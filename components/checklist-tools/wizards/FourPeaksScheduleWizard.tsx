@@ -25,7 +25,6 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
-  Share,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -370,10 +369,19 @@ export function FourPeaksScheduleWizard({
 
     try {
       const message = formatScheduleForShare(schedule, raceName);
-      await Share.share({
-        message,
-        title: `4 Peaks Schedule - ${raceName || 'Race'}`,
-      });
+      const title = `4 Peaks Schedule - ${raceName || 'Race'}`;
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ title, text: message });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(message);
+          Alert.alert('Copied', 'Schedule copied to clipboard');
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({ message, title });
+      }
     } catch (err) {
       if ((err as Error).message !== 'User did not share') {
         Alert.alert('Share Error', 'Unable to share schedule');

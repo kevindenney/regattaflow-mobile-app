@@ -1,7 +1,7 @@
 /**
  * QuickAddBoatForm Component
- * Inline form for quickly adding a boat (especially for crew scenario)
- * Minimal fields for fast boat creation
+ * Inline form for quickly adding a boat with optional sails
+ * Uses iOS-friendly custom pickers instead of @react-native-picker/picker
  */
 
 import React, { useState, useEffect } from 'react';
@@ -14,18 +14,20 @@ import {
   Alert,
   StyleSheet,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
+import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { sailorBoatService } from '@/services/SailorBoatService';
+import { equipmentService } from '@/services/EquipmentService';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 interface QuickAddBoatFormProps {
   visible: boolean;
   onClose: () => void;
-  onBoatAdded: (boatId: string) => void; // Callback with new boat ID
+  onBoatAdded: (boatId: string) => void;
 }
 
 interface BoatClass {
@@ -34,7 +36,17 @@ interface BoatClass {
   class_association: string | null;
 }
 
+// Sail categories for selection
+const SAIL_CATEGORIES = [
+  { id: 'mainsail', name: 'Mainsail', short: 'Main' },
+  { id: 'jib', name: 'Jib', short: 'Jib' },
+  { id: 'genoa', name: 'Genoa', short: 'Genoa' },
+  { id: 'spinnaker', name: 'Spinnaker', short: 'Spin' },
+  { id: 'code_zero', name: 'Code Zero', short: 'C0' },
+] as const;
+
 const logger = createLogger('QuickAddBoatForm');
+
 export function QuickAddBoatForm({
   visible,
   onClose,
@@ -46,14 +58,16 @@ export function QuickAddBoatForm({
   const [boatName, setBoatName] = useState('');
   const [sailNumber, setSailNumber] = useState('');
   const [classId, setClassId] = useState('');
-  const [ownershipType, setOwnershipType] = useState<
-    'owned' | 'co_owned' | 'chartered' | 'club_boat' | 'crew'
-  >('owned');
+  const [selectedSails, setSelectedSails] = useState<string[]>(['mainsail']);
 
   // UI state
   const [classes, setClasses] = useState<BoatClass[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingClasses, setLoadingClasses] = useState(true);
+  const [showClassPicker, setShowClassPicker] = useState(false);
+
+  // Get selected class object
+  const selectedClass = classes.find((c) => c.id === classId);
 
   useEffect(() => {
     if (visible) {
@@ -79,6 +93,14 @@ export function QuickAddBoatForm({
     }
   };
 
+  const toggleSail = (sailId: string) => {
+    setSelectedSails((prev) =>
+      prev.includes(sailId)
+        ? prev.filter((s) => s !== sailId)
+        : [...prev, sailId]
+    );
+  };
+
   const handleSubmit = async () => {
     logger.debug('[QuickAddBoatForm] Submit clicked');
 
@@ -102,33 +124,59 @@ export function QuickAddBoatForm({
 
     logger.debug('[QuickAddBoatForm] Creating boat:', {
       sail_number: sailNumber.trim() || undefined,
-      ownership_type: ownershipType,
+      selectedSails,
     });
 
     setLoading(true);
 
     try {
+      // Create the boat
       const newBoat = await sailorBoatService.createBoat({
         sailor_id: user.id,
         class_id: classId,
         name: boatName.trim(),
         sail_number: sailNumber.trim() || undefined,
-        ownership_type: ownershipType,
-        is_primary: false, // Don't set as primary for quick add
+        ownership_type: 'owned',
+        is_primary: false,
       });
 
       logger.debug('[QuickAddBoatForm] Successfully created boat:', newBoat.id);
 
+      // Create sails if any selected
+      if (selectedSails.length > 0) {
+        for (const sailCategory of selectedSails) {
+          try {
+            const sailName = SAIL_CATEGORIES.find((c) => c.id === sailCategory)?.name || sailCategory;
+            await equipmentService.createEquipment({
+              boat_id: newBoat.id,
+              category: sailCategory,
+              custom_name: sailName,
+              condition_rating: 4, // Default to "Good"
+              notes: 'Added during boat creation',
+            });
+            logger.debug(`[QuickAddBoatForm] Created sail: ${sailCategory}`);
+          } catch (sailErr) {
+            console.error(`[QuickAddBoatForm] Error creating ${sailCategory}:`, sailErr);
+            // Continue creating other sails even if one fails
+          }
+        }
+      }
+
+      const sailsText = selectedSails.length > 0
+        ? ` with ${selectedSails.length} sail${selectedSails.length > 1 ? 's' : ''}`
+        : '';
+
       Alert.alert(
         'Success!',
-        `Added boat: ${boatName}${sailNumber ? ` (Sail #${sailNumber})` : ''}`
+        `Added boat: ${boatName}${sailNumber ? ` (Sail #${sailNumber})` : ''}${sailsText}`
       );
 
       // Reset form
       setBoatName('');
       setSailNumber('');
       setClassId('');
-      setOwnershipType('owned');
+      setSelectedSails(['mainsail']);
+      setShowClassPicker(false);
 
       // Call callback with new boat ID
       onBoatAdded(newBoat.id);
@@ -144,13 +192,12 @@ export function QuickAddBoatForm({
         setBoatName('');
         setSailNumber('');
         setClassId('');
-        setOwnershipType('owned');
+        setSelectedSails(['mainsail']);
         onClose();
       } else {
         console.error('[QuickAddBoatForm] Error creating boat:', err);
         console.error('[QuickAddBoatForm] Error details:', JSON.stringify(err, null, 2));
 
-        // Handle specific error cases
         let errorMessage = err?.message || 'Failed to add boat';
 
         if (err?.code === '23505' || errorMessage.includes('duplicate') || errorMessage.includes('unique')) {
@@ -169,7 +216,8 @@ export function QuickAddBoatForm({
     setBoatName('');
     setSailNumber('');
     setClassId('');
-    setOwnershipType('owned');
+    setSelectedSails(['mainsail']);
+    setShowClassPicker(false);
     onClose();
   };
 
@@ -196,7 +244,7 @@ export function QuickAddBoatForm({
               <Text style={styles.loadingText}>Loading boat classes...</Text>
             </View>
           ) : (
-            <>
+            <ScrollView style={styles.formScroll} showsVerticalScrollIndicator={false}>
               {/* Boat Name */}
               <View style={styles.field}>
                 <Text style={styles.label}>
@@ -225,67 +273,91 @@ export function QuickAddBoatForm({
                 />
               </View>
 
-              {/* Boat Class */}
+              {/* Boat Class - Custom Picker */}
               <View style={styles.field}>
                 <Text style={styles.label}>
                   Boat Class <Text style={styles.required}>*</Text>
                 </Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={classId}
-                    onValueChange={setClassId}
-                    style={styles.picker}
-                    enabled={!loading}
+                <TouchableOpacity
+                  style={styles.pickerTrigger}
+                  onPress={() => setShowClassPicker(!showClassPicker)}
+                  disabled={loading}
+                >
+                  <Text
+                    style={selectedClass ? styles.pickerText : styles.pickerPlaceholder}
                   >
-                    <Picker.Item label="Select a class..." value="" />
-                    {classes.map((c) => (
-                      <Picker.Item
-                        key={c.id}
-                        label={`${c.name}${c.class_association ? ` (${c.class_association})` : ''}`}
-                        value={c.id}
-                      />
-                    ))}
-                  </Picker>
-                </View>
+                    {selectedClass
+                      ? `${selectedClass.name}${selectedClass.class_association ? ` (${selectedClass.class_association})` : ''}`
+                      : 'Select a class...'}
+                  </Text>
+                  {showClassPicker ? (
+                    <ChevronUp size={20} color="#6B7280" />
+                  ) : (
+                    <ChevronDown size={20} color="#6B7280" />
+                  )}
+                </TouchableOpacity>
+
+                {showClassPicker && (
+                  <View style={styles.pickerOptions}>
+                    <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
+                      {classes.map((c) => (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={[
+                            styles.pickerOption,
+                            c.id === classId && styles.pickerOptionSelected,
+                          ]}
+                          onPress={() => {
+                            setClassId(c.id);
+                            setShowClassPicker(false);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.pickerOptionText,
+                              c.id === classId && styles.pickerOptionTextSelected,
+                            ]}
+                          >
+                            {c.name}
+                          </Text>
+                          {c.class_association && (
+                            <Text style={styles.pickerOptionSubtext}>
+                              {c.class_association}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
 
-              {/* Ownership Type */}
+              {/* Sails Selection */}
               <View style={styles.field}>
-                <Text style={styles.label}>How do you use this boat?</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={ownershipType}
-                    onValueChange={(value) =>
-                      setOwnershipType(
-                        value as
-                          | 'owned'
-                          | 'co_owned'
-                          | 'chartered'
-                          | 'club_boat'
-                          | 'crew'
-                      )
-                    }
-                    style={styles.picker}
-                    enabled={!loading}
-                  >
-                    <Picker.Item label="I own this boat" value="owned" />
-                    <Picker.Item label="Co-owned / Shared" value="co_owned" />
-                    <Picker.Item label="Chartered / Rental" value="chartered" />
-                    <Picker.Item label="Club boat" value="club_boat" />
-                    <Picker.Item label="I crew on this boat" value="crew" />
-                  </Picker>
+                <Text style={styles.label}>Sails</Text>
+                <Text style={styles.helpText}>Select the sails this boat has</Text>
+                <View style={styles.sailsRow}>
+                  {SAIL_CATEGORIES.map((sail) => (
+                    <TouchableOpacity
+                      key={sail.id}
+                      style={[
+                        styles.sailPill,
+                        selectedSails.includes(sail.id) && styles.sailPillSelected,
+                      ]}
+                      onPress={() => toggleSail(sail.id)}
+                      disabled={loading}
+                    >
+                      <Text
+                        style={[
+                          styles.sailPillText,
+                          selectedSails.includes(sail.id) && styles.sailPillTextSelected,
+                        ]}
+                      >
+                        {sail.short}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <Text style={styles.helpText}>
-                  {ownershipType === 'crew'
-                    ? "You're racing as crew on someone else's boat"
-                    : ownershipType === 'club_boat'
-                      ? 'Boat owned by your sailing club'
-                      : ownershipType === 'chartered'
-                        ? 'Temporary rental or charter arrangement'
-                        : ownershipType === 'co_owned'
-                          ? 'You share ownership with others'
-                          : 'You are the sole owner of this boat'}
-                </Text>
               </View>
 
               {/* Action Buttons */}
@@ -317,7 +389,7 @@ export function QuickAddBoatForm({
                   )}
                 </TouchableOpacity>
               </View>
-            </>
+            </ScrollView>
           )}
         </View>
       </View>
@@ -345,7 +417,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   title: {
     fontSize: 20,
@@ -363,6 +435,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: '#6B7280',
+  },
+  formScroll: {
+    flexGrow: 0,
   },
   field: {
     marginBottom: 20,
@@ -386,26 +461,99 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
   },
-  pickerContainer: {
+  // Custom Picker styles
+  pickerTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#D1D5DB',
     borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  pickerText: {
+    fontSize: 16,
+    color: '#1F2937',
+    flex: 1,
+  },
+  pickerPlaceholder: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    flex: 1,
+  },
+  pickerOptions: {
+    marginTop: 4,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    maxHeight: 200,
     overflow: 'hidden',
   },
-  picker: {
-    height: 50,
+  pickerScroll: {
+    flexGrow: 0,
   },
+  pickerOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  pickerOptionSelected: {
+    backgroundColor: '#EFF6FF',
+  },
+  pickerOptionText: {
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  pickerOptionTextSelected: {
+    color: '#0284c7',
+    fontWeight: '600',
+  },
+  pickerOptionSubtext: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  // Sails selection
   helpText: {
     fontSize: 12,
     color: '#6B7280',
-    marginTop: 6,
-    lineHeight: 16,
+    marginBottom: 8,
   },
+  sailsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sailPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  sailPillSelected: {
+    backgroundColor: '#0284c7',
+    borderColor: '#0284c7',
+  },
+  sailPillText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  sailPillTextSelected: {
+    color: '#FFFFFF',
+  },
+  // Actions
   actions: {
     flexDirection: 'row',
     gap: 12,
     marginTop: 8,
+    paddingBottom: 8,
   },
   button: {
     flex: 1,

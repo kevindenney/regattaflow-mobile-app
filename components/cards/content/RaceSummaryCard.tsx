@@ -9,19 +9,35 @@
  */
 
 import {
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
   Flag,
   Navigation,
   Trophy,
   Users,
+  XCircle,
+  Clock,
+  FileText,
+  Sun,
+  Map,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState } from 'react';
-import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
+import { ActionSheetIOS, Alert, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { ScrollView, Swipeable } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, runOnJS } from 'react-native-reanimated';
+import { IOSSegmentedControl } from '@/components/ui/ios';
+import { triggerHaptic } from '@/lib/haptics';
 
-import { CrewAvatarStack } from '@/components/races/CrewAvatarStack';
-import { RaceCollaborationDrawer } from '@/components/races/RaceCollaborationDrawer';
+import { CrewHub } from '@/components/crew';
 import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
+import { RaceChatDrawer } from '@/components/races/RaceChatDrawer';
+import { RaceStartInfoBar } from '@/components/races/RaceStartInfoBar';
 import { useRaceCollaborators } from '@/hooks/useRaceCollaborators';
+import { RaceCollaborationService } from '@/services/RaceCollaborationService';
+import { useQueryClient } from '@tanstack/react-query';
 import { DetailedReviewModal } from '@/components/races/DetailedReviewModal';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import type { DetailCardType } from '@/constants/navigationAnimations';
@@ -32,6 +48,7 @@ import { useRaceSeriesPosition } from '@/hooks/useRaceSeriesPosition';
 import { useRaceStartOrder } from '@/hooks/useRaceStartOrder';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
+import { usePhaseCompletionCounts, formatPhaseCompletionLabel } from '@/hooks/usePhaseCompletionCounts';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
 import {
   CardContentProps,
@@ -44,7 +61,6 @@ import {
   AfterRaceContent,
   DaysBeforeContent,
   OnWaterContent,
-  RaceMorningContent,
 } from './phases';
 
 // =============================================================================
@@ -76,6 +92,13 @@ const DISTANCE_COLORS = {
   badgeText: '#7C3AED',
   routeBg: '#F5F3FF',
 } as const;
+
+// Pill-style phase labels (Prep/Race/Review)
+const RACE_PHASE_PILL_LABELS: Record<RacePhase, string> = {
+  days_before: 'Prep',
+  on_water: 'Race',
+  after_race: 'Review',
+};
 
 // =============================================================================
 // HELPERS
@@ -222,6 +245,100 @@ function formatMinutesCompact(minutes: number): string {
 }
 
 /**
+ * Format countdown in full format: "3d 2h until race"
+ * This is the restored Tufte-style countdown format
+ */
+function formatCountdownFull(countdown: {
+  days: number;
+  hours: number;
+  minutes: number;
+  isPast: boolean;
+}): string {
+  if (countdown.isPast) return 'Race completed';
+
+  const parts: string[] = [];
+  if (countdown.days > 0) parts.push(`${countdown.days}d`);
+  if (countdown.hours > 0) parts.push(`${countdown.hours}h`);
+  if (parts.length === 0) parts.push(`${countdown.minutes}m`);
+
+  return `${parts.join(' ')} until race`;
+}
+
+/**
+ * Format full date for display
+ * "Saturday, Jan 25 at 3:00 PM"
+ */
+function formatFullDate(date: string, time?: string): string {
+  const d = new Date(date);
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = d.getDate();
+  const timeStr = formatTime(time);
+  return `${weekday}, ${month} ${day} at ${timeStr}`;
+}
+
+/**
+ * Tufte: Simplify race name
+ * Remove club prefix (e.g., "RHKYC ") and redundant "- Race X" suffix
+ */
+function simplifyRaceName(name: string): string {
+  if (!name) return '';
+
+  // Common club prefixes to remove (expand as needed)
+  const clubPrefixes = ['RHKYC', 'HKPBC', 'ABC', 'YC', 'SC', 'RC', 'HKSC', 'STC'];
+  let simplified = name;
+
+  // Remove club prefix if present at start
+  for (const prefix of clubPrefixes) {
+    const pattern = new RegExp(`^${prefix}\\s+`, 'i');
+    simplified = simplified.replace(pattern, '');
+  }
+
+  // Remove "- Race X" at the end since we show race number separately
+  simplified = simplified.replace(/\s*-\s*Race\s+\d+$/i, '');
+
+  return simplified.trim();
+}
+
+/**
+ * Tufte: Determine active phase for inline progress bar
+ * Returns the first incomplete phase, or null if all complete
+ */
+function getActivePhaseForProgress(
+  phaseCounts: Record<string, { completed: number; total: number }>,
+  isPast: boolean
+): { name: string; completed: number; total: number } | null {
+  // For past races, show review if incomplete
+  if (isPast) {
+    const review = phaseCounts['after_race'];
+    if (review && review.completed < review.total) {
+      return { name: 'Review', ...review };
+    }
+    return null; // All done
+  }
+
+  // Show prep if incomplete (days_before phase)
+  const prep = phaseCounts['days_before'];
+  if (prep && prep.completed < prep.total) {
+    return { name: 'Prep', ...prep };
+  }
+
+  // Show race if incomplete (on_water phase)
+  const race = phaseCounts['on_water'];
+  if (race && race.completed < race.total) {
+    return { name: 'Race', ...race };
+  }
+
+  // Show review if incomplete (after_race phase)
+  const review = phaseCounts['after_race'];
+  if (review && review.completed < review.total) {
+    return { name: 'Review', ...review };
+  }
+
+  return null; // All complete
+}
+
+/**
  * Get urgency color based on countdown (iOS system colors)
  */
 function getUrgencyColor(days: number, hours: number, isPast: boolean): {
@@ -235,16 +352,14 @@ function getUrgencyColor(days: number, hours: number, isPast: boolean): {
   if (days === 0 && hours < 2) {
     return { bg: '#FFEBE9', text: IOS_COLORS.red, label: 'Starting Soon' };
   }
+  // All upcoming races show green (Today, Tomorrow, This Week, Upcoming)
   if (days === 0) {
-    return { bg: '#FFF4E5', text: IOS_COLORS.orange, label: 'Today' };
+    return { bg: '#E8FAE9', text: IOS_COLORS.green, label: 'Today' };
   }
   if (days <= 1) {
-    return { bg: '#FFF8E5', text: '#CC7A00', label: 'Tomorrow' };
+    return { bg: '#E8FAE9', text: IOS_COLORS.green, label: 'Tomorrow' };
   }
-  if (days <= 7) {
-    return { bg: '#E8FAE9', text: IOS_COLORS.green, label: 'This Week' };
-  }
-  return { bg: '#E5F1FF', text: IOS_COLORS.blue, label: 'Upcoming' };
+  return { bg: '#E8FAE9', text: IOS_COLORS.green, label: 'Upcoming' };
 }
 
 /**
@@ -447,6 +562,14 @@ export function RaceSummaryCard({
   onOpenPostRaceInterview,
   userId,
   onDismiss,
+  seasonWeek,
+  raceNumber,
+  totalRaces,
+  // Timeline navigation props (compact axis inside card footer)
+  timelineRaces,
+  currentRaceIndex,
+  onSelectRace,
+  nextRaceIndex,
 }: CardContentProps) {
   // Temporal phase state
   const currentPhase = useMemo(
@@ -461,9 +584,56 @@ export function RaceSummaryCard({
   // Detailed Review modal state
   const [showDetailedReview, setShowDetailedReview] = useState(false);
 
-  // Crew collaboration state
-  const [showCollaborationDrawer, setShowCollaborationDrawer] = useState(false);
+  // Crew Hub state (unified crew management)
+  const [showCrewHub, setShowCrewHub] = useState(false);
+
+  // Chat drawer state
+  const [showChat, setShowChat] = useState(false);
   const { collaborators } = useRaceCollaborators(race.id);
+
+  // Scroll edge gradient state (Tufte: shows content continues beyond viewport)
+  const [scrollState, setScrollState] = useState({ atTop: true, atBottom: false });
+  const queryClient = useQueryClient();
+
+  // Extract collaboration flags from race
+  const isOwner = (race as any).isOwner ?? true; // Default true for backward compatibility
+  const isCollaborator = (race as any).isCollaborator ?? false;
+  const isPendingInvite = (race as any).isPendingInvite ?? false;
+  const collaboratorId = (race as any).collaboratorId;
+
+  // Accept/decline invite handlers
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isDeclining, setIsDeclining] = useState(false);
+
+  const handleAcceptInvite = useCallback(async () => {
+    if (!collaboratorId || isAccepting) return;
+    setIsAccepting(true);
+    try {
+      await RaceCollaborationService.acceptInvite(collaboratorId);
+      // Invalidate queries to refresh the races list
+      queryClient.invalidateQueries({ queryKey: ['races'] });
+      queryClient.invalidateQueries({ queryKey: ['race-collaborators', race.id] });
+    } catch (error) {
+      console.error('Failed to accept invite:', error);
+    } finally {
+      setIsAccepting(false);
+    }
+  }, [collaboratorId, isAccepting, queryClient, race.id]);
+
+  const handleDeclineInvite = useCallback(async () => {
+    if (!collaboratorId || isDeclining) return;
+    setIsDeclining(true);
+    try {
+      await RaceCollaborationService.declineInvite(collaboratorId);
+      // Invalidate queries to refresh the races list
+      queryClient.invalidateQueries({ queryKey: ['races'] });
+      queryClient.invalidateQueries({ queryKey: ['race-collaborators', race.id] });
+    } catch (error) {
+      console.error('Failed to decline invite:', error);
+    } finally {
+      setIsDeclining(false);
+    }
+  }, [collaboratorId, isDeclining, queryClient, race.id]);
 
   // Handler to open detail sheet
   const handleOpenDetail = useCallback((type: DetailCardType) => {
@@ -473,6 +643,14 @@ export function RaceSummaryCard({
   // Handler to close detail sheet
   const handleCloseDetailSheet = useCallback(() => {
     setActiveDetailSheet(null);
+  }, []);
+
+  // Handler for scroll position tracking (shows edge gradients)
+  const handleContentScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const atTop = contentOffset.y <= 0;
+    const atBottom = contentOffset.y >= contentSize.height - layoutMeasurement.height - 10;
+    setScrollState({ atTop, atBottom });
   }, []);
 
   // Handler to open detailed review modal
@@ -557,6 +735,13 @@ export function RaceSummaryCard({
   }, [race.name, race.race_type, (race as any).total_distance_nm]);
 
   const isDistanceRace = detectedRaceType === 'distance';
+
+  // Get phase completion counts for tab labels (Tufte: data in the labels)
+  const { counts: phaseCounts } = usePhaseCompletionCounts({
+    regattaId: race.id,
+    raceType: detectedRaceType,
+    enabled: true,
+  });
 
   // Get race type badge styling
   const raceTypeBadge = useMemo(
@@ -644,56 +829,120 @@ export function RaceSummaryCard({
     enabled: !countdown.isPast,
   });
 
-  // Build menu items for card management
+  // Build menu items for card management - permission-aware
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
-    if (onEdit) {
-      items.push({ label: 'Edit Race', icon: 'create-outline', onPress: onEdit });
-    }
-    if (onDelete) {
-      items.push({ label: 'Delete Race', icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
+    // Only show edit/delete for owners
+    if (isOwner) {
+      if (onEdit) {
+        items.push({ label: 'Edit Race', icon: 'create-outline', onPress: onEdit });
+      }
+      if (onDelete) {
+        items.push({ label: 'Delete Race', icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
+      }
     }
     // For demo races, show dismiss option instead of edit/delete
     if ((race as any).isDemo && onDismiss) {
       items.push({ label: 'Dismiss sample', icon: 'close-outline', onPress: onDismiss });
     }
     return items;
-  }, [onEdit, onDelete, race, onDismiss]);
+  }, [onEdit, onDelete, race, onDismiss, isOwner]);
+
+  // Ref for swipeable
+  const swipeableRef = useRef<Swipeable>(null);
+
+  // Long-press handler to show context menu
+  const handleLongPress = useCallback(() => {
+    if (!canManage || menuItems.length === 0) return;
+
+    triggerHaptic('impactMedium');
+
+    if (Platform.OS === 'ios') {
+      const options = menuItems.map(item => item.label);
+      options.push('Cancel');
+
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: options.length - 1,
+          destructiveButtonIndex: menuItems.findIndex(item => item.variant === 'destructive'),
+        },
+        (buttonIndex) => {
+          if (buttonIndex < menuItems.length) {
+            menuItems[buttonIndex].onPress?.();
+          }
+        }
+      );
+    } else {
+      // Android: Use Alert with buttons
+      Alert.alert(
+        'Race Options',
+        undefined,
+        [
+          ...menuItems.map(item => ({
+            text: item.label,
+            onPress: item.onPress,
+            style: item.variant === 'destructive' ? ('destructive' as const) : ('default' as const),
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ],
+        { cancelable: true }
+      );
+    }
+  }, [canManage, menuItems]);
+
+  // Render right swipe actions (delete button)
+  const renderRightActions = useCallback(() => {
+    if (!isOwner || !onDelete) return null;
+
+    return (
+      <TouchableOpacity
+        style={styles.swipeDeleteAction}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onDelete();
+        }}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="trash-outline" size={24} color="#FFFFFF" />
+        <Text style={styles.swipeDeleteText}>Delete</Text>
+      </TouchableOpacity>
+    );
+  }, [isOwner, onDelete]);
 
   // Render race type badge component
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
 
-  // Helper to render phase tabs
-  const renderPhaseTabs = (compact: boolean = false) => (
-    <View style={compact ? styles.phaseTabsCompact : styles.phaseTabs}>
-      {RACE_PHASES.map((phase) => {
-        const isSelected = selectedPhase === phase;
-        const isCurrent = currentPhase === phase;
-        return (
-          <Pressable
-            key={phase}
-            style={[
-              compact ? styles.phaseTabCompact : styles.phaseTab,
-              isSelected && (compact ? styles.phaseTabCompactSelected : styles.phaseTabSelected),
-            ]}
-            onPress={() => setSelectedPhase(phase)}
-          >
-            <Text
-              numberOfLines={1}
-              style={[
-                compact ? styles.phaseTabTextCompact : styles.phaseTabText,
-                isSelected && (compact ? styles.phaseTabTextCompactSelected : styles.phaseTabTextSelected),
-              ]}
-            >
-              {RACE_PHASE_SHORT_LABELS[phase]}
-            </Text>
-            {isCurrent && !isSelected && (
-              <View style={styles.phaseCurrentIndicator} />
-            )}
-          </Pressable>
-        );
-      })}
-    </View>
+  // Phase tabs data for IOSSegmentedControl (Prep/Launch/Race/Review)
+  // Tufte: Include completion counts directly in labels for maximum information density
+  const phaseTabs = useMemo(() => {
+    return RACE_PHASES.map((phase) => {
+      const count = phaseCounts[phase];
+      const countLabel = formatPhaseCompletionLabel(count.completed, count.total);
+      return {
+        value: phase,
+        label: `${RACE_PHASE_PILL_LABELS[phase]}${countLabel}`,
+      };
+    });
+  }, [phaseCounts]);
+
+  // Handle phase tab change with haptic feedback
+  const handlePhaseChange = useCallback((phase: RacePhase) => {
+    // DEBUG: Log phase tab selection
+    if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
+      (window as any).__PERIOD_DEBUG__.log('RaceSummaryCard.phaseTab', RACE_PHASE_PILL_LABELS[phase], { phase, raceId: race.id });
+    }
+    setSelectedPhase(phase);
+  }, [race.id]);
+
+  // Helper to render phase tabs with iOS segmented control style (Prep/Launch/Race/Review)
+  const renderPhaseTabs = () => (
+    <IOSSegmentedControl
+      segments={phaseTabs}
+      selectedValue={selectedPhase}
+      onValueChange={handlePhaseChange}
+      size="small"
+    />
   );
 
   // Convert race data to CardRaceData format for phase content
@@ -731,13 +980,6 @@ export function RaceSummaryCard({
         return (
           <DaysBeforeContent
             race={cardRaceData}
-          />
-        );
-      case 'race_morning':
-        return (
-          <RaceMorningContent
-            race={cardRaceData}
-            onOpenDetail={handleOpenDetail}
           />
         );
       case 'on_water':
@@ -810,75 +1052,296 @@ export function RaceSummaryCard({
   // ==========================================================================
   // RENDER - Single full-height view with scrollable content
   // ==========================================================================
+
+  // Build full countdown text (e.g., "3d 2h until race")
+  const fullCountdownText = useMemo(() => {
+    return formatCountdownFull(countdown);
+  }, [countdown]);
+
+  // Build compact countdown text (e.g., "18h" or "2d") - for badges if needed
+  const compactCountdown = useMemo(() => {
+    if (countdown.isPast) return null;
+    if (countdown.days > 0) return `${countdown.days}d`;
+    if (countdown.hours > 0) return `${countdown.hours}h`;
+    return `${countdown.minutes}m`;
+  }, [countdown]);
+
+  // Get urgency color for countdown display
+  const urgencyColor = useMemo(() => {
+    return getUrgencyColor(countdown.days, countdown.hours, countdown.isPast);
+  }, [countdown.days, countdown.hours, countdown.isPast]);
+
+  // Build season context text (e.g., "W26 · Race 2/10")
+  const seasonContextText = useMemo(() => {
+    const parts: string[] = [];
+    if (seasonWeek) parts.push(seasonWeek);
+    if (raceNumber && totalRaces) parts.push(`Race ${raceNumber}/${totalRaces}`);
+    else if (raceNumber) parts.push(`Race ${raceNumber}`);
+    return parts.join(' · ');
+  }, [seasonWeek, raceNumber, totalRaces]);
+
+  // Build venue + datetime subtitle (e.g., "Victoria Harbour · Sat, Jan 25 10:30 AM")
+  const raceSubtitle = useMemo(() => {
+    const parts: string[] = [];
+
+    // Get venue name from various possible sources, avoiding raw coordinates
+    const venueInfo = (race as any).venue_info || (race as any).venue_data;
+    const racingAreaName = (race as any).racing_area_name;
+    const rawVenue = race.venue;
+
+    // Check if rawVenue looks like coordinates (e.g., "22.3361, 114.2911")
+    const isCoordinates = rawVenue && /^-?\d+\.?\d*,\s*-?\d+\.?\d*$/.test(rawVenue.trim());
+
+    // Priority: venue_info.name > racing_area_name > venue (if not coordinates)
+    const venueName = venueInfo?.name || racingAreaName || (!isCoordinates ? rawVenue : null);
+
+    if (venueName) parts.push(venueName);
+
+    const dateStr = formatDate(race.date);
+    const timeStr = formatTime(race.startTime);
+    parts.push(`${dateStr} ${timeStr}`);
+    return parts.join(' · ');
+  }, [race.venue, race.date, race.startTime, (race as any).venue_info, (race as any).racing_area_name]);
+
+  // Get active phase for inline progress bar
+  const activePhase = useMemo(() => {
+    return getActivePhaseForProgress(phaseCounts, countdown.isPast);
+  }, [phaseCounts, countdown.isPast]);
+
   return (
     <>
-      <View style={styles.container}>
-        {/* Typographic Header with Menu */}
-        <View style={styles.tufteHeader}>
-          <Text style={styles.tufteTypeLabel}>
-            {raceTypeBadge.label} RACE
-            {!countdown.isPast && ` · ${urgency.label}`}
-            {numberOfLegs > 0 && ` · ${numberOfLegs} legs`}
-          </Text>
-          <View style={styles.headerRightGroup}>
-            {/* Crew Avatars / Add Crew Button */}
-            <CrewAvatarStack
-              collaborators={collaborators || []}
-              maxVisible={3}
-              size="xs"
-              onPress={() => setShowCollaborationDrawer(true)}
-              showAddButton
-            />
-            {canManage && menuItems.length > 0 && (
-              <View pointerEvents="box-none">
-                <CardMenu items={menuItems} />
-              </View>
-            )}
+      <Swipeable
+        ref={swipeableRef}
+        renderRightActions={renderRightActions}
+        rightThreshold={40}
+        friction={2}
+        overshootRight={false}
+        containerStyle={{ flex: 1 }}
+      >
+        <Pressable onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1 }}>
+          <View style={styles.container}>
+            {/* Simplified Header: Race type badge + Countdown */}
+            <View style={styles.simpleHeaderRow}>
+          {/* Race type badge */}
+          <View style={styles.raceTypeBadge}>
+            <Text style={styles.raceTypeBadgeText}>
+              {detectedRaceType?.toUpperCase() || 'FLEET'}
+            </Text>
+          </View>
+          {/* Countdown on right - menu hidden, use swipe/long-press instead */}
+          <View style={styles.simpleHeaderRight}>
+            {/* Countdown */}
+            <View style={styles.countdownSimple}>
+              <Text style={[styles.countdownNumberSimple, { color: urgencyColor.text }]}>
+                {countdown.days}
+              </Text>
+              <Text style={[styles.countdownLabelSimple, { color: urgencyColor.text }]}>
+                {countdown.days === 1 ? 'day' : 'days'}
+              </Text>
+            </View>
+            {/* Card menu hidden - edit/delete available via swipe or long-press on card */}
           </View>
         </View>
 
-        {/* Demo Race Badge - shown when this is a placeholder race for empty state */}
-        {(race as any).isDemo && (
-          <View style={styles.demoBadge}>
-            <Text style={styles.demoBadgeText}>Sample Race</Text>
-            <Text style={styles.demoHint}>Tap + to add your first race</Text>
+        {/* Full race name */}
+        <Text style={styles.raceNameLarge} numberOfLines={2}>{race.name || '[No Race Name]'}</Text>
+
+        {/* Location */}
+        <View style={styles.simpleDetailRow}>
+          <Ionicons name="location-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+          <Text style={styles.simpleDetailText}>{venue?.name || race.venue || 'Venue TBD'}</Text>
+        </View>
+
+        {/* Date/time */}
+        <View style={styles.simpleDetailRow}>
+          <Ionicons name="calendar-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+          <Text style={styles.simpleDetailText}>{formatFullDate(race.date, race.startTime)}</Text>
+        </View>
+
+        {/* Collaboration indicators (keep these as they provide important context) */}
+        {!isOwner && isCollaborator && (
+          <View style={styles.sharedBadge}>
+            <Users size={12} color={IOS_COLORS.blue} />
+            <Text style={styles.sharedBadgeText}>Shared</Text>
           </View>
         )}
 
-        {/* Sample Data Badge - shown for seeded sample races from onboarding */}
-        {!!(race as any).metadata?.is_sample && !(race as any).isDemo && (
-          <View style={styles.sampleBadge}>
-            <Text style={styles.sampleBadgeText}>SAMPLE</Text>
+        {/* Pending Invite Badge with Accept/Decline actions (important for interaction) */}
+        {!isOwner && isPendingInvite && (
+          <View style={styles.inviteBadgeContainer}>
+            <View style={styles.inviteBadge}>
+              <Clock size={12} color={IOS_COLORS.orange} />
+              <Text style={styles.inviteBadgeText}>Crew Invite</Text>
+            </View>
+            <View style={styles.inviteActions}>
+              <Pressable
+                style={[styles.inviteAcceptButton, isAccepting && styles.inviteButtonDisabled]}
+                onPress={handleAcceptInvite}
+                disabled={isAccepting || isDeclining}
+              >
+                <CheckCircle size={14} color={IOS_COLORS.green} />
+                <Text style={styles.inviteAcceptText}>{isAccepting ? 'Joining...' : 'Accept'}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.inviteDeclineButton, isDeclining && styles.inviteButtonDisabled]}
+                onPress={handleDeclineInvite}
+                disabled={isAccepting || isDeclining}
+              >
+                <XCircle size={14} color={IOS_COLORS.red} />
+                <Text style={styles.inviteDeclineText}>{isDeclining ? 'Declining...' : 'Decline'}</Text>
+              </Pressable>
+            </View>
           </View>
         )}
 
-        {/* Race Name - Primary visual element */}
-        <Text style={styles.tufteRaceName} numberOfLines={2}>
-          {race.name}
-        </Text>
+        {/* Pill-style Phase Tabs (Prep/Race/Review) - keep for navigation */}
+        {renderPhaseTabs()}
 
-        {/* Venue + Racing Area */}
-        {(race.venue || (race as any).racing_area_name) && (
-          <Text style={styles.tufteVenue} numberOfLines={1}>
-            {[race.venue, (race as any).racing_area_name].filter(Boolean).join(' · ')}
-          </Text>
+        {/* Race Start Info Bar - VHF, races, start sequence (only on Race tab for upcoming races) */}
+        {!countdown.isPast && selectedPhase === 'on_water' && (
+          <RaceStartInfoBar
+            vhfChannel={vhfChannel}
+            startOrder={startOrderData?.startOrder}
+            totalFleets={startOrderData?.totalFleets}
+            classFlag={startOrderData?.classFlag}
+            startTime={startOrderData?.plannedStartTime || race.startTime}
+            warningTime={startOrderData?.plannedWarningTime}
+            compact
+          />
         )}
 
-        {/* Temporal Phase Tabs */}
-        {renderPhaseTabs(false)}
+        {/* Phase-Specific Content - Scrollable with Tufte edge gradients */}
+        <View style={styles.scrollContainer}>
+          <ScrollView
+            style={styles.phaseContentContainerExpanded}
+            contentContainerStyle={styles.phaseContentScrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces={true}
+            nestedScrollEnabled={Platform.OS === 'android'}
+            onScroll={handleContentScroll}
+            scrollEventThrottle={16}
+          >
+            {renderPhaseContent()}
+          </ScrollView>
 
-        {/* Phase-Specific Content - Scrollable */}
-        <ScrollView
-          style={styles.phaseContentContainerExpanded}
-          contentContainerStyle={styles.phaseContentScrollContent}
-          showsVerticalScrollIndicator={false}
-          bounces={true}
-          nestedScrollEnabled={Platform.OS === 'android'}
-        >
-          {renderPhaseContent()}
-        </ScrollView>
+          {/* Top edge gradient - shows when scrolled down */}
+          {!scrollState.atTop && (
+            <LinearGradient
+              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']}
+              style={styles.topScrollGradient}
+              pointerEvents="none"
+            />
+          )}
 
-      </View>
+          {/* Bottom edge gradient - shows when more content below */}
+          {!scrollState.atBottom && (
+            <LinearGradient
+              colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.95)']}
+              style={styles.bottomScrollGradient}
+              pointerEvents="none"
+            />
+          )}
+        </View>
+
+        {/* Compact Timeline Navigation with Prev/Next (Tufte: direct manipulation) */}
+        {timelineRaces && timelineRaces.length > 1 && onSelectRace && (
+          <View style={styles.compactTimeline}>
+            {/* Prev Button */}
+            <Pressable
+              style={[
+                styles.timelineNavButton,
+                currentRaceIndex === 0 && styles.timelineNavButtonDisabled,
+              ]}
+              onPress={() => {
+                if (currentRaceIndex && currentRaceIndex > 0) {
+                  triggerHaptic('light');
+                  onSelectRace(currentRaceIndex - 1);
+                }
+              }}
+              disabled={!currentRaceIndex || currentRaceIndex === 0}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <ChevronLeft
+                size={18}
+                color={currentRaceIndex === 0 ? IOS_COLORS.gray4 : IOS_COLORS.blue}
+              />
+            </Pressable>
+
+            {/* Timeline Track with Dots */}
+            <View style={styles.compactTimelineCenter}>
+              <View style={styles.compactTimelineTrack} />
+              <View style={styles.compactTimelineDots}>
+                {timelineRaces.map((tlRace, index) => {
+                  const isSelected = index === currentRaceIndex;
+                  const isNext = index === nextRaceIndex;
+                  const raceDate = new Date(tlRace.date);
+                  const dayLabel = raceDate.getDate().toString();
+                  const monthLabel = raceDate.toLocaleDateString('en-US', { month: 'short' }).slice(0, 3);
+
+                  return (
+                    <Pressable
+                      key={tlRace.id}
+                      onPress={() => {
+                        triggerHaptic('light');
+                        onSelectRace(index);
+                      }}
+                      style={[
+                        styles.compactTimelineDot,
+                        isSelected && styles.compactTimelineDotSelected,
+                      ]}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                    >
+                      {isNext && !isSelected && (
+                        <View style={styles.compactTimelineNowIndicator} />
+                      )}
+                      <Text style={[
+                        styles.compactTimelineDay,
+                        isSelected && styles.compactTimelineDaySelected,
+                        isNext && !isSelected && styles.compactTimelineDayNext,
+                      ]}>
+                        {dayLabel}
+                      </Text>
+                      {/* Show month for first, last, and selected dots */}
+                      {(index === 0 || index === timelineRaces.length - 1 || isSelected) && (
+                        <Text style={[
+                          styles.compactTimelineMonth,
+                          isSelected && styles.compactTimelineMonthSelected,
+                        ]}>
+                          {monthLabel}
+                        </Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Next Button */}
+            <Pressable
+              style={[
+                styles.timelineNavButton,
+                currentRaceIndex === timelineRaces.length - 1 && styles.timelineNavButtonDisabled,
+              ]}
+              onPress={() => {
+                if (currentRaceIndex !== undefined && currentRaceIndex < timelineRaces.length - 1) {
+                  triggerHaptic('light');
+                  onSelectRace(currentRaceIndex + 1);
+                }
+              }}
+              disabled={currentRaceIndex === undefined || currentRaceIndex === timelineRaces.length - 1}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <ChevronRight
+                size={18}
+                color={currentRaceIndex === timelineRaces.length - 1 ? IOS_COLORS.gray4 : IOS_COLORS.blue}
+              />
+            </Pressable>
+          </View>
+        )}
+
+          </View>
+        </Pressable>
+      </Swipeable>
 
       {/* Detail Bottom Sheet for drill-down */}
       <DetailBottomSheet
@@ -903,11 +1366,24 @@ export function RaceSummaryCard({
         onComplete={handleDetailedReviewComplete}
       />
 
-      {/* Crew Collaboration Drawer */}
-      <RaceCollaborationDrawer
+      {/* Crew Hub - Unified crew management */}
+      <CrewHub
+        sailorId={userId || ''}
+        classId={(race as any).class_id || ''}
+        className={boatClassName}
         regattaId={race.id}
-        isOpen={showCollaborationDrawer}
-        onClose={() => setShowCollaborationDrawer(false)}
+        raceName={race.name}
+        isOpen={showCrewHub}
+        onClose={() => setShowCrewHub(false)}
+        initialTab="roster"
+      />
+
+      {/* Race Chat Drawer */}
+      <RaceChatDrawer
+        regattaId={race.id}
+        raceName={race.name}
+        isOpen={showChat}
+        onClose={() => setShowChat(false)}
       />
     </>
   );
@@ -920,8 +1396,156 @@ export function RaceSummaryCard({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+    padding: 16,
     // Background controlled by CardShell (allows next race tinting)
+  },
+
+  // ==========================================================================
+  // TYPE + TIMING CONTEXT HEADER (e.g., "FLEET RACE · THIS WEEK")
+  // ==========================================================================
+
+  typeContextHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+
+  typeContextText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+  },
+
+  // Full countdown row (e.g., "3d 2h until race")
+  fullCountdown: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 12,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Header right section (race position + menu)
+  headerRightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  // Race position with navigation (e.g., "Race 4/22 →")
+  racePositionNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: `${IOS_COLORS.blue}10`,
+  },
+  racePositionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Race meta row (date/time + venue on same line)
+  raceMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+    gap: 4,
+  },
+  raceDateTimeText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  raceMetaSeparator: {
+    fontSize: 15,
+    color: IOS_COLORS.gray3,
+  },
+
+  // ==========================================================================
+  // LEGACY COMPACT HEADER (kept for potential reuse)
+  // ==========================================================================
+
+  compactHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    marginBottom: 8,
+  },
+
+  compactHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  compactHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  // Season context text (e.g., "W26 · Race 2/10")
+  seasonContext: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: -0.2,
+  },
+
+  // Compact countdown badge (e.g., "18h" or "2d")
+  countdownBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  countdownBadgeText: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Icon-only quick actions in header
+  quickActionsCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  compactActionButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  compactActionButtonPressed: {
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+  },
+
+  // Race name (Apple HIG - 20pt semibold, primary visual element)
+  raceName: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+    marginBottom: 4,
+  },
+
+  // Race subtitle (venue + datetime combined)
+  raceSubtitle: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 12,
   },
 
   // Badges Row (top of card)
@@ -981,7 +1605,7 @@ const styles = StyleSheet.create({
   venueText: {
     fontSize: 15,
     color: IOS_COLORS.gray,
-    flex: 1,
+    marginBottom: 12,
   },
 
   // Countdown Section
@@ -1335,7 +1959,102 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
     color: IOS_COLORS.secondaryLabel,
+    marginBottom: 12,
+  },
+
+  // Countdown Hero (Apple HIG - prominent centered countdown)
+  countdownHero: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    marginBottom: 12,
+  },
+  countdownHeroValue: {
+    fontSize: 48,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -1,
+    lineHeight: 56,
+  },
+  countdownHeroLabel: {
+    fontSize: 17,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    marginTop: 2,
+  },
+
+  // Compact Inline Countdown (saves ~16px vertical space)
+  countdownInline: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  countdownValue: {
+    fontSize: 36,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.5,
+  },
+  countdownLabel: {
+    fontSize: 17,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+  },
+
+  // Meta Row (location, date)
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
     marginBottom: 16,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metaIcon: {
+    fontSize: 14,
+  },
+  metaText: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Quick Actions Row (Compact - icon only, 44pt touch targets maintained)
+  quickActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  quickActionButton: {
+    width: 44,  // Touch target maintained
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  quickActionButtonPressed: {
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+  },
+  quickActionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.gray6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
   },
 
   // Time block - contains countdown inline with date
@@ -1649,99 +2368,6 @@ const styles = StyleSheet.create({
   },
 
   // ==========================================================================
-  // TEMPORAL PHASE TAB STYLES
-  // ==========================================================================
-
-  // Phase tabs container (expanded)
-  phaseTabs: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: IOS_COLORS.gray5,
-  },
-
-  // Phase tab button (expanded)
-  phaseTab: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 'auto',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: IOS_COLORS.gray6,
-    alignItems: 'center',
-    position: 'relative',
-    minWidth: 55,
-  },
-
-  // Phase tab selected state (expanded)
-  phaseTabSelected: {
-    backgroundColor: IOS_COLORS.blue,
-  },
-
-  // Phase tab text (expanded)
-  phaseTabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: IOS_COLORS.secondaryLabel,
-  },
-
-  // Phase tab text selected (expanded)
-  phaseTabTextSelected: {
-    color: '#FFFFFF',
-  },
-
-  // Phase tabs container (compact - for collapsed view)
-  phaseTabsCompact: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 4,
-    marginBottom: 12,
-    marginTop: 4,
-  },
-
-  // Phase tab button (compact)
-  phaseTabCompact: {
-    flex: 1,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: IOS_COLORS.gray6,
-    alignItems: 'center',
-    position: 'relative',
-  },
-
-  // Phase tab selected state (compact)
-  phaseTabCompactSelected: {
-    backgroundColor: IOS_COLORS.blue,
-  },
-
-  // Phase tab text (compact)
-  phaseTabTextCompact: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: IOS_COLORS.secondaryLabel,
-  },
-
-  // Phase tab text selected (compact)
-  phaseTabTextCompactSelected: {
-    color: '#FFFFFF',
-  },
-
-  // Current phase indicator dot (shows when not selected)
-  phaseCurrentIndicator: {
-    position: 'absolute',
-    bottom: 3,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: IOS_COLORS.orange,
-  },
-
-  // ==========================================================================
   // PHASE CONTENT CONTAINER STYLES
   // ==========================================================================
 
@@ -1754,12 +2380,124 @@ const styles = StyleSheet.create({
   // Phase content container (expanded view - ScrollView)
   phaseContentContainerExpanded: {
     flex: 1,
-    marginBottom: 24,
+    marginBottom: 16,
   },
 
   // Phase content scroll content (for ScrollView contentContainerStyle)
   phaseContentScrollContent: {
     paddingBottom: 20,
+  },
+
+  // Scroll container with edge gradients (Tufte: visual hint of content continuation)
+  scrollContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+
+  // Top scroll gradient (appears when scrolled down)
+  topScrollGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 24,
+    zIndex: 10,
+  },
+
+  // Bottom scroll gradient (appears when more content below)
+  bottomScrollGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 24,
+    zIndex: 10,
+  },
+
+  // Compact Timeline (inside card footer - Tufte-inspired)
+  compactTimeline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.gray5,
+    gap: 8,
+  },
+  // Navigation buttons for timeline
+  timelineNavButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.gray6,
+  },
+  timelineNavButtonDisabled: {
+    opacity: 0.4,
+  },
+  // Center section with track and dots
+  compactTimelineCenter: {
+    flex: 1,
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  compactTimelineTrack: {
+    position: 'absolute',
+    top: '40%',
+    left: 8,
+    right: 8,
+    height: 2,
+    backgroundColor: IOS_COLORS.gray5,
+    borderRadius: 1,
+  },
+  compactTimelineDots: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 4,
+  },
+  compactTimelineDot: {
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    minWidth: 32,
+    paddingTop: 4,
+  },
+  compactTimelineDotSelected: {
+    // Selected state handled by text styles
+  },
+  compactTimelineDay: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.tertiaryLabel,
+    fontVariant: ['tabular-nums'],
+  },
+  compactTimelineDaySelected: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: IOS_COLORS.blue,
+  },
+  compactTimelineDayNext: {
+    color: '#10B981', // Next race green
+    fontWeight: '600',
+  },
+  compactTimelineMonth: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  compactTimelineMonthSelected: {
+    color: IOS_COLORS.blue,
+    fontWeight: '600',
+  },
+  compactTimelineNowIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+    marginBottom: 4,
   },
 
   // Demo race badge (shown when user has no real races)
@@ -1797,6 +2535,244 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4338CA', // Indigo-700
     letterSpacing: 1,
+  },
+
+  // ==========================================================================
+  // COLLABORATION BADGE STYLES
+  // ==========================================================================
+
+  // "Shared with you" badge for accepted collaborators
+  sharedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+  },
+  sharedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+
+  // Pending invite badge container (contains badge + actions)
+  inviteBadgeContainer: {
+    marginBottom: 12,
+  },
+  inviteBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: `${IOS_COLORS.orange}15`,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  inviteBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.orange,
+  },
+
+  // Accept/Decline action buttons
+  inviteActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inviteAcceptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: `${IOS_COLORS.green}15`,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  inviteAcceptText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.green,
+  },
+  inviteDeclineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: `${IOS_COLORS.red}10`,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  inviteDeclineText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.red,
+  },
+  inviteButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  // ==========================================================================
+  // TUFTE MINIMALIST CARD STYLES
+  // Maximum data density, typography IS the interface
+  // ==========================================================================
+
+  // Top row: temporal info left, race number + menu right
+  tufteTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  tufteTopRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tufteTemporalText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteRaceNumber: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+  },
+
+  // Simplified race name (larger, no club prefix)
+  tufteRaceNameSimplified: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    lineHeight: 24,
+    marginBottom: 12,
+    letterSpacing: -0.3,
+  },
+
+  // Inline progress bar
+  tufteProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  tuftePhaseName: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    width: 44, // Fixed width for alignment
+  },
+  tufteProgressTrack: {
+    flex: 1,
+    height: 4,
+    backgroundColor: IOS_COLORS.gray5,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  tufteProgressFill: {
+    height: 4,
+    backgroundColor: IOS_COLORS.secondaryLabel,
+    borderRadius: 2,
+  },
+  tufteProgressCount: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    width: 20, // Fixed width for alignment
+    textAlign: 'right',
+  },
+
+  // Complete state
+  tufteCompleteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 16,
+  },
+  tufteCompleteText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+
+  // ==========================================================================
+  // SIMPLIFIED HEADER STYLES (Clean design: badge + countdown + name + details)
+  // ==========================================================================
+
+  simpleHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  raceTypeBadge: {
+    backgroundColor: IOS_COLORS.gray5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  raceTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+  },
+  simpleHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  countdownSimple: {
+    alignItems: 'center',
+  },
+  countdownNumberSimple: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  countdownLabelSimple: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  raceNameLarge: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    lineHeight: 28,
+    marginBottom: 16,
+  },
+  simpleDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  simpleDetailText: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // ==========================================================================
+  // SWIPE-TO-DELETE ACTION
+  // ==========================================================================
+  swipeDeleteAction: {
+    backgroundColor: IOS_COLORS.red,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    paddingHorizontal: 16,
+  },
+  swipeDeleteText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });
 

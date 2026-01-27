@@ -248,8 +248,6 @@ function getPhaseName(phase: RacePhase): string {
   switch (phase) {
     case 'days_before':
       return 'Preparation';
-    case 'race_morning':
-      return 'Race Morning';
     case 'on_water':
       return 'On Water';
     case 'after_race':

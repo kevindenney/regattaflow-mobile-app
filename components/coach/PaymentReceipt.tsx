@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  Share,
+  Platform,
+  Alert,
 } from 'react-native';
 import { CoachingSession } from '../../types/coach';
 
@@ -78,10 +79,20 @@ Thank you for using RegattaFlow!
 
   const handleShare = async () => {
     try {
-      await Share.share({
-        message: generateReceiptText(),
-        title: 'RegattaFlow Payment Receipt',
-      });
+      const message = generateReceiptText();
+      const title = 'RegattaFlow Payment Receipt';
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ title, text: message });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(message);
+          Alert.alert('Copied', 'Receipt copied to clipboard');
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({ message, title });
+      }
     } catch (error) {
       console.error('Error sharing receipt:', error);
     }

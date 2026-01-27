@@ -136,7 +136,7 @@ export const racesApi = {
       let { data, error, count } = await supabase
         .from('regatta_races')
         .select('*, regatta:regattas(*)', { count: 'exact' })
-        .eq('regattas.user_id', userId)
+        .eq('regattas.created_by', userId)
         .order('scheduled_date', { ascending: false })
         .order('scheduled_time', { ascending: false, nullsFirst: false })
         .range(offset, offset + limit - 1);
@@ -783,7 +783,7 @@ export const regattasApi = {
       const { data, error } = await supabase
         .from('regattas')
         .select('*')
-        .eq('user_id', userId)
+        .eq('created_by', userId)
         .order('start_date', { ascending: false });
 
       return { data, error, loading: false };

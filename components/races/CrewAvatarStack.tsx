@@ -100,18 +100,21 @@ export function CrewAvatarStack({
       return null;
     }
 
-    // Render the "+" add crew button
+    // Render the "+" add crew button - icon only for xs size (compact mode)
+    const isCompact = size === 'xs';
     const addButton = (
       <View style={styles.addButtonContainer}>
-        <View style={[styles.addButton, size === 'xs' && styles.addButtonXs]}>
+        <View style={[styles.addButton, isCompact && styles.addButtonXs]}>
           <UserPlus
-            size={size === 'xs' ? 12 : size === 'sm' ? 14 : 16}
+            size={isCompact ? 12 : size === 'sm' ? 14 : 16}
             color={IOS_COLORS.blue}
           />
         </View>
-        <Text style={[styles.addButtonLabel, size === 'xs' && styles.addButtonLabelXs]}>
-          Crew
-        </Text>
+        {!isCompact && (
+          <Text style={styles.addButtonLabel}>
+            Crew
+          </Text>
+        )}
       </View>
     );
 

@@ -62,6 +62,10 @@ interface UseRaceChecklistReturn {
   totalCount: number;
   progress: number; // 0-1
   isLoading: boolean;
+  /** True only on the first load - use to show skeleton without flickering on tab switch */
+  isInitialLoading: boolean;
+  /** True if we have cached/loaded data (even if currently refreshing) */
+  hasData: boolean;
   isSaving: boolean;
 
   // Actions
@@ -87,7 +91,7 @@ export function useRaceChecklist({
   const userId = userIdProp || user?.id;
 
   // Get race preparation for persisting checklist state
-  const { intentions, updateIntentions, isLoading, isSaving } = useRacePreparation({
+  const { intentions, updateIntentions, isLoading, isInitialLoading, hasData, isSaving } = useRacePreparation({
     regattaId,
     autoSave: true,
     debounceMs: 500, // Faster save for checklist toggling
@@ -269,6 +273,8 @@ export function useRaceChecklist({
     totalCount,
     progress,
     isLoading,
+    isInitialLoading,
+    hasData,
     isSaving,
 
     // Actions

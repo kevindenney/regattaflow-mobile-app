@@ -136,7 +136,7 @@ export function WeatherRoutingWizard({
     riskColor,
     agreementColor,
   } = useWeatherRouting({
-    regattaId,
+    raceEventId: regattaId,
     waypoints: routeWaypoints || null,
     startTime: startTimeString,
     boatId,

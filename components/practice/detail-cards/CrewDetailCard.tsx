@@ -19,7 +19,7 @@ import {
   Platform,
   UIManager,
   Pressable,
-  Share,
+  Alert,
 } from 'react-native';
 import {
   Users,
@@ -144,10 +144,20 @@ export function CrewDetailCard({
 
   const handleShare = async () => {
     if (inviteLink || inviteCode) {
+      const message = `Join my practice session!\n\nInvite code: ${inviteCode}\n\n${inviteLink || ''}`;
       try {
-        await Share.share({
-          message: `Join my practice session!\n\nInvite code: ${inviteCode}\n\n${inviteLink || ''}`,
-        });
+        if (Platform.OS === 'web') {
+          const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+          if (nav?.share) {
+            await nav.share({ text: message });
+          } else if (nav?.clipboard?.writeText) {
+            await nav.clipboard.writeText(message);
+            Alert.alert('Copied', 'Invite link copied to clipboard');
+          }
+        } else {
+          const { Share } = await import('react-native');
+          await Share.share({ message });
+        }
       } catch (error) {
         // User cancelled or error
       }

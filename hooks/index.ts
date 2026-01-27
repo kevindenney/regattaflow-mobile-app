@@ -84,6 +84,29 @@ export { useContentModules } from './useContentModules';
 export { useContentPreferences } from './useContentPreferences';
 export type { UseContentModulesReturn, UseContentPreferencesReturn } from '@/types/raceCardContent';
 
+// Sailor Discovery - Race Content Sharing
+export { useRegattaContent } from './useRegattaContent';
+export type { ContentVisibility, TuningSettings, UseRegattaContentReturn } from './useRegattaContent';
+
+// Instagram-style Discovery Feed
+export { useDiscoveryFeed } from './useDiscoveryFeed';
+export type { FeedItem, FeedItemType, FeedMode, UseDiscoveryFeedResult } from './useDiscoveryFeed';
+
+// Sailor Race Journey (view another sailor's race journey)
+export { usePublicSailorRaceJourney } from './usePublicSailorRaceJourney';
+export type {
+  SailorProfile,
+  RaceData,
+  RaceResult,
+  ChecklistSummary,
+  SailorRaceJourneyData,
+  UsePublicSailorRaceJourneyResult,
+} from './usePublicSailorRaceJourney';
+
+// Past Tuning Settings - AI Suggestions
+export { usePastTuningSettings } from './usePastTuningSettings';
+export type { UsePastTuningSettingsParams, UsePastTuningSettingsReturn } from './usePastTuningSettings';
+
 // Pre-Race Team Sharing
 export { useTeamSharing } from './useTeamSharing';
 export type { UseTeamSharingResult, UseTeamSharingParams, RaceShare } from './useTeamSharing';

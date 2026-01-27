@@ -166,9 +166,12 @@ export function TufteBoatRow({
           {sailNumber ? ` ${sailNumber}` : ''}
         </Text>
       </View>
-      <View style={styles.boatStatus}>
-        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-        <Text style={styles.boatStatusText}>{statusLabel}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={styles.boatStatus}>
+          <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+          <Text style={styles.boatStatusText}>{statusLabel}</Text>
+        </View>
+        {onPress && <Text style={styles.settingChevron}>›</Text>}
       </View>
     </TouchableOpacity>
   );

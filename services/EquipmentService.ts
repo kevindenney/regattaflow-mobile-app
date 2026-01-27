@@ -274,8 +274,9 @@ class EquipmentService {
       .order('custom_name');
 
     if (error) {
-      logger.error('Error fetching boat equipment', { boatId, error });
-      throw error;
+      // Equipment data may not be available - this is expected for new boats
+      logger.debug('Boat equipment not available', { boatId, code: error.code });
+      return [];
     }
 
     return data || [];
@@ -611,8 +612,8 @@ class EquipmentService {
       .single();
 
     if (error) {
-      logger.error('Error getting equipment health', { boatId, error });
-      // Return default values if function doesn't exist yet
+      // RPC function may not exist yet - return defaults silently
+      logger.debug('Equipment health RPC not available', { boatId });
       return {
         total_equipment: 0,
         overdue_maintenance: 0,
@@ -638,8 +639,8 @@ class EquipmentService {
       .order('attention_level');
 
     if (error) {
-      logger.error('Error getting equipment requiring attention', { boatId, error });
-      // Fallback: query directly if view doesn't exist
+      // View may not exist - this is expected, use fallback silently
+      logger.debug('equipment_requiring_attention view not available, using fallback', { boatId });
       return this.getEquipmentWithMaintenanceDue(boatId);
     }
 

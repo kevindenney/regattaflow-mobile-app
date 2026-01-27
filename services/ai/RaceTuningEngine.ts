@@ -3,11 +3,13 @@ import Anthropic from '@anthropic-ai/sdk';
 import { skillManagementService } from './SkillManagementService';
 import { createLogger } from '@/lib/utils/logger';
 import { cachedAICall } from '@/lib/utils/aiCache';
-import { 
-  withAIFallback, 
-  generateMockRigTuning, 
+import {
+  withAIFallback,
+  generateMockRigTuning,
   isAIInFallbackMode,
   isCreditExhaustedError,
+  isAPIOverloadError,
+  shouldTriggerFallback,
   activateFallbackMode
 } from '@/lib/utils/aiFallback';
 import { BOAT_TUNING_SKILL_CONTENT } from '@/skills/tuning-guides/boatTuningSkill';
@@ -322,10 +324,13 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
 
       return parsed.map(item => this.transformAIOnlyRecommendation(item));
     } catch (error: any) {
-      // Handle credit exhaustion gracefully
-      if (isCreditExhaustedError(error)) {
-        activateFallbackMode('Anthropic API credit balance too low');
-        logger.warn('Activating fallback mode due to credit exhaustion');
+      // Handle credit exhaustion OR API overload gracefully
+      if (shouldTriggerFallback(error)) {
+        const reason = isAPIOverloadError(error)
+          ? 'Anthropic API overloaded (529)'
+          : 'Anthropic API credit balance too low';
+        activateFallbackMode(reason);
+        logger.warn('Activating fallback mode', { reason, errorStatus: error?.status || error?.statusCode });
         const mockRec = generateMockRigTuning({
           className: boatClass,
           windSpeed: weatherContext.windSpeed,
@@ -340,13 +345,23 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
   }
 
   async generateRecommendations(params: GenerateParams): Promise<RaceTuningRecommendation[]> {
+    const { candidates, limit = 1, classId, className, averageWindSpeed, pointsOfSail } = params;
+
+    // Check if we're in fallback mode due to credit exhaustion or API overload
+    if (isAIInFallbackMode()) {
+      logger.info('Using fallback mode for rig tuning (API unavailable)');
+      const mockRec = generateMockRigTuning({
+        className: className || classId || undefined,
+        windSpeed: averageWindSpeed ?? undefined,
+      });
+      return [this.transformAIOnlyRecommendation(mockRec)];
+    }
+
     if (!this.hasValidApiKey) {
       return [];
     }
 
     await this.ensureSkillInitialized();
-
-    const { candidates, limit = 1, classId, className, averageWindSpeed, pointsOfSail } = params;
     if (!candidates || candidates.length === 0) {
       return [];
     }
@@ -514,7 +529,21 @@ ${JSON.stringify(payload, null, 2)}`;
       return parsed
         .map(item => this.transformSkillRecommendation(item))
         .filter(rec => rec.settings.length > 0);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle credit exhaustion OR API overload gracefully
+      if (shouldTriggerFallback(error)) {
+        const reason = isAPIOverloadError(error)
+          ? 'Anthropic API overloaded (529)'
+          : 'Anthropic API credit balance too low';
+        activateFallbackMode(reason);
+        logger.warn('Activating fallback mode in generateRecommendations', { reason, errorStatus: error?.status || error?.statusCode });
+        const mockRec = generateMockRigTuning({
+          className: className || classId || undefined,
+          windSpeed: averageWindSpeed ?? undefined,
+        });
+        return [this.transformAIOnlyRecommendation(mockRec)];
+      }
+
       logger.error('Boat tuning skill generation failed', error);
       throw error;
     }

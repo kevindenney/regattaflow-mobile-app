@@ -303,25 +303,35 @@ export class OpenMeteoService {
         cloudLayerProfile: {
           total: cloudCover,
           low: cloudCover * 0.4,
-          mid: cloudCover * 0.35,
+          medium: cloudCover * 0.35,
           high: cloudCover * 0.25,
         },
-        precipitation: {
-          intensity: precipitation,
+        precipitation,
+        precipitationProfile: {
+          rate: precipitation,
           probability: precipitation > 0 ? Math.min(90, precipitation * 30) : 10,
           type: temperature < 2 ? 'snow' : 'rain',
         },
         visibility: {
-          distance: visibilityMeters,
-          condition: this.determineVisibilityCondition(visibilityKm),
-          trend: 'stable',
+          horizontal: visibilityMeters,
+          conditions: this.determineVisibilityCondition(visibilityKm) as 'clear' | 'haze' | 'fog' | 'rain' | 'snow',
+        },
+        seaState: {
+          waveHeight,
+          wavePeriod,
+          swellHeight,
+          swellPeriod,
+          swellDirection,
+          seaTemperature: temperature - 2,
         },
         timestamp,
         location,
         forecast: {
           confidence: 0.85, // Open-Meteo uses ECMWF data which is high quality
           source: 'Open-Meteo',
-          validUntil: new Date(timestamp.getTime() + 3 * 60 * 60 * 1000),
+          modelRun: new Date(),
+          validTime: new Date(timestamp.getTime() + 3 * 60 * 60 * 1000),
+          resolution: '11km',
         },
       });
     }

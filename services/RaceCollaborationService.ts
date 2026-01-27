@@ -145,7 +145,7 @@ class RaceCollaborationServiceClass {
           .in('id', userIds),
         supabase
           .from('sailor_profiles')
-          .select('user_id, avatar_emoji, avatar_color, full_name')
+          .select('user_id, avatar_emoji, avatar_color')
           .in('user_id', userIds),
       ]);
 
@@ -170,7 +170,7 @@ class RaceCollaborationServiceClass {
         ...rowToRaceCollaborator(row as RaceCollaboratorRow),
         profile: profile || sailorProfile
           ? {
-              fullName: sailorProfile?.full_name || profile?.full_name,
+              fullName: profile?.full_name,
               avatarEmoji: sailorProfile?.avatar_emoji,
               avatarColor: sailorProfile?.avatar_color,
               email: profile?.email,
@@ -207,7 +207,7 @@ class RaceCollaborationServiceClass {
           .single(),
         supabase
           .from('sailor_profiles')
-          .select('user_id, avatar_emoji, avatar_color, full_name')
+          .select('user_id, avatar_emoji, avatar_color')
           .eq('user_id', data.user_id)
           .single(),
       ]);
@@ -216,7 +216,7 @@ class RaceCollaborationServiceClass {
       const sp = sailorProfileResult.data;
       if (p || sp) {
         profile = {
-          fullName: sp?.full_name || p?.full_name,
+          fullName: p?.full_name,
           avatarEmoji: sp?.avatar_emoji,
           avatarColor: sp?.avatar_color,
           email: p?.email,
@@ -322,6 +322,187 @@ class RaceCollaborationServiceClass {
     }
 
     logger.info('Declined invite', { collaboratorId });
+  }
+
+  /**
+   * Request to join a race (from Social Sailing timeline)
+   * Creates a pending collaborator entry that the race owner can approve/decline
+   */
+  async requestToJoin(
+    regattaId: string,
+    userId: string,
+    options?: { displayName?: string; role?: string; message?: string }
+  ): Promise<{ collaboratorId: string }> {
+    logger.info('Requesting to join race:', { regattaId, userId });
+
+    // Check if user is already a collaborator
+    const { data: existing } = await supabase
+      .from('race_collaborators')
+      .select('id, status')
+      .eq('regatta_id', regattaId)
+      .eq('user_id', userId)
+      .single();
+
+    if (existing) {
+      if (existing.status === 'accepted') {
+        throw new Error('You are already a member of this race');
+      }
+      if (existing.status === 'pending') {
+        throw new Error('Your request is already pending');
+      }
+      if (existing.status === 'declined') {
+        // Update the existing declined request to pending
+        const { error: updateError } = await supabase
+          .from('race_collaborators')
+          .update({
+            status: 'pending',
+            role: options?.role || 'Requested',
+          })
+          .eq('id', existing.id);
+
+        if (updateError) {
+          logger.error('Failed to update join request:', updateError);
+          throw updateError;
+        }
+
+        return { collaboratorId: existing.id };
+      }
+    }
+
+    // Create new collaborator with pending status
+    const { data: newCollab, error: insertError } = await supabase
+      .from('race_collaborators')
+      .insert({
+        regatta_id: regattaId,
+        user_id: userId,
+        display_name: options?.displayName || null,
+        access_level: 'view', // Will be updated when approved
+        role: options?.role || 'Requested',
+        status: 'pending',
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      logger.error('Failed to create join request:', insertError);
+      throw insertError;
+    }
+
+    logger.info('Created join request', { regattaId, userId, collaboratorId: newCollab?.id });
+    return { collaboratorId: newCollab.id };
+  }
+
+  /**
+   * Approve a join request (race owner only)
+   * Changes status from 'pending' to 'accepted' and grants edit access
+   */
+  async approveJoinRequest(collaboratorId: string): Promise<void> {
+    const { error } = await supabase
+      .from('race_collaborators')
+      .update({
+        status: 'accepted',
+        access_level: 'full',
+        joined_at: new Date().toISOString(),
+      })
+      .eq('id', collaboratorId);
+
+    if (error) {
+      logger.error('Failed to approve join request:', error);
+      throw error;
+    }
+
+    logger.info('Approved join request', { collaboratorId });
+  }
+
+  /**
+   * Add a crew member as a collaborator with edit access.
+   * Used when crew is assigned to race positions in SailingTab.
+   * Uses upsert to handle existing collaborators - updates their role and access.
+   * Status is set to 'accepted' immediately (no approval needed for crew).
+   */
+  async addCrewAsCollaborator(
+    regattaId: string,
+    userId: string,
+    role: string // Position: "Helmsman", "Tactician", etc.
+  ): Promise<{ collaboratorId: string; isNew: boolean }> {
+    const { data: currentUser } = await supabase.auth.getUser();
+    if (!currentUser?.user) {
+      throw new Error('Not authenticated');
+    }
+
+    // Check if user is already a collaborator
+    const { data: existing } = await supabase
+      .from('race_collaborators')
+      .select('id')
+      .eq('regatta_id', regattaId)
+      .eq('user_id', userId)
+      .single();
+
+    if (existing) {
+      // Update existing collaborator with new role and full access
+      const { error: updateError } = await supabase
+        .from('race_collaborators')
+        .update({
+          access_level: 'full',
+          role: role,
+          status: 'accepted',
+          joined_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+
+      if (updateError) {
+        logger.error('Failed to update crew collaborator:', updateError);
+        throw updateError;
+      }
+
+      logger.info('Updated crew collaborator', { regattaId, userId, role });
+      return { collaboratorId: existing.id, isNew: false };
+    }
+
+    // Create new collaborator with full access and accepted status
+    const { data: newCollab, error: insertError } = await supabase
+      .from('race_collaborators')
+      .insert({
+        regatta_id: regattaId,
+        user_id: userId,
+        invited_by: currentUser.user.id,
+        access_level: 'full',
+        role: role,
+        status: 'accepted',
+        joined_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      logger.error('Failed to add crew collaborator:', insertError);
+      throw insertError;
+    }
+
+    logger.info('Added crew as collaborator', { regattaId, userId, role });
+    return { collaboratorId: newCollab.id, isNew: true };
+  }
+
+  /**
+   * Remove a crew member's collaborator access.
+   * Used when crew is removed from race positions.
+   */
+  async removeCrewCollaborator(
+    regattaId: string,
+    userId: string
+  ): Promise<void> {
+    const { error } = await supabase
+      .from('race_collaborators')
+      .delete()
+      .eq('regatta_id', regattaId)
+      .eq('user_id', userId);
+
+    if (error) {
+      logger.error('Failed to remove crew collaborator:', error);
+      throw error;
+    }
+
+    logger.info('Removed crew collaborator', { regattaId, userId });
   }
 
   /**
@@ -472,7 +653,7 @@ class RaceCollaborationServiceClass {
           .in('id', userIds),
         supabase
           .from('sailor_profiles')
-          .select('user_id, avatar_emoji, avatar_color, full_name')
+          .select('user_id, avatar_emoji, avatar_color')
           .in('user_id', userIds),
       ]);
 
@@ -496,7 +677,7 @@ class RaceCollaborationServiceClass {
         ...rowToRaceMessage(row as RaceMessageRow),
         profile: profile || sailorProfile
           ? {
-              fullName: sailorProfile?.full_name || profile?.full_name,
+              fullName: profile?.full_name,
               avatarEmoji: sailorProfile?.avatar_emoji,
               avatarColor: sailorProfile?.avatar_color,
             }

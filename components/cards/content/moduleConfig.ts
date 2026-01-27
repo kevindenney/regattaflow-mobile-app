@@ -34,26 +34,11 @@ export const PHASE_MODULE_CONFIG: Record<RacePhase, PhaseModuleConfig> = {
       'competitor_notes',
       'tide_currents',
       'share_with_team',
-    ],
-    defaultModules: ['conditions', 'course', 'checklist', 'share_with_team'],
-    maxModules: 5,
-  },
-
-  race_morning: {
-    phase: 'race_morning',
-    availableModules: [
-      'conditions',
       'strategy',
-      'rig_setup',
-      'course',
-      'tide_currents',
       'start_sequence',
-      'checklist',
-      'fleet_analysis',
-      'share_with_team',
     ],
-    defaultModules: ['conditions', 'strategy', 'rig_setup', 'share_with_team'],
-    maxModules: 5,
+    defaultModules: ['conditions', 'course', 'checklist', 'strategy', 'share_with_team'],
+    maxModules: 6,
   },
 
   on_water: {

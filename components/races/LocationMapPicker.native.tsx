@@ -25,7 +25,7 @@ import {
   Pressable,
   TurboModuleRegistry,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, MapPin, Search, Navigation, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/services/supabase';
@@ -107,6 +107,7 @@ export function LocationMapPicker({
   initialName = '',
 }: LocationMapPickerProps) {
   const mapRef = useRef<any>(null);
+  const insets = useSafeAreaInsets();
 
   // State
   const [selectedLocation, setSelectedLocation] = useState<VenueLocation | null>(
@@ -350,22 +351,31 @@ export function LocationMapPicker({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen">
-      <SafeAreaView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <X size={24} color={IOS_COLORS.label} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Select Location</Text>
-          <TouchableOpacity
-            onPress={handleConfirm}
-            style={[styles.doneButton, !selectedLocation && styles.doneButtonDisabled]}
-            disabled={!selectedLocation}
-          >
-            <Text style={[styles.doneButtonText, !selectedLocation && styles.doneButtonTextDisabled]}>
-              Done
-            </Text>
-          </TouchableOpacity>
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        {/* Header - separate View with explicit zIndex to ensure touch handling */}
+        <View style={styles.headerWrapper}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeButton}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              activeOpacity={0.6}
+            >
+              <X size={24} color={IOS_COLORS.label} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Select Location</Text>
+            <TouchableOpacity
+              onPress={handleConfirm}
+              style={[styles.doneButton, !selectedLocation && styles.doneButtonDisabled]}
+              disabled={!selectedLocation}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              activeOpacity={0.6}
+            >
+              <Text style={[styles.doneButtonText, !selectedLocation && styles.doneButtonTextDisabled]}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search Bar */}
@@ -493,7 +503,7 @@ export function LocationMapPicker({
             Tap on the map to select a racing area center
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -507,6 +517,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: IOS_COLORS.systemBackground,
   },
+  headerWrapper: {
+    backgroundColor: IOS_COLORS.systemBackground,
+    zIndex: 1000,
+    elevation: 1000,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -515,12 +530,15 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: IOS_COLORS.gray5,
+    backgroundColor: IOS_COLORS.systemBackground,
+    zIndex: 10,
   },
   closeButton: {
     width: 44,
     height: 44,
     alignItems: 'flex-start',
     justifyContent: 'center',
+    zIndex: 11,
   },
   headerTitle: {
     fontSize: 17,
@@ -533,6 +551,7 @@ const styles = StyleSheet.create({
   doneButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
+    zIndex: 11,
   },
   doneButtonDisabled: {
     opacity: 0.5,
@@ -553,6 +572,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     gap: 8,
+    backgroundColor: IOS_COLORS.systemBackground,
+    zIndex: 10,
   },
   searchInputContainer: {
     flex: 1,

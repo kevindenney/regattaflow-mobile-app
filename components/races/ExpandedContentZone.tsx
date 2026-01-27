@@ -10,13 +10,20 @@
 
 import React, { useCallback, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Settings2 } from 'lucide-react-native';
+import { Settings2, FileText, Map, BookOpen } from 'lucide-react-native';
 
 import { IOS_COLORS } from '@/components/cards/constants';
 import { RacePhase, CardRaceData } from '@/components/cards/types';
 import { useContentModules } from '@/hooks/useContentModules';
 import { ContentModuleRenderer } from '@/components/cards/content/ContentModuleRenderer';
 import { ContentConfigModal } from '@/components/races/ContentConfigModal';
+import { AccordionSection } from '@/components/races/AccordionSection';
+import { RaceContentActions } from '@/components/races/RaceContentActions';
+import { EducationalChecklist } from '@/components/checklist-tools/EducationalChecklist';
+import {
+  PRE_RACE_PREPARATION_CONFIG,
+  COURSE_INTELLIGENCE_CONFIG,
+} from '@/lib/educationalChecklistConfig';
 import type { RaceType, ContentModuleId } from '@/types/raceCardContent';
 
 interface ExpandedContentZoneProps {
@@ -132,6 +139,47 @@ export function ExpandedContentZone({
             />
           ))
         )}
+
+        {/* Sailor Discovery - Prep Notes & Post-Race Analysis */}
+        <AccordionSection
+          title="Your Race Notes"
+          icon={<BookOpen size={16} color={IOS_COLORS.purple} />}
+          defaultExpanded
+          subtitle="Share prep & analysis with fleet"
+        >
+          <RaceContentActions
+            regattaId={raceId || race.id}
+            raceName={race.name}
+            raceDate={race.startDate as string | Date | undefined}
+          />
+        </AccordionSection>
+
+        {/* Educational Checklists */}
+        <View style={styles.checklistsContainer}>
+          <AccordionSection
+            title="Pre-Race Preparation"
+            icon={<FileText size={16} color={IOS_COLORS.blue} />}
+            defaultExpanded
+            subtitle="Documents & communications"
+          >
+            <EducationalChecklist
+              config={PRE_RACE_PREPARATION_CONFIG}
+              raceId={raceId || race.id}
+            />
+          </AccordionSection>
+
+          <AccordionSection
+            title="Course Intelligence"
+            icon={<Map size={16} color={IOS_COLORS.green} />}
+            defaultExpanded
+            subtitle="Course analysis & strategy"
+          >
+            <EducationalChecklist
+              config={COURSE_INTELLIGENCE_CONFIG}
+              raceId={raceId || race.id}
+            />
+          </AccordionSection>
+        </View>
       </ScrollView>
 
       {/* Configuration modal */}
@@ -159,8 +207,6 @@ function getPhaseTitle(phase: RacePhase): string {
   switch (phase) {
     case 'days_before':
       return 'Preparation';
-    case 'race_morning':
-      return 'Race Morning';
     case 'on_water':
       return 'On Water';
     case 'after_race':
@@ -239,6 +285,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: IOS_COLORS.systemBackground,
+  },
+  checklistsContainer: {
+    marginTop: 16,
+    gap: 8,
+    backgroundColor: IOS_COLORS.systemBackground,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 });
 

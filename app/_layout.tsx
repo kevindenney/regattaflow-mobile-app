@@ -88,7 +88,6 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
 
   console.error = (...args) => {
     // Suppress font loading timeout errors (non-critical)
-    // NOTE: We no longer suppress "Unexpected text node" to debug hydration issues
     if (
       typeof args[0] === 'string' &&
       (args[0].includes('timeout exceeded') ||

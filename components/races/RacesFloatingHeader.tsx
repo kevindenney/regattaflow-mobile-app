@@ -63,6 +63,8 @@ export interface RacesFloatingHeaderProps {
   onAddRace: () => void;
   /** Callback when add practice is pressed */
   onAddPractice?: () => void;
+  /** Callback when new season is pressed */
+  onNewSeason?: () => void;
   /** Current filter segment */
   filterSegment?: RaceFilterSegment;
   /** Callback when filter segment changes */
@@ -107,6 +109,7 @@ export function RacesFloatingHeader({
   isOnline,
   onAddRace,
   onAddPractice,
+  onNewSeason,
   filterSegment = 'upcoming',
   onFilterChange,
   scrollOffset = 0,
@@ -173,7 +176,7 @@ export function RacesFloatingHeader({
   // Handle add button press
   const handleAddPress = () => {
     triggerHaptic('impactLight');
-    if (!onAddPractice) {
+    if (!onAddPractice && !onNewSeason) {
       onAddRace();
       return;
     }
@@ -223,7 +226,7 @@ export function RacesFloatingHeader({
   const isLoading = loadingInsights || weatherLoading;
 
   // Build the race counter parts
-  const hasIndexCounter = currentRaceIndex && totalRaces;
+  const hasIndexCounter = Boolean(currentRaceIndex && totalRaces);
   const hasUpcoming = upcomingRaces !== undefined && upcomingRaces > 0;
   const showCounter = hasIndexCounter || hasUpcoming;
 
@@ -383,6 +386,29 @@ export function RacesFloatingHeader({
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
                 </TouchableOpacity>
+              )}
+
+              {/* New Season Option */}
+              {onNewSeason && (
+                <>
+                  <View style={styles.menuSeparator} />
+                  <TouchableOpacity
+                    style={styles.menuOption}
+                    onPress={() => handleMenuOption(onNewSeason)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemOrange}15` }]}>
+                      <MaterialCommunityIcons name="calendar-plus" size={24} color={IOS_COLORS.systemOrange} />
+                    </View>
+                    <View style={styles.menuOptionContent}>
+                      <Text style={styles.menuOptionTitle}>New Season</Text>
+                      <Text style={styles.menuOptionSubtitle}>
+                        Start a new racing season
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                  </TouchableOpacity>
+                </>
               )}
             </View>
           </Animated.View>

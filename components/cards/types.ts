@@ -47,42 +47,40 @@ export function isRacePast(date: string, startTime?: string): boolean {
 /**
  * Temporal phases for race preparation and execution
  * Organized by when information is most relevant (Tufte: information appears when needed)
+ * Simplified to 3 phases: Prep (days_before), Race (on_water), Review (after_race)
  */
-export type RacePhase = 'days_before' | 'race_morning' | 'on_water' | 'after_race';
+export type RacePhase = 'days_before' | 'on_water' | 'after_race';
 
 /**
  * Phase labels for display
  */
 export const RACE_PHASE_LABELS: Record<RacePhase, string> = {
   days_before: 'Days Before',
-  race_morning: 'Race Morning',
   on_water: 'On Water',
   after_race: 'After Race',
 };
 
 /**
- * Phase short labels for tabs
+ * Phase short labels for tabs (Apple HIG: concise, action-oriented)
  */
 export const RACE_PHASE_SHORT_LABELS: Record<RacePhase, string> = {
-  days_before: 'Prep',
-  race_morning: 'Launch',
-  on_water: 'Race',
+  days_before: 'Before',
+  on_water: 'Racing',
   after_race: 'Review',
 };
 
 /**
  * All phases in temporal order
  */
-export const RACE_PHASES: RacePhase[] = ['days_before', 'race_morning', 'on_water', 'after_race'];
+export const RACE_PHASES: RacePhase[] = ['days_before', 'on_water', 'after_race'];
 
 /**
  * Determine the current phase for a race based on date/time
  *
- * Logic:
+ * Logic (simplified to 3 phases):
  * - after_race: Race start time + 8 hours has passed (race is definitively over)
  * - on_water: Within 2 hours before start to 8 hours after start
- * - race_morning: Day of race, before on_water window
- * - days_before: Any time before race day
+ * - days_before: Any time before the on_water window (includes race morning)
  */
 export function getCurrentPhaseForRace(date: string, startTime?: string): RacePhase {
   const now = new Date();
@@ -97,7 +95,6 @@ export function getCurrentPhaseForRace(date: string, startTime?: string): RacePh
   // Calculate time boundaries
   const twoHoursBeforeStart = new Date(raceStart.getTime() - 2 * 60 * 60 * 1000);
   const eightHoursAfterStart = new Date(raceStart.getTime() + 8 * 60 * 60 * 1000);
-  const raceDayStart = new Date(`${raceDateOnly}T00:00:00`);
 
   // Determine phase
   if (now >= eightHoursAfterStart) {
@@ -106,10 +103,6 @@ export function getCurrentPhaseForRace(date: string, startTime?: string): RacePh
 
   if (now >= twoHoursBeforeStart && now < eightHoursAfterStart) {
     return 'on_water';
-  }
-
-  if (now >= raceDayStart && now < twoHoursBeforeStart) {
-    return 'race_morning';
   }
 
   return 'days_before';
@@ -360,6 +353,26 @@ export interface CardContentProps {
   userId?: string;
   /** Callback when dismiss is requested (for demo races) */
   onDismiss?: () => void;
+  /** Season week identifier (e.g., "W26") for compact header */
+  seasonWeek?: string;
+  /** Race number in current season/series (e.g., 2 for "Race 2 of 10") */
+  raceNumber?: number;
+  /** Total races in current season/series (e.g., 10 for "Race 2 of 10") */
+  totalRaces?: number;
+  /** Timeline navigation - array of races for compact date axis */
+  timelineRaces?: Array<{
+    id: string;
+    date: string;
+    raceType?: 'fleet' | 'distance' | 'match' | 'team';
+    seriesName?: string;
+    name?: string;
+  }>;
+  /** Timeline navigation - current race index */
+  currentRaceIndex?: number;
+  /** Timeline navigation - callback to jump to race */
+  onSelectRace?: (index: number) => void;
+  /** Timeline navigation - index of next upcoming race */
+  nextRaceIndex?: number;
 }
 
 // =============================================================================

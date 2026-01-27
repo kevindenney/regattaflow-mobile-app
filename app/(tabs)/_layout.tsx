@@ -1,6 +1,8 @@
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import { useBoats } from '@/hooks/useData';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
+import { triggerHaptic } from '@/lib/haptics';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth, UserCapabilities } from '@/providers/AuthProvider';
 import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
@@ -8,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Modal, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type TabConfig = {
@@ -65,12 +67,13 @@ const getTabsForUserType = (
 
   // Sailors (including sailors with coaching capability)
   if (userType === 'sailor' || userType === 'coach') {
-    // Base sailor tabs - Tufte-style: text-only tabs, no icons
+    // Base sailor tabs - iOS HIG style: SF Symbol icons (filled when active)
+    // 5 tabs: Races, Sailors (discover), Venue, Learn, More
     const tabs: TabConfig[] = [
-      { name: 'races', title: 'Races', icon: '', iconFocused: '' },
-      { name: 'learn', title: 'Learn', icon: '', iconFocused: '' },
-      { name: 'courses', title: 'Courses', icon: '', iconFocused: '' },
-      { name: 'venue', title: 'Venue', icon: '', iconFocused: '' },
+      { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'discover', title: 'Sailors', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'venue', title: 'Venue', icon: 'location-outline', iconFocused: 'location' },
+      { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
     ];
 
     // Add coaching tabs if user has coaching capability
@@ -82,8 +85,8 @@ const getTabsForUserType = (
       );
     }
 
-    // More menu always at the end
-    tabs.push({ name: 'more', title: '•••', icon: '', isMenuTrigger: true });
+    // More menu always at the end - iOS HIG style ellipsis icon
+    tabs.push({ name: 'more', title: 'More', icon: 'ellipsis-horizontal-circle-outline', iconFocused: 'ellipsis-horizontal-circle', isMenuTrigger: true });
 
     return tabs;
   }
@@ -185,6 +188,11 @@ function TabLayoutInner() {
       { key: 'progress', label: 'Progress', icon: 'trending-up-outline', route: '/(tabs)/progress' }
     );
 
+    // Courses - Race courses (moved from tab bar)
+    items.push(
+      { key: 'courses', label: 'Courses', icon: 'map-outline', route: '/(tabs)/courses' }
+    );
+
     // Clubs + Fleets merged into Affiliations
     items.push(
       { key: 'affiliations', label: 'Affiliations', icon: 'people-circle-outline', route: '/(tabs)/affiliations' }
@@ -231,50 +239,60 @@ function TabLayoutInner() {
       return null;
     }
 
-    const isActive = accessibilityState?.selected;
     const moreTab = findTab('more');
 
-    // Tufte-style for sailors: text-only ellipsis, no icon
+    // iOS HIG style for sailors: icon + label
     if (isSailorUser) {
       // More tab is active when menu is visible or we're on a "more" menu page
       const isMoreActive = isTabActive('more') || menuVisible;
+      const iconName = isMoreActive
+        ? (moreTab?.iconFocused || 'ellipsis-horizontal-circle')
+        : (moreTab?.icon || 'ellipsis-horizontal-circle-outline');
+
+      const handlePress = () => {
+        triggerHaptic('selection');
+        setMenuVisible(true);
+      };
 
       return (
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityState={{ ...accessibilityState, selected: isMoreActive }}
-          onPress={() => setMenuVisible(true)}
-          style={[style, styles.sailorTabButton]}
+          onPress={handlePress}
+          style={[style, styles.iosTabButton]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
         >
+          <Ionicons
+            name={iconName as any}
+            size={24}
+            color={isMoreActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
+          />
           <Text style={[
-            styles.sailorTabLabel,
-            { letterSpacing: 2 },  // Extra spacing for ellipsis
-            isMoreActive && styles.sailorTabLabelActive
+            styles.iosTabLabel,
+            isMoreActive && styles.iosTabLabelActive
           ]}>
-            {moreTab?.title ?? '•••'}
+            {moreTab?.title ?? 'More'}
           </Text>
-          {isMoreActive && (
-            <View style={styles.sailorTabUnderlineContainer}>
-              <View style={styles.sailorTabUnderline} />
-            </View>
-          )}
         </TouchableOpacity>
       );
     }
 
-    // Default style for non-sailors
-    const tint = isActive ? '#007AFF' : '#6B7280';
+    // Default style for non-sailors (club/coach)
+    const isActive = accessibilityState?.selected;
+    const tint = isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray;
     return (
       <TouchableOpacity
         accessibilityRole="button"
         accessibilityState={accessibilityState}
-        onPress={() => setMenuVisible(true)}
+        onPress={() => {
+          triggerHaptic('selection');
+          setMenuVisible(true);
+        }}
         style={[style, styles.hamburgerButton]}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Ionicons name={(moreTab?.icon ?? 'menu') as any} size={24} color={tint} />
+        <Ionicons name={(moreTab?.icon ?? 'ellipsis-horizontal-circle-outline') as any} size={24} color={tint} />
         <Text style={[styles.hamburgerLabel, { color: tint }]}>
           {moreTab?.title ?? 'More'}
         </Text>
@@ -282,31 +300,39 @@ function TabLayoutInner() {
     );
   };
 
-  // Tufte-style tab button for sailors: text only with underline indicator
-  const renderSailorTabButton = (tabName: string, tabTitle: string) => (props: BottomTabBarButtonProps) => {
+  // iOS HIG-style tab button for sailors: icon + label with proper touch handling
+  const renderSailorTabButton = (tabName: string, tabTitle: string, tabConfig?: TabConfig) => (props: BottomTabBarButtonProps) => {
     const { accessibilityState, onPress, style } = props;
     // Use pathname-based active detection since accessibilityState.selected is undefined
     const isActive = isTabActive(tabName);
+    const iconName = isActive
+      ? (tabConfig?.iconFocused || tabConfig?.icon || 'ellipsis-horizontal')
+      : (tabConfig?.icon || 'ellipsis-horizontal-outline');
+
+    const handlePress = () => {
+      triggerHaptic('selection');
+      onPress?.({} as any);
+    };
 
     return (
       <TouchableOpacity
         accessibilityRole="button"
         accessibilityState={{ ...accessibilityState, selected: isActive }}
-        onPress={onPress}
-        style={[style, styles.sailorTabButton]}
+        onPress={handlePress}
+        style={[style, styles.iosTabButton]}
         activeOpacity={0.7}
       >
+        <Ionicons
+          name={iconName as any}
+          size={24}
+          color={isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
+        />
         <Text style={[
-          styles.sailorTabLabel,
-          isActive && styles.sailorTabLabelActive
+          styles.iosTabLabel,
+          isActive && styles.iosTabLabelActive
         ]}>
           {tabTitle}
         </Text>
-        {isActive && (
-          <View style={styles.sailorTabUnderlineContainer}>
-            <View style={styles.sailorTabUnderline} />
-          </View>
-        )}
       </TouchableOpacity>
     );
   };
@@ -336,9 +362,9 @@ function TabLayoutInner() {
     );
   };
 
-  // Tufte-style colors for sailors: gray tones, no blue accent
-  const tabBarActiveColor = isClubUser ? '#FFFFFF' : isSailorUser ? '#374151' : '#2563EB';
-  const tabBarInactiveColor = isClubUser ? 'rgba(148,163,184,0.7)' : '#9CA3AF';
+  // iOS HIG colors: system blue for active, system gray for inactive
+  const tabBarActiveColor = isClubUser ? '#FFFFFF' : IOS_COLORS.systemBlue;
+  const tabBarInactiveColor = isClubUser ? 'rgba(148,163,184,0.7)' : IOS_COLORS.systemGray;
 
   const racesTab = findTab('races');
   const dashboardTab = findTab('dashboard'); // Legacy for non-sailor user types
@@ -350,6 +376,7 @@ function TabLayoutInner() {
   const learnTab = findTab('learn');
   const coursesTab = findTab('courses');
   const venueTab = findTab('venue');
+  const discoverTab = findTab('discover');
   const strategyTab = findTab('strategy');
   const mapTab = findTab('map');
   const clientsTab = findTab('clients');
@@ -362,8 +389,8 @@ function TabLayoutInner() {
 
   return (
     <View style={styles.container}>
-      {/* Hide on races tab - races.tsx has its own consolidated floating header */}
-      <NavigationHeader backgroundColor="#F8FAFC" hidden={pathname === '/races' || pathname === '/(tabs)/races' || pathname.includes('add-tufte')} />
+      {/* Hide navigation header on all tabs - each tab renders its own content */}
+      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={false} hidden={true} />
       <Tabs
         screenOptions={({ route }) => {
           const visible = isTabVisible(route.name);
@@ -376,8 +403,20 @@ function TabLayoutInner() {
             tabBarLabelPosition: 'below-icon',
             tabBarActiveTintColor: tabBarActiveColor,
             tabBarInactiveTintColor: tabBarInactiveColor,
-            // Tufte mode: Hide tab bar - navigation via drawer in header
-            tabBarStyle: { display: 'none' },
+            // Show iOS standard tab bar for sailors
+            tabBarStyle: isSailorUser
+              ? {
+                  ...styles.tabBarBase,
+                  ...styles.tabBarDefault,
+                  display: 'flex',
+                }
+              : isClubUser
+                ? {
+                    ...styles.tabBarBase,
+                    ...styles.tabBarClub,
+                    display: 'flex',
+                  }
+                : { display: 'none' },
             tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
             tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
             tabBarItemStyle: visible
@@ -403,11 +442,49 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('races')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('races', racesTab?.title ?? 'Races')
+                ? renderSailorTabButton('races', racesTab?.title ?? 'Races', racesTab)
                 : undefined,
           }}
         />
-        {/* Tab 2: Learn */}
+        {/* Tab 2: Sailors (discover) */}
+        <Tabs.Screen
+          name="discover"
+          options={{
+            title: 'Sailors',
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
+              <Ionicons
+                name={focused ? 'people' : 'people-outline'}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: !isTabVisible('discover')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('discover', 'Sailors', findTab('discover'))
+                : undefined,
+          }}
+        />
+        {/* Tab 3: Venue */}
+        <Tabs.Screen
+          name="venue"
+          options={{
+            title: venueTab?.title ?? 'Venue',
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'location', venueTab?.icon ?? 'location-outline') as any}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: !isTabVisible('venue')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('venue', venueTab?.title ?? 'Venue', venueTab)
+                : undefined,
+          }}
+        />
+        {/* Tab 4: Learn */}
         <Tabs.Screen
           name="learn"
           options={{
@@ -422,11 +499,11 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('learn')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('learn', learnTab?.title ?? 'Learn')
+                ? renderSailorTabButton('learn', learnTab?.title ?? 'Learn', learnTab)
                 : undefined,
           }}
         />
-        {/* Tab 3: Courses (Race Courses) */}
+        {/* Hidden: Courses (Race Courses) - accessed via More menu */}
         <Tabs.Screen
           name="courses"
           options={{
@@ -444,11 +521,11 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('courses')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('courses', coursesTab?.title ?? 'Courses')
+                ? renderSailorTabButton('courses', coursesTab?.title ?? 'Courses', coursesTab)
                 : undefined,
           }}
         />
-        {/* Tab 4: Boat (singular) */}
+        {/* Hidden: Boat (singular) */}
         <Tabs.Screen
           name="boat/index"
           options={{
@@ -466,26 +543,7 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('boat/index')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('boat/index', boatTab?.title ?? 'Boat')
-                : undefined,
-          }}
-        />
-        {/* Tab 5: Venue (singular) */}
-        <Tabs.Screen
-          name="venue"
-          options={{
-            title: venueTab?.title ?? 'Venue',
-            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
-              <Ionicons
-                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'location', venueTab?.icon ?? 'location-outline') as any}
-                size={size}
-                color={color}
-              />
-            ),
-            tabBarButton: !isTabVisible('venue')
-              ? () => null
-              : isSailorUser
-                ? renderSailorTabButton('venue', venueTab?.title ?? 'Venue')
+                ? renderSailorTabButton('boat/index', boatTab?.title ?? 'Boat', boatTab)
                 : undefined,
           }}
         />
@@ -822,27 +880,41 @@ function TabLayoutInner() {
               {menuItems.map((item, index) => (
                 <React.Fragment key={item.key}>
                   <Pressable
-                    style={({ pressed }) => [
-                      styles.menuItem,
-                      (item as any).isWarning && styles.menuItemWarning,
-                      pressed && styles.menuItemPressed
-                    ]}
-                    onPress={() => handleMenuItemPress(item.route)}
+                    onPress={() => {
+                      triggerHaptic('selection');
+                      handleMenuItemPress(item.route);
+                    }}
+                    style={({ pressed }) => ({
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 11,
+                      paddingHorizontal: 16,
+                      backgroundColor: pressed ? '#E5E5EA' : ((item as any).isWarning ? '#FFF5F5' : '#FFFFFF'),
+                    })}
                   >
-                    <Ionicons
-                      name={item.icon as any}
-                      size={20}
-                      color={(item as any).isWarning ? '#EF4444' : '#1F2937'}
-                    />
-                    <Text style={[
-                      styles.menuLabel,
-                      (item as any).isWarning && styles.menuLabelWarning
-                    ]}>
+                    <View style={{ width: 28, alignItems: 'center' }}>
+                      <Ionicons
+                        name={item.icon as any}
+                        size={22}
+                        color={(item as any).isWarning ? '#FF3B30' : '#007AFF'}
+                      />
+                    </View>
+                    <Text style={{
+                      flex: 1,
+                      fontSize: 17,
+                      color: (item as any).isWarning ? '#FF3B30' : '#000000',
+                      marginLeft: 12,
+                    }}>
                       {item.label}
                     </Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color="#C7C7CC"
+                    />
                   </Pressable>
-                  {(item as any).isWarning && index < menuItems.length - 1 && (
-                    <View style={styles.menuDivider} />
+                  {index < menuItems.length - 1 && (
+                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#C6C6C8', marginLeft: 56 }} />
                   )}
                 </React.Fragment>
               ))}
@@ -1043,7 +1115,27 @@ const styles = StyleSheet.create({
   hiddenTabItem: {
     display: 'none',
   },
-  // Tufte-style sailor tab button
+  // iOS HIG tab button style
+  iosTabButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    minWidth: 44, // iOS minimum touch target
+    minHeight: 44, // iOS minimum touch target
+  },
+  iosTabLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: IOS_COLORS.systemGray,
+    marginTop: 2,
+    letterSpacing: 0,
+  },
+  iosTabLabelActive: {
+    color: IOS_COLORS.systemBlue,
+  },
+  // Legacy sailor tab styles (kept for backwards compatibility)
   sailorTabButton: {
     flex: 1,
     alignItems: 'center',
@@ -1055,12 +1147,12 @@ const styles = StyleSheet.create({
   sailorTabLabel: {
     fontSize: 13,
     fontWeight: '400',
-    color: '#9CA3AF',
+    color: IOS_COLORS.systemGray,
     letterSpacing: 0.2,
   },
   sailorTabLabelActive: {
     fontWeight: '500',
-    color: '#374151',
+    color: IOS_COLORS.systemBlue,
   },
   sailorTabUnderlineContainer: {
     position: 'absolute',
@@ -1072,7 +1164,7 @@ const styles = StyleSheet.create({
   sailorTabUnderline: {
     width: 32,
     height: 2,
-    backgroundColor: '#374151',
+    backgroundColor: IOS_COLORS.systemBlue,
     borderRadius: 1,
   },
   hamburgerButton: {
@@ -1091,49 +1183,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
     alignItems: 'flex-end',
-    backgroundColor: 'rgba(15, 23, 42, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
   menuContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginRight: 16,
-    marginBottom: 96,
-    paddingVertical: 12,
-    width: 220,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }
-      : {
-        boxShadow: '0px 4px',
-        elevation: 8,
-      }
-    ),
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  menuItemWarning: {
-    backgroundColor: '#FEF2F2',
-  },
-  menuItemPressed: {
-    backgroundColor: '#F3F4F6',
-  },
-  menuLabel: {
-    fontSize: 14,
-    color: '#1F2937',
-    fontWeight: '500',
-  },
-  menuLabelWarning: {
-    color: '#EF4444',
-    fontWeight: '600',
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 4,
+    borderRadius: 14,
+    marginRight: 12,
+    marginBottom: Platform.OS === 'ios' ? 100 : 80,
+    minWidth: 200,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)',
+      } as any,
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.25,
+        shadowRadius: 25,
+        elevation: 20,
+      },
+    }),
   },
 });
 

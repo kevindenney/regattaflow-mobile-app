@@ -66,6 +66,10 @@ export interface DiscoverableUser extends SailorProfileSummary {
   clubName?: string;
   boatClassName?: string;
   isFollowing: boolean;
+  /** Number of races this user has */
+  raceCount?: number;
+  /** Preview of recent race names */
+  recentRaces?: string[];
 }
 
 class CrewFinderServiceClass {
@@ -994,6 +998,49 @@ class CrewFinderServiceClass {
     }
     console.log('[CrewFinderService] getAllUsersForDiscovery - got club mappings:', Object.keys(clubMap).length);
 
+    // Fetch race counts for each user (from regattas they created)
+    console.log('[CrewFinderService] getAllUsersForDiscovery - fetching race counts...');
+    const { data: raceCounts, error: raceCountError } = await supabase
+      .from('regattas')
+      .select('created_by')
+      .in('created_by', userIds);
+
+    if (raceCountError) {
+      console.warn('[CrewFinderService] getAllUsersForDiscovery - race count query failed:', raceCountError);
+    }
+
+    // Count races per user
+    const raceCountMap: Record<string, number> = {};
+    if (raceCounts) {
+      raceCounts.forEach((r: any) => {
+        raceCountMap[r.created_by] = (raceCountMap[r.created_by] || 0) + 1;
+      });
+    }
+    console.log('[CrewFinderService] getAllUsersForDiscovery - got race counts for', Object.keys(raceCountMap).length, 'users');
+
+    // Also fetch recent race names for users with races
+    const usersWithRaces = Object.keys(raceCountMap);
+    const recentRacesMap: Record<string, string[]> = {};
+    if (usersWithRaces.length > 0) {
+      const { data: recentRaces } = await supabase
+        .from('regattas')
+        .select('created_by, name')
+        .in('created_by', usersWithRaces)
+        .order('start_date', { ascending: false })
+        .limit(100);
+
+      if (recentRaces) {
+        recentRaces.forEach((r: any) => {
+          if (!recentRacesMap[r.created_by]) {
+            recentRacesMap[r.created_by] = [];
+          }
+          if (recentRacesMap[r.created_by].length < 3) {
+            recentRacesMap[r.created_by].push(r.name);
+          }
+        });
+      }
+    }
+
     const users: DiscoverableUser[] = profiles.map((profile: any) => {
       const sailorProfile = sailorProfilesMap[profile.id];
 
@@ -1006,16 +1053,24 @@ class CrewFinderServiceClass {
         email: profile.email,
         clubName: clubMap[profile.id],
         isFollowing: followingSet.has(profile.id),
+        raceCount: raceCountMap[profile.id] || 0,
+        recentRaces: recentRacesMap[profile.id] || [],
       };
     });
 
     console.log('[CrewFinderService] getAllUsersForDiscovery - returning', users.length, 'users, hasMore:', count !== null ? offset + limit < count : false);
 
-    // Sort followed users to the top
+    // Sort: followed users first, then by race count (most active), then by name
     users.sort((a, b) => {
+      // Following status first
       if (a.isFollowing && !b.isFollowing) return -1;
       if (!a.isFollowing && b.isFollowing) return 1;
-      return 0;
+      // Then by race count (descending)
+      const aRaces = a.raceCount || 0;
+      const bRaces = b.raceCount || 0;
+      if (bRaces !== aRaces) return bRaces - aRaces;
+      // Finally by name
+      return a.fullName.localeCompare(b.fullName);
     });
 
     return {
@@ -1139,6 +1194,844 @@ class CrewFinderServiceClass {
 
     return count || 0;
   }
+
+  // ===========================================================================
+  // SOCIAL SAILING / TIMELINE METHODS
+  // ===========================================================================
+
+  /**
+   * Get followed users with their race timelines
+   * Returns profiles of followed users along with their upcoming/recent races
+   */
+  async getFollowedUsersWithRaces(
+    userId: string,
+    options?: { includeRaces?: boolean; racesLimit?: number }
+  ): Promise<FollowedUserTimeline[]> {
+    const includeRaces = options?.includeRaces ?? true;
+    const racesLimit = options?.racesLimit ?? 10;
+
+    logger.info('[CrewFinderService] getFollowedUsersWithRaces called', { userId, includeRaces, racesLimit });
+
+    // Step 1: Get list of followed user IDs
+    const followingIds = await this.getFollowingIds(userId);
+
+    if (followingIds.length === 0) {
+      logger.info('[CrewFinderService] User follows no one');
+      return [];
+    }
+
+    // Step 2: Get profiles for followed users
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', followingIds);
+
+    if (profilesError) {
+      logger.error('Failed to get followed user profiles:', profilesError);
+      throw profilesError;
+    }
+
+    if (!profiles || profiles.length === 0) {
+      return [];
+    }
+
+    // Step 3: Get sailor_profiles for avatars
+    const { data: sailorProfiles } = await supabase
+      .from('sailor_profiles')
+      .select('user_id, avatar_emoji, avatar_color, experience_level')
+      .in('user_id', followingIds);
+
+    const sailorProfilesMap: Record<string, any> = {};
+    if (sailorProfiles) {
+      sailorProfiles.forEach((sp: any) => {
+        sailorProfilesMap[sp.user_id] = sp;
+      });
+    }
+
+    // Step 4: Get races for followed users if requested
+    let racesByUser: Record<string, any[]> = {};
+
+    if (includeRaces) {
+      // Get races created by followed users
+      // Include races within a reasonable time window (past 30 days to future)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: races, error: racesError } = await supabase
+        .from('regattas')
+        .select('*')
+        .in('created_by', followingIds)
+        .gte('start_date', thirtyDaysAgo.toISOString())
+        .order('start_date', { ascending: true });
+
+      if (racesError) {
+        logger.warn('Failed to get followed users races:', racesError);
+      } else if (races) {
+        // Group races by user
+        races.forEach((race: any) => {
+          const creatorId = race.created_by;
+          if (!racesByUser[creatorId]) {
+            racesByUser[creatorId] = [];
+          }
+          if (racesByUser[creatorId].length < racesLimit) {
+            racesByUser[creatorId].push(race);
+          }
+        });
+      }
+    }
+
+    // Step 5: Build result array
+    const result: FollowedUserTimeline[] = profiles.map((profile: any) => {
+      const sailorProfile = sailorProfilesMap[profile.id];
+      return {
+        user: {
+          id: profile.id,
+          fullName: profile.full_name || 'Unknown',
+          avatarEmoji: sailorProfile?.avatar_emoji,
+          avatarColor: sailorProfile?.avatar_color,
+          sailingExperience: sailorProfile?.experience_level,
+        },
+        races: racesByUser[profile.id] || [],
+        raceCount: racesByUser[profile.id]?.length || 0,
+      };
+    });
+
+    // Sort by users with most upcoming races first
+    result.sort((a, b) => b.raceCount - a.raceCount);
+
+    logger.info('[CrewFinderService] getFollowedUsersWithRaces result:', {
+      followedCount: result.length,
+      totalRaces: result.reduce((sum, u) => sum + u.raceCount, 0),
+    });
+
+    return result;
+  }
+
+  /**
+   * Get similar sailors based on shared characteristics
+   * Used for discovery/suggestions
+   */
+  async getSimilarSailors(
+    userId: string,
+    options?: { limit?: number }
+  ): Promise<SimilarSailor[]> {
+    const limit = options?.limit ?? 20;
+    const scoreMap = new Map<string, { user: SailorProfileSummary; score: number; reasons: string[] }>();
+
+    logger.info('[CrewFinderService] getSimilarSailors called', { userId, limit });
+
+    // Get current user's data for comparison
+    const { data: currentUserProfile } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .eq('id', userId)
+      .single();
+
+    // Get current user's boats (classes)
+    const { data: userBoats } = await supabase
+      .from('sailor_boats')
+      .select('class_id')
+      .eq('sailor_id', userId);
+
+    const userClassIds = new Set((userBoats || []).map((b: any) => b.class_id).filter(Boolean));
+
+    // Get current user's clubs
+    const { data: userClubs } = await supabase
+      .from('club_members')
+      .select('club_id')
+      .eq('user_id', userId);
+
+    const userClubIds = new Set((userClubs || []).map((c: any) => c.club_id).filter(Boolean));
+
+    // Get current user's fleets
+    const { data: userFleets } = await supabase
+      .from('fleet_members')
+      .select('fleet_id')
+      .eq('user_id', userId);
+
+    const userFleetIds = new Set((userFleets || []).map((f: any) => f.fleet_id).filter(Boolean));
+
+    // Get current user's race collaborators (people they've raced with)
+    const { data: userCollabs } = await supabase
+      .from('race_collaborators')
+      .select('user_id, race_id')
+      .eq('user_id', userId);
+
+    const userRaceIds = new Set((userCollabs || []).map((c: any) => c.race_id).filter(Boolean));
+
+    // Get users already following to exclude/mark
+    const followingIds = await this.getFollowingIds(userId);
+    const followingSet = new Set(followingIds);
+
+    // SCORING CRITERIA:
+    // 1. Same boat class: +5
+    // 2. Same club: +4
+    // 3. Same fleet: +3
+    // 4. Raced together: +3
+    // 5. Same region: +2
+
+    // Score by boat class
+    if (userClassIds.size > 0) {
+      const { data: sameClassUsers } = await supabase
+        .from('sailor_boats')
+        .select('sailor_id, class_id, boat_classes(name)')
+        .in('class_id', Array.from(userClassIds))
+        .neq('sailor_id', userId)
+        .limit(100);
+
+      (sameClassUsers || []).forEach((sb: any) => {
+        const existing = scoreMap.get(sb.sailor_id);
+        const className = sb.boat_classes?.name || 'same class';
+        if (existing) {
+          existing.score += 5;
+          if (!existing.reasons.includes(`Sails ${className}`)) {
+            existing.reasons.push(`Sails ${className}`);
+          }
+        } else {
+          scoreMap.set(sb.sailor_id, {
+            user: { userId: sb.sailor_id, fullName: '' },
+            score: 5,
+            reasons: [`Sails ${className}`],
+          });
+        }
+      });
+    }
+
+    // Score by club membership
+    if (userClubIds.size > 0) {
+      const { data: sameClubUsers } = await supabase
+        .from('club_members')
+        .select('user_id, club_id, clubs(name)')
+        .in('club_id', Array.from(userClubIds))
+        .neq('user_id', userId)
+        .limit(100);
+
+      (sameClubUsers || []).forEach((cm: any) => {
+        const existing = scoreMap.get(cm.user_id);
+        const clubName = cm.clubs?.name || 'same club';
+        if (existing) {
+          existing.score += 4;
+          if (!existing.reasons.includes(`Member of ${clubName}`)) {
+            existing.reasons.push(`Member of ${clubName}`);
+          }
+        } else {
+          scoreMap.set(cm.user_id, {
+            user: { userId: cm.user_id, fullName: '' },
+            score: 4,
+            reasons: [`Member of ${clubName}`],
+          });
+        }
+      });
+    }
+
+    // Score by fleet membership
+    if (userFleetIds.size > 0) {
+      const { data: sameFleetUsers } = await supabase
+        .from('fleet_members')
+        .select('user_id, fleet_id, fleets(name)')
+        .in('fleet_id', Array.from(userFleetIds))
+        .neq('user_id', userId)
+        .limit(100);
+
+      (sameFleetUsers || []).forEach((fm: any) => {
+        const existing = scoreMap.get(fm.user_id);
+        const fleetName = fm.fleets?.name || 'same fleet';
+        if (existing) {
+          existing.score += 3;
+          if (!existing.reasons.includes(`In ${fleetName}`)) {
+            existing.reasons.push(`In ${fleetName}`);
+          }
+        } else {
+          scoreMap.set(fm.user_id, {
+            user: { userId: fm.user_id, fullName: '' },
+            score: 3,
+            reasons: [`In ${fleetName}`],
+          });
+        }
+      });
+    }
+
+    // Score by race collaboration (raced together)
+    if (userRaceIds.size > 0) {
+      const { data: sameRaceUsers } = await supabase
+        .from('race_collaborators')
+        .select('user_id, race_id')
+        .in('race_id', Array.from(userRaceIds))
+        .neq('user_id', userId)
+        .limit(100);
+
+      (sameRaceUsers || []).forEach((rc: any) => {
+        const existing = scoreMap.get(rc.user_id);
+        if (existing) {
+          existing.score += 3;
+          if (!existing.reasons.some(r => r.includes('Raced'))) {
+            existing.reasons.push('Raced together');
+          }
+        } else {
+          scoreMap.set(rc.user_id, {
+            user: { userId: rc.user_id, fullName: '' },
+            score: 3,
+            reasons: ['Raced together'],
+          });
+        }
+      });
+    }
+
+    // Get profiles for scored users
+    const scoredUserIds = Array.from(scoreMap.keys());
+    if (scoredUserIds.length === 0) {
+      // No similarity matches found - fallback to "Active Sailors" (users with most races)
+      logger.info('[CrewFinderService] No similar sailors found, falling back to active sailors');
+      return this.getActiveSailors(userId, limit, followingSet);
+    }
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', scoredUserIds);
+
+    const { data: sailorProfiles } = await supabase
+      .from('sailor_profiles')
+      .select('user_id, avatar_emoji, avatar_color, experience_level')
+      .in('user_id', scoredUserIds);
+
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+    const sailorProfilesMap = new Map((sailorProfiles || []).map((sp: any) => [sp.user_id, sp]));
+
+    // Build result array with full profile data
+    const result: SimilarSailor[] = [];
+    for (const [userId, data] of scoreMap) {
+      const profile = profilesMap.get(userId);
+      const sailorProfile = sailorProfilesMap.get(userId);
+
+      if (!profile?.full_name) continue; // Skip users without names
+
+      result.push({
+        userId,
+        fullName: profile.full_name,
+        avatarEmoji: sailorProfile?.avatar_emoji,
+        avatarColor: sailorProfile?.avatar_color,
+        sailingExperience: sailorProfile?.experience_level,
+        similarityScore: data.score,
+        similarityReasons: data.reasons,
+        isFollowing: followingSet.has(userId),
+      });
+    }
+
+    // Sort by score (highest first), then by name
+    result.sort((a, b) => {
+      if (b.similarityScore !== a.similarityScore) {
+        return b.similarityScore - a.similarityScore;
+      }
+      return a.fullName.localeCompare(b.fullName);
+    });
+
+    return result.slice(0, limit);
+  }
+
+  /**
+   * Subscribe to a fleet - batch follow all members
+   */
+  async subscribeToFleet(userId: string, fleetId: string): Promise<{ followed: number; errors: number }> {
+    logger.info('[CrewFinderService] subscribeToFleet called', { userId, fleetId });
+
+    // Get all fleet members except the current user
+    const { data: members, error: membersError } = await supabase
+      .from('fleet_members')
+      .select('user_id')
+      .eq('fleet_id', fleetId)
+      .neq('user_id', userId);
+
+    if (membersError) {
+      logger.error('Failed to get fleet members:', membersError);
+      throw membersError;
+    }
+
+    if (!members || members.length === 0) {
+      return { followed: 0, errors: 0 };
+    }
+
+    // Get existing follows to avoid duplicates
+    const existingFollows = await this.getFollowingIds(userId);
+    const existingSet = new Set(existingFollows);
+
+    // Filter to only new follows
+    const newFollows = members
+      .map((m: any) => m.user_id)
+      .filter((id: string) => !existingSet.has(id));
+
+    if (newFollows.length === 0) {
+      logger.info('[CrewFinderService] Already following all fleet members');
+      return { followed: 0, errors: 0 };
+    }
+
+    // Batch insert new follows
+    const followRows = newFollows.map((followingId: string) => ({
+      follower_id: userId,
+      following_id: followingId,
+    }));
+
+    const { error: insertError } = await supabase
+      .from('user_follows')
+      .insert(followRows);
+
+    if (insertError) {
+      logger.error('Failed to batch follow fleet members:', insertError);
+      // Attempt individual follows as fallback
+      let followed = 0;
+      let errors = 0;
+      for (const followingId of newFollows) {
+        try {
+          await this.followUser(userId, followingId);
+          followed++;
+        } catch {
+          errors++;
+        }
+      }
+      return { followed, errors };
+    }
+
+    logger.info('[CrewFinderService] subscribeToFleet success', {
+      fleetId,
+      membersFollowed: newFollows.length,
+    });
+
+    return { followed: newFollows.length, errors: 0 };
+  }
+
+  /**
+   * Copy a race to user's timeline
+   * Creates a new race entry based on another user's race
+   */
+  async copyRaceToTimeline(
+    userId: string,
+    sourceRaceId: string
+  ): Promise<{ raceId: string; success: boolean }> {
+    logger.info('[CrewFinderService] copyRaceToTimeline called', { userId, sourceRaceId });
+
+    // Get the source race
+    const { data: sourceRace, error: sourceError } = await supabase
+      .from('regattas')
+      .select('*')
+      .eq('id', sourceRaceId)
+      .single();
+
+    if (sourceError || !sourceRace) {
+      logger.error('Failed to get source race:', sourceError);
+      throw new Error('Source race not found');
+    }
+
+    // Create a copy with the new user as owner
+    const newRace = {
+      ...sourceRace,
+      id: undefined, // Let Supabase generate a new ID
+      created_by: userId,
+      // Update metadata to indicate this is a copied race
+      metadata: {
+        ...sourceRace.metadata,
+        copied_from: sourceRaceId,
+        copied_at: new Date().toISOString(),
+      },
+      // Reset visibility to private for copied races
+      content_visibility: 'private',
+    };
+
+    // Remove fields that shouldn't be copied
+    delete newRace.id;
+    delete newRace.created_at;
+    delete newRace.updated_at;
+    // Remove columns that may not exist in the schema
+    delete newRace.source_regatta_id;
+    delete newRace.is_copy;
+
+    const { data: createdRace, error: createError } = await supabase
+      .from('regattas')
+      .insert(newRace)
+      .select('id')
+      .single();
+
+    if (createError || !createdRace) {
+      logger.error('Failed to create race copy:', createError);
+      throw new Error('Failed to copy race to timeline');
+    }
+
+    logger.info('[CrewFinderService] copyRaceToTimeline success', {
+      sourceRaceId,
+      newRaceId: createdRace.id,
+    });
+
+    return { raceId: createdRace.id, success: true };
+  }
+
+  /**
+   * Get public races for discovery feed (Instagram-style)
+   * Returns races with content_visibility = 'public' from all users
+   * Paginated for infinite scroll
+   */
+  async getPublicRaces(options: {
+    limit?: number;
+    offset?: number;
+    excludeUserId?: string;
+    excludeUserIds?: string[];
+  }): Promise<{ races: PublicRacePreview[]; hasMore: boolean }> {
+    const limit = options.limit ?? 20;
+    const offset = options.offset ?? 0;
+    const excludeUserId = options.excludeUserId;
+    const excludeUserIds = options.excludeUserIds ?? [];
+
+    logger.info('[CrewFinderService] getPublicRaces called', { limit, offset, excludeUserId });
+
+    // Get following IDs if excludeUserId is provided (for follow status)
+    let followingSet = new Set<string>();
+    if (excludeUserId) {
+      try {
+        const followingIds = await this.getFollowingIds(excludeUserId);
+        followingSet = new Set(followingIds);
+      } catch (error) {
+        logger.warn('Error fetching following IDs for public races:', error);
+      }
+    }
+
+    // Build query for public races
+    // Include races from past 30 days and all future races
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    let query = supabase
+      .from('regattas')
+      .select('*', { count: 'exact' })
+      .eq('content_visibility', 'public')
+      .gte('start_date', thirtyDaysAgo.toISOString())
+      .order('start_date', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    // Exclude current user's races
+    if (excludeUserId) {
+      query = query.neq('created_by', excludeUserId);
+    }
+
+    // Exclude additional user IDs (e.g., already shown followed users)
+    if (excludeUserIds.length > 0) {
+      // Use .not() with 'in' to exclude multiple IDs
+      const allExcludeIds = excludeUserId
+        ? [excludeUserId, ...excludeUserIds]
+        : excludeUserIds;
+      query = query.not('created_by', 'in', `(${allExcludeIds.join(',')})`);
+    }
+
+    const { data: races, error: racesError, count } = await query;
+
+    if (racesError) {
+      logger.error('Failed to get public races:', racesError);
+      throw racesError;
+    }
+
+    if (!races || races.length === 0) {
+      return { races: [], hasMore: false };
+    }
+
+    // Get unique user IDs from races (created_by is the owner column)
+    const userIds = [...new Set(races.map((r: any) => r.created_by).filter(Boolean))];
+
+    // Fetch user profiles
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', userIds);
+
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+    // Fetch sailor profiles for avatars
+    const { data: sailorProfiles } = await supabase
+      .from('sailor_profiles')
+      .select('user_id, avatar_emoji, avatar_color')
+      .in('user_id', userIds);
+
+    const sailorProfilesMap = new Map(
+      (sailorProfiles || []).map((sp: any) => [sp.user_id, sp])
+    );
+
+    // Calculate dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Transform races to PublicRacePreview
+    const publicRaces: PublicRacePreview[] = races.map((race: any) => {
+      const profile = profilesMap.get(race.created_by);
+      const sailorProfile = sailorProfilesMap.get(race.created_by);
+      const startDate = new Date(race.start_date);
+      const daysUntil = Math.ceil(
+        (startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      return {
+        id: race.id,
+        name: race.name,
+        startDate: race.start_date,
+        venue: race.venue,
+        userId: race.created_by,
+        userName: profile?.full_name || 'Unknown Sailor',
+        avatarEmoji: sailorProfile?.avatar_emoji,
+        avatarColor: sailorProfile?.avatar_color,
+        boatClass: race.boat_class,
+        hasPrepNotes: !!race.prep_notes,
+        hasTuning: !!race.tuning_settings,
+        hasPostRaceNotes: !!race.post_race_notes,
+        hasLessons: Array.isArray(race.lessons_learned) && race.lessons_learned.length > 0,
+        isPast: daysUntil < 0,
+        daysUntil,
+        isFollowing: followingSet.has(race.created_by),
+      };
+    });
+
+    logger.info('[CrewFinderService] getPublicRaces result', {
+      count: publicRaces.length,
+      total: count,
+      hasMore: count !== null ? offset + limit < count : false,
+    });
+
+    return {
+      races: publicRaces,
+      hasMore: count !== null ? offset + limit < count : false,
+    };
+  }
+
+  /**
+   * Get races from followed users for discovery feed
+   * Returns races from users the current user follows
+   */
+  async getFollowedUsersRaces(options: {
+    userId: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ races: PublicRacePreview[]; hasMore: boolean; followingCount: number }> {
+    const { userId } = options;
+    const limit = options.limit ?? 20;
+    const offset = options.offset ?? 0;
+
+    logger.info('[CrewFinderService] getFollowedUsersRaces called', { userId, limit, offset });
+
+    // Get following IDs
+    const followingIds = await this.getFollowingIds(userId);
+
+    if (followingIds.length === 0) {
+      return { races: [], hasMore: false, followingCount: 0 };
+    }
+
+    // Get races from followed users
+    // Include races visible to at least fleet level (public or fleet)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: races, error: racesError, count } = await supabase
+      .from('regattas')
+      .select('*', { count: 'exact' })
+      .in('created_by', followingIds)
+      .in('content_visibility', ['public', 'fleet'])
+      .gte('start_date', thirtyDaysAgo.toISOString())
+      .order('start_date', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (racesError) {
+      logger.error('Failed to get followed users races:', racesError);
+      throw racesError;
+    }
+
+    if (!races || races.length === 0) {
+      return { races: [], hasMore: false, followingCount: followingIds.length };
+    }
+
+    // Get unique user IDs from races (created_by is the owner column)
+    const userIds = [...new Set(races.map((r: any) => r.created_by).filter(Boolean))];
+
+    // Fetch user profiles
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', userIds);
+
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+    // Fetch sailor profiles for avatars
+    const { data: sailorProfiles } = await supabase
+      .from('sailor_profiles')
+      .select('user_id, avatar_emoji, avatar_color')
+      .in('user_id', userIds);
+
+    const sailorProfilesMap = new Map(
+      (sailorProfiles || []).map((sp: any) => [sp.user_id, sp])
+    );
+
+    // Calculate dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Transform races
+    const publicRaces: PublicRacePreview[] = races.map((race: any) => {
+      const profile = profilesMap.get(race.created_by);
+      const sailorProfile = sailorProfilesMap.get(race.created_by);
+      const startDate = new Date(race.start_date);
+      const daysUntil = Math.ceil(
+        (startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      return {
+        id: race.id,
+        name: race.name,
+        startDate: race.start_date,
+        venue: race.venue,
+        userId: race.created_by,
+        userName: profile?.full_name || 'Unknown Sailor',
+        avatarEmoji: sailorProfile?.avatar_emoji,
+        avatarColor: sailorProfile?.avatar_color,
+        boatClass: race.boat_class,
+        hasPrepNotes: !!race.prep_notes,
+        hasTuning: !!race.tuning_settings,
+        hasPostRaceNotes: !!race.post_race_notes,
+        hasLessons: Array.isArray(race.lessons_learned) && race.lessons_learned.length > 0,
+        isPast: daysUntil < 0,
+        daysUntil,
+        isFollowing: true, // All these races are from followed users
+      };
+    });
+
+    logger.info('[CrewFinderService] getFollowedUsersRaces result', {
+      count: publicRaces.length,
+      total: count,
+      followingCount: followingIds.length,
+    });
+
+    return {
+      races: publicRaces,
+      hasMore: count !== null ? offset + limit < count : false,
+      followingCount: followingIds.length,
+    };
+  }
+
+  /**
+   * Get active sailors - users with the most races
+   * Used as a fallback when no similarity matches are found
+   */
+  private async getActiveSailors(
+    userId: string,
+    limit: number,
+    followingSet: Set<string>
+  ): Promise<SimilarSailor[]> {
+    logger.info('[CrewFinderService] getActiveSailors called', { userId, limit });
+
+    // Find users with the most races (excluding current user)
+    const { data: racesByUser, error: racesError } = await supabase
+      .from('regattas')
+      .select('created_by')
+      .neq('created_by', userId)
+      .not('created_by', 'is', null);
+
+    if (racesError) {
+      logger.error('Failed to get races for active sailors:', racesError);
+      return [];
+    }
+
+    // Count races per user
+    const raceCountMap = new Map<string, number>();
+    (racesByUser || []).forEach((r: any) => {
+      raceCountMap.set(r.created_by, (raceCountMap.get(r.created_by) || 0) + 1);
+    });
+
+    if (raceCountMap.size === 0) {
+      return [];
+    }
+
+    // Sort by race count and take top users
+    const sortedUserIds = Array.from(raceCountMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([userId]) => userId);
+
+    // Get profiles
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', sortedUserIds);
+
+    const { data: sailorProfiles } = await supabase
+      .from('sailor_profiles')
+      .select('user_id, avatar_emoji, avatar_color, experience_level')
+      .in('user_id', sortedUserIds);
+
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+    const sailorProfilesMap = new Map((sailorProfiles || []).map((sp: any) => [sp.user_id, sp]));
+
+    // Build result array
+    const result: SimilarSailor[] = [];
+    for (const activeUserId of sortedUserIds) {
+      const profile = profilesMap.get(activeUserId);
+      const sailorProfile = sailorProfilesMap.get(activeUserId);
+      const raceCount = raceCountMap.get(activeUserId) || 0;
+
+      if (!profile?.full_name) continue;
+
+      result.push({
+        userId: activeUserId,
+        fullName: profile.full_name,
+        avatarEmoji: sailorProfile?.avatar_emoji,
+        avatarColor: sailorProfile?.avatar_color,
+        sailingExperience: sailorProfile?.experience_level,
+        // Use race count as similarity score for sorting
+        similarityScore: raceCount,
+        similarityReasons: [`${raceCount} race${raceCount !== 1 ? 's' : ''}`],
+        isFollowing: followingSet.has(activeUserId),
+      });
+    }
+
+    // Sort by race count (highest first)
+    result.sort((a, b) => b.similarityScore - a.similarityScore);
+
+    logger.info('[CrewFinderService] getActiveSailors returning', { count: result.length });
+    return result.slice(0, limit);
+  }
+}
+
+/**
+ * Followed user with their race timeline
+ */
+export interface FollowedUserTimeline {
+  user: SailorProfileSummary;
+  races: any[]; // Raw regatta data
+  raceCount: number;
+}
+
+/**
+ * Public race preview for discovery feed
+ */
+export interface PublicRacePreview {
+  id: string;
+  name: string;
+  startDate: string;
+  venue?: string;
+  userId: string;
+  userName: string;
+  avatarEmoji?: string;
+  avatarColor?: string;
+  boatClass?: string;
+  // Content indicators
+  hasPrepNotes: boolean;
+  hasTuning: boolean;
+  hasPostRaceNotes: boolean;
+  hasLessons: boolean;
+  // Race status
+  isPast: boolean;
+  daysUntil: number;
+  // Follow status
+  isFollowing: boolean;
+}
+
+/**
+ * Similar sailor with similarity scoring
+ */
+export interface SimilarSailor extends SailorProfileSummary {
+  similarityScore: number;
+  similarityReasons: string[];
+  isFollowing: boolean;
 }
 
 // Export singleton instance

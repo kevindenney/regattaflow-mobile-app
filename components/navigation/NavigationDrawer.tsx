@@ -46,6 +46,7 @@ const SAILOR_NAV_ITEMS: NavItem[] = [
 const SAILOR_SECONDARY_ITEMS: NavItem[] = [
   { key: 'progress', label: 'Progress', route: '/(tabs)/progress', icon: 'trending-up-outline' },
   { key: 'courses', label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
+  { key: 'sailors', label: 'Sailors', route: '/(tabs)/discover', icon: 'compass-outline' },
   { key: 'affiliations', label: 'Affiliations', route: '/(tabs)/affiliations', icon: 'people-circle-outline' },
   { key: 'crew', label: 'Crew', route: '/(tabs)/crew', icon: 'people-outline' },
   { key: 'coaches', label: 'Coaches', route: '/(tabs)/coaching', icon: 'school-outline' },

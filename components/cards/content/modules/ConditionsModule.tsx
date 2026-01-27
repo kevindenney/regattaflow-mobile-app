@@ -74,7 +74,7 @@ function ConditionsModule({
       </View>
 
       {/* Additional conditions based on phase */}
-      {phase === 'race_morning' && (
+      {phase === 'days_before' && (
         <View style={styles.alertSection}>
           <Text style={styles.alertText}>
             Check final forecast before launch

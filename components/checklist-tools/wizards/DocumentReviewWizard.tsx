@@ -432,11 +432,18 @@ function getExtractedDataForChecklistItem(
           value: data.classRestrictions,
         });
       }
-      if (data.classRules && data.classRules.length > 0) {
+      if (data.classRules && (Array.isArray(data.classRules) ? data.classRules.length > 0 : data.classRules)) {
+        // Defensive type guard: handle both array and legacy string formats
+        const classRulesPreview = Array.isArray(data.classRules)
+          ? data.classRules.slice(0, 3).join('; ') + (data.classRules.length > 3 ? '...' : '')
+          : typeof data.classRules === 'string'
+            ? data.classRules.slice(0, 150) + (data.classRules.length > 150 ? '...' : '')
+            : String(data.classRules);
+
         fields.push({
           icon: <FileText size={14} color={IOS_COLORS.blue} />,
           label: 'Class Rules',
-          value: data.classRules.slice(0, 3).join('; ') + (data.classRules.length > 3 ? '...' : ''),
+          value: classRulesPreview,
         });
       }
       if (data.minimumInsuranceCoverage) {
@@ -458,11 +465,16 @@ function getExtractedDataForChecklistItem(
           value: data.scoringFormulaDescription,
         });
       }
-      if (data.handicapSystem && data.handicapSystem.length > 0) {
+      if (data.handicapSystem && (Array.isArray(data.handicapSystem) ? data.handicapSystem.length > 0 : data.handicapSystem)) {
+        // Defensive type guard: handle both array and legacy string formats
+        const handicapValue = Array.isArray(data.handicapSystem)
+          ? data.handicapSystem.join(', ')
+          : String(data.handicapSystem);
+
         fields.push({
           icon: <Flag size={14} color={IOS_COLORS.blue} />,
           label: 'Handicap',
-          value: data.handicapSystem.join(', '),
+          value: handicapValue,
         });
       }
       if (data.seriesRacesRequired) {
@@ -931,9 +943,9 @@ function ExtractedDataSection({ data, expanded, onToggle }: ExtractedDataSection
               </View>
               <View style={styles.extractedSectionContent}>
                 <Text style={styles.detailText}>{data.scoringFormulaDescription}</Text>
-                {data.handicapSystem && data.handicapSystem.length > 0 && (
+                {data.handicapSystem && (Array.isArray(data.handicapSystem) ? data.handicapSystem.length > 0 : data.handicapSystem) && (
                   <Text style={styles.detailTextSecondary}>
-                    Handicap: {data.handicapSystem.join(', ')}
+                    Handicap: {Array.isArray(data.handicapSystem) ? data.handicapSystem.join(', ') : String(data.handicapSystem)}
                   </Text>
                 )}
               </View>

@@ -11,7 +11,7 @@
  */
 
 import React, { useCallback, useMemo, memo, useState, useEffect } from 'react';
-import { StyleSheet, View, Platform, LayoutChangeEvent, TouchableOpacity, Text } from 'react-native';
+import { StyleSheet, View, Platform, LayoutChangeEvent } from 'react-native';
 import {
   GestureDetector,
   Gesture,
@@ -42,13 +42,11 @@ import {
   IOS_COLORS,
 } from './constants';
 import { CardShell } from './CardShell';
+import { TimeAxisRace } from '@/components/races/TimelineTimeAxis';
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
-
-// Maximum number of dots to show before windowing
-const MAX_VISIBLE_DOTS = 7;
 
 // =============================================================================
 // TYPES
@@ -69,7 +67,14 @@ interface CardGridNativeProps extends CardGridProps {
     onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void,
     onOpenPostRaceInterview?: () => void,
     userId?: string,
-    onDismiss?: () => void
+    onDismiss?: () => void,
+    raceIndex?: number,
+    totalRaces?: number,
+    // Timeline navigation props (for compact axis inside card)
+    timelineRaces?: Array<{ id: string; date: string; raceType?: 'fleet' | 'distance' | 'match' | 'team'; seriesName?: string; name?: string }>,
+    currentRaceIndex?: number,
+    onSelectRace?: (index: number) => void,
+    nextRaceIndex?: number
   ) => React.ReactNode;
 }
 
@@ -125,24 +130,23 @@ function CardGridComponent({
   }, [effectiveWidth, effectiveHeight]);
 
   // Update horizontal offset when dimensions change
-  useMemo(() => {
+  useEffect(() => {
     horizontalOffset.value = jsRaceIndex * dimensions.horizontalSnapInterval;
-  }, [dimensions.horizontalSnapInterval, jsRaceIndex]);
+  }, [dimensions.horizontalSnapInterval, jsRaceIndex, horizontalOffset]);
 
   // Respond to initialRaceIndex changes from parent (e.g., "upcoming" button)
+  // NOTE: We do NOT call onRaceChange here to avoid re-render loops.
+  // The parent already knows the race index (it passed it to us).
+  // onRaceChange should only be called when the USER changes the race via gesture.
   useEffect(() => {
     if (initialRaceIndex !== jsRaceIndex && initialRaceIndex >= 0 && initialRaceIndex < races.length) {
       // Update shared values
       currentRaceIndex.value = initialRaceIndex;
       horizontalOffset.value = withSpring(initialRaceIndex * dimensions.horizontalSnapInterval, SNAP_SPRING_CONFIG);
-      // Update JS state
+      // Update JS state only - no callback to avoid loop
       setJsRaceIndex(initialRaceIndex);
-      // Trigger callback
-      if (onRaceChange && races[initialRaceIndex]) {
-        onRaceChange(initialRaceIndex, races[initialRaceIndex]);
-      }
     }
-  }, [initialRaceIndex]);
+  }, [initialRaceIndex, races.length, currentRaceIndex, horizontalOffset, dimensions.horizontalSnapInterval]);
 
   // ==========================================================================
   // GESTURE HANDLING
@@ -183,6 +187,17 @@ function CardGridComponent({
   );
 
   const racesCount = races.length;
+
+  // Convert races to TimeAxisRace format for Tufte-inspired time axis
+  const timeAxisRaces: TimeAxisRace[] = useMemo(() => {
+    return races.map((race) => ({
+      id: race.id,
+      date: race.start_date || race.date || new Date().toISOString(),
+      raceType: (race.race_type as 'fleet' | 'distance' | 'match' | 'team') || 'fleet',
+      seriesName: race.series_name || (race as any).metadata?.series_name,
+      name: race.name,
+    }));
+  }, [races]);
 
   /**
    * Pan gesture for horizontal race navigation
@@ -335,7 +350,14 @@ function CardGridComponent({
               handleRaceComplete,
               handleOpenPostRaceInterview,
               userId,
-              handleDismiss
+              handleDismiss,
+              raceIndex,
+              races.length,
+              // Timeline navigation props (for compact axis inside card)
+              timeAxisRaces,
+              jsRaceIndex,
+              goToRace,
+              nextRaceIndex ?? undefined
             )}
           </CardShell>
         </View>
@@ -354,6 +376,7 @@ function CardGridComponent({
       onOpenPostRaceInterview,
       deletingRaceId,
       onDismissSample,
+      races.length,
     ]
   );
 
@@ -361,7 +384,13 @@ function CardGridComponent({
    * Render all visible cards
    */
   const renderCards = useMemo(() => {
-    return races.map((race, raceIndex) => renderCard(race, raceIndex)).filter(Boolean);
+    return races.map((race, raceIndex) => {
+      // DEBUG: Log each race being rendered
+      if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
+        (window as any).__PERIOD_DEBUG__.log('CardGrid.native.renderCard', raceIndex, { raceId: race.id, raceName: race.name, raceIndex });
+      }
+      return renderCard(race, raceIndex);
+    }).filter(Boolean);
   }, [races, renderCard, jsRaceIndex, dimensions]);
 
   // ==========================================================================
@@ -403,81 +432,7 @@ function CardGridComponent({
         </GestureDetector>
       </View>
 
-      {/* Timeline Navigation Dots */}
-      {races.length > 1 && (
-        <View style={styles.timelineContainer}>
-          <View style={styles.timelineDotsRow}>
-            {/* Left arrow for windowed view */}
-            {races.length > MAX_VISIBLE_DOTS && jsRaceIndex > Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
-              <TouchableOpacity
-                onPress={() => goToRace(Math.max(0, jsRaceIndex - MAX_VISIBLE_DOTS))}
-                style={styles.timelineArrowButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={styles.timelineArrow}>‹</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Render dots with windowing */}
-            {(() => {
-              const totalRaces = races.length;
-
-              // Calculate visible window for many races
-              let startIdx = 0;
-              let endIdx = totalRaces - 1;
-
-              if (totalRaces > MAX_VISIBLE_DOTS) {
-                const halfWindow = Math.floor((MAX_VISIBLE_DOTS - 1) / 2);
-                startIdx = Math.max(0, jsRaceIndex - halfWindow);
-                endIdx = startIdx + MAX_VISIBLE_DOTS - 1;
-                if (endIdx >= totalRaces) {
-                  endIdx = totalRaces - 1;
-                  startIdx = Math.max(0, endIdx - MAX_VISIBLE_DOTS + 1);
-                }
-              }
-
-              return races.slice(startIdx, endIdx + 1).map((race, idx) => {
-                const actualIndex = startIdx + idx;
-                const isSelected = actualIndex === jsRaceIndex;
-                const isNextRace = nextRaceIndex != null && actualIndex === nextRaceIndex;
-
-                return (
-                  <TouchableOpacity
-                    key={race.id || `dot-${actualIndex}`}
-                    onPress={() => goToRace(actualIndex)}
-                    style={styles.timelineDotContainer}
-                    hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
-                  >
-                    {/* Now bar - small vertical line above the upcoming race dot */}
-                    {isNextRace && (
-                      <View style={styles.timelineNowBar} />
-                    )}
-                    {/* Uniform circle: filled for active, hollow for inactive */}
-                    <View
-                      style={[
-                        styles.timelineDot,
-                        isSelected ? styles.timelineDotActive : styles.timelineDotInactive,
-                      ]}
-                    />
-                  </TouchableOpacity>
-                );
-              });
-            })()}
-
-            {/* Right arrow for windowed view */}
-            {races.length > MAX_VISIBLE_DOTS && jsRaceIndex < races.length - 1 - Math.floor((MAX_VISIBLE_DOTS - 1) / 2) && (
-              <TouchableOpacity
-                onPress={() => goToRace(Math.min(races.length - 1, jsRaceIndex + MAX_VISIBLE_DOTS))}
-                style={styles.timelineArrowButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={[styles.timelineArrow, { marginLeft: 2, marginRight: 0 }]}>›</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-        </View>
-      )}
+      {/* TimelineTimeAxis moved inside RaceSummaryCard footer for compactness */}
     </GestureHandlerRootView>
   );
 }
@@ -511,57 +466,13 @@ const styles = StyleSheet.create({
   },
   gestureWrapper: {
     flex: 1,
+    justifyContent: 'center',
   },
   gridContainer: {
     position: 'relative',
   },
   cardPosition: {
     position: 'absolute',
-  },
-  // Timeline navigation - iOS Page Control style (below card)
-  timelineContainer: {
-    position: 'absolute',
-    bottom: 48, // Lift dots up from the bottom edge
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  timelineDotsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  timelineDotContainer: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    height: 14,
-  },
-  timelineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  timelineDotActive: {
-    backgroundColor: '#374151',
-  },
-  timelineDotInactive: {
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  timelineNowBar: {
-    width: 2,
-    height: 5,
-    backgroundColor: '#34C759',
-    borderRadius: 1,
-    marginBottom: 2,
-  },
-  timelineArrowButton: {
-    paddingHorizontal: 4,
-  },
-  timelineArrow: {
-    fontSize: 12,
-    color: '#94A3B8',
   },
 });
 

@@ -49,6 +49,10 @@ interface RaceDocumentsDisplayProps {
   compact?: boolean;
   /** Callback when a document is selected */
   onDocumentSelect?: (doc: RaceDisplayDocument) => void;
+  /** Show upload SSI button */
+  showUploadButton?: boolean;
+  /** Callback when upload SSI is pressed */
+  onUploadSSI?: () => void;
 }
 
 /**
@@ -236,6 +240,8 @@ export function RaceDocumentsDisplay({
   showEmptyState = true,
   compact = false,
   onDocumentSelect,
+  showUploadButton = false,
+  onUploadSSI,
 }: RaceDocumentsDisplayProps) {
   const [raceCollapsed, setRaceCollapsed] = useState(false);
   const [clubCollapsed, setClubCollapsed] = useState(false);
@@ -350,6 +356,22 @@ export function RaceDocumentsDisplay({
               </View>
             )}
           </View>
+        )}
+
+        {/* Upload SSI Button */}
+        {showUploadButton && onUploadSSI && (
+          <TouchableOpacity
+            style={styles.uploadButton}
+            onPress={onUploadSSI}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="file-upload-outline"
+              size={20}
+              color={IOS_COLORS.blue}
+            />
+            <Text style={styles.uploadButtonText}>Upload Sailing Instructions</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -511,6 +533,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: IOS_COLORS.gray,
     textAlign: 'center',
+  },
+
+  // Upload button
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: IOS_COLORS.blue,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
   },
 });
 

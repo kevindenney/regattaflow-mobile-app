@@ -143,7 +143,7 @@ export interface ComprehensiveRaceData {
 
   // Governing Rules
   racingRulesSystem?: string;
-  classRules?: string;
+  classRules?: string[];  // Array of individual class rules (e.g., ["IRC", "ORC", "Class rules apply"])
   prescriptions?: string;
   additionalDocuments?: string[];
 
@@ -204,6 +204,47 @@ export interface ComprehensiveRaceData {
   // Prizes
   prizesDescription?: string;
   prizePresentationDetails?: string;
+
+  // ============================================
+  // SI-SPECIFIC FIELDS (Sailing Instructions)
+  // ============================================
+
+  // Class Flags - mapping of boat classes to International Code Flags
+  // Essential for Race Tab - shows which flag to watch for during starts
+  classFlags?: Array<{
+    className: string;           // e.g., "Dragon", "Etchells", "J/80"
+    flag: string;               // International Code Flag (e.g., "D", "G", "J")
+    flagDescription?: string;   // e.g., "Naval 6" for Flying Fifteen
+  }>;
+
+  // Protest Procedures - how to file protests
+  protestProcedures?: {
+    protestTimeLimit?: string;           // e.g., "90 minutes after last boat finishes"
+    protestFormLocation?: string;        // e.g., "Race Office", "Online via SailSys"
+    protestHearingLocation?: string;     // e.g., "RHKYC Kellett Island Committee Room"
+    protestCommitteeContact?: string;    // Contact info for protest committee
+    protestFee?: string;                 // e.g., "HK$200"
+    specialProcedures?: string;          // Any special procedures or modifications to RRS
+  };
+
+  // Post-Race Information
+  postRaceRequirements?: {
+    signOffRequired?: boolean;           // Whether sign-off is required after racing
+    signOffMethod?: string;              // e.g., "via SailSys", "at Race Office"
+    retirementNotification?: string;     // How to notify if retiring
+    resultsPostingLocation?: string;     // Where results will be posted
+    resultsPostingTime?: string;         // When results will be available
+  };
+
+  // Signals Made Ashore - important for Race Morning
+  signalsMadeAshore?: {
+    location?: string;                   // e.g., "RHKYC Shelter Cove flagpoles"
+    apFlagMeaning?: string;              // What AP flag means (e.g., "not less than 30 minutes")
+    otherSignals?: Array<{
+      signal: string;
+      meaning: string;
+    }>;
+  };
 
   // GPS Coordinates & Course Layout (NEW - from enhanced Skills extraction)
   marks?: Array<{
@@ -282,6 +323,8 @@ export class ComprehensiveRaceExtractionAgent {
     data?: ComprehensiveRaceData;
     error?: string;
     confidence?: number;
+    partialExtraction?: boolean;
+    missingFields?: string;
   }> {
     try {
       logger.debug('[ComprehensiveRaceExtractionAgent] Starting extraction...');

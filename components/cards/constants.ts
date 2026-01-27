@@ -167,22 +167,22 @@ export const CARD_SHADOW_PRESSED = {
 } as const;
 
 /**
- * Dramatic shadow for Tufte design - strong 3D floating effect
- * Cards should command attention against warm paper background
+ * Apple HIG card shadow - subtle, refined floating effect
+ * Clean shadow that doesn't overpower the content
  */
 export const CARD_SHADOW_DRAMATIC = {
   shadowColor: '#000',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.28,
-  shadowRadius: 20,
-  elevation: 16,
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  elevation: 8,
 } as const;
 
 /**
- * Web-specific dramatic shadow (multi-layer for depth)
+ * Web-specific card shadow (Apple HIG - subtle and refined)
  */
 export const CARD_SHADOW_DRAMATIC_WEB =
-  '0 4px 8px rgba(0, 0, 0, 0.1), 0 12px 28px rgba(0, 0, 0, 0.18), 0 24px 48px rgba(0, 0, 0, 0.08)';
+  '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.08)';
 
 /**
  * Dramatic shadow for expanded cards

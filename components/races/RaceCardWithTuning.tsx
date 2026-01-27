@@ -8,7 +8,8 @@ import React, { useMemo, useState } from 'react';
 import { RaceCard, type RaceCardProps, type RigTuningData } from './RaceCard';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { useRaceCollaborators } from '@/hooks/useRaceCollaborators';
-import { RaceCollaborationDrawer } from './RaceCollaborationDrawer';
+import { useAuth } from '@/providers/AuthProvider';
+import { CrewHub } from '@/components/crew';
 
 export interface RaceCardWithTuningProps extends Omit<RaceCardProps, 'rigTuning' | 'collaborators' | 'onCollaboratorsPress'> {
   /** Boat class ID for tuning lookup */
@@ -104,8 +105,11 @@ export function RaceCardWithTuning({
   id,
   ...raceCardProps
 }: RaceCardWithTuningProps) {
-  // Collaboration drawer state
-  const [showCollaborationDrawer, setShowCollaborationDrawer] = useState(false);
+  // Get current user for CrewHub
+  const { userId } = useAuth();
+
+  // CrewHub state
+  const [showCrewHub, setShowCrewHub] = useState(false);
 
   // Use regattaId if provided, otherwise fall back to id
   const effectiveRegattaId = regattaId || id;
@@ -154,13 +158,18 @@ export function RaceCardWithTuning({
         critical_details={critical_details}
         rigTuning={rigTuning}
         collaborators={collaborators}
-        onCollaboratorsPress={() => setShowCollaborationDrawer(true)}
+        onCollaboratorsPress={() => setShowCrewHub(true)}
       />
-      {effectiveRegattaId && (
-        <RaceCollaborationDrawer
+      {effectiveRegattaId && userId && (
+        <CrewHub
+          sailorId={userId}
+          classId={classId || ''}
+          className={className || undefined}
           regattaId={effectiveRegattaId}
-          isOpen={showCollaborationDrawer}
-          onClose={() => setShowCollaborationDrawer(false)}
+          raceName={raceCardProps.name}
+          isOpen={showCrewHub}
+          onClose={() => setShowCrewHub(false)}
+          initialTab="roster"
         />
       )}
     </>

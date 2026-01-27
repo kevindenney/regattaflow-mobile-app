@@ -62,6 +62,8 @@ export interface UseRaceDocumentsReturn {
   isExtracting: boolean;
   /** Result of the last extraction */
   extractionResult: ExtractionResult | null;
+  /** Whether stored extraction has been checked */
+  storedExtractionChecked: boolean;
   /** Whether document type picker is visible */
   typePickerVisible: boolean;
   /** Refresh documents */
@@ -78,6 +80,8 @@ export interface UseRaceDocumentsReturn {
   dismissTypePicker: () => void;
   /** Trigger extraction for an existing document */
   triggerExtraction: (documentUrl: string, documentId: string, documentType: RaceDocumentType) => void;
+  /** Clear extraction result */
+  clearExtractionResult: () => void;
   /** Delete a document */
   deleteDocument: (documentId: string) => Promise<boolean>;
 }

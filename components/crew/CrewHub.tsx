@@ -271,16 +271,21 @@ export function CrewHub({
   return (
     <Actionsheet isOpen={isOpen} onClose={onClose}>
       <ActionsheetBackdrop />
-      <ActionsheetContent style={[styles.content, { height: drawerHeight }]}>
+      <ActionsheetContent
+        style={[styles.content, { minHeight: drawerHeight, maxHeight: drawerHeight }]}
+      >
         <ActionsheetDragIndicatorWrapper>
           <ActionsheetDragIndicator />
         </ActionsheetDragIndicatorWrapper>
 
-        {renderHeader()}
-        {renderTabBar()}
+        {/* Full height container to ensure proper flex layout */}
+        <View style={[styles.innerContainer, { height: drawerHeight - 30 }]}>
+          {renderHeader()}
+          {renderTabBar()}
 
-        <View style={styles.tabContent}>
-          {renderTabContent()}
+          <View style={styles.tabContent}>
+            {renderTabContent()}
+          </View>
         </View>
       </ActionsheetContent>
     </Actionsheet>
@@ -294,6 +299,10 @@ export function CrewHub({
 const styles = StyleSheet.create({
   content: {
     backgroundColor: IOS_COLORS.systemBackground,
+  },
+  innerContainer: {
+    flex: 1,
+    width: '100%',
   },
   header: {
     flexDirection: 'row',

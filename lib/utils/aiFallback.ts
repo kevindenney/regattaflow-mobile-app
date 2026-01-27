@@ -24,17 +24,63 @@ const CREDIT_EXHAUSTION_PATTERNS = [
   'payment required',
 ];
 
+// API overload/unavailable patterns (529, 503, etc.)
+const API_OVERLOAD_PATTERNS = [
+  'overload',
+  'service unavailable',
+  'temporarily unavailable',
+  'too many requests',
+  'server is busy',
+  'capacity',
+];
+
 /**
  * Check if an error indicates credit exhaustion
  */
 export function isCreditExhaustedError(error: unknown): boolean {
   if (!error) return false;
-  
-  const message = error instanceof Error 
-    ? error.message.toLowerCase() 
+
+  const message = error instanceof Error
+    ? error.message.toLowerCase()
     : String(error).toLowerCase();
-  
+
   return CREDIT_EXHAUSTION_PATTERNS.some(pattern => message.includes(pattern));
+}
+
+/**
+ * Check if an error indicates API overload (529, 503, etc.)
+ */
+export function isAPIOverloadError(error: unknown): boolean {
+  if (!error) return false;
+
+  // Check for HTTP status codes
+  const status = (error as any)?.status || (error as any)?.statusCode;
+  if (status === 529 || status === 503 || status === 502) {
+    return true;
+  }
+
+  const message = error instanceof Error
+    ? error.message.toLowerCase()
+    : String(error).toLowerCase();
+
+  // Check for overload patterns in message
+  if (API_OVERLOAD_PATTERNS.some(pattern => message.includes(pattern))) {
+    return true;
+  }
+
+  // Also check for status codes in error message (e.g., "529" or "503")
+  if (message.includes('529') || message.includes('503') || message.includes('502')) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if an error should trigger fallback mode (credit exhaustion OR API overload)
+ */
+export function shouldTriggerFallback(error: unknown): boolean {
+  return isCreditExhaustedError(error) || isAPIOverloadError(error);
 }
 
 /**
@@ -106,13 +152,16 @@ export async function withAIFallback<T>(
     const result = await aiCall();
     return { result, usedFallback: false };
   } catch (error) {
-    if (isCreditExhaustedError(error)) {
-      activateFallbackMode(options?.fallbackMessage || 'Credit exhaustion detected');
+    if (shouldTriggerFallback(error)) {
+      const reason = isAPIOverloadError(error)
+        ? 'Anthropic API overloaded'
+        : options?.fallbackMessage || 'Credit exhaustion detected';
+      activateFallbackMode(reason);
       options?.onFallback?.();
       return { result: fallbackValue, usedFallback: true };
     }
-    
-    // Re-throw non-credit errors
+
+    // Re-throw non-fallback errors
     throw error;
   }
 }

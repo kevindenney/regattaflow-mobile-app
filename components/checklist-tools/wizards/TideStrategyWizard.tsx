@@ -84,6 +84,7 @@ interface TideStrategyWizardProps extends ChecklistToolProps {
   raceName?: string;
   raceStartTime?: string;
   raceDurationHours?: number;
+  onStrategyCapture?: (data: Record<string, string>) => void;
 }
 
 // Tide state type
@@ -115,6 +116,7 @@ export function TideStrategyWizard({
   raceName,
   raceStartTime,
   raceDurationHours,
+  onStrategyCapture,
 }: TideStrategyWizardProps) {
   const router = useRouter();
 
@@ -417,6 +419,30 @@ ${tideState.currentStrength === 'strong'
       setStep(steps[prevIndex]);
     }
   }, [currentStepIndex, steps]);
+
+  // Handle completion with strategy capture
+  const handleComplete = useCallback(() => {
+    // Capture tide strategy data before completing
+    if (onStrategyCapture) {
+      const strategyData: Record<string, string> = {};
+
+      // Tide flow state
+      strategyData['tide.flow'] = tideState.flowDescription;
+      strategyData['tide.strength'] = `${tideState.currentStrength.charAt(0).toUpperCase() + tideState.currentStrength.slice(1)} current`;
+
+      // Favored course side from tide analysis
+      if (courseSideStrategy.length > 0) {
+        const favored = courseSideStrategy.reduce((best, current) =>
+          current.currentAdvantage > best.currentAdvantage ? current : best
+        );
+        strategyData['tide.favoredSide'] = `${favored.side.charAt(0).toUpperCase() + favored.side.slice(1)} side favored - ${favored.recommendation}`;
+      }
+
+      onStrategyCapture(strategyData);
+    }
+
+    onComplete();
+  }, [onStrategyCapture, onComplete, tideState, courseSideStrategy]);
 
   // Render loading state
   const renderLoading = () => (
@@ -846,7 +872,7 @@ ${tideState.currentStrength === 'strong'
               <ChevronRight size={20} color={IOS_COLORS.secondaryBackground} />
             </Pressable>
           ) : (
-            <Pressable style={styles.doneButton} onPress={onComplete}>
+            <Pressable style={styles.doneButton} onPress={handleComplete}>
               <CheckCircle2 size={20} color={IOS_COLORS.secondaryBackground} />
               <Text style={styles.doneButtonText}>Done</Text>
             </Pressable>

@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { ChevronDown, Sailboat, Check, X, Plus } from 'lucide-react-native';
 import { useUserBoats } from '@/hooks/useUserBoats';
-import type { SailorBoat } from '@/services/SailorBoatService';
+import { sailorBoatService, type SailorBoat } from '@/services/SailorBoatService';
 import { QuickAddBoatForm } from '@/components/boats/QuickAddBoatForm';
 
 const COLORS = {
@@ -74,15 +74,22 @@ export function BoatSelector({
   };
 
   const handleBoatAdded = async (newBoatId: string) => {
-    // Refetch to get the updated boats list including the new boat
-    const result = await refetch();
+    try {
+      // Fetch the newly created boat directly
+      const newBoat = await sailorBoatService.getBoat(newBoatId);
 
-    // Find the newly added boat and auto-select it
-    const newBoat = result.data?.find((b) => b.id === newBoatId);
-    if (newBoat) {
-      const classId = newBoat.class_id || null;
-      const className = newBoat.boat_class?.name || null;
-      onSelect(newBoat.id, classId, className);
+      if (newBoat) {
+        const classId = newBoat.class_id || null;
+        const className = newBoat.boat_class?.name || null;
+        onSelect(newBoat.id, classId, className);
+      }
+
+      // Refetch the boats list to update the UI
+      refetch();
+    } catch (err) {
+      console.error('[BoatSelector] Error fetching new boat:', err);
+      // Still select the boat by ID even if fetch fails
+      onSelect(newBoatId, null, null);
     }
 
     setModalVisible(false);
@@ -162,7 +169,10 @@ export function BoatSelector({
                   styles.addBoatButtonPrimary,
                   pressed && styles.addBoatButtonPressed,
                 ]}
-                onPress={() => setQuickAddVisible(true)}
+                onPress={() => {
+                  setModalVisible(false);
+                  setTimeout(() => setQuickAddVisible(true), 300);
+                }}
               >
                 <Plus size={20} color={COLORS.secondaryBackground} />
                 <Text style={styles.addBoatButtonPrimaryText}>Add Your First Boat</Text>
@@ -226,7 +236,11 @@ export function BoatSelector({
                   styles.addBoatButton,
                   pressed && styles.addBoatButtonPressed,
                 ]}
-                onPress={() => setQuickAddVisible(true)}
+                onPress={() => {
+                  setModalVisible(false);
+                  // Small delay to let the first modal close before opening the second
+                  setTimeout(() => setQuickAddVisible(true), 300);
+                }}
               >
                 <Plus size={20} color={COLORS.primary} />
                 <Text style={styles.addBoatButtonText}>Add New Boat</Text>

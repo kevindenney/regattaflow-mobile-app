@@ -24,7 +24,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Search, UserPlus, Users, Sailboat, UserCheck, Globe } from 'lucide-react-native';
 import { IOS_COLORS } from '@/components/cards/constants';
-import { CrewFinderService, SailorProfileSummary, DiscoverableUser } from '@/services/CrewFinderService';
+import { CrewFinderService, SailorProfileSummary, DiscoverableUser, SimilarSailor } from '@/services/CrewFinderService';
 import { crewManagementService, CrewRole } from '@/services/crewManagementService';
 import { useCrewFinder } from '@/hooks/useCrewFinder';
 import debounce from 'lodash/debounce';
@@ -95,6 +95,8 @@ export function CrewMemberFinderModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SailorProfileSummary[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestedUser[]>([]);
+  const [similarSailors, setSimilarSailors] = useState<SimilarSailor[]>([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [addingUserId, setAddingUserId] = useState<string | null>(null);
@@ -141,16 +143,34 @@ export function CrewMemberFinderModal({
     }
   }, [currentUserId, regattaId, regattaName]);
 
+  // Load similar sailors for discovery
+  const loadSimilarSailors = useCallback(async () => {
+    if (!currentUserId) {
+      return;
+    }
+
+    try {
+      setLoadingSimilar(true);
+      const similar = await CrewFinderService.getSimilarSailors(currentUserId, { limit: 15 });
+      setSimilarSailors(similar);
+    } catch (error) {
+      console.error('[CrewMemberFinderModal] Error loading similar sailors:', error);
+    } finally {
+      setLoadingSimilar(false);
+    }
+  }, [currentUserId]);
+
   useEffect(() => {
     if (visible) {
       loadSuggestions();
+      loadSimilarSailors();
       setSearchQuery('');
       setSearchResults([]);
       setShowRolePicker(null);
       setActiveTab('suggestions');
       refetchDiscoverUsers();
     }
-  }, [visible, loadSuggestions, refetchDiscoverUsers]);
+  }, [visible, loadSuggestions, loadSimilarSailors, refetchDiscoverUsers]);
 
   // ---------------------------------------------------------------------------
   // SEARCH
@@ -364,6 +384,7 @@ export function CrewMemberFinderModal({
     const isLoading = followingUserId === user.userId;
     const showingRolePicker = showRolePicker === user.userId;
     const isAdding = addingUserId === user.userId;
+    const raceCount = user.raceCount || 0;
 
     // Build subtitle from available info
     const subtitleParts: string[] = [];
@@ -375,26 +396,47 @@ export function CrewMemberFinderModal({
     return (
       <View key={user.userId} style={styles.userRow}>
         <View style={styles.userInfo}>
-          {/* Avatar */}
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: user.avatarColor || IOS_COLORS.gray5 },
-            ]}
-          >
-            <Text style={styles.avatarEmoji}>
-              {user.avatarEmoji || '⛵'}
-            </Text>
+          {/* Avatar with race count badge */}
+          <View style={styles.avatarContainer}>
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: user.avatarColor || IOS_COLORS.gray5 },
+              ]}
+            >
+              <Text style={styles.avatarEmoji}>
+                {user.avatarEmoji || '⛵'}
+              </Text>
+            </View>
+            {/* Race count badge */}
+            {raceCount > 0 && (
+              <View style={styles.raceCountBadge}>
+                <Text style={styles.raceCountBadgeText}>{raceCount}</Text>
+              </View>
+            )}
           </View>
 
           {/* Name & Info */}
           <View style={styles.userDetails}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {user.fullName}
-            </Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {user.fullName}
+              </Text>
+              {raceCount > 0 && (
+                <Text style={styles.raceCountText}>
+                  {raceCount} race{raceCount !== 1 ? 's' : ''}
+                </Text>
+              )}
+            </View>
             <Text style={styles.userSource} numberOfLines={1}>
               {subtitle}
             </Text>
+            {/* Recent races preview */}
+            {user.recentRaces && user.recentRaces.length > 0 && (
+              <Text style={styles.recentRacesPreview} numberOfLines={1}>
+                📍 {user.recentRaces.slice(0, 2).join(', ')}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -564,6 +606,9 @@ export function CrewMemberFinderModal({
 
   // Render content based on active tab and search state
   const renderContent = () => {
+    // Debug: Log what we're rendering
+    console.log('[CrewMemberFinderModal] renderContent - activeTab:', activeTab, 'discoverUsers:', discoverUsers.length, 'isLoadingDiscoverUsers:', isLoadingDiscoverUsers);
+
     // If searching, always show search results
     if (isSearching) {
       return (
@@ -597,46 +642,92 @@ export function CrewMemberFinderModal({
     // Show tab content
     if (activeTab === 'discover') {
       return (
-        <>
-          <View style={styles.sectionHeader}>
+        <ScrollView
+          style={styles.userList}
+          contentContainerStyle={styles.userListContent}
+          showsVerticalScrollIndicator={false}
+          onScroll={({ nativeEvent }) => {
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+            const isCloseToBottom =
+              layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
+            if (isCloseToBottom && hasMoreDiscoverUsers && !isLoadingDiscoverUsers) {
+              loadMoreDiscoverUsers();
+            }
+          }}
+          scrollEventThrottle={400}
+        >
+          {/* Similar Sailors Section - based on discovery algorithm */}
+          {/* Falls back to Active Sailors when no similarity matches found */}
+          {(loadingSimilar || similarSailors.length > 0) && (() => {
+            // Detect if showing Active Sailors fallback vs actual Similar Sailors
+            // Fallback reasons look like "X races" while similar reasons are "Same club", "Same boat class", etc.
+            const isActiveSailorsFallback = similarSailors.length > 0 &&
+              similarSailors.every(s => s.similarityReasons.some(r => /^\d+ races?$/.test(r)));
+            const sectionTitle = isActiveSailorsFallback ? 'ACTIVE SAILORS' : 'SIMILAR SAILORS';
+            const loadingText = isActiveSailorsFallback ? 'Finding active sailors...' : 'Finding similar sailors...';
+
+            return (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+                {similarSailors.length > 0 && (
+                  <Text style={styles.sectionCount}>{similarSailors.length}</Text>
+                )}
+              </View>
+              {loadingSimilar ? (
+                <View style={styles.loadingContainerSmall}>
+                  <ActivityIndicator size="small" color={IOS_COLORS.blue} />
+                  <Text style={styles.loadingTextSmall}>{loadingText}</Text>
+                </View>
+              ) : (
+                similarSailors.map((user) => (
+                  <View key={user.userId}>
+                    {renderDiscoverUserRow({
+                      userId: user.userId,
+                      fullName: user.fullName,
+                      avatarEmoji: user.avatarEmoji,
+                      avatarColor: user.avatarColor,
+                      isFollowing: user.isFollowing,
+                    } as DiscoverableUser)}
+                    {/* Show similarity reasons */}
+                    <View style={styles.similarityReasons}>
+                      {user.similarityReasons.slice(0, 2).map((reason, idx) => (
+                        <View key={idx} style={styles.similarityBadge}>
+                          <Text style={styles.similarityBadgeText}>{reason}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
+          );})()}
+
+          {/* All Users Section */}
+          <View style={[styles.sectionHeader, similarSailors.length > 0 && { marginTop: 16 }]}>
             <Text style={styles.sectionTitle}>ALL USERS</Text>
             {discoverUsers.length > 0 && (
               <Text style={styles.sectionCount}>{discoverUsers.length}</Text>
             )}
           </View>
-          <ScrollView
-            style={styles.userList}
-            contentContainerStyle={styles.userListContent}
-            showsVerticalScrollIndicator={false}
-            onScroll={({ nativeEvent }) => {
-              const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-              const isCloseToBottom =
-                layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
-              if (isCloseToBottom && hasMoreDiscoverUsers && !isLoadingDiscoverUsers) {
-                loadMoreDiscoverUsers();
-              }
-            }}
-            scrollEventThrottle={400}
-          >
-            {isLoadingDiscoverUsers && discoverUsers.length === 0 ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={IOS_COLORS.blue} />
-                <Text style={styles.loadingText}>Loading users...</Text>
-              </View>
-            ) : discoverUsers.length === 0 ? (
-              renderEmptyDiscover()
-            ) : (
-              <>
-                {discoverUsers.map((user) => renderDiscoverUserRow(user))}
-                {isLoadingDiscoverUsers && (
-                  <View style={styles.loadMoreContainer}>
-                    <ActivityIndicator size="small" color={IOS_COLORS.blue} />
-                  </View>
-                )}
-              </>
-            )}
-          </ScrollView>
-        </>
+          {isLoadingDiscoverUsers && discoverUsers.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={IOS_COLORS.blue} />
+              <Text style={styles.loadingText}>Loading users...</Text>
+            </View>
+          ) : discoverUsers.length === 0 ? (
+            renderEmptyDiscover()
+          ) : (
+            <>
+              {discoverUsers.map((user) => renderDiscoverUserRow(user))}
+              {isLoadingDiscoverUsers && (
+                <View style={styles.loadMoreContainer}>
+                  <ActivityIndicator size="small" color={IOS_COLORS.blue} />
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
       );
     }
 
@@ -836,30 +927,73 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   avatarEmoji: {
     fontSize: 20,
+  },
+  raceCountBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.systemBackground,
+  },
+  raceCountBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#fff',
   },
   userDetails: {
     flex: 1,
     marginRight: 12,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   userName: {
     fontSize: 15,
     fontWeight: '500',
     color: IOS_COLORS.label,
+    flexShrink: 1,
+  },
+  raceCountText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+    backgroundColor: `${IOS_COLORS.blue}15`,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   userSource: {
     fontSize: 12,
     color: IOS_COLORS.gray,
     marginTop: 2,
+  },
+  recentRacesPreview: {
+    fontSize: 11,
+    color: IOS_COLORS.gray2,
+    marginTop: 3,
+    fontStyle: 'italic',
   },
   addButton: {
     flexDirection: 'row',
@@ -992,6 +1126,37 @@ const styles = StyleSheet.create({
   loadMoreContainer: {
     padding: 16,
     alignItems: 'center',
+  },
+  // Similar sailors styles
+  loadingContainerSmall: {
+    padding: 20,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingTextSmall: {
+    fontSize: 13,
+    color: IOS_COLORS.gray,
+  },
+  similarityReasons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    marginTop: -8,
+    gap: 6,
+  },
+  similarityBadge: {
+    backgroundColor: IOS_COLORS.gray6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  similarityBadgeText: {
+    fontSize: 11,
+    color: IOS_COLORS.gray,
+    fontWeight: '500',
   },
 });
 

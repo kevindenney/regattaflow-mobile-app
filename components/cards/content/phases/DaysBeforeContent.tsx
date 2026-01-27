@@ -500,26 +500,6 @@ export function DaysBeforeContent({
   // Use venueCoordinates (from enrichment) or fall back to metadata coordinates
   const coords = venueCoordinates || metadataCoords;
 
-  // Debug logging for strategy wizard coordinate issues
-  console.log('[DaysBeforeContent] Venue & Date debug:', {
-    raceId: race.id,
-    raceName: race.name,
-    raceDate: race.date,
-    raceStartTime: race.startTime,
-    venueName,
-    venueCoordinates,
-    metadataCoords,
-    coords,
-    hasCoords: !!coords,
-    venueForForecastWillBeNull: !coords,
-    metadata: {
-      venue_id: metadata.venue_id,
-      start_coordinates: metadata.start_coordinates,
-      venue_coordinates: metadata.venue_coordinates,
-      racing_area_coordinates: metadata.racing_area_coordinates,
-    },
-  });
-
   // Memoize location object for CoursePositionEditor to prevent unnecessary re-renders
   const memoizedLocation = useMemo(() =>
     coords ? { lat: coords.lat, lng: coords.lng } : undefined,
@@ -589,33 +569,6 @@ export function DaysBeforeContent({
     const itemsWithTools = allItems.filter(item => hasTool(item));
     return itemsWithTools.map(item => item.id);
   }, [itemsByCategory]);
-
-  // Derive existingIntention for RigTuningWizard from intentions.rigIntentions
-  // Converts from RigIntentions format to RigTuningIntention format
-  const rigTuningExistingIntention = useMemo(() => {
-    if (!intentions?.rigIntentions) return undefined;
-
-    const { settings, overallNotes } = intentions.rigIntentions;
-
-    // Convert RigIntentions.settings (Record<string, { status, value, notes }>)
-    // to RigTuningIntention.plannedSettings (Record<string, string>)
-    const plannedSettings: Record<string, string> = {};
-    if (settings) {
-      Object.entries(settings).forEach(([key, setting]) => {
-        if (setting.status === 'adjusted' && setting.value) {
-          plannedSettings[key] = setting.value;
-        }
-      });
-    }
-
-    return {
-      recommendations: [],
-      conditionsSummary: '',
-      userNotes: overallNotes || '',
-      plannedSettings,
-      savedAt: intentions.updatedAt || new Date().toISOString(),
-    };
-  }, [intentions?.rigIntentions, intentions?.updatedAt]);
 
   // Fetch sails for the boat and show picker or inspection
   const handleSailsAction = useCallback(async () => {
@@ -785,6 +738,33 @@ export function DaysBeforeContent({
   const { intentions, isLoading: isPreparationLoading, updateStrategyNote, updateRigIntentions } = useRacePreparation({
     regattaId: race.id,
   });
+
+  // Derive existingIntention for RigTuningWizard from intentions.rigIntentions
+  // Converts from RigIntentions format to RigTuningIntention format
+  const rigTuningExistingIntention = useMemo(() => {
+    if (!intentions?.rigIntentions) return undefined;
+
+    const { settings, overallNotes } = intentions.rigIntentions;
+
+    // Convert RigIntentions.settings (Record<string, { status, value, notes }>)
+    // to RigTuningIntention.plannedSettings (Record<string, string>)
+    const plannedSettings: Record<string, string> = {};
+    if (settings) {
+      Object.entries(settings).forEach(([key, setting]) => {
+        if (setting.status === 'adjusted' && setting.value) {
+          plannedSettings[key] = setting.value;
+        }
+      });
+    }
+
+    return {
+      recommendations: [],
+      conditionsSummary: '',
+      userNotes: overallNotes || '',
+      plannedSettings,
+      savedAt: intentions.updatedAt || new Date().toISOString(),
+    };
+  }, [intentions?.rigIntentions, intentions?.updatedAt]);
 
   // Regatta content for fleet sharing
   const { savePreRaceContent } = useRegattaContent({
@@ -1687,6 +1667,7 @@ export function DaysBeforeContent({
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     gap: 16,
   },
 

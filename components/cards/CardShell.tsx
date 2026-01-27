@@ -30,9 +30,6 @@ import {
 // COMPONENT
 // =============================================================================
 
-// Subtle green tint for next race card (noticeable but not distracting)
-const NEXT_RACE_BACKGROUND = '#F0FDF4'; // Light green-50 tint
-
 export function CardShell({
   position,
   dimensions,
@@ -103,9 +100,9 @@ export function CardShell({
       width: dimensions.cardWidth,
       height: dimensions.cardHeight,
       borderRadius: dimensions.borderRadius,
-      backgroundColor: isNextRace ? NEXT_RACE_BACKGROUND : IOS_COLORS.systemBackground,
+      backgroundColor: IOS_COLORS.systemBackground,
     }),
-    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius, isNextRace]
+    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius]
   );
 
   return (

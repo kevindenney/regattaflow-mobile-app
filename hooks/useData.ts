@@ -91,23 +91,62 @@ export function useRaces() {
     // Execute query directly in useEffect
     (async () => {
       try {
-        const { data: rawData, error: dbError } = await api.supabase
+        // Fetch races owned by the user
+        const { data: ownedRaces, error: ownedError } = await api.supabase
           .from('regattas')
           .select('*')
           .eq('created_by', user.id)
           .order('start_date', { ascending: true })
-          .limit(100); // Increased to support full season calendars (CSV imports)
+          .limit(100);
 
-        if (dbError) {
-          logger.error('Database error fetching races:', dbError);
-          setError(dbError as Error);
+        if (ownedError) {
+          logger.error('Database error fetching owned races:', ownedError);
+          setError(ownedError as Error);
           setData([]);
           setLoading(false);
           return;
         }
 
+        // Fetch races where user is a collaborator (accepted or pending)
+        const { data: collaboratorRows, error: collaboratorError } = await api.supabase
+          .from('race_collaborators')
+          .select('regatta_id, id, access_level, status, regattas(*)')
+          .eq('user_id', user.id)
+          .in('status', ['accepted', 'pending']);
+
+        if (collaboratorError) {
+          logger.warn('Error fetching collaborator races:', collaboratorError);
+        }
+
+        // Build collaboration info map
+        const collaborationInfo = new Map<string, {
+          isCollaborator: boolean;
+          isPendingInvite: boolean;
+          accessLevel: string;
+          collaboratorId: string;
+        }>();
+
+        const sharedRaces: any[] = [];
+        (collaboratorRows ?? []).forEach((row: any) => {
+          if (row.regatta_id && row.regattas) {
+            collaborationInfo.set(row.regatta_id, {
+              isCollaborator: row.status === 'accepted',
+              isPendingInvite: row.status === 'pending',
+              accessLevel: row.access_level,
+              collaboratorId: row.id,
+            });
+            // Only add if not already in owned races
+            if (!ownedRaces?.some(r => r.id === row.regatta_id)) {
+              sharedRaces.push(row.regattas);
+            }
+          }
+        });
+
+        // Combine owned and shared races
+        const allRaces = [...(ownedRaces || []), ...sharedRaces];
+
         // Map to expected format
-        const mapped = (rawData || []).map((regatta: any) => {
+        const mapped = allRaces.map((regatta: any) => {
           // Extract time from start_date in 24-hour format (HH:MM:SS)
           const extractTimeFrom24Hour = (isoDate: string): string => {
             try {
@@ -124,6 +163,9 @@ export function useRaces() {
             }
           };
 
+          const collabInfo = collaborationInfo.get(regatta.id);
+          const isOwner = regatta.created_by === user.id;
+
           return {
             id: regatta.id,
             name: regatta.name,
@@ -136,9 +178,30 @@ export function useRaces() {
             wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
             tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
             strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-            critical_details: regatta.metadata?.critical_details
+            critical_details: regatta.metadata?.critical_details,
+            // Distance racing fields
+            route_waypoints: regatta.route_waypoints,
+            race_type: regatta.race_type,
+            total_distance_nm: regatta.total_distance_nm,
+            time_limit_hours: regatta.time_limit_hours,
+            // Boat/class for equipment features
+            boat_id: regatta.boat_id,
+            class_id: regatta.class_id,
+            // Permissions
+            created_by: regatta.created_by,
+            // Ownership/collaboration flags
+            isOwner,
+            isCollaborator: collabInfo?.isCollaborator ?? false,
+            isPendingInvite: collabInfo?.isPendingInvite ?? false,
+            accessLevel: collabInfo?.accessLevel ?? (isOwner ? 'full' : undefined),
+            collaboratorId: collabInfo?.collaboratorId,
+            // Full metadata for other uses
+            metadata: regatta.metadata,
           };
         });
+
+        // Sort by date
+        mapped.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         setData(mapped);
         setLoading(false);
@@ -561,7 +624,14 @@ export function useDashboardData() {
     weatherStatus: regatta.metadata?.weatherStatus,
     weatherError: regatta.metadata?.weatherError,
     strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-    critical_details: regatta.metadata?.critical_details
+    critical_details: regatta.metadata?.critical_details,
+    // Ownership/collaboration flags (from useLiveRaces)
+    isOwner: regatta.isOwner ?? true, // Default to true for backward compatibility
+    isCollaborator: regatta.isCollaborator ?? false,
+    isPendingInvite: regatta.isPendingInvite ?? false,
+    accessLevel: regatta.accessLevel,
+    collaboratorId: regatta.collaboratorId,
+    created_by: regatta.created_by, // Preserve for permission checks
   }));
 
   const loading = profile.loading || racesLoading || performanceHistory.loading || boats.loading || fleets.loading || recentSessions.loading;

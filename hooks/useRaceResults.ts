@@ -271,7 +271,70 @@ export function useLiveRaces(userId?: string) {
         addRaces(normalizedRaceEvents);
       }
 
-      const merged = Array.from(racesById.values()).sort((a: any, b: any) => {
+      // Map to track collaboration info for each race
+      const collaborationInfo = new Map<string, {
+        isCollaborator: boolean;
+        isPendingInvite: boolean;
+        accessLevel: string;
+        collaboratorId: string;
+      }>();
+
+      // Regattas where the user is a collaborator (accepted or pending)
+      const { data: collaboratorRows, error: collaboratorError } = await supabase
+        .from('race_collaborators')
+        .select('regatta_id, id, access_level, status')
+        .eq('user_id', userId)
+        .in('status', ['accepted', 'pending']);
+
+      if (collaboratorError) {
+        logger.warn('Unable to load collaborator regattas:', collaboratorError);
+      } else {
+        const collaboratorRegattaIds = Array.from(
+          new Set((collaboratorRows ?? []).map((row) => row.regatta_id).filter(Boolean))
+        ) as string[];
+
+        // Store collaboration info for each race
+        (collaboratorRows ?? []).forEach((row) => {
+          if (row.regatta_id) {
+            collaborationInfo.set(row.regatta_id, {
+              isCollaborator: row.status === 'accepted',
+              isPendingInvite: row.status === 'pending',
+              accessLevel: row.access_level,
+              collaboratorId: row.id,
+            });
+          }
+        });
+
+        const missingCollaboratorIds = collaboratorRegattaIds.filter((regattaId) => !racesById.has(regattaId));
+
+        if (missingCollaboratorIds.length > 0) {
+          const { data: collaboratorRaces, error: collabRacesError } = await supabase
+            .from('regattas')
+            .select('*')
+            .in('id', missingCollaboratorIds)
+            .order('start_date', { ascending: true });
+
+          if (collabRacesError) {
+            logger.warn('Unable to load regattas for collaborators:', collabRacesError);
+          } else {
+            addRaces(collaboratorRaces as any[]);
+          }
+        }
+      }
+
+      // Add ownership/collaboration flags to all races
+      const merged = Array.from(racesById.values()).map((race: any) => {
+        const collabInfo = collaborationInfo.get(race.id);
+        return {
+          ...race,
+          // Ownership flags
+          isOwner: race.created_by === userId,
+          isCollaborator: collabInfo?.isCollaborator ?? false,
+          isPendingInvite: collabInfo?.isPendingInvite ?? false,
+          accessLevel: collabInfo?.accessLevel ?? (race.created_by === userId ? 'full' : undefined),
+          collaboratorId: collabInfo?.collaboratorId ?? undefined,
+        };
+      }).sort((a: any, b: any) => {
         const aTime = a?.start_date ? new Date(a.start_date).getTime() : Number.MAX_SAFE_INTEGER;
         const bTime = b?.start_date ? new Date(b.start_date).getTime() : Number.MAX_SAFE_INTEGER;
         return aTime - bTime;
@@ -404,10 +467,37 @@ export function useLiveRaces(userId?: string) {
       logger.error('Error setting up race_events realtime subscription:', err);
     }
 
+    // Subscribe to race_collaborators changes for this user
+    // This handles when user receives a new invite or when their invite status changes
+    const collaboratorsChannelName = createChannelName('user-collaborators', userId);
+    try {
+      realtimeService.subscribe(
+        collaboratorsChannelName,
+        {
+          table: 'race_collaborators',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          try {
+            // For any collaborator change, refresh the races list to get updated data
+            // This is simpler than trying to merge individual updates and ensures consistency
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+              loadLiveRaces();
+            }
+          } catch (err) {
+            logger.error('Error handling race_collaborators realtime event:', err);
+          }
+        }
+      );
+    } catch (err) {
+      logger.error('Error setting up race_collaborators realtime subscription:', err);
+    }
+
     return () => {
       try {
         realtimeService.unsubscribe(channelName);
         realtimeService.unsubscribe(raceEventsChannelName);
+        realtimeService.unsubscribe(collaboratorsChannelName);
       } catch (err) {
         logger.error('Error unsubscribing from realtime:', err);
       }

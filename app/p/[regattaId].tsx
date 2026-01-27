@@ -26,7 +26,6 @@ import {
     Linking,
     Platform,
     ScrollView,
-    Share,
     StyleSheet,
     TouchableOpacity,
     View,
@@ -102,7 +101,7 @@ export default function PublicRegattaLanding() {
 
   const handleShare = async () => {
     const url = `${API_BASE}/p/${regattaId}`;
-    
+
     if (Platform.OS === 'web') {
       if (navigator.share) {
         await navigator.share({
@@ -114,6 +113,7 @@ export default function PublicRegattaLanding() {
         alert('Link copied to clipboard!');
       }
     } else {
+      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out ${data?.name}: ${url}`,
         url,

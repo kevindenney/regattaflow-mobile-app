@@ -22,6 +22,10 @@ export interface StoredDocument {
   url?: string;  // URL to access the document
   public_url?: string;
   metadata?: Record<string, any>;
+  extraction?: {
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    progress?: number;
+  };
   created_at: string;
   updated_at: string;
 }

@@ -1,7 +1,12 @@
 /**
  * RegattaFlow Design System
  * Ocean Blue Theme for Sailing Applications
+ *
+ * See also: design-tokens-ios.ts for Apple HIG compliant tokens
  */
+
+// Re-export iOS tokens for easy access
+export * from './design-tokens-ios';
 
 export const colors = {
   // Primary - Ocean Blue
@@ -133,4 +138,83 @@ export const sailingTerms = {
 export const touchTarget = {
   minHeight: 44,
   minWidth: 44,
+} as const;
+
+/**
+ * Tufte-inspired Design Tokens
+ *
+ * Following Edward Tufte's principles:
+ * - Maximize data-ink ratio
+ * - Remove chartjunk (unnecessary visual elements)
+ * - Every pixel of ink should convey unique information
+ */
+export const tufte = {
+  // Typography: smaller, tighter, data-focused
+  text: {
+    data: {
+      fontSize: 14,
+      fontWeight: '500' as const,
+      color: colors.gray900,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: '400' as const,
+      color: colors.gray500,
+    },
+    muted: {
+      fontSize: 12,
+      fontWeight: '400' as const,
+      color: colors.gray400,
+    },
+    fraction: {
+      fontSize: 14,
+      fontWeight: '500' as const,
+      color: colors.gray600,
+    },
+    raceName: {
+      fontSize: 16,
+      fontWeight: '600' as const,
+      color: colors.gray900,
+      lineHeight: 22,
+    },
+    raceNumber: {
+      fontSize: 13,
+      fontWeight: '400' as const,
+      color: colors.gray400,
+    },
+    temporal: {
+      fontSize: 13,
+      fontWeight: '500' as const,
+      color: colors.gray600,
+    },
+    phaseName: {
+      fontSize: 12,
+      fontWeight: '500' as const,
+      color: colors.gray500,
+    },
+    progressCount: {
+      fontSize: 12,
+      fontWeight: '500' as const,
+      color: colors.gray600,
+    },
+  },
+  // Spacing: minimal, tight
+  spacing: {
+    inline: 4,   // gap-1
+    block: 8,    // gap-2
+    section: 12, // gap-3
+  },
+  // Progress bar: minimal visual chrome
+  progress: {
+    track: {
+      height: 4,
+      backgroundColor: colors.gray200,
+      borderRadius: 2,
+    },
+    fill: {
+      height: 4,
+      backgroundColor: colors.gray600,
+      borderRadius: 2,
+    },
+  },
 } as const;

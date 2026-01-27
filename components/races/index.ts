@@ -15,6 +15,7 @@ export type {
 
 // Legacy components
 export { RaceCard } from './RaceCard';
+export { RaceCardActionBar } from './RaceCardActionBar';
 export { RaceCardWithTuning } from './RaceCardWithTuning';
 export { AddRaceModal } from './AddRaceModal';
 
@@ -24,6 +25,8 @@ export type { RaceCardEnhancedProps, RaceConditionsTimeline } from './RaceCardEn
 export { AccordionSection, AccordionGroup } from './AccordionSection';
 export type { AccordionSectionProps } from './AccordionSection';
 export { RaceTimer } from './RaceTimer';
+export { RaceStartInfoBar } from './RaceStartInfoBar';
+export type { RaceStartInfoBarProps } from './RaceStartInfoBar';
 export { PostRaceInterview } from './PostRaceInterview';
 export { RaceAnalysisView } from './RaceAnalysisView';
 export { RaceDetailsView } from './RaceDetailsView';
@@ -195,6 +198,39 @@ export { PreRaceSailCheck } from './PreRaceSailCheck';
 // Expanded Race Card Components
 export { ExpandedContentZone } from './ExpandedContentZone';
 export { ContentConfigModal } from './ContentConfigModal';
+
+// Race Chat Component (extracted from deprecated RaceCollaborationDrawer)
+export { RaceChatDrawer } from './RaceChatDrawer';
+
+// Team Action Pill (unified crew + chat pill for race card headers)
+export { TeamActionPill } from './TeamActionPill';
+export type { TeamActionPillProps } from './TeamActionPill';
+
+// Social Sailing / Multi-Timeline Components
+export { TimelineFeed } from './TimelineFeed';
+export { TimelineScreen } from './TimelineScreen';
+export { SocialTimelineView } from './SocialTimelineView';
+export { RaceShareActions } from './RaceShareActions';
+export { TimelineIndicator, TimelineContextBadge } from './TimelineIndicator';
+
+// Sailor Discovery Components
+export { FleetActivityFeed } from './FleetActivityFeed';
+export { RaceParticipantsView, ParticipantCountBadge } from './RaceParticipantsView';
+export { ClassExpertsSection } from './ClassExpertsSection';
+
+// Tufte-Inspired Timeline Navigation Components
+export { TimelineTimeAxis } from './TimelineTimeAxis';
+export type { TimelineTimeAxisProps, TimeAxisRace } from './TimelineTimeAxis';
+export { TimelineAvatarStrip } from './TimelineAvatarStrip';
+export type { TimelineAvatarStripProps } from './TimelineAvatarStrip';
+
+// Sailor Discovery Content Forms
+export { RacePrepForm } from './RacePrepForm';
+export type { RacePrepFormProps } from './RacePrepForm';
+export { PostRaceForm } from './PostRaceForm';
+export type { PostRaceFormProps } from './PostRaceForm';
+export { RaceContentActions } from './RaceContentActions';
+export type { RaceContentActionsProps } from './RaceContentActions';
 
 // Re-export types
 export type { Document } from './DocumentList';

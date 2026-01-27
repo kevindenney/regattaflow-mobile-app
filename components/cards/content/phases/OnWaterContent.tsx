@@ -20,11 +20,10 @@ import {
   Car,
   Check,
   CheckCircle,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Circle,
+  ClipboardList,
   Clock,
   CloudSun,
   Compass,
@@ -48,8 +47,20 @@ import {
 
 import { CardRaceData, getTimeUntilRace } from '../../types';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
-import { AccordionSection } from '@/components/races/AccordionSection';
 import type { ChecklistCompletion } from '@/types/checklists';
+import type { PreStartSpecification } from '@/types/raceIntentions';
+import { EnhancedPreStartItem } from '@/components/races/EnhancedPreStartItem';
+import {
+  derivePreDepartureItems,
+  deriveRacingStrategyItems,
+  groupRacingStrategyByCategory,
+  hasPreDepartureItems,
+  hasRacingStrategyItems,
+  getNonEmptyCategories,
+  CATEGORY_DISPLAY_CONFIG,
+  type PreDepartureItem,
+  type StrategyCategory,
+} from '@/lib/checklists/onWaterHelpers';
 import { RaceCountdownTimer, type RaceType as TimerRaceType } from '@/components/races/RaceCountdownTimer';
 import { HistoricalSummaryCard, DataStatement } from './historical';
 import { getItemsGroupedByCategory, getCategoriesForPhase } from '@/lib/checklists/checklistConfig';
@@ -87,6 +98,7 @@ const CATEGORY_ICONS: Record<ChecklistCategory, React.ComponentType<any>> = {
   on_water: Compass,
   documents: FileText,
   strategy: Target,
+  review: ClipboardList,
 };
 
 // =============================================================================
@@ -973,206 +985,6 @@ const PRE_START_CHECK_ITEMS: PreStartCheckItem[] = [
   { id: 'prestart_boat_check', label: 'Final boat check complete', icon: CheckCircle, iconColor: IOS_COLORS.green },
 ];
 
-// =============================================================================
-// INTERACTIVE PRE-START CHECKLIST COMPONENT
-// =============================================================================
-
-interface InteractivePreStartChecklistProps {
-  completions: Record<string, ChecklistCompletion> | undefined;
-  onToggleItem: (itemId: string) => void;
-}
-
-function InteractivePreStartChecklist({
-  completions,
-  onToggleItem,
-}: InteractivePreStartChecklistProps) {
-  const completedCount = PRE_START_CHECK_ITEMS.filter(
-    (item) => completions?.[item.id]
-  ).length;
-  const progress = completedCount / PRE_START_CHECK_ITEMS.length;
-
-  return (
-    <View style={preStartStyles.container}>
-      {/* Progress Header */}
-      <View style={preStartStyles.progressHeader}>
-        <View style={preStartStyles.progressTextRow}>
-          <Text style={preStartStyles.progressLabel}>Pre-Start Checks</Text>
-          <Text style={preStartStyles.progressCount}>
-            {completedCount} of {PRE_START_CHECK_ITEMS.length}
-          </Text>
-        </View>
-        <View style={preStartStyles.progressBar}>
-          <View
-            style={[
-              preStartStyles.progressFill,
-              { width: `${progress * 100}%` },
-              progress === 1 && preStartStyles.progressFillComplete,
-            ]}
-          />
-        </View>
-      </View>
-
-      {/* Checklist Items */}
-      <View style={preStartStyles.itemsList}>
-        {PRE_START_CHECK_ITEMS.map((item) => {
-          const isCompleted = !!completions?.[item.id];
-          const Icon = item.icon;
-
-          return (
-            <Pressable
-              key={item.id}
-              style={[
-                preStartStyles.item,
-                isCompleted && preStartStyles.itemCompleted,
-              ]}
-              onPress={() => onToggleItem(item.id)}
-            >
-              <View
-                style={[
-                  preStartStyles.itemIcon,
-                  { backgroundColor: `${item.iconColor}15` },
-                  isCompleted && { backgroundColor: `${IOS_COLORS.green}15` },
-                ]}
-              >
-                {isCompleted ? (
-                  <Check size={14} color={IOS_COLORS.green} strokeWidth={3} />
-                ) : (
-                  <Icon size={14} color={item.iconColor} />
-                )}
-              </View>
-              <Text
-                style={[
-                  preStartStyles.itemLabel,
-                  isCompleted && preStartStyles.itemLabelCompleted,
-                ]}
-              >
-                {item.label}
-              </Text>
-              <View
-                style={[
-                  preStartStyles.checkbox,
-                  isCompleted && preStartStyles.checkboxChecked,
-                ]}
-              >
-                {isCompleted && (
-                  <Check size={12} color="#FFFFFF" strokeWidth={3} />
-                )}
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-const preStartStyles = StyleSheet.create({
-  container: {
-    gap: 12,
-  },
-  progressHeader: {
-    gap: 6,
-  },
-  progressTextRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: IOS_COLORS.gray,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  progressCount: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: IOS_COLORS.secondaryLabel,
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: IOS_COLORS.gray5,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: IOS_COLORS.blue,
-    borderRadius: 2,
-  },
-  progressFillComplete: {
-    backgroundColor: IOS_COLORS.green,
-  },
-  itemsList: {
-    gap: 8,
-  },
-  // Card-style item (matches EducationalChecklistItem)
-  itemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 14,
-    gap: 12,
-  },
-  itemCardCompleted: {
-    backgroundColor: '#34C75908', // Faint green tint
-    opacity: 0.85,
-  },
-  // Circle checkbox (24x24, matches EducationalChecklistItem)
-  checkboxCircle: {
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Legacy styles kept for backwards compatibility
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: IOS_COLORS.gray6,
-    borderRadius: 10,
-    padding: 10,
-    gap: 10,
-  },
-  itemCompleted: {
-    backgroundColor: `${IOS_COLORS.green}08`,
-  },
-  itemIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 7,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  itemLabel: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: IOS_COLORS.label,
-    lineHeight: 20,
-  },
-  itemLabelCompleted: {
-    color: IOS_COLORS.secondaryLabel,
-    textDecorationLine: 'line-through',
-    textDecorationColor: IOS_COLORS.gray,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: IOS_COLORS.gray3,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: IOS_COLORS.green,
-    borderColor: IOS_COLORS.green,
-  },
-});
-
 /**
  * Retrospective Checklist Section - Shows all checklist items with completed/not status
  */
@@ -1432,6 +1244,55 @@ export function OnWaterContent({
     [intentions?.checklistCompletions, updateIntentions]
   );
 
+  // Handle pre-start specification update
+  const handleUpdateSpecification = useCallback(
+    (itemId: string, specification: string) => {
+      const currentSpecs = intentions?.preStartSpecifications || {};
+
+      let updatedSpecs: Record<string, PreStartSpecification>;
+      if (!specification.trim()) {
+        // Remove the specification
+        const { [itemId]: _, ...rest } = currentSpecs;
+        updatedSpecs = rest;
+      } else {
+        // Add/update the specification
+        updatedSpecs = {
+          ...currentSpecs,
+          [itemId]: {
+            itemId,
+            specification: specification.trim(),
+            specifiedAt: new Date().toISOString(),
+          },
+        };
+      }
+
+      updateIntentions({ preStartSpecifications: updatedSpecs });
+    },
+    [intentions?.preStartSpecifications, updateIntentions]
+  );
+
+  // Derive pre-departure items from intentions
+  const preDepartureItems = useMemo(
+    () => derivePreDepartureItems(intentions),
+    [intentions]
+  );
+
+  // Derive and group racing strategy items
+  const racingStrategyItems = useMemo(
+    () => deriveRacingStrategyItems(strategyNotes),
+    [strategyNotes]
+  );
+
+  const groupedStrategy = useMemo(
+    () => groupRacingStrategyByCategory(racingStrategyItems),
+    [racingStrategyItems]
+  );
+
+  const nonEmptyCategories = useMemo(
+    () => getNonEmptyCategories(groupedStrategy),
+    [groupedStrategy]
+  );
+
   useEffect(() => {
     const interval = setInterval(() => {
       setTimeUntilRace(getTimeUntilRace(race.date, race.startTime));
@@ -1531,127 +1392,136 @@ export function OnWaterContent({
         </View>
       )}
 
-      {/* Strategy Summary Section (expanded only) */}
-      {isExpanded && (hasStartStrategy || hasFirstBeatStrategy || hasDownwindStrategy || hasMarkRoundingStrategy || hasFinishStrategy) && (
-        <View style={styles.strategySection}>
-          <Text style={styles.sectionLabel}>YOUR STRATEGY</Text>
-          <View style={styles.strategyCards}>
-            {hasStartStrategy && (
-              <StrategySummaryCard
-                icon={Flag}
-                iconColor={IOS_COLORS.orange}
-                title="Start Strategy"
-                summary={startStrategySummary}
-                details={startStrategyDetails}
-                emptyMessage="No start strategy set"
-              />
-            )}
-            {hasFirstBeatStrategy && (
-              <StrategySummaryCard
-                icon={Navigation}
-                iconColor={IOS_COLORS.blue}
-                title="First Beat"
-                summary={firstBeatSummary}
-                details={firstBeatDetails}
-                emptyMessage="No first beat plan"
-              />
-            )}
-            {hasDownwindStrategy && (
-              <StrategySummaryCard
-                icon={Navigation}
-                iconColor={IOS_COLORS.green}
-                title="Downwind"
-                summary={downwindSummary}
-                details={downwindDetails}
-                emptyMessage="No downwind plan"
-              />
-            )}
-            {hasMarkRoundingStrategy && (
-              <StrategySummaryCard
-                icon={Navigation}
-                iconColor="#5856D6"
-                title="Mark Rounding"
-                summary={markRoundingSummary}
-                details={markRoundingDetails}
-                emptyMessage="No mark rounding plan"
-              />
-            )}
-            {hasFinishStrategy && (
-              <StrategySummaryCard
-                icon={Flag}
-                iconColor={IOS_COLORS.green}
-                title="Finish"
-                summary={finishSummary}
-                details={finishDetails}
-                emptyMessage="No finish plan"
-              />
+      {/* Pre-Departure Section (expanded only) - Equipment/setup from prep phase */}
+      {isExpanded && (
+        <View style={styles.preDepartureSection}>
+          <View style={styles.preStartHeader}>
+            <Wrench size={16} color={IOS_COLORS.orange} />
+            <Text style={styles.preStartHeaderLabel}>PRE-DEPARTURE</Text>
+            {preDepartureItems.length > 0 && (
+              <Text style={styles.preStartHeaderCount}>
+                {preDepartureItems.filter(item => checklistCompletions?.[`predep_${item.id}`]).length}/{preDepartureItems.length}
+              </Text>
             )}
           </View>
-        </View>
-      )}
-
-      {/* Pre-Start Checklist (expanded only) - using AccordionSection for consistent layout */}
-      {isExpanded && (
-        <View style={styles.preStartAccordionContainer}>
-          <AccordionSection
-            title="Pre-Start Checks"
-            icon={<Compass size={16} color={IOS_COLORS.blue} />}
-            defaultExpanded
-            count={PRE_START_CHECK_ITEMS.length - PRE_START_CHECK_ITEMS.filter(
-              (item) => checklistCompletions?.[item.id]
-            ).length || undefined}
-            subtitle={`${PRE_START_CHECK_ITEMS.filter(
-              (item) => checklistCompletions?.[item.id]
-            ).length}/${PRE_START_CHECK_ITEMS.length} completed`}
-          >
-            <View style={preStartStyles.itemsList}>
-              {PRE_START_CHECK_ITEMS.map((item) => {
-                const isCompleted = !!checklistCompletions?.[item.id];
-                const Icon = item.icon;
+          {preDepartureItems.length > 0 ? (
+            <View style={styles.preDepartureItemsList}>
+              {preDepartureItems.map((item) => {
+                const completionKey = `predep_${item.id}`;
+                const isCompleted = !!checklistCompletions?.[completionKey];
 
                 return (
                   <Pressable
                     key={item.id}
-                    style={[
-                      preStartStyles.itemCard,
-                      isCompleted && preStartStyles.itemCardCompleted,
-                    ]}
-                    onPress={() => handleToggleChecklistItem(item.id)}
+                    style={styles.preDepartureItem}
+                    onPress={() => handleToggleChecklistItem(completionKey)}
                   >
-                    {/* Circle checkbox using lucide icons */}
-                    <View style={preStartStyles.checkboxCircle}>
-                      {isCompleted ? (
-                        <CheckCircle2 size={24} color={IOS_COLORS.green} />
-                      ) : (
-                        <Circle size={24} color={IOS_COLORS.gray} />
+                    <View style={[styles.preStartCheckbox, isCompleted && styles.preStartCheckboxDone]}>
+                      {isCompleted && <Text style={styles.preStartCheckmark}>✓</Text>}
+                    </View>
+                    <View style={styles.preDepartureContent}>
+                      <Text
+                        style={[
+                          styles.preDepartureLabel,
+                          isCompleted && styles.preStartItemLabelDone,
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                      {item.detail && (
+                        <Text style={styles.preDepartureDetail}>{item.detail}</Text>
                       )}
                     </View>
-                    <View
-                      style={[
-                        preStartStyles.itemIcon,
-                        { backgroundColor: `${item.iconColor}15` },
-                        isCompleted && { backgroundColor: `${IOS_COLORS.green}15` },
-                      ]}
-                    >
-                      {isCompleted ? (
-                        <Check size={14} color={IOS_COLORS.green} strokeWidth={3} />
-                      ) : (
-                        <Icon size={14} color={item.iconColor} />
-                      )}
+                    <View style={[styles.preDepartureTypeBadge, item.type === 'sail' ? styles.sailBadge : styles.rigBadge]}>
+                      <Text style={styles.preDepartureTypeBadgeText}>
+                        {item.type === 'sail' ? 'Sail' : 'Rig'}
+                      </Text>
                     </View>
-                    <Text
-                      style={[
-                        preStartStyles.itemLabel,
-                        isCompleted && preStartStyles.itemLabelCompleted,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
                   </Pressable>
                 );
               })}
             </View>
-          </AccordionSection>
+          ) : (
+            <View style={styles.emptyPreDepartureContainer}>
+              <Wrench size={20} color={IOS_COLORS.gray} />
+              <Text style={styles.emptyPreDepartureText}>
+                No equipment decisions from prep phase
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Pre-Start Checklist (expanded only) - Enhanced with HOW specifications */}
+      {isExpanded && (
+        <View style={styles.preStartSection}>
+          {/* Section header */}
+          <View style={styles.preStartHeader}>
+            <Compass size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.preStartHeaderLabel}>PRE-START CHECKS</Text>
+            <Text style={styles.preStartHeaderCount}>
+              {PRE_START_CHECK_ITEMS.filter(item => checklistCompletions?.[item.id]).length}/{PRE_START_CHECK_ITEMS.length}
+            </Text>
+          </View>
+          {/* Enhanced checklist items with specification inputs */}
+          <View style={styles.enhancedPreStartItemsList}>
+            {PRE_START_CHECK_ITEMS.map((item) => (
+              <EnhancedPreStartItem
+                key={item.id}
+                itemId={item.id}
+                label={item.label}
+                isCompleted={!!checklistCompletions?.[item.id]}
+                specification={intentions?.preStartSpecifications?.[item.id]}
+                onToggle={handleToggleChecklistItem}
+                onUpdateSpecification={handleUpdateSpecification}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Racing Strategy Section (expanded only) - Grouped strategy from prep phase */}
+      {isExpanded && (
+        <View style={styles.racingStrategySection}>
+          <View style={styles.preStartHeader}>
+            <Target size={16} color={IOS_COLORS.green} />
+            <Text style={styles.preStartHeaderLabel}>RACING STRATEGY</Text>
+          </View>
+          {nonEmptyCategories.length > 0 ? (
+            <View style={styles.racingStrategyCategoriesList}>
+              {nonEmptyCategories.map((category) => {
+                const config = CATEGORY_DISPLAY_CONFIG[category];
+                const items = groupedStrategy[category];
+
+                return (
+                  <View key={category} style={styles.racingStrategyCategory}>
+                    {/* Category header with colored accent */}
+                    <View style={[styles.racingStrategyCategoryHeader, { borderLeftColor: config.color }]}>
+                      <Text style={[styles.racingStrategyCategoryLabel, { color: config.color }]}>
+                        {config.label}
+                      </Text>
+                    </View>
+                    {/* Strategy items within category */}
+                    <View style={styles.racingStrategyItemsList}>
+                      {items.map((strategyItem) => (
+                        <View key={strategyItem.id} style={styles.racingStrategyItem}>
+                          <Text style={styles.racingStrategyItemLabel}>{strategyItem.label}</Text>
+                          <Text style={styles.racingStrategyItemValue}>{strategyItem.value}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyRacingStrategyContainer}>
+              <Target size={20} color={IOS_COLORS.gray} />
+              <Text style={styles.emptyRacingStrategyText}>
+                No strategy decisions from prep phase
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -1661,6 +1531,7 @@ export function OnWaterContent({
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
     gap: 16,
   },
 
@@ -1691,12 +1562,209 @@ const styles = StyleSheet.create({
   strategyCards: {
     gap: 8,
   },
+  emptyStrategyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    padding: 16,
+    borderRadius: 10,
+    gap: 10,
+  },
+  emptyStrategyText: {
+    fontSize: 14,
+    color: IOS_COLORS.gray,
+    textAlign: 'center',
+    flex: 1,
+  },
 
-  // Pre-start accordion container
-  preStartAccordionContainer: {
+  // Pre-start section (flat header style matching DaysBeforeContent)
+  preStartSection: {
+    gap: 10,
+  },
+  preStartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  preStartHeaderLabel: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  preStartHeaderCount: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+  preStartItemsList: {
+    gap: 10,
+  },
+  preStartItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  // Square checkbox (22x22, borderRadius 6) matching DaysBeforeContent
+  preStartCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: IOS_COLORS.gray3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  preStartCheckboxDone: {
+    backgroundColor: IOS_COLORS.green,
+    borderColor: IOS_COLORS.green,
+  },
+  preStartCheckmark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  preStartItemLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  preStartItemLabelDone: {
+    color: IOS_COLORS.gray,
+    textDecorationLine: 'line-through',
+  },
+
+  // Enhanced Pre-Start Items List
+  enhancedPreStartItemsList: {
+    gap: 8,
+  },
+
+  // Pre-Departure Section
+  preDepartureSection: {
+    gap: 10,
+  },
+  preDepartureItemsList: {
+    gap: 8,
+  },
+  preDepartureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  preDepartureContent: {
+    flex: 1,
+    gap: 2,
+  },
+  preDepartureLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  preDepartureDetail: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  preDepartureTypeBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  sailBadge: {
+    backgroundColor: `${IOS_COLORS.blue}15`,
+  },
+  rigBadge: {
+    backgroundColor: `${IOS_COLORS.orange}15`,
+  },
+  preDepartureTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  emptyPreDepartureContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: IOS_COLORS.gray6,
-    borderRadius: 12,
-    overflow: 'hidden',
+    padding: 16,
+    borderRadius: 10,
+    gap: 10,
+  },
+  emptyPreDepartureText: {
+    fontSize: 14,
+    color: IOS_COLORS.gray,
+    textAlign: 'center',
+    flex: 1,
+  },
+
+  // Racing Strategy Section
+  racingStrategySection: {
+    gap: 10,
+  },
+  racingStrategyCategoriesList: {
+    gap: 12,
+  },
+  racingStrategyCategory: {
+    gap: 8,
+  },
+  racingStrategyCategoryHeader: {
+    borderLeftWidth: 3,
+    paddingLeft: 10,
+    paddingVertical: 2,
+  },
+  racingStrategyCategoryLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  racingStrategyItemsList: {
+    gap: 6,
+    paddingLeft: 13,
+  },
+  racingStrategyItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 12,
+    gap: 4,
+  },
+  racingStrategyItemLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.gray,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  racingStrategyItemValue: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    lineHeight: 20,
+  },
+  emptyRacingStrategyContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: IOS_COLORS.gray6,
+    padding: 16,
+    borderRadius: 10,
+    gap: 10,
+  },
+  emptyRacingStrategyText: {
+    fontSize: 14,
+    color: IOS_COLORS.gray,
+    textAlign: 'center',
+    flex: 1,
   },
 
   // Completed Race View (legacy)

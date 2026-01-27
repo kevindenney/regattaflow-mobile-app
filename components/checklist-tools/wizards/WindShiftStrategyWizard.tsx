@@ -80,6 +80,7 @@ interface WindShiftStrategyWizardProps extends ChecklistToolProps {
   raceName?: string;
   raceStartTime?: string;
   raceDurationHours?: number;
+  onStrategyCapture?: (data: Record<string, string>) => void;
 }
 
 // Shift pattern types
@@ -105,6 +106,7 @@ export function WindShiftStrategyWizard({
   raceName,
   raceStartTime,
   raceDurationHours,
+  onStrategyCapture,
 }: WindShiftStrategyWizardProps) {
   const router = useRouter();
 
@@ -291,7 +293,7 @@ ${thermalAssessment.hasSeaBreeze ? `**Sea Breeze:** Expected ${thermalAssessment
 ### Key Strategic Points
 
 1. **Shift Strategy:** ${shiftAnalysis.pattern === 'oscillating'
-  ? 'This is an oscillating day. Tack on every header of 5\u00b0 or more. Stay in phase with the shifts.'
+  ? 'This is an oscillating day. Tack on every header of 5° or more. Stay in phase with the shifts.'
   : shiftAnalysis.pattern === 'persistent_left' || shiftAnalysis.pattern === 'persistent_right'
   ? `Persistent shift expected to the ${shiftAnalysis.pattern === 'persistent_left' ? 'left' : 'right'}. Get there early and commit.`
   : 'Stable conditions - play the fleet, not the shifts. Focus on boat speed.'}
@@ -390,6 +392,26 @@ ${shiftAnalysis.pattern === 'stable'
       setStep(steps[prevIndex]);
     }
   }, [currentStepIndex, steps]);
+
+  // Handle completion with strategy capture
+  const handleComplete = useCallback(() => {
+    // Capture wind shift strategy data before completing
+    if (onStrategyCapture) {
+      const strategyData: Record<string, string> = {};
+
+      // Wind shift pattern
+      strategyData['upwind.shiftStrategy'] = `${shiftAnalysis.pattern.replace('_', ' ')} pattern - ${shiftAnalysis.recommendation}`;
+
+      // Thermal effects
+      if (thermalAssessment.hasSeaBreeze) {
+        strategyData['wind.thermal'] = `Sea breeze expected ${thermalAssessment.expectedOnset || 'during race'} from ${thermalAssessment.expectedDirection || 'shore'} - ${thermalAssessment.recommendation}`;
+      }
+
+      onStrategyCapture(strategyData);
+    }
+
+    onComplete();
+  }, [onStrategyCapture, onComplete, shiftAnalysis, thermalAssessment]);
 
   // Get trend icon
   const getTrendIcon = useCallback((trend: string) => {
@@ -603,7 +625,7 @@ ${shiftAnalysis.pattern === 'stable'
           <Text style={styles.shiftLabel}>Average Shift Magnitude</Text>
           <Text style={styles.shiftValue}>
             {shiftAnalysis.avgMagnitude > 0
-              ? `~${shiftAnalysis.avgMagnitude.toFixed(0)}\u00b0`
+              ? `~${shiftAnalysis.avgMagnitude.toFixed(0)}°`
               : 'N/A'}
           </Text>
         </View>
@@ -616,15 +638,15 @@ ${shiftAnalysis.pattern === 'stable'
         {shiftAnalysis.pattern === 'oscillating' && (
           <>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
-              <Text style={styles.tipText}>Tack immediately on headers of 5\u00b0 or more</Text>
+              <Text style={styles.tipBullet}>•</Text>
+              <Text style={styles.tipText}>Tack immediately on headers of 5° or more</Text>
             </View>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>Sail lifts longer - don't give them away</Text>
             </View>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>Avoid corners - stay in the middle to play shifts</Text>
             </View>
           </>
@@ -633,17 +655,17 @@ ${shiftAnalysis.pattern === 'stable'
         {(shiftAnalysis.pattern === 'persistent_left' || shiftAnalysis.pattern === 'persistent_right') && (
           <>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>
                 Get to the {shiftAnalysis.pattern === 'persistent_left' ? 'left' : 'right'} side early
               </Text>
             </View>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>Commit to your strategy - don't second-guess</Text>
             </View>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>
                 Start at the {shiftAnalysis.pattern === 'persistent_left' ? 'pin' : 'boat'} end
               </Text>
@@ -654,15 +676,15 @@ ${shiftAnalysis.pattern === 'stable'
         {shiftAnalysis.pattern === 'stable' && (
           <>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>Focus on boat speed - it's a boat speed day</Text>
             </View>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>Play the fleet, not imaginary shifts</Text>
             </View>
             <View style={styles.tipItem}>
-              <Text style={styles.tipBullet}>\u2022</Text>
+              <Text style={styles.tipBullet}>•</Text>
               <Text style={styles.tipText}>Clear air is paramount - avoid tight situations</Text>
             </View>
           </>
@@ -734,19 +756,19 @@ ${shiftAnalysis.pattern === 'stable'
         <Text style={styles.cardTitle}>Signs to Watch For</Text>
 
         <View style={styles.tipItem}>
-          <Text style={styles.tipBullet}>\u2022</Text>
+          <Text style={styles.tipBullet}>•</Text>
           <Text style={styles.tipText}>Cumulus cloud development over land</Text>
         </View>
         <View style={styles.tipItem}>
-          <Text style={styles.tipBullet}>\u2022</Text>
+          <Text style={styles.tipBullet}>•</Text>
           <Text style={styles.tipText}>Dark water (new breeze) on the horizon</Text>
         </View>
         <View style={styles.tipItem}>
-          <Text style={styles.tipBullet}>\u2022</Text>
+          <Text style={styles.tipBullet}>•</Text>
           <Text style={styles.tipText}>Temperature difference between land and water</Text>
         </View>
         <View style={styles.tipItem}>
-          <Text style={styles.tipBullet}>\u2022</Text>
+          <Text style={styles.tipBullet}>•</Text>
           <Text style={styles.tipText}>Other boats finding new pressure first</Text>
         </View>
       </View>
@@ -757,7 +779,7 @@ ${shiftAnalysis.pattern === 'stable'
           <Text style={styles.cardTitle}>Temperature</Text>
           <View style={styles.tempDisplay}>
             <Text style={styles.tempValue}>
-              {currentForecast.raceWindow.airTemperature.toFixed(0)}\u00b0C
+              {currentForecast.raceWindow.airTemperature.toFixed(0)}°C
             </Text>
             <Text style={styles.tempLabel}>Air temperature at race time</Text>
           </View>
@@ -894,7 +916,7 @@ ${shiftAnalysis.pattern === 'stable'
               <ChevronRight size={20} color={IOS_COLORS.secondaryBackground} />
             </Pressable>
           ) : (
-            <Pressable style={styles.doneButton} onPress={onComplete}>
+            <Pressable style={styles.doneButton} onPress={handleComplete}>
               <CheckCircle2 size={20} color={IOS_COLORS.secondaryBackground} />
               <Text style={styles.doneButtonText}>Done</Text>
             </Pressable>

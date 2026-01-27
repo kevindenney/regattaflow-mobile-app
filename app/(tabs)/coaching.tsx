@@ -26,7 +26,7 @@ import { coachStrategyService } from '@/services/CoachStrategyService';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,

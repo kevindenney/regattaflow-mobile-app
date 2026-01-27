@@ -28,7 +28,8 @@ export type ChecklistCategory =
   | 'morning'           // Race morning general
   | 'on_water'          // On water checks
   | 'documents'         // Race documents (NOR, SI, Course)
-  | 'strategy';         // Strategy brief checklist
+  | 'strategy'          // Strategy brief checklist
+  | 'review';           // Post-race review
 
 /**
  * Priority level for checklist items
@@ -111,85 +112,92 @@ export interface CategoryConfig {
 
 /**
  * Category configurations for display
+ * Labels use Title Case for consistent UI presentation
  */
 export const CATEGORY_CONFIG: Record<ChecklistCategory, CategoryConfig> = {
   equipment: {
     id: 'equipment',
-    label: 'EQUIPMENT',
+    label: 'Equipment',
     icon: 'Wrench',
     color: '#FF9500', // iOS orange
   },
   crew: {
     id: 'crew',
-    label: 'CREW',
+    label: 'Crew',
     icon: 'Users',
     color: '#007AFF', // iOS blue
   },
   logistics: {
     id: 'logistics',
-    label: 'LOGISTICS',
+    label: 'Logistics',
     icon: 'Car',
     color: '#34C759', // iOS green
   },
   safety: {
     id: 'safety',
-    label: 'SAFETY',
+    label: 'Safety',
     icon: 'Shield',
     color: '#FF3B30', // iOS red
   },
   navigation: {
     id: 'navigation',
-    label: 'NAVIGATION',
+    label: 'Navigation',
     icon: 'Compass',
     color: '#5856D6', // iOS purple
   },
   tactics: {
     id: 'tactics',
-    label: 'TACTICS',
+    label: 'Tactics',
     icon: 'Target',
     color: '#FF2D55', // iOS pink
   },
   team_coordination: {
     id: 'team_coordination',
-    label: 'TEAM',
+    label: 'Team Coordination',
     icon: 'Users',
     color: '#0D9488', // Teal (team racing color)
   },
   rules: {
     id: 'rules',
-    label: 'RULES',
+    label: 'Rules',
     icon: 'BookOpen',
     color: '#AF52DE', // iOS purple
   },
   weather: {
     id: 'weather',
-    label: 'WEATHER',
+    label: 'Weather',
     icon: 'CloudSun',
     color: '#007AFF', // iOS blue
   },
   morning: {
     id: 'morning',
-    label: 'MORNING',
+    label: 'Morning',
     icon: 'Sun',
     color: '#FF9500', // iOS orange
   },
   on_water: {
     id: 'on_water',
-    label: 'ON WATER',
+    label: 'On Water',
     icon: 'Waves',
     color: '#007AFF', // iOS blue
   },
   documents: {
     id: 'documents',
-    label: 'DOCUMENTS',
+    label: 'Documents',
     icon: 'FileText',
     color: '#5856D6', // iOS purple
   },
   strategy: {
     id: 'strategy',
-    label: 'STRATEGY',
+    label: 'Strategy',
     icon: 'Target',
     color: '#FF2D55', // iOS pink
+  },
+  review: {
+    id: 'review',
+    label: 'Review',
+    icon: 'ClipboardCheck',
+    color: '#10B981', // Green for post-race review
   },
 };
 
@@ -209,3 +217,52 @@ export const PHASE_SHORT_LABELS: Record<RacePhase, string> = {
   on_water: 'Racing',
   after_race: 'After',
 };
+
+/**
+ * Educational checklist lesson content
+ * Contains brief instructional content for each checklist item
+ */
+export interface ChecklistLesson {
+  id: string;
+  title: string;
+  content: string;           // 100-200 word educational content
+  keyPoints?: string[];      // Quick reference bullet points
+  learningModuleSlug?: string;
+  learningModuleId?: string;
+}
+
+/**
+ * Extended checklist item with educational components
+ * Used for pre-race preparation and course intelligence checklists
+ */
+export interface EducationalChecklistItem extends ChecklistItem {
+  /** Optional lesson content for the item */
+  lesson?: ChecklistLesson;
+  /** Label for the tool button (e.g., "Review Document", "Open Map") */
+  toolButtonLabel?: string;
+}
+
+/**
+ * Configuration for an educational checklist section
+ * Defines the structure and items for a checklist section
+ */
+export interface ChecklistSectionConfig {
+  id: string;
+  title: string;
+  icon: string;              // Lucide icon name
+  description?: string;
+  items: EducationalChecklistItem[];
+  defaultExpanded?: boolean;
+}
+
+/**
+ * Completion state for educational checklist items
+ * Tracks which items have been completed by the user
+ */
+export interface EducationalChecklistCompletion {
+  itemId: string;
+  completedAt: string;       // ISO timestamp
+  completedBy: string;       // user_id
+  sailorId?: string;
+  raceId?: string;
+}

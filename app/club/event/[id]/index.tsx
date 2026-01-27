@@ -12,7 +12,6 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -118,12 +117,23 @@ export default function EventDetailScreen() {
   const handleShare = async () => {
     if (!event) return;
 
+    const message = `Check out ${event.title}\n${format(new Date(event.start_date), 'MMM dd, yyyy')}`;
     try {
-      await Share.share({
-        title: event.title,
-        message: `Check out ${event.title}\n${format(new Date(event.start_date), 'MMM dd, yyyy')}`,
-        // url: `https://regattaflow.com/events/${eventId}`, // TODO: Add actual URL
-      });
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ title: event.title, text: message });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(message);
+          Alert.alert('Copied', 'Event details copied to clipboard');
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({
+          title: event.title,
+          message,
+        });
+      }
     } catch (error) {
       console.error('Error sharing event:', error);
     }

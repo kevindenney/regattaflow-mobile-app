@@ -15,7 +15,6 @@ import {
   Platform,
   ActivityIndicator,
   Linking,
-  Share,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -465,11 +464,19 @@ export function RouteBriefingWizard({
   // Handle native share
   const handleShare = useCallback(async () => {
     const text = generateBriefingText();
+    const title = `Route Briefing - ${raceData?.name || 'Race'}`;
     try {
-      await Share.share({
-        message: text,
-        title: `Route Briefing - ${raceData?.name || 'Race'}`,
-      });
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ title, text });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(text);
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({ message: text, title });
+      }
     } catch (err) {
       console.error('Share failed:', err);
     }

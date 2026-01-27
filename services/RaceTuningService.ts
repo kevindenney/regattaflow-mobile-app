@@ -133,7 +133,8 @@ class RaceTuningService {
         ),
       };
     } catch (error) {
-      logger.error('Failed to get equipment context', { boatId, error });
+      // Equipment context is optional - log as debug, not error
+      logger.debug('Equipment context not available', { boatId, message: (error as Error)?.message });
       return null;
     }
   }

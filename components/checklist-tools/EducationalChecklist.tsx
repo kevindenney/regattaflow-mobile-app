@@ -275,7 +275,7 @@ export function EducationalChecklist({
         {config.items.map((item) => {
           // DEBUG: Log each checklist item being rendered
           if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
-            (window as any).__PERIOD_DEBUG__.log('EducationalChecklist.item', item.id, { itemId: item.id, itemTitle: item.title, toolId: item.toolId });
+            (window as any).__PERIOD_DEBUG__.log('EducationalChecklist.item', item.id, { itemId: item.id, itemTitle: item.label, toolId: item.toolId });
           }
           return (
             <EducationalChecklistItem

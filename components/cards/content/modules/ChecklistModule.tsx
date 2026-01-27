@@ -121,10 +121,6 @@ function getChecklistForPhase(phase: RacePhase, raceType: string): ChecklistItem
         { id: 'boat_prep', label: 'Boat preparation complete', priority: 'medium' },
         { id: 'crew_comms', label: 'Confirm crew arrangements', priority: 'medium' },
         { id: 'pack_gear', label: 'Pack race gear', priority: 'low' },
-      ];
-
-    case 'race_morning':
-      return [
         { id: 'final_forecast', label: 'Check final forecast', priority: 'high' },
         { id: 'tune_rig', label: 'Tune rig for conditions', priority: 'high' },
         { id: 'select_sails', label: 'Select and rig sails', priority: 'high' },

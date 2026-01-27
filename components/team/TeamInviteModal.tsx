@@ -13,8 +13,8 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
-  Share,
   Platform,
+  Alert,
 } from 'react-native';
 import { X, Copy, Share2, Check, RefreshCw, Users } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -75,12 +75,21 @@ export function TeamInviteModal({
     if (!inviteCode) return;
 
     const message = `Join my team "${teamName}" for our upcoming race!\n\nUse invite code: ${inviteCode}\n\nOr tap this link: ${inviteLink || `regattaflow://join-team?code=${inviteCode}`}`;
+    const title = `Join ${teamName}`;
 
     try {
-      await Share.share({
-        message,
-        title: `Join ${teamName}`,
-      });
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ title, text: message });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(message);
+          Alert.alert('Copied', 'Invite link copied to clipboard');
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({ message, title });
+      }
     } catch (error) {
       // User cancelled or error
     }

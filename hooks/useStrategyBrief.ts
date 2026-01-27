@@ -94,7 +94,7 @@ export function useStrategyBrief({
   } = useRaceTypeStrategy(regattaId, race.name);
 
   // Get race preparation for intention and completion tracking
-  const { intentions, updateIntentions, isLoading: isLoadingPrep, isSaving } = useRacePreparation({
+  const { intentions, updateIntentions, updateStrategyNote, isLoading: isLoadingPrep, isSaving } = useRacePreparation({
     regattaId,
     autoSave: true,
     debounceMs: 800,
@@ -116,6 +116,9 @@ export function useStrategyBrief({
   // Get completions from intentions
   const completions = intentions?.checklistCompletions || {};
 
+  // Get strategy notes from intentions as fallback (ensures data shows after tab switching)
+  const strategyNotes = intentions?.strategyNotes || {};
+
   // Build sections with full state using dynamic race-type sections
   const allSections: StrategyBriefSectionWithState[] = useMemo(() => {
     return raceSections.map((section) => {
@@ -128,10 +131,11 @@ export function useStrategyBrief({
         completion,
         aiRecommendation: recommendation?.aiRecommendation || section.defaultTip,
         pastPerformance: recommendation?.pastPerformance,
-        userPlan: plans[section.id],
+        // Read from plans (useRaceStrategyNotes) first, fallback to intentions.strategyNotes
+        userPlan: plans[section.id] || strategyNotes[section.id],
       };
     });
-  }, [raceSections, sectionData, completions, plans]);
+  }, [raceSections, sectionData, completions, plans, strategyNotes]);
 
   // Build phases with their sections using dynamic race-type phases
   const phases: StrategyBriefPhase[] = useMemo(() => {
@@ -202,12 +206,15 @@ export function useStrategyBrief({
     [intentions?.checklistCompletions, updateIntentions, user?.id]
   );
 
-  // Update section plan (delegates to useRaceStrategyNotes)
+  // Update section plan (delegates to useRaceStrategyNotes and syncs to intentions.strategyNotes)
   const updateSectionPlan = useCallback(
     (sectionId: StrategySectionId, plan: string) => {
+      // Save to strategy_entries via useRaceStrategyNotes (existing behavior)
       updatePlan(sectionId, plan);
+      // Also sync to intentions.strategyNotes for OnWaterContent display
+      updateStrategyNote(sectionId, plan);
     },
-    [updatePlan]
+    [updatePlan, updateStrategyNote]
   );
 
   const isLoading = isLoadingRaceType || isLoadingPrep || isLoadingRecs || isLoadingPlans;

@@ -1,3 +1,10 @@
+/**
+ * Edit Profile Screen
+ *
+ * Form to edit user profile information.
+ * Uses StyleSheet for consistent styling across the app.
+ */
+
 import React from 'react';
 import {
   View,
@@ -8,67 +15,34 @@ import {
   Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Save } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/services/supabase';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
+import { TUFTE_BACKGROUND } from '@/components/cards';
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { user } = useAuth();
-  const [loading, setLoading] = React.useState(true);
+  const insets = useSafeAreaInsets();
+  const { user, userProfile, updateUserProfile } = useAuth();
   const [saving, setSaving] = React.useState(false);
-  const [profile, setProfile] = React.useState({
-    name: '',
-    phone: '',
-    bio: '',
-    location: '',
-    yacht_club: '',
-    sail_number: '',
-    preferred_boat_class: ''
-  });
+  const [fullName, setFullName] = React.useState('');
 
+  // Initialize from userProfile
   React.useEffect(() => {
-    loadProfile();
-  }, [user]);
-
-  const loadProfile = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setProfile({
-          name: data.name || '',
-          phone: data.phone || '',
-          bio: data.bio || '',
-          location: data.location || '',
-          yacht_club: data.yacht_club || '',
-          sail_number: data.sail_number || '',
-          preferred_boat_class: data.preferred_boat_class || ''
-        });
-      }
-    } catch (error) {
-      console.error('Error loading profile:', error);
-      Alert.alert('Error', 'Failed to load profile');
-    } finally {
-      setLoading(false);
+    if (userProfile) {
+      setFullName(userProfile.full_name || '');
     }
-  };
+  }, [userProfile]);
 
   const handleSave = async () => {
     if (!user) return;
 
-    if (!profile.name.trim()) {
+    if (!fullName.trim()) {
       Alert.alert('Error', 'Name is required');
       return;
     }
@@ -76,21 +50,9 @@ export default function EditProfileScreen() {
     setSaving(true);
 
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          name: profile.name.trim(),
-          phone: profile.phone.trim(),
-          bio: profile.bio.trim(),
-          location: profile.location.trim(),
-          yacht_club: profile.yacht_club.trim(),
-          sail_number: profile.sail_number.trim(),
-          preferred_boat_class: profile.preferred_boat_class.trim(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      await updateUserProfile({
+        full_name: fullName.trim(),
+      });
 
       Alert.alert('Success', 'Profile updated successfully', [
         {
@@ -100,16 +62,16 @@ export default function EditProfileScreen() {
       ]);
     } catch (error) {
       console.error('Error saving profile:', error);
-      Alert.alert('Error', 'Failed to save profile');
+      Alert.alert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
+  if (!userProfile) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#2563EB" />
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
       </View>
     );
   }
@@ -117,135 +79,164 @@ export default function EditProfileScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-gray-50"
+      style={styles.container}
     >
       {/* Header */}
-      <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1">
-            <TouchableOpacity onPress={() => router.back()} className="mr-4">
-              <ArrowLeft size={24} color="#1F2937" />
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color={IOS_COLORS.label} />
             </TouchableOpacity>
-            <Text className="text-xl font-bold text-gray-800">Edit Profile</Text>
+            <Text style={styles.headerTitle}>Edit Profile</Text>
           </View>
           <TouchableOpacity
             onPress={handleSave}
             disabled={saving}
-            className="bg-blue-500 px-4 py-2 rounded-lg flex-row items-center"
+            style={styles.saveButton}
           >
             {saving ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
                 <Save size={18} color="#FFFFFF" />
-                <Text className="text-white font-semibold ml-2">Save</Text>
+                <Text style={styles.saveButtonText}>Save</Text>
               </>
             )}
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Basic Information */}
-        <View className="bg-white mt-4 px-4 py-4">
-          <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
-            Basic Information
-          </Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Basic Information</Text>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Full Name *</Text>
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Full Name *</Text>
             <TextInput
-              value={profile.name}
-              onChangeText={(text) => setProfile({ ...profile, name: text })}
+              value={fullName}
+              onChangeText={setFullName}
               placeholder="Enter your name"
-              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              style={styles.input}
+              autoCapitalize="words"
             />
           </View>
 
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Email</Text>
+          <View style={styles.fieldContainer}>
+            <Text style={styles.fieldLabel}>Email</Text>
             <TextInput
               value={user?.email || ''}
               editable={false}
-              className="bg-gray-100 border border-gray-200 rounded-lg px-4 py-3 text-gray-500"
+              style={[styles.input, styles.inputDisabled]}
             />
-            <Text className="text-gray-400 text-xs mt-1">
+            <Text style={styles.fieldHint}>
               Email cannot be changed here
             </Text>
           </View>
-
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Phone</Text>
-            <TextInput
-              value={profile.phone}
-              onChangeText={(text) => setProfile({ ...profile, phone: text })}
-              placeholder="Enter your phone number"
-              keyboardType="phone-pad"
-              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
-            />
-          </View>
-
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Location</Text>
-            <TextInput
-              value={profile.location}
-              onChangeText={(text) => setProfile({ ...profile, location: text })}
-              placeholder="e.g., San Francisco, CA"
-              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
-            />
-          </View>
-
-          <View>
-            <Text className="text-gray-700 font-medium mb-2">Bio</Text>
-            <TextInput
-              value={profile.bio}
-              onChangeText={(text) => setProfile({ ...profile, bio: text })}
-              placeholder="Tell us about yourself"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
-            />
-          </View>
         </View>
 
-        {/* Sailing Information */}
-        <View className="bg-white mt-4 px-4 py-4">
-          <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
-            Sailing Information
-          </Text>
-
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Yacht Club</Text>
-            <TextInput
-              value={profile.yacht_club}
-              onChangeText={(text) => setProfile({ ...profile, yacht_club: text })}
-              placeholder="Enter your yacht club"
-              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
-            />
-          </View>
-
-          <View className="mb-4">
-            <Text className="text-gray-700 font-medium mb-2">Sail Number</Text>
-            <TextInput
-              value={profile.sail_number}
-              onChangeText={(text) => setProfile({ ...profile, sail_number: text })}
-              placeholder="Enter your sail number"
-              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
-            />
-          </View>
-
-          <View>
-            <Text className="text-gray-700 font-medium mb-2">Preferred Boat Class</Text>
-            <TextInput
-              value={profile.preferred_boat_class}
-              onChangeText={(text) => setProfile({ ...profile, preferred_boat_class: text })}
-              placeholder="e.g., J/70, Dragon, Swan 47"
-              className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-gray-800"
-            />
-          </View>
-        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: TUFTE_BACKGROUND,
+  },
+  centered: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  header: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 4,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+  },
+  saveButton: {
+    backgroundColor: IOS_COLORS.systemBlue,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+  section: {
+    backgroundColor: '#FFFFFF',
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 16,
+  },
+  fieldContainer: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    marginBottom: 8,
+  },
+  fieldHint: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+    marginTop: 4,
+  },
+  input: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: IOS_COLORS.label,
+  },
+  inputDisabled: {
+    backgroundColor: '#F1F3F4',
+    color: IOS_COLORS.secondaryLabel,
+  },
+});

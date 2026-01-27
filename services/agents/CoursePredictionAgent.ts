@@ -411,7 +411,7 @@ Provide clear reasoning for your predictions and include confidence scores. If m
             race_date
           )
         `)
-        .eq('regattas.user_id', userId)
+        .eq('regattas.created_by', userId)
         .not('regattas.actual_course_id', 'is', null)
         .order('predicted_for_date', { ascending: false })
         .limit(20);

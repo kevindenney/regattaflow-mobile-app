@@ -16,10 +16,12 @@ import type { RaceDocument as RaceDocumentsCardDocument } from '@/components/rac
 import {
   AIVenueInsightsCard,
   BoatSetupSection,
+  ClassExpertsSection,
   CourseOutlineCard,
   DemoNotice,
   DemoRacesCarousel,
   DistanceRaceContentSection,
+  FleetActivityFeed,
   FleetRaceContentSection,
   FleetStrategySection,
   PostRaceAnalysisSection,
@@ -27,20 +29,21 @@ import {
   RacesFloatingHeader,
   RealRacesCarousel,
   RegulatoryDigestCard,
-  TeamLogisticsSection
+  SocialTimelineView,
+  TeamLogisticsSection,
 } from '@/components/races';
+import { IOSRacesScreen } from '@/components/races/ios';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
 import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
 import { calculatePerformanceMetrics } from '@/components/races/PerformanceMetrics';
 import { PlanModeContent } from '@/components/races/plan';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
-import { SeasonArchive } from '@/components/seasons/SeasonArchive';
 import { SeasonHeader } from '@/components/seasons/SeasonHeader';
 import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { OnboardingTour, TourStep } from '@/components/onboarding/OnboardingTour';
 import { useOnboardingTour } from '@/hooks/useOnboardingTour';
-import { NavigationDrawer, NavigationDrawerContent } from '@/components/navigation/NavigationDrawer';
+import NavigationDrawer, { NavigationDrawerContent } from '@/components/navigation/NavigationDrawer';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { MOCK_RACES } from '@/constants/mockData';
@@ -50,6 +53,7 @@ import { useAddRace } from '@/hooks/useAddRace';
 import { useCoachContext } from '@/hooks/useCoachContext';
 import { useDashboardData } from '@/hooks/useData';
 import { useEnrichedRaces } from '@/hooks/useEnrichedRaces';
+import { useFollowedTimelines } from '@/hooks/useFollowedTimelines';
 import { useGuestRaces } from '@/hooks/useGuestRaces';
 import { useNextMarkData } from '@/hooks/useNextMarkData';
 import { useOffline } from '@/hooks/useOffline';
@@ -98,7 +102,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, LayoutRectangle, Modal, Platform, RefreshControl, ScrollView, Share, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const logger = createLogger('RacesScreen');
@@ -131,10 +135,9 @@ export default function RacesScreen() {
   const [demoNoticeDismissed, setDemoNoticeDismissed] = useState(false);
 
   // Season state and hooks
-  const [showSeasonArchive, setShowSeasonArchive] = useState(false);
   const [showSeasonSettings, setShowSeasonSettings] = useState(false);
   const { data: currentSeason, isLoading: loadingCurrentSeason, refetch: refetchCurrentSeason } = useCurrentSeason();
-  const { data: userSeasons = [], isLoading: loadingSeasons, refetch: refetchSeasons } = useUserSeasons();
+  const { refetch: refetchSeasons } = useUserSeasons();
 
   // Use demo season for guest users
   const effectiveSeason = useMemo(() => {
@@ -749,6 +752,16 @@ export default function RacesScreen() {
   // Enrich races with real weather data
   const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
 
+  // Social timeline: get all timelines (current user + followed users)
+  const { allTimelines, isLoading: loadingFollowedTimelines } = useFollowedTimelines(enrichedRaces);
+  // allTimelines[0] is always the current user - check if there are OTHER users to browse
+  const hasFollowedUsers = allTimelines.length > 1;
+
+  // Timeline switching state - 0 is your timeline, 1+ are followed users
+  const [currentTimelineIndex, setCurrentTimelineIndex] = useState(0);
+  const currentTimeline = allTimelines[currentTimelineIndex] || allTimelines[0];
+  const isViewingOtherTimeline = currentTimelineIndex > 0 && currentTimeline?.user?.isCurrentUser === false;
+
   // Race list data (extracted to useRaceListData hook)
   const {
     pastRaceIds,
@@ -848,9 +861,15 @@ export default function RacesScreen() {
   // Base race data for CardGrid (without detailed enrichment)
   // This is used initially; enrichment happens in cardGridRacesEnriched below
   // When no races exist, show a demo race so users can explore the UI
+  // When viewing another user's timeline, use their races instead
   const baseCardGridRaces: CardRaceData[] = useMemo(() => {
-    // If no races and sample race not dismissed, show demo race with sample data
-    if (safeRecentRaces.length === 0 && !sampleRaceDismissed) {
+    // When viewing another user's timeline, use their races
+    const racesToShow = isViewingOtherTimeline && currentTimeline?.races
+      ? currentTimeline.races
+      : safeRecentRaces;
+
+    // If no races and sample race not dismissed (only for own timeline), show demo race
+    if (racesToShow.length === 0 && !sampleRaceDismissed && !isViewingOtherTimeline) {
       return [{
         id: DEMO_RACE.id || 'demo-race',
         name: 'Sample Race',
@@ -894,7 +913,7 @@ export default function RacesScreen() {
       }];
     }
 
-    return safeRecentRaces.map((race: any) => ({
+    return racesToShow.map((race: any) => ({
       id: race.id,
       name: race.name || race.race_name || 'Unnamed Race',
       venue: race.venue || race.venue_name,
@@ -927,7 +946,16 @@ export default function RacesScreen() {
         protestDeadline: race.protest_deadline || race.critical_details?.protest_deadline,
       },
     }));
-  }, [safeRecentRaces, sampleRaceDismissed]);
+  }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline]);
+
+  // Calculate current season week (ISO week number with 'W' prefix)
+  const currentSeasonWeek = useMemo(() => {
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+    const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+    return `W${weekNumber}`;
+  }, []);
 
   // Render card content for CardGrid
   const renderCardGridContent = useCallback(
@@ -944,7 +972,9 @@ export default function RacesScreen() {
       onRaceComplete?: (sessionId: string, raceName: string, raceId: string) => void,
       onOpenPostRaceInterview?: () => void,
       userId?: string,
-      onDismiss?: () => void
+      onDismiss?: () => void,
+      raceIndex?: number,
+      totalRaces?: number
     ) => {
       const ContentComponent = getCardContentComponent(cardType);
       return (
@@ -963,10 +993,13 @@ export default function RacesScreen() {
           onOpenPostRaceInterview={onOpenPostRaceInterview}
           userId={userId}
           onDismiss={onDismiss}
+          seasonWeek={currentSeasonWeek}
+          raceNumber={raceIndex !== undefined ? raceIndex + 1 : undefined}
+          totalRaces={totalRaces}
         />
       );
     },
-    [cardGridDimensions]
+    [cardGridDimensions, currentSeasonWeek]
   );
 
   // Handle race change from CardGrid
@@ -1160,6 +1193,13 @@ export default function RacesScreen() {
   const handleAddPractice = useCallback(() => {
     router.push('/practice/create');
   }, [router]);
+
+  // Navigate to the next upcoming race when "X upcoming" is tapped
+  const handleUpcomingPress = useCallback(() => {
+    if (safeNextRace?.id) {
+      setSelectedRaceId(safeNextRace.id);
+    }
+  }, [safeNextRace?.id]);
 
   // Open boat class selector modal
   const handleSetBoatClass = useCallback(() => {
@@ -2433,6 +2473,8 @@ export default function RacesScreen() {
           Alert.alert('Race Debrief', message);
         }
       } else {
+        // Dynamically import Share to avoid NativeEventEmitter error on web
+        const { Share } = await import('react-native');
         await Share.share({
           title: shareTitle,
           message,
@@ -2657,6 +2699,57 @@ export default function RacesScreen() {
     );
   }
 
+  // iOS Races Screen - Full-screen immersive design
+  if (FEATURE_FLAGS.USE_IOS_RACES_SCREEN && Platform.OS !== 'web') {
+    // Transform race data for IOSRacesScreen
+    const iosRaces = safeRecentRaces.map((race: any) => {
+      const now = new Date();
+      const raceDate = new Date(race.start_date || race.date);
+      const diffMs = raceDate.getTime() - now.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+      // Determine status
+      let status: 'upcoming' | 'today' | 'past' = 'upcoming';
+      if (diffDays < 0) {
+        status = 'past';
+      } else if (diffDays === 0) {
+        status = 'today';
+      }
+
+      return {
+        id: race.id,
+        name: race.name || race.regatta_name || 'Untitled Race',
+        venue: race.venue || race.location,
+        date: race.start_date || race.date,
+        startTime: race.start_time || race.startTime || '10:00',
+        raceType: race.race_type as 'fleet' | 'distance' | 'match' | 'team' | undefined,
+        status,
+        daysUntil: Math.max(0, diffDays),
+        hoursUntil: status === 'today' ? Math.max(0, diffHours) : undefined,
+        minutesUntil: status === 'today' && diffHours < 1 ? Math.max(0, diffMinutes) : undefined,
+        wind: race.wind_speed ? { direction: race.wind_direction || 'N', speed: race.wind_speed } : undefined,
+        numberOfRaces: race.number_of_races,
+        progress: race.prepProgress || 0,
+      };
+    });
+
+    return (
+      <IOSRacesScreen
+        races={iosRaces}
+        onRacePress={(race) => {
+          setSelectedRaceId(race.id);
+          setHasManuallySelected(true);
+          // Navigate to race detail
+          router.push(`/race/${race.id}`);
+        }}
+        onAddRace={handleShowAddRaceSheet}
+        isLoading={loading || liveRacesLoading}
+      />
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: TUFTE_BACKGROUND }}>
       {/* Floating Header - wrapped for tour spotlight */}
@@ -2668,38 +2761,17 @@ export default function RacesScreen() {
           isOnline={isOnline}
           onAddRace={handleShowAddRaceSheet}
           onAddPractice={handleAddPractice}
+          onNewSeason={() => setShowSeasonSettings(true)}
           onAddButtonLayout={setAddButtonLayout}
           measureTrigger={tourVisible}
-          drawerVisible={drawerVisible}
-          onDrawerVisibleChange={setDrawerVisible}
-          onLearnItemLayout={setLearnItemLayout}
-          onVenueItemLayout={setVenueItemLayout}
-          onCoachingItemLayout={setCoachingItemLayout}
-          onPricingItemLayout={setPricingItemLayout}
-          skipDrawer={tourVisible}
+          totalRaces={enrichedRaces?.length || 0}
+          upcomingRaces={upcomingRacesCount}
+          currentRaceIndex={selectedRaceId ? (enrichedRaces?.findIndex((r: any) => r.id === selectedRaceId) ?? -1) + 1 : undefined}
+          onUpcomingPress={handleUpcomingPress}
         />
       </View>
 
-      {/* Season Header - Shows current season context */}
-      {!showSeasonArchive && (
-        <SeasonHeader
-          season={effectiveSeason}
-          currentRaceIndex={safeRecentRaces.findIndex(r => r.id === selectedRaceId)}
-          totalRaces={safeRecentRaces.length}
-          upcomingRaces={upcomingRacesCount}
-          onArchivePress={isGuest ? undefined : () => setShowSeasonArchive(true)}
-          onSeasonPress={isGuest ? undefined : () => setShowSeasonSettings(true)}
-          onStartSeasonPress={isGuest ? undefined : () => setShowSeasonSettings(true)}
-          onUpcomingPress={() => {
-            // Scroll to next upcoming race
-            if (safeNextRace?.id) {
-              setSelectedRaceId(safeNextRace.id);
-              setHasManuallySelected(true);
-            }
-          }}
-          compact
-        />
-      )}
+      {/* Season Header removed - counter info moved to RacesFloatingHeader */}
 
       {/* Getting Started Tips - TODO: implement TufteTipsCarousel */}
 
@@ -2714,24 +2786,72 @@ export default function RacesScreen() {
         </View>
       ) : FEATURE_FLAGS.USE_CARD_GRID_NAVIGATION ? (
         // New CardGrid 2D navigation system - wrapped for tour spotlight
-        <View ref={cardGridRef} collapsable={false} style={{ flex: 1 }}>
+        <View
+          ref={cardGridRef}
+          collapsable={false}
+          style={{ flex: 1 }}
+        >
+          {/* Timeline header when viewing another user */}
+          {isViewingOtherTimeline && currentTimeline && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              backgroundColor: 'rgba(255,255,255,0.95)',
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: '#E2E8F0',
+            }}>
+              <View style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: currentTimeline?.user?.avatar?.color || '#3B82F6',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 10,
+              }}>
+                <Text style={{ fontSize: 18 }}>{currentTimeline?.user?.avatar?.emoji || '⛵'}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: '#1E293B' }}>
+                  {currentTimeline?.user?.name || 'Timeline'}'s Timeline
+                </Text>
+                <Text style={{ fontSize: 12, color: '#64748B' }}>
+                  {currentTimeline?.races?.length || 0} {(currentTimeline?.races?.length || 0) === 1 ? 'race' : 'races'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setCurrentTimelineIndex(0)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  backgroundColor: '#F1F5F9',
+                  borderRadius: 16,
+                }}
+              >
+                <Text style={{ fontSize: 13, color: '#3B82F6', fontWeight: '500' }}>Back to Mine</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <CardGrid
             races={cardGridRaces}
             renderCardContent={renderCardGridContent}
             onRaceChange={handleCardGridRaceChange}
             onCardChange={handleCardGridCardChange}
             initialRaceIndex={Math.max(0, cardGridRaces.findIndex(r => r.id === (selectedRaceId || safeNextRace?.id)))}
-            nextRaceIndex={safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
+            nextRaceIndex={!isViewingOtherTimeline && safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
             enableHaptics={FEATURE_FLAGS.ENABLE_CARD_HAPTICS}
-            persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION}
+            persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
             style={{ flex: 1 }}
             userId={user?.id}
-            onEditRace={handleEditRace}
-            onDeleteRace={handleDeleteRace}
+            onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
+            onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
             deletingRaceId={deletingRaceId}
-            onUploadDocument={handleCardGridUploadDocument}
-            onRaceComplete={handleRaceComplete}
-            onOpenPostRaceInterview={(raceId, _raceName) => {
+            onUploadDocument={isViewingOtherTimeline ? undefined : handleCardGridUploadDocument}
+            onRaceComplete={isViewingOtherTimeline ? undefined : handleRaceComplete}
+            onOpenPostRaceInterview={isViewingOtherTimeline ? undefined : (raceId, _raceName) => {
               // Select the race if different, then open interview
               if (raceId !== selectedRaceId) {
                 setSelectedRaceId(raceId);
@@ -2742,7 +2862,7 @@ export default function RacesScreen() {
                 handleOpenPostRaceInterviewManually();
               }, 100);
             }}
-            onDismissSample={handleDismissSampleRace}
+            onDismissSample={isViewingOtherTimeline ? undefined : handleDismissSampleRace}
           />
         </View>
       ) : (
@@ -2764,6 +2884,28 @@ export default function RacesScreen() {
             onDismiss={() => setDemoNoticeDismissed(true)}
             onClaimWorkspace={handleClaimWorkspace}
           />
+
+          {/* Fleet Activity Feed - Auto-surfaces fleet mates' race prep (Inner Circle discovery) */}
+          {!isGuest && hasRealRaces && (
+            <FleetActivityFeed
+              maxItems={6}
+              onRaceSelect={(race) => {
+                // Navigate to view the fleet mate's race
+                logger.info('Fleet activity race selected:', race.name, race.userId);
+              }}
+            />
+          )}
+
+          {/* Class Experts Section - Discover top sailors in your boat class */}
+          {!isGuest && hasRealRaces && (
+            <ClassExpertsSection
+              limit={5}
+              onExpertSelect={(expert) => {
+                logger.info('Class expert selected:', expert.userName, expert.expertScore);
+              }}
+            />
+          )}
+
           {/* RACE CARDS - MULTIPLE RACES SIDE-BY-SIDE */}
           {hasRealRaces ? (
             // Legacy carousel with detail zone
@@ -3149,26 +3291,6 @@ export default function RacesScreen() {
         onBoatClassSelected={handleBoatClassSelected}
       />
 
-      {/* Season Archive Modal */}
-      <Modal
-        visible={showSeasonArchive}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowSeasonArchive(false)}
-      >
-        <SeasonArchive
-          seasons={userSeasons}
-          isLoading={loadingSeasons}
-          onRefresh={() => refetchSeasons()}
-          onSeasonPress={(seasonId) => {
-            // TODO: Navigate to season detail view
-            logger.info('[RacesScreen] Season selected', { seasonId });
-            setShowSeasonArchive(false);
-          }}
-          onBackPress={() => setShowSeasonArchive(false)}
-        />
-      </Modal>
-
       {/* Season Settings Modal - Create/Edit/End Season */}
       <SeasonSettingsModal
         visible={showSeasonSettings}
@@ -3197,6 +3319,18 @@ export default function RacesScreen() {
         onClose={() => setShowSignupPrompt(false)}
         feature="multiple_races"
       />
+
+      {/* Navigation Drawer - standalone modal (shown when hamburger pressed) */}
+      {!tourVisible && (
+        <NavigationDrawer
+          visible={drawerVisible}
+          onClose={() => setDrawerVisible(false)}
+          onLearnItemLayout={setLearnItemLayout}
+          onVenueItemLayout={setVenueItemLayout}
+          onCoachingItemLayout={setCoachingItemLayout}
+          onPricingItemLayout={setPricingItemLayout}
+        />
+      )}
 
       {/* Onboarding Tour - shown for first-time users */}
       {/* Drawer content rendered inside tour Modal to fix iOS z-index stacking */}

@@ -87,7 +87,7 @@ export {
 
 export { CardShell } from './CardShell';
 export { CardGrid } from './CardGrid';
-export { CardGridTimeline } from './CardGridTimeline';
+// CardGridTimeline removed - replaced by TimelineTimeAxis (Tufte-inspired)
 
 // =============================================================================
 // HOOKS

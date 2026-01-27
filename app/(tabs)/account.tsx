@@ -2,7 +2,7 @@
  * Account Screen
  *
  * Unified Tufte-style account management screen.
- * Combines Profile + Settings into single dense layout.
+ * Profile with inline editing, boats, subscription, and consolidated settings.
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -52,6 +52,12 @@ interface UserBoat {
   is_primary?: boolean;
 }
 
+interface ProfileUpdates {
+  full_name?: string;
+  home_club?: string;
+  home_venue?: string;
+}
+
 export default function AccountScreen() {
   const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities } = useAuth();
   const { t } = useTranslation(['settings', 'common']);
@@ -60,7 +66,6 @@ export default function AccountScreen() {
   const { settings: userSettings, updateSetting } = useUserSettings();
 
   // State
-  const [darkMode, setDarkMode] = useState(false);
   const [languageVisible, setLanguageVisible] = useState(false);
   const [claimVisible, setClaimVisible] = useState(false);
   const [claimPassword, setClaimPassword] = useState('');
@@ -83,15 +88,6 @@ export default function AccountScreen() {
     const tier = userProfile?.subscription_tier || 'free';
     return tier.charAt(0).toUpperCase() + tier.slice(1);
   }, [userProfile?.subscription_tier]);
-
-  const sailingIdentity = useMemo(() => {
-    return {
-      primaryClass: userProfile?.primary_class || 'Not set',
-      sailNumber: userProfile?.sail_number || 'Not set',
-      homeClub: userProfile?.home_club || 'Not set',
-      homeVenue: userProfile?.home_venue || 'Not set',
-    };
-  }, [userProfile]);
 
   // Load boats on mount
   React.useEffect(() => {
@@ -122,6 +118,17 @@ export default function AccountScreen() {
       setBoatsLoading(false);
     }
   }, [user?.id]);
+
+  // Inline profile save handler
+  const handleProfileSave = useCallback(async (updates: ProfileUpdates) => {
+    try {
+      await updateUserProfile(updates);
+    } catch (error) {
+      console.error('[Account] Failed to save profile:', error);
+      Alert.alert('Error', 'Failed to save changes. Please try again.');
+      throw error; // Re-throw so the inline editor can handle the error state
+    }
+  }, [updateUserProfile]);
 
   // Handlers
   const handleSignOut = useCallback(async () => {
@@ -258,21 +265,15 @@ export default function AccountScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent}>
-        {/* Profile Header */}
+        {/* Profile Header - with inline editing for name, home club, home venue */}
         <TufteProfileHeader
           name={userProfile?.full_name || 'User'}
           email={user?.email}
+          homeClub={userProfile?.home_club}
+          homeVenue={userProfile?.home_venue}
           memberSince={userProfile?.created_at}
-          onEditPress={() => router.push('/settings/edit-profile')}
+          onSave={handleProfileSave}
         />
-
-        {/* Sailing Identity */}
-        <TufteAccountSection title="Sailing Identity" action="Edit" onActionPress={() => router.push('/settings/edit-profile')}>
-          <TufteDataRow label="Primary Class" value={sailingIdentity.primaryClass} />
-          <TufteDataRow label="Sail Number" value={sailingIdentity.sailNumber} />
-          <TufteDataRow label="Home Club" value={sailingIdentity.homeClub} />
-          <TufteDataRow label="Home Venue" value={sailingIdentity.homeVenue} isLast />
-        </TufteAccountSection>
 
         {/* Boats */}
         <TufteAccountSection
@@ -304,56 +305,31 @@ export default function AccountScreen() {
           )}
         </TufteAccountSection>
 
-        {/* Subscription */}
+        {/* Subscription - simplified */}
         <TufteAccountSection title="Subscription">
-          <TufteDataRow label="Plan" value={subscriptionTier} />
-          <TufteDataRow
-            label="Status"
-            value={userProfile?.subscription_status === 'active' ? 'Active' : 'Inactive'}
-            status={userProfile?.subscription_status === 'active' ? 'active' : 'inactive'}
-          />
+          <TufteDataRow label="Plan" value={`${subscriptionTier} Plan`} />
+          {/* Only show status for paid tiers - free users don't need to see "Inactive" */}
+          {userProfile?.subscription_tier && userProfile.subscription_tier !== 'free' && (
+            <TufteDataRow
+              label="Status"
+              value={userProfile?.subscription_status === 'active' ? 'Active' : 'Expired'}
+              status={userProfile?.subscription_status === 'active' ? 'active' : 'warning'}
+            />
+          )}
           <TufteSettingRow
-            label="Manage Subscription"
+            label={userProfile?.subscription_tier === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
             onPress={() => router.push('/subscription')}
             isLast
           />
         </TufteAccountSection>
 
-        {/* Become a Coach - shown for sailors without coaching capability */}
-        {userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching && (
-          <TufteAccountSection title="Expand Your Role">
-            <TufteSettingRow
-              label="Become a Coach"
-              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
-              isLast
-            />
-          </TufteAccountSection>
-        )}
-
-        {/* Coach Profile - shown for users with coaching capability */}
-        {capabilities?.hasCoaching && (
-          <TufteAccountSection title="Coach Profile">
-            <TufteDataRow
-              label="Status"
-              value={capabilities.coachingProfile?.profile_published ? 'Published' : 'Draft'}
-              status={capabilities.coachingProfile?.profile_published ? 'active' : 'inactive'}
-            />
-            <TufteSettingRow
-              label="Edit Coach Profile"
-              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
-              isLast
-            />
-          </TufteAccountSection>
-        )}
-
-        {/* Preferences */}
-        <TufteAccountSection title="Preferences">
+        {/* Settings - consolidated */}
+        <TufteAccountSection title="Settings">
           <TufteSettingRow
             label={t('settings:preferences.language')}
             value={currentLanguageName}
             onPress={() => setLanguageVisible(true)}
           />
-          <TufteToggleRow label="Dark Mode" value={darkMode} onValueChange={setDarkMode} />
           <TufteToggleRow
             label="Show Quick Tips"
             value={userSettings.showQuickTips}
@@ -362,36 +338,41 @@ export default function AccountScreen() {
           <TufteSettingRow
             label="Notifications"
             onPress={() => router.push('/settings/notifications')}
-            isLast
           />
-        </TufteAccountSection>
-
-        {/* Account Actions */}
-        <TufteAccountSection title="Account">
+          <TufteSettingRow
+            label="Change Password"
+            onPress={() => router.push('/settings/change-password')}
+          />
+          {/* Complete Onboarding - for users who haven't finished */}
           {!userProfile?.onboarding_completed && userProfile?.user_type === 'sailor' && (
             <TufteSettingRow
               label="Complete Onboarding"
               onPress={() => router.push('/(auth)/sailor-onboarding-comprehensive')}
             />
           )}
+          {/* Claim Workspace - for demo users */}
           {isDemoProfile && (
             <TufteSettingRow
               label="Claim Workspace"
               onPress={() => setClaimVisible(true)}
             />
           )}
-          <TufteSettingRow
-            label="Change Password"
-            onPress={() => router.push('/settings/change-password')}
-          />
-          <TufteSettingRow
-            label="Privacy Policy"
-            onPress={() => Alert.alert('Coming Soon', 'Privacy policy link will be available soon!')}
-          />
-          <TufteSettingRow
-            label="Terms of Service"
-            onPress={() => Alert.alert('Coming Soon', 'Terms of service link will be available soon!')}
-          />
+          {/* Become a Coach - shown for sailors without coaching capability */}
+          {userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching && (
+            <TufteSettingRow
+              label="Become a Coach"
+              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+            />
+          )}
+          {/* Coach Profile - shown for users with coaching capability */}
+          {capabilities?.hasCoaching && (
+            <TufteSettingRow
+              label="Coach Profile"
+              value={capabilities.coachingProfile?.profile_published ? 'Published' : 'Draft'}
+              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+            />
+          )}
+          {/* Sample Data - for sailors */}
           {userProfile?.user_type === 'sailor' && (
             <TufteSettingRow
               label="Reset Sample Data"
@@ -409,8 +390,8 @@ export default function AccountScreen() {
           />
         </TufteAccountSection>
 
-        {/* Danger Zone */}
-        <TufteAccountSection title="Account Actions">
+        {/* Sign Out - standalone section */}
+        <TufteAccountSection>
           <TufteSettingRow
             label="Sign Out"
             onPress={handleSignOut}

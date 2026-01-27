@@ -60,6 +60,8 @@ export interface RaceWindowData {
   windAtEnd: number;
   /** Wind direction at race start */
   windDirectionAtStart: string;
+  /** Wind direction at race start in degrees (0-360) */
+  windDirectionDegreesAtStart?: number;
   /** Tide height at race start (meters) */
   tideAtStart: number;
   /** Tide height at race end (meters) */
@@ -70,6 +72,10 @@ export interface RaceWindowData {
   turnTimeDuringRace?: string;
   /** Is the turn time during the race window? */
   hasTurnDuringRace: boolean;
+  /** Current/tide flow direction at race start in degrees (0-360) */
+  currentDirectionAtStart?: number;
+  /** Current/tide flow speed at race start (knots) */
+  currentSpeedAtStart?: number;
   /** Start time for race window display */
   raceStartTime: string;
   /** End time for race window display */
@@ -364,11 +370,14 @@ function extractRaceWindowData(
     windAtStart,
     windAtEnd,
     windDirectionAtStart: degreesToCardinal(startForecast.windDirection),
+    windDirectionDegreesAtStart: startForecast.windDirection,
     tideAtStart: tideValues[startIdx] ?? 0,
     tideAtEnd: tideValues[endIdx] ?? 0,
     tidePeakDuringRace,
     turnTimeDuringRace,
     hasTurnDuringRace,
+    currentDirectionAtStart: startForecast.currentDirection,
+    currentSpeedAtStart: startForecast.currentSpeed,
     raceStartTime: formatTime(startForecast.timestamp),
     raceEndTime: formatTime(endForecast.timestamp),
     beaufortAtStart: knotsToBeaufort(windAtStart),

@@ -5,7 +5,6 @@ import {
     Alert,
     Platform,
     ScrollView,
-    Share,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -51,10 +50,20 @@ export default function BookingConfirmationScreen() {
   };
 
   const handleShareBooking = async () => {
+    const message = `Booked a sailing coaching session with ${params.coachName} on ${formatDateTime(params.startTime)}`;
     try {
-      await Share.share({
-        message: `Booked a sailing coaching session with ${params.coachName} on ${formatDateTime(params.startTime)}`,
-      });
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ text: message });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(message);
+          Alert.alert('Copied', 'Booking details copied to clipboard');
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({ message });
+      }
     } catch (error) {
       console.error('Error sharing:', error);
     }

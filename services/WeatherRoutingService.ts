@@ -98,7 +98,7 @@ export class WeatherRoutingService {
     // Get multi-model forecasts at route centroid
     const centroid = this.calculateRouteCentroid(waypoints);
     const modelForecasts = await this.getMultiModelForecasts({
-      location: centroid,
+      location: { lat: centroid.latitude, lng: centroid.longitude },
       startTime,
       hours: hoursAhead,
       models,
@@ -153,6 +153,7 @@ export class WeatherRoutingService {
     params: GetModelComparisonParams
   ): Promise<ModelForecast[]> {
     const { location, startTime, hours, models = ['OPENMETEO', 'GFS'] } = params;
+    const geoLocation: GeoLocation = { latitude: location.lat, longitude: location.lng };
 
     const forecasts: ModelForecast[] = [];
 
@@ -160,7 +161,7 @@ export class WeatherRoutingService {
     if (models.includes('OPENMETEO')) {
       try {
         const openMeteoData = await this.fetchOpenMeteoForecast(
-          location,
+          geoLocation,
           startTime,
           hours
         );
@@ -181,7 +182,7 @@ export class WeatherRoutingService {
       for (const modelName of stormGlassModels) {
         try {
           const sgData = await this.fetchStormGlassForecast(
-            location,
+            geoLocation,
             startTime,
             hours,
             modelName as WeatherModelName
@@ -301,10 +302,10 @@ export class WeatherRoutingService {
       }
 
       // Calculate aggregated conditions
-      const windSpeeds = legForecasts.map((f) => f.windSpeed);
-      const windDirections = legForecasts.map((f) => f.windDirection);
+      const windSpeeds = legForecasts.map((f) => f.wind.speed);
+      const windDirections = legForecasts.map((f) => f.wind.direction);
       const waveHeights = legForecasts
-        .map((f) => f.waveHeight)
+        .map((f) => f.waves?.height)
         .filter((h): h is number => h !== undefined);
 
       return {
@@ -318,7 +319,7 @@ export class WeatherRoutingService {
             windDirections[0],
             windDirections[windDirections.length - 1]
           ),
-          gusts: legForecasts[0]?.windGusts,
+          gusts: legForecasts[0]?.wind.gusts,
         },
         waves:
           waveHeights.length > 0
@@ -327,8 +328,8 @@ export class WeatherRoutingService {
                 heightMax: Math.max(...waveHeights),
                 heightAvg:
                   waveHeights.reduce((a, b) => a + b, 0) / waveHeights.length,
-                period: legForecasts[0]?.wavePeriod || 0,
-                direction: legForecasts[0]?.waveDirection || 0,
+                period: legForecasts[0]?.waves?.period || 0,
+                direction: legForecasts[0]?.waves?.direction || 0,
               }
             : undefined,
         visibility: 'good',
@@ -714,14 +715,14 @@ export class WeatherRoutingService {
 
       const hourlyData: HourlyModelData[] = forecasts.map((f) => ({
         time: new Date(f.timestamp),
-        windSpeed: f.windSpeed,
-        windDirection: f.windDirection,
-        gusts: f.windGusts,
-        waveHeight: f.waveHeight,
-        waveDirection: f.waveDirection,
-        wavePeriod: f.wavePeriod,
+        windSpeed: f.wind.speed,
+        windDirection: f.wind.direction,
+        gusts: f.wind.gusts,
+        waveHeight: f.waves?.height,
+        waveDirection: f.waves?.direction,
+        wavePeriod: f.waves?.period,
         cloudCover: f.cloudCover,
-        pressure: f.pressure,
+        pressure: f.pressure?.sealevel ?? 1013.25,
       }));
 
       return {
@@ -748,22 +749,23 @@ export class WeatherRoutingService {
     if (!this.stormGlassService) return null;
 
     try {
-      const data = await this.stormGlassService.getMarineData(
-        location.latitude,
-        location.longitude,
+      const forecasts = await this.stormGlassService.getMarineWeather(
+        location,
         hours
       );
 
-      if (!data.hourly) return null;
+      if (!forecasts || forecasts.length === 0) return null;
 
-      const hourlyData: HourlyModelData[] = data.hourly.map((h: any) => ({
-        time: new Date(h.time),
-        windSpeed: h.windSpeed?.noaa || h.windSpeed?.sg || 0,
-        windDirection: h.windDirection?.noaa || h.windDirection?.sg || 0,
-        gusts: h.gust?.noaa || h.gust?.sg,
-        waveHeight: h.waveHeight?.noaa || h.waveHeight?.sg,
-        waveDirection: h.waveDirection?.noaa || h.waveDirection?.sg,
-        wavePeriod: h.wavePeriod?.noaa || h.wavePeriod?.sg,
+      const hourlyData: HourlyModelData[] = forecasts.map((f) => ({
+        time: new Date(f.timestamp),
+        windSpeed: f.wind.speed,
+        windDirection: f.wind.direction,
+        gusts: f.wind.gusts,
+        waveHeight: f.waves?.height,
+        waveDirection: f.waves?.direction,
+        wavePeriod: f.waves?.period,
+        cloudCover: f.cloudCover,
+        pressure: f.pressure?.sealevel ?? 1013.25,
       }));
 
       return {

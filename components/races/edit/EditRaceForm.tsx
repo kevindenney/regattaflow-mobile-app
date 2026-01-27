@@ -795,6 +795,9 @@ export function EditRaceForm({
         start_date: startDate,
         first_warning_signal: formData.startTime || null,
         start_area_name: formData.venue || null,
+        // Venue coordinates - save to top-level columns for weather fetching
+        latitude: formData.venueCoordinates?.lat || null,
+        longitude: formData.venueCoordinates?.lng || null,
         description: formData.description || null,
         race_type: formData.raceType,
         // Boat selection

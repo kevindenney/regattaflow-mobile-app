@@ -221,7 +221,7 @@ export function CourseMapWizard({
     onCancel(); // Close modal first
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn/race-preparation-mastery',
+        pathname: '/(tabs)/learn' as any,
         params: {
           moduleId: 'module-13-2', // Tactical Planning module
         },
@@ -2134,7 +2134,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   siExtractionResults: {
-    backgroundColor: IOS_COLORS.tertiaryBackground,
+    backgroundColor: `${IOS_COLORS.secondaryBackground}`,
     borderRadius: 12,
     padding: 16,
     marginTop: 12,

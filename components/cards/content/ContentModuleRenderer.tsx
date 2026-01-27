@@ -7,10 +7,26 @@
 
 import React, { Suspense } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import {
+  CloudSun,
+  Compass,
+  Navigation,
+  Sailboat,
+  Users,
+  FileText,
+  Timer,
+  Waves,
+  User,
+  Flag,
+  Map,
+  Trophy,
+  BookOpen,
+  Share2,
+} from 'lucide-react-native';
 
 import { IOS_COLORS } from '@/components/cards/constants';
 import { RacePhase, CardRaceData } from '@/components/cards/types';
-import { CollapsibleModule } from './CollapsibleModule';
+import { AccordionSection } from '@/components/races/AccordionSection';
 import { getModuleLabel } from './moduleConfig';
 import type { RaceType, ContentModuleId, CONTENT_MODULE_INFO } from '@/types/raceCardContent';
 
@@ -53,6 +69,31 @@ function ModuleLoadingFallback() {
 }
 
 /**
+ * Get icon component for a module
+ */
+function getModuleIconComponent(moduleId: ContentModuleId) {
+  const iconMap: Record<ContentModuleId, React.ComponentType<any>> = {
+    conditions: CloudSun,
+    strategy: Compass,
+    rig_setup: Sailboat,
+    course: Navigation,
+    fleet_analysis: Users,
+    regulatory: FileText,
+    checklist: FileText,
+    start_sequence: Timer,
+    tide_currents: Waves,
+    competitor_notes: User,
+    team_assignments: Users,
+    match_opponent: Flag,
+    distance_waypoints: Map,
+    results_preview: Trophy,
+    learning_notes: BookOpen,
+    share_with_team: Share2,
+  };
+  return iconMap[moduleId] || FileText;
+}
+
+/**
  * Placeholder module for unimplemented modules
  */
 function PlaceholderModule({
@@ -85,6 +126,11 @@ export function ContentModuleRenderer({
   onHide,
 }: ContentModuleRendererProps) {
   const label = getModuleLabel(moduleId, raceType);
+
+  // DEBUG: Log module rendering
+  if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
+    (window as any).__PERIOD_DEBUG__.log('ContentModuleRenderer', label, { moduleId, raceType, phase, raceId: race.id, isCollapsed });
+  }
 
   // Get the module component based on ID
   const renderModuleContent = () => {
@@ -161,20 +207,32 @@ export function ContentModuleRenderer({
     }
   };
 
+  const IconComponent = getModuleIconComponent(moduleId);
+
   return (
-    <CollapsibleModule
-      title={label}
-      moduleId={moduleId}
-      isCollapsed={isCollapsed}
-      onToggle={onToggleCollapse}
-      onHide={onHide}
-    >
-      {renderModuleContent()}
-    </CollapsibleModule>
+    <View style={styles.accordionContainer}>
+      <AccordionSection
+        title={label}
+        icon={<IconComponent size={16} color={IOS_COLORS.blue} />}
+        defaultExpanded={!isCollapsed}
+        onToggle={(expanded) => {
+          // AccordionSection reports the new expanded state, but onToggleCollapse expects toggle behavior
+          // If the component controls its own state, this callback may just be informational
+          onToggleCollapse?.();
+        }}
+      >
+        {renderModuleContent()}
+      </AccordionSection>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  accordionContainer: {
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   loadingContainer: {
     padding: 16,
     alignItems: 'center',

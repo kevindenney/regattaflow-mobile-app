@@ -19,7 +19,7 @@ import {
 import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from '@/components/races/AddRaceDialog/tufteFormStyles';
 import { IOS_COLORS } from '@/components/cards/constants';
 
-export type DocumentType = 'nor' | 'si' | 'amendment' | 'appendix' | 'course_diagram' | 'other';
+export type DocumentType = 'nor' | 'si' | 'amendment' | 'appendix' | 'course_diagram' | 'courses' | 'other';
 
 interface DocumentTypeOption {
   type: DocumentType;
@@ -66,6 +66,13 @@ const DOCUMENT_TYPES: DocumentTypeOption[] = [
     description: 'Course layout and marks',
   },
   {
+    type: 'courses',
+    label: 'Courses',
+    shortLabel: 'Courses',
+    icon: <Map size={16} />,
+    description: 'Course sequences and layouts',
+  },
+  {
     type: 'other',
     label: 'Other Document',
     shortLabel: 'Other',
@@ -92,7 +99,7 @@ export function DocumentTypeSelector({
   showCommonOnly = false,
 }: DocumentTypeSelectorProps) {
   const types = showCommonOnly
-    ? DOCUMENT_TYPES.filter((t) => ['nor', 'si', 'amendment'].includes(t.type))
+    ? DOCUMENT_TYPES.filter((t) => ['nor', 'si', 'amendment', 'courses'].includes(t.type))
     : DOCUMENT_TYPES;
 
   if (compact) {

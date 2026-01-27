@@ -434,6 +434,7 @@ interface FirstBeatStrategyWizardProps extends ChecklistToolProps {
   raceName?: string;
   raceStartTime?: string;
   raceDurationHours?: number;
+  onStrategyCapture?: (data: Record<string, string>) => void;
 }
 
 // Side selection type
@@ -461,6 +462,7 @@ export function FirstBeatStrategyWizard({
   raceName,
   raceStartTime,
   raceDurationHours,
+  onStrategyCapture,
 }: FirstBeatStrategyWizardProps) {
   const router = useRouter();
 
@@ -826,6 +828,32 @@ Switch strategy if you observe:
       setStep(steps[prevIndex]);
     }
   }, [currentStepIndex, steps]);
+
+  // Handle completion with strategy capture
+  const handleComplete = useCallback(() => {
+    // Capture first beat strategy data before completing
+    if (onStrategyCapture) {
+      const strategyData: Record<string, string> = {};
+
+      // Favored tack
+      strategyData['upwind.favoredTack'] = `${tackRecommendation.tack.charAt(0).toUpperCase() + tackRecommendation.tack.slice(1)} tack - ${tackRecommendation.reason}`;
+
+      // Favored side with confidence
+      strategyData['upwind.favoredSide'] = `${favoredSide.side.charAt(0).toUpperCase() + favoredSide.side.slice(1)} side (${favoredSide.confidence} confidence) - ${favoredSide.description}`;
+
+      // Commitment/layline approach
+      const commitmentDescriptions: Record<CommitmentLevel, string> = {
+        low: 'Play shifts, stay flexible, minimize risk',
+        medium: 'Balanced approach, moderate commitment',
+        high: 'Commit early, fewer tacks, maximize gain',
+      };
+      strategyData['upwind.laylineApproach'] = commitmentDescriptions[commitmentLevel];
+
+      onStrategyCapture(strategyData);
+    }
+
+    onComplete();
+  }, [onStrategyCapture, onComplete, tackRecommendation, favoredSide, commitmentLevel]);
 
   // Render loading state
   const renderLoading = () => (
@@ -1280,7 +1308,7 @@ Switch strategy if you observe:
               <ChevronRight size={20} color={IOS_COLORS.secondaryBackground} />
             </Pressable>
           ) : (
-            <Pressable style={styles.doneButton} onPress={onComplete}>
+            <Pressable style={styles.doneButton} onPress={handleComplete}>
               <CheckCircle2 size={20} color={IOS_COLORS.secondaryBackground} />
               <Text style={styles.doneButtonText}>Done</Text>
             </Pressable>

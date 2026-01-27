@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,11 @@ import {
   FlatList,
   ActivityIndicator,
 } from 'react-native';
-import { ChevronRight, Plus, User, Mail, Phone, MessageCircle, Shield, Users } from 'lucide-react-native';
+import { ChevronRight, Plus, User, Users } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useSailorOnboardingState, type SailorCrewData, type SailorCrewMember } from '@/hooks/useSailorOnboardingState';
 
-// Mock data for crew roles
+// Common sailing crew roles
 const CREW_ROLES = [
   "Skipper",
   "Tactician",
@@ -23,17 +23,6 @@ const CREW_ROLES = [
   "Helmsman",
   "Trimmer",
   "Pitman",
-  "Cook",
-  "Medic",
-  "Photographer"
-];
-
-// Communication methods
-const COMMUNICATION_METHODS = [
-  { id: 'phone', name: 'Phone', icon: Phone },
-  { id: 'email', name: 'Email', icon: Mail },
-  { id: 'whatsapp', name: 'WhatsApp', icon: MessageCircle },
-  { id: 'signal', name: 'Signal', icon: Shield }
 ];
 
 export default function CrewScreen() {
@@ -43,30 +32,9 @@ export default function CrewScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingMember, setIsAddingMember] = useState(false);
   
-  const [newMember, setNewMember] = useState({
-    name: '',
-    role: '',
-    email: '',
-    phone: '',
-    communicationMethods: [] as string[],
-    hasAccess: false
-  });
-  
+  const [newMember, setNewMember] = useState({ name: '', role: '' });
   const [showRoleSuggestions, setShowRoleSuggestions] = useState(false);
   const [filteredRoles, setFilteredRoles] = useState(CREW_ROLES);
-  const [selectedAvatar, setSelectedAvatar] = useState(0);
-  
-  // Mock avatars from the tool
-  const avatars = [
-    "https://unsplash.com/photos/man-standing-beside-wall-pAtA8xe_iVM",
-    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8M3x8dXNlcnxlbnwwfHwwfHx8MA%3D%3D",
-    "https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTF8fHVzZXJ8ZW58MHx8MHx8fDA%3D",
-    "https://images.unsplash.com/photo-1605993439219-9d09d2020fa5?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTN8fHVzZXJ8ZW58MHx8MHx8fDA%3D",
-    "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZGFyY2h8Mjh8fHVzZXJ8ZW58MHx8MHx8fDA%3D",
-    "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MzJ8fHVzZXJ8ZW58MHx8MHx8fDA%3D",
-    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NTd8fHVzZXJ8ZW58MHx8MHx8fDA%3D",
-    "https://images.unsplash.com/photo-1578445714074-946b536079aa?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTl8fFByb2Zlc3Npb25hbCUyMGF2YXRhciUyMHdpdGglMjBnbGFzc2VzfGVufDB8fDB8fHww"
-  ];
 
   useEffect(() => {
     setCrewMembers(state.crew?.crewMembers ?? []);
@@ -90,13 +58,13 @@ export default function CrewScreen() {
   const generateMemberId = () => `crew-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   const handleAddMember = async () => {
-    if (isAddingMember) return; // Prevent double-clicks
+    if (isAddingMember) return;
 
     try {
       setIsAddingMember(true);
 
       if (!newMember.name.trim() || !newMember.role.trim()) {
-        Alert.alert('Validation Error', 'Please enter both name and role');
+        Alert.alert('Missing info', 'Please enter both name and role');
         return;
       }
 
@@ -104,32 +72,14 @@ export default function CrewScreen() {
         id: generateMemberId(),
         name: newMember.name.trim(),
         role: newMember.role.trim(),
-        email: newMember.email.trim() || undefined,
-        phone: newMember.phone.trim() || undefined,
-        communicationMethods: newMember.communicationMethods,
-        hasAccess: newMember.hasAccess,
       };
 
       const updatedMembers = [...crewMembers, member];
-      
-      // Update local state first for immediate feedback
       setCrewMembers(updatedMembers);
-      
-      // Then persist to storage
       persistCrewMembers(updatedMembers);
-      
-      Alert.alert('Crew member added', `${member.name} was added to your roster.`);
-      
+
       // Reset form
-      setNewMember({
-        name: '',
-        role: '',
-        email: '',
-        phone: '',
-        communicationMethods: [],
-        hasAccess: false
-      });
-      setSelectedAvatar(0);
+      setNewMember({ name: '', role: '' });
       setShowRoleSuggestions(false);
     } catch (error) {
       console.error('Error adding crew member:', error);
@@ -137,29 +87,6 @@ export default function CrewScreen() {
     } finally {
       setIsAddingMember(false);
     }
-  };
-
-  const toggleCommunicationMethod = (methodId: string) => {
-    setNewMember(prev => {
-      if (prev.communicationMethods.includes(methodId)) {
-        return {
-          ...prev,
-          communicationMethods: prev.communicationMethods.filter(id => id !== methodId)
-        };
-      } else {
-        return {
-          ...prev,
-          communicationMethods: [...prev.communicationMethods, methodId]
-        };
-      }
-    });
-  };
-
-  const toggleAccess = () => {
-    setNewMember(prev => ({
-      ...prev,
-      hasAccess: !prev.hasAccess
-    }));
   };
 
   const filterRoles = (text: string) => {
@@ -186,14 +113,11 @@ export default function CrewScreen() {
   };
 
   const handleContinueToReview = () => {
-    if (crewMembers.length === 0) {
-      Alert.alert('Add crew', 'Add at least one crew member before continuing.');
-      return;
-    }
-
     try {
       setIsSaving(true);
-      persistCrewMembers(crewMembers);
+      if (crewMembers.length > 0) {
+        persistCrewMembers(crewMembers);
+      }
       router.push('/review');
     } catch (error: any) {
       console.error('Error continuing to review:', error);
@@ -203,7 +127,11 @@ export default function CrewScreen() {
     }
   };
 
-  const canContinue = crewMembers.length > 0 && !isSaving;
+  const handleSkip = () => {
+    router.push('/review');
+  };
+
+  const canContinue = !isSaving;
 
   return (
     <View className="flex-1 bg-white">
@@ -224,38 +152,30 @@ export default function CrewScreen() {
       <ScrollView className="flex-1 px-4">
         <View className="mt-6">
           <Text className="text-2xl font-bold text-gray-800 mb-2">
-            Manage Your Crew
+            Add Your Crew
           </Text>
-          <Text className="text-gray-500 mb-6">
-            Add crew members, assign roles, and set communication preferences
+          <Text className="text-gray-500 mb-4">
+            Optionally add crew members now, or skip and add them later
           </Text>
 
-          {/* Add Crew Member Form */}
-          <View className="mb-8 bg-blue-50 rounded-xl p-4">
-            <Text className="text-lg font-semibold text-gray-800 mb-4">
-              Add New Crew Member
-            </Text>
-            
-            {/* Avatar Selection */}
-            <View className="mb-4">
-              <Text className="text-gray-800 font-medium mb-2">Avatar</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="max-h-20">
-                <View className="flex-row gap-3">
-                  {avatars.map((avatar, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      onPress={() => setSelectedAvatar(index)}
-                      className={`rounded-full border-2 ${selectedAvatar === index ? 'border-blue-600' : 'border-transparent'}`}
-                    >
-                      <View className="w-14 h-14 rounded-full overflow-hidden">
-                        <View className="bg-gray-200 w-full h-full rounded-full" />
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
+          {/* Educational tip about CrewHub */}
+          <View className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
+            <View className="flex-row items-center mb-2">
+              <Users size={18} color="#2563EB" />
+              <Text className="text-blue-800 font-semibold ml-2">Crew Hub Available Later</Text>
             </View>
-            
+            <Text className="text-blue-700 text-sm">
+              You can manage your full crew roster anytime from your race cards.
+              This includes assigning positions, inviting coaches, and tracking who you sail with.
+            </Text>
+          </View>
+
+          {/* Add Crew Member Form */}
+          <View className="mb-8 bg-gray-50 rounded-xl p-4 border border-gray-200">
+            <Text className="text-lg font-semibold text-gray-800 mb-4">
+              Quick Add Crew Member
+            </Text>
+
             {/* Name Input */}
             <View className="mb-4">
               <Text className="text-gray-800 font-medium mb-2">Name</Text>
@@ -298,69 +218,6 @@ export default function CrewScreen() {
                   </View>
                 )}
               </View>
-            </View>
-            
-            {/* Contact Information */}
-            <View className="mb-4">
-              <Text className="text-gray-800 font-medium mb-2">Contact Information</Text>
-              <View className="flex-row gap-3">
-                <TextInput
-                  value={newMember.email}
-                  onChangeText={(text) => setNewMember(prev => ({ ...prev, email: text }))}
-                  placeholder="Email"
-                  className="flex-1 bg-white border border-gray-200 rounded-xl p-4 text-base"
-                  keyboardType="email-address"
-                />
-                <TextInput
-                  value={newMember.phone}
-                  onChangeText={(text) => setNewMember(prev => ({ ...prev, phone: text }))}
-                  placeholder="Phone"
-                  className="flex-1 bg-white border border-gray-200 rounded-xl p-4 text-base"
-                  keyboardType="phone-pad"
-                />
-              </View>
-            </View>
-            
-            {/* Communication Methods */}
-            <View className="mb-4">
-              <Text className="text-gray-800 font-medium mb-2">Communication Methods</Text>
-              <View className="flex-row flex-wrap gap-2">
-                {COMMUNICATION_METHODS.map((method) => {
-                  const Icon = method.icon;
-                  const isSelected = newMember.communicationMethods.includes(method.id);
-                  return (
-                    <TouchableOpacity
-                      key={method.id}
-                      onPress={() => toggleCommunicationMethod(method.id)}
-                      className={`flex-row items-center px-3 py-2 rounded-full border ${isSelected ? 'bg-blue-100 border-blue-600' : 'bg-gray-100 border-gray-300'}`}
-                    >
-                      <Icon size={16} color={isSelected ? '#2563EB' : '#6B7280'} />
-                      <Text className={`ml-2 text-sm ${isSelected ? 'text-blue-600' : 'text-gray-600'}`}>
-                        {method.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-            
-            {/* RegattaFlow Access */}
-            <View className="mb-4">
-              <TouchableOpacity 
-                onPress={toggleAccess}
-                className="flex-row items-center justify-between p-3 bg-white border border-gray-200 rounded-xl"
-              >
-                <View className="flex-row items-center">
-                  <Shield size={20} className="text-blue-600 mr-3" />
-                  <Text className="text-gray-800">Grant RegattaFlow Access</Text>
-                </View>
-                <View className={`w-12 h-6 rounded-full ${newMember.hasAccess ? 'bg-blue-600' : 'bg-gray-300'} justify-center`}>
-                  <View className={`w-5 h-5 rounded-full bg-white ${newMember.hasAccess ? 'ml-6' : 'ml-0.5'}`} />
-                </View>
-              </TouchableOpacity>
-              <Text className="text-gray-500 text-xs mt-1 ml-1">
-                Allow this crew member to access boat data and race analytics
-              </Text>
             </View>
             
             {/* Add Button */}
@@ -406,10 +263,10 @@ export default function CrewScreen() {
                 <Text className="text-gray-500 mt-4">Loading crew preferences...</Text>
               </View>
             ) : crewMembers.length === 0 ? (
-              <View className="bg-gray-50 rounded-xl p-8 items-center justify-center">
-                <Users size={48} className="text-gray-300 mb-4" />
-                <Text className="text-gray-500 text-center">
-                  No crew members added yet. Add your first crew member above.
+              <View className="bg-gray-50 rounded-xl p-6 items-center justify-center">
+                <Users size={40} color="#9CA3AF" />
+                <Text className="text-gray-500 text-center mt-3">
+                  No crew added yet. Skip this step or add someone above.
                 </Text>
               </View>
             ) : (
@@ -420,39 +277,17 @@ export default function CrewScreen() {
                 renderItem={({ item }) => (
                   <View className="bg-white border border-gray-200 rounded-xl p-4 mb-3">
                     <View className="flex-row items-center">
-                      <View className="w-12 h-12 rounded-full bg-gray-200 items-center justify-center mr-3">
-                        <User size={24} className="text-gray-500" />
+                      <View className="w-10 h-10 rounded-full bg-blue-100 items-center justify-center mr-3">
+                        <User size={20} color="#2563EB" />
                       </View>
                       <View className="flex-1">
                         <Text className="font-semibold text-gray-800">{item.name}</Text>
-                        <Text className="text-blue-600">{item.role}</Text>
-                        <View className="flex-row flex-wrap mt-1">
-                          {(item.communicationMethods ?? []).map(methodId => {
-                            const method = COMMUNICATION_METHODS.find(m => m.id === methodId);
-                            if (!method) return null;
-                            const Icon = method.icon;
-                            return (
-                              <View 
-                                key={methodId} 
-                                className="flex-row items-center bg-blue-50 rounded-full px-2 py-1 mr-2 mb-1"
-                              >
-                                <Icon size={12} className="text-blue-600 mr-1" />
-                                <Text className="text-blue-600 text-xs">{method.name}</Text>
-                              </View>
-                            );
-                          })}
-                        </View>
+                        <Text className="text-blue-600 text-sm">{item.role}</Text>
                       </View>
                       <TouchableOpacity onPress={() => removeCrewMember(item.id)}>
                         <Text className="text-red-500 font-medium">Remove</Text>
                       </TouchableOpacity>
                     </View>
-                    {item.hasAccess && (
-                      <View className="flex-row items-center mt-3 pt-3 border-t border-gray-100">
-                        <Shield size={16} className="text-green-500 mr-2" />
-                        <Text className="text-green-600 text-sm">Has RegattaFlow Access</Text>
-                      </View>
-                    )}
                   </View>
                 )}
               />
@@ -462,17 +297,27 @@ export default function CrewScreen() {
       </ScrollView>
 
       {/* Bottom Action */}
-      <View className="px-4 py-4 border-t border-gray-200">
-        <TouchableOpacity 
-          className={`rounded-xl py-4 flex-row items-center justify-center ${canContinue ? 'bg-blue-600' : 'bg-gray-300'}`}
-          disabled={!canContinue}
-          onPress={handleContinueToReview}
-        >
-          <Text className="text-white font-semibold text-lg">
-            {isSaving ? 'Saving...' : 'Continue to Review'}
-          </Text>
-          <ChevronRight size={20} color="white" className="ml-2" />
-        </TouchableOpacity>
+      <View className="px-4 py-4 border-t border-gray-200 bg-white">
+        <View className="flex-row gap-3">
+          <TouchableOpacity
+            className="flex-1 rounded-xl py-4 flex-row items-center justify-center border border-gray-300 bg-white"
+            onPress={handleSkip}
+          >
+            <Text className="text-gray-700 font-semibold text-lg">
+              Skip for Now
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className={`flex-1 rounded-xl py-4 flex-row items-center justify-center ${canContinue ? 'bg-blue-600' : 'bg-gray-300'}`}
+            disabled={!canContinue}
+            onPress={handleContinueToReview}
+          >
+            <Text className="text-white font-semibold text-lg">
+              {isSaving ? 'Saving...' : crewMembers.length > 0 ? 'Continue' : 'Skip'}
+            </Text>
+            <ChevronRight size={20} color="white" className="ml-2" />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );

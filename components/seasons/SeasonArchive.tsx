@@ -2,8 +2,8 @@
  * Season Archive
  *
  * Tufte-inspired archive view for past seasons.
- * Uses small multiples pattern - each season is a comparable data-dense card.
- * Shows results sequence as inline text sparkline, standings, conditions.
+ * Maximum data-ink ratio - status conveyed through typography weight,
+ * results as inline text sequences, no decorative badges or section labels.
  */
 
 import React from 'react';
@@ -17,7 +17,70 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { ordinal } from '@/lib/tufte';
 import type { SeasonListItem, SeasonWithSummary } from '@/types/season';
+
+// =============================================================================
+// TYPOGRAPHY STYLES BY STATUS
+// =============================================================================
+
+/** Status conveyed through typography hierarchy, not colored badges */
+function getStatusTypography(status: string): {
+  fontWeight: '300' | '400' | '500' | '600';
+  opacity: number;
+} {
+  switch (status) {
+    case 'active':
+      return { fontWeight: '600', opacity: 1 };
+    case 'completed':
+      return { fontWeight: '400', opacity: 0.85 };
+    case 'archived':
+      return { fontWeight: '300', opacity: 0.7 };
+    case 'upcoming':
+      return { fontWeight: '500', opacity: 0.9 };
+    case 'draft':
+    default:
+      return { fontWeight: '300', opacity: 0.6 };
+  }
+}
+
+// =============================================================================
+// INLINE RESULTS SPARKLINE
+// =============================================================================
+
+/**
+ * Format results as inline text sequence: 2·4·1·3·2·5·1
+ * Wins shown bold, DNF as ○
+ */
+function formatResultsSequence(
+  results: (number | null)[],
+  wins?: number
+): React.ReactNode[] {
+  if (!results || results.length === 0) return [];
+
+  return results.map((result, index) => {
+    const isWin = result === 1;
+    const isDNF = result === null;
+    const separator = index < results.length - 1 ? '·' : '';
+
+    if (isDNF) {
+      return (
+        <Text key={index} style={styles.resultDNF}>
+          ○{separator}
+        </Text>
+      );
+    }
+
+    return (
+      <Text
+        key={index}
+        style={[styles.resultNumber, isWin && styles.resultWin]}
+      >
+        {result}{separator}
+      </Text>
+    );
+  });
+}
 
 // =============================================================================
 // SEASON SUMMARY CARD
@@ -34,39 +97,38 @@ function SeasonSummaryCard({ season, onPress }: SeasonSummaryCardProps) {
     new Date(season.end_date)
   );
 
+  const typography = getStatusTypography(season.status);
+
+  // Build inline summary line: "Summer 2025 → 2nd/12"
+  const finalStanding = season.user_position
+    ? ` → ${ordinal(season.user_position)}`
+    : '';
+
   return (
     <TouchableOpacity
-      style={styles.card}
+      style={[styles.card, { opacity: typography.opacity }]}
       onPress={onPress}
       activeOpacity={0.7}
       disabled={!onPress}
     >
-      {/* Header */}
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{season.name}</Text>
-        <StatusBadge status={season.status} />
-      </View>
+      {/* Single-line header with status conveyed through weight */}
+      <Text
+        style={[styles.cardTitle, { fontWeight: typography.fontWeight }]}
+        numberOfLines={1}
+      >
+        {season.name}
+        {finalStanding && (
+          <Text style={styles.inlineStanding}>{finalStanding}</Text>
+        )}
+      </Text>
 
       {/* Metadata line */}
       <Text style={styles.cardMeta}>
-        {dateRange} · {season.race_count} races · {season.completed_count} completed
+        {dateRange} · {season.completed_count}/{season.race_count} races
+        {season.user_points !== null && season.user_points !== undefined && (
+          <Text style={styles.inlinePoints}> · {season.user_points} pts</Text>
+        )}
       </Text>
-
-      {/* User standing (if available) */}
-      {season.user_position && (
-        <View style={styles.standingRow}>
-          <Text style={styles.standingLabel}>Your result:</Text>
-          <Text style={styles.standingValue}>
-            {formatOrdinal(season.user_position)} place
-          </Text>
-          {season.user_points !== null && (
-            <>
-              <Text style={styles.standingSeparator}>·</Text>
-              <Text style={styles.standingPoints}>{season.user_points} pts</Text>
-            </>
-          )}
-        </View>
-      )}
 
       {/* View link */}
       <View style={styles.cardFooter}>
@@ -94,131 +156,81 @@ export function DetailedSeasonCard({ season, onPress }: DetailedSeasonCardProps)
 
   const { summary } = season;
   const results = summary.results || [];
+  const typography = getStatusTypography(season.status);
+
+  // Build compact standing string: "2nd/12"
+  const standingString = summary.user_standing
+    ? `${ordinal(summary.user_standing.rank)}/${summary.user_standing.total_entries}`
+    : '';
 
   return (
     <TouchableOpacity
-      style={styles.detailedCard}
+      style={[styles.detailedCard, { opacity: typography.opacity }]}
       onPress={onPress}
       activeOpacity={0.7}
       disabled={!onPress}
     >
-      {/* Header */}
+      {/* Header - season name with inline standing */}
       <View style={styles.detailedHeader}>
-        <Text style={styles.detailedTitle}>{season.name}</Text>
-        <StatusBadge status={season.status} />
-      </View>
-
-      {/* Metadata */}
-      <Text style={styles.detailedMeta}>{dateRange}</Text>
-
-      {/* Divider */}
-      <View style={styles.divider} />
-
-      {/* Results sequence - text sparkline */}
-      {results.length > 0 && (
-        <View style={styles.resultsSection}>
-          <Text style={styles.sectionLabel}>RESULTS</Text>
-          <View style={styles.resultsSequence}>
-            {results.map((result, index) => (
-              <Text
-                key={index}
-                style={[
-                  styles.resultNumber,
-                  result === 1 && styles.resultWin,
-                  result === null && styles.resultDNS,
-                ]}
-              >
-                {result === null ? '·' : result}
-              </Text>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Standing summary */}
-      {summary.user_standing && (
-        <View style={styles.standingsSection}>
-          <Text style={styles.sectionLabel}>STANDINGS</Text>
-          <View style={styles.standingsGrid}>
-            <View style={styles.standingStat}>
-              <Text style={styles.statValue}>
-                {formatOrdinal(summary.user_standing.rank)}
-              </Text>
-              <Text style={styles.statLabel}>of {summary.user_standing.total_entries}</Text>
-            </View>
-            <View style={styles.standingStat}>
-              <Text style={styles.statValue}>{summary.user_standing.net_points}</Text>
-              <Text style={styles.statLabel}>points</Text>
-            </View>
-            <View style={styles.standingStat}>
-              <Text style={[styles.statValue, styles.statWins]}>
-                {summary.user_standing.wins}
-              </Text>
-              <Text style={styles.statLabel}>{summary.user_standing.wins === 1 ? 'win' : 'wins'}</Text>
-            </View>
-            <View style={styles.standingStat}>
-              <Text style={styles.statValue}>{summary.user_standing.podiums}</Text>
-              <Text style={styles.statLabel}>podiums</Text>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Conditions summary */}
-      {summary.conditions && (
-        <View style={styles.conditionsSection}>
-          <Text style={styles.sectionLabel}>CONDITIONS</Text>
-          <Text style={styles.conditionsText}>
-            Avg wind {summary.conditions.avg_wind_speed}kt
-            ({summary.conditions.wind_range[0]}–{summary.conditions.wind_range[1]}kt)
-            · {summary.conditions.predominant_direction}
-          </Text>
-          <Text style={styles.conditionsDetail}>
-            {summary.conditions.light_days} light days · {summary.conditions.heavy_days} heavy days
-          </Text>
-        </View>
-      )}
-
-      {/* Race counts */}
-      <View style={styles.countsSection}>
-        <Text style={styles.countsText}>
-          {summary.total_races} races · {summary.completed_races} completed
-          {summary.regatta_count > 0 && ` · ${summary.regatta_count} regattas`}
+        <Text
+          style={[styles.detailedTitle, { fontWeight: typography.fontWeight }]}
+          numberOfLines={1}
+        >
+          {season.name}
         </Text>
+        {standingString && (
+          <Text style={styles.headerStanding}>→ {standingString}</Text>
+        )}
       </View>
+
+      {/* Inline results sequence with final position */}
+      {results.length > 0 && (
+        <View style={styles.resultsInline}>
+          <Text style={styles.resultsSequenceText}>
+            {formatResultsSequence(results)}
+          </Text>
+          {summary.user_standing && (
+            <Text style={styles.resultsArrow}>
+              {' '}→ {summary.user_standing.net_points}pts
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Compact stats line - no labels, just data */}
+      {summary.user_standing && (
+        <Text style={styles.statsLine}>
+          {summary.user_standing.wins > 0 && (
+            <Text style={styles.winsHighlight}>
+              {summary.user_standing.wins}× 1st
+            </Text>
+          )}
+          {summary.user_standing.wins > 0 && summary.user_standing.podiums > summary.user_standing.wins && ' · '}
+          {summary.user_standing.podiums > summary.user_standing.wins && (
+            <Text>{summary.user_standing.podiums - summary.user_standing.wins}× top 3</Text>
+          )}
+        </Text>
+      )}
+
+      {/* Conditions - single dense line */}
+      {summary.conditions && (
+        <Text style={styles.conditionsLine}>
+          {summary.conditions.avg_wind_speed}kt avg ({summary.conditions.wind_range[0]}–{summary.conditions.wind_range[1]}) · {summary.conditions.predominant_direction}
+        </Text>
+      )}
+
+      {/* Race counts and date */}
+      <Text style={styles.metaLine}>
+        {dateRange} · {summary.completed_races}/{summary.total_races} races
+        {summary.regatta_count > 0 && ` · ${summary.regatta_count} regattas`}
+      </Text>
 
       {/* View link */}
       <View style={styles.cardFooter}>
-        <Text style={styles.viewLink}>View all {summary.total_races} races</Text>
+        <Text style={styles.viewLink}>View all races</Text>
         <MaterialCommunityIcons name="chevron-right" size={16} color={IOS_COLORS.blue} />
       </View>
     </TouchableOpacity>
-  );
-}
-
-// =============================================================================
-// STATUS BADGE
-// =============================================================================
-
-interface StatusBadgeProps {
-  status: string;
-}
-
-function StatusBadge({ status }: StatusBadgeProps) {
-  const statusConfig: Record<string, { label: string; color: string }> = {
-    active: { label: 'Active', color: IOS_COLORS.green },
-    completed: { label: 'Completed', color: IOS_COLORS.blue },
-    archived: { label: 'Archived', color: IOS_COLORS.gray },
-    upcoming: { label: 'Upcoming', color: IOS_COLORS.orange },
-    draft: { label: 'Draft', color: IOS_COLORS.gray2 },
-  };
-
-  const config = statusConfig[status] || statusConfig.draft;
-
-  return (
-    <Text style={[styles.statusBadge, { color: config.color }]}>
-      {config.label}
-    </Text>
   );
 }
 
@@ -249,8 +261,21 @@ export function SeasonArchive({
   onBackPress,
   headerContent,
 }: SeasonArchiveProps) {
-  // Group seasons by year for visual organization
-  const seasonsByYear = groupByYear(seasons);
+  // Sort seasons: active first, then by year descending, then by status
+  const sortedSeasons = [...seasons].sort((a, b) => {
+    // Active seasons first
+    if (a.status === 'active' && b.status !== 'active') return -1;
+    if (b.status === 'active' && a.status !== 'active') return 1;
+
+    // Then by year
+    if (a.year !== b.year) return b.year - a.year;
+
+    // Then by start date
+    return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+  });
+
+  // Group by year
+  const seasonsByYear = groupByYear(sortedSeasons);
   const years = Object.keys(seasonsByYear).sort((a, b) => Number(b) - Number(a));
 
   const totalRaces = seasons.reduce((sum, s) => sum + s.race_count, 0);
@@ -280,13 +305,10 @@ export function SeasonArchive({
       >
         {headerContent}
 
-        {/* Summary stats */}
-        <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>YOUR RACING HISTORY</Text>
-          <Text style={styles.summaryStats}>
-            {seasons.length} seasons · {totalRaces} races · {totalCompleted} completed
-          </Text>
-        </View>
+        {/* Summary - single dense line, no label */}
+        <Text style={styles.summaryStats}>
+          {seasons.length} seasons · {totalRaces} races · {totalCompleted} completed
+        </Text>
 
         {/* Seasons by year */}
         {years.length === 0 ? (
@@ -332,12 +354,6 @@ function formatDateRange(start: Date, end: Date): string {
     return `${startMonth}–${endMonth} ${startYear}`;
   }
   return `${startMonth} ${startYear}–${endMonth} ${endYear}`;
-}
-
-function formatOrdinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
 function groupByYear(seasons: SeasonListItem[]): Record<string, SeasonListItem[]> {
@@ -399,88 +415,56 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
 
-  // Summary section
-  summarySection: {
-    marginBottom: 24,
-  },
-  summaryTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: IOS_COLORS.gray,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
+  // Summary - single dense line
   summaryStats: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
-    color: IOS_COLORS.label,
+    color: IOS_COLORS.secondaryLabel,
+    marginBottom: 20,
+    fontVariant: ['tabular-nums'],
   },
 
   // Year sections
   yearSection: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   yearLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: IOS_COLORS.secondaryLabel,
-    marginBottom: 12,
+    marginBottom: 10,
     paddingLeft: 4,
   },
 
   // Card styles
   card: {
     backgroundColor: IOS_COLORS.systemBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    marginBottom: 4,
+  },
+  inlineStanding: {
     fontWeight: '600',
     color: IOS_COLORS.label,
-    flex: 1,
   },
   cardMeta: {
     fontSize: 13,
     fontWeight: '400',
     color: IOS_COLORS.secondaryLabel,
     marginBottom: 8,
+    fontVariant: ['tabular-nums'],
   },
-  standingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  standingLabel: {
-    fontSize: 13,
-    fontWeight: '400',
-    color: IOS_COLORS.secondaryLabel,
-  },
-  standingValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-  },
-  standingSeparator: {
-    fontSize: 13,
-    color: IOS_COLORS.gray3,
-  },
-  standingPoints: {
-    fontSize: 13,
+  inlinePoints: {
     fontWeight: '500',
     color: IOS_COLORS.secondaryLabel,
   },
@@ -488,7 +472,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    marginTop: 8,
+    marginTop: 4,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOS_COLORS.gray5,
@@ -499,127 +483,94 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.blue,
   },
 
-  // Status badge
-  statusBadge: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
   // Detailed card styles
   detailedCard: {
     backgroundColor: IOS_COLORS.systemBackground,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 14,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   detailedHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'baseline',
     justifyContent: 'space-between',
+    marginBottom: 6,
   },
   detailedTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
     color: IOS_COLORS.label,
     flex: 1,
   },
-  detailedMeta: {
+  headerStanding: {
     fontSize: 14,
-    fontWeight: '400',
-    color: IOS_COLORS.secondaryLabel,
-    marginTop: 2,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: IOS_COLORS.gray4,
-    marginVertical: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginLeft: 8,
   },
 
-  // Results section
-  resultsSection: {
-    marginBottom: 12,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: IOS_COLORS.gray,
-    letterSpacing: 1,
-    marginBottom: 6,
-  },
-  resultsSequence: {
+  // Inline results sequence
+  resultsInline: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'baseline',
+    marginBottom: 6,
+  },
+  resultsSequenceText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    fontVariant: ['tabular-nums'],
   },
   resultNumber: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  resultWin: {
-    color: IOS_COLORS.green,
-  },
-  resultDNS: {
-    color: IOS_COLORS.gray3,
-  },
-
-  // Standings section
-  standingsSection: {
-    marginBottom: 12,
-  },
-  standingsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  standingStat: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: IOS_COLORS.label,
-  },
-  statWins: {
-    color: IOS_COLORS.green,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '400',
-    color: IOS_COLORS.secondaryLabel,
-    marginTop: 2,
-  },
-
-  // Conditions section
-  conditionsSection: {
-    marginBottom: 12,
-  },
-  conditionsText: {
     fontSize: 14,
     fontWeight: '500',
     color: IOS_COLORS.label,
   },
-  conditionsDetail: {
-    fontSize: 13,
-    fontWeight: '400',
+  resultWin: {
+    fontWeight: '700',
+  },
+  resultDNF: {
+    fontSize: 14,
+    color: IOS_COLORS.gray3,
+  },
+  resultsArrow: {
+    fontSize: 14,
+    fontWeight: '600',
     color: IOS_COLORS.secondaryLabel,
-    marginTop: 2,
   },
 
-  // Counts section
-  countsSection: {
-    marginBottom: 8,
-  },
-  countsText: {
+  // Stats line
+  statsLine: {
     fontSize: 13,
     fontWeight: '400',
     color: IOS_COLORS.secondaryLabel,
+    marginBottom: 4,
+  },
+  winsHighlight: {
+    fontWeight: '600',
+    color: IOS_COLORS.green,
+  },
+
+  // Conditions line
+  conditionsLine: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    marginBottom: 4,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Meta line
+  metaLine: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+    marginBottom: 8,
   },
 
   // Empty state

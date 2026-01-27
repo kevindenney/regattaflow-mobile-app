@@ -291,6 +291,41 @@ class CrewManagementService {
   }
 
   /**
+   * Add a crew member from an existing RegattaFlow user (with user_id linking)
+   */
+  async addCrewMemberFromUser(
+    sailorId: string,
+    classId: string,
+    userId: string,
+    name: string,
+    email: string,
+    role: CrewRole
+  ): Promise<CrewMember> {
+    const { data, error } = await supabase
+      .from('crew_members')
+      .insert({
+        sailor_id: sailorId,
+        class_id: classId,
+        user_id: userId,
+        email: email.toLowerCase(),
+        name,
+        role,
+        access_level: 'view',
+        status: 'active',
+        invite_accepted_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding crew member from user:', error);
+      throw error;
+    }
+
+    return this.mapCrewMember(data);
+  }
+
+  /**
    * Invite a new crew member (direct Supabase call without offline handling)
    */
   async inviteCrewMemberDirect(

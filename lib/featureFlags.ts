@@ -67,6 +67,31 @@ export const FEATURE_FLAGS = {
    * When false: Traditional 11-card vertical stack with separate strategy cards
    */
   USE_TEMPORAL_PHASE_ARCHITECTURE: true,
+
+  /**
+   * Enable social sailing multi-timeline view
+   * When true: Shows TimelineFeed with vertical swipe between followed users' timelines
+   *            TikTok-style navigation: swipe up/down between timelines, left/right for races
+   * When false: Standard single-user timeline view
+   */
+  ENABLE_SOCIAL_TIMELINE: true, // Integrated into CardGrid - timeline switching with full card content
+
+  /**
+   * Use full-screen iOS HIG races screen
+   * When true: Renders IOSRacesScreen with full-screen swipeable race cards
+   *            Minimal header, iOS-style page indicator, immersive experience
+   * When false: Uses existing CardGrid or ScrollView navigation
+   * NOTE: Disabled - the simplified screen lacks phase tabs, checklists, and timeline features
+   */
+  USE_IOS_RACES_SCREEN: false,
+
+  /**
+   * Use iOS HIG-style Add Race form
+   * When true: Renders IOSAddRaceForm with Apple HIG-compliant design
+   *            Inset grouped sections, iOS navigation, system colors
+   * When false: Uses existing TufteAddRaceForm
+   */
+  USE_IOS_ADD_RACE_FORM: true,
 } as const;
 
 // =============================================================================

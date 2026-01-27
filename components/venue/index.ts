@@ -62,3 +62,25 @@ export { FleetCommunityCard } from './FleetCommunityCard';
 export { RacingIntelSection } from './RacingIntelSection';
 export { VenueComparisonModal, CompareVenuesButton } from './VenueComparisonModal';
 
+// ===========================================================================
+// iOS HIG Components (Sprint 3)
+// ===========================================================================
+
+// Apple Maps-style venue pill
+export { IOSVenuePill } from './IOSVenuePill';
+
+// Widget-style condition cards
+export { IOSConditionsWidgets } from './IOSConditionsWidgets';
+
+// iOS-style map controls
+export { IOSMapControls, type MapLayers as IOSMapLayers } from './IOSMapControls';
+
+// Racing areas collection view
+export { IOSRacingAreasCollection } from './IOSRacingAreasCollection';
+
+// iOS upcoming races list
+export { IOSUpcomingRacesList } from './IOSUpcomingRacesList';
+
+// Tufte live conditions (for compatibility)
+export { TufteLiveConditions } from './TufteLiveConditions';
+

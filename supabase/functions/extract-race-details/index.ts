@@ -251,7 +251,7 @@ Return a JSON object with this EXACT structure:
       // === GOVERNING RULES ===
       "racingRulesSystem": string | null,  // e.g., "Racing Rules of Sailing (RRS)"
       "prescriptions": string | null,  // e.g., "HKSF Prescriptions"
-      "classRules": string | null,  // e.g., "International Dragon Class Rules"
+      "classRules": Array<string> | null,  // Array of class rules that apply, e.g., ["IRC Rules", "ORC Rules", "Dragon Class Rules"]
       "ssiReference": string | null,  // e.g., "Part 1 and Appendix D for Harbour racing"
       "courseAttachmentReference": string | null,  // e.g., "SSI Attachment A" or "SSI Attachment B"
 

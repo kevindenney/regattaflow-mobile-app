@@ -24,7 +24,6 @@ import {
     ActivityIndicator,
     Platform,
     Pressable,
-    Share,
     StyleSheet,
     Text,
     View
@@ -79,13 +78,14 @@ export function PreRaceBriefingCard({
     if (!briefing) return;
     
     const text = RaceBriefingService.formatAsText(briefing);
-    
+
     try {
       if (Platform.OS === 'web') {
         await Clipboard.setStringAsync(text);
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2000);
       } else {
+        const { Share } = await import('react-native');
         await Share.share({
           message: text,
           title: `Pre-Race Briefing: ${raceName}`,

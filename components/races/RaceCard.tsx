@@ -13,27 +13,19 @@
  */
 
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
-import {
-  IOS_COLORS,
-  CARD_SHADOW_DRAMATIC,
-  CARD_SHADOW_DRAMATIC_WEB,
-  CARD_SHADOW_DRAMATIC_EXPANDED,
-  CARD_SHADOW_DRAMATIC_EXPANDED_WEB,
-} from '@/components/cards/constants';
+import { IOS_COLORS } from '@/components/cards/constants';
+import { IOS_COLORS as IOS_DESIGN_COLORS } from '@/lib/design-tokens-ios';
+import { triggerHaptic } from '@/lib/haptics';
 import { calculateCountdown } from '@/constants/mockData';
 import { createLogger } from '@/lib/utils/logger';
 import { useRouter } from 'expo-router';
-import { Award, CheckCircle2, MapPin, Medal, Pin, Radio, Route, Sailboat, Trophy, Wind, Waves } from 'lucide-react-native';
-import { TinySparkline } from '@/components/shared/charts';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { RaceTimer } from './RaceTimer';
-import { StartSequenceTimer } from './StartSequenceTimer';
-import { RaceTypeBadge, type RaceType } from './RaceTypeSelector';
-import { TruncatedText } from '@/components/ui/TruncatedText';
+import { Dimensions, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import type { RaceType } from './RaceTypeSelector';
 import { ExpandedContentZone } from './ExpandedContentZone';
 import { getCurrentPhaseForRace, CardRaceData } from '@/components/cards/types';
-import { CrewAvatarStack } from './CrewAvatarStack';
+import { RaceCardActionBar } from './RaceCardActionBar';
 import { RaceCollaborator } from '@/types/raceCollaboration';
 
 // Results data for completed races
@@ -48,6 +40,40 @@ export interface RaceResultData {
 
 const logger = createLogger('RaceCard');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+/**
+ * Format venue display - handles coordinate-only venues gracefully
+ * Shows "Race Location" instead of raw coordinates
+ */
+function formatVenueDisplay(
+  venue: string | undefined | null,
+  coordinates?: { lat: number; lng: number } | null
+): string {
+  if (!venue) {
+    return 'Venue TBD';
+  }
+
+  // Check if venue looks like coordinates (e.g., "22.3361, 114.2911" or "-33.8, 151.2")
+  const coordPattern = /^-?\d+\.?\d*,\s*-?\d+\.?\d*$/;
+  if (coordPattern.test(venue.trim())) {
+    // If we have coordinates object, we could reverse geocode, but for now show friendly text
+    return 'Race Location Set';
+  }
+
+  return venue;
+}
+
+/**
+ * Format full date for display
+ * "Saturday, Jan 25 at 3:00 PM"
+ */
+function formatFullDate(date: string, time: string): string {
+  const d = new Date(date);
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = d.getDate();
+  return `${weekday}, ${month} ${day} at ${time}`;
+}
 
 export interface RaceCardProps {
   id: string;
@@ -113,6 +139,27 @@ export interface RaceCardProps {
   collaborators?: RaceCollaborator[];
   /** Callback when crew avatars are pressed */
   onCollaboratorsPress?: () => void;
+  /** Start order information from schedule */
+  startOrderData?: {
+    startOrder: number;
+    totalFleets: number;
+    classFlag?: string;
+    plannedStartTime?: string;
+  };
+  /** Number of other sailors preparing for same race (from fuzzy match) */
+  participantCount?: number;
+  /** Callback when participant count badge is pressed */
+  onParticipantsPress?: () => void;
+  /** Race number in the series (e.g., 15 for "race 15 of 26") */
+  raceNumber?: number;
+  /** Total races in the series */
+  seriesTotal?: number;
+  /** Prep checklist progress */
+  prepProgress?: { completed: number; total: number };
+  /** Race checklist progress */
+  raceProgress?: { completed: number; total: number };
+  /** Review checklist progress */
+  reviewProgress?: { completed: number; total: number };
 }
 
 export function RaceCard({
@@ -154,6 +201,14 @@ export function RaceCard({
   expandedHeaderOffset = 120,
   collaborators,
   onCollaboratorsPress,
+  startOrderData,
+  participantCount,
+  onParticipantsPress,
+  raceNumber,
+  seriesTotal,
+  prepProgress,
+  raceProgress,
+  reviewProgress,
 }: RaceCardProps) {
   // Debug: Log VHF channel data sources
   React.useEffect(() => {
@@ -221,6 +276,9 @@ export function RaceCard({
   }, [raceStatus]);
 
   const handlePress = () => {
+    // Haptic feedback on press
+    triggerHaptic('impactLight');
+
     // If onSelect callback provided, use inline selection instead of navigation
     if (onSelect) {
       logger.debug('[RaceCard] Card selected for inline view!', { id, name });
@@ -336,8 +394,8 @@ export function RaceCard({
         pointerEvents="auto"
         hitSlop={{ top: 0, bottom: 0, left: 0, right: 0 }}
       >
-      {/* Status Accent Line - Apple-style top indicator */}
-      <View style={[styles.accentLine, { backgroundColor: accentColor }]} />
+      {/* Subtle background tint based on status - iOS HIG style */}
+      <View style={[styles.statusTint, { backgroundColor: `${accentColor}08` }]} />
 
       {/* Menu in upper right corner - pointerEvents="box-none" prevents bubbling to parent */}
       {menuItems.length > 0 && (
@@ -346,225 +404,48 @@ export function RaceCard({
         </View>
       )}
 
-      {/* Top Badges Row - Race type, Course, Race Count */}
-      <View style={styles.topBadgesRow}>
-        {/* Race Type Badge */}
-        <RaceTypeBadge type={raceType} size="small" />
+      {/* Simplified Header: Race type badge + Countdown */}
+      <View style={styles.simpleHeaderRow}>
+        {/* Race type badge */}
+        <View style={styles.raceTypeBadge}>
+          <Text style={styles.raceTypeBadgeText}>
+            {raceType?.toUpperCase() || 'FLEET'}
+          </Text>
+        </View>
+        {/* Countdown */}
+        <View style={styles.countdownSimple}>
+          <Text style={[styles.countdownNumberSimple, { color: countdownColors.text }]}>
+            {countdown.days}
+          </Text>
+          <Text style={[styles.countdownLabelSimple, { color: countdownColors.text }]}>
+            {countdown.days === 1 ? 'day' : 'days'}
+          </Text>
+        </View>
+      </View>
 
-        {/* Course Badge */}
-        {courseName && (
-          <View style={styles.courseBadge}>
-            <Route size={10} color={IOS_COLORS.green} />
-            <Text style={styles.courseBadgeText}>{courseName}</Text>
-          </View>
-        )}
+      {/* Full race name */}
+      <Text style={styles.raceNameLarge}>{name || '[No Race Name]'}</Text>
 
-        {/* Race Count Badge */}
-        {numberOfRaces && numberOfRaces > 0 && (
-          <View style={styles.raceCountBadge}>
-            <Text style={styles.raceCountBadgeText}>{numberOfRaces} {numberOfRaces === 1 ? 'race' : 'races'}</Text>
-          </View>
-        )}
+      {/* Location */}
+      <View style={styles.simpleDetailRow}>
+        <Ionicons name="location-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+        <Text style={styles.simpleDetailText}>{formatVenueDisplay(venue, venueCoordinates)}</Text>
+      </View>
 
-        {/* Crew Avatars / Add Crew Button */}
-        <CrewAvatarStack
-          collaborators={collaborators || []}
-          maxVisible={3}
-          size="xs"
-          onPress={onCollaboratorsPress}
-          showAddButton={!!onCollaboratorsPress}
+      {/* Date/time */}
+      <View style={styles.simpleDetailRow}>
+        <Ionicons name="calendar-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+        <Text style={styles.simpleDetailText}>{formatFullDate(date, startTime)}</Text>
+      </View>
+
+      {/* Bottom Action Bar - context-aware actions */}
+      {!isExpanded && (
+        <RaceCardActionBar
+          raceStatus={raceStatus}
+          daysUntil={countdown.days}
+          onPrimaryAction={onSelect}
+          isExpanded={isExpanded}
         />
-      </View>
-
-      {/* Header Zone - Countdown left, Details right */}
-      <View style={[styles.headerZone, styles.headerZoneFullScreen]}>
-        {/* Countdown Box - Tufte compact format */}
-        <View style={[
-          styles.countdownBox,
-          styles.countdownBoxFullScreen,
-          { backgroundColor: countdownColors.bg }
-        ]}>
-          {raceStatus === 'past' ? (
-            <>
-              <CheckCircle2 size={32} color={countdownColors.text} />
-              <Text style={[
-                styles.countdownBoxLabel,
-                styles.countdownBoxLabelFullScreen,
-                { color: countdownColors.text }
-              ]}>DONE</Text>
-            </>
-          ) : (
-            <Text style={[
-              styles.countdownBoxCompact,
-              styles.countdownBoxCompactFullScreen,
-              { color: countdownColors.text }
-            ]}>
-              {countdown.days > 0
-                ? `${countdown.days}d ${countdown.hours}h`
-                : `${countdown.hours}h ${countdown.minutes}m`}
-            </Text>
-          )}
-        </View>
-
-        {/* Race Details */}
-        <View style={[styles.headerDetails, styles.headerDetailsFullScreen]}>
-          <TruncatedText
-            text={name || '[No Race Name]'}
-            numberOfLines={3}
-            style={[styles.raceNameNew, styles.raceNameFullScreen]}
-          />
-          <View style={styles.metaRow}>
-            <MapPin size={11} color={IOS_COLORS.gray} />
-            <Text style={styles.metaText} numberOfLines={1}>
-              {venue || '[No Venue]'}
-            </Text>
-            <Text style={styles.metaDot}>•</Text>
-            <Text style={styles.metaText}>
-              {new Date(date).toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric'
-              })}
-            </Text>
-          </View>
-          {/* Start Time Row */}
-          <View style={styles.startTimeRow}>
-            <Text style={styles.startTimeLabel}>
-              {critical_details?.warning_signal ? 'Warning Signal' : 'Start'}:
-            </Text>
-            <Text style={styles.startTimeValue}>
-              {critical_details?.warning_signal || startTime}
-            </Text>
-            {startSequenceType && (
-              <View style={styles.startSequenceBadge}>
-                <Text style={styles.startSequenceBadgeText}>
-                  {startSequenceType === 'standard' ? '5-4-1-0' :
-                   startSequenceType === 'pursuit' ? 'Pursuit' :
-                   startSequenceType === 'rolling' ? 'Rolling' : 'Gate'}
-                </Text>
-              </View>
-            )}
-          </View>
-          {/* Status indicators */}
-          {isSelected && (
-            <View style={styles.statusIndicator}>
-              <CheckCircle2 size={10} color={IOS_COLORS.blue} />
-              <Text style={styles.statusText}>Viewing</Text>
-            </View>
-          )}
-          {isMock && !isSelected && (
-            <View style={[styles.statusIndicator, { backgroundColor: `${IOS_COLORS.yellow}25` }]}>
-              <Text style={[styles.statusText, { color: IOS_COLORS.orange }]}>Demo</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* VHF Channel - if available */}
-      {(critical_details?.vhf_channel || vhf_channel) && (
-        <View style={[styles.conditionsRow, styles.conditionsRowFullScreen]}>
-          <View style={[styles.conditionChip, styles.vhfChip, styles.conditionChipFullScreen]}>
-            <Radio size={18} color={IOS_COLORS.purple} strokeWidth={2.5} />
-            <Text style={[styles.conditionChipText, styles.conditionChipTextFullScreen]}>
-              Ch {critical_details?.vhf_channel || vhf_channel}
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Weather Sparklines - for upcoming races with forecast data */}
-      {raceStatus !== 'past' && countdown.days <= 7 && (windForecast?.length ?? 0) >= 2 && (
-        <View style={styles.sparklineRow}>
-          {/* Wind sparkline */}
-          {windForecast && windForecast.length >= 2 && (
-            <View style={styles.sparklineItem}>
-              <Wind size={14} color={IOS_COLORS.blue} strokeWidth={2} />
-              <Text style={styles.sparklineLabel}>
-                {Math.round(Math.min(...windForecast))}-{Math.round(Math.max(...windForecast))}kt
-              </Text>
-              <TinySparkline
-                data={windForecast}
-                width={50}
-                height={14}
-                color={IOS_COLORS.blue}
-                nowIndex={forecastNowIndex}
-                showNowDot
-                variant="line"
-              />
-            </View>
-          )}
-          {/* Tide sparkline */}
-          {tideForecast && tideForecast.length >= 2 && (
-            <View style={styles.sparklineItem}>
-              <Waves size={14} color={IOS_COLORS.teal} strokeWidth={2} />
-              <Text style={styles.sparklineLabel}>Tide</Text>
-              <TinySparkline
-                data={tideForecast}
-                width={50}
-                height={14}
-                color={IOS_COLORS.teal}
-                nowIndex={forecastNowIndex}
-                showNowDot
-                variant="area"
-              />
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Rig Tension Indicator - compact display */}
-      {rigTension && raceStatus !== 'past' && (
-        <View style={styles.rigTensionRow}>
-          <View style={styles.rigTensionIndicator}>
-            <Text style={styles.rigTensionLabel}>Uppers</Text>
-            <Text style={styles.rigTensionValue}>{rigTension.uppers || '--'}</Text>
-          </View>
-          {rigTension.lowers && (
-            <View style={styles.rigTensionIndicator}>
-              <Text style={styles.rigTensionLabel}>Lowers</Text>
-              <Text style={styles.rigTensionValue}>{rigTension.lowers}</Text>
-            </View>
-          )}
-          {rigTension.description && (
-            <Text style={styles.rigTensionDescription}>{rigTension.description}</Text>
-          )}
-        </View>
-      )}
-
-      {/* Race Timer for upcoming races - full countdown display */}
-      {!isMock && raceStatus !== 'past' && onRaceComplete && (
-        <View style={styles.timerContainerFullScreen}>
-          <RaceTimer
-            raceId={id}
-            raceName={name}
-            raceDate={date}
-            raceTime={startTime}
-            onRaceComplete={onRaceComplete}
-          />
-        </View>
-      )}
-
-      {/* Start Sequence Timer - for races without GPS tracking */}
-      {!isMock && raceStatus !== 'past' && !onRaceComplete && (
-        <View style={styles.startSequenceContainerFullScreen}>
-          <StartSequenceTimer compact={false} />
-        </View>
-      )}
-
-      {/* Results display for past races */}
-      {raceStatus === 'past' && results && (
-        <View style={styles.resultsContainerFullScreen}>
-          <View style={styles.resultBadgeFullScreen}>
-            {results.position <= 3 && <Trophy size={24} color="#FFD700" />}
-            <Text style={styles.resultBadgeTextFullScreen}>
-              {results.position === 1 ? '1st' : results.position === 2 ? '2nd' : results.position === 3 ? '3rd' : `${results.position}th`}
-            </Text>
-          </View>
-          <Text style={styles.resultMetaFullScreen}>of {results.fleetSize} boats</Text>
-          {results.points !== undefined && (
-            <Text style={styles.resultPointsFullScreen}>{results.points} pts</Text>
-          )}
-        </View>
       )}
 
       {/* Expanded Content Zone - shows when card is expanded */}
@@ -629,29 +510,34 @@ const styles = StyleSheet.create({
     // @ts-ignore - userSelect is web-only
     userSelect: 'none',
   },
-  // Tufte-style elevated card with dramatic shadow for depth
+  // iOS HIG-style card with softer, single shadow
   cardApple: {
-    backgroundColor: IOS_COLORS.systemBackground,
+    backgroundColor: IOS_DESIGN_COLORS.secondarySystemGroupedBackground,
     borderWidth: 0,
     ...Platform.select({
       web: {
-        // Dramatic multi-layer shadow (Tufte style - cards float above warm paper)
-        boxShadow: CARD_SHADOW_DRAMATIC_WEB,
+        // Softer single-layer shadow - iOS HIG compliant
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.06)',
       },
       default: {
-        // Dramatic shadow for native - strong 3D floating effect
-        ...CARD_SHADOW_DRAMATIC,
+        // Softer shadow for native - subtle floating effect
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 8,
       },
     }),
   },
-  // Status accent line at top of card
-  accentLine: {
+  // Subtle background tint - iOS HIG style (replaces 4px accent bar)
+  statusTint: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 4,
-    zIndex: 10,
+    bottom: 0,
+    borderRadius: 20,
+    zIndex: 0,
   },
   cardFullScreen: {
     padding: 20,
@@ -845,17 +731,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   countdownBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    minWidth: 56,
   },
   countdownBoxFullScreen: {
-    width: 90,
-    height: 90,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    minWidth: 90,
   },
   countdownBoxNumber: {
     fontSize: 24,
@@ -1634,5 +1522,137 @@ const styles = StyleSheet.create({
   expandedPlaceholderSubtext: {
     fontSize: 12,
     color: IOS_COLORS.gray2,
+  },
+
+  // =============================================================================
+  // TUFTE-STYLE MINIMALIST STYLES
+  // =============================================================================
+
+  // Top row: temporal info left, race number right
+  tufteTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tufteTemporalText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  tufteRaceNumber: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
+  },
+
+  // Race name: simplified, prominent
+  tufteRaceNameContainer: {
+    marginBottom: 16,
+  },
+  tufteRaceName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    lineHeight: 24,
+  },
+
+  // Inline progress bar
+  tufteProgressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  tuftePhaseName: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    width: 44, // Fixed width for alignment
+  },
+  tufteProgressTrack: {
+    flex: 1,
+    height: 4,
+    backgroundColor: IOS_COLORS.gray5,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  tufteProgressFill: {
+    height: 4,
+    backgroundColor: IOS_COLORS.secondaryLabel,
+    borderRadius: 2,
+  },
+  tufteProgressCount: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    width: 20, // Fixed width for alignment
+    textAlign: 'right',
+  },
+
+  // Complete state
+  tufteCompleteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  tufteCompleteText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+  },
+
+  // =============================================================================
+  // SIMPLIFIED HEADER STYLES
+  // =============================================================================
+
+  simpleHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  raceTypeBadge: {
+    backgroundColor: IOS_COLORS.gray5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  raceTypeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+  },
+  countdownSimple: {
+    alignItems: 'center',
+  },
+  countdownNumberSimple: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  countdownLabelSimple: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  raceNameLarge: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    lineHeight: 28,
+    marginBottom: 16,
+  },
+  simpleDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  simpleDetailText: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
   },
 });

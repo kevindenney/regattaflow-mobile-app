@@ -32,6 +32,7 @@ import { InputMethodStep, InputMethod } from './InputMethodStep';
 import { AIExtractionStep } from './AIExtractionStep';
 import { RaceDetailsStep, RaceFormData } from './RaceDetailsStep';
 import { TufteAddRaceForm } from './TufteAddRaceForm';
+import { IOSAddRaceForm } from './IOSAddRaceForm';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import type { ExtractedRaceData } from '../ExtractionResults';
 
@@ -44,6 +45,11 @@ interface AddRaceDialogProps {
 type Step = 'type' | 'input-method' | 'ai-extraction' | 'details';
 
 export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) {
+  // Use iOS HIG-style form when feature flag is enabled (native only)
+  if (FEATURE_FLAGS.USE_IOS_ADD_RACE_FORM && Platform.OS !== 'web') {
+    return <IOSAddRaceForm visible={visible} onClose={onClose} onSave={onSave} />;
+  }
+
   // Use Tufte-style single-page form when feature flag is enabled
   if (FEATURE_FLAGS.USE_TUFTE_ADD_RACE_FORM) {
     return <TufteAddRaceForm visible={visible} onClose={onClose} onSave={onSave} />;

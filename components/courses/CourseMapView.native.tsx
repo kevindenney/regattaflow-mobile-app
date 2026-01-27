@@ -99,6 +99,8 @@ interface CourseMapViewProps {
   onMarkPress?: (mark: CourseMark) => void;
   prediction?: CoursePrediction | null;
   selectedMarkId?: string;
+  /** When true, hides overlay controls for use in compact/embedded contexts */
+  compact?: boolean;
 }
 
 const CourseMapView: React.FC<CourseMapViewProps> = ({
@@ -107,6 +109,7 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
   onMarkPress,
   prediction = null,
   selectedMarkId,
+  compact = false,
 }) => {
   const mapRef = useRef<any>(null);
   const [showLayerPanel, setShowLayerPanel] = useState(false);
@@ -309,7 +312,38 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
     );
   };
 
-  // Fallback UI when maps aren't available
+  // Compact mode: always show informational UI (map is too small to be useful)
+  if (compact) {
+    return (
+      <View style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#F3F4F6',
+        padding: 16,
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+          <MapPin size={24} color="#10B981" />
+          <Text style={{ marginLeft: 8, fontSize: 16, fontWeight: '600', color: '#374151' }}>
+            {courseMarks.length > 0 ? courseMarks[0].name : 'Course Map'}
+          </Text>
+        </View>
+        {courseMarks.length > 0 && courseMarks[0].coordinates && (
+          <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center' }}>
+            {courseMarks[0].coordinates.latitude.toFixed(4)}, {courseMarks[0].coordinates.longitude.toFixed(4)}
+          </Text>
+        )}
+        {(!mapsAvailable || !MapView) && (
+          <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>
+            Full map requires development build
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  // Fallback UI when maps aren't available (non-compact)
   if (!mapsAvailable || !MapView) {
     return (
       <View className="flex-1 items-center justify-center bg-gray-100 p-4">
@@ -486,60 +520,66 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
         })}
       </MapView>
 
-      {/* Layer Controls */}
-      <View className="absolute top-4 right-4">
-        <TouchableOpacity
-          className="bg-white rounded-full p-3 shadow-lg mb-2"
-          onPress={() => setShowLayerPanel(true)}
-        >
-          <Layers color="#2563EB" size={24} />
-        </TouchableOpacity>
+      {/* Layer Controls - hidden in compact mode */}
+      {!compact && (
+        <View className="absolute top-4 right-4">
+          <TouchableOpacity
+            className="bg-white rounded-full p-3 shadow-lg mb-2"
+            onPress={() => setShowLayerPanel(true)}
+          >
+            <Layers color="#2563EB" size={24} />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          className="bg-white rounded-full p-3 shadow-lg"
-          onPress={() => {
-            setMapType(current => {
-              if (current === 'standard') return 'satellite';
-              if (current === 'satellite') return 'hybrid';
-              return 'standard';
-            });
-          }}
-        >
-          <MapPin color="#2563EB" size={24} />
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            className="bg-white rounded-full p-3 shadow-lg"
+            onPress={() => {
+              setMapType(current => {
+                if (current === 'standard') return 'satellite';
+                if (current === 'satellite') return 'hybrid';
+                return 'standard';
+              });
+            }}
+          >
+            <MapPin color="#2563EB" size={24} />
+          </TouchableOpacity>
+        </View>
+      )}
 
-      {/* Active Layers Indicator */}
-      <View className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3">
-        <Text className="text-xs font-bold text-gray-500 mb-2">ACTIVE LAYERS</Text>
-        <View className="flex-row flex-wrap gap-2">
-          {layers.filter(l => l.enabled).map(layer => (
-            <View key={layer.id} className="flex-row items-center bg-blue-50 px-2 py-1 rounded">
-              <layer.icon color="#2563EB" size={14} />
-              <Text className="text-xs text-blue-600 ml-1">{layer.name}</Text>
-            </View>
-          ))}
+      {/* Active Layers Indicator - hidden in compact mode */}
+      {!compact && (
+        <View className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3">
+          <Text className="text-xs font-bold text-gray-500 mb-2">ACTIVE LAYERS</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {layers.filter(l => l.enabled).map(layer => (
+              <View key={layer.id} className="flex-row items-center bg-blue-50 px-2 py-1 rounded">
+                <layer.icon color="#2563EB" size={14} />
+                <Text className="text-xs text-blue-600 ml-1">{layer.name}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
+      )}
 
-      {/* Stats Bar */}
-      <View className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3">
-        <View className="flex-row items-center mb-1">
-          <Wind color="#059669" size={16} />
-          <Text className="text-sm ml-2 font-medium">12kt NE</Text>
+      {/* Stats Bar - hidden in compact mode */}
+      {!compact && (
+        <View className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3">
+          <View className="flex-row items-center mb-1">
+            <Wind color="#059669" size={16} />
+            <Text className="text-sm ml-2 font-medium">12kt NE</Text>
+          </View>
+          <View className="flex-row items-center mb-1">
+            <Navigation color="#2563EB" size={16} />
+            <Text className="text-sm ml-2 font-medium">0.8kt Flood</Text>
+          </View>
+          <View className="flex-row items-center">
+            <Waves color="#8B5CF6" size={16} />
+            <Text className="text-sm ml-2 font-medium">0.5m SW</Text>
+          </View>
         </View>
-        <View className="flex-row items-center mb-1">
-          <Navigation color="#2563EB" size={16} />
-          <Text className="text-sm ml-2 font-medium">0.8kt Flood</Text>
-        </View>
-        <View className="flex-row items-center">
-          <Waves color="#8B5CF6" size={16} />
-          <Text className="text-sm ml-2 font-medium">0.5m SW</Text>
-        </View>
-      </View>
+      )}
 
-      {renderLayerPanel()}
-      {renderMarkPopup()}
+      {!compact && renderLayerPanel()}
+      {!compact && renderMarkPopup()}
     </View>
   );
 };

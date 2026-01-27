@@ -130,8 +130,8 @@ export function AccordionSection({
             }}
           >
             <ChevronDown
-              size={18}
-              color={disabled ? IOS_COLORS.gray4 : IOS_COLORS.secondaryLabel}
+              size={20}
+              color={disabled ? IOS_COLORS.gray4 : IOS_COLORS.tertiaryLabel}
             />
           </Animated.View>
         </View>
@@ -196,9 +196,10 @@ export function AccordionGroup({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: TufteTokens.backgrounds.paper,
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.color,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginBottom: 8,
+    overflow: 'hidden',
   },
   containerDisabled: {
     opacity: 0.6,
@@ -207,25 +208,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: TufteTokens.spacing.standard,
-    paddingHorizontal: TufteTokens.spacing.section,
-    minHeight: 48,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    minHeight: 52,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: TufteTokens.spacing.standard,
+    gap: 12,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: TufteTokens.spacing.compact,
+    gap: 8,
   },
   iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: IOS_COLORS.gray6,
     alignItems: 'center',
     justifyContent: 'center',
@@ -234,20 +235,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    ...TufteTokens.typography.primary,
-    fontSize: 15,
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    letterSpacing: -0.2,
   },
   titleDisabled: {
     color: IOS_COLORS.gray,
   },
   subtitle: {
-    ...TufteTokens.typography.tertiary,
-    marginTop: 1,
+    fontSize: 13,
+    fontWeight: '400',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
   },
   countBadge: {
     backgroundColor: `${IOS_COLORS.blue}15`,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 10,
     minWidth: 22,
     alignItems: 'center',
@@ -262,19 +267,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   content: {
-    paddingHorizontal: TufteTokens.spacing.section,
-    paddingBottom: TufteTokens.spacing.section,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
 });
 
 const groupStyles = StyleSheet.create({
   container: {
-    backgroundColor: TufteTokens.backgrounds.paper,
-    borderRadius: TufteTokens.borderRadius.subtle,
-    ...Platform.select({
-      web: TufteTokens.shadows.subtleWeb,
-      default: TufteTokens.shadows.subtle,
-    }),
+    backgroundColor: IOS_COLORS.gray6,
+    borderRadius: 12,
     overflow: 'hidden',
   },
 });

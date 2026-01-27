@@ -50,6 +50,7 @@ import {
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
 import { supabase } from '@/services/supabase';
 import { DemoRaceService } from '@/services/DemoRaceService';
+import CourseMapView from '@/components/courses/CourseMapView';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -186,6 +187,105 @@ function convertDemoRaceToExtractedData(demoRace: ReturnType<typeof DemoRaceServ
       { channel: demoRace.metadata.vhf_channel.replace('Channel ', ''), purpose: 'Race communications' }
     ] : undefined,
   };
+}
+
+// Helper to parse coordinate strings like "22.2997, 114.1446"
+function parseCoordinateString(coordString: string | undefined): { latitude: number; longitude: number } | null {
+  if (!coordString) return null;
+
+  // Match patterns like "22.2997, 114.1446" or "22.2997,114.1446"
+  const coordMatch = coordString.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    // Validate coordinates are reasonable (lat: -90 to 90, lng: -180 to 180)
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { latitude: lat, longitude: lng };
+    }
+  }
+  return null;
+}
+
+// Helper to convert race data to CourseMapView marks format
+interface CourseMark {
+  id: string;
+  name: string;
+  type: 'start' | 'mark' | 'finish' | 'gate';
+  coordinates: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
+function convertToMarks(raceData: ExtractedRaceData): CourseMark[] {
+  const marks: CourseMark[] = [];
+
+  // Add route waypoints as marks
+  if (raceData.route_waypoints) {
+    raceData.route_waypoints.forEach((wp, idx) => {
+      if (wp.latitude && wp.longitude) {
+        // Determine mark type based on position or name
+        let markType: CourseMark['type'] = 'mark';
+        const nameLower = wp.name.toLowerCase();
+        if (idx === 0 || nameLower.includes('start')) {
+          markType = 'start';
+        } else if (idx === raceData.route_waypoints!.length - 1 || nameLower.includes('finish')) {
+          markType = 'finish';
+        } else if (nameLower.includes('gate')) {
+          markType = 'gate';
+        }
+
+        marks.push({
+          id: `waypoint-${idx}`,
+          name: wp.name,
+          type: markType,
+          coordinates: {
+            latitude: wp.latitude,
+            longitude: wp.longitude,
+          },
+        });
+      }
+    });
+  }
+
+  // If no waypoints but we have start_area_name with coordinates, create a start marker
+  if (marks.length === 0 && raceData.start_area_name) {
+    const parsedCoords = parseCoordinateString(raceData.start_area_name);
+    if (parsedCoords) {
+      marks.push({
+        id: 'start-area',
+        name: 'Start Area',
+        type: 'start',
+        coordinates: parsedCoords,
+      });
+    }
+  }
+
+  return marks;
+}
+
+function getCenterCoordinate(raceData: ExtractedRaceData): { latitude: number; longitude: number } | undefined {
+  // Try to get center from first waypoint with coordinates
+  if (raceData.route_waypoints) {
+    const firstWithCoords = raceData.route_waypoints.find(wp => wp.latitude && wp.longitude);
+    if (firstWithCoords && firstWithCoords.latitude && firstWithCoords.longitude) {
+      return {
+        latitude: firstWithCoords.latitude,
+        longitude: firstWithCoords.longitude,
+      };
+    }
+  }
+
+  // Try to parse coordinates from start_area_name
+  if (raceData.start_area_name) {
+    const parsedCoords = parseCoordinateString(raceData.start_area_name);
+    if (parsedCoords) {
+      return parsedCoords;
+    }
+  }
+
+  // Default to Hong Kong if no coordinates available
+  return { latitude: 22.2793, longitude: 114.1628 };
 }
 
 // Helper to fetch race data with extracted details
@@ -490,8 +590,24 @@ export function PreRaceBriefingWizard({
 
     const hasStartInfo = raceData.start_area_name || raceData.start_area_description || raceData.total_distance_nm;
 
+    // Convert race data to map format
+    const courseMarks = convertToMarks(raceData);
+    const centerCoordinate = getCenterCoordinate(raceData);
+    const hasMapData = courseMarks.length > 0;
+
     return (
       <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentContainer} showsVerticalScrollIndicator={false}>
+        {/* Course Map */}
+        {hasMapData && (
+          <View style={styles.courseMapContainer}>
+            <CourseMapView
+              courseMarks={courseMarks}
+              centerCoordinate={centerCoordinate}
+              compact={true}
+            />
+          </View>
+        )}
+
         {/* Start & Distance Card */}
         {hasStartInfo && (
           <DataCard>
@@ -1150,6 +1266,13 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
     textTransform: 'uppercase',
     letterSpacing: 0.8,
+  },
+  courseMapContainer: {
+    height: 200,
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: IOS_COLORS.secondaryBackground,
   },
   emptySection: {
     alignItems: 'center',

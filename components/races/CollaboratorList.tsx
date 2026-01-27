@@ -5,6 +5,7 @@
  * - Avatar, name, role display
  * - Pending status indicator
  * - Invite button for owners
+ * - Find Crew button for owners
  * - Remove/edit actions for owners
  */
 
@@ -15,8 +16,8 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Share,
   Platform,
+  Alert,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
@@ -31,13 +32,17 @@ import {
   CheckCircle2,
   Shield,
   Eye,
+  Search,
 } from 'lucide-react-native';
+import { CoachFinderModal } from '@/components/crew/CoachFinderModal';
 
 interface CollaboratorListProps {
   /** List of collaborators */
   collaborators: RaceCollaborator[];
   /** Whether current user is owner */
   isOwner: boolean;
+  /** Race ID for crew finder */
+  regattaId: string;
   /** Callback to create invite */
   onCreateInvite: (accessLevel?: AccessLevel) => Promise<string>;
   /** Callback to remove collaborator */
@@ -46,6 +51,8 @@ interface CollaboratorListProps {
   onUpdateAccess?: (collaboratorId: string, level: AccessLevel) => void;
   /** Whether currently loading */
   isLoading?: boolean;
+  /** Callback when crew finder sends an invite */
+  onCrewFinderInviteSent?: () => void;
 }
 
 /**
@@ -83,13 +90,20 @@ function getDisplayName(collaborator: RaceCollaborator): string {
 export function CollaboratorList({
   collaborators,
   isOwner,
+  regattaId,
   onCreateInvite,
   onRemove,
   onUpdateAccess,
   isLoading = false,
+  onCrewFinderInviteSent,
 }: CollaboratorListProps) {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
+  const [showCrewFinder, setShowCrewFinder] = useState(false);
+
+  const handleCrewFinderInviteSent = () => {
+    onCrewFinderInviteSent?.();
+  };
 
   const handleCreateInvite = async () => {
     setIsCreatingInvite(true);
@@ -118,10 +132,18 @@ export function CollaboratorList({
       const message = `Join my race on RegattaFlow! Use invite code: ${inviteCode}\n\nOr tap this link: ${webUrl}`;
 
       try {
-        await Share.share({
-          message,
-          title: 'Join my race',
-        });
+        if (Platform.OS === 'web') {
+          const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+          if (nav?.share) {
+            await nav.share({ title: 'Join my race', text: message });
+          } else if (nav?.clipboard?.writeText) {
+            await nav.clipboard.writeText(message);
+            Alert.alert('Copied', 'Invite link copied to clipboard');
+          }
+        } else {
+          const { Share } = await import('react-native');
+          await Share.share({ message, title: 'Join my race' });
+        }
       } catch (error) {
         console.error('Failed to share:', error);
       }
@@ -165,16 +187,25 @@ export function CollaboratorList({
               </View>
             </View>
           ) : (
-            <Pressable
-              style={[styles.inviteButton, isCreatingInvite && styles.inviteButtonDisabled]}
-              onPress={handleCreateInvite}
-              disabled={isCreatingInvite}
-            >
-              <UserPlus size={20} color={IOS_COLORS.blue} />
-              <Text style={styles.inviteButtonText}>
-                {isCreatingInvite ? 'Creating...' : 'Invite Crew Member'}
-              </Text>
-            </Pressable>
+            <View style={styles.inviteButtonsRow}>
+              <Pressable
+                style={[styles.inviteButton, isCreatingInvite && styles.inviteButtonDisabled]}
+                onPress={handleCreateInvite}
+                disabled={isCreatingInvite}
+              >
+                <UserPlus size={20} color={IOS_COLORS.blue} />
+                <Text style={styles.inviteButtonText}>
+                  {isCreatingInvite ? 'Creating...' : 'Invite via Code'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.findCrewButton}
+                onPress={() => setShowCrewFinder(true)}
+              >
+                <Search size={20} color={IOS_COLORS.blue} />
+                <Text style={styles.findCrewButtonText}>Find Crew</Text>
+              </Pressable>
+            </View>
           )}
         </View>
       )}
@@ -223,6 +254,14 @@ export function CollaboratorList({
           </Text>
         </View>
       )}
+
+      {/* Coach Finder Modal */}
+      <CoachFinderModal
+        regattaId={regattaId}
+        isVisible={showCrewFinder}
+        onClose={() => setShowCrewFinder(false)}
+        onInviteSent={handleCrewFinderInviteSent}
+      />
     </ScrollView>
   );
 }
@@ -319,13 +358,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   inviteButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     backgroundColor: `${IOS_COLORS.blue}15`,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: `${IOS_COLORS.blue}30`,
@@ -334,6 +374,27 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   inviteButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  inviteButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  findCrewButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: `${IOS_COLORS.blue}10`,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.blue}30`,
+  },
+  findCrewButtonText: {
     fontSize: 15,
     fontWeight: '600',
     color: IOS_COLORS.blue,

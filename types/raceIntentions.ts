@@ -178,6 +178,18 @@ export interface StrategyBriefIntention {
 }
 
 /**
+ * Pre-Start Specification - HOW the user will accomplish a pre-start check item
+ */
+export interface PreStartSpecification {
+  /** The pre-start checklist item ID this specification belongs to */
+  itemId: string;
+  /** User's specification of HOW they will accomplish this (e.g., "VHF 72 at -10 min") */
+  specification: string;
+  /** ISO timestamp when the specification was set */
+  specifiedAt: string;
+}
+
+/**
  * Complete race intentions structure
  * Stored in sailor_race_preparation.user_intentions JSONB column
  */
@@ -208,6 +220,9 @@ export interface RaceIntentions {
 
   /** Strategy Brief - race intention and strategy checklist */
   strategyBrief?: StrategyBriefIntention;
+
+  /** Pre-Start Specifications - HOW user will accomplish pre-start checks (keyed by item ID) */
+  preStartSpecifications?: Record<string, PreStartSpecification>;
 
   /** Last update timestamp */
   updatedAt: string;

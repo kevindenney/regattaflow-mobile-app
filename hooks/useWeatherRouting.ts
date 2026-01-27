@@ -139,6 +139,16 @@ export function useWeatherRouting({
 
   const isEnabled = enabled && hasValidRoute && !!validStartTime && !!raceEventId;
 
+  // Debug logging
+  logger.info('[useWeatherRouting] Configuration', {
+    enabled,
+    hasValidRoute,
+    waypointsLength: waypoints?.length ?? 0,
+    validStartTime: validStartTime?.toISOString() ?? null,
+    raceEventId,
+    isEnabled,
+  });
+
   // Query key for caching
   const queryKey = useMemo(
     () => [
@@ -272,7 +282,7 @@ export function useWeatherRouting({
 
   return {
     // Analysis Data
-    analysis,
+    analysis: analysis ?? null,
     legs,
     modelForecasts,
     modelAgreement,

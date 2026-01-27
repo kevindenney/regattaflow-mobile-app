@@ -11,7 +11,6 @@ import {
     Modal,
     Platform,
     ScrollView,
-    Share,
     StyleSheet,
     Text,
     TextInput,
@@ -567,10 +566,19 @@ export function StrategySharingModal({
   const handleNativeShare = async () => {
     try {
       const text = generateShareableText();
-      await Share.share({
-        message: text,
-        title: `Race Strategy - ${raceInfo.name}`,
-      });
+      const title = `Race Strategy - ${raceInfo.name}`;
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ title, text });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(text);
+          Alert.alert('Copied', 'Strategy copied to clipboard');
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({ message: text, title });
+      }
       onShareComplete?.('external');
     } catch (error) {
       logger.error('Failed to share:', error);
@@ -1331,9 +1339,9 @@ export function StrategySharingModal({
   // Share public link via native share
   const handleSharePublicLink = async () => {
     if (!publicSharingStatus.url) return;
-    
+
     const title = raceInfo.name ? `Race Strategy - ${raceInfo.name}` : 'Race Strategy';
-    
+
     if (Platform.OS === 'web') {
       if (navigator.share) {
         await navigator.share({
@@ -1344,6 +1352,7 @@ export function StrategySharingModal({
         await handleCopyPublicLink();
       }
     } else {
+      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out my race strategy: ${publicSharingStatus.url}`,
         url: publicSharingStatus.url,

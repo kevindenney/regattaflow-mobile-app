@@ -263,14 +263,14 @@ export function ForecastCheckWizard({
     }
   }, [captureSnapshot]);
 
-  // Handle learn more - navigate to Weather & Conditions module in Race Preparation Mastery course
+  // Handle learn more - navigate to Decoding Race Day Wind lesson in Launch Phase Strategy course
   const handleLearnMore = useCallback(() => {
     onCancel(); // Close modal first
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn/race-preparation-mastery',
+        pathname: '/(tabs)/learn/launch-phase-strategy/player',
         params: {
-          moduleId: 'module-13-1', // Weather & Conditions module
+          lessonId: 'lesson-14-1-1', // Decoding Race Day Wind lesson
         },
       });
     }, 150);
@@ -919,14 +919,6 @@ export function ForecastCheckWizard({
           </Text>
         )}
 
-        {/* First Check Notice */}
-        {!hasSnapshots && (
-          <View style={rcStyles.firstCheckNotice}>
-            <Text style={rcStyles.firstCheckText}>
-              First check · future checks will show changes
-            </Text>
-          </View>
-        )}
 
         {/* Data Source Attribution Footer */}
         {currentForecast?.dataSource && (
@@ -1339,34 +1331,11 @@ export function ForecastCheckWizard({
 
   // Render bottom navigation
   const renderBottomNav = () => {
-    if (step === 'loading') return null;
+    // No bottom action on loading or current forecast view
+    if (step === 'loading' || step === 'current') return null;
 
     return (
       <View style={styles.bottomAction}>
-        {step === 'current' && (
-          <Pressable
-            style={[
-              styles.primaryButton,
-              (isCapturing || !currentForecast) && styles.primaryButtonDisabled,
-            ]}
-            onPress={handleCapture}
-            disabled={isCapturing || !currentForecast}
-          >
-            {isCapturing ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : hasSnapshots ? (
-              <>
-                <RefreshCw size={20} color="#FFFFFF" />
-                <Text style={styles.primaryButtonText}>Save Snapshot</Text>
-              </>
-            ) : (
-              <>
-                <Check size={20} color="#FFFFFF" />
-                <Text style={styles.primaryButtonText}>Save First Check</Text>
-              </>
-            )}
-          </Pressable>
-        )}
 
         {step === 'comparison' && (
           <View style={styles.navRow}>

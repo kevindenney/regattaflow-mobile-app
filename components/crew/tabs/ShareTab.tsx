@@ -15,7 +15,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Share,
   Platform,
   Linking,
   ActivityIndicator,
@@ -208,10 +207,19 @@ export function ShareTab({
 
       case 'more':
         try {
-          await Share.share({
-            message,
-            title: raceName ? `Join: ${raceName}` : 'Join my race',
-          });
+          const title = raceName ? `Join: ${raceName}` : 'Join my race';
+          if (Platform.OS === 'web') {
+            const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+            if (nav?.share) {
+              await nav.share({ title, text: message });
+            } else if (nav?.clipboard?.writeText) {
+              await nav.clipboard.writeText(message);
+              Alert.alert('Copied', 'Invite link copied to clipboard');
+            }
+          } else {
+            const { Share } = await import('react-native');
+            await Share.share({ message, title });
+          }
         } catch (error) {
           console.error('Share failed:', error);
         }

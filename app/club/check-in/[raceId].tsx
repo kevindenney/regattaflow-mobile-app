@@ -14,7 +14,6 @@ import {
   TextInput,
   Platform,
   Modal,
-  Share,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -263,13 +262,24 @@ export default function CheckInDashboard() {
   // Share QR code URL
   const shareQRCode = async () => {
     if (!config?.check_in_qr_token) return;
-    
+
     const url = checkInService.getQRCodeUrl(config.check_in_qr_token);
     try {
-      await Share.share({
-        message: `Check in for Race ${raceNumber}: ${url}`,
-        url,
-      });
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+        if (nav?.share) {
+          await nav.share({ text: `Check in for Race ${raceNumber}: ${url}`, url });
+        } else if (nav?.clipboard?.writeText) {
+          await nav.clipboard.writeText(url);
+          Alert.alert('Copied', 'Check-in link copied to clipboard');
+        }
+      } else {
+        const { Share } = await import('react-native');
+        await Share.share({
+          message: `Check in for Race ${raceNumber}: ${url}`,
+          url,
+        });
+      }
     } catch (error) {
       console.error('Error sharing:', error);
     }

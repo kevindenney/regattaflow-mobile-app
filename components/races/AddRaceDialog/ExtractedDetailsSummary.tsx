@@ -161,9 +161,8 @@ export function ExtractedDetailsSummary({
     console.warn('[ExtractedDetailsSummary] Received wrapper object - data should be unwrapped to races[0]');
   }
 
-  // In editable mode, always show all fields (even empty ones)
-  // In read-only mode, only show if there's data
-  if (!data && !isEditable) {
+  // Only show if there's data (don't show empty sections even in editable mode)
+  if (!data) {
     return null;
   }
 
@@ -263,8 +262,8 @@ export function ExtractedDetailsSummary({
       {/* Expanded Content */}
       {expanded && (
         <View style={styles.content}>
-          {/* Schedule - always show in editable mode */}
-          {(safeData.schedule?.length > 0 || isEditable) && (
+          {/* Schedule */}
+          {safeData.schedule?.length > 0 && (
             <DetailSection
               icon={<Calendar size={16} color={IOS_COLORS.orange} />}
               title="Schedule"
@@ -320,7 +319,7 @@ export function ExtractedDetailsSummary({
           )}
 
           {/* Route Waypoints - for distance races */}
-          {(safeData.routeWaypoints?.length > 0 || isEditable) && (
+          {safeData.routeWaypoints?.length > 0 && (
             <DetailSection
               icon={<Navigation size={16} color={IOS_COLORS.blue} />}
               title={`Route Waypoints${safeData.routeWaypoints?.length ? ` (${safeData.routeWaypoints.length})` : ''}`}
@@ -353,7 +352,7 @@ export function ExtractedDetailsSummary({
           )}
 
           {/* VHF Channels */}
-          {(safeData.vhfChannels?.length > 0 || isEditable) && (
+          {safeData.vhfChannels?.length > 0 && (
             <DetailSection
               icon={<Radio size={16} color={IOS_COLORS.teal} />}
               title="VHF Channels"
@@ -392,12 +391,12 @@ export function ExtractedDetailsSummary({
           )}
 
           {/* Crew Requirements */}
-          {(safeData.minimumCrew || safeData.crewRequirements || safeData.minorSailorRules || isEditable) && (
+          {(safeData.minimumCrew || safeData.crewRequirements || safeData.minorSailorRules) && (
             <DetailSection
               icon={<Users size={16} color={IOS_COLORS.purple} />}
               title="Crew Requirements"
             >
-              {(safeData.minimumCrew !== undefined || isEditable) && (
+              {safeData.minimumCrew !== undefined && (
                 <View style={styles.inlineRow}>
                   <Text style={styles.fieldLabel}>Minimum crew:</Text>
                   {isEditable ? (
@@ -413,7 +412,7 @@ export function ExtractedDetailsSummary({
                   )}
                 </View>
               )}
-              {(safeData.crewRequirements || isEditable) && (
+              {safeData.crewRequirements && (
                 isEditable ? (
                   <EditableText
                     value={safeData.crewRequirements || ''}
@@ -433,7 +432,7 @@ export function ExtractedDetailsSummary({
           )}
 
           {/* Prohibited Areas */}
-          {(safeData.prohibitedAreas?.length > 0 || isEditable) && (
+          {safeData.prohibitedAreas?.length > 0 && (
             <DetailSection
               icon={<AlertTriangle size={16} color={IOS_COLORS.red} />}
               title={`Prohibited Areas${safeData.prohibitedAreas?.length ? ` (${safeData.prohibitedAreas.length})` : ''}`}
@@ -467,8 +466,8 @@ export function ExtractedDetailsSummary({
             </DetailSection>
           )}
 
-          {/* Tide Gates (NEW) */}
-          {(safeData.tideGates?.length > 0 || isEditable) && (
+          {/* Tide Gates */}
+          {safeData.tideGates?.length > 0 && (
             <DetailSection
               icon={<Waves size={16} color={IOS_COLORS.blue} />}
               title="Tide Gates"
@@ -506,7 +505,7 @@ export function ExtractedDetailsSummary({
           )}
 
           {/* Entry Fees */}
-          {(safeData.entryFees?.length > 0 || isEditable) && (
+          {(safeData.entryFees?.length > 0 || safeData.entryDeadline) && (
             <DetailSection
               icon={<DollarSign size={16} color={IOS_COLORS.green} />}
               title="Entry Fees"
@@ -541,7 +540,7 @@ export function ExtractedDetailsSummary({
                   )}
                 </View>
               ))}
-              {(safeData.entryDeadline || isEditable) && (
+              {(safeData.entryDeadline) && (
                 <View style={styles.inlineRow}>
                   <Text style={styles.fieldLabel}>Entry deadline:</Text>
                   {isEditable ? (
@@ -565,7 +564,7 @@ export function ExtractedDetailsSummary({
               icon={<Shield size={16} color={IOS_COLORS.orange} />}
               title="Safety & Insurance"
             >
-              {(safeData.safetyRequirements || isEditable) && (
+              {(safeData.safetyRequirements) && (
                 isEditable ? (
                   <EditableText
                     value={safeData.safetyRequirements || ''}
@@ -578,7 +577,7 @@ export function ExtractedDetailsSummary({
                   <Text style={styles.detailText}>{safeData.safetyRequirements}</Text>
                 )
               )}
-              {(safeData.retirementNotification || isEditable) && (
+              {(safeData.retirementNotification) && (
                 <View style={styles.fieldRow}>
                   <Text style={styles.fieldLabel}>Retirement notification:</Text>
                   {isEditable ? (
@@ -593,7 +592,7 @@ export function ExtractedDetailsSummary({
                   )}
                 </View>
               )}
-              {(safeData.insuranceRequirements || isEditable) && (
+              {(safeData.insuranceRequirements) && (
                 <View style={styles.fieldRow}>
                   <Text style={styles.fieldLabel}>Insurance:</Text>
                   {isEditable ? (
@@ -617,7 +616,7 @@ export function ExtractedDetailsSummary({
               icon={<Waves size={16} color={IOS_COLORS.cyan} />}
               title="Expected Conditions"
             >
-              {(safeData.expectedConditions || isEditable) && (
+              {(safeData.expectedConditions) && (
                 isEditable ? (
                   <EditableText
                     value={safeData.expectedConditions || ''}
@@ -630,7 +629,7 @@ export function ExtractedDetailsSummary({
                   <Text style={styles.detailText}>{safeData.expectedConditions}</Text>
                 )
               )}
-              {(safeData.expectedWindDirection || isEditable) && (
+              {(safeData.expectedWindDirection) && (
                 <View style={styles.inlineRow}>
                   <Text style={styles.fieldLabel}>Wind:</Text>
                   {isEditable ? (
@@ -671,7 +670,7 @@ export function ExtractedDetailsSummary({
           )}
 
           {/* Scoring */}
-          {(safeData.scoringFormulaDescription || isEditable) && (
+          {(safeData.scoringFormulaDescription || safeData.handicapSystem?.length > 0) && (
             <DetailSection
               icon={<Trophy size={16} color={IOS_COLORS.yellow} />}
               title="Scoring"
@@ -696,7 +695,7 @@ export function ExtractedDetailsSummary({
           )}
 
           {/* Motoring Division */}
-          {(safeData.motoringDivisionAvailable || isEditable) && (
+          {(safeData.motoringDivisionAvailable || safeData.motoringDivisionRules) && (
             <DetailSection
               icon={<Ship size={16} color={IOS_COLORS.teal} />}
               title="Motoring Division"
@@ -712,7 +711,7 @@ export function ExtractedDetailsSummary({
                   />
                 </View>
               )}
-              {(safeData.motoringDivisionRules || isEditable) && (
+              {(safeData.motoringDivisionRules) && (
                 isEditable ? (
                   <EditableText
                     value={safeData.motoringDivisionRules || ''}
@@ -736,7 +735,7 @@ export function ExtractedDetailsSummary({
               icon={<MapPin size={16} color={IOS_COLORS.blue} />}
               title="Course Areas"
             >
-              {(safeData.startAreaName || isEditable) && (
+              {(safeData.startAreaName) && (
                 <View style={styles.inlineRow}>
                   <Text style={styles.fieldLabel}>Start:</Text>
                   {isEditable ? (
@@ -751,7 +750,7 @@ export function ExtractedDetailsSummary({
                   )}
                 </View>
               )}
-              {(safeData.finishAreaName || isEditable) && (
+              {(safeData.finishAreaName) && (
                 <View style={styles.inlineRow}>
                   <Text style={styles.fieldLabel}>Finish:</Text>
                   {isEditable ? (
@@ -769,8 +768,8 @@ export function ExtractedDetailsSummary({
             </DetailSection>
           )}
 
-          {/* Prizes (NEW) */}
-          {(safeData.prizesDescription || isEditable) && (
+          {/* Prizes */}
+          {safeData.prizesDescription && (
             <DetailSection
               icon={<Trophy size={16} color={IOS_COLORS.gold} />}
               title="Prizes"
@@ -812,7 +811,7 @@ export function ExtractedDetailsSummary({
               icon={<Radio size={16} color={TUFTE_FORM_COLORS.secondaryLabel} />}
               title="Contact"
             >
-              {(safeData.organizingAuthority || isEditable) && (
+              {(safeData.organizingAuthority) && (
                 isEditable ? (
                   <EditableText
                     value={safeData.organizingAuthority || ''}
@@ -824,7 +823,7 @@ export function ExtractedDetailsSummary({
                   <Text style={styles.detailText}>{safeData.organizingAuthority}</Text>
                 )
               )}
-              {(safeData.eventWebsite || isEditable) && (
+              {(safeData.eventWebsite) && (
                 isEditable ? (
                   <EditableText
                     value={safeData.eventWebsite || ''}
@@ -836,7 +835,7 @@ export function ExtractedDetailsSummary({
                   <Text style={styles.linkText}>{safeData.eventWebsite}</Text>
                 )
               )}
-              {(safeData.contactEmail || isEditable) && (
+              {(safeData.contactEmail) && (
                 isEditable ? (
                   <EditableText
                     value={safeData.contactEmail || ''}

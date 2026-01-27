@@ -64,6 +64,9 @@ export function PDFUpload({
             suggestedType = 'si';
           } else if (lowerName.includes('amend')) {
             suggestedType = 'amendment';
+          } else if (lowerName.includes('courses') || (lowerName.includes('attachment') && lowerName.includes('b'))) {
+            // "Courses" documents like "Attachment B" with course sequences
+            suggestedType = 'courses';
           } else if (lowerName.includes('course') || lowerName.includes('chart')) {
             suggestedType = 'course_diagram';
           }

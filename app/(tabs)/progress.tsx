@@ -21,6 +21,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -28,6 +29,7 @@ import { useRouter } from 'expo-router';
 import { useExcellenceMetrics } from '@/hooks/useExcellenceMetrics';
 import { useLearnableEvents, useLearningInsights } from '@/hooks/useAdaptiveLearning';
 import { useSeasonSelection } from '@/hooks/useSailorProfile';
+import { useCurrentSeason, useUserSeasons } from '@/hooks/useSeason';
 import { sparkline, trendArrow } from '@/lib/tufte';
 
 import {
@@ -35,14 +37,29 @@ import {
   OutcomeTrendCard,
   FocusRecommendations,
   RecentLearnings,
+  SeasonHistorySection,
+  PastRaceList,
 } from '@/components/progress';
+import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
+import { SeasonArchive } from '@/components/seasons/SeasonArchive';
 
 export default function ProgressScreen() {
   const router = useRouter();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showSeasonSettings, setShowSeasonSettings] = useState(false);
+  const [showFullArchive, setShowFullArchive] = useState(false);
 
   // Get current season (if available)
   const { currentSeason } = useSeasonSelection?.() || { currentSeason: null };
+
+  // Season data for history section
+  const { data: activeSeason, refetch: refetchCurrentSeason } = useCurrentSeason();
+  const { data: userSeasons = [], isLoading: loadingSeasons, refetch: refetchSeasons } = useUserSeasons();
+
+  // Build SeasonWithSummary list for slope graph (from seasons that have summary data)
+  const seasonsWithSummary = (userSeasons as any[]).filter(
+    (s) => s.summary?.user_standing
+  );
 
   // Load excellence metrics
   const {
@@ -130,9 +147,14 @@ export default function ProgressScreen() {
         <View style={styles.header}>
           <View style={styles.headerRow}>
             <Text style={styles.title}>Progress</Text>
-            {currentSeason && (
-              <Text style={styles.seasonText}>{currentSeason.name}</Text>
-            )}
+            <TouchableOpacity
+              onPress={() => setShowSeasonSettings(true)}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.seasonText}>
+                {currentSeason?.name || activeSeason?.name || 'No season ›'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Integrated summary line with sparkline */}
@@ -192,9 +214,82 @@ export default function ProgressScreen() {
           />
         </View>
 
+        {/* Season History Section */}
+        {userSeasons.length > 0 && (
+          <>
+            <View style={styles.sectionDivider} />
+            <View style={styles.section}>
+              <SeasonHistorySection
+                seasonsWithSummary={seasonsWithSummary}
+                seasons={userSeasons}
+                limit={5}
+                onSeasonPress={(seasonId) => {
+                  // Future: navigate to season detail
+                }}
+                onViewAll={() => setShowFullArchive(true)}
+              />
+            </View>
+          </>
+        )}
+
+        {/* Past Races Section */}
+        {outcomes.recentResults && outcomes.recentResults.length > 0 && (
+          <>
+            <View style={styles.sectionDivider} />
+            <View style={styles.section}>
+              <PastRaceList
+                races={outcomes.recentResults}
+                limit={8}
+                onRacePress={(raceId) => {
+                  // Future: navigate to race detail
+                }}
+              />
+            </View>
+          </>
+        )}
+
         {/* Footer spacer */}
         <View style={styles.footerSpacer} />
       </ScrollView>
+
+      {/* Season Settings Modal */}
+      <SeasonSettingsModal
+        visible={showSeasonSettings}
+        season={activeSeason ?? null}
+        onClose={() => setShowSeasonSettings(false)}
+        onSeasonCreated={() => {
+          setShowSeasonSettings(false);
+          refetchCurrentSeason();
+          refetchSeasons();
+        }}
+        onSeasonUpdated={() => {
+          setShowSeasonSettings(false);
+          refetchCurrentSeason();
+          refetchSeasons();
+        }}
+        onSeasonEnded={() => {
+          refetchCurrentSeason();
+          refetchSeasons();
+        }}
+      />
+
+      {/* Full Season Archive Modal */}
+      <Modal
+        visible={showFullArchive}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowFullArchive(false)}
+      >
+        <SeasonArchive
+          seasons={userSeasons}
+          isLoading={loadingSeasons}
+          onRefresh={() => refetchSeasons()}
+          onSeasonPress={(seasonId) => {
+            setShowFullArchive(false);
+          }}
+          onBackPress={() => setShowFullArchive(false)}
+        />
+      </Modal>
     </SafeAreaView>
   );
 }

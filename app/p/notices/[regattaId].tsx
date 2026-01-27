@@ -23,7 +23,6 @@ import {
     Platform,
     RefreshControl,
     ScrollView,
-    Share,
     StyleSheet,
     TouchableOpacity,
     View,
@@ -100,7 +99,7 @@ export default function PublicNoticesPage() {
 
   const handleShare = async () => {
     const url = `${API_BASE}/p/notices/${regattaId}`;
-    
+
     if (Platform.OS === 'web') {
       if (navigator.share) {
         await navigator.share({
@@ -112,6 +111,7 @@ export default function PublicNoticesPage() {
         alert('Link copied to clipboard!');
       }
     } else {
+      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out notices for ${data?.regatta.name}: ${url}`,
         url,

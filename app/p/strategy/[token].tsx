@@ -23,7 +23,6 @@ import {
     Linking,
     Platform,
     ScrollView,
-    Share,
     StyleSheet,
     TouchableOpacity,
     View,
@@ -209,7 +208,7 @@ export default function PublicStrategyPage() {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : API_BASE;
     const url = `${baseUrl}/p/strategy/${token}`;
     const title = data?.race?.name ? `Race Strategy - ${data.race.name}` : 'Race Strategy';
-    
+
     if (Platform.OS === 'web') {
       if (navigator.share) {
         await navigator.share({ title, url });
@@ -218,6 +217,7 @@ export default function PublicStrategyPage() {
         alert('Link copied to clipboard!');
       }
     } else {
+      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out this race strategy: ${url}`,
         url,
