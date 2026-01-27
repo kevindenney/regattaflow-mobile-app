@@ -1,18 +1,54 @@
 /**
- * Races Floating Header
+ * Races Floating Header - Redesigned
  *
- * Top header bar for the races screen with hamburger menu,
- * section title, loading indicator, add race button, and user avatar.
- * Integrates with NavigationDrawer for Tufte-style navigation.
+ * Clean header bar for the races screen:
+ * - Large left-aligned "Races" title
+ * - Race counter ("13 of 22 | 11 upcoming")
+ * - Green circular + button on right
+ * - Segmented control for filtering (Upcoming | Past | All)
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, Modal, Pressable, Animated, useWindowDimensions, LayoutRectangle } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+  StyleSheet,
+  Platform,
+  Modal,
+  Pressable,
+  TextInput,
+} from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
-import { floatingHeaderStyles } from '@/components/races/styles';
-import { NavigationDrawer } from '@/components/navigation/NavigationDrawer';
-import { TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { IOSSegmentedControl } from '@/components/ui/ios';
+import {
+  IOS_COLORS,
+  IOS_TYPOGRAPHY,
+  IOS_SPACING,
+  IOS_RADIUS,
+  IOS_SHADOWS,
+  IOS_ANIMATIONS,
+} from '@/lib/design-tokens-ios';
+import { triggerHaptic } from '@/lib/haptics';
+import type { LayoutRectangle } from 'react-native';
+
+export type RaceFilterSegment = 'upcoming' | 'past' | 'all';
+
+const FILTER_SEGMENTS: { value: RaceFilterSegment; label: string }[] = [
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'past', label: 'Past' },
+  { value: 'all', label: 'All' },
+];
 
 export interface RacesFloatingHeaderProps {
   /** Top inset for safe area */
@@ -27,25 +63,42 @@ export interface RacesFloatingHeaderProps {
   onAddRace: () => void;
   /** Callback when add practice is pressed */
   onAddPractice?: () => void;
+  /** Current filter segment */
+  filterSegment?: RaceFilterSegment;
+  /** Callback when filter segment changes */
+  onFilterChange?: (segment: RaceFilterSegment) => void;
+  /** Current scroll offset for large title collapse */
+  scrollOffset?: number;
+  /** Callback when search text changes */
+  onSearchChange?: (text: string) => void;
+  /** Whether search is active */
+  searchActive?: boolean;
   /** Callback to expose the + button's layout for onboarding tour spotlight */
   onAddButtonLayout?: (layout: LayoutRectangle) => void;
   /** Trigger value to force re-measurement of add button (e.g., when tour becomes visible) */
   measureTrigger?: boolean | number;
-  /** Controlled drawer visibility (for onboarding tour) */
+  /** Total number of races in the season */
+  totalRaces?: number;
+  /** Number of upcoming races */
+  upcomingRaces?: number;
+  /** Current race index (1-based, for "X of Y" display) */
+  currentRaceIndex?: number;
+  /** Callback when "X upcoming" is pressed to navigate to next race */
+  onUpcomingPress?: () => void;
+  /** Legacy drawer props - kept for compatibility but not rendered */
   drawerVisible?: boolean;
-  /** Callback when drawer visibility changes */
   onDrawerVisibleChange?: (visible: boolean) => void;
-  /** Layout callbacks for navigation drawer menu items (onboarding tour) */
   onLearnItemLayout?: (layout: LayoutRectangle) => void;
   onVenueItemLayout?: (layout: LayoutRectangle) => void;
   onCoachingItemLayout?: (layout: LayoutRectangle) => void;
   onPricingItemLayout?: (layout: LayoutRectangle) => void;
-  /** Skip rendering drawer internally (for rendering it separately during tour) */
   skipDrawer?: boolean;
 }
 
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
 /**
- * Floating Header Component
+ * Redesigned Header Component
  */
 export function RacesFloatingHeader({
   topInset,
@@ -54,35 +107,34 @@ export function RacesFloatingHeader({
   isOnline,
   onAddRace,
   onAddPractice,
+  filterSegment = 'upcoming',
+  onFilterChange,
+  scrollOffset = 0,
+  onSearchChange,
   onAddButtonLayout,
   measureTrigger,
-  drawerVisible: controlledDrawerVisible,
-  onDrawerVisibleChange,
-  onLearnItemLayout,
-  onVenueItemLayout,
-  onCoachingItemLayout,
-  onPricingItemLayout,
-  skipDrawer = false,
+  totalRaces,
+  upcomingRaces,
+  currentRaceIndex,
+  onUpcomingPress,
 }: RacesFloatingHeaderProps) {
-  // Support both controlled and uncontrolled drawer state
-  const [internalDrawerVisible, setInternalDrawerVisible] = useState(false);
-  const isDrawerVisible = controlledDrawerVisible ?? internalDrawerVisible;
-  const setDrawerVisible = onDrawerVisibleChange ?? setInternalDrawerVisible;
-
   const [menuVisible, setMenuVisible] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const { width: windowWidth } = useWindowDimensions();
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const searchInputRef = useRef<TextInput>(null);
+
+  // Animation values
+  const menuFadeAnim = useSharedValue(0);
+  const menuScaleAnim = useSharedValue(0.9);
+  const addButtonScale = useSharedValue(1);
 
   // Ref for the + button to expose layout for onboarding tour
   const addButtonRef = useRef<View>(null);
 
   // Measure and report the + button's layout for onboarding tour spotlight
-  // Re-measures when measureTrigger changes (e.g., when tour becomes visible)
   useEffect(() => {
     if (!onAddButtonLayout) return;
 
-    // Small delay to ensure the button has rendered and any layout changes have settled
     const timer = setTimeout(() => {
       if (Platform.OS === 'web') {
         const buttonNode = addButtonRef.current as unknown as { getBoundingClientRect?: () => DOMRect };
@@ -107,40 +159,20 @@ export function RacesFloatingHeader({
   // Show menu with animation
   const showMenu = () => {
     setMenuVisible(true);
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    menuFadeAnim.value = withTiming(1, { duration: 200 });
+    menuScaleAnim.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
   };
 
   // Hide menu with animation
   const hideMenu = () => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 0.9,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => setMenuVisible(false));
+    menuFadeAnim.value = withTiming(0, { duration: 150 });
+    menuScaleAnim.value = withTiming(0.9, { duration: 150 });
+    setTimeout(() => setMenuVisible(false), 150);
   };
 
-  // Handle add button press - show custom menu
+  // Handle add button press
   const handleAddPress = () => {
-    // If no practice handler provided, just add race directly
+    triggerHaptic('impactLight');
     if (!onAddPractice) {
       onAddRace();
       return;
@@ -149,72 +181,145 @@ export function RacesFloatingHeader({
   };
 
   const handleMenuOption = (action: () => void) => {
-    console.log('[RacesFloatingHeader] handleMenuOption called, action type:', typeof action);
     hideMenu();
-    // Small delay to let animation finish
     setTimeout(() => {
-      console.log('[RacesFloatingHeader] Executing action after timeout');
-      try {
-        action();
-        console.log('[RacesFloatingHeader] Action executed successfully');
-      } catch (error) {
-        console.error('[RacesFloatingHeader] Action error:', error);
-      }
+      action();
     }, 100);
   };
 
+  // Handle search toggle
+  const handleSearchToggle = () => {
+    triggerHaptic('selection');
+    if (searchVisible) {
+      setSearchVisible(false);
+      setSearchText('');
+      onSearchChange?.('');
+    } else {
+      setSearchVisible(true);
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  };
+
+  // Handle search text change
+  const handleSearchTextChange = (text: string) => {
+    setSearchText(text);
+    onSearchChange?.(text);
+  };
+
+  // Animated styles
+  const menuOverlayStyle = useAnimatedStyle(() => ({
+    opacity: menuFadeAnim.value,
+  }));
+
+  const menuContainerStyle = useAnimatedStyle(() => ({
+    opacity: menuFadeAnim.value,
+    transform: [{ scale: menuScaleAnim.value }],
+  }));
+
+  const addButtonAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: addButtonScale.value }],
+  }));
+
+  const isLoading = loadingInsights || weatherLoading;
+
+  // Build the race counter parts
+  const hasIndexCounter = currentRaceIndex && totalRaces;
+  const hasUpcoming = upcomingRaces !== undefined && upcomingRaces > 0;
+  const showCounter = hasIndexCounter || hasUpcoming;
+
   return (
     <>
-      <View style={[floatingHeaderStyles.container, styles.headerBg, { paddingTop: topInset }]}>
-        {/* Left: Hamburger menu */}
-        <View style={floatingHeaderStyles.left}>
-          <TouchableOpacity
-            style={styles.hamburgerButton}
-            onPress={() => setDrawerVisible(true)}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Open navigation menu"
-          >
-            <Ionicons name="menu" size={24} color="#374151" />
-          </TouchableOpacity>
-          {(loadingInsights || weatherLoading) && (
-            <ActivityIndicator size="small" color="#9CA3AF" style={{ marginLeft: 8 }} />
-          )}
-        </View>
+      <View style={[styles.container, { paddingTop: topInset }]}>
+        {/* Nav bar: title left | counter center | add right */}
+        <View style={styles.navBar}>
+          {/* Left: Large Title */}
+          <View style={styles.titleSection}>
+            <Text style={styles.largeTitle}>Races</Text>
+            {isLoading && (
+              <ActivityIndicator
+                size="small"
+                color={IOS_COLORS.secondaryLabel}
+                style={styles.loadingIndicator}
+              />
+            )}
+            {!isOnline && <OfflineIndicator />}
+          </View>
 
-        {/* Spacer */}
-        <View style={{ flex: 1 }} />
+          {/* Center: Race Counter */}
+          {showCounter ? (
+            <View style={styles.counterSection}>{hasIndexCounter && (
+              <Text style={styles.counterText}>{currentRaceIndex} of {totalRaces}</Text>
+            )}{hasIndexCounter && hasUpcoming && (
+              <Text style={styles.counterText}> | </Text>
+            )}{hasUpcoming && (
+              <Pressable
+                onPress={onUpcomingPress}
+                disabled={!onUpcomingPress}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              >
+                <Text style={[styles.counterText, onUpcomingPress && styles.counterLink]}>
+                  {upcomingRaces} upcoming
+                </Text>
+              </Pressable>
+            )}</View>
+          ) : null}
 
-        {/* Right: Actions */}
-        <View style={floatingHeaderStyles.right}>
-          {!isOnline && <OfflineIndicator />}
-          {/* Add button - wrapped with ref for onboarding tour spotlight */}
+          {/* Right: Green Add Button */}
           <View ref={addButtonRef} collapsable={false}>
-            <TouchableOpacity
-              style={styles.addButton}
+            <AnimatedPressable
+              style={[styles.addButton, addButtonAnimStyle]}
               onPress={handleAddPress}
-              accessibilityLabel="Add race or practice"
+              onPressIn={() => {
+                addButtonScale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
+              }}
+              onPressOut={() => {
+                addButtonScale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
+              }}
+              accessibilityLabel="Add race"
               accessibilityRole="button"
             >
-              <Text style={styles.addButtonText}>+</Text>
-            </TouchableOpacity>
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+            </AnimatedPressable>
           </View>
         </View>
+
+        {/* Search Bar (conditionally visible) */}
+        {searchVisible && (
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <Ionicons
+                name="search"
+                size={18}
+                color={IOS_COLORS.secondaryLabel}
+                style={styles.searchIcon}
+              />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Search races..."
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                value={searchText}
+                onChangeText={handleSearchTextChange}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Segmented Control */}
+        {onFilterChange && (
+          <View style={styles.segmentedControlContainer}>
+            <IOSSegmentedControl
+              segments={FILTER_SEGMENTS}
+              selectedValue={filterSegment}
+              onChange={onFilterChange}
+            />
+          </View>
+        )}
       </View>
 
-      {/* Navigation Drawer - skip when rendered separately during tour */}
-      {!skipDrawer && (
-        <NavigationDrawer
-          visible={isDrawerVisible}
-          onClose={() => setDrawerVisible(false)}
-          onLearnItemLayout={onLearnItemLayout}
-          onVenueItemLayout={onVenueItemLayout}
-          onCoachingItemLayout={onCoachingItemLayout}
-          onPricingItemLayout={onPricingItemLayout}
-        />
-      )}
-
-      {/* Add Menu Modal - Custom design for all platforms */}
+      {/* Add Menu Modal */}
       <Modal
         visible={menuVisible}
         transparent
@@ -222,19 +327,9 @@ export function RacesFloatingHeader({
         onRequestClose={hideMenu}
         statusBarTranslucent
       >
-        <Pressable style={styles.menuOverlay} onPress={hideMenu}>
-          <Animated.View
-            style={[
-              styles.menuContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ scale: scaleAnim }],
-                maxWidth: Math.min(windowWidth - 48, 320),
-              },
-            ]}
-            // Prevent touches on menu from closing the overlay
-            onStartShouldSetResponder={() => true}
-          >
+        <Animated.View style={[styles.menuOverlay, menuOverlayStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={hideMenu} />
+          <Animated.View style={[styles.menuContainer, menuContainerStyle]}>
             {/* Header */}
             <View style={styles.menuHeader}>
               <Text style={styles.menuTitle}>Create New</Text>
@@ -243,35 +338,32 @@ export function RacesFloatingHeader({
                 style={styles.menuCloseButton}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="close" size={20} color="#9CA3AF" />
+                <Ionicons name="close-circle" size={24} color={IOS_COLORS.systemGray3} />
               </TouchableOpacity>
             </View>
-
-            {/* Divider */}
-            <View style={styles.menuDivider} />
 
             {/* Menu Options */}
             <View style={styles.menuOptions}>
               {/* Add Race Option */}
               <TouchableOpacity
                 style={styles.menuOption}
-                onPress={() => {
-                  console.log('[RacesFloatingHeader] Add Race TouchableOpacity pressed');
-                  handleMenuOption(onAddRace);
-                }}
+                onPress={() => handleMenuOption(onAddRace)}
                 activeOpacity={0.7}
               >
-                <View style={[styles.menuOptionIcon, { backgroundColor: '#EBF4FF' }]}>
-                  <MaterialCommunityIcons name="flag-checkered" size={22} color="#2563EB" />
+                <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemBlue}15` }]}>
+                  <MaterialCommunityIcons name="flag-checkered" size={24} color={IOS_COLORS.systemBlue} />
                 </View>
                 <View style={styles.menuOptionContent}>
                   <Text style={styles.menuOptionTitle}>Add Race</Text>
                   <Text style={styles.menuOptionSubtitle}>
-                    Add a regatta, series race, or single event
+                    Regatta, series race, or single event
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+                <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
               </TouchableOpacity>
+
+              {/* Separator */}
+              <View style={styles.menuSeparator} />
 
               {/* Add Practice Option */}
               {onAddPractice && (
@@ -280,118 +372,173 @@ export function RacesFloatingHeader({
                   onPress={() => handleMenuOption(onAddPractice)}
                   activeOpacity={0.7}
                 >
-                  <View style={[styles.menuOptionIcon, { backgroundColor: '#F0FDF4' }]}>
-                    <MaterialCommunityIcons name="sail-boat" size={22} color="#16A34A" />
+                  <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemGreen}15` }]}>
+                    <MaterialCommunityIcons name="sail-boat" size={24} color={IOS_COLORS.systemGreen} />
                   </View>
                   <View style={styles.menuOptionContent}>
-                    <Text style={styles.menuOptionTitle}>Add Practice Session</Text>
+                    <Text style={styles.menuOptionTitle}>Add Practice</Text>
                     <Text style={styles.menuOptionSubtitle}>
-                      Plan drills, boat handling, or training
+                      Drills, boat handling, or training
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+                  <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
                 </TouchableOpacity>
               )}
             </View>
           </Animated.View>
-        </Pressable>
+        </Animated.View>
       </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  headerBg: {
-    backgroundColor: TUFTE_BACKGROUND,
+  container: {
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
   },
-  hamburgerButton: {
-    padding: 8,
-    marginLeft: -8,
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 52,
+    paddingHorizontal: 16,
+  },
+  titleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  largeTitle: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    letterSpacing: -0.5,
+  },
+  loadingIndicator: {
+    marginLeft: 0,
+  },
+  counterSection: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  counterText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: -0.2,
+  },
+  counterLink: {
+    color: IOS_COLORS.systemBlue,
+    textDecorationLine: 'underline',
   },
   addButton: {
-    padding: 8,
-    marginRight: -8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  addButtonText: {
-    fontSize: 28,
-    fontWeight: '300',
-    color: '#007AFF',
+  searchContainer: {
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.md,
   },
-  // Custom menu styles for all platforms
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.tertiarySystemFill || IOS_COLORS.systemGray6,
+    borderRadius: IOS_RADIUS.sm,
+    paddingHorizontal: IOS_SPACING.sm,
+    height: 36,
+  },
+  searchIcon: {
+    marginRight: IOS_SPACING.xs,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: IOS_TYPOGRAPHY.body.fontSize,
+    color: IOS_COLORS.label,
+    paddingVertical: 0,
+  },
+  segmentedControlContainer: {
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingBottom: IOS_SPACING.xs,
+  },
+  // Menu styles
   menuOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: IOS_SPACING.xl,
   },
   menuContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderRadius: IOS_RADIUS.lg,
     width: '100%',
-    // Shadow for iOS
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    // Elevation for Android
-    elevation: 16,
+    maxWidth: 340,
+    ...IOS_SHADOWS.card,
     overflow: 'hidden',
   },
   menuHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingTop: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.md,
   },
   menuTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    letterSpacing: -0.3,
+    fontSize: IOS_TYPOGRAPHY.title3.fontSize,
+    fontWeight: IOS_TYPOGRAPHY.title3.fontWeight as any,
+    color: IOS_COLORS.label,
   },
   menuCloseButton: {
-    padding: 4,
-    marginRight: -4,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 20,
+    padding: IOS_SPACING.xs,
+    marginRight: -IOS_SPACING.xs,
   },
   menuOptions: {
-    paddingVertical: 8,
+    paddingBottom: IOS_SPACING.md,
   },
   menuOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: IOS_SPACING.md,
+    paddingHorizontal: IOS_SPACING.lg,
   },
   menuOptionIcon: {
     width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: IOS_RADIUS.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   menuOptionContent: {
     flex: 1,
-    marginLeft: 14,
-    marginRight: 8,
+    marginLeft: IOS_SPACING.md,
+    marginRight: IOS_SPACING.sm,
   },
   menuOptionTitle: {
-    fontSize: 16,
+    fontSize: IOS_TYPOGRAPHY.body.fontSize,
     fontWeight: '600',
-    color: '#111827',
+    color: IOS_COLORS.label,
     marginBottom: 2,
   },
   menuOptionSubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
+    fontSize: IOS_TYPOGRAPHY.footnote.fontSize,
+    color: IOS_COLORS.secondaryLabel,
     lineHeight: 18,
+  },
+  menuSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+    marginHorizontal: IOS_SPACING.lg,
+    marginLeft: 76, // Align with text after icon
   },
 });
 
