@@ -179,7 +179,7 @@ export function useVenueRaces(
       
       setHasMore((count || 0) > currentOffset + limit);
     } catch (err: any) {
-      console.error('[useVenueRaces] Error loading races:', err);
+      console.warn('[useVenueRaces] Error loading races:', err);
       setError(err.message || 'Failed to load races');
     } finally {
       setIsLoading(false);

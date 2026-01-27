@@ -151,9 +151,12 @@ export function VenueMapView({
     if (!mapsAvailable) return;
     if (!mapRef.current) return;
 
+    const map = mapRef.current?.getMapRef?.() ?? mapRef.current;
+    if (!map) return;
+
     if (currentVenue) {
       // Center on current venue
-      mapRef.current.animateToRegion({
+      map.animateToRegion?.({
         latitude: currentVenue.coordinates_lat,
         longitude: currentVenue.coordinates_lng,
         latitudeDelta: 0.5,
@@ -166,7 +169,7 @@ export function VenueMapView({
         longitude: v.coordinates_lng,
       }));
 
-      mapRef.current.fitToCoordinates(coordinates, {
+      map.fitToCoordinates?.(coordinates, {
         edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
         animated: true,
       });
@@ -179,7 +182,8 @@ export function VenueMapView({
     if (!mapRef.current || !selectedVenue) return;
 
     // Center on selected venue
-    mapRef.current.animateToRegion({
+    const map = mapRef.current?.getMapRef?.() ?? mapRef.current;
+    map?.animateToRegion?.({
       latitude: selectedVenue.coordinates_lat,
       longitude: selectedVenue.coordinates_lng,
       latitudeDelta: 0.5,

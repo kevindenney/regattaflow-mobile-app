@@ -13,6 +13,8 @@ import {
   TeamChecklistCompletion,
 } from '@/types/teamRacing';
 import { getChecklistItems } from '@/lib/checklists';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
+import { supabase } from '@/services/supabase';
 import type { ChecklistItem, RacePhase } from '@/types/checklists';
 import type { RaceType } from '@/types/raceEvents';
 import { createLogger } from '@/lib/utils/logger';
@@ -31,6 +33,8 @@ interface UseTeamChecklistOptions {
   teamEntryId: string | null;
   raceType: RaceType;
   phase: RacePhase;
+  /** Regatta ID — required for posting system messages to crew chat */
+  regattaId?: string;
 }
 
 interface UseTeamChecklistReturn {
@@ -62,6 +66,7 @@ export function useTeamChecklist({
   teamEntryId,
   raceType,
   phase,
+  regattaId,
 }: UseTeamChecklistOptions): UseTeamChecklistReturn {
   const { user } = useAuth();
 
@@ -153,6 +158,27 @@ export function useTeamChecklist({
         setIsSyncing(true);
         await teamRaceEntryService.updateChecklistItem(teamEntryId, itemId, completion);
         logger.info('Completed team checklist item', { teamEntryId, itemId });
+
+        // Auto-post system message to crew chat
+        if (FEATURE_FLAGS.ENABLE_CHECKLIST_SYSTEM_MESSAGES && regattaId && user?.id) {
+          const displayName = user.user_metadata?.full_name || user.email || 'Someone';
+          const itemLabel = baseItems.find((i) => i.id === itemId)?.label || itemId;
+          const systemMsg = `${displayName} completed "${itemLabel}"`;
+
+          supabase
+            .from('race_messages')
+            .insert({
+              regatta_id: regattaId,
+              user_id: user.id,
+              message: systemMsg,
+              message_type: 'checklist',
+            })
+            .then(({ error: msgError }) => {
+              if (msgError) {
+                logger.warn('Failed to post checklist system message:', msgError.message);
+              }
+            });
+        }
       } catch (err) {
         // Revert on error
         await loadChecklistState();

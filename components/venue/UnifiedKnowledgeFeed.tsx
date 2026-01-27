@@ -1,4 +1,7 @@
 /**
+ * @deprecated Use CommunityFeed from components/venue/feed/CommunityFeed.tsx instead.
+ * This component is maintained for backward compatibility only.
+ *
  * UnifiedKnowledgeFeed
  *
  * Single scrollable feed combining discussions, documents, tips, and insights.

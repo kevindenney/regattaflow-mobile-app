@@ -1,5 +1,6 @@
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
 import FloatingTabBar, { FLOATING_TAB_BAR_BOTTOM_MARGIN, FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
+import MoreMenuSheet from '@/components/navigation/MoreMenuSheet';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import GlobalSearchOverlay from '@/components/search/GlobalSearchOverlay';
 import { useBoats } from '@/hooks/useData';
@@ -13,7 +14,7 @@ import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { BackHandler, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackHandler, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type TabConfig = {
   name: string;
@@ -70,12 +71,13 @@ const getTabsForUserType = (
   // Sailors (including sailors with coaching capability)
   if (userType === 'sailor' || userType === 'coach') {
     // Base sailor tabs - floating pill tab bar
-    // 4 navigation tabs + Search (rendered by FloatingTabBar, not a route)
-    // Learn moved to More menu
+    // 5 navigation tabs + Search (rendered by FloatingTabBar, not a route)
+    // Learn promoted from More menu to tab bar per "Prioritize Important Features" principle
     const tabs: TabConfig[] = [
       { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
       { name: 'discover', title: 'Sailors', icon: 'people-outline', iconFocused: 'people' },
       { name: 'venue', title: 'Venue', icon: 'location-outline', iconFocused: 'location' },
+      { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
     ];
 
     // Add coaching tabs if user has coaching capability
@@ -185,11 +187,6 @@ function TabLayoutInner() {
         isWarning: true,
       });
     }
-
-    // Learn - moved from tab bar to More menu
-    items.push(
-      { key: 'learn', label: 'Learn', icon: 'book-outline', route: '/(tabs)/learn' }
-    );
 
     // Progress - Excellence Framework Dashboard (top priority for sailors)
     items.push(
@@ -904,67 +901,16 @@ function TabLayoutInner() {
         />
       </Tabs>
 
-      {showMenuTrigger && menuVisible && (
-        <View style={styles.menuOverlayAbsolute}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuVisible(false)} />
-          <View
-            style={[
-              styles.menuContainer,
-              isSailorUser && {
-                marginBottom: FLOATING_TAB_BAR_HEIGHT + FLOATING_TAB_BAR_BOTTOM_MARGIN + 24,
-              },
-            ]}
-          >
-            {menuItems.length === 0 ? (
-              <View style={{ padding: 20, alignItems: 'center' }}>
-                <Text style={{ color: '#6B7280', fontSize: 16 }}>No menu items available</Text>
-              </View>
-            ) : (
-              menuItems.map((item, index) => (
-                <React.Fragment key={item.key}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      triggerHaptic('selection');
-                      handleMenuItemPress(item.route);
-                    }}
-                    activeOpacity={0.7}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingVertical: 14,
-                      paddingHorizontal: 16,
-                      backgroundColor: (item as any).isWarning ? '#FEF2F2' : '#FFFFFF',
-                    }}
-                  >
-                    <Ionicons
-                      name={item.icon as any}
-                      size={22}
-                      color={(item as any).isWarning ? '#EF4444' : '#007AFF'}
-                      style={{ width: 28, textAlign: 'center' }}
-                    />
-                    <Text style={{
-                      flex: 1,
-                      fontSize: 17,
-                      color: (item as any).isWarning ? '#EF4444' : '#1F2937',
-                      fontWeight: '500',
-                      marginLeft: 12,
-                    }}>
-                      {item.label}
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={20}
-                      color="#9CA3AF"
-                    />
-                  </TouchableOpacity>
-                  {index < menuItems.length - 1 && (
-                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: '#E5E7EB', marginLeft: 56 }} />
-                  )}
-                </React.Fragment>
-              ))
-            )}
-          </View>
-        </View>
+      {showMenuTrigger && (
+        <MoreMenuSheet
+          visible={menuVisible}
+          onClose={() => setMenuVisible(false)}
+          menuItems={menuItems}
+          onItemPress={handleMenuItemPress}
+          userProfile={user ? { full_name: user.user_metadata?.full_name, email: user.email } : undefined}
+          userType={userType}
+          isGuest={isGuest}
+        />
       )}
 
       {/* Global Search Overlay */}
@@ -1228,32 +1174,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 2,
     fontWeight: '500',
-  },
-  menuOverlayAbsolute: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    zIndex: 9999,
-  },
-  menuContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    marginRight: 16,
-    marginBottom: Platform.OS === 'ios' ? 100 : 80,
-    minWidth: 200,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)',
-      } as any,
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.25,
-        shadowRadius: 25,
-        elevation: 20,
-      },
-    }),
   },
 });
 

@@ -22,7 +22,7 @@ import {
   Sun,
   Map,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useRef, Component, ErrorInfo } from 'react';
 import { ActionSheetIOS, Alert, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -99,6 +99,44 @@ const RACE_PHASE_PILL_LABELS: Record<RacePhase, string> = {
   on_water: 'Race',
   after_race: 'Review',
 };
+
+// =============================================================================
+// ERROR BOUNDARY for phase content debugging
+// =============================================================================
+
+class PhaseContentErrorBoundary extends Component<
+  { children: React.ReactNode; phase: string },
+  { hasError: boolean; error: string | null }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error(`[PhaseContentErrorBoundary] ${this.props.phase} crashed:`, error.message, errorInfo.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 14, color: '#FF3B30', fontWeight: '600', marginBottom: 8 }}>
+            Phase content error
+          </Text>
+          <Text style={{ fontSize: 12, color: '#8E8E93', textAlign: 'center' }}>
+            {this.state.error || 'Unknown error'}
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // =============================================================================
 // HELPERS
@@ -1225,7 +1263,9 @@ export function RaceSummaryCard({
             onScroll={handleContentScroll}
             scrollEventThrottle={16}
           >
-            {renderPhaseContent()}
+            <PhaseContentErrorBoundary phase={selectedPhase}>
+              {renderPhaseContent()}
+            </PhaseContentErrorBoundary>
           </ScrollView>
 
           {/* Top edge gradient - shows when scrolled down */}

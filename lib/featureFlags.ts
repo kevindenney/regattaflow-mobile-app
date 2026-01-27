@@ -92,6 +92,63 @@ export const FEATURE_FLAGS = {
    * When false: Uses existing TufteAddRaceForm
    */
   USE_IOS_ADD_RACE_FORM: true,
+
+  /**
+   * Use grouped vertical race list instead of horizontal card carousel
+   * When true: Renders RaceListSection with time-based grouping (Today/This Week/Later/Past)
+   *            Tapping a race row navigates to /race/[id] detail screen
+   * When false: Uses existing CardGrid horizontal carousel navigation
+   */
+  USE_RACE_LIST_VIEW: false,
+
+  /**
+   * Use grouped vertical list for Sailors/Discover tab
+   * When true: Renders SailorsGroupedList with sections (Following, Fleet Activity, Class Experts, Discover)
+   *            Scannable rows replace TikTok-style full-screen paging
+   * When false: Uses existing DiscoverScreen with full-screen vertical pager
+   */
+  USE_GROUPED_DISCOVER_LIST: true,
+
+  // =========================================================================
+  // COLLABORATION FEATURES (Apple-style collaboration design)
+  // =========================================================================
+
+  /**
+   * Show collaborator avatar row on race detail hero header
+   * When true: Displays crew member avatars with presence dots below race metadata
+   *            Tapping opens the collaboration popover
+   * When false: Hero header shows only countdown, name, and metadata
+   */
+  ENABLE_CREW_AVATARS_HEADER: true,
+
+  /**
+   * Enable race crew chat (Messages-style conversation alongside race prep)
+   * When true: Shows crew chat as a bottom sheet on race detail screen
+   *            System messages auto-post when checklist items are completed
+   * When false: No chat UI on race detail
+   */
+  ENABLE_RACE_CREW_CHAT: true,
+
+  /**
+   * Enable collaboration popover (Apple-style collaborator details)
+   * When true: Tapping avatar row opens popover with crew list, recent activity, manage button
+   * When false: Avatar row taps do nothing
+   */
+  ENABLE_COLLABORATION_POPOVER: true,
+
+  /**
+   * Enable realtime presence indicators on collaborator avatars
+   * When true: Green dots on avatars of crew members currently viewing the race
+   * When false: Avatars shown without presence state
+   */
+  ENABLE_RACE_PRESENCE: true,
+
+  /**
+   * Auto-post system messages to race_messages when checklist items are completed
+   * When true: Completing a checklist item inserts a system message
+   * When false: Checklist completions are not surfaced in chat
+   */
+  ENABLE_CHECKLIST_SYSTEM_MESSAGES: true,
 } as const;
 
 // =============================================================================

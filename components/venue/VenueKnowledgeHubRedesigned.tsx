@@ -8,7 +8,7 @@
  * - Conditions sparklines
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,12 +19,14 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens, colors } from '@/constants/designSystem';
 import { VenueHeroMap } from './VenueHeroMap';
-import { RacingAreaCard, RacingAreaCardList } from './RacingAreaCard';
+import { RacingAreaCard } from './RacingAreaCard';
 import { TufteLiveConditions } from './TufteLiveConditions';
-import { UnifiedKnowledgeFeed } from './UnifiedKnowledgeFeed';
+import { CommunityFeed } from './feed/CommunityFeed';
+import { PostComposer } from './post/PostComposer';
 import { UnknownAreaPrompt, UnknownAreaBanner } from './UnknownAreaPrompt';
 import { CommunityAreaBadge } from './CommunityAreaBadge';
 import {
@@ -33,6 +35,8 @@ import {
   type CreateCommunityAreaParams,
 } from '@/services/venue/CommunityVenueCreationService';
 import { useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
+import { useMapPinnedPosts } from '@/hooks/useCommunityFeed';
+import type { FeedPost, CurrentConditions } from '@/types/community-feed';
 
 // Dynamic import helper for expo-location (native only)
 let LocationModule: typeof import('expo-location') | null = null;
@@ -64,19 +68,24 @@ interface VenueKnowledgeHubRedesignedProps {
   onShowMap?: () => void;
   onSaveVenue?: () => void;
   isSaved?: boolean;
+  /** When true, suppress the built-in header (used when parent renders TabScreenToolbar) */
+  hideHeader?: boolean;
 }
 
 export function VenueKnowledgeHubRedesigned({
   venueId,
   venueName,
-  venueRegion,
+  venueRegion: _venueRegion,
   venueCountry,
   latitude,
   longitude,
-  onShowMap,
+  onShowMap: _onShowMap,
   onSaveVenue,
   isSaved = false,
+  hideHeader = false,
 }: VenueKnowledgeHubRedesignedProps) {
+  const router = useRouter();
+
   // State
   const [racingAreas, setRacingAreas] = useState<VenueRacingArea[]>([]);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -91,11 +100,14 @@ export function VenueKnowledgeHubRedesigned({
   // Manual pin placement (for creating areas without GPS)
   const [manualPinLocation, setManualPinLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // Mock knowledge feed items (would come from hooks in real implementation)
-  const [knowledgeItems, setKnowledgeItems] = useState<any[]>([]);
+  // Community feed composer
+  const [showComposer, setShowComposer] = useState(false);
+
+  // Map pinned posts for overlay
+  const { data: mapPinnedPosts } = useMapPinnedPosts(venueId);
 
   // Get live weather
-  const { weather: liveWeather, isLoading: weatherLoading } = useVenueLiveWeather(
+  const { weather: liveWeather } = useVenueLiveWeather(
     latitude,
     longitude,
     venueId,
@@ -215,30 +227,50 @@ export function VenueKnowledgeHubRedesigned({
       })
     : [];
 
+  // Current conditions for community feed condition matching
+  const currentConditions: CurrentConditions | undefined = useMemo(() => {
+    if (!liveWeather) return undefined;
+    return {
+      windSpeed: liveWeather.windSpeed,
+      windDirection: liveWeather.windDirection,
+      windGusts: liveWeather.windGusts,
+      waveHeight: liveWeather.waveHeight,
+      currentSpeed: liveWeather.currentSpeed,
+      tidalState: liveWeather.tidalState as CurrentConditions['tidalState'],
+    };
+  }, [liveWeather]);
+
+  // Navigation handlers for community feed
+  const handlePostPress = useCallback((post: FeedPost) => {
+    router.push(`/venue/post/${post.id}`);
+  }, [router]);
+
   return (
     <View style={styles.container}>
-      {/* Header (Tufte: minimal chrome, inline conditions) */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.venueName} numberOfLines={1}>{venueName}</Text>
-          <Text style={styles.venueSubtitle}>
-            {venueCountry}
-            {liveWeather?.windSpeed && ` · ${liveWeather.windSpeed}kt ${getWindDirectionText(liveWeather.windDirection)}`}
-          </Text>
+      {/* Header (Tufte: minimal chrome, inline conditions) - hidden when parent provides toolbar */}
+      {!hideHeader && (
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.venueName} numberOfLines={1}>{venueName}</Text>
+            <Text style={styles.venueSubtitle}>
+              {venueCountry}
+              {liveWeather?.windSpeed && ` · ${liveWeather.windSpeed}kt ${getWindDirectionText(liveWeather.windDirection)}`}
+            </Text>
+          </View>
+          {onSaveVenue && (
+            <Pressable
+              style={[styles.saveButton, isSaved && styles.saveButtonActive]}
+              onPress={onSaveVenue}
+            >
+              <Ionicons
+                name={isSaved ? 'bookmark' : 'bookmark-outline'}
+                size={20}
+                color={isSaved ? '#2563EB' : '#6B7280'}
+              />
+            </Pressable>
+          )}
         </View>
-        {onSaveVenue && (
-          <Pressable
-            style={[styles.saveButton, isSaved && styles.saveButtonActive]}
-            onPress={onSaveVenue}
-          >
-            <Ionicons
-              name={isSaved ? 'bookmark' : 'bookmark-outline'}
-              size={20}
-              color={isSaved ? '#2563EB' : '#6B7280'}
-            />
-          </Pressable>
-        )}
-      </View>
+      )}
 
       <ScrollView
         style={styles.scrollView}
@@ -271,6 +303,8 @@ export function VenueKnowledgeHubRedesigned({
           tideHeight={liveWeather?.tidalHeight}
           tideState={liveWeather?.tidalState as any}
           currentSpeed={liveWeather?.currentSpeed}
+          mapPinnedPosts={mapPinnedPosts}
+          onPostMarkerPress={handlePostPress}
         />
 
         {/* Tufte Live Conditions - Dense data display */}
@@ -359,10 +393,10 @@ export function VenueKnowledgeHubRedesigned({
           </View>
         )}
 
-        {/* Knowledge Feed */}
+        {/* Community Knowledge Feed */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Local Knowledge</Text>
+            <Text style={styles.sectionTitle}>Community Knowledge</Text>
             {selectedArea && (
               <Pressable onPress={() => setSelectedAreaId(null)}>
                 <Text style={styles.clearFilter}>Show all</Text>
@@ -370,11 +404,12 @@ export function VenueKnowledgeHubRedesigned({
             )}
           </View>
 
-          <UnifiedKnowledgeFeed
+          <CommunityFeed
             venueId={venueId}
             racingAreaId={selectedAreaId}
-            items={knowledgeItems}
-            isLoading={false}
+            currentConditions={currentConditions}
+            onPostPress={handlePostPress}
+            onCreatePost={() => setShowComposer(true)}
             emptyMessage={
               selectedArea
                 ? `No knowledge shared for ${selectedArea.name} yet`
@@ -383,6 +418,22 @@ export function VenueKnowledgeHubRedesigned({
           />
         </View>
       </ScrollView>
+
+      {/* FAB for creating new posts */}
+      <Pressable
+        style={styles.fab}
+        onPress={() => setShowComposer(true)}
+      >
+        <Ionicons name="add" size={24} color="#FFFFFF" />
+      </Pressable>
+
+      {/* Post Composer Modal */}
+      <PostComposer
+        visible={showComposer}
+        venueId={venueId}
+        racingAreaId={selectedAreaId}
+        onDismiss={() => setShowComposer(false)}
+      />
 
       {/* Unknown Area Prompt Modal - Uses manual pin > user GPS > venue center as fallback */}
       <UnknownAreaPrompt
@@ -539,6 +590,23 @@ const styles = StyleSheet.create({
   selectedAreaDescription: {
     ...TufteTokens.typography.tertiary,
     color: '#6B7280',
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    right: TufteTokens.spacing.section,
+    bottom: Platform.OS === 'ios' ? 100 : 80,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#2563EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...TufteTokens.shadows.subtle,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
 });
 

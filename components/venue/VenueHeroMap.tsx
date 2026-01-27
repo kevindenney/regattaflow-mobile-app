@@ -7,13 +7,15 @@
  */
 
 import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, Pressable, Platform, Alert, TurboModuleRegistry } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, Pressable, Platform, TurboModuleRegistry } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
 import { RacingAreaCircleOverlay } from './RacingAreaCircleOverlay';
 import { UnknownAreaBanner } from './UnknownAreaPrompt';
 import { VenuePreviewCard } from './VenuePreviewCard';
+import { MapPostMarkers } from './map/MapPostMarkers';
 import type { VenueRacingArea } from '@/services/venue/CommunityVenueCreationService';
+import type { FeedPost } from '@/types/community-feed';
 
 // Safely import react-native-maps
 let MapView: any = null;
@@ -27,6 +29,7 @@ if (Platform.OS !== 'web') {
   try {
     const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
     if (nativeModule) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const maps = require('react-native-maps');
       MapView = maps.default;
       Marker = maps.Marker;
@@ -81,6 +84,9 @@ export interface VenueHeroMapProps {
   currentSpeed?: number;
   currentData?: number[];
   discussionCount?: number;
+  // Community feed map pins
+  mapPinnedPosts?: FeedPost[];
+  onPostMarkerPress?: (post: FeedPost) => void;
 }
 
 export function VenueHeroMap({
@@ -100,7 +106,7 @@ export function VenueHeroMap({
   height = 280,
   showUserLocation = true,
   showCompass = true,
-  showConditionsOverlay = false,
+  showConditionsOverlay: _showConditionsOverlay = false,
   isLoading = false,
   // Weather data for preview card
   windSpeed,
@@ -112,6 +118,8 @@ export function VenueHeroMap({
   currentSpeed,
   currentData,
   discussionCount,
+  mapPinnedPosts,
+  onPostMarkerPress,
 }: VenueHeroMapProps) {
   const mapRef = useRef<any>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -257,6 +265,14 @@ export function VenueHeroMap({
           onAreaPress={onAreaSelect}
           showLabels
         />
+
+        {/* Community feed post markers */}
+        {mapPinnedPosts && mapPinnedPosts.length > 0 && (
+          <MapPostMarkers
+            posts={mapPinnedPosts}
+            onPostPress={onPostMarkerPress}
+          />
+        )}
 
         {/* Manual pin for area creation */}
         {manualPinLocation && Marker && (

@@ -159,7 +159,7 @@ export function useFleetActivity(): UseFleetActivityResult {
       const racesByFleet = new Map<string, FleetMateRace[]>();
 
       (races || []).forEach((race: any) => {
-        const memberInfo = memberInfoMap.get(race.user_id);
+        const memberInfo = memberInfoMap.get(race.created_by);
         if (!memberInfo) return;
 
         const startDate = new Date(race.start_date);
@@ -170,7 +170,7 @@ export function useFleetActivity(): UseFleetActivityResult {
           name: race.name,
           startDate: race.start_date,
           venue: race.venue,
-          userId: race.user_id,
+          userId: race.created_by,
           userName: memberInfo.name,
           avatarEmoji: memberInfo.emoji,
           avatarColor: memberInfo.color,

@@ -1,4 +1,6 @@
 /**
+ * @deprecated Use PostComposer from components/venue/post/PostComposer.tsx instead.
+ *
  * DiscussionComposer - Create new discussion modal
  */
 

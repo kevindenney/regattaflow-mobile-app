@@ -1,4 +1,6 @@
 /**
+ * @deprecated Use PostDetailScreen from components/venue/post/PostDetailScreen.tsx instead.
+ *
  * DiscussionThread - Single discussion view with comments
  */
 

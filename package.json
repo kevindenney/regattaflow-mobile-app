@@ -11,6 +11,7 @@
     "build:web": "NODE_OPTIONS='--max-old-space-size=3072' npx expo export --platform web && node scripts/copy-static.js",
     "postinstall": "node scripts/fix-peer-deps.js",
     "seed:rhkyc": "node scripts/seed-rhkyc-demo.mjs",
+    "seed:sailors": "node scripts/seed-sailors-tab-demo.mjs",
     "lint": "npx eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "npx tsc --noEmit"
   },

@@ -205,6 +205,40 @@ class CourseCatalogService {
   getLevelById(levelId: string): Level | undefined {
     return this.catalog.levels.find((l) => l.id === levelId);
   }
+
+  /**
+   * Get behavior-based topic categories for organizing courses by
+   * race phase / common problem rather than skill level.
+   * Maps to "Organize by Behavior" principle from Apple's Design Discoverable Interfaces.
+   */
+  getTopics(): { id: string; label: string; description: string; icon: string }[] {
+    return [
+      { id: 'starting', label: 'Starts', description: 'Win the start line', icon: 'flag' },
+      { id: 'upwind', label: 'Upwind', description: 'Beat to windward', icon: 'arrow-up' },
+      { id: 'marks', label: 'Marks', description: 'Rounding & laylines', icon: 'navigate' },
+      { id: 'downwind', label: 'Downwind', description: 'Fast runs & gybes', icon: 'arrow-down' },
+      { id: 'strategy', label: 'Strategy', description: 'Race tactics & weather', icon: 'bulb' },
+      { id: 'boat-handling', label: 'Boat Skills', description: 'Trim, maneuvers & rules', icon: 'boat' },
+      { id: 'preparation', label: 'Race Prep', description: 'Pre-race planning', icon: 'clipboard' },
+    ];
+  }
+
+  /**
+   * Get courses matching a behavior-based topic tag.
+   * Courses can appear in multiple topics based on their tags.
+   */
+  getCoursesByTopic(topicId: string): Course[] {
+    return this.getAllCourses().filter((course) => {
+      const tags = course.tags || [];
+      const skills = course.skillsUsed || [];
+      // Match by tag, skill, or title keywords
+      return (
+        tags.includes(topicId) ||
+        skills.some((s) => s.toLowerCase().includes(topicId)) ||
+        course.title.toLowerCase().includes(topicId)
+      );
+    });
+  }
 }
 
 export default new CourseCatalogService();

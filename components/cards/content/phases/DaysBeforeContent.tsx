@@ -66,6 +66,7 @@ import { InteractiveChecklist } from '@/components/checklist-tools/InteractiveCh
 import { PositionAssignmentPanel, MeetingPointPicker } from '@/components/checklist-tools/crew';
 import { hasTool } from '@/lib/checklists/toolRegistry';
 import { CATEGORY_CONFIG, ChecklistCategory } from '@/types/checklists';
+import { IOSInsetGroupedSection } from '@/components/ui/ios';
 import type { RaceType } from '@/types/raceEvents';
 import { getLearningLinks, getLearningBrief, getItemCategory, getLessonId, getLearningForItem } from '@/data/learningLinks';
 import { useUserSettings } from '@/hooks/useUserSettings';
@@ -943,6 +944,22 @@ export function DaysBeforeContent({
   // ==========================================================================
   // RENDER
   // ==========================================================================
+
+  // DEBUG: Log render state to identify blank card issue
+  console.log('[DaysBeforeContent] RENDER STATE:', {
+    raceId: race.id,
+    raceName: race.name,
+    raceType,
+    isTeamRace,
+    isInitialLoading,
+    hasData,
+    categoriesCount: categories.length,
+    categories: categories.join(','),
+    visibleCategoriesCount: visibleCategories.length,
+    totalCount,
+    completedCount,
+    isExpanded,
+  });
 
   // Only show loading skeleton on initial load - when we have no cached data yet
   // On subsequent tab switches, show existing data immediately (background refresh if needed)

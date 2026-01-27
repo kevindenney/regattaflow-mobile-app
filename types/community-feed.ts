@@ -1,0 +1,195 @@
+/**
+ * Community Knowledge Feed Types
+ *
+ * Types for the Reddit-style community knowledge feed system.
+ */
+
+// ============================================================================
+// ENUMS & CONSTANTS
+// ============================================================================
+
+export type PostType = 'tip' | 'question' | 'report' | 'discussion' | 'safety_alert';
+
+export type FeedSortType = 'hot' | 'new' | 'rising' | 'top' | 'conditions_match';
+
+export type VenueRole = 'moderator' | 'race_officer' | 'coach' | 'contributor';
+
+export type TidePhase = 'rising' | 'falling' | 'high' | 'low' | 'ebb' | 'flood';
+
+export type TopPeriod = 'today' | 'week' | 'month' | 'all';
+
+export const POST_TYPE_CONFIG: Record<PostType, {
+  label: string;
+  icon: string;
+  color: string;
+  bgColor: string;
+}> = {
+  tip: { label: 'Tip', icon: 'bulb-outline', color: '#D97706', bgColor: '#FEF3C7' },
+  question: { label: 'Question', icon: 'help-circle-outline', color: '#2563EB', bgColor: '#DBEAFE' },
+  report: { label: 'Report', icon: 'document-text-outline', color: '#059669', bgColor: '#D1FAE5' },
+  discussion: { label: 'Discussion', icon: 'chatbubbles-outline', color: '#6B7280', bgColor: '#F3F4F6' },
+  safety_alert: { label: 'Safety', icon: 'warning-outline', color: '#DC2626', bgColor: '#FEE2E2' },
+};
+
+// ============================================================================
+// CORE TYPES
+// ============================================================================
+
+export interface FeedPost {
+  id: string;
+  venue_id: string;
+  author_id: string | null;
+  title: string;
+  body: string | null;
+  post_type: PostType;
+  category: string | null;
+  is_public: boolean;
+  fleet_id: string | null;
+  racing_area_id: string | null;
+  location_lat: number | null;
+  location_lng: number | null;
+  location_label: string | null;
+  upvotes: number;
+  downvotes: number;
+  comment_count: number;
+  view_count: number;
+  pinned: boolean;
+  is_resolved: boolean;
+  accepted_answer_id: string | null;
+  created_at: string;
+  updated_at: string;
+  last_activity_at: string;
+  // Joined fields
+  author?: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  };
+  racing_area?: {
+    id: string;
+    area_name: string;
+  };
+  topic_tags?: TopicTag[];
+  condition_tags?: ConditionTag[];
+  user_vote?: number | null;
+  // Computed fields
+  hot_score?: number;
+  condition_match_score?: number;
+  author_venue_stats?: AuthorVenueStats;
+}
+
+export interface ConditionTag {
+  id: string;
+  discussion_id: string;
+  wind_direction_min: number | null;
+  wind_direction_max: number | null;
+  wind_speed_min: number | null;
+  wind_speed_max: number | null;
+  tide_phase: TidePhase | null;
+  wave_height_min: number | null;
+  wave_height_max: number | null;
+  current_speed_min: number | null;
+  current_speed_max: number | null;
+  season: string | null;
+  time_of_day: string | null;
+  label: string | null;
+}
+
+export interface TopicTag {
+  id: string;
+  name: string;
+  display_name: string;
+  icon: string | null;
+  color: string | null;
+  sort_order: number;
+}
+
+export interface ThreadedComment {
+  id: string;
+  discussion_id: string;
+  parent_id: string | null;
+  author_id: string | null;
+  body: string;
+  upvotes: number;
+  downvotes: number;
+  created_at: string;
+  updated_at: string;
+  depth: number;
+  author?: {
+    id: string;
+    full_name: string | null;
+    avatar_url: string | null;
+  };
+  user_vote?: number | null;
+  replies?: ThreadedComment[];
+}
+
+export interface AuthorVenueStats {
+  race_count: number;
+  avg_finish: number | null;
+  best_finish: number | null;
+}
+
+export interface CurrentConditions {
+  windSpeed: number | null;
+  windDirection: number | null;
+  windGusts?: number | null;
+  waveHeight?: number | null;
+  currentSpeed?: number | null;
+  tidalState?: TidePhase | null;
+  season?: string;
+}
+
+export interface MembershipStatus {
+  isMember: boolean;
+  isModerator: boolean;
+  roles: VenueRole[];
+}
+
+// ============================================================================
+// PARAMS
+// ============================================================================
+
+export interface CreatePostParams {
+  venue_id: string;
+  title: string;
+  body?: string;
+  post_type: PostType;
+  category?: string;
+  is_public?: boolean;
+  fleet_id?: string;
+  racing_area_id?: string;
+  location_lat?: number;
+  location_lng?: number;
+  location_label?: string;
+  topic_tag_ids?: string[];
+  condition_tags?: Omit<ConditionTag, 'id' | 'discussion_id'>[];
+}
+
+export interface UpdatePostParams {
+  title?: string;
+  body?: string;
+  post_type?: PostType;
+  category?: string;
+  is_resolved?: boolean;
+  accepted_answer_id?: string;
+}
+
+export interface FeedQueryParams {
+  venueId: string;
+  sort?: FeedSortType;
+  postType?: PostType;
+  tagIds?: string[];
+  racingAreaId?: string | null;
+  topPeriod?: TopPeriod;
+  currentConditions?: CurrentConditions;
+  page?: number;
+  limit?: number;
+}
+
+export interface MapBounds {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}

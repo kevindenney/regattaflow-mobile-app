@@ -6,6 +6,9 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import {
+  Alert,
+  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import CourseCatalogService, { type Course } from '@/services/CourseCatalogService';
@@ -21,6 +24,7 @@ import { IOS_COLORS } from '@/components/cards/constants';
 import { CourseRow } from '@/components/learn/CourseRow';
 import { InProgressCard } from '@/components/learn/InProgressCard';
 import { LevelTabs } from '@/components/learn/LevelTabs';
+import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
 
 // Mock progress data - in production this would come from LessonProgressService
 // This demonstrates the Tufte-inspired progress tracking
@@ -45,27 +49,41 @@ const MOCK_PROGRESS: Record<string, CourseProgress> = {
   },
 };
 
+type BrowseMode = 'level' | 'topic';
+
 export default function LearnScreen() {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(false);
-  const [selectedLevel, setSelectedLevel] = useState<string>('level-1'); // Start with Fundamentals (natural progression)
+  const [browseMode, setBrowseMode] = useState<BrowseMode>('topic'); // Default to behavior-based view
+  const [selectedLevel, setSelectedLevel] = useState<string>('level-1');
+  const [selectedTopic, setSelectedTopic] = useState<string>('starting');
   const [showAllCourses, setShowAllCourses] = useState(false);
 
   const isDesktop = mounted && width > 768;
 
   // Get data from catalog service
   const levels = CourseCatalogService.getLevels();
+  const topics = CourseCatalogService.getTopics();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const currentLevel = levels.find((l) => l.id === selectedLevel);
-  const coursesToShow = currentLevel
+  const levelCoursesToShow = currentLevel
     ? showAllCourses
       ? currentLevel.courses
-      : currentLevel.courses.slice(0, 6) // Show more courses with compact rows
+      : currentLevel.courses.slice(0, 6)
     : [];
+
+  const topicCourses = useMemo(
+    () => CourseCatalogService.getCoursesByTopic(selectedTopic),
+    [selectedTopic]
+  );
+  const currentTopic = topics.find((t) => t.id === selectedTopic);
+
+  const coursesToShow = browseMode === 'level' ? levelCoursesToShow : topicCourses;
 
   // Find the in-progress course to feature (Tufte: featured card earns its space)
   const allCourses = useMemo(() => CourseCatalogService.getAllCourses(), []);
@@ -111,7 +129,23 @@ export default function LearnScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <TabScreenToolbar
+        title="Learn"
+        topInset={insets.top}
+        actions={[
+          {
+            icon: 'search-outline',
+            label: 'Search courses',
+            onPress: () => Alert.alert('Search', 'Course search coming soon'),
+          },
+          {
+            icon: 'bookmark-outline',
+            label: 'Saved courses',
+            onPress: () => Alert.alert('Saved', 'Saved courses coming soon'),
+          },
+        ]}
+      />
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
         <View style={[styles.content, isDesktop && styles.contentDesktop]}>
           {/* In-Progress Course Card (Tufte: earns space with real content) */}
@@ -126,42 +160,144 @@ export default function LearnScreen() {
             />
           )}
 
-          {/* Learning Path Navigation (Tufte: removed redundant heading) */}
-          <View style={styles.learningPathSection}>
-            <LevelTabs
-              levels={levels}
-              selectedLevelId={selectedLevel}
-              onLevelSelect={(levelId) => {
-                setSelectedLevel(levelId);
-                setShowAllCourses(false);
-              }}
-            />
+          {/* Browse Mode Segmented Control */}
+          <View style={styles.browseModeContainer}>
+            <View style={styles.browseModeSegment}>
+              <Pressable
+                style={[
+                  styles.browseModeTab,
+                  browseMode === 'topic' && styles.browseModeTabActive,
+                ]}
+                onPress={() => {
+                  setBrowseMode('topic');
+                  setShowAllCourses(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.browseModeTabText,
+                    browseMode === 'topic' && styles.browseModeTabTextActive,
+                  ]}
+                >
+                  By Topic
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.browseModeTab,
+                  browseMode === 'level' && styles.browseModeTabActive,
+                ]}
+                onPress={() => {
+                  setBrowseMode('level');
+                  setShowAllCourses(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.browseModeTabText,
+                    browseMode === 'level' && styles.browseModeTabTextActive,
+                  ]}
+                >
+                  By Level
+                </Text>
+              </Pressable>
+            </View>
+          </View>
 
-            {/* Level Description - tightened to single line subtitle */}
-            {currentLevel && (
+          {/* Navigation Tabs — topic or level based */}
+          <View style={styles.learningPathSection}>
+            {browseMode === 'level' ? (
+              <LevelTabs
+                levels={levels}
+                selectedLevelId={selectedLevel}
+                onLevelSelect={(levelId) => {
+                  setSelectedLevel(levelId);
+                  setShowAllCourses(false);
+                }}
+              />
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.topicTabsContainer}
+              >
+                {topics.map((topic) => {
+                  const isActive = topic.id === selectedTopic;
+                  return (
+                    <TouchableOpacity
+                      key={topic.id}
+                      style={[
+                        styles.topicTab,
+                        isActive && styles.topicTabActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedTopic(topic.id);
+                        setShowAllCourses(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={(topic.icon + (isActive ? '' : '-outline')) as any}
+                        size={16}
+                        color={isActive ? IOS_COLORS.blue : IOS_COLORS.secondaryLabel}
+                      />
+                      <Text
+                        style={[
+                          styles.topicTabText,
+                          isActive && styles.topicTabTextActive,
+                        ]}
+                      >
+                        {topic.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Description */}
+            {browseMode === 'level' && currentLevel && (
               <Text style={styles.levelDescriptionInline}>
                 {currentLevel.description}
               </Text>
             )}
+            {browseMode === 'topic' && currentTopic && (
+              <Text style={styles.levelDescriptionInline}>
+                {currentTopic.description}
+                {topicCourses.length > 0 ? ` \u00B7 ${topicCourses.length} course${topicCourses.length !== 1 ? 's' : ''}` : ''}
+              </Text>
+            )}
           </View>
 
-          {/* Course List (Tufte: compact rows, higher information density) */}
+          {/* Course List */}
           <View style={styles.coursesList}>
-            {coursesToShow
-              .filter(course => course.slug !== inProgressCourse?.slug) // Don't duplicate in-progress
-              .map((course) => (
-                <CourseRow
-                  key={course.id}
-                  course={course}
-                  progress={MOCK_PROGRESS[course.slug]?.progress}
-                  isInProgress={MOCK_PROGRESS[course.slug]?.progress !== undefined && MOCK_PROGRESS[course.slug]?.progress < 100}
-                  onPress={() => handleCoursePress(course)}
-                />
-              ))}
+            {coursesToShow.length === 0 ? (
+              <View style={styles.topicEmptyState}>
+                <Ionicons name="book-outline" size={32} color={IOS_COLORS.systemGray3} />
+                <Text style={styles.topicEmptyText}>
+                  No courses yet for this topic
+                </Text>
+                <Text style={styles.topicEmptySubtext}>
+                  New courses are added regularly
+                </Text>
+              </View>
+            ) : (
+              coursesToShow
+                .filter(course => course.slug !== inProgressCourse?.slug)
+                .map((course) => (
+                  <CourseRow
+                    key={course.id}
+                    course={course}
+                    progress={MOCK_PROGRESS[course.slug]?.progress}
+                    isInProgress={MOCK_PROGRESS[course.slug]?.progress !== undefined && MOCK_PROGRESS[course.slug]?.progress < 100}
+                    onPress={() => handleCoursePress(course)}
+                  />
+                ))
+            )}
           </View>
 
-          {/* Show More Button */}
-          {currentLevel && currentLevel.courses.length > 3 && !showAllCourses && (
+          {/* Show More Button — only for level view */}
+          {browseMode === 'level' && currentLevel && currentLevel.courses.length > 3 && !showAllCourses && (
             <TouchableOpacity
               style={styles.showMoreButton}
               onPress={() => setShowAllCourses(true)}
@@ -175,14 +311,14 @@ export default function LearnScreen() {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   scrollView: {
     flex: 1,
@@ -233,6 +369,86 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 17,
     color: IOS_COLORS.blue,
+  },
+  // Browse Mode Segmented Control
+  browseModeContainer: {
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  browseModeSegment: {
+    flexDirection: 'row',
+    backgroundColor: IOS_COLORS.systemGray6 ?? '#F2F2F7',
+    borderRadius: 8,
+    padding: 2,
+  },
+  browseModeTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  browseModeTabActive: {
+    backgroundColor: IOS_COLORS.systemBackground,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      default: {
+        elevation: 1,
+      },
+    }),
+  },
+  browseModeTabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  browseModeTabTextActive: {
+    color: IOS_COLORS.label,
+    fontWeight: '600',
+  },
+  // Topic Tabs
+  topicTabsContainer: {
+    gap: 8,
+    paddingRight: 16,
+  },
+  topicTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: IOS_COLORS.systemGray6 ?? '#F2F2F7',
+  },
+  topicTabActive: {
+    backgroundColor: `${IOS_COLORS.blue}12`,
+  },
+  topicTabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  topicTabTextActive: {
+    color: IOS_COLORS.blue,
+    fontWeight: '600',
+  },
+  topicEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 6,
+  },
+  topicEmptyText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 4,
+  },
+  topicEmptySubtext: {
+    fontSize: 13,
+    color: IOS_COLORS.tertiaryLabel,
   },
   learningPathSection: {
     paddingHorizontal: 0,

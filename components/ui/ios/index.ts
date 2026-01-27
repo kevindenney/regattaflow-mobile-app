@@ -6,6 +6,7 @@
 // List components
 export { IOSListSection } from './IOSListSection';
 export { IOSListItem } from './IOSListItem';
+export { IOSInsetGroupedSection } from './IOSInsetGroupedSection';
 
 // Controls
 export { IOSSegmentedControl } from './IOSSegmentedControl';

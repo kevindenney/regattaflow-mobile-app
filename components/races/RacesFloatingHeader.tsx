@@ -1,11 +1,12 @@
 /**
- * Races Floating Header - Redesigned
+ * Races Floating Header - Redesigned with TabScreenToolbar
  *
- * Clean header bar for the races screen:
+ * Consistent tab screen header using the shared TabScreenToolbar:
  * - Large left-aligned "Races" title
- * - Race counter ("13 of 22 | 11 upcoming")
- * - Green circular + button on right
+ * - Race counter subtitle ("13 of 22 | 11 upcoming")
+ * - White capsule with search + add icons
  * - Segmented control for filtering (Upcoming | Past | All)
+ * - Search bar (toggled via capsule icon)
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -13,7 +14,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ActivityIndicator,
   StyleSheet,
   Platform,
   Modal,
@@ -25,12 +25,14 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  interpolate,
-  Extrapolation,
 } from 'react-native-reanimated';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
 import { IOSSegmentedControl } from '@/components/ui/ios';
+import {
+  TabScreenToolbar,
+  capsuleStyles,
+} from '@/components/ui/TabScreenToolbar';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -100,7 +102,7 @@ export interface RacesFloatingHeaderProps {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
- * Redesigned Header Component
+ * Races Header built on TabScreenToolbar
  */
 export function RacesFloatingHeader({
   topInset,
@@ -112,7 +114,7 @@ export function RacesFloatingHeader({
   onNewSeason,
   filterSegment = 'upcoming',
   onFilterChange,
-  scrollOffset = 0,
+  scrollOffset: _scrollOffset = 0,
   onSearchChange,
   onAddButtonLayout,
   measureTrigger,
@@ -225,66 +227,73 @@ export function RacesFloatingHeader({
 
   const isLoading = loadingInsights || weatherLoading;
 
-  // Build the race counter parts
+  // Build the race counter subtitle
   const hasIndexCounter = Boolean(currentRaceIndex && totalRaces);
   const hasUpcoming = upcomingRaces !== undefined && upcomingRaces > 0;
-  const showCounter = hasIndexCounter || hasUpcoming;
+  const subtitleParts: string[] = [];
+  if (hasIndexCounter) {
+    subtitleParts.push(`${currentRaceIndex} of ${totalRaces}`);
+  }
+  if (hasUpcoming) {
+    subtitleParts.push(`${upcomingRaces} upcoming`);
+  }
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' | ') : undefined;
+
+  // Custom right capsule with search + add buttons (preserving add button ref)
+  const rightCapsule = (
+    <View style={capsuleStyles.capsule}>
+      {/* Search toggle */}
+      <AnimatedPressable
+        style={capsuleStyles.actionButton}
+        accessibilityLabel="Search races"
+        accessibilityRole="button"
+        onPress={handleSearchToggle}
+      >
+        <Ionicons
+          name={searchVisible ? 'search' : 'search-outline'}
+          size={20}
+          color={searchVisible ? IOS_COLORS.systemBlue : IOS_COLORS.secondaryLabel}
+        />
+      </AnimatedPressable>
+
+      <View style={capsuleStyles.capsuleDivider} />
+
+      {/* Add button (with ref for onboarding spotlight) */}
+      <View ref={addButtonRef} collapsable={false}>
+        <AnimatedPressable
+          style={[capsuleStyles.actionButton, addButtonAnimStyle]}
+          onPress={handleAddPress}
+          onPressIn={() => {
+            addButtonScale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
+          }}
+          onPressOut={() => {
+            addButtonScale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
+          }}
+          accessibilityLabel="Add race"
+          accessibilityRole="button"
+        >
+          <Ionicons name="add" size={20} color={IOS_COLORS.secondaryLabel} />
+        </AnimatedPressable>
+      </View>
+    </View>
+  );
 
   return (
     <>
-      <View style={[styles.container, { paddingTop: topInset }]}>
-        {/* Nav bar: title left | counter center | add right */}
-        <View style={styles.navBar}>
-          {/* Left: Large Title */}
-          <View style={styles.titleSection}>
-            <Text style={styles.largeTitle}>Races</Text>
-            {isLoading && (
-              <ActivityIndicator
-                size="small"
-                color={IOS_COLORS.secondaryLabel}
-                style={styles.loadingIndicator}
-              />
-            )}
-            {!isOnline && <OfflineIndicator />}
+      <TabScreenToolbar
+        title="Races"
+        subtitle={subtitle}
+        onSubtitlePress={hasUpcoming ? onUpcomingPress : undefined}
+        topInset={topInset}
+        isLoading={isLoading}
+        rightContent={rightCapsule}
+      >
+        {/* Offline indicator */}
+        {!isOnline && (
+          <View style={styles.offlineContainer}>
+            <OfflineIndicator />
           </View>
-
-          {/* Center: Race Counter */}
-          {showCounter ? (
-            <View style={styles.counterSection}>{hasIndexCounter && (
-              <Text style={styles.counterText}>{currentRaceIndex} of {totalRaces}</Text>
-            )}{hasIndexCounter && hasUpcoming && (
-              <Text style={styles.counterText}> | </Text>
-            )}{hasUpcoming && (
-              <Pressable
-                onPress={onUpcomingPress}
-                disabled={!onUpcomingPress}
-                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-              >
-                <Text style={[styles.counterText, onUpcomingPress && styles.counterLink]}>
-                  {upcomingRaces} upcoming
-                </Text>
-              </Pressable>
-            )}</View>
-          ) : null}
-
-          {/* Right: Green Add Button */}
-          <View ref={addButtonRef} collapsable={false}>
-            <AnimatedPressable
-              style={[styles.addButton, addButtonAnimStyle]}
-              onPress={handleAddPress}
-              onPressIn={() => {
-                addButtonScale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
-              }}
-              onPressOut={() => {
-                addButtonScale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
-              }}
-              accessibilityLabel="Add race"
-              accessibilityRole="button"
-            >
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-            </AnimatedPressable>
-          </View>
-        </View>
+        )}
 
         {/* Search Bar (conditionally visible) */}
         {searchVisible && (
@@ -320,7 +329,7 @@ export function RacesFloatingHeader({
             />
           </View>
         )}
-      </View>
+      </TabScreenToolbar>
 
       {/* Add Menu Modal */}
       <Modal
@@ -419,56 +428,9 @@ export function RacesFloatingHeader({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: IOS_COLORS.systemGroupedBackground,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: IOS_COLORS.separator,
-  },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 52,
-    paddingHorizontal: 16,
-  },
-  titleSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  largeTitle: {
-    fontSize: 34,
-    fontWeight: '700',
-    color: IOS_COLORS.label,
-    letterSpacing: -0.5,
-  },
-  loadingIndicator: {
-    marginLeft: 0,
-  },
-  counterSection: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  counterText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
-    letterSpacing: -0.2,
-  },
-  counterLink: {
-    color: IOS_COLORS.systemBlue,
-    textDecorationLine: 'underline',
-  },
-  addButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: IOS_COLORS.systemBlue,
-    alignItems: 'center',
-    justifyContent: 'center',
+  offlineContainer: {
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.xs,
   },
   searchContainer: {
     paddingHorizontal: IOS_SPACING.lg,

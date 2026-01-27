@@ -30,5 +30,11 @@ export { RaceCardSailorHeader } from './RaceCardSailorHeader';
 export { RaceCardContentSections } from './RaceCardContentSections';
 export { RaceCardActionBar } from './RaceCardActionBar';
 
+// Grouped list components (iOS HIG redesign)
+export { SailorsGroupedList } from './SailorsGroupedList';
+export { SailorRaceRow } from './SailorRaceRow';
+export type { SailorRaceRowData } from './SailorRaceRow';
+export { ExpertRow } from './ExpertRow';
+
 // Read-only content components
 export * from './read-only';

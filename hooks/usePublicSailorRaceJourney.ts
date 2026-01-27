@@ -37,9 +37,6 @@ export interface RaceData {
   name: string;
   race_series?: string;
   start_date: string;
-  start_time?: string;
-  venue_name?: string;
-  boat_class?: string;
   content_visibility?: string;
   prep_notes?: string;
   tuning_settings?: TuningSettings;
@@ -53,11 +50,11 @@ export interface RaceData {
  */
 export interface RaceResult {
   id: string;
-  race_id: string;
+  regatta_id: string;
   position?: number;
-  total_boats?: number;
+  points?: number;
+  status_code?: string;
   notes?: string;
-  rating_change?: number;
 }
 
 /**
@@ -140,6 +137,24 @@ export function usePublicSailorRaceJourney(
     setError(null);
 
     try {
+      // Resolve 'latest' to the most recent public race for the sailor
+      let resolvedRaceId = raceId;
+      if (raceId === 'latest') {
+        const { data: latestRace, error: latestError } = await supabase
+          .from('regattas')
+          .select('id')
+          .eq('created_by', sailorId)
+          .in('content_visibility', ['public', 'fleet'])
+          .order('start_date', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestError || !latestRace) {
+          throw new Error('No public races found for this sailor');
+        }
+        resolvedRaceId = latestRace.id;
+      }
+
       // Fetch all data in parallel for efficiency
       const [profileResult, raceResult, preparationResult, resultsResult] = await Promise.all([
         // Fetch sailor profile
@@ -171,11 +186,11 @@ export function usePublicSailorRaceJourney(
           const { data: raceData, error: raceError } = await supabase
             .from('regattas')
             .select(
-              `id, name, race_series, start_date, start_time, venue_name, boat_class,
+              `id, name, event_series_name, start_date,
                content_visibility, prep_notes, tuning_settings, post_race_notes,
                lessons_learned, metadata`
             )
-            .eq('id', raceId)
+            .eq('id', resolvedRaceId)
             .eq('created_by', sailorId)
             .single();
 
@@ -186,19 +201,22 @@ export function usePublicSailorRaceJourney(
             throw new Error('This race is private');
           }
 
-          return raceData as RaceData;
+          return {
+            ...raceData,
+            race_series: raceData.event_series_name,
+          } as RaceData;
         })(),
 
         // Fetch preparation data using service
-        sailorRacePreparationService.getPreparation(raceId, sailorId),
+        sailorRacePreparationService.getPreparation(resolvedRaceId, sailorId),
 
         // Fetch race results
         (async () => {
           const { data: resultsData, error: resultsError } = await supabase
             .from('race_results')
-            .select('id, race_id, position, total_boats, notes, rating_change')
-            .eq('race_id', raceId)
-            .eq('user_id', sailorId);
+            .select('id, regatta_id, position, points, status_code, notes')
+            .eq('regatta_id', resolvedRaceId)
+            .eq('sailor_id', sailorId);
 
           if (resultsError) throw resultsError;
           return resultsData as RaceResult[];

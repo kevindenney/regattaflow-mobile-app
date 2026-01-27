@@ -1,4 +1,6 @@
 /**
+ * @deprecated Use CommunityFeed from components/venue/feed/CommunityFeed.tsx instead.
+ *
  * DiscussionList - List of discussion threads for a venue
  * Reddit-style with upvotes, categories, and activity indicators
  */

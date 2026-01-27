@@ -32,6 +32,7 @@ import {
   SocialTimelineView,
   TeamLogisticsSection,
 } from '@/components/races';
+import { RaceListSection } from '@/components/races/RaceListSection';
 import { IOSRacesScreen } from '@/components/races/ios';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
 import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
@@ -2773,7 +2774,7 @@ export default function RacesScreen() {
 
       {/* Getting Started Tips - TODO: implement TufteTipsCarousel */}
 
-      {/* Main Content - CardGrid or ScrollView based on feature flag */}
+      {/* Main Content - RaceListView, CardGrid, or ScrollView based on feature flag */}
       {/* Show loading state when creating sample data for new users */}
       {creatingSampleData ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: TUFTE_BACKGROUND }}>
@@ -2782,6 +2783,18 @@ export default function RacesScreen() {
             Setting up your first race...
           </Text>
         </View>
+      ) : FEATURE_FLAGS.USE_RACE_LIST_VIEW ? (
+        // Grouped vertical list view — progressive disclosure design
+        <RaceListSection
+          races={cardGridRaces}
+          onRacePress={(raceId) => {
+            setSelectedRaceId(raceId);
+            setHasManuallySelected(true);
+            router.push(`/race/${raceId}`);
+          }}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+        />
       ) : FEATURE_FLAGS.USE_CARD_GRID_NAVIGATION ? (
         // New CardGrid 2D navigation system - wrapped for tour spotlight
         <View

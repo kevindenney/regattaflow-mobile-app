@@ -61,6 +61,10 @@ export interface UseDiscoveryFeedResult {
   hasBoatClass: boolean;
   /** Followed users' race IDs for quick lookup */
   followedUserIds: Set<string>;
+  /** Raw following races array (for grouped list view) */
+  followingRaces: PublicRacePreview[];
+  /** Raw discovery races array (for grouped list view) */
+  discoveryRaces: PublicRacePreview[];
 }
 
 const PAGE_SIZE = 20;
@@ -366,6 +370,8 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
     error,
     hasBoatClass,
     followedUserIds,
+    followingRaces,
+    discoveryRaces,
   };
 }
 
