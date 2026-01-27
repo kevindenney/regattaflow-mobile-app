@@ -13,7 +13,7 @@
 
 import { supabase } from './supabase';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Platform } from 'react-native';
+import { Platform, Share } from 'react-native';
 import { createLogger } from '@/lib/utils/logger';
 import { ClubRole } from '@/types/club';
 
@@ -538,8 +538,6 @@ class ClubMemberService {
           encoding: FileSystem.EncodingType.UTF8,
         });
 
-        // Dynamically import Share to avoid NativeEventEmitter error on web
-        const { Share } = await import('react-native');
         await Share.share({
           url: fileUri,
           title: `${clubName} Member List`,

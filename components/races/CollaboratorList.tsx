@@ -18,6 +18,7 @@ import {
   Pressable,
   Platform,
   Alert,
+  Share,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
@@ -141,7 +142,6 @@ export function CollaboratorList({
             Alert.alert('Copied', 'Invite link copied to clipboard');
           }
         } else {
-          const { Share } = await import('react-native');
           await Share.share({ message, title: 'Join my race' });
         }
       } catch (error) {

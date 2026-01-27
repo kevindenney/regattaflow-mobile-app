@@ -29,6 +29,7 @@ import {
     StyleSheet,
     TouchableOpacity,
     View,
+    Share,
 } from 'react-native';
 
 interface RegattaData {
@@ -113,7 +114,6 @@ export default function PublicRegattaLanding() {
         alert('Link copied to clipboard!');
       }
     } else {
-      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out ${data?.name}: ${url}`,
         url,

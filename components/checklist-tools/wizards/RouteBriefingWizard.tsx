@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Linking,
   TextInput,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -474,7 +475,6 @@ export function RouteBriefingWizard({
           await nav.clipboard.writeText(text);
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({ message: text, title });
       }
     } catch (err) {

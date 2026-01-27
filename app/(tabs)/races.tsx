@@ -102,7 +102,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const logger = createLogger('RacesScreen');
@@ -2473,8 +2473,6 @@ export default function RacesScreen() {
           Alert.alert('Race Debrief', message);
         }
       } else {
-        // Dynamically import Share to avoid NativeEventEmitter error on web
-        const { Share } = await import('react-native');
         await Share.share({
           title: shareTitle,
           message,

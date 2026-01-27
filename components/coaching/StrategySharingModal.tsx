@@ -16,6 +16,8 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    Share,
+    Linking,
 } from 'react-native';
 
 const logger = createLogger('StrategySharingModal');
@@ -576,7 +578,6 @@ export function StrategySharingModal({
           Alert.alert('Copied', 'Strategy copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({ message: text, title });
       }
       onShareComplete?.('external');
@@ -591,7 +592,6 @@ export function StrategySharingModal({
       const encoded = encodeURIComponent(text);
       const url = `whatsapp://send?text=${encoded}`;
       
-      const { Linking } = await import('react-native');
       const canOpen = await Linking.canOpenURL(url);
       
       if (canOpen) {
@@ -613,7 +613,6 @@ export function StrategySharingModal({
       const body = encodeURIComponent(text);
       const url = `mailto:?subject=${subject}&body=${body}`;
       
-      const { Linking } = await import('react-native');
       await Linking.openURL(url);
       onShareComplete?.('external', 'Email');
     } catch (error) {
@@ -1352,7 +1351,6 @@ export function StrategySharingModal({
         await handleCopyPublicLink();
       }
     } else {
-      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out my race strategy: ${publicSharingStatus.url}`,
         url: publicSharingStatus.url,

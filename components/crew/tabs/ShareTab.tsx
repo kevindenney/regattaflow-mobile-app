@@ -19,6 +19,7 @@ import {
   Linking,
   ActivityIndicator,
   Alert,
+  Share,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {
@@ -217,7 +218,6 @@ export function ShareTab({
               Alert.alert('Copied', 'Invite link copied to clipboard');
             }
           } else {
-            const { Share } = await import('react-native');
             await Share.share({ message, title });
           }
         } catch (error) {

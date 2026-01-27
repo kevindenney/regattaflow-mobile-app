@@ -26,7 +26,8 @@ import {
     Pressable,
     StyleSheet,
     Text,
-    View
+    View,
+    Share,
 } from 'react-native';
 
 interface PreRaceBriefingCardProps {
@@ -85,7 +86,6 @@ export function PreRaceBriefingCard({
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2000);
       } else {
-        const { Share } = await import('react-native');
         await Share.share({
           message: text,
           title: `Pre-Race Briefing: ${raceName}`,

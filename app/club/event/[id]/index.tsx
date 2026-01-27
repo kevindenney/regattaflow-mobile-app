@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -128,7 +129,6 @@ export default function EventDetailScreen() {
           Alert.alert('Copied', 'Event details copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({
           title: event.title,
           message,

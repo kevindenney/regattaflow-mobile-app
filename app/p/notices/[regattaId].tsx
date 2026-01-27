@@ -26,6 +26,7 @@ import {
     StyleSheet,
     TouchableOpacity,
     View,
+    Share,
 } from 'react-native';
 
 interface Notice {
@@ -111,7 +112,6 @@ export default function PublicNoticesPage() {
         alert('Link copied to clipboard!');
       }
     } else {
-      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out notices for ${data?.regatta.name}: ${url}`,
         url,

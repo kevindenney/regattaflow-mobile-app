@@ -14,6 +14,7 @@ import {
   TextInput,
   Platform,
   Modal,
+  Share,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
@@ -274,7 +275,6 @@ export default function CheckInDashboard() {
           Alert.alert('Copied', 'Check-in link copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({
           message: `Check in for Race ${raceNumber}: ${url}`,
           url,

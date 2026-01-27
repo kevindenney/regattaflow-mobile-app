@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   Platform,
   Alert,
+  Share,
 } from 'react-native';
 import { X, Copy, Share2, Check, RefreshCw, Users } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -87,7 +88,6 @@ export function TeamInviteModal({
           Alert.alert('Copied', 'Invite link copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({ message, title });
       }
     } catch (error) {

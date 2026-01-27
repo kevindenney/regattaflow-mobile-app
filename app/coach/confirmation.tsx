@@ -5,6 +5,7 @@ import {
     Alert,
     Platform,
     ScrollView,
+    Share,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -61,7 +62,6 @@ export default function BookingConfirmationScreen() {
           Alert.alert('Copied', 'Booking details copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({ message });
       }
     } catch (error) {

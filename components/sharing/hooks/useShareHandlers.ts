@@ -4,7 +4,7 @@
  */
 
 import { useCallback } from 'react';
-import { Alert, Linking, Platform } from 'react-native';
+import { Alert, Linking, Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as MailComposer from 'expo-mail-composer';
 import { createLogger } from '@/lib/utils/logger';
@@ -83,8 +83,6 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
           throw new Error('Sharing not supported on this browser');
         }
       } else {
-        // Native: dynamically import Share to avoid NativeEventEmitter error on web
-        const { Share } = await import('react-native');
         await Share.share({
           message: text,
           title,
@@ -185,7 +183,6 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
         }
 
         // Fallback: Use native share sheet (user can pick Mail from there)
-        const { Share } = await import('react-native');
         await Share.share({
           message: text,
           title: subject,

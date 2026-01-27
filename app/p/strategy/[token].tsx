@@ -26,6 +26,7 @@ import {
     StyleSheet,
     TouchableOpacity,
     View,
+    Share,
 } from 'react-native';
 
 interface StrategyData {
@@ -217,7 +218,6 @@ export default function PublicStrategyPage() {
         alert('Link copied to clipboard!');
       }
     } else {
-      const { Share } = await import('react-native');
       await Share.share({
         message: `Check out this race strategy: ${url}`,
         url,

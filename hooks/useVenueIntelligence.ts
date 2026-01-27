@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Platform } from 'react-native';
 import type {
   SailingVenue as GlobalSailingVenue,
   VenueTransition,
@@ -284,7 +285,6 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
   }, [state.currentVenue, loadVenueIntelligence]);
 
   const initializeDetection = useCallback(async (): Promise<boolean> => {
-    const { Platform } = await import('react-native');
 
     if (!locationListenerRef.current) {
       locationListenerRef.current = handleLocationUpdate;

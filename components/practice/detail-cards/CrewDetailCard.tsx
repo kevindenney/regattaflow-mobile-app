@@ -20,6 +20,7 @@ import {
   UIManager,
   Pressable,
   Alert,
+  Share,
 } from 'react-native';
 import {
   Users,
@@ -155,7 +156,6 @@ export function CrewDetailCard({
             Alert.alert('Copied', 'Invite link copied to clipboard');
           }
         } else {
-          const { Share } = await import('react-native');
           await Share.share({ message });
         }
       } catch (error) {

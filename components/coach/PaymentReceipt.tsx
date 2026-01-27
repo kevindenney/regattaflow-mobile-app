@@ -8,6 +8,7 @@ import {
   Modal,
   Platform,
   Alert,
+  Share,
 } from 'react-native';
 import { CoachingSession } from '../../types/coach';
 
@@ -90,7 +91,6 @@ Thank you for using RegattaFlow!
           Alert.alert('Copied', 'Receipt copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({ message, title });
       }
     } catch (error) {

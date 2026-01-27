@@ -26,6 +26,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Alert,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -379,7 +380,6 @@ export function FourPeaksScheduleWizard({
           Alert.alert('Copied', 'Schedule copied to clipboard');
         }
       } else {
-        const { Share } = await import('react-native');
         await Share.share({ message, title });
       }
     } catch (err) {
