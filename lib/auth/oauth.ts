@@ -87,24 +87,17 @@ export const signInWithGoogle = async (): Promise<void> => {
   try {
     const config = getOAuthConfig('google');
 
-    const discovery = AuthSession.useAutoDiscovery('https://accounts.google.com');
+    const discovery = await AuthSession.fetchDiscoveryAsync('https://accounts.google.com');
 
-    const [request, response, promptAsync] = AuthSession.useAuthRequest(
-      {
-        clientId: config.clientId,
-        scopes: config.scopes,
-        redirectUri: config.redirectUri,
-        responseType: AuthSession.ResponseType.Code,
-        additionalParameters: config.additionalParameters,
-      },
-      discovery
-    );
+    const request = new AuthSession.AuthRequest({
+      clientId: config.clientId,
+      scopes: config.scopes,
+      redirectUri: config.redirectUri,
+      responseType: AuthSession.ResponseType.Code,
+      additionalParameters: config.additionalParameters,
+    });
 
-    if (!request) {
-      throw new Error('Failed to create OAuth request');
-    }
-
-    const result = await promptAsync({
+    const result = await request.promptAsync(discovery, {
       useProxy: Platform.OS === 'web',
       showInRecents: true,
     });
@@ -155,23 +148,16 @@ export const signInWithApple = async (): Promise<void> => {
 
     const config = getOAuthConfig('apple');
 
-    const discovery = AuthSession.useAutoDiscovery('https://appleid.apple.com');
+    const discovery = await AuthSession.fetchDiscoveryAsync('https://appleid.apple.com');
 
-    const [request, response, promptAsync] = AuthSession.useAuthRequest(
-      {
-        clientId: config.clientId,
-        scopes: config.scopes,
-        redirectUri: config.redirectUri,
-        responseType: AuthSession.ResponseType.Code,
-      },
-      discovery
-    );
+    const request = new AuthSession.AuthRequest({
+      clientId: config.clientId,
+      scopes: config.scopes,
+      redirectUri: config.redirectUri,
+      responseType: AuthSession.ResponseType.Code,
+    });
 
-    if (!request) {
-      throw new Error('Failed to create Apple OAuth request');
-    }
-
-    const result = await promptAsync({
+    const result = await request.promptAsync(discovery, {
       useProxy: false, // Apple requires native flow
       showInRecents: true,
     });

@@ -269,7 +269,7 @@ export default function ProtestManagement() {
                 style={styles.hearingCard}
                 onPress={() => router.push(`/club/protests/hearing/${hearing.id}`)}
               >
-                <View style={styles.hearingTime}>
+                <View style={styles.hearingTimeContainer}>
                   <Clock size={16} color="#0EA5E9" />
                   <Text style={styles.hearingTimeText}>
                     {new Date(hearing.scheduled_time).toLocaleTimeString([], { 
@@ -735,7 +735,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 8,
   },
-  hearingTime: {
+  hearingTimeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

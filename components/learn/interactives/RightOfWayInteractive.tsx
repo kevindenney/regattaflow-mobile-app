@@ -23,7 +23,7 @@ import Animated, {
   runOnJS,
   useDerivedValue,
 } from 'react-native-reanimated';
-import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Polygon, LinearGradient, Stop, RadialGradient } from 'react-native-svg';
+import Svg, { G, Line, Circle, Rect, Text as SvgText, Path, Defs, Polygon, LinearGradient, Stop, RadialGradient, Marker, Pattern } from 'react-native-svg';
 import type { RightOfWayStep, RightOfWayQuizQuestion, PracticeScenario, UserRole } from './data/rightOfWayData';
 import { RIGHT_OF_WAY_STEPS, RIGHT_OF_WAY_QUIZ, RIGHT_OF_WAY_DEEP_DIVE, PRACTICE_SCENARIOS } from './data/rightOfWayData';
 import { TopDownSailboatSVG } from './shared';

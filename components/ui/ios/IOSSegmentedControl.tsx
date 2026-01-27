@@ -10,6 +10,7 @@ import {
   IOS_TYPOGRAPHY,
   IOS_SPACING,
   IOS_ANIMATIONS,
+  IOS_TOUCH,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 
@@ -124,11 +125,13 @@ export function IOSSegmentedControl<T extends string = string>({
         return (
           <Pressable
             key={segment.value}
-            style={[
+            style={({ pressed }) => [
               styles.segment,
               sizeStyles.segment,
               !filled && isSelected && styles.selectedSegmentUnfilled,
+              pressed && !disabled && { opacity: 0.5 },
             ]}
+            hitSlop={sizeStyles.hitSlop}
             onPress={() => handleSegmentPress(segment.value)}
             onLayout={(e) => handleSegmentLayout(index, e)}
             disabled={disabled}
@@ -155,29 +158,39 @@ export function IOSSegmentedControl<T extends string = string>({
 }
 
 function getSizeStyles(size: 'small' | 'regular' | 'large') {
+  const minTarget = IOS_TOUCH.minHeight; // 44pt
   switch (size) {
-    case 'small':
+    case 'small': {
+      const vPad = (minTarget - 28) / 2;
       return {
         container: { height: 28, borderRadius: 7 },
         indicator: { borderRadius: 6 },
-        segment: { paddingHorizontal: IOS_SPACING.sm },
+        segment: { paddingHorizontal: IOS_SPACING.md },
         text: { fontSize: 13 },
+        hitSlop: { top: vPad, bottom: vPad, left: 0, right: 0 },
       };
-    case 'large':
+    }
+    case 'large': {
+      const vPad = (minTarget - 40) / 2;
       return {
         container: { height: 40, borderRadius: 9 },
         indicator: { borderRadius: 8 },
         segment: { paddingHorizontal: IOS_SPACING.lg },
         text: { fontSize: 15 },
+        hitSlop: { top: vPad, bottom: vPad, left: 0, right: 0 },
       };
+    }
     case 'regular':
-    default:
+    default: {
+      const vPad = (minTarget - 32) / 2;
       return {
         container: { height: 32, borderRadius: 8 },
         indicator: { borderRadius: 7 },
         segment: { paddingHorizontal: IOS_SPACING.md },
         text: { fontSize: 13 },
+        hitSlop: { top: vPad, bottom: vPad, left: 0, right: 0 },
       };
+    }
   }
 }
 
@@ -222,11 +235,12 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontWeight: '500',
-    color: IOS_COLORS.label,
+    color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
   },
   selectedText: {
     fontWeight: '600',
+    color: IOS_COLORS.label,
   },
   disabledText: {
     color: IOS_COLORS.tertiaryLabel,

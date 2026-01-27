@@ -316,7 +316,7 @@ export function RacesFloatingHeader({
             <IOSSegmentedControl
               segments={FILTER_SEGMENTS}
               selectedValue={filterSegment}
-              onChange={onFilterChange}
+              onValueChange={onFilterChange}
             />
           </View>
         )}

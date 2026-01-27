@@ -2584,6 +2584,12 @@ export function ComprehensiveRaceEntry({
           vhf_channels: vhfChannelsDetailed.length > 0 ? vhfChannelsDetailed : undefined,
           ...(selectedClassId ? { class_id: selectedClassId } : {}),
           ...(primaryClassName ? { class_name: primaryClassName } : {}),
+          // Store prohibited areas in metadata for race strategy
+          ...(prohibitedAreas.length > 0 ? { prohibited_areas: prohibitedAreas } : {}),
+          // Store start lines (if multiple start lines exist)
+          ...(startLines.length > 0 ? { start_lines: startLines } : {}),
+          // Store sign-on requirements (SailSys requirements)
+          ...(signOnRequirement ? { sign_on_requirement: signOnRequirement } : {}),
         },
         status: 'planned',
 
@@ -2711,17 +2717,6 @@ export function ComprehensiveRaceEntry({
         total_distance_nm: raceType === 'distance' && totalDistanceNm ? parseFloat(totalDistanceNm) : null,
         time_limit_hours: raceType === 'distance' && timeLimitHours ? parseFloat(timeLimitHours) : null,
         start_finish_same_location: raceType === 'distance' ? startFinishSameLocation : null,
-
-        // Metadata for strategy-critical information (merge with existing metadata if updating)
-        metadata: {
-          venue_name: venue.trim(),
-          // Store prohibited areas in metadata for race strategy
-          ...(prohibitedAreas.length > 0 ? { prohibited_areas: prohibitedAreas } : {}),
-          // Store start lines (if multiple start lines exist)
-          ...(startLines.length > 0 ? { start_lines: startLines } : {}),
-          // Store sign-on requirements (SailSys requirements)
-          ...(signOnRequirement ? { sign_on_requirement: signOnRequirement } : {}),
-        },
 
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

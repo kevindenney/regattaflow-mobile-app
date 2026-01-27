@@ -46,30 +46,9 @@ export default function AuthLayout() {
   // Guest mode: Allow access to races tab without authentication
   const isGuestMode = state === 'guest' || isGuest;
 
-  // Show config error immediately if Supabase can't initialize
-  if (SUPABASE_CONFIG_ERROR) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>⚠️ Configuration Error</Text>
-        <Text style={styles.errorText}>{SUPABASE_CONFIG_ERROR}</Text>
-        <Text style={styles.errorHint}>
-          Please ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY 
-          are set in your Vercel environment variables.
-        </Text>
-        {Platform.OS === 'web' && (
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => window.location.reload()}
-          >
-            <Text style={styles.retryText}>Refresh Page</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  }
-
   // Detect if auth is taking too long (potential config issue)
   useEffect(() => {
+    if (SUPABASE_CONFIG_ERROR) return; // Skip if config error
     if (state === 'checking') {
       const timer = setTimeout(() => {
         setLoadingTimeout(true);
@@ -84,6 +63,7 @@ export default function AuthLayout() {
   // Imperative redirect for signed_out to prevent any rendering
   // EXCEPT for login and signup pages
   useEffect(() => {
+    if (SUPABASE_CONFIG_ERROR) return; // Skip if config error
     const isAuthEntryPoint = AUTH_ENTRY_ROUTES.has(currentRoute ?? '');
 
     if (state === 'signed_out' && !isAuthEntryPoint) {
@@ -103,6 +83,28 @@ export default function AuthLayout() {
       router.replace(destination);
     }
   }, [state, userType, currentRoute]);
+
+  // Show config error immediately if Supabase can't initialize
+  if (SUPABASE_CONFIG_ERROR) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>Configuration Error</Text>
+        <Text style={styles.errorText}>{SUPABASE_CONFIG_ERROR}</Text>
+        <Text style={styles.errorHint}>
+          Please ensure EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY
+          are set in your Vercel environment variables.
+        </Text>
+        {Platform.OS === 'web' && (
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => window.location.reload()}
+          >
+            <Text style={styles.retryText}>Refresh Page</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
 
   // Show loading indicator while checking auth state
   if (state === 'checking') {

@@ -93,20 +93,6 @@ export function VenueMapView({
   savedVenueIds = new Set(),
   mapLayers = {},
 }: VenueMapViewProps) {
-  // Fallback when react-native-maps isn't available (Expo Go)
-  if (!mapsAvailable) {
-    return (
-      <View style={styles.fallbackContainer}>
-        <Ionicons name="map-outline" size={48} color="#94A3B8" />
-        <Text style={styles.fallbackTitle}>Map Unavailable</Text>
-        <Text style={styles.fallbackText}>
-          Native maps require a development build.{'\n'}
-          Use web version or run with EAS Build.
-        </Text>
-      </View>
-    );
-  }
-
   const mapRef = useRef<ClusteredMapView>(null);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [yachtClubs, setYachtClubs] = useState<YachtClub[]>([]);
@@ -114,11 +100,13 @@ export function VenueMapView({
 
   // Fetch venues from database
   useEffect(() => {
+    if (!mapsAvailable) return;
     fetchVenues();
   }, []);
 
   // Fetch yacht clubs when layer is enabled
   useEffect(() => {
+    if (!mapsAvailable) return;
     if (mapLayers.yachtClubs) {
       fetchYachtClubs();
     }
@@ -160,6 +148,7 @@ export function VenueMapView({
 
   // Center map on current venue or all venues
   useEffect(() => {
+    if (!mapsAvailable) return;
     if (!mapRef.current) return;
 
     if (currentVenue) {
@@ -186,6 +175,7 @@ export function VenueMapView({
 
   // Center map when a venue is selected (via marker press or sidebar click)
   useEffect(() => {
+    if (!mapsAvailable) return;
     if (!mapRef.current || !selectedVenue) return;
 
     // Center on selected venue
@@ -196,41 +186,6 @@ export function VenueMapView({
       longitudeDelta: 0.5,
     }, 500);
   }, [selectedVenue]);
-
-  const getMarkerColor = (venueType: string) => {
-    switch (venueType) {
-      case 'championship': return '#ffc107'; // Gold
-      case 'premier': return '#007AFF'; // Blue
-      case 'regional': return '#666'; // Gray
-      default: return '#007AFF';
-    }
-  };
-
-  const getMarkerIcon = (venueType: string) => {
-    switch (venueType) {
-      case 'championship': return 'trophy';
-      case 'premier': return 'star';
-      case 'regional': return 'location';
-      default: return 'boat';
-    }
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <ThemedText style={styles.loadingText}>Loading venues...</ThemedText>
-      </View>
-    );
-  }
-
-  // Default region (centered on Hong Kong if no venue selected)
-  const defaultRegion = {
-    latitude: currentVenue?.coordinates_lat || 22.2793,
-    longitude: currentVenue?.coordinates_lng || 114.1628,
-    latitudeDelta: currentVenue ? 0.5 : 60,
-    longitudeDelta: currentVenue ? 0.5 : 60,
-  };
 
   // Venues to display - filter by saved venues if enabled
   let displayVenues: Venue[];
@@ -283,6 +238,55 @@ export function VenueMapView({
 
     return data;
   }, [displayVenues, yachtClubs, mapLayers.yachtClubs]);
+
+  // Fallback when react-native-maps isn't available (Expo Go)
+  if (!mapsAvailable) {
+    return (
+      <View style={styles.fallbackContainer}>
+        <Ionicons name="map-outline" size={48} color="#94A3B8" />
+        <Text style={styles.fallbackTitle}>Map Unavailable</Text>
+        <Text style={styles.fallbackText}>
+          Native maps require a development build.{'\n'}
+          Use web version or run with EAS Build.
+        </Text>
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <ThemedText style={styles.loadingText}>Loading venues...</ThemedText>
+      </View>
+    );
+  }
+
+  // Default region (centered on Hong Kong if no venue selected)
+  const defaultRegion = {
+    latitude: currentVenue?.coordinates_lat || 22.2793,
+    longitude: currentVenue?.coordinates_lng || 114.1628,
+    latitudeDelta: currentVenue ? 0.5 : 60,
+    longitudeDelta: currentVenue ? 0.5 : 60,
+  };
+
+  const getMarkerColor = (venueType: string) => {
+    switch (venueType) {
+      case 'championship': return '#ffc107'; // Gold
+      case 'premier': return '#007AFF'; // Blue
+      case 'regional': return '#666'; // Gray
+      default: return '#007AFF';
+    }
+  };
+
+  const getMarkerIcon = (venueType: string) => {
+    switch (venueType) {
+      case 'championship': return 'trophy';
+      case 'premier': return 'star';
+      case 'regional': return 'location';
+      default: return 'boat';
+    }
+  };
 
   // Custom cluster marker renderer
   const renderCluster = (cluster: any, onPress: any) => {
@@ -404,7 +408,6 @@ export function VenueMapView({
   );
 }
 
-export { VenueMapView };
 export default VenueMapView;
 
 const styles = StyleSheet.create({

@@ -276,11 +276,6 @@ export function TimelineTimeAxis({
   snapInterval = 391, // CARD_WIDTH + CARD_GAP
   maxVisibleTicks = 7,
 }: TimelineTimeAxisProps) {
-  // Don't render if 0 or 1 races
-  if (races.length <= 1) {
-    return null;
-  }
-
   // Parse and sort races by date for display
   const processedRaces = useMemo(() => {
     return races.map((race, idx) => {
@@ -347,6 +342,11 @@ export function TimelineTimeAxis({
       hasMore: end < races.length || start > 0,
     };
   }, [races.length, processedRaces, currentIndex, maxVisibleTicks]);
+
+  // Don't render if 0 or 1 races
+  if (races.length <= 1) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>

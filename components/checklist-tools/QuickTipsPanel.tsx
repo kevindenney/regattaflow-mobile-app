@@ -57,11 +57,6 @@ export function QuickTipsPanel({
   const router = useRouter();
   const { settings } = useUserSettings();
 
-  // Don't render if quick tips are disabled in settings
-  if (!settings.showQuickTips) {
-    return null;
-  }
-
   const tips = item.quickTips || [];
   const hasLearningLink = !!item.learningModuleSlug;
 
@@ -81,6 +76,11 @@ export function QuickTipsPanel({
   const handleGotIt = useCallback(() => {
     onComplete();
   }, [onComplete]);
+
+  // Don't render if quick tips are disabled in settings
+  if (!settings.showQuickTips) {
+    return null;
+  }
 
   return (
     <Modal

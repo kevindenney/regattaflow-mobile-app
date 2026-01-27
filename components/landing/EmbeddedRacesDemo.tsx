@@ -4274,7 +4274,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  addRaceButton: {
+  headerAddRaceButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -4287,7 +4287,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     opacity: 0.6,
   },
-  addRaceButtonText: {
+  headerAddRaceButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#9CA3AF',
@@ -4596,7 +4596,7 @@ const styles = StyleSheet.create({
       } as any,
     }),
   },
-  sectionTitle: {
+  cardSectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1F2937',
@@ -4610,7 +4610,7 @@ const styles = StyleSheet.create({
       } as any,
     }),
   },
-  sectionSubtitle: {
+  cardSectionSubtitle: {
     fontSize: 12,
     fontWeight: '400',
     color: '#6B7280',
@@ -4621,20 +4621,20 @@ const styles = StyleSheet.create({
       } as any,
     }),
   },
-  strategyCard: {
+  cardStrategyCard: {
     backgroundColor: '#F0F9FF',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
     borderColor: '#BFDBFE',
   },
-  strategyTitle: {
+  cardStrategyTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1F2937',
     marginBottom: 8,
   },
-  strategyText: {
+  cardStrategyText: {
     fontSize: 12,
     color: '#374151',
     lineHeight: 18,
@@ -5130,12 +5130,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  quickStatValue: {
+  cardQuickStatValue: {
     fontSize: 20,
     fontWeight: '700',
     color: '#1F2937',
   },
-  quickStatLabel: {
+  cardQuickStatLabel: {
     fontSize: 11,
     color: '#6B7280',
     fontWeight: '500',
@@ -5243,12 +5243,12 @@ const styles = StyleSheet.create({
   metricContent: {
     flex: 1,
   },
-  metricLabel: {
+  cardMetricLabel: {
     fontSize: 12,
     color: '#6B7280',
     fontWeight: '500',
   },
-  metricValue: {
+  cardMetricValue: {
     fontSize: 16,
     fontWeight: '700',
     color: '#1F2937',
@@ -5398,16 +5398,16 @@ const styles = StyleSheet.create({
     borderLeftColor: '#FF9800',
     // borderLeft shorthand removed - already using borderLeftWidth and borderLeftColor
   },
-  analysisContent: {
+  cardAnalysisContent: {
     flex: 1,
   },
-  analysisHeading: {
+  cardAnalysisHeading: {
     fontSize: 15,
     fontWeight: '600',
     color: '#212121',
     marginBottom: 4,
   },
-  analysisText: {
+  cardAnalysisText: {
     fontSize: 13,
     color: '#616161',
     lineHeight: 18,
@@ -5472,7 +5472,7 @@ const styles = StyleSheet.create({
   lapBreakdownSection: {
     marginBottom: 32,
   },
-  subsectionTitle: {
+  trackSubsectionTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: '#212121',
@@ -5865,7 +5865,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#F44336',
   },
-  insightTitle: {
+  trackInsightTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: '#212121',
@@ -6324,7 +6324,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#C7D2FE',
   },
-  badgeText: {
+  coachBadgeText: {
     fontSize: 11,
     fontWeight: '600',
     color: '#4F46E5',

@@ -259,11 +259,6 @@ export function TimelineAvatarStrip({
   onSelectTimeline,
   enableHaptics = true,
 }: TimelineAvatarStripProps) {
-  // Don't render if only one timeline
-  if (timelines.length <= 1) {
-    return null;
-  }
-
   // Handle avatar press
   const handlePress = useCallback(
     (index: number) => {
@@ -313,6 +308,11 @@ export function TimelineAvatarStrip({
       showOverflow: timelines.length > SIZES.maxVisibleAvatars,
     };
   }, [timelines, currentIndex]);
+
+  // Don't render if only one timeline
+  if (timelines.length <= 1) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>

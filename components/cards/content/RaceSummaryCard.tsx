@@ -1117,6 +1117,7 @@ export function RaceSummaryCard({
         friction={2}
         overshootRight={false}
         containerStyle={{ flex: 1 }}
+        childrenContainerStyle={{ flex: 1 }}
       >
         <Pressable onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1 }}>
           <View style={styles.container}>
@@ -1585,8 +1586,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
 
-  // Race Name (Apple typography)
-  raceName: {
+  // Race Name expanded (Apple typography)
+  raceNameExpanded: {
     fontSize: 22,
     fontWeight: '700',
     color: IOS_COLORS.label,

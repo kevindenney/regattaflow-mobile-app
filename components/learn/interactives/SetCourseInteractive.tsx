@@ -345,7 +345,7 @@ export function SetCourseInteractive({
         
         {/* Deep Dive Toggle */}
         {currentStep.details && currentStep.details.length > 0 && (
-          <View style={styles.deepDiveSection}>
+          <View style={styles.deepDiveToggleSection}>
             <TouchableOpacity 
               style={styles.deepDiveButton}
               onPress={() => setShowDeepDive(!showDeepDive)}
@@ -760,7 +760,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   // Deep Dive Styles
-  deepDiveSection: {
+  deepDiveToggleSection: {
     marginTop: 12,
   },
   deepDiveButton: {

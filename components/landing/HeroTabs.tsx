@@ -570,7 +570,7 @@ export function HeroTabs() {
                       </View>
 
                       {/* Nautical Map */}
-                      <View style={styles.mapContainer}>
+                      <View style={styles.phoneMapContainer}>
                         <View style={styles.mapBackground}>
                           {/* Compass lines */}
                           <View style={styles.compassLines} />
@@ -676,7 +676,7 @@ export function HeroTabs() {
               {currentTab.stats.map((stat, index) => (
                 <View key={index} style={styles.statCard}>
                   <Text style={styles.statNumber}>{stat.number}</Text>
-                  <Text style={styles.statLabel}>{stat.label}</Text>
+                  <Text style={styles.socialStatLabel}>{stat.label}</Text>
                 </View>
               ))}
             </View>
@@ -1180,7 +1180,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  phoneFrame: {
+  phoneMockupFrame: {
     width: 200,
     height: 400,
     backgroundColor: '#1F2937',
@@ -1250,7 +1250,7 @@ const styles = StyleSheet.create({
         }
     ),
   },
-  featureIcon: {
+  featureCardIcon: {
     fontSize: 32,
     marginBottom: 16,
   },
@@ -1301,7 +1301,7 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     marginBottom: 8,
   },
-  statLabel: {
+  socialStatLabel: {
     fontSize: 18,
     color: '#6B7280',
     textAlign: 'center',
@@ -1649,7 +1649,7 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     fontWeight: '600',
   },
-  mapContainer: {
+  phoneMapContainer: {
     position: 'relative',
     backgroundColor: '#EBF8FF',
     borderRadius: 16,

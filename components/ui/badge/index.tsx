@@ -139,7 +139,7 @@ type BadgeIconProps = Omit<React.ComponentPropsWithoutRef<typeof UIIcon>, 'class
 
 type StyleContextValue = BadgeContext | undefined;
 
-const getStyleContext = (): StyleContextValue => {
+const useGetStyleContext = (): StyleContextValue => {
   const context = useStyleContext(SCOPE) as StyleContextValue;
   return context;
 };
@@ -167,7 +167,7 @@ Badge.displayName = 'Badge';
 
 const BadgeText = React.forwardRef<Text, BadgeTextProps>(
   ({ className, size, children, ...props }, ref) => {
-    const context = getStyleContext();
+    const context = useGetStyleContext();
     const computedClassName = badgeTextStyle({
       parentVariants: {
         size: context?.size,
@@ -188,7 +188,7 @@ const BadgeText = React.forwardRef<Text, BadgeTextProps>(
 BadgeText.displayName = 'BadgeText';
 
 const BadgeIcon: React.FC<BadgeIconProps> = ({ className, size, ...props }) => {
-  const context = getStyleContext();
+  const context = useGetStyleContext();
 
   const computedClassName = badgeIconStyle({
     parentVariants: {

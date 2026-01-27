@@ -9,7 +9,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { StyleSheet, View, Alert, TouchableOpacity } from 'react-native';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
-// import { Canvas } from '@react-three/fiber'; // TODO: Re-enable with ES module fix
+// import { Canvas, useThree, useFrame } from '@react-three/fiber'; // TODO: Re-enable with ES module fix
+// import { Billboard, Text as DreiText } from '@react-three/drei'; // TODO: Re-enable with Three.js
 import { WebMapView } from './WebMapView';
 
 // Import all our new professional components
@@ -350,7 +351,8 @@ function getVenueBounds(venue: string): BoundingBox {
   return venueBounds[venue as keyof typeof venueBounds] || venueBounds['san-francisco-bay'];
 }
 
-// 3D Race Mark Component
+// 3D Race Mark Component (disabled - requires @react-three/fiber + drei)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function RaceMark3D({
   mark,
   bounds,
@@ -382,7 +384,9 @@ function RaceMark3D({
       </mesh>
 
       {/* Mark label */}
+      {/* eslint-disable-next-line react/jsx-no-undef */}
       <Billboard position={[0, 8, 0]}>
+        {/* eslint-disable-next-line react/jsx-no-undef */}
         <Text
           fontSize={2}
           color={markColor}

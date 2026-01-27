@@ -117,7 +117,6 @@ export const CHECKLIST_LEARNING_MAP: Record<string, { category: LearningCategory
 
   // On-water checklist items
   'check_in': { category: 'rules', key: 'check_in', lessonId: 'lesson-1-3-1' },
-  'current_check': { category: 'weather', key: 'current_check', lessonId: 'lesson-13-1-2' },
 
   // Crew checklist items
   'role_assignments': { category: 'crew', key: 'role_assignments' },

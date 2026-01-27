@@ -66,11 +66,6 @@ export function RaceShareActions({
   const [copied, setCopied] = useState(alreadyCopied);
   const [requested, setRequested] = useState(alreadyRequested);
 
-  // Don't show if this is the user's own race
-  if (user?.id === raceOwnerId) {
-    return null;
-  }
-
   // Haptic feedback
   const triggerHaptic = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -177,6 +172,11 @@ export function RaceShareActions({
       setStartingPlanning(false);
     }
   }, [user?.id, raceId, raceName, startingPlanning, triggerHaptic, onStartPlanning]);
+
+  // Don't show if this is the user's own race
+  if (user?.id === raceOwnerId) {
+    return null;
+  }
 
   if (compact) {
     return (

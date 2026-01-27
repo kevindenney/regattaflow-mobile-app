@@ -49,6 +49,81 @@ interface IOSUnderlineTabsProps<T extends string> {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
+ * Individual underline tab - extracted as a proper component so hooks are valid
+ */
+function UnderlineTab<T extends string>({
+  tab,
+  isSelected,
+  compact,
+  accentColor,
+  currentPhaseValue,
+  onPress,
+  onLayout,
+}: {
+  tab: Tab<T>;
+  isSelected: boolean;
+  compact: boolean;
+  accentColor: string;
+  currentPhaseValue?: T;
+  onPress: () => void;
+  onLayout: (event: LayoutChangeEvent) => void;
+}) {
+  const isCurrentPhase = currentPhaseValue !== undefined && tab.value === currentPhaseValue;
+  const showCurrentIndicator = isCurrentPhase && !isSelected;
+  const scale = useSharedValue(1);
+
+  const animatedTabStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <AnimatedPressable
+      style={[
+        styles.tab,
+        compact && styles.tabCompact,
+        animatedTabStyle,
+      ]}
+      onLayout={onLayout}
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.95, IOS_ANIMATIONS.spring.stiff);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
+      }}
+    >
+      <View style={styles.tabContent}>
+        <Text
+          style={[
+            styles.tabLabel,
+            compact && styles.tabLabelCompact,
+            isSelected && [styles.tabLabelSelected, { color: accentColor }],
+          ]}
+        >
+          {tab.label}
+        </Text>
+        {tab.badge !== undefined && tab.badge > 0 && (
+          <View
+            style={[
+              styles.badge,
+              isSelected && { backgroundColor: accentColor },
+            ]}
+          >
+            <Text style={styles.badgeText}>
+              {tab.badge > 99 ? '99+' : tab.badge}
+            </Text>
+          </View>
+        )}
+      </View>
+      {/* Current phase indicator (orange dot) */}
+      {showCurrentIndicator && (
+        <View style={styles.currentPhaseIndicator} />
+      )}
+    </AnimatedPressable>
+  );
+}
+
+/**
  * iOS-style underline tabs component
  * Following Apple Human Interface Guidelines
  *
@@ -114,68 +189,21 @@ export function IOSUnderlineTabs<T extends string>({
     transform: [{ translateX: underlineOffset.value }],
   }));
 
-  const renderTab = (tab: Tab<T>, index: number) => {
-    const isSelected = tab.value === selectedValue;
-    const isCurrentPhase = currentPhaseValue !== undefined && tab.value === currentPhaseValue;
-    const showCurrentIndicator = isCurrentPhase && !isSelected;
-    const scale = useSharedValue(1);
-
-    const animatedTabStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-    }));
-
-    return (
-      <AnimatedPressable
-        key={tab.value}
-        style={[
-          styles.tab,
-          compact && styles.tabCompact,
-          animatedTabStyle,
-        ]}
-        onLayout={(e) => handleTabLayout(tab.value, e)}
-        onPress={() => handleTabPress(tab.value)}
-        onPressIn={() => {
-          scale.value = withSpring(0.95, IOS_ANIMATIONS.spring.stiff);
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
-        }}
-      >
-        <View style={styles.tabContent}>
-          <Text
-            style={[
-              styles.tabLabel,
-              compact && styles.tabLabelCompact,
-              isSelected && [styles.tabLabelSelected, { color: accentColor }],
-            ]}
-          >
-            {tab.label}
-          </Text>
-          {tab.badge !== undefined && tab.badge > 0 && (
-            <View
-              style={[
-                styles.badge,
-                isSelected && { backgroundColor: accentColor },
-              ]}
-            >
-              <Text style={styles.badgeText}>
-                {tab.badge > 99 ? '99+' : tab.badge}
-              </Text>
-            </View>
-          )}
-        </View>
-        {/* Current phase indicator (orange dot) */}
-        {showCurrentIndicator && (
-          <View style={styles.currentPhaseIndicator} />
-        )}
-      </AnimatedPressable>
-    );
-  };
-
   const TabsContent = (
     <>
       <View style={styles.tabsRow}>
-        {tabs.map((tab, index) => renderTab(tab, index))}
+        {tabs.map((tab, index) => (
+          <UnderlineTab
+            key={tab.value}
+            tab={tab}
+            isSelected={tab.value === selectedValue}
+            compact={compact}
+            accentColor={accentColor}
+            currentPhaseValue={currentPhaseValue}
+            onPress={() => handleTabPress(tab.value)}
+            onLayout={(e) => handleTabLayout(tab.value, e)}
+          />
+        ))}
       </View>
       {/* Animated underline */}
       <Animated.View

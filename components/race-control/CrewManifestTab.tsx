@@ -118,7 +118,7 @@ export default function CrewManifestTab({ raceId }: CrewManifestTabProps) {
             </View>
           </View>
           <View style={styles.complianceBar}>
-            <View style={styles.complianceBarFill} style={{ width: `${summary.complianceRate}%` }} />
+            <View style={[styles.complianceBarFill, { width: `${summary.complianceRate}%` }]} />
           </View>
           <Text style={styles.complianceText}>
             {summary.complianceRate.toFixed(0)}% Compliance Rate

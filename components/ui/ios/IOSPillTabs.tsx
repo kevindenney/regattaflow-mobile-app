@@ -45,6 +45,73 @@ interface IOSPillTabsProps<T extends string> {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
+ * Individual pill tab - extracted as a proper component so hooks are valid
+ */
+function PillTab<T extends string>({
+  tab,
+  isSelected,
+  onPress,
+  accentColor,
+  unselectedBgColor,
+  compact,
+}: {
+  tab: Tab<T>;
+  isSelected: boolean;
+  onPress: () => void;
+  accentColor: string;
+  unselectedBgColor: string;
+  compact: boolean;
+}) {
+  const scale = useSharedValue(1);
+
+  const animatedTabStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <AnimatedPressable
+      style={[
+        styles.pill,
+        compact && styles.pillCompact,
+        { backgroundColor: isSelected ? accentColor : unselectedBgColor },
+        animatedTabStyle,
+      ]}
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.95, IOS_ANIMATIONS.spring.stiff);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
+      }}
+    >
+      <View style={styles.pillContent}>
+        <Text
+          style={[
+            styles.pillLabel,
+            compact && styles.pillLabelCompact,
+            isSelected && styles.pillLabelSelected,
+          ]}
+        >
+          {tab.label}
+        </Text>
+        {tab.badge !== undefined && tab.badge > 0 && (
+          <View
+            style={[
+              styles.badge,
+              isSelected && { backgroundColor: 'rgba(255,255,255,0.3)' },
+            ]}
+          >
+            <Text style={[styles.badgeText, isSelected && { color: '#FFFFFF' }]}>
+              {tab.badge > 99 ? '99+' : tab.badge}
+            </Text>
+          </View>
+        )}
+      </View>
+    </AnimatedPressable>
+  );
+}
+
+/**
  * iOS-style pill tabs component
  * Following Apple Human Interface Guidelines
  *
@@ -70,61 +137,19 @@ export function IOSPillTabs<T extends string>({
     }
   }, [selectedValue, onChange]);
 
-  const renderTab = (tab: Tab<T>, index: number) => {
-    const isSelected = tab.value === selectedValue;
-    const scale = useSharedValue(1);
-
-    const animatedTabStyle = useAnimatedStyle(() => ({
-      transform: [{ scale: scale.value }],
-    }));
-
-    return (
-      <AnimatedPressable
-        key={tab.value}
-        style={[
-          styles.pill,
-          compact && styles.pillCompact,
-          { backgroundColor: isSelected ? accentColor : unselectedBgColor },
-          animatedTabStyle,
-        ]}
-        onPress={() => handleTabPress(tab.value)}
-        onPressIn={() => {
-          scale.value = withSpring(0.95, IOS_ANIMATIONS.spring.stiff);
-        }}
-        onPressOut={() => {
-          scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
-        }}
-      >
-        <View style={styles.pillContent}>
-          <Text
-            style={[
-              styles.pillLabel,
-              compact && styles.pillLabelCompact,
-              isSelected && styles.pillLabelSelected,
-            ]}
-          >
-            {tab.label}
-          </Text>
-          {tab.badge !== undefined && tab.badge > 0 && (
-            <View
-              style={[
-                styles.badge,
-                isSelected && { backgroundColor: 'rgba(255,255,255,0.3)' },
-              ]}
-            >
-              <Text style={[styles.badgeText, isSelected && { color: '#FFFFFF' }]}>
-                {tab.badge > 99 ? '99+' : tab.badge}
-              </Text>
-            </View>
-          )}
-        </View>
-      </AnimatedPressable>
-    );
-  };
-
   const TabsContent = (
     <View style={styles.tabsRow}>
-      {tabs.map((tab, index) => renderTab(tab, index))}
+      {tabs.map((tab, index) => (
+        <PillTab
+          key={tab.value}
+          tab={tab}
+          isSelected={tab.value === selectedValue}
+          onPress={() => handleTabPress(tab.value)}
+          accentColor={accentColor}
+          unselectedBgColor={unselectedBgColor}
+          compact={compact}
+        />
+      ))}
     </View>
   );
 

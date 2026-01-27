@@ -30,7 +30,9 @@ export {
   resolveRaceContext,
   resolveClubSummary,
 } from './ContextResolvers';
-export type { EventContext, RaceContext, ClubSummary } from './ContextResolvers';
+// Note: EventContext and RaceContext are already exported from './types'.
+// ClubSummary is unique to ContextResolvers so we export it here.
+export type { ClubSummary } from './ContextResolvers';
 
 // Prompt builders
 export {

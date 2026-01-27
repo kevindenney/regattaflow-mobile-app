@@ -23,9 +23,8 @@ import { RacingAcademySection } from './RacingAcademySection';
 
 // Web-only component to render title without React Native Web duplication
 const WebHeroTitle = ({ text, style }: { text: string; style: any }) => {
-  if (Platform.OS !== 'web') return null;
-  
   React.useEffect(() => {
+    if (Platform.OS !== 'web') return;
     // Ensure only one element exists - remove duplicates
     const elements = document.querySelectorAll('[data-hero-title-native]');
     if (elements.length > 1) {
@@ -35,12 +34,14 @@ const WebHeroTitle = ({ text, style }: { text: string; style: any }) => {
       }
     }
   }, []);
-  
+
+  if (Platform.OS !== 'web') return null;
+
   // Convert \n to actual line breaks - handle both literal \n and actual newlines
   const htmlText = text
     .replace(/\\n/g, '<br/>')  // Replace literal \n string
     .replace(/\n/g, '<br/>');  // Replace actual newline characters
-  
+
   // @ts-ignore - web only, using native HTML div
   return (
     <div

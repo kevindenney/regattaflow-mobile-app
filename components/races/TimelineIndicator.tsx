@@ -97,23 +97,24 @@ export function TimelineIndicator({
   accentColor = IOS_COLORS.blue,
   position = 'left',
 }: TimelineIndicatorProps) {
-  // Don't render if only one timeline
-  if (totalTimelines <= 1) return null;
-
   const containerOpacity = useSharedValue(0);
 
   useEffect(() => {
+    if (totalTimelines <= 1) return;
     if (isVisible) {
       containerOpacity.value = withTiming(1, { duration: 150 });
     } else {
       // Delay fade out slightly so user can see their position
       containerOpacity.value = withDelay(300, withTiming(0, { duration: 300 }));
     }
-  }, [isVisible]);
+  }, [isVisible, totalTimelines]);
 
   const containerStyle = useAnimatedStyle(() => ({
     opacity: containerOpacity.value,
   }));
+
+  // Don't render if only one timeline
+  if (totalTimelines <= 1) return null;
 
   return (
     <Animated.View

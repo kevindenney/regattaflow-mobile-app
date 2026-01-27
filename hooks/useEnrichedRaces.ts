@@ -433,7 +433,6 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           critical_details,
           created_by: regatta.created_by, // Preserve for edit/delete permission checks
           venueCoordinates, // Include coordinates for weather fetching
-          venueCoordinates, // Include coordinates for weather fetching
           metadata: regatta.metadata, // Preserve full metadata for sample detection
           boat_id: regatta.boat_id, // Preserve boat_id for equipment/sails
           // Distance racing fields

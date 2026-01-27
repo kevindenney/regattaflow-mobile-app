@@ -158,8 +158,7 @@ const AvatarImage = React.forwardRef<
       // @ts-expect-error
       style={
         Platform.OS === 'web'
-          ? // eslint-disable-next-line react-native/no-inline-styles
-            { height: 'revert-layer', width: 'revert-layer' }
+          ? { height: 'revert-layer', width: 'revert-layer' }
           : undefined
       }
     />

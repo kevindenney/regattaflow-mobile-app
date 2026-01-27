@@ -432,15 +432,18 @@ export function IOSTypingIndicator({
     };
   }, []);
 
-  const createDotStyle = (animValue: Animated.SharedValue<number>) =>
-    useAnimatedStyle(() => ({
-      opacity: interpolate(animValue.value, [0, 1], [0.3, 1]),
-      transform: [{ translateY: interpolate(animValue.value, [0, 1], [0, -4]) }],
-    }));
-
-  const dot1Style = createDotStyle(dot1);
-  const dot2Style = createDotStyle(dot2);
-  const dot3Style = createDotStyle(dot3);
+  const dot1Style = useAnimatedStyle(() => ({
+    opacity: interpolate(dot1.value, [0, 1], [0.3, 1]),
+    transform: [{ translateY: interpolate(dot1.value, [0, 1], [0, -4]) }],
+  }));
+  const dot2Style = useAnimatedStyle(() => ({
+    opacity: interpolate(dot2.value, [0, 1], [0.3, 1]),
+    transform: [{ translateY: interpolate(dot2.value, [0, 1], [0, -4]) }],
+  }));
+  const dot3Style = useAnimatedStyle(() => ({
+    opacity: interpolate(dot3.value, [0, 1], [0.3, 1]),
+    transform: [{ translateY: interpolate(dot3.value, [0, 1], [0, -4]) }],
+  }));
 
   const dotBase = {
     width: dotSize,

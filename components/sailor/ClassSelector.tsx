@@ -102,7 +102,7 @@ export function ClassSelector({
             )}
           </View>
           {singleClass.isPrimary && (
-            <View style={styles.primaryBadge}>
+            <View style={styles.primaryBadgeSimple}>
               <Text style={styles.primaryText}>Primary</Text>
             </View>
           )}
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 4,
   },
-  primaryBadge: {
+  primaryBadgeSimple: {
     backgroundColor: '#FEF3C7',
     paddingHorizontal: 12,
     paddingVertical: 6,

@@ -252,6 +252,31 @@ export default function RaceDetailScreen() {
   // Feature flag: Enable new Apple Weather-inspired scrollable design
   const USE_SCROLLABLE_DESIGN = true;
 
+  // All hooks must be declared before any early returns to satisfy rules-of-hooks
+  const [race, setRace] = useState<RaceDetails | null>(null);
+  const [raceFullData, setRaceFullData] = useState<any>(null); // Full race data for details view
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  // Strategy state
+  const [strategy, setStrategy] = useState<RaceStrategyViewModel | null>(null);
+  const [generatingStrategy, setGeneratingStrategy] = useState(false);
+  const [activeLayer, setActiveLayer] = useState<'course' | 'weather' | 'tide' | 'tactical' | 'bathymetry' | 'satellite'>('course');
+  const [showLaylines, setShowLaylines] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Course Setup state (Phase 2)
+  const [hasCourseMarks, setHasCourseMarks] = useState(false);
+  const [showCourseSetup, setShowCourseSetup] = useState(false);
+  const [showCourseSelector, setShowCourseSelector] = useState(false);
+
+  // Handle URL parameters for Quick Draw launch (Phase 2)
+  const [isQuickDrawMode, setIsQuickDrawMode] = useState(false);
+  const urlActionHandled = React.useRef(false);
+
   useEffect(() => {
     if (USE_SCROLLABLE_DESIGN && id) {
       const redirectParams: Record<string, string> = { id };
@@ -268,47 +293,20 @@ export default function RaceDetailScreen() {
     }
   }, [id, tab, action, courseId]);
 
-  // If redirecting, show nothing
-  if (USE_SCROLLABLE_DESIGN) {
-    return null;
-  }
-
-  const [race, setRace] = useState<RaceDetails | null>(null);
-  const [raceFullData, setRaceFullData] = useState<any>(null); // Full race data for details view
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [documents, setDocuments] = useState<Document[]>([]);
-  const [uploading, setUploading] = useState(false);
-  // Removed global extracting state - now tracked per-document via extractionStatus
-
-  // Strategy state
-  const [strategy, setStrategy] = useState<RaceStrategyViewModel | null>(null);
-  const [generatingStrategy, setGeneratingStrategy] = useState(false);
-  const [activeLayer, setActiveLayer] = useState<'course' | 'weather' | 'tide' | 'tactical' | 'bathymetry' | 'satellite'>('course');
-  const [showLaylines, setShowLaylines] = useState(false);
-  const [showMenuModal, setShowMenuModal] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  // Course Setup state (Phase 2)
-  const [hasCourseMarks, setHasCourseMarks] = useState(false);
-  const [showCourseSetup, setShowCourseSetup] = useState(false);
-  const [showCourseSelector, setShowCourseSelector] = useState(false);
-
   useEffect(() => {
+    if (USE_SCROLLABLE_DESIGN) return;
     loadRaceDetails();
   }, [id]);
 
-  // Handle URL parameters for Quick Draw launch (Phase 2)
-  const [isQuickDrawMode, setIsQuickDrawMode] = useState(false);
-  const urlActionHandled = React.useRef(false);
-
   // Reset urlActionHandled when action parameter changes
   useEffect(() => {
+    if (USE_SCROLLABLE_DESIGN) return;
     logger.debug('[RaceDetail] Action parameter changed, resetting urlActionHandled');
     urlActionHandled.current = false;
   }, [action]);
 
   useEffect(() => {
+    if (USE_SCROLLABLE_DESIGN) return;
     logger.debug('[RaceDetail] ===== URL PARAMS EFFECT =====');
     logger.debug('[RaceDetail] tab:', tab, 'action:', action);
     logger.debug('[RaceDetail] urlActionHandled.current:', urlActionHandled.current);
@@ -351,6 +349,11 @@ export default function RaceDetailScreen() {
       }
     }
   }, [tab, action]);
+
+  // If redirecting, show nothing
+  if (USE_SCROLLABLE_DESIGN) {
+    return null;
+  }
 
   const loadRaceDetails = async () => {
     try {

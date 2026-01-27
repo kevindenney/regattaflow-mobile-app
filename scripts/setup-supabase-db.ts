@@ -323,5 +323,4 @@ export async function setupSupabaseDatabase(): Promise<void> {
   }
 }
 
-// Export for use in other modules
-export { setupSupabaseDatabase };
+// Export for use in other modules (already exported via `export async function`)

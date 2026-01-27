@@ -99,11 +99,6 @@ export function RacingAreaCircleOverlay({
   onAreaPress,
   showLabels = true,
 }: RacingAreaCircleOverlayProps) {
-  // Return null if maps aren't available
-  if (!mapsAvailable) {
-    return null;
-  }
-
   const handleAreaPress = useCallback(
     (area: VenueRacingArea) => {
       onAreaPress?.(area);
@@ -123,6 +118,11 @@ export function RacingAreaCircleOverlay({
       ),
     [areas]
   );
+
+  // Return null if maps aren't available
+  if (!mapsAvailable) {
+    return null;
+  }
 
   if (validAreas.length === 0) {
     return null;

@@ -61,7 +61,7 @@ export { AIQuickEntry } from './AIQuickEntry';
 export { ExtractionProgress } from './ExtractionProgress';
 export { ExtractionResults } from './ExtractionResults';
 export { ManualRaceForm } from './ManualRaceForm';
-export type { InputMethod } from './AIQuickEntry';
+export type { InputMethod as AIQuickEntryInputMethod } from './AIQuickEntry';
 export type { ExtractionStep } from './ExtractionProgress';
 export type { ExtractedRaceData, ExtractedField, FieldConfidence } from './ExtractionResults';
 export type { ManualRaceFormData } from './ManualRaceForm';

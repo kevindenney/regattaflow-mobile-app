@@ -6,7 +6,15 @@
  * Optimized for race day use with noise handling and sailing terminology recognition
  */
 
-import { Audio } from 'expo-av';
+import {
+  Audio,
+  InterruptionModeIOS,
+  InterruptionModeAndroid,
+  AndroidOutputFormat,
+  AndroidAudioEncoder,
+  IOSOutputFormat,
+  IOSAudioQuality,
+} from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import Anthropic from '@anthropic-ai/sdk';
 import { Platform } from 'react-native';
@@ -83,9 +91,9 @@ class VoiceNoteService {
       // Configure audio mode for recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
-        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         playsInSilentModeIOS: true,
-        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
         shouldDuckAndroid: true,
         staysActiveInBackground: true,
         playThroughEarpieceAndroid: false,
@@ -116,18 +124,18 @@ class VoiceNoteService {
       const recordingOptions: Audio.RecordingOptions = {
         android: {
           extension: '.m4a',
-          outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
-          audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
+          outputFormat: AndroidOutputFormat.MPEG_4,
+          audioEncoder: AndroidAudioEncoder.AAC,
           sampleRate: quality === 'high' ? 44100 : 22050,
           numberOfChannels: 1,
           bitRate: quality === 'high' ? 128000 : 64000,
         },
         ios: {
           extension: '.m4a',
-          outputFormat: Audio.RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC,
+          outputFormat: IOSOutputFormat.MPEG4AAC,
           audioQuality: quality === 'high'
-            ? Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH
-            : Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_MEDIUM,
+            ? IOSAudioQuality.HIGH
+            : IOSAudioQuality.MEDIUM,
           sampleRate: quality === 'high' ? 44100 : 22050,
           numberOfChannels: 1,
           bitRate: quality === 'high' ? 128000 : 64000,
