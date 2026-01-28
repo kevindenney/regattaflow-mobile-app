@@ -2,114 +2,48 @@ import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
 import FloatingTabBar, { FLOATING_TAB_BAR_BOTTOM_MARGIN, FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import MoreMenuSheet from '@/components/navigation/MoreMenuSheet';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
-import GlobalSearchOverlay from '@/components/search/GlobalSearchOverlay';
+import { GlobalSearchProvider } from '@/providers/GlobalSearchProvider';
+import { useWebDrawer, WebDrawerProvider } from '@/providers/WebDrawerProvider';
 import { useBoats } from '@/hooks/useData';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
+import { type TabConfig, getTabsForUserType } from '@/lib/navigation-config';
 import { triggerHaptic } from '@/lib/haptics';
 import { createLogger } from '@/lib/utils/logger';
-import { useAuth, UserCapabilities } from '@/providers/AuthProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
-import { BackHandler, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import { BackHandler, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
-type TabConfig = {
-  name: string;
-  title: string;
-  icon: string;
-  iconFocused?: string;
-  isMenuTrigger?: boolean;
-  emoji?: string;
-};
+// Lazy import WebSidebarNav only on web to avoid bundling on native
+const WebSidebarNav = Platform.OS === 'web'
+  ? React.lazy(() => import('@/components/navigation/WebSidebarNav'))
+  : null;
 
-// Define tabs for each user type (5 visible tabs for sailors)
-// Supports capability-based additive tabs for sailors with coaching capability
+// Whether to use the web sidebar layout (web only, behind feature flag)
+const useWebSidebar = Platform.OS === 'web' && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
 
 const logger = createLogger('_layout');
-
-/**
- * Get tabs for a user based on their type and capabilities.
- * For sailors with coaching capability, adds coach tabs to sailor tabs.
- */
-const getTabsForUserType = (
-  userType: string | null,
-  isGuest: boolean = false,
-  capabilities?: UserCapabilities
-): TabConfig[] => {
-  // Guests get limited sailor-style tabs (Races only for now)
-  if (isGuest) {
-    return [
-      { name: 'races', title: 'Races', icon: '', iconFocused: '' },
-      // Limited tabs for guests - just races to explore demo/sample content
-    ];
-  }
-
-  // Club admins get their own dedicated tabs (unchanged)
-  if (userType === 'club') {
-    return [
-      { name: 'events', title: 'Events', icon: 'calendar-outline', iconFocused: 'calendar' },
-      { name: 'members', title: 'Members', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'race-management', title: 'Racing', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'profile', title: 'Club', icon: 'business-outline', iconFocused: 'business' },
-      { name: 'settings', title: 'Settings', icon: 'cog-outline', iconFocused: 'cog' },
-    ];
-  }
-
-  // Legacy support: pure coach user type (will be migrated to sailor + capability)
-  if (userType === 'coach' && !capabilities?.hasCoaching) {
-    return [
-      { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
-      { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
-      { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
-    ];
-  }
-
-  // Sailors (including sailors with coaching capability)
-  if (userType === 'sailor' || userType === 'coach') {
-    // Base sailor tabs - floating pill tab bar
-    // 5 navigation tabs + Search (rendered by FloatingTabBar, not a route)
-    // Learn promoted from More menu to tab bar per "Prioritize Important Features" principle
-    const tabs: TabConfig[] = [
-      { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'discover', title: 'Sailors', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'venue', title: 'Venue', icon: 'location-outline', iconFocused: 'location' },
-      { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
-    ];
-
-    // Add coaching tabs if user has coaching capability
-    if (capabilities?.hasCoaching) {
-      tabs.push(
-        { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
-        { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
-        { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
-      );
-    }
-
-    // More menu always at the end - iOS HIG style ellipsis icon
-    tabs.push({ name: 'more', title: 'More', icon: 'ellipsis-horizontal-circle-outline', iconFocused: 'ellipsis-horizontal-circle', isMenuTrigger: true });
-
-    return tabs;
-  }
-
-  // No tabs for non-logged-in users
-  return [];
-};
 
 function TabLayoutInner() {
   const { userType, user, clubProfile, personaLoading, isGuest, capabilities } = useAuth();
   const router = useRouter();
   const navigation = useNavigation();
   const pathname = usePathname();
+  const { isDrawerOpen, closeDrawer } = useWebDrawer();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+
+  // iPad portrait: tab bar moves to top of screen
+  const isIPadPortrait = Platform.OS === 'ios' && (Platform as any).isPad === true && windowHeight > windowWidth;
 
   // Get tabs based on user type and capabilities
   // Sailors with coaching capability will see both sailor and coach tabs
   const tabs = getTabsForUserType(userType ?? null, isGuest, capabilities);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [searchVisible, setSearchVisible] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
   const { data: boats, loading: boatsLoading } = useBoats();
 
@@ -169,15 +103,12 @@ function TabLayoutInner() {
   const menuItems = useMemo(() => {
     const items: Array<{ key: string; label: string; icon: string; route: string; isWarning?: boolean }> = [];
 
-    // Coach menu items (simplified)
+    // Coach menu items (simplified — Account is now accessible via profile avatar)
     if (userType === 'coach') {
-      items.push(
-        { key: 'account', label: 'Account', icon: 'person-outline', route: '/(tabs)/account' }
-      );
       return items;
     }
 
-    // Sailor menu items (original)
+    // Sailor menu items
     if (isProfileIncomplete) {
       items.push({
         key: 'complete-profile',
@@ -188,21 +119,6 @@ function TabLayoutInner() {
       });
     }
 
-    // Progress - Excellence Framework Dashboard (top priority for sailors)
-    items.push(
-      { key: 'progress', label: 'Progress', icon: 'trending-up-outline', route: '/(tabs)/progress' }
-    );
-
-    // Courses - Race courses (moved from tab bar)
-    items.push(
-      { key: 'courses', label: 'Courses', icon: 'map-outline', route: '/(tabs)/courses' }
-    );
-
-    // Clubs + Fleets merged into Affiliations
-    items.push(
-      { key: 'affiliations', label: 'Affiliations', icon: 'people-circle-outline', route: '/(tabs)/affiliations' }
-    );
-
     if (userType !== 'club') {
       items.push({
         key: 'coaching',
@@ -212,15 +128,7 @@ function TabLayoutInner() {
       });
     }
 
-    // Race Detail - browse races and view scrollable detail
-    items.push(
-      { key: 'race-browser', label: 'Race Detail', icon: 'flag-outline', route: '/(tabs)/race-browser' }
-    );
-
-    // Tuning Guides merged into Boats tab - removed from menu
-    items.push(
-      { key: 'account', label: 'Account', icon: 'person-outline', route: '/(tabs)/account' }
-    );
+    // Account removed — now accessible via profile avatar in toolbar
 
     return items;
   }, [isProfileIncomplete, userType]);
@@ -397,56 +305,76 @@ function TabLayoutInner() {
   const raceManagementTab = findTab('race-management');
   const moreTab = findTab('more');
 
-  return (
-    <View style={styles.container}>
-      {/* Hide navigation header on all tabs - each tab renders its own content */}
-      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={false} hidden={true} />
-      <Tabs
-        tabBar={isSailorUser ? (props) => (
-          <FloatingTabBar
-            {...props}
-            visibleTabs={tabs}
-            onOpenMenu={() => setMenuVisible(true)}
-            onOpenSearch={() => setSearchVisible(true)}
-            pathname={pathname}
-          />
-        ) : undefined}
-        screenOptions={({ route }) => {
-          const visible = isTabVisible(route.name);
-          const tab = findTab(route.name);
-          const labelText = tab?.title ?? tab?.name ?? route.name;
+  // Determine tab bar and scene style based on platform
+  const getTabBarConfig = () => {
+    // Web sidebar mode: hide the tab bar entirely, sidebar handles navigation
+    if (useWebSidebar) {
+      return {
+        tabBar: () => null as any,
+        tabBarStyle: { display: 'none' as const },
+        sceneStyle: undefined,
+      };
+    }
 
-          return {
-            headerShown: false,
-            tabBarShowLabel: true,
-            tabBarLabelPosition: 'below-icon',
-            tabBarActiveTintColor: tabBarActiveColor,
-            tabBarInactiveTintColor: tabBarInactiveColor,
-            // Floating tab bar for sailors (rendered via tabBar prop above),
-            // standard tab bar for club users
-            tabBarStyle: isSailorUser
-              ? { display: 'none' } // Hidden; FloatingTabBar renders instead
-              : isClubUser
-                ? {
-                  ...styles.tabBarBase,
-                  ...styles.tabBarClub,
-                  display: 'flex',
-                }
-                : { display: 'none' },
-            // Add bottom padding for sailor users to prevent content from being hidden behind floating bar
-            sceneStyle: isSailorUser
-              ? { paddingBottom: FLOATING_TAB_BAR_HEIGHT + FLOATING_TAB_BAR_BOTTOM_MARGIN + 20 }
-              : undefined,
-            tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
-            tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
-            tabBarItemStyle: visible
-              ? isClubUser
-                ? styles.tabItemClub
-                : styles.tabItemDefault
-              : styles.hiddenTabItem,
-          };
-        }}
-      >
+    // Native / web without sidebar: existing behavior
+    // iPad portrait: tab bar at top → use paddingTop instead of paddingBottom
+    const tabBarPadding = isSailorUser
+      ? isIPadPortrait
+        ? { paddingTop: FLOATING_TAB_BAR_HEIGHT + 20 }
+        : { paddingBottom: FLOATING_TAB_BAR_HEIGHT + FLOATING_TAB_BAR_BOTTOM_MARGIN + 20 }
+      : undefined;
+
+    return {
+      tabBar: isSailorUser ? (props: any) => (
+        <FloatingTabBar
+          {...props}
+          visibleTabs={tabs}
+          onOpenMenu={() => setMenuVisible(true)}
+          pathname={pathname}
+          position={isIPadPortrait ? 'top' : 'bottom'}
+        />
+      ) : undefined,
+      tabBarStyle: isSailorUser
+        ? { display: 'none' as const }
+        : isClubUser
+          ? {
+            ...styles.tabBarBase,
+            ...styles.tabBarClub,
+            display: 'flex' as const,
+          }
+          : { display: 'none' as const },
+      sceneStyle: tabBarPadding,
+    };
+  };
+
+  const tabBarConfig = getTabBarConfig();
+
+  const tabsContent = (
+    <Tabs
+      tabBar={tabBarConfig.tabBar}
+      screenOptions={({ route }) => {
+        const visible = isTabVisible(route.name);
+        const tab = findTab(route.name);
+        const labelText = tab?.title ?? tab?.name ?? route.name;
+
+        return {
+          headerShown: false,
+          tabBarShowLabel: true,
+          tabBarLabelPosition: 'below-icon',
+          tabBarActiveTintColor: tabBarActiveColor,
+          tabBarInactiveTintColor: tabBarInactiveColor,
+          tabBarStyle: tabBarConfig.tabBarStyle,
+          sceneStyle: tabBarConfig.sceneStyle,
+          tabBarIconStyle: isClubUser ? styles.tabIconClub : styles.tabIconDefault,
+          tabBarLabelStyle: isClubUser ? styles.tabLabelClub : styles.tabLabelDefault,
+          tabBarItemStyle: visible
+            ? isClubUser
+              ? styles.tabItemClub
+              : styles.tabItemDefault
+            : styles.hiddenTabItem,
+        };
+      }}
+    >
         {/* Tab 1: Races */}
         <Tabs.Screen
           name="races"
@@ -466,11 +394,11 @@ function TabLayoutInner() {
                 : undefined,
           }}
         />
-        {/* Tab 2: Sailors (discover) */}
+        {/* Tab 2: Community (discover) */}
         <Tabs.Screen
           name="discover"
           options={{
-            title: 'Sailors',
+            title: 'Community',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
                 name={focused ? 'people' : 'people-outline'}
@@ -481,7 +409,7 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('discover')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('discover', 'Sailors', findTab('discover'))
+                ? renderSailorTabButton('discover', discoverTab?.title ?? 'Community', findTab('discover'))
                 : undefined,
           }}
         />
@@ -489,10 +417,10 @@ function TabLayoutInner() {
         <Tabs.Screen
           name="venue"
           options={{
-            title: venueTab?.title ?? 'Venue',
+            title: venueTab?.title ?? 'Local',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'location', venueTab?.icon ?? 'location-outline') as any}
+                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'compass', venueTab?.icon ?? 'compass-outline') as any}
                 size={size}
                 color={color}
               />
@@ -500,7 +428,7 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('venue')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('venue', venueTab?.title ?? 'Venue', venueTab)
+                ? renderSailorTabButton('venue', venueTab?.title ?? 'Local', venueTab)
                 : undefined,
           }}
         />
@@ -899,9 +827,32 @@ function TabLayoutInner() {
               ),
           }}
         />
-      </Tabs>
+    </Tabs>
+  );
 
-      {showMenuTrigger && (
+  return (
+    <View style={styles.container}>
+      {/* Hide navigation header on all tabs - each tab renders its own content */}
+      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={false} hidden={true} />
+
+      <View style={useWebSidebar ? styles.webShelfRow : styles.nativeRow}>
+        {/* Shelf panel — persistent on web, pushes content right */}
+        {useWebSidebar && isDrawerOpen && (
+          <View style={styles.shelfPanel}>
+            <Suspense fallback={<View style={{ width: 280 }} />}>
+              {WebSidebarNav && <WebSidebarNav onClose={closeDrawer} />}
+            </Suspense>
+          </View>
+        )}
+
+        {/* Content area — always flex: 1 */}
+        <View style={styles.shelfContent}>
+          {tabsContent}
+        </View>
+      </View>
+
+      {/* More menu for native (hidden when web sidebar mode is active) */}
+      {!useWebSidebar && showMenuTrigger && (
         <MoreMenuSheet
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
@@ -912,12 +863,6 @@ function TabLayoutInner() {
           isGuest={isGuest}
         />
       )}
-
-      {/* Global Search Overlay */}
-      <GlobalSearchOverlay
-        visible={searchVisible}
-        onClose={() => setSearchVisible(false)}
-      />
     </View>
   );
 }
@@ -955,6 +900,21 @@ const styles = StyleSheet.create({
       } as any,
       default: {},
     }),
+  },
+  // Web shelf layout (persistent sidebar + content)
+  webShelfRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  // Native: no row layout needed, just flex fill
+  nativeRow: {
+    flex: 1,
+  },
+  shelfPanel: {
+    width: 280,
+  },
+  shelfContent: {
+    flex: 1,
   },
   tabBarBase: {
     borderTopWidth: 0,
@@ -1177,11 +1137,15 @@ const styles = StyleSheet.create({
   },
 });
 
-// Wrap with CoachWorkspaceProvider for coach users
+// Wrap with CoachWorkspaceProvider for coach users and GlobalSearchProvider for search
 export default function TabLayout() {
   return (
-    <CoachWorkspaceProvider>
-      <TabLayoutInner />
-    </CoachWorkspaceProvider>
+    <WebDrawerProvider>
+      <CoachWorkspaceProvider>
+        <GlobalSearchProvider>
+          <TabLayoutInner />
+        </GlobalSearchProvider>
+      </CoachWorkspaceProvider>
+    </WebDrawerProvider>
   );
 }

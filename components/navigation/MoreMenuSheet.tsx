@@ -3,15 +3,16 @@
  *
  * Full-width bottom sheet that slides up with animation, featuring:
  * - Animated backdrop + spring slide-up
+ * - Drag-to-dismiss gesture (pan down to close, snap back on release)
  * - User identity header with avatar/initials
  * - Grouped sections with colored icon backgrounds
  * - "Complete Profile" callout card
- * - Drag handle for visual affordance
  */
 
-import { IOS_COLORS, IOS_TYPOGRAPHY } from '@/lib/design-tokens-ios';
+import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import React, { useCallback, useEffect } from 'react';
 import {
   Dimensions,
@@ -22,11 +23,11 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,7 +41,6 @@ export interface MoreMenuItem {
   icon: string;
   route: string;
   isWarning?: boolean;
-  /** Background color for the icon badge (iOS Settings style) */
   iconBg?: string;
   /** Section this item belongs to */
   section?: string;
@@ -66,43 +66,20 @@ export interface MoreMenuSheetProps {
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAX_SHEET_HEIGHT = SCREEN_HEIGHT * 0.65;
-const SHEET_BORDER_RADIUS = 20;
-const ICON_BADGE_SIZE = 28;
-const ICON_BADGE_RADIUS = 6;
+const SHEET_BORDER_RADIUS = 24;
+const SHEET_HORIZONTAL_MARGIN = 12;
 const AVATAR_SIZE = 40;
-
-// Spring config matching FloatingTabBar patterns
-const SPRING_CONFIG = { damping: 20, stiffness: 200 };
-
-// ─── Icon color mapping ──────────────────────────────────────────────────────
-
-const ICON_BG_COLORS: Record<string, string> = {
-  progress: IOS_COLORS.systemGreen,
-  courses: IOS_COLORS.systemOrange,
-  affiliations: IOS_COLORS.systemPurple,
-  coaching: IOS_COLORS.systemTeal,
-  'race-browser': IOS_COLORS.systemIndigo,
-  account: IOS_COLORS.systemGray,
-};
 
 // Section definitions for grouping
 const SECTION_MAP: Record<string, string> = {
-  progress: 'training',
-  courses: 'training',
-  affiliations: 'community',
   coaching: 'community',
-  'race-browser': 'tools',
-  account: 'account',
 };
 
 const SECTION_TITLES: Record<string, string> = {
-  training: 'Training',
   community: 'Community',
-  tools: 'Tools',
-  account: 'Account',
 };
 
-const SECTION_ORDER = ['callout', 'training', 'community', 'tools', 'account'];
+const SECTION_ORDER = ['callout', 'community'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -149,6 +126,13 @@ function groupMenuItems(items: MoreMenuItem[]): MoreMenuSection[] {
   }
 
   return sections;
+}
+
+// ─── Worklets ────────────────────────────────────────────────────────────────
+
+function clamp(value: number, min: number, max: number): number {
+  'worklet';
+  return Math.min(Math.max(value, min), max);
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -224,17 +208,17 @@ function CalloutCard({
         triggerHaptic('selection');
         onPress();
       }}
-      style={({ pressed }) => [
-        styles.calloutCard,
-        pressed && styles.calloutCardPressed,
-      ]}
     >
-      <Ionicons name="warning" size={20} color={IOS_COLORS.systemOrange} style={styles.calloutIcon} />
-      <View style={styles.calloutContent}>
-        <Text style={styles.calloutTitle}>Complete Your Profile</Text>
-        <Text style={styles.calloutSubtitle}>Add your boat to unlock all features</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={IOS_COLORS.tertiaryLabel} />
+      {({ pressed }) => (
+        <View style={[styles.calloutCard, pressed && styles.calloutCardPressed]}>
+          <Ionicons name="warning" size={20} color={IOS_COLORS.systemOrange} style={styles.calloutIcon} />
+          <View style={styles.calloutContent}>
+            <Text style={styles.calloutTitle}>Complete Your Profile</Text>
+            <Text style={styles.calloutSubtitle}>Add your boat to unlock all features</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={IOS_COLORS.tertiaryLabel} />
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -248,8 +232,6 @@ function MenuRow({
   isLast: boolean;
   onPress: () => void;
 }) {
-  const bgColor = item.iconBg || ICON_BG_COLORS[item.key] || IOS_COLORS.systemBlue;
-
   return (
     <>
       <Pressable
@@ -257,18 +239,16 @@ function MenuRow({
           triggerHaptic('selection');
           onPress();
         }}
-        style={({ pressed }) => [
-          styles.menuRow,
-          pressed && styles.menuRowPressed,
-        ]}
       >
-        <View style={[styles.iconBadge, { backgroundColor: bgColor }]}>
-          <Ionicons name={item.icon as any} size={18} color="#FFFFFF" />
-        </View>
-        <Text style={styles.menuRowLabel} numberOfLines={1}>
-          {item.label}
-        </Text>
-        <Ionicons name="chevron-forward" size={18} color={IOS_COLORS.tertiaryLabel} />
+        {({ pressed }) => (
+          <View style={[styles.menuRow, pressed && styles.menuRowPressed]}>
+            <Ionicons name={item.icon as any} size={20} color={IOS_COLORS.secondaryLabel} />
+            <Text style={styles.menuRowLabel} numberOfLines={1}>
+              {item.label}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
+          </View>
+        )}
       </Pressable>
       {!isLast && <View style={styles.rowSeparator} />}
     </>
@@ -327,7 +307,7 @@ export default function MoreMenuSheet({
   const insets = useSafeAreaInsets();
   const backdropOpacity = useSharedValue(0);
   const sheetTranslateY = useSharedValue(MAX_SHEET_HEIGHT);
-  const sheetOpacity = useSharedValue(0);
+  const contextY = useSharedValue(0);
 
   // Track whether the component should render at all
   const [shouldRender, setShouldRender] = React.useState(false);
@@ -336,28 +316,66 @@ export default function MoreMenuSheet({
     setShouldRender(false);
   }, []);
 
-  // Animate in/out
+  const dismissViaGesture = useCallback(() => {
+    triggerHaptic('impactLight');
+    onClose();
+  }, [onClose]);
+
+  const fireSnapHaptic = useCallback(() => {
+    triggerHaptic('impactLight');
+  }, []);
+
+  // ── Drag-to-dismiss gesture ────────────────────────────────────────────────
+  const panGesture = Gesture.Pan()
+    .activeOffsetY(15)
+    .failOffsetY(-5)
+    .onStart(() => {
+      contextY.value = sheetTranslateY.value;
+    })
+    .onUpdate((e) => {
+      sheetTranslateY.value = clamp(
+        contextY.value + e.translationY,
+        -20, // slight over-drag upward
+        MAX_SHEET_HEIGHT,
+      );
+    })
+    .onEnd((e) => {
+      const threshold = MAX_SHEET_HEIGHT * 0.35;
+      const shouldDismiss =
+        sheetTranslateY.value > threshold || e.velocityY > 800;
+
+      if (shouldDismiss) {
+        sheetTranslateY.value = withTiming(MAX_SHEET_HEIGHT, { duration: 250 });
+        backdropOpacity.value = withTiming(0, { duration: 200 }, (finished) => {
+          if (finished) {
+            runOnJS(dismissViaGesture)();
+          }
+        });
+      } else {
+        sheetTranslateY.value = withTiming(0, { duration: 250 });
+        runOnJS(fireSnapHaptic)();
+      }
+    });
+
+  // ── Animate in / out ───────────────────────────────────────────────────────
   useEffect(() => {
     if (visible) {
       setShouldRender(true);
-      // Animate in
       backdropOpacity.value = withTiming(1, { duration: 200 });
-      sheetTranslateY.value = withSpring(0, SPRING_CONFIG);
-      sheetOpacity.value = withTiming(1, { duration: 150 });
+      sheetTranslateY.value = withTiming(0, { duration: 300 });
     } else if (shouldRender) {
-      // Animate out
       backdropOpacity.value = withTiming(0, { duration: 200 });
-      sheetTranslateY.value = withSpring(MAX_SHEET_HEIGHT, {
-        damping: 25,
-        stiffness: 250,
-      });
-      sheetOpacity.value = withTiming(0, { duration: 150 }, (finished) => {
-        if (finished) {
-          runOnJS(handleDismissComplete)();
-        }
-      });
+      sheetTranslateY.value = withTiming(
+        MAX_SHEET_HEIGHT,
+        { duration: 250 },
+        (finished) => {
+          if (finished) {
+            runOnJS(handleDismissComplete)();
+          }
+        },
+      );
     }
-  }, [visible, shouldRender, backdropOpacity, sheetTranslateY, sheetOpacity, handleDismissComplete]);
+  }, [visible, shouldRender, backdropOpacity, sheetTranslateY, handleDismissComplete]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: backdropOpacity.value,
@@ -365,7 +383,6 @@ export default function MoreMenuSheet({
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetTranslateY.value }],
-    opacity: sheetOpacity.value,
   }));
 
   if (!shouldRender) return null;
@@ -375,45 +392,63 @@ export default function MoreMenuSheet({
   // Position the sheet above the floating tab bar
   const tabBarClearance = FLOATING_TAB_BAR_HEIGHT + Math.max(Math.round(insets.bottom / 2), 8) + FLOATING_TAB_BAR_BOTTOM_MARGIN;
 
+  const sheetContent = (
+    <>
+      <DragHandle />
+      <ScrollView
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <UserHeader
+          userProfile={userProfile}
+          isGuest={isGuest}
+        />
+        <View style={styles.headerSeparator} />
+
+        {sections.map((section) => (
+          <GroupedSection
+            key={section.key}
+            section={section}
+            onItemPress={onItemPress}
+          />
+        ))}
+      </ScrollView>
+    </>
+  );
+
   return (
-    <View style={styles.overlay} pointerEvents="box-none">
+    <GestureHandlerRootView style={styles.overlay} pointerEvents="box-none">
       {/* Backdrop */}
       <Animated.View style={[styles.backdrop, backdropStyle]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
 
       {/* Sheet */}
-      <Animated.View
-        style={[
-          styles.sheet,
-          { bottom: tabBarClearance, maxHeight: MAX_SHEET_HEIGHT },
-          sheetStyle,
-        ]}
-      >
-        <DragHandle />
-        <ScrollView
-          bounces={false}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={[
+            styles.sheetOuter,
+            { bottom: tabBarClearance, maxHeight: MAX_SHEET_HEIGHT },
+            sheetStyle,
+          ]}
         >
-          {/* User header */}
-          <UserHeader
-            userProfile={userProfile}
-            isGuest={isGuest}
-          />
-          <View style={styles.headerSeparator} />
-
-          {/* Grouped menu sections */}
-          {sections.map((section) => (
-            <GroupedSection
-              key={section.key}
-              section={section}
-              onItemPress={onItemPress}
-            />
-          ))}
-        </ScrollView>
-      </Animated.View>
-    </View>
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={80}
+              tint="systemChromeMaterial"
+              style={styles.blurBackground}
+            >
+              {sheetContent}
+            </BlurView>
+          ) : (
+            <View style={styles.solidBackground}>
+              {sheetContent}
+            </View>
+          )}
+        </Animated.View>
+      </GestureDetector>
+    </GestureHandlerRootView>
   );
 }
 
@@ -428,26 +463,40 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
-  sheet: {
+  sheetOuter: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    backgroundColor: IOS_COLORS.systemGroupedBackground,
-    borderTopLeftRadius: SHEET_BORDER_RADIUS,
-    borderTopRightRadius: SHEET_BORDER_RADIUS,
+    left: SHEET_HORIZONTAL_MARGIN,
+    right: SHEET_HORIZONTAL_MARGIN,
+    borderRadius: SHEET_BORDER_RADIUS,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 24,
+        ...IOS_SHADOWS.lg,
       },
       android: {
-        elevation: 24,
+        elevation: 8,
       },
       web: {
-        boxShadow: '0 -8px 32px rgba(0,0,0,0.15)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
       } as any,
+    }),
+  },
+  blurBackground: {
+    // BlurView fills the parent; borderRadius handled by sheetOuter overflow
+  },
+  solidBackground: {
+    ...Platform.select({
+      android: {
+        backgroundColor: 'rgba(255, 255, 255, 0.97)',
+      },
+      web: {
+        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+      } as any,
+      default: {
+        backgroundColor: '#FFFFFF',
+      },
     }),
   },
   scrollContent: {
@@ -528,7 +577,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   sectionCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
     marginHorizontal: 16,
     borderRadius: 10,
     ...Platform.select({
@@ -553,7 +602,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   calloutCard: {
-    backgroundColor: '#FFF8E1',
+    backgroundColor: 'rgba(255, 248, 225, 0.85)',
     borderRadius: 10,
     borderLeftWidth: 4,
     borderLeftColor: IOS_COLORS.systemOrange,
@@ -592,13 +641,6 @@ const styles = StyleSheet.create({
   menuRowPressed: {
     backgroundColor: IOS_COLORS.systemGray5,
   },
-  iconBadge: {
-    width: ICON_BADGE_SIZE,
-    height: ICON_BADGE_SIZE,
-    borderRadius: ICON_BADGE_RADIUS,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   menuRowLabel: {
     ...IOS_TYPOGRAPHY.body,
     color: IOS_COLORS.label,
@@ -608,6 +650,6 @@ const styles = StyleSheet.create({
   rowSeparator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: IOS_COLORS.separator,
-    marginLeft: ICON_BADGE_SIZE + 14 + 12, // badge + padding + margin
+    marginLeft: 14 + 20 + 12, // padding + icon + gap
   },
 });

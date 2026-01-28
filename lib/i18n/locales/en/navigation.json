@@ -2,12 +2,13 @@
   "tabs": {
     "home": "Home",
     "races": "Races",
-    "venues": "Venues",
+    "venues": "Local",
     "learn": "Learn",
     "settings": "Settings",
     "profile": "Profile",
     "club": "Club",
-    "fleet": "Fleet"
+    "fleet": "Fleet",
+    "community": "Community"
   },
   "headers": {
     "dashboard": "Dashboard",
