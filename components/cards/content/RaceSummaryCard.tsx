@@ -24,7 +24,6 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState, Component, ErrorInfo } from 'react';
 import { ActionSheetIOS, Alert, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, runOnJS } from 'react-native-reanimated';
@@ -613,6 +612,8 @@ export function RaceSummaryCard({
   currentRaceIndex,
   onSelectRace,
   nextRaceIndex,
+  // Scroll handler forwarded from parent for toolbar hide/show
+  onContentScroll,
 }: CardContentProps) {
   const router = useRouter();
 
@@ -660,8 +661,6 @@ export function RaceSummaryCard({
     }
   }, [race.name, race.date, race.venue]);
 
-  // Scroll edge gradient state (Tufte: shows content continues beyond viewport)
-  const [scrollState, setScrollState] = useState({ atTop: true, atBottom: false });
   const queryClient = useQueryClient();
 
   // Extract collaboration flags from race
@@ -714,13 +713,10 @@ export function RaceSummaryCard({
     setActiveDetailSheet(null);
   }, []);
 
-  // Handler for scroll position tracking (shows edge gradients)
+  // Handler for scroll position tracking (shows edge gradients + toolbar hide/show)
   const handleContentScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const atTop = contentOffset.y <= 0;
-    const atBottom = contentOffset.y >= contentSize.height - layoutMeasurement.height - 10;
-    setScrollState({ atTop, atBottom });
-  }, []);
+    onContentScroll?.(event);
+  }, [onContentScroll]);
 
   // Handler to open detailed review modal
   const handleOpenDetailedReview = useCallback(() => {
@@ -907,8 +903,6 @@ export function RaceSummaryCard({
     }
     // Share is always available
     items.push({ label: 'Share Race', icon: 'share-outline', onPress: handleShare });
-    // Race Courses
-    items.push({ label: 'Race Courses', icon: 'map-outline', onPress: () => router.push('/race-courses') });
     // Race Detail (scrollable view)
     items.push({ label: 'Race Detail', icon: 'flag-outline', onPress: () => router.push(`/race/${race.id}` as any) });
     // Only show edit/delete for owners
@@ -1169,24 +1163,61 @@ export function RaceSummaryCard({
   return (
     <>
         <Pressable onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1 }}>
-          <View style={styles.container}>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces={true}
+            nestedScrollEnabled={Platform.OS === 'android'}
+            onScroll={handleContentScroll}
+            scrollEventThrottle={16}
+          >
             {/* Simplified Header: Race type badge + Countdown */}
             <View style={styles.simpleHeaderRow}>
-          {/* Race type badge */}
-          <View style={styles.raceTypeBadge}>
-            <Text style={styles.raceTypeBadgeText}>
-              {detectedRaceType?.toUpperCase() || 'FLEET'}
-            </Text>
-          </View>
+          {/* Status badge: past = green checkmark + result; future = race type */}
+          {countdown.isPast ? (
+            <View style={styles.pastRaceBadge}>
+              <Ionicons name="checkmark-circle" size={14} color={IOS_COLORS.green} />
+              <Text style={styles.pastBadgeText}>
+                {analysisData?.selfReportedPosition
+                  ? `${analysisData.selfReportedPosition}${getOrdinalSuffix(analysisData.selfReportedPosition)}`
+                  : 'DONE'}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.raceTypeBadge}>
+              <Text style={styles.raceTypeBadgeText}>
+                {detectedRaceType?.toUpperCase() || 'FLEET'}
+              </Text>
+            </View>
+          )}
           <View style={styles.simpleHeaderRight}>
-            {/* Countdown */}
+            {/* Countdown: past = gray relative time; today = bold TODAY; future = large number */}
             <View style={styles.countdownSimple}>
-              <Text style={[styles.countdownNumberSimple, { color: urgencyColor.text }]}>
-                {countdown.days}
-              </Text>
-              <Text style={[styles.countdownLabelSimple, { color: urgencyColor.text }]}>
-                {countdown.days === 1 ? 'day' : 'days'}
-              </Text>
+              {countdown.isPast ? (
+                <Text style={styles.pastTimeLabel}>
+                  {countdown.daysSince === 0
+                    ? 'Today'
+                    : countdown.daysSince === 1
+                      ? 'Yesterday'
+                      : countdown.daysSince <= 30
+                        ? `${countdown.daysSince}d ago`
+                        : 'Completed'}
+                </Text>
+              ) : countdown.isToday ? (
+                <Text style={[styles.countdownTodayLabel, { color: urgencyColor.text }]}>
+                  TODAY
+                </Text>
+              ) : (
+                <>
+                  <Text style={[styles.countdownNumberSimple, { color: urgencyColor.text }]}>
+                    {countdown.days}
+                  </Text>
+                  <Text style={[styles.countdownLabelSimple, { color: urgencyColor.text }]}>
+                    {countdown.days === 1 ? 'day' : 'days'}
+                  </Text>
+                </>
+              )}
             </View>
             {/* Three-dot menu (includes Share Race, Crew Chat) */}
             {menuItems.length > 0 && (
@@ -1277,40 +1308,10 @@ export function RaceSummaryCard({
           />
         )}
 
-        {/* Phase-Specific Content - Scrollable with Tufte edge gradients */}
-        <View style={styles.scrollContainer}>
-          <ScrollView
-            style={styles.phaseContentContainerExpanded}
-            contentContainerStyle={styles.phaseContentScrollContent}
-            showsVerticalScrollIndicator={false}
-            bounces={true}
-            nestedScrollEnabled={Platform.OS === 'android'}
-            onScroll={handleContentScroll}
-            scrollEventThrottle={16}
-          >
-            <PhaseContentErrorBoundary phase={selectedPhase}>
-              {renderPhaseContent()}
-            </PhaseContentErrorBoundary>
-          </ScrollView>
-
-          {/* Top edge gradient - shows when scrolled down */}
-          {!scrollState.atTop && (
-            <LinearGradient
-              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']}
-              style={styles.topScrollGradient}
-              pointerEvents="none"
-            />
-          )}
-
-          {/* Bottom edge gradient - shows when more content below */}
-          {!scrollState.atBottom && (
-            <LinearGradient
-              colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.95)']}
-              style={styles.bottomScrollGradient}
-              pointerEvents="none"
-            />
-          )}
-        </View>
+        {/* Phase-Specific Content */}
+        <PhaseContentErrorBoundary phase={selectedPhase}>
+          {renderPhaseContent()}
+        </PhaseContentErrorBoundary>
 
         {/* Compact Timeline Navigation with Prev/Next (Tufte: direct manipulation) */}
         {timelineRaces && timelineRaces.length > 1 && onSelectRace && (
@@ -1408,7 +1409,7 @@ export function RaceSummaryCard({
           </View>
         )}
 
-          </View>
+          </ScrollView>
         </Pressable>
 
       {/* Detail Bottom Sheet for drill-down */}
@@ -2458,47 +2459,9 @@ const styles = StyleSheet.create({
   // PHASE CONTENT CONTAINER STYLES
   // ==========================================================================
 
-  // Phase content container (collapsed view)
-  phaseContentContainer: {
-    flex: 1,
-    marginBottom: 20,
-  },
-
-  // Phase content container (expanded view - ScrollView)
-  phaseContentContainerExpanded: {
-    flex: 1,
-    marginBottom: 16,
-  },
-
-  // Phase content scroll content (for ScrollView contentContainerStyle)
-  phaseContentScrollContent: {
-    paddingBottom: 20,
-  },
-
-  // Scroll container with edge gradients (Tufte: visual hint of content continuation)
-  scrollContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-
-  // Top scroll gradient (appears when scrolled down)
-  topScrollGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 24,
-    zIndex: 10,
-  },
-
-  // Bottom scroll gradient (appears when more content below)
-  bottomScrollGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 24,
-    zIndex: 10,
+  // ScrollView content container
+  scrollContent: {
+    paddingBottom: 80, // Clear floating tab bar (64px) + bottom margin (~17px)
   },
 
   // Compact Timeline (inside card footer - Tufte-inspired)
@@ -2825,6 +2788,32 @@ const styles = StyleSheet.create({
   countdownLabelSimple: {
     fontSize: 13,
     fontWeight: '500',
+  },
+  pastTimeLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.gray,
+    letterSpacing: -0.1,
+  },
+  countdownTodayLabel: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  pastRaceBadge: {
+    backgroundColor: '#E8FAE9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  pastBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.green,
+    letterSpacing: 0.5,
   },
   raceNameLarge: {
     fontSize: 22,
