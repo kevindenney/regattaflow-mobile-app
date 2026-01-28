@@ -24,6 +24,7 @@ import type {
   UpdatePostParams,
   MapBounds,
 } from '@/types/community-feed';
+import { MOCK_DISCUSSION_FEED } from '@/data/mockDiscussionFeed';
 
 // ============================================================================
 // QUERY KEYS
@@ -38,7 +39,15 @@ export const communityFeedKeys = {
     tagIds?: string[];
     racingAreaId?: string | null;
     topPeriod?: TopPeriod;
+    catalogRaceId?: string;
   }) => [...communityFeedKeys.feeds(), venueId, filters] as const,
+  raceFeed: (catalogRaceId: string) => [...communityFeedKeys.feeds(), 'race', catalogRaceId] as const,
+  aggregatedFeed: (venueIds: string[], filters?: {
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+  }) => [...communityFeedKeys.feeds(), 'aggregated', venueIds, filters] as const,
   posts: () => [...communityFeedKeys.all, 'post'] as const,
   post: (postId: string) => [...communityFeedKeys.posts(), postId] as const,
   comments: (postId: string) => [...communityFeedKeys.all, 'comments', postId] as const,
@@ -48,6 +57,7 @@ export const communityFeedKeys = {
   authorStats: (authorId: string, venueId: string) =>
     [...communityFeedKeys.all, 'author-stats', authorId, venueId] as const,
   conditionsFeed: (venueId: string) => [...communityFeedKeys.all, 'conditions-feed', venueId] as const,
+  userPosts: (userId: string) => [...communityFeedKeys.all, 'user-posts', userId] as const,
 };
 
 // ============================================================================
@@ -113,6 +123,79 @@ export function useCommunityFeed(
   });
 }
 
+/**
+ * Aggregated feed across multiple venues (for Discuss tab)
+ */
+export function useAggregatedFeed(
+  venueIds: string[],
+  options: {
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+    enabled?: boolean;
+  } = {}
+) {
+  const {
+    sort = 'hot',
+    postType,
+    tagIds,
+    topPeriod,
+    enabled = true,
+  } = options;
+
+  return useInfiniteQuery({
+    queryKey: communityFeedKeys.aggregatedFeed(venueIds, { sort, postType, tagIds, topPeriod }),
+    queryFn: async ({ pageParam = 0 }) => {
+      return CommunityFeedService.getAggregatedFeed({
+        venueIds,
+        sort,
+        postType,
+        tagIds,
+        topPeriod,
+        page: pageParam,
+        limit: 20,
+      });
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    enabled: enabled && venueIds.length > 0,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+/**
+ * Feed of posts authored by a specific user
+ */
+export function useUserPosts(userId: string | undefined) {
+  return useInfiniteQuery({
+    queryKey: communityFeedKeys.userPosts(userId || ''),
+    queryFn: async ({ pageParam = 0 }) => {
+      return CommunityFeedService.getUserPosts(userId!, pageParam, 20);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    enabled: !!userId,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+/**
+ * Feed of posts tagged with a specific catalog race
+ */
+export function useRaceFeed(catalogRaceId: string | undefined) {
+  return useInfiniteQuery({
+    queryKey: communityFeedKeys.raceFeed(catalogRaceId || ''),
+    queryFn: async ({ pageParam = 0 }) => {
+      return CommunityFeedService.getPostsByRace(catalogRaceId!, pageParam, 20);
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    enabled: !!catalogRaceId,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
 // ============================================================================
 // POST DETAIL
 // ============================================================================
@@ -121,11 +204,15 @@ export function useCommunityFeed(
  * Fetch a single post with all joined data
  */
 export function usePostDetail(postId: string, enabled = true) {
+  const isMock = postId.startsWith('mock-');
   return useQuery({
     queryKey: communityFeedKeys.post(postId),
-    queryFn: () => CommunityFeedService.getPostById(postId),
+    queryFn: () =>
+      isMock
+        ? MOCK_DISCUSSION_FEED.find((p) => p.id === postId) ?? null
+        : CommunityFeedService.getPostById(postId),
     enabled: enabled && !!postId,
-    staleTime: 1000 * 60, // 1 minute
+    staleTime: isMock ? Infinity : 1000 * 60,
   });
 }
 
@@ -242,11 +329,12 @@ export function useVotePost() {
  * Fetch threaded comments for a post
  */
 export function usePostComments(postId: string, enabled = true) {
+  const isMock = postId.startsWith('mock-');
   return useQuery({
     queryKey: communityFeedKeys.comments(postId),
-    queryFn: () => CommunityFeedService.getComments(postId),
+    queryFn: () => (isMock ? [] : CommunityFeedService.getComments(postId)),
     enabled: enabled && !!postId,
-    staleTime: 1000 * 30, // 30 seconds
+    staleTime: isMock ? Infinity : 1000 * 30,
   });
 }
 
@@ -327,10 +415,12 @@ export function useMapPinnedPosts(venueId: string, bounds?: MapBounds) {
  * Get author's racing stats at a venue
  */
 export function useAuthorVenueStats(authorId: string | null, venueId: string) {
+  // Mock posts use non-UUID IDs (e.g. "user-jchen", "venue-rhkyc")
+  const isRealId = /^[0-9a-f]{8}-/.test(authorId ?? '');
   return useQuery({
     queryKey: communityFeedKeys.authorStats(authorId || '', venueId),
     queryFn: () => CommunityFeedService.getAuthorVenueStats(authorId!, venueId),
-    enabled: !!authorId && !!venueId,
+    enabled: !!authorId && !!venueId && isRealId,
     staleTime: 1000 * 60 * 10, // 10 minutes
   });
 }
