@@ -67,7 +67,6 @@ export const getTabsForUserType = (
       { name: 'clients', title: 'Clients', icon: 'people-outline', iconFocused: 'people' },
       { name: 'schedule', title: 'Schedule', icon: 'calendar-outline', iconFocused: 'calendar' },
       { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
-      { name: 'more', title: 'More', icon: 'menu', isMenuTrigger: true },
     ];
   }
 
@@ -88,9 +87,6 @@ export const getTabsForUserType = (
         { name: 'earnings', title: 'Earnings', icon: 'cash-outline', iconFocused: 'cash' },
       );
     }
-
-    // More menu always at the end - iOS HIG style ellipsis icon
-    tabs.push({ name: 'more', title: 'More', icon: 'ellipsis-horizontal-circle-outline', iconFocused: 'ellipsis-horizontal-circle', isMenuTrigger: true });
 
     return tabs;
   }

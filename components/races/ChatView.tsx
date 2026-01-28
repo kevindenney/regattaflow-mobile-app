@@ -20,6 +20,7 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
 import { RaceMessage } from '@/types/raceCollaboration';
@@ -31,6 +32,8 @@ interface ChatViewProps {
   messages: RaceMessage[];
   /** Callback to send a message */
   onSend: (message: string) => Promise<void>;
+  /** Callback to delete a message (own messages only) */
+  onDelete?: (messageId: string) => Promise<void>;
   /** Current user ID for styling own messages */
   currentUserId?: string;
   /** Whether currently loading */
@@ -78,6 +81,7 @@ function getInitials(message: RaceMessage): string {
 export function ChatView({
   messages,
   onSend,
+  onDelete,
   currentUserId,
   isLoading = false,
   placeholder = 'Type a message...',
@@ -106,6 +110,10 @@ export function ChatView({
       console.error('Failed to send message:', error);
       // Restore text if send failed
       setInputText(text);
+      Alert.alert(
+        'Message not sent',
+        'Could not deliver your message. Check your connection and try again.',
+      );
     } finally {
       setIsSending(false);
     }
@@ -138,6 +146,7 @@ export function ChatView({
               key={message.id}
               message={message}
               isOwn={message.userId === currentUserId}
+              onDelete={onDelete}
             />
           ))
         )}
@@ -186,9 +195,30 @@ export function ChatView({
 interface MessageBubbleProps {
   message: RaceMessage;
   isOwn: boolean;
+  onDelete?: (messageId: string) => Promise<void>;
 }
 
-function MessageBubble({ message, isOwn }: MessageBubbleProps) {
+function MessageBubble({ message, isOwn, onDelete }: MessageBubbleProps) {
+  const handleLongPress = () => {
+    if (!isOwn || !onDelete) return;
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            onDelete(message.id).catch(() => {
+              Alert.alert('Error', 'Could not delete message.');
+            });
+          },
+        },
+      ],
+    );
+  };
+
   // System messages have different styling
   if (message.messageType === 'system') {
     return (
@@ -199,7 +229,11 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
   }
 
   return (
-    <View style={[styles.messageBubbleContainer, isOwn && styles.ownMessage]}>
+    <Pressable
+      onLongPress={handleLongPress}
+      delayLongPress={400}
+      style={[styles.messageBubbleContainer, isOwn && styles.ownMessage]}
+    >
       {!isOwn && (
         <Avatar
           size="xs"
@@ -234,7 +268,7 @@ function MessageBubble({ message, isOwn }: MessageBubbleProps) {
           {formatTime(message.createdAt)}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 

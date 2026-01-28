@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import {
   Actionsheet,
   ActionsheetContent,
@@ -51,12 +51,12 @@ export function RaceChatDrawer({
   onClose,
 }: RaceChatDrawerProps) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const { height: windowHeight } = useWindowDimensions();
 
   const {
     messages,
     isLoading,
     sendMessage,
+    deleteMessage,
     collaborators,
   } = useRaceCollaboration(regattaId);
 
@@ -68,9 +68,6 @@ export function RaceChatDrawer({
     };
     getCurrentUser();
   }, []);
-
-  // Calculate drawer height (75% of screen - slightly smaller than full collab drawer)
-  const drawerHeight = windowHeight * 0.75;
 
   // Count active collaborators for subtitle
   const activeCollaboratorCount = collaborators.filter(
@@ -111,9 +108,9 @@ export function RaceChatDrawer({
   // ---------------------------------------------------------------------------
 
   return (
-    <Actionsheet isOpen={isOpen} onClose={onClose}>
+    <Actionsheet isOpen={isOpen} onClose={onClose} snapPoints={[75]}>
       <ActionsheetBackdrop />
-      <ActionsheetContent style={[styles.content, { height: drawerHeight }]}>
+      <ActionsheetContent style={styles.content}>
         <ActionsheetDragIndicatorWrapper>
           <ActionsheetDragIndicator />
         </ActionsheetDragIndicatorWrapper>
@@ -124,6 +121,7 @@ export function RaceChatDrawer({
           <ChatView
             messages={messages}
             onSend={sendMessage}
+            onDelete={deleteMessage}
             currentUserId={currentUserId || undefined}
             isLoading={isLoading}
             placeholder="Message your crew..."

@@ -11,18 +11,18 @@ import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { CommunityFeed } from '../feed/CommunityFeed';
 import { SimplifiedFeedHeader } from '../feed/SimplifiedFeedHeader';
 import { useTopicTags } from '@/hooks/useCommunityFeed';
-import type { FeedPost, FeedSortType, PostType, CurrentConditions } from '@/types/community-feed';
+import type { FeedPost, FeedSortType, PostType } from '@/types/community-feed';
 
 interface VenueFeedSegmentProps {
   venueId: string;
-  currentConditions?: CurrentConditions;
+  racingAreaId?: string | null;
   onPostPress: (post: FeedPost) => void;
   onCreatePost: () => void;
 }
 
 export function VenueFeedSegment({
   venueId,
-  currentConditions,
+  racingAreaId,
   onPostPress,
   onCreatePost,
 }: VenueFeedSegmentProps) {
@@ -51,15 +51,15 @@ export function VenueFeedSegment({
       topicTags={topicTags || []}
       selectedTagIds={selectedTagIds}
       onTagToggle={handleTagToggle}
-      showConditionsSort={!!currentConditions}
+      showConditionsSort={false}
     />
-  ), [sort, selectedPostType, topicTags, selectedTagIds, handleTagToggle, currentConditions]);
+  ), [sort, selectedPostType, topicTags, selectedTagIds, handleTagToggle]);
 
   return (
     <View style={styles.container}>
       <CommunityFeed
         venueId={venueId}
-        currentConditions={currentConditions}
+        racingAreaId={racingAreaId}
         onPostPress={onPostPress}
         onCreatePost={onCreatePost}
         sort={sort}

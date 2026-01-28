@@ -343,7 +343,7 @@ export default function GlobalSearchOverlay({
           router.push('/(tabs)/discover' as any);
           break;
         case 'venues':
-          router.push('/(tabs)/venue' as any);
+          router.push(`/venue/${item.id}` as any);
           break;
         case 'boatClasses':
           // Navigate to discover as a safe fallback

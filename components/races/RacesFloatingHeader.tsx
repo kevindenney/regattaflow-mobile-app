@@ -5,7 +5,6 @@
  * - Large left-aligned "Races" title
  * - Race counter subtitle ("13 of 22 | 11 upcoming")
  * - White capsule with search + add icons
- * - Segmented control for filtering (Upcoming | Past | All)
  * - Search bar (toggled via capsule icon)
  */
 
@@ -28,7 +27,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
-import { IOSSegmentedControl } from '@/components/ui/ios';
 import {
   TabScreenToolbar,
   capsuleStyles,
@@ -44,13 +42,7 @@ import {
 import { triggerHaptic } from '@/lib/haptics';
 import type { LayoutRectangle } from 'react-native';
 
-export type RaceFilterSegment = 'upcoming' | 'past' | 'all';
-
-const FILTER_SEGMENTS: { value: RaceFilterSegment; label: string }[] = [
-  { value: 'upcoming', label: 'Upcoming' },
-  { value: 'past', label: 'Past' },
-  { value: 'all', label: 'All' },
-];
+export type RaceFilterSegment = 'upcoming' | 'past' | 'progress';
 
 export interface RacesFloatingHeaderProps {
   /** Top inset for safe area */
@@ -67,10 +59,6 @@ export interface RacesFloatingHeaderProps {
   onAddPractice?: () => void;
   /** Callback when new season is pressed */
   onNewSeason?: () => void;
-  /** Current filter segment */
-  filterSegment?: RaceFilterSegment;
-  /** Callback when filter segment changes */
-  onFilterChange?: (segment: RaceFilterSegment) => void;
   /** Current scroll offset for large title collapse */
   scrollOffset?: number;
   /** Callback when search text changes */
@@ -112,8 +100,6 @@ export function RacesFloatingHeader({
   onAddRace,
   onAddPractice,
   onNewSeason,
-  filterSegment = 'upcoming',
-  onFilterChange,
   scrollOffset: _scrollOffset = 0,
   onSearchChange,
   onAddButtonLayout,
@@ -227,7 +213,7 @@ export function RacesFloatingHeader({
 
   const isLoading = loadingInsights || weatherLoading;
 
-  // Build the race counter subtitle
+  // Build the race counter subtitle (hidden for progress segment)
   const hasIndexCounter = Boolean(currentRaceIndex && totalRaces);
   const hasUpcoming = upcomingRaces !== undefined && upcomingRaces > 0;
   const subtitleParts: string[] = [];
@@ -319,16 +305,6 @@ export function RacesFloatingHeader({
           </View>
         )}
 
-        {/* Segmented Control */}
-        {onFilterChange && (
-          <View style={styles.segmentedControlContainer}>
-            <IOSSegmentedControl
-              segments={FILTER_SEGMENTS}
-              selectedValue={filterSegment}
-              onValueChange={onFilterChange}
-            />
-          </View>
-        )}
       </TabScreenToolbar>
 
       {/* Add Menu Modal */}
@@ -452,10 +428,6 @@ const styles = StyleSheet.create({
     fontSize: IOS_TYPOGRAPHY.body.fontSize,
     color: IOS_COLORS.label,
     paddingVertical: 0,
-  },
-  segmentedControlContainer: {
-    paddingHorizontal: IOS_SPACING.sm,
-    paddingBottom: IOS_SPACING.xs,
   },
   // Menu styles
   menuOverlay: {

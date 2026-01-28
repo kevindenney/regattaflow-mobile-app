@@ -1,10 +1,8 @@
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
 import FloatingTabBar, { FLOATING_TAB_BAR_BOTTOM_MARGIN, FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
-import MoreMenuSheet from '@/components/navigation/MoreMenuSheet';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import { GlobalSearchProvider } from '@/providers/GlobalSearchProvider';
 import { useWebDrawer, WebDrawerProvider } from '@/providers/WebDrawerProvider';
-import { useBoats } from '@/hooks/useData';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { type TabConfig, getTabsForUserType } from '@/lib/navigation-config';
@@ -16,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 // Lazy import WebSidebarNav only on web to avoid bundling on native
@@ -43,9 +41,7 @@ function TabLayoutInner() {
   // Get tabs based on user type and capabilities
   // Sailors with coaching capability will see both sailor and coach tabs
   const tabs = getTabsForUserType(userType ?? null, isGuest, capabilities);
-  const [menuVisible, setMenuVisible] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
-  const { data: boats, loading: boatsLoading } = useBoats();
 
   // Redirect legacy coach users (user_type='coach' without capabilities) to /clients
   // Note: Sailors with coaching capability do NOT redirect - they stay on /races
@@ -67,10 +63,6 @@ function TabLayoutInner() {
 
   const isTabVisible = (name: string) => tabs.some(t => t.name === name);
   const findTab = (name: string) => tabs.find(tab => tab.name === name);
-  const showMenuTrigger = tabs.some(tab => tab.isMenuTrigger);
-
-  // Check if profile is incomplete (for sailors only)
-  const isProfileIncomplete = userType === 'sailor' && !boatsLoading && (!boats || boats.length === 0);
 
   // Swallow Android hardware back while in Tabs to avoid popping to Auth
   useFocusEffect(
@@ -100,49 +92,11 @@ function TabLayoutInner() {
   logger.debug('[TabLayout] Platform:', Platform.OS);
   logger.debug('[TabLayout] ==============================');
 
-  const menuItems = useMemo(() => {
-    const items: Array<{ key: string; label: string; icon: string; route: string; isWarning?: boolean }> = [];
-
-    // Coach menu items (simplified — Account is now accessible via profile avatar)
-    if (userType === 'coach') {
-      return items;
-    }
-
-    // Sailor menu items
-    if (isProfileIncomplete) {
-      items.push({
-        key: 'complete-profile',
-        label: 'Complete Profile',
-        icon: 'warning-outline',
-        route: '/(auth)/sailor-onboarding-chat',
-        isWarning: true,
-      });
-    }
-
-    if (userType !== 'club') {
-      items.push({
-        key: 'coaching',
-        label: 'Coaches',
-        icon: 'school-outline',
-        route: '/(tabs)/coaching',
-      });
-    }
-
-    // Account removed — now accessible via profile avatar in toolbar
-
-    return items;
-  }, [isProfileIncomplete, userType]);
-
   // User type flags for conditional rendering
   // Guests are treated as sailors for UI purposes
   const isClubUser = userType === 'club';
   const isSailorUser = userType === 'sailor' || isGuest;
   const isGuestUser = isGuest;
-
-  const handleMenuItemPress = (route: string) => {
-    setMenuVisible(false);
-    router.push(route as Parameters<typeof router.push>[0]);
-  };
 
   // Helper to check if a tab is active based on pathname
   const isTabActive = (tabName: string): boolean => {
@@ -150,72 +104,6 @@ function TabLayoutInner() {
     const normalizedTabName = tabName === 'boat/index' ? 'boat' : tabName;
     // Check if pathname matches the tab (e.g., /races, /learn, /boat)
     return pathname === `/${normalizedTabName}` || pathname.startsWith(`/${normalizedTabName}/`);
-  };
-
-  const renderHamburgerButton = ({ accessibilityState, style }: BottomTabBarButtonProps) => {
-    if (!showMenuTrigger) {
-      return null;
-    }
-
-    const moreTab = findTab('more');
-
-    // iOS HIG style for sailors: icon + label
-    if (isSailorUser) {
-      // More tab is active when menu is visible or we're on a "more" menu page
-      const isMoreActive = isTabActive('more') || menuVisible;
-      const iconName = isMoreActive
-        ? (moreTab?.iconFocused || 'ellipsis-horizontal-circle')
-        : (moreTab?.icon || 'ellipsis-horizontal-circle-outline');
-
-      const handlePress = () => {
-        triggerHaptic('selection');
-        setMenuVisible(true);
-      };
-
-      return (
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityState={{ ...accessibilityState, selected: isMoreActive }}
-          onPress={handlePress}
-          style={[style, styles.iosTabButton]}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={iconName as any}
-            size={24}
-            color={isMoreActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
-          />
-          <Text style={[
-            styles.iosTabLabel,
-            isMoreActive && styles.iosTabLabelActive
-          ]}>
-            {moreTab?.title ?? 'More'}
-          </Text>
-        </TouchableOpacity>
-      );
-    }
-
-    // Default style for non-sailors (club/coach)
-    const isActive = accessibilityState?.selected;
-    const tint = isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray;
-    return (
-      <TouchableOpacity
-        accessibilityRole="button"
-        accessibilityState={accessibilityState}
-        onPress={() => {
-          triggerHaptic('selection');
-          setMenuVisible(true);
-        }}
-        style={[style, styles.hamburgerButton]}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Ionicons name={(moreTab?.icon ?? 'ellipsis-horizontal-circle-outline') as any} size={24} color={tint} />
-        <Text style={[styles.hamburgerLabel, { color: tint }]}>
-          {moreTab?.title ?? 'More'}
-        </Text>
-      </TouchableOpacity>
-    );
   };
 
   // iOS HIG-style tab button for sailors: icon + label with proper touch handling
@@ -303,7 +191,6 @@ function TabLayoutInner() {
   const eventsTab = findTab('events');
   const membersTab = findTab('members');
   const raceManagementTab = findTab('race-management');
-  const moreTab = findTab('more');
 
   // Determine tab bar and scene style based on platform
   const getTabBarConfig = () => {
@@ -329,7 +216,7 @@ function TabLayoutInner() {
         <FloatingTabBar
           {...props}
           visibleTabs={tabs}
-          onOpenMenu={() => setMenuVisible(true)}
+          onOpenMenu={() => {}}
           pathname={pathname}
           position={isIPadPortrait ? 'top' : 'bottom'}
         />
@@ -801,30 +688,11 @@ function TabLayoutInner() {
             tabBarButton: isTabVisible('earnings') ? undefined : () => null,
           }}
         />
-        {/* Tab 5: More - MUST BE LAST VISIBLE TAB */}
+        {/* More tab removed — coaching moved to Learn, account is a modal */}
         <Tabs.Screen
           name="more"
-          listeners={{
-            tabPress: (e) => {
-              // Prevent navigating to the more screen - it's only a menu trigger
-              e.preventDefault();
-              triggerHaptic('selection');
-              setMenuVisible(true);
-            },
-          }}
           options={{
-            title: moreTab?.title ?? 'More',
-            tabBarButton: showMenuTrigger ? renderHamburgerButton : () => null,
-            tabBarIcon: ({ color, size, focused }) =>
-              moreTab?.emoji ? (
-                <EmojiTabIcon emoji={moreTab.emoji} focused={focused} size={size} />
-              ) : (
-                <Ionicons
-                  name={getIconName(moreTab, focused, moreTab?.iconFocused ?? 'menu', moreTab?.icon ?? 'menu') as any}
-                  size={size}
-                  color={color}
-                />
-              ),
+            href: null,
           }}
         />
     </Tabs>
@@ -851,18 +719,6 @@ function TabLayoutInner() {
         </View>
       </View>
 
-      {/* More menu for native (hidden when web sidebar mode is active) */}
-      {!useWebSidebar && showMenuTrigger && (
-        <MoreMenuSheet
-          visible={menuVisible}
-          onClose={() => setMenuVisible(false)}
-          menuItems={menuItems}
-          onItemPress={handleMenuItemPress}
-          userProfile={user ? { full_name: user.user_metadata?.full_name, email: user.email } : undefined}
-          userType={userType}
-          isGuest={isGuest}
-        />
-      )}
     </View>
   );
 }
@@ -1122,18 +978,6 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: IOS_COLORS.systemBlue,
     borderRadius: 1,
-  },
-  hamburgerButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 2,
-    gap: 2,
-  },
-  hamburgerLabel: {
-    fontSize: 10,
-    marginTop: 2,
-    fontWeight: '500',
   },
 });
 

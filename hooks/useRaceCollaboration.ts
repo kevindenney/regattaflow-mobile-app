@@ -18,6 +18,7 @@ import {
 } from '@/types/raceCollaboration';
 import { createLogger } from '@/lib/utils/logger';
 import { isUuid } from '@/utils/uuid';
+import { supabase } from '@/services/supabase';
 
 const logger = createLogger('useRaceCollaboration');
 
@@ -37,6 +38,7 @@ interface UseRaceCollaborationResult {
   // Actions
   createInvite: (accessLevel?: AccessLevel, displayName?: string, role?: string) => Promise<string>;
   sendMessage: (message: string, type?: MessageType) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<void>;
   removeCollaborator: (collaboratorId: string) => Promise<void>;
   updateAccessLevel: (collaboratorId: string, level: AccessLevel) => Promise<void>;
   refresh: () => Promise<void>;
@@ -139,9 +141,62 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
     async (message: string, type: MessageType = 'text'): Promise<void> => {
       if (!regattaId) throw new Error('No regatta ID');
 
-      await RaceCollaborationService.sendMessage(regattaId, message, type);
+      // Get current user for optimistic update
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Optimistic: add message to local state immediately
+      const optimisticId = `optimistic-${Date.now()}`;
+      if (user) {
+        const optimisticMessage: RaceMessage = {
+          id: optimisticId,
+          regattaId,
+          userId: user.id,
+          message,
+          messageType: type,
+          createdAt: new Date().toISOString(),
+          profile: {
+            fullName: user.user_metadata?.full_name || user.email || 'You',
+          },
+        };
+        setMessages((prev) => [...prev, optimisticMessage]);
+      }
+
+      try {
+        const sentMessage = await RaceCollaborationService.sendMessage(regattaId, message, type);
+        // Replace optimistic message with real one
+        setMessages((prev) =>
+          prev.map((m) => (m.id === optimisticId ? sentMessage : m))
+        );
+      } catch (err) {
+        // Remove optimistic message on failure
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+        throw err;
+      }
     },
     [regattaId]
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId: string): Promise<void> => {
+      // Optimistic: remove from local state immediately
+      const removed = messages.find((m) => m.id === messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+
+      try {
+        await RaceCollaborationService.deleteMessage(messageId);
+      } catch (err) {
+        // Restore on failure
+        if (removed) {
+          setMessages((prev) => {
+            const restored = [...prev, removed];
+            restored.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            return restored;
+          });
+        }
+        throw err;
+      }
+    },
+    [messages]
   );
 
   const removeCollaborator = useCallback(
@@ -180,6 +235,7 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
     // Actions
     createInvite,
     sendMessage,
+    deleteMessage,
     removeCollaborator,
     updateAccessLevel,
     refresh: fetchData,

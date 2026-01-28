@@ -71,15 +71,11 @@ const SHEET_HORIZONTAL_MARGIN = 12;
 const AVATAR_SIZE = 40;
 
 // Section definitions for grouping
-const SECTION_MAP: Record<string, string> = {
-  coaching: 'community',
-};
+const SECTION_MAP: Record<string, string> = {};
 
-const SECTION_TITLES: Record<string, string> = {
-  community: 'Community',
-};
+const SECTION_TITLES: Record<string, string> = {};
 
-const SECTION_ORDER = ['callout', 'community'];
+const SECTION_ORDER = ['callout'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

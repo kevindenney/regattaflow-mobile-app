@@ -3,10 +3,11 @@
  *
  * Reusable toolbar for tab screens with a large title on the left
  * and action icons grouped in a white capsule pill on the right.
+ * Includes an Apple HIG-style profile avatar button (rightmost).
  * Inspired by the Apple Health "Records" screen pattern.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,12 +22,16 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import {
   IOS_COLORS,
   IOS_SHADOWS,
   IOS_ANIMATIONS,
 } from '@/lib/design-tokens-ios';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { triggerHaptic } from '@/lib/haptics';
+import { useWebDrawer } from '@/providers/WebDrawerProvider';
+import { useAuth } from '@/providers/AuthProvider';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +55,11 @@ export interface TabScreenToolbarProps {
   onSubtitlePress?: () => void;
   actions?: ToolbarAction[];
   /**
+   * When provided, a magnifying-glass icon is auto-prepended to the
+   * capsule action list. This callback opens the global search overlay.
+   */
+  onGlobalSearch?: () => void;
+  /**
    * Custom right-side content that replaces the default actions capsule.
    * Use this when you need a ref or custom layout for the right element.
    */
@@ -62,15 +72,69 @@ export interface TabScreenToolbarProps {
   showBorder?: boolean;
   /** Show a spinner next to the title */
   isLoading?: boolean;
+  /** Show the profile avatar button in the trailing position (default: true) */
+  showProfileAvatar?: boolean;
   /** Extra content below the nav row (e.g. segmented controls, search bar) */
   children?: React.ReactNode;
 }
 
 // ---------------------------------------------------------------------------
-// Internal: animated action button
+// Internal: shared animated pressable
 // ---------------------------------------------------------------------------
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// ---------------------------------------------------------------------------
+// Internal: profile avatar button (Apple HIG trailing position)
+// ---------------------------------------------------------------------------
+
+const PROFILE_AVATAR_SIZE = 30;
+
+function getInitials(name?: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function ProfileAvatarButton() {
+  const { userProfile, isGuest } = useAuth();
+  const scale = useSharedValue(1);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const initials = isGuest ? '?' : getInitials(userProfile?.full_name);
+
+  return (
+    <AnimatedPressable
+      style={[styles.profileAvatar, animStyle]}
+      accessibilityLabel="Account"
+      accessibilityRole="button"
+      onPress={() => {
+        triggerHaptic('selection');
+        router.push('/account');
+      }}
+      onPressIn={() => {
+        scale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
+      }}
+    >
+      {isGuest ? (
+        <Ionicons name="person-circle-outline" size={PROFILE_AVATAR_SIZE} color={IOS_COLORS.secondaryLabel} />
+      ) : (
+        <Text style={styles.profileAvatarText}>{initials}</Text>
+      )}
+    </AnimatedPressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Internal: animated action button
+// ---------------------------------------------------------------------------
 
 function ActionButton({ action }: { action: ToolbarAction }) {
   const scale = useSharedValue(1);
@@ -118,14 +182,32 @@ export function TabScreenToolbar({
   subtitle,
   onSubtitlePress,
   actions,
+  onGlobalSearch,
   rightContent,
   topInset = 0,
   backgroundColor = IOS_COLORS.systemGroupedBackground,
   showBorder = true,
   isLoading = false,
+  showProfileAvatar = true,
   children,
 }: TabScreenToolbarProps) {
-  const hasActions = actions && actions.length > 0;
+  const { isDrawerOpen, toggleDrawer } = useWebDrawer();
+
+  // Show hamburger menu on web when sidebar drawer is enabled
+  const showWebMenuButton = Platform.OS === 'web' && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
+
+  // Auto-prepend a search action when onGlobalSearch is provided
+  const mergedActions = useMemo(() => {
+    if (!onGlobalSearch) return actions;
+    const searchAction: ToolbarAction = {
+      icon: 'search-outline',
+      label: 'Search',
+      onPress: onGlobalSearch,
+    };
+    return [searchAction, ...(actions ?? [])];
+  }, [onGlobalSearch, actions]);
+
+  const hasActions = mergedActions && mergedActions.length > 0;
 
   return (
     <View
@@ -137,6 +219,21 @@ export function TabScreenToolbar({
     >
       {/* Nav row: title left  |  capsule right */}
       <View style={styles.navRow}>
+        {/* Web: shelf toggle button */}
+        {showWebMenuButton && (
+          <Pressable
+            onPress={toggleDrawer}
+            style={({ pressed }) => [styles.menuButton, pressed && { opacity: 0.6 }]}
+            accessibilityLabel={isDrawerOpen ? 'Collapse sidebar' : 'Open sidebar'}
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name={isDrawerOpen ? 'chevron-back' : 'menu'}
+              size={24}
+              color={IOS_COLORS.secondaryLabel}
+            />
+          </Pressable>
+        )}
         {/* Left: title + optional subtitle */}
         <View style={styles.titleSection}>
           <Text
@@ -175,19 +272,22 @@ export function TabScreenToolbar({
           </Pressable>
         ) : null}
 
-        {/* Right: custom content or default action capsule */}
-        {rightContent
-          ? rightContent
-          : hasActions && (
-              <View style={styles.capsule}>
-                {actions.map((action, idx) => (
-                  <React.Fragment key={action.label}>
-                    {idx > 0 && <View style={styles.capsuleDivider} />}
-                    <ActionButton action={action} />
-                  </React.Fragment>
-                ))}
-              </View>
-            )}
+        {/* Right: custom content or default action capsule + profile avatar */}
+        <View style={styles.rightSection}>
+          {rightContent
+            ? rightContent
+            : hasActions && (
+                <View style={styles.capsule}>
+                  {mergedActions.map((action, idx) => (
+                    <React.Fragment key={action.label}>
+                      {idx > 0 && <View style={styles.capsuleDivider} />}
+                      <ActionButton action={action} />
+                    </React.Fragment>
+                  ))}
+                </View>
+              )}
+          {showProfileAvatar && <ProfileAvatarButton />}
+        </View>
       </View>
 
       {/* Children slot for tab-specific extras */}
@@ -217,6 +317,16 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 4,
     paddingHorizontal: 16,
+  },
+
+  // Web menu button
+  menuButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+    borderRadius: 8,
   },
 
   // Title
@@ -250,6 +360,29 @@ const styles = StyleSheet.create({
   },
   subtitleLink: {
     color: IOS_COLORS.systemBlue,
+  },
+
+  // Right section (capsule + avatar)
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  // Profile avatar
+  profileAvatar: {
+    width: PROFILE_AVATAR_SIZE,
+    height: PROFILE_AVATAR_SIZE,
+    borderRadius: PROFILE_AVATAR_SIZE / 2,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 
   // Capsule pill

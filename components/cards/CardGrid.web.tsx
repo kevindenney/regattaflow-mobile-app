@@ -83,27 +83,56 @@ function CardGridComponent({
 }: CardGridWebProps & { nextRaceIndex?: number | null }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
+  const containerRef = useRef<View>(null);
+
+  // Track container width via ResizeObserver (accounts for shelf sidebar)
+  const [containerWidth, setContainerWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 375
+  );
 
   // State
   const [dimensions, setDimensions] = useState<CardDimensions>(() =>
-    calculateCardDimensions(
-      typeof window !== 'undefined' ? window.innerWidth : 375,
-      typeof window !== 'undefined' ? window.innerHeight : 667
-    )
+    calculateCardDimensions(containerWidth, typeof window !== 'undefined' ? window.innerHeight : 667)
   );
   const [currentRaceIndex, setCurrentRaceIndex] = useState(initialRaceIndex);
 
-  // Update dimensions on resize
+  // Observe container width changes (e.g. shelf open/close)
+  useEffect(() => {
+    const el = containerRef.current as any;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+
+    // Get the underlying DOM node from React Native web View
+    const domNode: HTMLElement | undefined =
+      el instanceof HTMLElement ? el : el?.getNode?.() ?? el;
+    if (!domNode || !(domNode instanceof HTMLElement)) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(domNode);
+    return () => observer.disconnect();
+  }, []);
+
+  // Recalculate card dimensions when container width or window height changes
+  useEffect(() => {
+    setDimensions(
+      calculateCardDimensions(containerWidth, window.innerHeight)
+    );
+  }, [containerWidth]);
+
+  // Update dimensions on window resize (for height changes)
   useEffect(() => {
     const handleResize = () => {
       setDimensions(
-        calculateCardDimensions(window.innerWidth, window.innerHeight)
+        calculateCardDimensions(containerWidth, window.innerHeight)
       );
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [containerWidth]);
 
   // Calculate full height card dimensions
   const cardHeight = useMemo(() => {
@@ -290,7 +319,7 @@ function CardGridComponent({
   }
 
   return (
-    <View style={[styles.container, style]} testID={testID}>
+    <View ref={containerRef} style={[styles.container, style]} testID={testID}>
       <ScrollView
         ref={horizontalScrollRef}
         horizontal

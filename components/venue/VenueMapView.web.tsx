@@ -412,6 +412,12 @@ function GoogleMapComponent({
         if (!club.coordinates_lat || !club.coordinates_lng) return;
 
         const color = getYachtClubColor(club.prestige_level);
+        // Pre-compute parent venue at marker-creation time to avoid stale closure lookups
+        const parentVenue = venues.find(v => v.id === club.venue_id) || null;
+
+        if (!parentVenue) {
+          console.warn(`[VenueMap] Yacht club "${club.name}" has no resolved parent venue (venue_id: ${club.venue_id})`);
+        }
 
         const marker = createMapMarker({
           position: { lat: club.coordinates_lat, lng: club.coordinates_lng },
@@ -425,6 +431,11 @@ function GoogleMapComponent({
         marker.addListener('click', () => {
           const content = createYachtClubInfoWindowContent(club);
           showInfoWindow(marker, content);
+
+          // Fire onMarkerPress with the pre-resolved parent venue
+          if (onMarkerPress && parentVenue) {
+            onMarkerPress(parentVenue);
+          }
         });
 
         markersRef.current.push(marker);

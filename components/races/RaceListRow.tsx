@@ -11,7 +11,7 @@
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { ChevronRight } from 'lucide-react-native';
+import { ChevronRight, MoreHorizontal } from 'lucide-react-native';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -40,8 +40,12 @@ interface RaceListRowProps {
   prepProgress?: number | null;
   /** Called when row is tapped */
   onPress?: (raceId: string) => void;
+  /** Called when ellipsis button is tapped */
+  onMorePress?: (raceId: string) => void;
   /** Whether to dim the row (for past races) */
   dimmed?: boolean;
+  /** Whether this row is selected (master-detail mode on web) */
+  isSelected?: boolean;
 }
 
 // =============================================================================
@@ -75,7 +79,9 @@ export function RaceListRow({
   variant = 'standard',
   prepProgress = null,
   onPress,
+  onMorePress,
   dimmed = false,
+  isSelected = false,
 }: RaceListRowProps) {
   const countdown = useRaceCountdown(race.date, race.startTime);
 
@@ -94,6 +100,7 @@ export function RaceListRow({
         isHero && styles.rowHero,
         isCompact && styles.rowCompact,
         dimmed && styles.rowDimmed,
+        isSelected && styles.rowSelected,
         pressed && styles.rowPressed,
       ]}
       accessibilityRole="button"
@@ -141,7 +148,7 @@ export function RaceListRow({
         )}
       </View>
 
-      {/* Right: Progress ring + chevron */}
+      {/* Right: Progress ring + ellipsis + chevron */}
       <View style={styles.rightContainer}>
         {prepProgress != null && (
           <PrepProgressRing
@@ -150,6 +157,20 @@ export function RaceListRow({
             strokeWidth={isHero ? 3.5 : 3}
             showLabel={!isCompact}
           />
+        )}
+        {onMorePress && (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onMorePress(race.id);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={styles.moreButton}
+            accessibilityRole="button"
+            accessibilityLabel="More options"
+          >
+            <MoreHorizontal size={18} color={IOS_COLORS.systemGray2} />
+          </Pressable>
         )}
         <ChevronRight
           size={16}
@@ -186,6 +207,9 @@ const styles = StyleSheet.create({
   },
   rowDimmed: {
     opacity: 0.55,
+  },
+  rowSelected: {
+    backgroundColor: 'rgba(0, 122, 255, 0.08)',
   },
   rowPressed: {
     backgroundColor: IOS_COLORS.quaternarySystemFill,
@@ -250,5 +274,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: IOS_SPACING.sm,
+  },
+  moreButton: {
+    padding: 4,
+    borderRadius: 12,
   },
 });

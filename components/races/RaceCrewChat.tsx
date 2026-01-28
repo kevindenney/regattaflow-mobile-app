@@ -21,6 +21,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import {
   Actionsheet,
@@ -48,6 +49,7 @@ interface RaceCrewChatProps {
   messages: RaceMessage[];
   currentUserId?: string;
   onSendMessage: (text: string) => Promise<void>;
+  onDeleteMessage?: (messageId: string) => Promise<void>;
   isSending?: boolean;
   isLoading?: boolean;
 }
@@ -114,10 +116,12 @@ function MessageBubble({
   message,
   isOwnMessage,
   showAvatar,
+  onDelete,
 }: {
   message: RaceMessage;
   isOwnMessage: boolean;
   showAvatar: boolean;
+  onDelete?: (messageId: string) => Promise<void>;
 }) {
   const initials = message.profile?.fullName
     ? message.profile.fullName
@@ -128,8 +132,30 @@ function MessageBubble({
         .substring(0, 2)
     : '??';
 
+  const handleLongPress = () => {
+    if (!isOwnMessage || !onDelete) return;
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            onDelete(message.id).catch(() => {
+              Alert.alert('Error', 'Could not delete message.');
+            });
+          },
+        },
+      ],
+    );
+  };
+
   return (
-    <View
+    <Pressable
+      onLongPress={handleLongPress}
+      delayLongPress={400}
       style={[
         styles.messageBubbleRow,
         isOwnMessage && styles.messageBubbleRowOwn,
@@ -188,7 +214,7 @@ function MessageBubble({
           {formatMessageTime(message.createdAt)}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -202,6 +228,7 @@ export function RaceCrewChat({
   messages,
   currentUserId,
   onSendMessage,
+  onDeleteMessage,
   isSending = false,
   isLoading = false,
 }: RaceCrewChatProps) {
@@ -227,6 +254,10 @@ export function RaceCrewChat({
     } catch {
       // Restore text on failure
       setInputText(text);
+      Alert.alert(
+        'Message not sent',
+        'Could not deliver your message. Check your connection and try again.',
+      );
     }
   }, [inputText, isSending, onSendMessage]);
 
@@ -249,10 +280,11 @@ export function RaceCrewChat({
           message={item}
           isOwnMessage={isOwnMessage}
           showAvatar={showAvatar}
+          onDelete={onDeleteMessage}
         />
       );
     },
-    [currentUserId, messages]
+    [currentUserId, messages, onDeleteMessage]
   );
 
   const renderDateHeader = useCallback(

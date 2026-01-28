@@ -43,8 +43,9 @@ type TabItemConfig = {
 interface FloatingTabBarProps extends BottomTabBarProps {
   visibleTabs: TabItemConfig[];
   onOpenMenu: () => void;
-  onOpenSearch: () => void;
   pathname: string;
+  /** Position at 'top' or 'bottom' of the screen (default: 'bottom') */
+  position?: 'top' | 'bottom';
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -110,66 +111,29 @@ function TabItem({
   );
 }
 
-/**
- * Search tab item (special - not a real route)
- */
-function SearchTabItem({ onPress }: { onPress: () => void }) {
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = useCallback(() => {
-    scale.value = withSpring(0.9, { damping: 15, stiffness: 300 });
-  }, [scale]);
-
-  const handlePressOut = useCallback(() => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
-  }, [scale]);
-
-  return (
-    <AnimatedPressable
-      accessibilityRole="tab"
-      accessibilityLabel="Search"
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      style={[styles.tabItem, animatedStyle]}
-      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-    >
-      <View style={styles.tabItemInner}>
-        <Ionicons
-          name="search-outline"
-          size={22}
-          color={IOS_COLORS.systemGray}
-        />
-        <Text style={styles.tabLabel} numberOfLines={1}>
-          Search
-        </Text>
-      </View>
-    </AnimatedPressable>
-  );
-}
-
 export default function FloatingTabBar({
   state,
   navigation,
   visibleTabs,
   onOpenMenu,
-  onOpenSearch,
   pathname,
+  position = 'bottom',
 }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
+  const isTop = position === 'top';
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
 
   // Hide tab bar when keyboard is open
   useEffect(() => {
+    const hideDistance = isTop
+      ? -(FLOATING_TAB_BAR_HEIGHT + 40)  // slide up when at top
+      : FLOATING_TAB_BAR_HEIGHT + 40;     // slide down when at bottom
+
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       () => {
-        translateY.value = withTiming(FLOATING_TAB_BAR_HEIGHT + 40, { duration: 250 });
+        translateY.value = withTiming(hideDistance, { duration: 250 });
         opacity.value = withTiming(0, { duration: 150 });
       }
     );
@@ -185,7 +149,7 @@ export default function FloatingTabBar({
       showSub.remove();
       hideSub.remove();
     };
-  }, [translateY, opacity]);
+  }, [translateY, opacity, isTop]);
 
   const containerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -221,15 +185,12 @@ export default function FloatingTabBar({
     }
   };
 
-  const handleSearchPress = () => {
-    triggerHaptic('selection');
-    onOpenSearch();
-  };
-
-  // Position close to screen bottom (Apple Maps style).
-  // Use half the safe-area inset so the pill clears the home indicator
-  // without leaving a large white gap below.
-  const bottomPosition = Math.max(Math.round(insets.bottom / 2), 8) + FLOATING_TAB_BAR_BOTTOM_MARGIN;
+  // Position close to screen edge.
+  // Bottom: half the safe-area inset so the pill clears the home indicator
+  // Top: safe-area top for iPad portrait mode
+  const edgePosition = isTop
+    ? Math.max(insets.top, 12)
+    : Math.max(Math.round(insets.bottom / 2), 8) + FLOATING_TAB_BAR_BOTTOM_MARGIN;
 
   const barContent = (
     <View
@@ -244,7 +205,6 @@ export default function FloatingTabBar({
           onPress={() => handleTabPress(tab)}
         />
       ))}
-      <SearchTabItem onPress={handleSearchPress} />
     </View>
   );
 
@@ -252,7 +212,7 @@ export default function FloatingTabBar({
     <Animated.View
       style={[
         styles.outerContainer,
-        { bottom: bottomPosition },
+        isTop ? { top: edgePosition } : { bottom: edgePosition },
         containerAnimatedStyle,
       ]}
       pointerEvents="box-none"

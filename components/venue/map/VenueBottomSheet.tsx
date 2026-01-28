@@ -9,7 +9,7 @@
  * Uses react-native-reanimated + react-native-gesture-handler.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -36,7 +36,6 @@ import {
   IOS_ANIMATIONS,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
-import { ConditionsCompactBar } from '../ConditionsCompactBar';
 import { IOSConditionsWidgets } from '../IOSConditionsWidgets';
 import { WindPatternCard } from '../WindPatternCard';
 import { TideCurrentPanel } from '../TideCurrentPanel';
@@ -67,6 +66,12 @@ interface VenueBottomSheetProps {
   onAskAI: () => void;
   loadingAI: boolean;
   onCompare: () => void;
+  /** When true, the sheet shows a preview banner with Switch / Close actions */
+  isPreviewMode?: boolean;
+  /** Commit the previewed venue as the new global venue */
+  onSwitchVenue?: () => void;
+  /** Dismiss preview and revert to the current venue */
+  onDismissPreview?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +245,9 @@ export function VenueBottomSheet({
   onAskAI,
   loadingAI,
   onCompare,
+  isPreviewMode = false,
+  onSwitchVenue,
+  onDismissPreview,
 }: VenueBottomSheetProps) {
   // Sheet height as animated value (height of visible portion from bottom)
   const sheetHeight = useSharedValue(PEEK);
@@ -248,6 +256,15 @@ export function VenueBottomSheet({
   const fireHaptic = useCallback(() => {
     triggerHaptic('impactLight');
   }, []);
+
+  // Auto-expand to HALF when entering preview, snap back to PEEK when leaving
+  useEffect(() => {
+    if (isPreviewMode) {
+      sheetHeight.value = withSpring(HALF, SPRING_CONFIG);
+    } else {
+      sheetHeight.value = withSpring(PEEK, SPRING_CONFIG);
+    }
+  }, [isPreviewMode]);
 
   const panGesture = Gesture.Pan()
     .onStart(() => {
@@ -331,6 +348,38 @@ export function VenueBottomSheet({
           >
             {/* ===== PEEK ZONE ===== */}
             <View style={styles.peekContent}>
+              {isPreviewMode && (
+                <View style={styles.previewBanner}>
+                  <View style={styles.previewBannerLeft}>
+                    <Ionicons name="eye-outline" size={14} color={IOS_COLORS.systemOrange} />
+                    <Text style={styles.previewLabel}>Previewing</Text>
+                  </View>
+                  <View style={styles.previewBannerActions}>
+                    <Pressable
+                      style={styles.previewCloseButton}
+                      onPress={() => {
+                        triggerHaptic('impactLight');
+                        onDismissPreview?.();
+                      }}
+                      accessibilityLabel="Close preview"
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.previewCloseText}>Close</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.previewSwitchButton}
+                      onPress={() => {
+                        triggerHaptic('impactMedium');
+                        onSwitchVenue?.();
+                      }}
+                      accessibilityLabel="Switch to this venue"
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.previewSwitchText}>Switch Here</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
               <Text style={styles.venueName} numberOfLines={1}>
                 {venue.name}
               </Text>
@@ -339,12 +388,6 @@ export function VenueBottomSheet({
                 {venue.region ? ` · ${venue.region}` : ''}
               </Text>
             </View>
-
-            {/* Compact conditions strip */}
-            <ConditionsCompactBar
-              weather={liveWeather}
-              isLoading={!liveWeather}
-            />
 
             {/* ===== HALF ZONE ===== */}
             <View style={styles.halfContent}>
@@ -363,19 +406,21 @@ export function VenueBottomSheet({
                   icon="sparkles-outline"
                   label="AI Analysis"
                   onPress={onAskAI}
-                  disabled={loadingAI}
+                  disabled={loadingAI || isPreviewMode}
                 />
                 <ActionCircle
                   icon={isSaved ? 'bookmark' : 'bookmark-outline'}
                   label={isSaved ? 'Saved' : 'Save'}
                   isActive={isSaved}
                   onPress={onSaveVenue}
+                  disabled={isPreviewMode}
                 />
                 {savedVenueIds.size >= 2 && (
                   <ActionCircle
                     icon="copy-outline"
                     label="Compare"
                     onPress={onCompare}
+                    disabled={isPreviewMode}
                   />
                 )}
               </View>
@@ -471,6 +516,56 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+  },
+
+  // Preview banner
+  previewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: IOS_SPACING.sm,
+    paddingVertical: IOS_SPACING.xs,
+    paddingHorizontal: IOS_SPACING.sm,
+    backgroundColor: `${IOS_COLORS.systemOrange}12`,
+    borderRadius: IOS_RADIUS.sm,
+  },
+  previewBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.xs,
+  },
+  previewLabel: {
+    fontSize: IOS_TYPOGRAPHY.caption1.fontSize,
+    fontWeight: '600',
+    color: IOS_COLORS.systemOrange,
+    letterSpacing: IOS_TYPOGRAPHY.caption1.letterSpacing,
+  },
+  previewBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.sm,
+  },
+  previewCloseButton: {
+    paddingVertical: 4,
+    paddingHorizontal: IOS_SPACING.sm,
+    borderRadius: IOS_RADIUS.sm,
+    backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
+  },
+  previewCloseText: {
+    fontSize: IOS_TYPOGRAPHY.caption1.fontSize,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  previewSwitchButton: {
+    paddingVertical: 4,
+    paddingHorizontal: IOS_SPACING.md,
+    borderRadius: IOS_RADIUS.sm,
+    backgroundColor: IOS_COLORS.systemBlue,
+  },
+  previewSwitchText: {
+    fontSize: IOS_TYPOGRAPHY.caption1.fontSize,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 
   // Peek zone

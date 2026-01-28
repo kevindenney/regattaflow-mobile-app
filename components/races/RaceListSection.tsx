@@ -62,12 +62,16 @@ interface RaceListSectionProps {
   filterSegment?: RaceFilterSegment;
   /** Called when a race row is tapped */
   onRacePress?: (raceId: string) => void;
+  /** Called when ellipsis (more) button on a race row is tapped */
+  onRaceMorePress?: (raceId: string) => void;
   /** Pull-to-refresh handler */
   onRefresh?: () => void;
   /** Whether refreshing is in progress */
   refreshing?: boolean;
   /** Optional prep progress lookup (raceId -> 0-1 progress) */
   prepProgressMap?: Record<string, number>;
+  /** Currently selected race ID (for master-detail highlight on web) */
+  selectedRaceId?: string | null;
 }
 
 // =============================================================================
@@ -127,9 +131,11 @@ export function RaceListSection({
   races,
   filterSegment = 'upcoming',
   onRacePress,
+  onRaceMorePress,
   onRefresh,
   refreshing = false,
   prepProgressMap,
+  selectedRaceId,
 }: RaceListSectionProps) {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     past: true,
@@ -244,10 +250,12 @@ export function RaceListSection({
           dimmed={section.dimmed}
           prepProgress={prepProgressMap?.[item.id] ?? null}
           onPress={onRacePress}
+          onMorePress={onRaceMorePress}
+          isSelected={selectedRaceId === item.id}
         />
       );
     },
-    [onRacePress, prepProgressMap],
+    [onRacePress, onRaceMorePress, prepProgressMap, selectedRaceId],
   );
 
   // Row separator

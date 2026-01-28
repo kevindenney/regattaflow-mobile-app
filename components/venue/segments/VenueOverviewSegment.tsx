@@ -1,8 +1,13 @@
 /**
- * VenueOverviewSegment
+ * @deprecated This component is no longer rendered. Its content (clubs, racing
+ * areas) has been moved to VenueDetailHeader which is rendered in the venue
+ * detail screen (app/venue/[id].tsx). The venue tab now shows a directory
+ * listing instead of a single-venue view.
  *
- * Default segment for the venue tab. Shows conditions bar, compact hero map,
- * racing area list, and community highlights (preview cards).
+ * VenueOverviewSegment (DEPRECATED)
+ *
+ * Previously the default segment for the venue tab. Showed conditions bar,
+ * compact hero map, racing area list, and community highlights.
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';

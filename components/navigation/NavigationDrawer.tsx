@@ -24,50 +24,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/providers/AuthProvider';
 import { TUFTE_BACKGROUND, TUFTE_BACKGROUND_SECONDARY, TUFTE_TEXT } from '@/components/cards/constants';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
+import {
+  type NavItem,
+  SAILOR_NAV_ITEMS,
+  SAILOR_SECONDARY_ITEMS,
+  COACH_NAV_ITEMS,
+  CLUB_NAV_ITEMS,
+  COMMON_FOOTER_ITEMS,
+  getNavItemsForUserType,
+  isRouteActive,
+} from '@/lib/navigation-config';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
-
-interface NavItem {
-  key: string;
-  label: string;
-  route: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}
-
-// Navigation items by persona
-// Boat management moved to Account screen
-const SAILOR_NAV_ITEMS: NavItem[] = [
-  { key: 'races', label: 'Races', route: '/(tabs)/races', icon: 'flag-outline' },
-  { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
-  { key: 'venue', label: 'Venue', route: '/(tabs)/venue', icon: 'location-outline' },
-];
-
-const SAILOR_SECONDARY_ITEMS: NavItem[] = [
-  { key: 'progress', label: 'Progress', route: '/(tabs)/progress', icon: 'trending-up-outline' },
-  { key: 'courses', label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
-  { key: 'sailors', label: 'Sailors', route: '/(tabs)/discover', icon: 'compass-outline' },
-  { key: 'affiliations', label: 'Affiliations', route: '/(tabs)/affiliations', icon: 'people-circle-outline' },
-  { key: 'crew', label: 'Crew', route: '/(tabs)/crew', icon: 'people-outline' },
-  { key: 'coaches', label: 'Coaches', route: '/(tabs)/coaching', icon: 'school-outline' },
-];
-
-const COACH_NAV_ITEMS: NavItem[] = [
-  { key: 'clients', label: 'Clients', route: '/(tabs)/clients', icon: 'people-outline' },
-  { key: 'schedule', label: 'Schedule', route: '/(tabs)/schedule', icon: 'calendar-outline' },
-  { key: 'earnings', label: 'Earnings', route: '/(tabs)/earnings', icon: 'cash-outline' },
-];
-
-const CLUB_NAV_ITEMS: NavItem[] = [
-  { key: 'events', label: 'Events', route: '/(tabs)/events', icon: 'calendar-outline' },
-  { key: 'members', label: 'Members', route: '/(tabs)/members', icon: 'people-outline' },
-  { key: 'racing', label: 'Racing', route: '/(tabs)/race-management', icon: 'flag-outline' },
-  { key: 'club', label: 'Club', route: '/(tabs)/profile', icon: 'business-outline' },
-];
-
-const COMMON_FOOTER_ITEMS: NavItem[] = [
-  { key: 'account', label: 'Account', route: '/(tabs)/account', icon: 'person-outline' },
-];
 
 interface NavigationDrawerProps {
   visible: boolean;

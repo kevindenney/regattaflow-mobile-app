@@ -116,7 +116,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
           { label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
           { label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
           { label: 'Boats', route: '/(tabs)/boat/index', icon: 'boat-outline' },
-          { label: 'Venues', route: '/(tabs)/venue', icon: 'location-outline' },
+          { label: 'Local', route: '/(tabs)/venue', icon: 'compass-outline' },
         ];
       case 'coach':
         return [

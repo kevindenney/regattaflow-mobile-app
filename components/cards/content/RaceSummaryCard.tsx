@@ -22,20 +22,25 @@ import {
   Sun,
   Map,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState, useRef, Component, ErrorInfo } from 'react';
-import { ActionSheetIOS, Alert, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo, useState, Component, ErrorInfo } from 'react';
+import { ActionSheetIOS, Alert, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { ScrollView, Swipeable } from 'react-native-gesture-handler';
+import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, runOnJS } from 'react-native-reanimated';
 import { IOSSegmentedControl } from '@/components/ui/ios';
 import { triggerHaptic } from '@/lib/haptics';
+import { useRouter } from 'expo-router';
 
 import { CrewHub } from '@/components/crew';
 import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
 import { RaceChatDrawer } from '@/components/races/RaceChatDrawer';
 import { RaceStartInfoBar } from '@/components/races/RaceStartInfoBar';
+import { CrewAvatarStack } from '@/components/races/CrewAvatarStack';
+import { CollaborationPopover } from '@/components/races/CollaborationPopover';
 import { useRaceCollaborators } from '@/hooks/useRaceCollaborators';
+import { useRaceMessages } from '@/hooks/useRaceMessages';
+import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import { useQueryClient } from '@tanstack/react-query';
 import { DetailedReviewModal } from '@/components/races/DetailedReviewModal';
@@ -609,6 +614,8 @@ export function RaceSummaryCard({
   onSelectRace,
   nextRaceIndex,
 }: CardContentProps) {
+  const router = useRouter();
+
   // Temporal phase state
   const currentPhase = useMemo(
     () => getCurrentPhaseForRace(race.date, race.startTime),
@@ -627,7 +634,31 @@ export function RaceSummaryCard({
 
   // Chat drawer state
   const [showChat, setShowChat] = useState(false);
+  const [showCollabPopover, setShowCollabPopover] = useState(false);
   const { collaborators } = useRaceCollaborators(race.id);
+
+  // Messages for collaboration popover activity feed
+  const { messages: raceMessages } = useRaceMessages({
+    regattaId: race.id,
+    realtime: FEATURE_FLAGS.ENABLE_RACE_CREW_CHAT,
+  });
+
+  // Share handler
+  const handleShare = useCallback(async () => {
+    try {
+      const dateStr = new Date(race.date).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+      const parts = [`${race.name} — ${dateStr}`];
+      if (race.venue) parts.push(race.venue);
+      parts.push('Shared from RegattaFlow');
+      await Share.share({ message: parts.join('\n'), title: race.name });
+    } catch {
+      // User cancelled — no-op
+    }
+  }, [race.name, race.date, race.venue]);
 
   // Scroll edge gradient state (Tufte: shows content continues beyond viewport)
   const [scrollState, setScrollState] = useState({ atTop: true, atBottom: false });
@@ -870,6 +901,16 @@ export function RaceSummaryCard({
   // Build menu items for card management - permission-aware
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
+    // Crew Chat — fallback entry point when no avatar row is visible
+    if (FEATURE_FLAGS.ENABLE_RACE_CREW_CHAT) {
+      items.push({ label: 'Crew Chat', icon: 'chatbubbles-outline', onPress: () => setShowChat(true) });
+    }
+    // Share is always available
+    items.push({ label: 'Share Race', icon: 'share-outline', onPress: handleShare });
+    // Race Courses
+    items.push({ label: 'Race Courses', icon: 'map-outline', onPress: () => router.push('/race-courses') });
+    // Race Detail (scrollable view)
+    items.push({ label: 'Race Detail', icon: 'flag-outline', onPress: () => router.push(`/race/${race.id}` as any) });
     // Only show edit/delete for owners
     if (isOwner) {
       if (onEdit) {
@@ -884,10 +925,7 @@ export function RaceSummaryCard({
       items.push({ label: 'Dismiss sample', icon: 'close-outline', onPress: onDismiss });
     }
     return items;
-  }, [onEdit, onDelete, race, onDismiss, isOwner]);
-
-  // Ref for swipeable
-  const swipeableRef = useRef<Swipeable>(null);
+  }, [onEdit, onDelete, race, onDismiss, isOwner, handleShare, router]);
 
   // Long-press handler to show context menu
   const handleLongPress = useCallback(() => {
@@ -928,25 +966,6 @@ export function RaceSummaryCard({
       );
     }
   }, [canManage, menuItems]);
-
-  // Render right swipe actions (delete button)
-  const renderRightActions = useCallback(() => {
-    if (!isOwner || !onDelete) return null;
-
-    return (
-      <TouchableOpacity
-        style={styles.swipeDeleteAction}
-        onPress={() => {
-          swipeableRef.current?.close();
-          onDelete();
-        }}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="trash-outline" size={24} color="#FFFFFF" />
-        <Text style={styles.swipeDeleteText}>Delete</Text>
-      </TouchableOpacity>
-    );
-  }, [isOwner, onDelete]);
 
   // Render race type badge component
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
@@ -1149,15 +1168,6 @@ export function RaceSummaryCard({
 
   return (
     <>
-      <Swipeable
-        ref={swipeableRef}
-        renderRightActions={renderRightActions}
-        rightThreshold={40}
-        friction={2}
-        overshootRight={false}
-        containerStyle={{ flex: 1 }}
-        childrenContainerStyle={{ flex: 1 }}
-      >
         <Pressable onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1 }}>
           <View style={styles.container}>
             {/* Simplified Header: Race type badge + Countdown */}
@@ -1168,7 +1178,6 @@ export function RaceSummaryCard({
               {detectedRaceType?.toUpperCase() || 'FLEET'}
             </Text>
           </View>
-          {/* Countdown on right - menu hidden, use swipe/long-press instead */}
           <View style={styles.simpleHeaderRight}>
             {/* Countdown */}
             <View style={styles.countdownSimple}>
@@ -1179,7 +1188,10 @@ export function RaceSummaryCard({
                 {countdown.days === 1 ? 'day' : 'days'}
               </Text>
             </View>
-            {/* Card menu hidden - edit/delete available via swipe or long-press on card */}
+            {/* Three-dot menu (includes Share Race, Crew Chat) */}
+            {menuItems.length > 0 && (
+              <CardMenu items={menuItems} iconSize={20} iconColor={IOS_COLORS.gray} />
+            )}
           </View>
         </View>
 
@@ -1197,6 +1209,19 @@ export function RaceSummaryCard({
           <Ionicons name="calendar-outline" size={16} color={IOS_COLORS.secondaryLabel} />
           <Text style={styles.simpleDetailText}>{formatFullDate(race.date, race.startTime)}</Text>
         </View>
+
+        {/* Collaborator avatar row */}
+        {FEATURE_FLAGS.ENABLE_CREW_AVATARS_HEADER && collaborators.length > 0 && (
+          <View style={styles.crewAvatarRow}>
+            <CrewAvatarStack
+              collaborators={collaborators}
+              maxVisible={5}
+              size="xs"
+              onPress={() => setShowCollabPopover(true)}
+              showPendingBadge
+            />
+          </View>
+        )}
 
         {/* Pill-style Phase Tabs (Prep/Race/Review) */}
         {renderPhaseTabs()}
@@ -1385,7 +1410,6 @@ export function RaceSummaryCard({
 
           </View>
         </Pressable>
-      </Swipeable>
 
       {/* Detail Bottom Sheet for drill-down */}
       <DetailBottomSheet
@@ -1429,6 +1453,25 @@ export function RaceSummaryCard({
         isOpen={showChat}
         onClose={() => setShowChat(false)}
       />
+
+      {/* Collaboration Popover */}
+      {FEATURE_FLAGS.ENABLE_COLLABORATION_POPOVER && (
+        <CollaborationPopover
+          visible={showCollabPopover}
+          onClose={() => setShowCollabPopover(false)}
+          collaborators={collaborators}
+          recentMessages={raceMessages}
+          currentUserId={userId}
+          onOpenChat={() => {
+            setShowCollabPopover(false);
+            setShowChat(true);
+          }}
+          onManageCrew={() => {
+            setShowCollabPopover(false);
+            setShowCrewHub(true);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -2800,24 +2843,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: IOS_COLORS.secondaryLabel,
   },
-
-  // ==========================================================================
-  // SWIPE-TO-DELETE ACTION
-  // ==========================================================================
-  swipeDeleteAction: {
-    backgroundColor: IOS_COLORS.red,
-    justifyContent: 'center',
+  crewAvatarRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    width: 80,
-    height: '100%',
-    paddingHorizontal: 16,
-  },
-  swipeDeleteText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
     marginTop: 4,
+    marginBottom: 8,
   },
+
 });
 
 export default RaceSummaryCard;

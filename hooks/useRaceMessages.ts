@@ -32,6 +32,8 @@ interface UseRaceMessagesReturn {
   error: Error | null;
   /** Send a new text message */
   sendMessage: (text: string) => Promise<void>;
+  /** Delete a message (own messages only) */
+  deleteMessage: (messageId: string) => Promise<void>;
   /** Post a system message (e.g., checklist completion) */
   postSystemMessage: (text: string) => Promise<void>;
   /** Whether a send is in progress */
@@ -218,6 +220,35 @@ export function useRaceMessages({
     [regattaId, user]
   );
 
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      // Optimistic removal
+      const removed = messages.find((m) => m.id === messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+
+      try {
+        const { error: deleteError } = await supabase
+          .from('race_messages')
+          .delete()
+          .eq('id', messageId);
+
+        if (deleteError) throw new Error(deleteError.message);
+      } catch (err) {
+        // Restore on failure
+        if (removed) {
+          setMessages((prev) => {
+            const restored = [...prev, removed];
+            restored.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            return restored;
+          });
+        }
+        logger.error('Failed to delete message:', err);
+        throw err;
+      }
+    },
+    [messages]
+  );
+
   const postSystemMessage = useCallback(
     async (text: string) => {
       if (!regattaId || !user?.id) return;
@@ -248,6 +279,7 @@ export function useRaceMessages({
     isLoading,
     error,
     sendMessage,
+    deleteMessage,
     postSystemMessage,
     isSending,
     refetch: fetchMessages,

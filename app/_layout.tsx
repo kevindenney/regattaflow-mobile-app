@@ -166,7 +166,9 @@ function StackWithSplash() {
   return (
     <>
       <NetworkStatusBanner />
-      <Stack screenOptions={{headerShown: false}} />
+      <Stack screenOptions={{headerShown: false}}>
+        <Stack.Screen name="account" options={{ presentation: 'modal', headerShown: false }} />
+      </Stack>
     </>
   )
 }

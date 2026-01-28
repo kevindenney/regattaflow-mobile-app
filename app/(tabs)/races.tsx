@@ -33,6 +33,7 @@ import {
   TeamLogisticsSection,
 } from '@/components/races';
 import { RaceListSection } from '@/components/races/RaceListSection';
+import { SeasonArchive } from '@/components/seasons/SeasonArchive';
 import { IOSRacesScreen } from '@/components/races/ios';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
 import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
@@ -103,7 +104,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const logger = createLogger('RacesScreen');
@@ -135,10 +136,13 @@ export default function RacesScreen() {
   // State for dismissing the demo notice
   const [demoNoticeDismissed, setDemoNoticeDismissed] = useState(false);
 
+  // Season archive modal
+  const [showFullArchive, setShowFullArchive] = useState(false);
+
   // Season state and hooks
   const [showSeasonSettings, setShowSeasonSettings] = useState(false);
   const { data: currentSeason, isLoading: loadingCurrentSeason, refetch: refetchCurrentSeason } = useCurrentSeason();
-  const { refetch: refetchSeasons } = useUserSeasons();
+  const { data: userSeasons, refetch: refetchSeasons } = useUserSeasons();
 
   // Use demo season for guest users
   const effectiveSeason = useMemo(() => {
@@ -2792,6 +2796,29 @@ export default function RacesScreen() {
             setHasManuallySelected(true);
             router.push(`/race/${raceId}`);
           }}
+          onRaceMorePress={(raceId) => {
+            const options = ['Race Courses', 'Race Detail', 'Cancel'];
+            const cancelButtonIndex = 2;
+
+            if (Platform.OS === 'ios') {
+              ActionSheetIOS.showActionSheetWithOptions(
+                { options, cancelButtonIndex },
+                (buttonIndex) => {
+                  if (buttonIndex === 0) {
+                    router.push('/race-courses');
+                  } else if (buttonIndex === 1) {
+                    router.push(`/race/${raceId}`);
+                  }
+                },
+              );
+            } else {
+              Alert.alert('Race Options', undefined, [
+                { text: 'Race Courses', onPress: () => router.push('/race-courses') },
+                { text: 'Race Detail', onPress: () => router.push(`/race/${raceId}`) },
+                { text: 'Cancel', style: 'cancel' },
+              ]);
+            }
+          }}
           onRefresh={onRefresh}
           refreshing={refreshing}
         />
@@ -3323,6 +3350,24 @@ export default function RacesScreen() {
           refetchSeasons();
         }}
       />
+
+      {/* Full Season Archive Modal - shown from Progress segment */}
+      <Modal
+        visible={showFullArchive}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowFullArchive(false)}
+      >
+        <SeasonArchive
+          seasons={userSeasons ?? []}
+          isLoading={false}
+          onRefresh={() => refetchSeasons()}
+          onSeasonPress={(seasonId) => {
+            setShowFullArchive(false);
+          }}
+          onBackPress={() => setShowFullArchive(false)}
+        />
+      </Modal>
 
       {/* Signup Prompt Modal - shown when guest tries to add 2nd race */}
       <SignupPromptModal

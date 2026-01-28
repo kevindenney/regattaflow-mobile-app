@@ -1,6 +1,9 @@
 /**
  * Race Browser - Browse and select races to view detail
- * Lists the user's races as tappable rows that navigate to the scrollable race detail screen.
+ *
+ * Lists the user's races as tappable rows.
+ * - On web (wide): Uses MasterDetailLayout to show detail in right pane
+ * - On mobile/narrow: Navigates to full-screen race detail via router.push()
  */
 
 import React, { useEffect, useState } from 'react';
@@ -17,7 +20,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
+import { MasterDetailLayout } from '@/components/layout/MasterDetailLayout';
+import { RaceDetailContent } from '@/components/races/RaceDetailContent';
+import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { useAuth } from '@/providers/AuthProvider';
+import { useGlobalSearch } from '@/providers/GlobalSearchProvider';
 import { supabase } from '@/services/supabase';
 
 interface Race {
@@ -32,10 +39,13 @@ export default function RaceBrowserScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { openGlobalSearch } = useGlobalSearch();
+  const { showMasterDetail } = useResponsiveLayout();
 
   const [races, setRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) {
@@ -67,7 +77,11 @@ export default function RaceBrowserScreen() {
   }, [user?.id]);
 
   const handleRacePress = (raceId: string) => {
-    router.push(`/(tabs)/race/scrollable/${raceId}`);
+    if (showMasterDetail) {
+      setSelectedRaceId(raceId);
+    } else {
+      router.push(`/(tabs)/race/scrollable/${raceId}`);
+    }
   };
 
   const formatDate = (dateStr: string | null): string => {
@@ -97,10 +111,11 @@ export default function RaceBrowserScreen() {
 
   const renderRaceRow = ({ item }: { item: Race }) => {
     const venueName = item.metadata?.venue_name ?? item.metadata?.venueName ?? null;
+    const isSelected = showMasterDetail && selectedRaceId === item.id;
 
     return (
       <TouchableOpacity
-        style={styles.raceRow}
+        style={[styles.raceRow, isSelected && styles.raceRowSelected]}
         onPress={() => handleRacePress(item.id)}
         activeOpacity={0.6}
       >
@@ -125,7 +140,9 @@ export default function RaceBrowserScreen() {
             </Text>
           </View>
         )}
-        <Ionicons name="chevron-forward" size={18} color={IOS_COLORS.tertiaryLabel} />
+        {!showMasterDetail && (
+          <Ionicons name="chevron-forward" size={18} color={IOS_COLORS.tertiaryLabel} />
+        )}
       </TouchableOpacity>
     );
   };
@@ -149,11 +166,12 @@ export default function RaceBrowserScreen() {
     );
   };
 
-  return (
+  const masterContent = (
     <View style={styles.container}>
       <TabScreenToolbar
         title="Race Detail"
         topInset={insets.top}
+        onGlobalSearch={openGlobalSearch}
       />
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -176,6 +194,15 @@ export default function RaceBrowserScreen() {
         />
       )}
     </View>
+  );
+
+  return (
+    <MasterDetailLayout
+      masterContent={masterContent}
+      detailContent={selectedRaceId ? <RaceDetailContent raceId={selectedRaceId} /> : null}
+      selectedId={selectedRaceId}
+      onSelectedIdChange={setSelectedRaceId}
+    />
   );
 }
 
@@ -213,6 +240,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
+  },
+  raceRowSelected: {
+    backgroundColor: 'rgba(0, 122, 255, 0.08)',
   },
   raceIcon: {
     width: 36,

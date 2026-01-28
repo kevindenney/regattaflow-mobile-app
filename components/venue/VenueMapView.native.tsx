@@ -155,12 +155,12 @@ export function VenueMapView({
     if (!map) return;
 
     if (currentVenue) {
-      // Center on current venue
+      // Center on current venue — tight zoom to show the racing area
       map.animateToRegion?.({
         latitude: currentVenue.coordinates_lat,
         longitude: currentVenue.coordinates_lng,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
       }, 500);
     } else if (showAllVenues && venues.length > 0) {
       // Fit all venues in view
@@ -186,8 +186,8 @@ export function VenueMapView({
     map?.animateToRegion?.({
       latitude: selectedVenue.coordinates_lat,
       longitude: selectedVenue.coordinates_lng,
-      latitudeDelta: 0.5,
-      longitudeDelta: 0.5,
+      latitudeDelta: 0.08,
+      longitudeDelta: 0.08,
     }, 500);
   }, [selectedVenue]);
 
@@ -236,12 +236,13 @@ export function VenueMapView({
           },
           type: 'yachtClub',
           data: club,
+          parentVenue: venues.find(v => v.id === club.venue_id) || null,
         });
       });
     }
 
     return data;
-  }, [displayVenues, yachtClubs, mapLayers.yachtClubs]);
+  }, [displayVenues, yachtClubs, mapLayers.yachtClubs, venues]);
 
   // Fallback when react-native-maps isn't available (Expo Go)
   if (!mapsAvailable) {
@@ -270,8 +271,8 @@ export function VenueMapView({
   const defaultRegion = {
     latitude: currentVenue?.coordinates_lat || 22.2793,
     longitude: currentVenue?.coordinates_lng || 114.1628,
-    latitudeDelta: currentVenue ? 0.5 : 60,
-    longitudeDelta: currentVenue ? 0.5 : 60,
+    latitudeDelta: currentVenue ? 0.08 : 60,
+    longitudeDelta: currentVenue ? 0.08 : 60,
   };
 
   const getMarkerColor = (venueType: string) => {
@@ -346,6 +347,11 @@ export function VenueMapView({
 
     if (type === 'yachtClub') {
       const club: YachtClub = markerData;
+      const parentVenue: Venue | null = data.parentVenue;
+
+      if (!parentVenue) {
+        console.warn(`[VenueMap] Yacht club "${club.name}" has no resolved parent venue (venue_id: ${club.venue_id})`);
+      }
 
       return (
         <Marker
@@ -353,6 +359,11 @@ export function VenueMapView({
           coordinate={location}
           title={club.short_name || club.name}
           description={club.prestige_level ? `${club.prestige_level} yacht club` : 'Yacht Club'}
+          onPress={() => {
+            if (onMarkerPress && parentVenue) {
+              onMarkerPress(parentVenue);
+            }
+          }}
         >
           <View
             style={[

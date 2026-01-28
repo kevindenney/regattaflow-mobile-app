@@ -149,6 +149,26 @@ export const FEATURE_FLAGS = {
    * When false: Checklist completions are not surfaced in chat
    */
   ENABLE_CHECKLIST_SYSTEM_MESSAGES: true,
+
+  // =========================================================================
+  // WEB LAYOUT FEATURES
+  // =========================================================================
+
+  /**
+   * Use persistent sidebar navigation on web instead of bottom tab bar
+   * When true: Web renders a 240px sidebar on the left with all nav items;
+   *            bottom tab bar and More menu are hidden on web
+   * When false: Web uses the same FloatingTabBar as mobile
+   * NOTE: Only affects web platform (Platform.OS === 'web')
+   */
+  USE_WEB_SIDEBAR_LAYOUT: true,
+
+  /**
+   * Enable master-detail split view on web for list-to-detail screens
+   * When true: On wide screens (>= 1024px), lists show detail in right pane
+   * When false: All platforms use full-screen push navigation
+   */
+  USE_MASTER_DETAIL_LAYOUT: true,
 } as const;
 
 // =============================================================================
