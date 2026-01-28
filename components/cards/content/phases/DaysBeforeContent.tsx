@@ -70,6 +70,7 @@ import { IOSInsetGroupedSection } from '@/components/ui/ios';
 import type { RaceType } from '@/types/raceEvents';
 import { getLearningLinks, getLearningBrief, getItemCategory, getLessonId, getLearningForItem } from '@/data/learningLinks';
 import { useUserSettings } from '@/hooks/useUserSettings';
+import { useFocusIntentForRace } from '@/hooks/useFocusIntent';
 
 // Team collaboration components
 import {
@@ -470,6 +471,9 @@ export function DaysBeforeContent({
 
   // User settings for quick tips/learning visibility
   const { settings: userSettings } = useUserSettings();
+
+  // Focus intent for this race (set from a previous race's review)
+  const { focusIntent } = useFocusIntentForRace(race.id);
 
   // State for team invite modal
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -1103,6 +1107,24 @@ export function DaysBeforeContent({
           <Text style={styles.raceTypeBadgeText}>
             {raceType.charAt(0).toUpperCase() + raceType.slice(1)} Racing
           </Text>
+        </View>
+      )}
+
+      {/* Focus Intent Card - carried over from previous race review */}
+      {focusIntent && (
+        <View style={styles.focusIntentCard}>
+          <View style={styles.focusIntentHeader}>
+            <Target size={14} color={IOS_COLORS.teal} />
+            <Text style={styles.focusIntentLabel}>Your Focus</Text>
+          </View>
+          <Text style={styles.focusIntentText} numberOfLines={2}>
+            "{focusIntent.focusText}"
+          </Text>
+          {focusIntent.sourceRaceId && (
+            <Text style={styles.focusIntentMeta}>
+              Set after previous race
+            </Text>
+          )}
         </View>
       )}
 
@@ -1953,6 +1975,39 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+
+  // Focus Intent Card
+  focusIntentCard: {
+    backgroundColor: `${IOS_COLORS.teal}12`,
+    borderRadius: 10,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: IOS_COLORS.teal,
+    gap: 6,
+  },
+  focusIntentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  focusIntentLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.teal,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  focusIntentText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    fontStyle: 'italic',
+  },
+  focusIntentMeta: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: IOS_COLORS.gray,
   },
 
   // Carryover

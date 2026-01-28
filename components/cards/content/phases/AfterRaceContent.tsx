@@ -42,6 +42,7 @@ import { useEducationalChecklist } from '@/hooks/useEducationalChecklist';
 import { Marginalia } from '@/components/ui/Marginalia';
 import { RaceAnalysisService } from '@/services/RaceAnalysisService';
 import { StructuredDebriefInterview } from '@/components/races/review/StructuredDebriefInterview';
+import { NextRaceFocusSection } from '@/components/races/review/NextRaceFocusSection';
 import { RaceContentActions } from '@/components/races/RaceContentActions';
 import {
   POST_RACE_REVIEW_CONFIG,
@@ -505,7 +506,16 @@ export function AfterRaceContent({
         </View>
       )}
 
-      {/* Section 5: Equipment & Maintenance - Flat header */}
+      {/* Section 5: Next Race Focus - Deliberate practice loop */}
+      {isExpanded && (
+        <NextRaceFocusSection
+          raceId={race.id}
+          userId={userId}
+          isExpanded={isExpanded}
+        />
+      )}
+
+      {/* Section 6: Equipment & Maintenance - Flat header */}
       {isExpanded && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -560,7 +570,7 @@ export function AfterRaceContent({
         </View>
       )}
 
-      {/* Section 6: AI Analysis - Flat header */}
+      {/* Section 7: AI Analysis - Flat header */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Brain size={16} color={IOS_COLORS.purple} />
