@@ -2,8 +2,7 @@
  * AccountModalContent
  *
  * Apple HIG-style account screen presented as a modal.
- * Features a drag handle, Done button, profile banner, and grouped sections.
- * All business logic ported from app/(tabs)/account.tsx.
+ * Uses inset grouped IOSListSections with IOSListItems.
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -11,7 +10,6 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -25,25 +23,17 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/providers/AuthProvider';
-import { TOUR_STORAGE_KEYS } from '@/hooks/useOnboardingTour';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { supabase } from '@/services/supabase';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
-import { IOS_COLORS } from '@/components/cards/constants';
+import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { useUserSettings } from '@/hooks/useUserSettings';
 
-import {
-  TufteProfileHeader,
-  TufteAccountSection,
-  TufteSettingRow,
-  TufteDataRow,
-  TufteToggleRow,
-  TufteBoatRow,
-  tufteAccountStyles,
-} from '@/components/account';
+import { IOSListSection } from '@/components/ui/ios/IOSListSection';
+import { IOSListItem } from '@/components/ui/ios/IOSListItem';
+import { TufteProfileHeader } from './TufteProfileHeader';
+import { accountStyles, ICON_BACKGROUNDS } from './accountStyles';
 
 // Types
 interface UserBoat {
@@ -76,7 +66,6 @@ export default function AccountModalContent() {
   const [claimLoading, setClaimLoading] = useState(false);
   const [boats, setBoats] = useState<UserBoat[]>([]);
   const [boatsLoading, setBoatsLoading] = useState(true);
-  const [resetSampleLoading, setResetSampleLoading] = useState(false);
 
   // Derived state
   const currentLocale = getCurrentLocale();
@@ -194,64 +183,18 @@ export default function AccountModalContent() {
     }
   }, [claimPassword, claimPasswordConfirm, user, userProfile, updateUserProfile]);
 
-  const handleResetSampleData = useCallback(async () => {
-    Alert.alert(
-      'Reset Sample Data',
-      'This will create sample races to help you explore the app. Any existing sample races will remain.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create',
-          onPress: async () => {
-            setResetSampleLoading(true);
-            try {
-              const result = await createSailorSampleData({
-                userId: user!.id,
-                userName: userProfile?.full_name || 'Sailor',
-                force: true,
-              });
-              if (result.success) {
-                Alert.alert('Success', 'Sample races have been created! Check your races list.');
-              } else {
-                Alert.alert('Error', result.error || 'Failed to create sample data.');
-              }
-            } catch (error: any) {
-              console.error('[Account] Reset sample data error:', error);
-              Alert.alert('Error', 'Failed to create sample data. Please try again.');
-            } finally {
-              setResetSampleLoading(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [user, userProfile]);
-
-  const handleReplayTour = useCallback(async () => {
-    Alert.alert(
-      'Replay Tour',
-      'This will restart the onboarding tour the next time you open the Races tab.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Replay',
-          onPress: async () => {
-            try {
-              await AsyncStorage.removeItem(TOUR_STORAGE_KEYS.sailor);
-              Alert.alert('Success', 'The onboarding tour will play when you open the Races tab.');
-            } catch (error) {
-              console.error('[Account] Failed to reset tour:', error);
-              Alert.alert('Error', 'Failed to reset tour. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  }, []);
-
   const handleDone = useCallback(() => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/races');
+    }
   }, []);
+
+  // ── Trailing value component helper ──────────────────────────────
+  const trailingValue = (text: string) => (
+    <Text style={accountStyles.trailingValueText}>{text}</Text>
+  );
 
   // Early return for unauthenticated
   if (!user) {
@@ -294,8 +237,8 @@ export default function AccountModalContent() {
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={tufteAccountStyles.scrollContent}>
-        {/* Profile Header - with inline editing */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={accountStyles.scrollContent}>
+        {/* ── Profile Card ─────────────────────────────────────── */}
         <TufteProfileHeader
           name={userProfile?.full_name || 'User'}
           email={user?.email}
@@ -305,130 +248,177 @@ export default function AccountModalContent() {
           onSave={handleProfileSave}
         />
 
-        {/* Boats */}
-        <TufteAccountSection
-          title="Boats"
-          action="Add Boat"
-          onActionPress={() => router.push('/(tabs)/boat/add')}
-        >
+        {/* ── Boats ────────────────────────────────────────────── */}
+        <IOSListSection header="Boats">
           {boatsLoading ? (
-            <View style={{ padding: 16, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color={IOS_COLORS.gray} />
+            <View style={accountStyles.emptyState}>
+              <ActivityIndicator size="small" color={IOS_COLORS.systemGray} />
             </View>
           ) : boats.length === 0 ? (
-            <View style={tufteAccountStyles.emptyState}>
-              <Text style={tufteAccountStyles.emptyText}>No boats added yet</Text>
+            <View style={accountStyles.emptyState}>
+              <Text style={accountStyles.emptyText}>No boats added yet</Text>
             </View>
           ) : (
-            boats.map((boat, index) => (
-              <TufteBoatRow
+            boats.map((boat) => (
+              <IOSListItem
                 key={boat.id}
-                name={boat.boat_name}
-                boatClass={boat.boat_class_name}
-                sailNumber={boat.sail_number}
-                status={boat.status === 'sold' || boat.status === 'retired' ? 'inactive' : boat.status}
-                isPrimary={boat.is_primary}
+                title={`${boat.boat_name}${boat.is_primary ? ' \u00b7 Primary' : ''}`}
+                subtitle={`${boat.boat_class_name}${boat.sail_number ? ` ${boat.sail_number}` : ''}`}
+                leadingIcon="boat-outline"
+                leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+                trailingAccessory="badge"
+                badgeText={boat.status === 'active' ? 'active' : boat.status === 'stored' ? 'stored' : 'inactive'}
+                badgeColor={
+                  boat.status === 'active'
+                    ? IOS_COLORS.systemGreen
+                    : boat.status === 'stored'
+                      ? IOS_COLORS.systemOrange
+                      : IOS_COLORS.systemGray
+                }
                 onPress={() => router.push(`/(tabs)/boat/${boat.id}`)}
-                isLast={index === boats.length - 1}
               />
             ))
           )}
-        </TufteAccountSection>
+          <IOSListItem
+            title="Add Boat"
+            leadingIcon="add-circle-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingAccessory="chevron"
+            onPress={() => router.push('/(tabs)/boat/add')}
+          />
+        </IOSListSection>
 
-        {/* Subscription */}
-        <TufteAccountSection title="Subscription">
-          <TufteDataRow label="Plan" value={`${subscriptionTier} Plan`} />
+        {/* ── Subscription ─────────────────────────────────────── */}
+        <IOSListSection header="Subscription">
+          <IOSListItem
+            title="Plan"
+            trailingAccessory="none"
+            trailingComponent={trailingValue(`${subscriptionTier} Plan`)}
+          />
           {userProfile?.subscription_tier && userProfile.subscription_tier !== 'free' && (
-            <TufteDataRow
-              label="Status"
-              value={userProfile?.subscription_status === 'active' ? 'Active' : 'Expired'}
-              status={userProfile?.subscription_status === 'active' ? 'active' : 'warning'}
+            <IOSListItem
+              title="Status"
+              trailingAccessory="none"
+              trailingComponent={trailingValue(
+                userProfile?.subscription_status === 'active' ? 'Active' : 'Expired'
+              )}
             />
           )}
-          <TufteSettingRow
-            label={userProfile?.subscription_tier === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
+          <IOSListItem
+            title={userProfile?.subscription_tier === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
+            leadingIcon="arrow-up-circle-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+            trailingAccessory="chevron"
             onPress={() => router.push('/subscription')}
-            isLast
           />
-        </TufteAccountSection>
+        </IOSListSection>
 
-        {/* Settings */}
-        <TufteAccountSection title="Settings">
-          <TufteSettingRow
-            label={t('settings:preferences.language')}
-            value={currentLanguageName}
+        {/* ── General ──────────────────────────────────────────── */}
+        <IOSListSection header="General">
+          <IOSListItem
+            title={t('settings:preferences.language')}
+            leadingIcon="globe-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingComponent={trailingValue(currentLanguageName)}
             onPress={() => setLanguageVisible(true)}
           />
-          <TufteToggleRow
-            label="Show Quick Tips"
-            value={userSettings.showQuickTips}
-            onValueChange={(value) => updateSetting('showQuickTips', value)}
+          <IOSListItem
+            title="Quick Tips"
+            leadingIcon="bulb-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.yellow}
+            trailingAccessory="switch"
+            switchValue={userSettings.showQuickTips}
+            onSwitchChange={(value) => updateSetting('showQuickTips', value)}
           />
-          <TufteSettingRow
-            label="Notifications"
+          <IOSListItem
+            title="Notifications"
+            leadingIcon="notifications-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.red}
+            trailingAccessory="chevron"
             onPress={() => router.push('/settings/notifications')}
           />
-          <TufteSettingRow
-            label="Change Password"
+        </IOSListSection>
+
+        {/* ── Security ─────────────────────────────────────────── */}
+        <IOSListSection header="Security">
+          <IOSListItem
+            title="Change Password"
+            leadingIcon="lock-closed-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
+            trailingAccessory="chevron"
             onPress={() => router.push('/settings/change-password')}
           />
-          {!userProfile?.onboarding_completed && userProfile?.user_type === 'sailor' && (
-            <TufteSettingRow
-              label="Complete Onboarding"
-              onPress={() => router.push('/(auth)/sailor-onboarding-comprehensive')}
-            />
-          )}
           {isDemoProfile && (
-            <TufteSettingRow
-              label="Claim Workspace"
+            <IOSListItem
+              title="Claim Workspace"
+              leadingIcon="key-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
+              trailingAccessory="chevron"
               onPress={() => setClaimVisible(true)}
             />
           )}
-          {userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching && (
-            <TufteSettingRow
-              label="Become a Coach"
-              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+          {!userProfile?.onboarding_completed && userProfile?.user_type === 'sailor' && (
+            <IOSListItem
+              title="Complete Onboarding"
+              leadingIcon="checkmark-circle-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.green}
+              trailingAccessory="chevron"
+              onPress={() => router.push('/(auth)/sailor-onboarding-comprehensive')}
             />
           )}
-          {capabilities?.hasCoaching && (
-            <TufteSettingRow
-              label="Coach Profile"
-              value={capabilities.coachingProfile?.profile_published ? 'Published' : 'Draft'}
-              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
-            />
-          )}
-          {userProfile?.user_type === 'sailor' && (
-            <TufteSettingRow
-              label="Reset Sample Data"
-              onPress={handleResetSampleData}
-            />
-          )}
-          <TufteSettingRow
-            label="Replay Onboarding Tour"
-            onPress={handleReplayTour}
-          />
-          <TufteSettingRow
-            label="Help & Support"
+        </IOSListSection>
+
+        {/* ── Coaching ─────────────────────────────────────────── */}
+        {(userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching) || capabilities?.hasCoaching ? (
+          <IOSListSection header="Coaching">
+            {userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching && (
+              <IOSListItem
+                title="Become a Coach"
+                leadingIcon="school-outline"
+                leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+                trailingAccessory="chevron"
+                onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+              />
+            )}
+            {capabilities?.hasCoaching && (
+              <IOSListItem
+                title="Coach Profile"
+                leadingIcon="person-circle-outline"
+                leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+                trailingComponent={trailingValue(
+                  capabilities.coachingProfile?.profile_published ? 'Published' : 'Draft'
+                )}
+                onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+              />
+            )}
+          </IOSListSection>
+        ) : null}
+
+        {/* ── About ────────────────────────────────────────────── */}
+        <IOSListSection header="About">
+          <IOSListItem
+            title="Help & Support"
+            leadingIcon="help-circle-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.teal}
+            trailingAccessory="chevron"
             onPress={() => Alert.alert('Support', 'Email us at support@regattaflow.com')}
-            isLast
           />
-        </TufteAccountSection>
+        </IOSListSection>
 
-        {/* Sign Out */}
-        <TufteAccountSection>
-          <TufteSettingRow
-            label="Sign Out"
+        {/* ── Sign Out ─────────────────────────────────────────── */}
+        <IOSListSection>
+          <IOSListItem
+            title="Sign Out"
+            titleStyle={accountStyles.signOutText}
+            trailingAccessory="none"
             onPress={handleSignOut}
-            danger
-            showChevron={false}
-            isLast
           />
-        </TufteAccountSection>
+        </IOSListSection>
 
-        {/* App Info */}
-        <View style={tufteAccountStyles.appInfo}>
-          <Text style={tufteAccountStyles.appInfoText}>RegattaFlow v1.0.0</Text>
-          <Text style={tufteAccountStyles.appInfoText}>2024 RegattaFlow Inc.</Text>
+        {/* ── App Info Footer ──────────────────────────────────── */}
+        <View style={accountStyles.appInfo}>
+          <Text style={accountStyles.appInfoText}>RegattaFlow v1.0.0</Text>
+          <Text style={accountStyles.appInfoText}>2024 RegattaFlow Inc.</Text>
         </View>
       </ScrollView>
 
@@ -448,12 +438,12 @@ export default function AccountModalContent() {
           }
         }}
       >
-        <View style={tufteAccountStyles.modalOverlay}>
-          <View style={tufteAccountStyles.modalContent}>
-            <View style={tufteAccountStyles.modalHeader}>
-              <Text style={tufteAccountStyles.modalTitle}>Claim Your Workspace</Text>
+        <View style={accountStyles.modalOverlay}>
+          <View style={accountStyles.modalContent}>
+            <View style={accountStyles.claimModalHeader}>
+              <Text style={accountStyles.claimModalTitle}>Claim Your Workspace</Text>
               <TouchableOpacity
-                style={tufteAccountStyles.modalCloseButton}
+                style={accountStyles.claimModalCloseButton}
                 onPress={() => {
                   if (!claimLoading) {
                     setClaimVisible(false);
@@ -462,7 +452,7 @@ export default function AccountModalContent() {
                   }
                 }}
               >
-                <Ionicons name="close" size={24} color={IOS_COLORS.gray} />
+                <Ionicons name="close" size={24} color={IOS_COLORS.systemGray} />
               </TouchableOpacity>
             </View>
 
@@ -470,10 +460,10 @@ export default function AccountModalContent() {
               Set a password so you can sign back in and keep your progress.
             </Text>
 
-            <View style={tufteAccountStyles.formGroup}>
-              <Text style={tufteAccountStyles.formLabel}>Password</Text>
+            <View style={accountStyles.formGroup}>
+              <Text style={accountStyles.formLabel}>Password</Text>
               <TextInput
-                style={tufteAccountStyles.formInput}
+                style={accountStyles.formInput}
                 placeholder="Min 6 characters"
                 placeholderTextColor={IOS_COLORS.tertiaryLabel}
                 secureTextEntry
@@ -483,10 +473,10 @@ export default function AccountModalContent() {
               />
             </View>
 
-            <View style={tufteAccountStyles.formGroup}>
-              <Text style={tufteAccountStyles.formLabel}>Confirm Password</Text>
+            <View style={accountStyles.formGroup}>
+              <Text style={accountStyles.formLabel}>Confirm Password</Text>
               <TextInput
-                style={tufteAccountStyles.formInput}
+                style={accountStyles.formInput}
                 placeholder="Confirm password"
                 placeholderTextColor={IOS_COLORS.tertiaryLabel}
                 secureTextEntry
@@ -497,14 +487,14 @@ export default function AccountModalContent() {
             </View>
 
             <TouchableOpacity
-              style={tufteAccountStyles.primaryButton}
+              style={accountStyles.primaryButton}
               onPress={handleClaimWorkspace}
               disabled={claimLoading}
             >
               {claimLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={tufteAccountStyles.primaryButtonText}>Set Password</Text>
+                <Text style={accountStyles.primaryButtonText}>Set Password</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -521,8 +511,6 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     backgroundColor: IOS_COLORS.systemGroupedBackground,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: IOS_COLORS.separator,
   },
   dragHandle: {
     width: 36,
