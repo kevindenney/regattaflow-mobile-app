@@ -41,7 +41,8 @@ import { useVenueDirectory } from '@/hooks/useVenueDirectory';
 import { ClubDiscoveryService } from '@/services/ClubDiscoveryService';
 import { useSavedVenues } from '@/hooks/useSavedVenues';
 import { useVenueActivityStats } from '@/hooks/useVenueActivityStats';
-import { useUserPosts } from '@/hooks/useCommunityFeed';
+import { useUserPosts, communityFeedKeys } from '@/hooks/useCommunityFeed';
+import { useQueryClient } from '@tanstack/react-query';
 import { MOCK_DISCUSSION_FEED } from '@/data/mockDiscussionFeed';
 import { useAuth } from '@/providers/AuthProvider';
 import type { FeedPost, FeedSortType, PostType } from '@/types/community-feed';
@@ -293,6 +294,7 @@ export default function DiscussScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
 
@@ -475,9 +477,10 @@ export default function DiscussScreen() {
 
   const handlePostPress = useCallback(
     (post: FeedPost) => {
+      queryClient.setQueryData(communityFeedKeys.post(post.id), post);
       router.push(`/venue/post/${post.id}`);
     },
-    [router],
+    [router, queryClient],
   );
 
   const handleJoinToggle = useCallback(

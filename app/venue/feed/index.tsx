@@ -7,10 +7,12 @@
 import React, { useCallback, useState } from 'react';
 import { View, StyleSheet, Pressable, Text, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
 import { CommunityFeed } from '@/components/venue/feed/CommunityFeed';
 import { PostComposer } from '@/components/venue/post/PostComposer';
+import { communityFeedKeys } from '@/hooks/useCommunityFeed';
 import type { FeedPost } from '@/types/community-feed';
 
 export default function FeedRoute() {
@@ -20,11 +22,13 @@ export default function FeedRoute() {
     tag?: string;
   }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [showComposer, setShowComposer] = useState(false);
 
   const handlePostPress = useCallback((post: FeedPost) => {
+    queryClient.setQueryData(communityFeedKeys.post(post.id), post);
     router.push(`/venue/post/${post.id}`);
-  }, [router]);
+  }, [router, queryClient]);
 
   if (!venueId) return null;
 

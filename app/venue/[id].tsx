@@ -25,7 +25,9 @@ import { VenueMapSegment } from '@/components/venue/segments/VenueMapSegment';
 import { VenueDetailHeader } from '@/components/venue/VenueDetailHeader';
 import { PostComposer } from '@/components/venue/post/PostComposer';
 import { AddRacingAreaSheet } from '@/components/venue/AddRacingAreaSheet';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSavedVenues } from '@/hooks/useSavedVenues';
+import { communityFeedKeys } from '@/hooks/useCommunityFeed';
 import { supabase } from '@/services/supabase';
 import { triggerHaptic } from '@/lib/haptics';
 import type { FeedPost } from '@/types/community-feed';
@@ -94,6 +96,7 @@ function JoinHeaderButton({
 export default function VenueDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { savedVenueIds, saveVenue, unsaveVenue, refreshSavedVenues } =
     useSavedVenues();
 
@@ -170,9 +173,10 @@ export default function VenueDetailScreen() {
 
   const handlePostPress = useCallback(
     (post: FeedPost) => {
+      queryClient.setQueryData(communityFeedKeys.post(post.id), post);
       router.push(`/venue/post/${post.id}`);
     },
-    [router],
+    [router, queryClient],
   );
 
   // ---------------------------------------------------------------------------
