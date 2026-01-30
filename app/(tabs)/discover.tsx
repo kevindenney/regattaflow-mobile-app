@@ -1,67 +1,119 @@
 /**
- * Community Tab Screen (formerly "Sailors" / "Discover")
+ * Follow Tab Screen (formerly "Connect" / "Discover")
  *
- * Three segments via iOS segmented control:
- * - Sailors: Find and follow fellow sailors
- * - Clubs: User's club memberships
- * - Fleets: User's fleet memberships
+ * Instagram-style activity feed showing content from followed sailors:
+ * - Race schedules and results from followed sailors
+ * - Future: Club announcements and posts
  *
- * Feature flag USE_GROUPED_DISCOVER_LIST toggles between:
- * - Grouped vertical list (new) — scannable sections
- * - TikTok-style vertical pager (legacy) — full-screen cards
+ * Discovery of new sailors/clubs is handled by the Search tab.
  */
 
-import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { ActionSheetIOS, Alert, Platform, Share, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DiscoverScreen } from '@/components/discover';
-import { SailorsGroupedList } from '@/components/discover/SailorsGroupedList';
-import { ClubsContent } from '@/components/discover/ClubsContent';
-import { FleetsContent } from '@/components/discover/FleetsContent';
-import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
-import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
-import { useGlobalSearch } from '@/providers/GlobalSearchProvider';
+import { useRouter } from 'expo-router';
+import { FollowActivityFeed } from '@/components/follow';
+import { TabScreenToolbar, type ToolbarAction } from '@/components/ui/TabScreenToolbar';
+import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
-import { FEATURE_FLAGS } from '@/lib/featureFlags';
+import { useAuth } from '@/providers/AuthProvider';
 
-type CommunitySegment = 'sailors' | 'clubs' | 'fleets';
-
-const SEGMENTS = [
-  { value: 'sailors' as const, label: 'Sailors' },
-  { value: 'clubs' as const, label: 'Clubs' },
-  { value: 'fleets' as const, label: 'Fleets' },
-];
-
-export default function DiscoverTab() {
+export default function FollowTab() {
   const insets = useSafeAreaInsets();
-  const { openGlobalSearch } = useGlobalSearch();
-  const [activeSegment, setActiveSegment] = useState<CommunitySegment>('sailors');
+  const router = useRouter();
+  const { user } = useAuth();
+  const [toolbarHeight, setToolbarHeight] = useState(0);
+  const { toolbarHidden, handleScroll } = useScrollToolbarHide();
+
+  // ---------------------------------------------------------------------------
+  // Action handlers
+  // ---------------------------------------------------------------------------
+
+  const handleInvite = useCallback(async () => {
+    const inviteUrl = `https://regattaflow.app/invite${user?.id ? `?from=${user.id}` : ''}`;
+    try {
+      await Share.share({
+        message: `Join me on RegattaFlow - the sailing app for racers! ${inviteUrl}`,
+        url: inviteUrl,
+        title: 'Join RegattaFlow',
+      });
+    } catch {
+      // User cancelled or share failed silently
+    }
+  }, [user?.id]);
+
+  const handleDiscoverSailors = useCallback(() => {
+    router.push('/(tabs)/search');
+  }, [router]);
+
+  const handleMoreOptions = useCallback(() => {
+    const options = ['Filter by Boat Class', 'Manage Following', 'Cancel'];
+    const cancelButtonIndex = options.length - 1;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          title: 'Feed Options',
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            Alert.alert('Filter', 'Filter options coming soon');
+          } else if (buttonIndex === 1) {
+            router.push('/(tabs)/search');
+          }
+        }
+      );
+    } else {
+      // Android/web fallback using Alert
+      Alert.alert('Feed Options', 'Select an option', [
+        { text: 'Filter by Boat Class', onPress: () => Alert.alert('Filter', 'Coming soon') },
+        { text: 'Manage Following', onPress: () => router.push('/(tabs)/search') },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    }
+  }, [router]);
+
+  // ---------------------------------------------------------------------------
+  // Toolbar actions
+  // ---------------------------------------------------------------------------
+
+  const toolbarActions: ToolbarAction[] = useMemo(() => [
+    {
+      icon: 'person-add-outline',
+      sfSymbol: 'person.badge.plus',
+      label: 'Find sailors',
+      onPress: handleDiscoverSailors,
+    },
+    {
+      icon: 'share-outline',
+      sfSymbol: 'square.and.arrow.up',
+      label: 'Invite',
+      onPress: handleInvite,
+    },
+    {
+      icon: 'ellipsis-horizontal',
+      sfSymbol: 'ellipsis',
+      label: 'More options',
+      onPress: handleMoreOptions,
+    },
+  ], [handleDiscoverSailors, handleInvite, handleMoreOptions]);
 
   return (
     <View style={styles.container}>
       <TabScreenToolbar
-        title="Community"
+        title="Follow"
         topInset={insets.top}
-        onGlobalSearch={openGlobalSearch}
-      >
-        <View style={styles.segmentContainer}>
-          <IOSSegmentedControl<CommunitySegment>
-            segments={SEGMENTS}
-            selectedValue={activeSegment}
-            onValueChange={setActiveSegment}
-          />
-        </View>
-      </TabScreenToolbar>
+        actions={toolbarActions}
+        onMeasuredHeight={setToolbarHeight}
+        hidden={toolbarHidden}
+      />
 
-      {activeSegment === 'sailors' && (
-        FEATURE_FLAGS.USE_GROUPED_DISCOVER_LIST ? (
-          <SailorsGroupedList />
-        ) : (
-          <DiscoverScreen />
-        )
-      )}
-      {activeSegment === 'clubs' && <ClubsContent />}
-      {activeSegment === 'fleets' && <FleetsContent />}
+      <FollowActivityFeed
+        toolbarOffset={toolbarHeight}
+        onScroll={handleScroll}
+      />
     </View>
   );
 }
@@ -70,10 +122,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: IOS_COLORS.systemGroupedBackground,
-  },
-  segmentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 8,
   },
 });

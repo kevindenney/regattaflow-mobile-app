@@ -18,6 +18,7 @@ import {
   RefreshControl,
   Pressable,
   Platform,
+  ActionSheetIOS,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -41,7 +42,7 @@ import { useVenueDirectory } from '@/hooks/useVenueDirectory';
 import { ClubDiscoveryService } from '@/services/ClubDiscoveryService';
 import { useSavedVenues } from '@/hooks/useSavedVenues';
 import { useVenueActivityStats } from '@/hooks/useVenueActivityStats';
-import { useUserPosts, communityFeedKeys } from '@/hooks/useCommunityFeed';
+import { communityFeedKeys } from '@/hooks/useCommunityFeed';
 import { useQueryClient } from '@tanstack/react-query';
 import { MOCK_DISCUSSION_FEED } from '@/data/mockDiscussionFeed';
 import { useAuth } from '@/providers/AuthProvider';
@@ -54,12 +55,11 @@ import { POST_TYPE_CONFIG } from '@/types/community-feed';
 
 const DISCOVER_LIMIT = 25;
 
-type SegmentValue = 'feed' | 'my-posts' | 'my-waters';
+type SegmentValue = 'feed' | 'my-waters';
 
 const SEGMENTS: { value: SegmentValue; label: string }[] = [
   { value: 'feed', label: 'Feed' },
-  { value: 'my-posts', label: 'My Posts' },
-  { value: 'my-waters', label: 'My Venues' },
+  { value: 'my-waters', label: 'Venues' },
 ];
 
 const SORT_OPTIONS: { key: FeedSortType; label: string }[] = [
@@ -77,157 +77,6 @@ const POST_TYPE_FILTERS: (PostType | 'all')[] = [
   'discussion',
   'safety_alert',
 ];
-
-// ---------------------------------------------------------------------------
-// Feed Sort/Filter Header
-// ---------------------------------------------------------------------------
-
-function FeedFilterBar({
-  sort,
-  onSortChange,
-  selectedPostType,
-  onPostTypeChange,
-}: {
-  sort: FeedSortType;
-  onSortChange: (s: FeedSortType) => void;
-  selectedPostType: PostType | undefined;
-  onPostTypeChange: (t: PostType | undefined) => void;
-}) {
-  return (
-    <View style={filterStyles.container}>
-      {/* Sort pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={filterStyles.pillRow}
-      >
-        {SORT_OPTIONS.map((opt) => {
-          const isSelected = sort === opt.key;
-          return (
-            <Pressable
-              key={opt.key}
-              style={[
-                filterStyles.pill,
-                isSelected && filterStyles.pillSelected,
-              ]}
-              onPress={() => {
-                triggerHaptic('selection');
-                onSortChange(opt.key);
-              }}
-            >
-              <Text
-                style={[
-                  filterStyles.pillText,
-                  isSelected && filterStyles.pillTextSelected,
-                ]}
-              >
-                {opt.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {/* Post type pills */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={filterStyles.pillRow}
-      >
-        {POST_TYPE_FILTERS.map((type) => {
-          const isAll = type === 'all';
-          const isSelected = isAll ? !selectedPostType : selectedPostType === type;
-          const config = isAll ? null : POST_TYPE_CONFIG[type as PostType];
-
-          return (
-            <Pressable
-              key={type}
-              style={[
-                filterStyles.pill,
-                filterStyles.pillOutline,
-                isSelected && filterStyles.pillOutlineSelected,
-              ]}
-              onPress={() => {
-                triggerHaptic('selection');
-                onPostTypeChange(isAll ? undefined : (type as PostType));
-              }}
-            >
-              {config && (
-                <Ionicons
-                  name={config.icon as any}
-                  size={12}
-                  color={isSelected ? config.color : IOS_COLORS.tertiaryLabel}
-                />
-              )}
-              <Text
-                style={[
-                  filterStyles.pillOutlineText,
-                  isSelected && {
-                    color: isAll ? IOS_COLORS.systemBlue : config?.color,
-                    fontWeight: '600',
-                  },
-                ]}
-              >
-                {isAll ? 'All' : config?.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-const filterStyles = StyleSheet.create({
-  container: {
-    gap: IOS_SPACING.xs,
-    paddingTop: IOS_SPACING.xs,
-    paddingBottom: IOS_SPACING.sm,
-    backgroundColor: IOS_COLORS.systemGroupedBackground,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: IOS_COLORS.separator,
-  },
-  pillRow: {
-    flexDirection: 'row',
-    gap: IOS_SPACING.sm,
-    paddingHorizontal: IOS_SPACING.lg,
-  },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: IOS_SPACING.md,
-    paddingVertical: 6,
-    borderRadius: IOS_RADIUS.full,
-    backgroundColor: IOS_COLORS.tertiarySystemFill,
-  },
-  pillSelected: {
-    backgroundColor: IOS_COLORS.systemBlue,
-  },
-  pillText: {
-    ...IOS_TYPOGRAPHY.footnote,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
-  },
-  pillTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  pillOutline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: IOS_COLORS.tertiarySystemFill,
-  },
-  pillOutlineSelected: {
-    borderColor: IOS_COLORS.systemBlue,
-    backgroundColor: IOS_COLORS.quaternarySystemFill,
-  },
-  pillOutlineText: {
-    ...IOS_TYPOGRAPHY.footnote,
-    fontWeight: '500',
-    color: IOS_COLORS.tertiaryLabel,
-  },
-});
 
 // ---------------------------------------------------------------------------
 // Empty State
@@ -304,7 +153,6 @@ export default function DiscussScreen() {
   // Feed state
   const [feedSort, setFeedSort] = useState<FeedSortType>('hot');
   const [feedPostType, setFeedPostType] = useState<PostType | undefined>(undefined);
-  const [showFilters, setShowFilters] = useState(true);
   const filtersActive = feedSort !== 'hot' || feedPostType !== undefined;
 
   // Venue directory state
@@ -414,24 +262,6 @@ export default function DiscussScreen() {
   }, [feedSort, feedPostType]);
 
   // ---------------------------------------------------------------------------
-  // My Posts data (live from Supabase)
-  // ---------------------------------------------------------------------------
-
-  const {
-    data: myPostsData,
-    fetchNextPage: fetchNextMyPosts,
-    hasNextPage: hasMoreMyPosts,
-    isFetchingNextPage: isFetchingMoreMyPosts,
-    refetch: refetchMyPosts,
-    isLoading: isLoadingMyPosts,
-  } = useUserPosts(user?.id);
-
-  const myPosts = useMemo<FeedPost[]>(() => {
-    if (!myPostsData?.pages) return [];
-    return myPostsData.pages.flatMap((page) => page.data);
-  }, [myPostsData]);
-
-  // ---------------------------------------------------------------------------
   // Venue directory data
   // ---------------------------------------------------------------------------
 
@@ -508,8 +338,49 @@ export default function DiscussScreen() {
     setSegment('my-waters');
   }, []);
 
+  const openSortPicker = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      const labels = SORT_OPTIONS.map((o) => o.label);
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [...labels, 'Cancel'],
+          cancelButtonIndex: labels.length,
+          title: 'Sort by',
+        },
+        (index) => {
+          if (index < SORT_OPTIONS.length) {
+            triggerHaptic('selection');
+            setFeedSort(SORT_OPTIONS[index].key);
+          }
+        },
+      );
+    }
+  }, []);
+
+  const openPostTypePicker = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      const labels = POST_TYPE_FILTERS.map((t) =>
+        t === 'all' ? 'All Types' : POST_TYPE_CONFIG[t as PostType].label
+      );
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: [...labels, 'Cancel'],
+          cancelButtonIndex: labels.length,
+          title: 'Filter by type',
+        },
+        (index) => {
+          if (index < POST_TYPE_FILTERS.length) {
+            triggerHaptic('selection');
+            const selected = POST_TYPE_FILTERS[index];
+            setFeedPostType(selected === 'all' ? undefined : (selected as PostType));
+          }
+        },
+      );
+    }
+  }, []);
+
   // ---------------------------------------------------------------------------
-  // Toolbar actions (compose + filter) – only on Feed segment
+  // Toolbar actions (compose + sort + filter) – only on Feed segment
   // ---------------------------------------------------------------------------
 
   const toolbarActions = useMemo<ToolbarAction[] | undefined>(() => {
@@ -525,15 +396,21 @@ export default function DiscussScreen() {
 
     if (segment === 'feed') {
       actions.push({
+        icon: 'swap-vertical-outline',
+        label: SORT_OPTIONS.find((o) => o.key === feedSort)?.label ?? 'Hot',
+        onPress: openSortPicker,
+        isActive: feedSort !== 'hot',
+      });
+      actions.push({
         icon: 'funnel-outline',
-        label: 'Toggle filters',
-        onPress: () => setShowFilters((prev) => !prev),
-        isActive: showFilters || filtersActive,
+        label: feedPostType ? POST_TYPE_CONFIG[feedPostType].label : 'Filter',
+        onPress: openPostTypePicker,
+        isActive: feedPostType !== undefined,
       });
     }
 
     return actions;
-  }, [segment, showFilters, filtersActive, router]);
+  }, [segment, feedSort, feedPostType, router, openSortPicker, openPostTypePicker]);
 
   // ---------------------------------------------------------------------------
   // Render helpers
@@ -554,7 +431,7 @@ export default function DiscussScreen() {
   const feedKeyExtractor = useCallback((item: FeedPost) => item.id, []);
 
   const feedItemSeparator = useCallback(
-    () => <View style={{ height: IOS_SPACING.md }} />,
+    () => <View style={{ height: 12 }} />,
     [],
   );
 
@@ -562,21 +439,11 @@ export default function DiscussScreen() {
   // Render
   // ---------------------------------------------------------------------------
 
-  // Feed list header: includes FeedFilterBar when filters are shown
-  const feedListHeader = useMemo(() => {
-    if (!showFilters || (feedPosts.length === 0 && !feedPostType)) return null;
-    return (
-      <FeedFilterBar
-        sort={feedSort}
-        onSortChange={setFeedSort}
-        selectedPostType={feedPostType}
-        onPostTypeChange={setFeedPostType}
-      />
-    );
-  }, [showFilters, feedPosts.length, feedPostType, feedSort, setFeedSort, setFeedPostType]);
-
   return (
     <View style={styles.container}>
+      {/* Fixed status bar background — prevents content from showing through */}
+      <View style={[styles.statusBarBackground, { height: insets.top }]} />
+
       {/* Scroll content first — flows behind absolutely-positioned toolbar */}
       {segment === 'feed' ? (
         /* ================================================================ */
@@ -592,7 +459,6 @@ export default function DiscussScreen() {
             ItemSeparatorComponent={feedItemSeparator}
             contentContainerStyle={[styles.feedContent, { paddingTop: toolbarHeight }]}
             showsVerticalScrollIndicator={false}
-            ListHeaderComponent={feedListHeader}
             onScroll={handleToolbarScroll}
             scrollEventThrottle={16}
             refreshControl={
@@ -606,50 +472,6 @@ export default function DiscussScreen() {
               <View style={styles.noResults}>
                 <Text style={styles.noResultsText}>
                   No posts match this filter
-                </Text>
-              </View>
-            }
-          />
-        )
-      ) : segment === 'my-posts' ? (
-        /* ================================================================ */
-        /* MY POSTS SEGMENT                                                 */
-        /* ================================================================ */
-        isLoadingMyPosts ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
-          </View>
-        ) : (
-          <FlatList
-            data={myPosts}
-            renderItem={renderFeedItem}
-            keyExtractor={feedKeyExtractor}
-            ItemSeparatorComponent={feedItemSeparator}
-            contentContainerStyle={[styles.feedContent, { paddingTop: toolbarHeight }]}
-            showsVerticalScrollIndicator={false}
-            onEndReached={() => {
-              if (hasMoreMyPosts && !isFetchingMoreMyPosts) {
-                fetchNextMyPosts();
-              }
-            }}
-            onEndReachedThreshold={0.5}
-            refreshControl={
-              <RefreshControl
-                refreshing={false}
-                onRefresh={() => refetchMyPosts()}
-                tintColor={IOS_COLORS.systemBlue}
-              />
-            }
-            ListEmptyComponent={
-              <View style={emptyStyles.container}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={48}
-                  color={IOS_COLORS.systemGray3}
-                />
-                <Text style={emptyStyles.title}>No posts yet</Text>
-                <Text style={emptyStyles.subtitle}>
-                  Tap + to share your knowledge with the sailing community
                 </Text>
               </View>
             }
@@ -792,6 +614,7 @@ export default function DiscussScreen() {
         actions={toolbarActions}
         onMeasuredHeight={setToolbarHeight}
         hidden={toolbarHidden}
+        backgroundColor="rgba(242, 242, 247, 0.94)"
       >
         <View style={styles.segmentContainer}>
           <IOSSegmentedControl
@@ -801,6 +624,18 @@ export default function DiscussScreen() {
             filled
           />
         </View>
+        {segment === 'feed' && filtersActive && (
+          <View style={styles.activeFilterHint}>
+            <Text style={styles.activeFilterHintText}>
+              {feedSort !== 'hot' ? `Sorted by ${SORT_OPTIONS.find(o => o.key === feedSort)?.label}` : ''}
+              {feedSort !== 'hot' && feedPostType ? ' · ' : ''}
+              {feedPostType ? `${POST_TYPE_CONFIG[feedPostType].label} only` : ''}
+            </Text>
+            <Pressable onPress={() => { setFeedSort('hot'); setFeedPostType(undefined); }}>
+              <Text style={styles.activeFilterClearText}>Clear</Text>
+            </Pressable>
+          </View>
+        )}
       </TabScreenToolbar>
     </View>
   );
@@ -815,6 +650,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
+  statusBarBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 99,
+    backgroundColor: 'rgba(242, 242, 247, 0.94)',
+  },
 
   // Segment control
   segmentContainer: {
@@ -823,9 +666,29 @@ const styles = StyleSheet.create({
     paddingBottom: IOS_SPACING.sm,
   },
 
+  // Active filter hint
+  activeFilterHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.sm,
+  },
+  activeFilterHintText: {
+    ...IOS_TYPOGRAPHY.caption1,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  activeFilterClearText: {
+    ...IOS_TYPOGRAPHY.caption1,
+    color: IOS_COLORS.systemBlue,
+    fontWeight: '600',
+  },
+
   // Feed
   feedContent: {
     paddingBottom: 120,
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
   noResults: {
     paddingVertical: 40,

@@ -47,7 +47,7 @@ export const getTabsForUserType = (
   if (isGuest) {
     return [
       { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'discover', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'discover', title: 'Follow', icon: 'heart-outline', iconFocused: 'heart' },
       { name: 'venue', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
@@ -78,7 +78,7 @@ export const getTabsForUserType = (
   if (userType === 'sailor' || userType === 'coach') {
     const tabs: TabConfig[] = [
       { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'discover', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'discover', title: 'Follow', icon: 'heart-outline', iconFocused: 'heart' },
       { name: 'venue', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
@@ -107,7 +107,7 @@ export const getTabsForUserType = (
 // Navigation items by persona (used by NavigationDrawer and WebSidebarNav)
 export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'races', label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
-  { key: 'discover', label: 'Connect', route: '/(tabs)/discover', icon: 'people-outline' },
+  { key: 'discover', label: 'Follow', route: '/(tabs)/discover', icon: 'heart-outline' },
   { key: 'venue', label: 'Discuss', route: '/(tabs)/venue', icon: 'chatbubbles-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
   { key: 'reflect', label: 'Reflect', route: '/(tabs)/reflect', icon: 'stats-chart-outline' },
