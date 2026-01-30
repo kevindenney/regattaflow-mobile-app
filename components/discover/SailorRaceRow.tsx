@@ -58,6 +58,7 @@ export interface SailorRaceRowData {
 interface SailorRaceRowProps {
   data: SailorRaceRowData;
   onPress: (data: SailorRaceRowData) => void;
+  onAvatarPress?: (userId: string) => void;
   onDismiss?: (data: SailorRaceRowData) => void;
   onLikePress?: (data: SailorRaceRowData) => void;
   onCommentPress?: (data: SailorRaceRowData) => void;
@@ -130,7 +131,7 @@ function formatRelativeDate(daysUntil: number, isPast: boolean): string {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function SailorRaceRow({ data, onPress, onDismiss, onLikePress, onCommentPress, onFollowToggle, isOwnUser = false, showSeparator = true, isLast = false }: SailorRaceRowProps) {
+export function SailorRaceRow({ data, onPress, onAvatarPress, onDismiss, onLikePress, onCommentPress, onFollowToggle, isOwnUser = false, showSeparator = true, isLast = false }: SailorRaceRowProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -168,6 +169,11 @@ export function SailorRaceRow({ data, onPress, onDismiss, onLikePress, onComment
     e?.stopPropagation?.();
     onFollowToggle?.(data.userId);
   }, [onFollowToggle, data.userId]);
+
+  const handleAvatarPress = useCallback((e: any) => {
+    e?.stopPropagation?.();
+    onAvatarPress?.(data.userId);
+  }, [onAvatarPress, data.userId]);
 
   const relativeDate = formatRelativeDate(data.daysUntil, data.isPast);
   const activeTags = CONTENT_TAGS.filter(
@@ -220,18 +226,26 @@ export function SailorRaceRow({ data, onPress, onDismiss, onLikePress, onComment
       accessibilityRole="button"
       accessibilityLabel={`${data.userName}, ${subtitle}, ${footnote}${tagNames ? `, content: ${tagNames}` : ''}`}
     >
-      {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-        {showEmoji ? (
-          <Text style={styles.avatarEmoji} maxFontSizeMultiplier={1.5}>
-            {data.avatarEmoji}
-          </Text>
-        ) : (
-          <Text style={styles.avatarInitials} maxFontSizeMultiplier={1.5}>
-            {initials}
-          </Text>
-        )}
-      </View>
+      {/* Avatar - tappable to view profile */}
+      <Pressable
+        onPress={onAvatarPress ? handleAvatarPress : undefined}
+        disabled={!onAvatarPress}
+        hitSlop={4}
+        accessibilityRole={onAvatarPress ? 'button' : undefined}
+        accessibilityLabel={onAvatarPress ? `View ${data.userName}'s profile` : undefined}
+      >
+        <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+          {showEmoji ? (
+            <Text style={styles.avatarEmoji} maxFontSizeMultiplier={1.5}>
+              {data.avatarEmoji}
+            </Text>
+          ) : (
+            <Text style={styles.avatarInitials} maxFontSizeMultiplier={1.5}>
+              {initials}
+            </Text>
+          )}
+        </View>
+      </Pressable>
 
       {/* Center content */}
       <View style={styles.content}>

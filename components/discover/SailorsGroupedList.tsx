@@ -233,6 +233,14 @@ export function SailorsGroupedList({ toolbarOffset = 0, onScroll }: SailorsGroup
     [router]
   );
 
+  // Navigate to sailor profile when avatar is tapped
+  const handleAvatarPress = useCallback(
+    (userId: string) => {
+      router.push(`/sailor/${userId}`);
+    },
+    [router]
+  );
+
   // Dismiss (not interested) — only for discover section items
   const handleDismissRace = useCallback(
     (data: SailorRaceRowData) => {
@@ -362,6 +370,7 @@ export function SailorsGroupedList({ toolbarOffset = 0, onScroll }: SailorsGroup
             expert={item as ClassExpert}
             className={className || undefined}
             onPress={handleExpertPress}
+            onAvatarPress={handleAvatarPress}
             onToggleFollow={toggleExpertFollow}
             showSeparator={!isLast}
             isLast={isLast}
@@ -383,6 +392,7 @@ export function SailorsGroupedList({ toolbarOffset = 0, onScroll }: SailorsGroup
         <SailorRaceRow
           data={{ ...raceData, isLiked }}
           onPress={handleRaceRowPress}
+          onAvatarPress={handleAvatarPress}
           onDismiss={showDismiss ? handleDismissRace : undefined}
           onLikePress={handleLikePress}
           onCommentPress={handleCommentPress}
@@ -393,7 +403,7 @@ export function SailorsGroupedList({ toolbarOffset = 0, onScroll }: SailorsGroup
         />
       );
     },
-    [className, handleExpertPress, handleRaceRowPress, handleDismissRace, toggleExpertFollow, likedRaces, handleLikePress, handleCommentPress, handleFollowToggle, user?.id]
+    [className, handleExpertPress, handleRaceRowPress, handleAvatarPress, handleDismissRace, toggleExpertFollow, likedRaces, handleLikePress, handleCommentPress, handleFollowToggle, user?.id]
   );
 
   // Render section footer — show empty message, peek preview, or bottom radius

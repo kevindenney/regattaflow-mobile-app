@@ -61,6 +61,7 @@ interface ExpertRowProps {
   expert: ClassExpert;
   className?: string;
   onPress: (expert: ClassExpert) => void;
+  onAvatarPress?: (userId: string) => void;
   onToggleFollow: (expertUserId: string) => void;
   showSeparator?: boolean;
   isLast?: boolean;
@@ -76,6 +77,7 @@ export function ExpertRow({
   expert,
   className,
   onPress,
+  onAvatarPress,
   onToggleFollow,
   showSeparator = true,
   isLast = false,
@@ -101,6 +103,10 @@ export function ExpertRow({
   const handleFollowPress = useCallback(() => {
     onToggleFollow(expert.userId);
   }, [onToggleFollow, expert.userId]);
+
+  const handleAvatarPress = useCallback(() => {
+    onAvatarPress?.(expert.userId);
+  }, [onAvatarPress, expert.userId]);
 
   const subtitle = className
     ? `Top ${className} sailor`
@@ -134,18 +140,26 @@ export function ExpertRow({
       accessibilityRole="button"
       accessibilityLabel={`${expert.userName}, ${subtitle}`}
     >
-      {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-        {showEmoji ? (
-          <Text style={styles.avatarEmoji} maxFontSizeMultiplier={1.5}>
-            {expert.avatarEmoji}
-          </Text>
-        ) : (
-          <Text style={styles.avatarInitials} maxFontSizeMultiplier={1.5}>
-            {initials}
-          </Text>
-        )}
-      </View>
+      {/* Avatar - tappable to view profile */}
+      <Pressable
+        onPress={onAvatarPress ? handleAvatarPress : undefined}
+        disabled={!onAvatarPress}
+        hitSlop={4}
+        accessibilityRole={onAvatarPress ? 'button' : undefined}
+        accessibilityLabel={onAvatarPress ? `View ${expert.userName}'s profile` : undefined}
+      >
+        <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+          {showEmoji ? (
+            <Text style={styles.avatarEmoji} maxFontSizeMultiplier={1.5}>
+              {expert.avatarEmoji}
+            </Text>
+          ) : (
+            <Text style={styles.avatarInitials} maxFontSizeMultiplier={1.5}>
+              {initials}
+            </Text>
+          )}
+        </View>
+      </Pressable>
 
       {/* Center content */}
       <View style={styles.content}>
