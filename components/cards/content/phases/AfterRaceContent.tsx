@@ -14,8 +14,8 @@
  * - Coach feedback
  */
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, Animated } from 'react-native';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, Animated, LayoutAnimation, Platform, UIManager } from 'react-native';
 import {
   Trophy,
   Wrench,
@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Check,
   ChevronRight,
+  ChevronDown,
   ClipboardList,
   Target,
   GraduationCap,
@@ -31,6 +32,7 @@ import {
   Waves,
   Lightbulb,
   Calendar,
+  Sparkles,
 } from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
@@ -69,7 +71,6 @@ interface AfterRaceContentProps {
   race: CardRaceData;
   userId?: string;
   onOpenPostRaceInterview?: () => void;
-  onOpenDetailedReview?: () => void;
   isExpanded?: boolean;
 }
 
@@ -222,7 +223,6 @@ export function AfterRaceContent({
   race,
   userId: propsUserId,
   onOpenPostRaceInterview,
-  onOpenDetailedReview,
   isExpanded = true,
 }: AfterRaceContentProps) {
   // Get current user if userId not provided
@@ -237,6 +237,7 @@ export function AfterRaceContent({
   const {
     progress: debriefProgress,
     isComplete: debriefComplete,
+    refetch: refetchDebrief,
   } = useDebriefInterview({
     raceId: race.id,
     userId,
@@ -262,6 +263,60 @@ export function AfterRaceContent({
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  // Track when AI analysis is newly generated (for visual highlight)
+  const [isAIAnalysisNew, setIsAIAnalysisNew] = useState(false);
+  const aiAnalysisHighlightAnim = useRef(new Animated.Value(0)).current;
+
+  // Toast notification for AI analysis completion
+  const [showAIToast, setShowAIToast] = useState(false);
+  const aiToastOpacity = useRef(new Animated.Value(0)).current;
+
+  // Collapsible section state - default collapsed
+  const [isPerformanceExpanded, setIsPerformanceExpanded] = useState(false);
+  const [isLearningExpanded, setIsLearningExpanded] = useState(false);
+
+  // Enable LayoutAnimation on Android
+  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+
+  // Show AI analysis success feedback (toast + highlight)
+  const showAIAnalysisSuccess = useCallback(() => {
+    // Show toast notification
+    setShowAIToast(true);
+    Animated.sequence([
+      Animated.timing(aiToastOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.delay(3000),
+      Animated.timing(aiToastOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowAIToast(false));
+
+    // Trigger highlight animation (pulse effect)
+    setIsAIAnalysisNew(true);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(aiAnalysisHighlightAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(aiAnalysisHighlightAnim, {
+          toValue: 0,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+      ]),
+      { iterations: 3 }
+    ).start(() => setIsAIAnalysisNew(false));
+  }, [aiToastOpacity, aiAnalysisHighlightAnim]);
+
   // Trigger AI analysis generation
   const triggerAnalysis = useCallback(async () => {
     const timerSessionId = analysisData?.timerSessionId;
@@ -279,6 +334,8 @@ export function AfterRaceContent({
         // Refresh both hooks to pick up the new analysis
         refetchState();
         refetchData();
+        // Show success feedback
+        showAIAnalysisSuccess();
       } else {
         setAnalysisError('Analysis generation failed');
       }
@@ -288,7 +345,7 @@ export function AfterRaceContent({
     } finally {
       setIsGeneratingAnalysis(false);
     }
-  }, [analysisData?.timerSessionId, refetchState, refetchData]);
+  }, [analysisData?.timerSessionId, refetchState, refetchData, showAIAnalysisSuccess]);
 
   // Save equipment note
   const saveEquipmentNote = useCallback(async () => {
@@ -325,10 +382,41 @@ export function AfterRaceContent({
     }
   }, [equipmentNotes, addIssue, race.id, race.name, savedConfirmationOpacity, userId]);
 
+  // Toggle collapsible sections with animation
+  const togglePerformanceSection = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsPerformanceExpanded(prev => !prev);
+  }, []);
+
+  const toggleLearningSection = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsLearningExpanded(prev => !prev);
+  }, []);
+
   // Derived data
   const hasResult = analysisState?.hasResult;
   const hasAIAnalysis = analysisState?.hasAIAnalysis;
   const coachAnnotations = analysisState?.coachAnnotations || [];
+
+  // Auto-generate AI analysis when debrief is completed
+  // Track the last raceId we triggered analysis for to avoid re-triggering
+  const lastAutoTriggeredRaceId = useRef<string | null>(null);
+  React.useEffect(() => {
+    // Only auto-trigger when all conditions are met and we haven't triggered for this race yet
+    const shouldTrigger =
+      debriefComplete &&
+      hasResult &&
+      !hasAIAnalysis &&
+      !isGeneratingAnalysis &&
+      analysisData?.timerSessionId &&
+      lastAutoTriggeredRaceId.current !== race.id;
+
+    if (shouldTrigger) {
+      lastAutoTriggeredRaceId.current = race.id;
+      console.log('[AfterRaceContent] Auto-triggering AI analysis for race:', race.id);
+      triggerAnalysis();
+    }
+  }, [debriefComplete, hasResult, hasAIAnalysis, isGeneratingAnalysis, analysisData?.timerSessionId, triggerAnalysis, race.id]);
 
   // Format result
   const resultText = useMemo(() => {
@@ -375,9 +463,14 @@ export function AfterRaceContent({
   // Core items: result, debrief, equipment
   const coreCompleted = (hasResult ? 1 : 0) + (debriefComplete ? 1 : 0) + (hasEquipmentNote ? 1 : 0);
   const coreTotal = 3;
-  // Total including educational items
-  const totalCompleted = coreCompleted + performanceCompletedCount + learningCompletedCount;
-  const totalItems = coreTotal + performanceTotalCount + learningTotalCount;
+  // Only include educational items in progress if debrief is NOT complete
+  // (once debrief is done, those checklists are hidden as redundant)
+  const totalCompleted = debriefComplete
+    ? coreCompleted
+    : coreCompleted + performanceCompletedCount + learningCompletedCount;
+  const totalItems = debriefComplete
+    ? coreTotal
+    : coreTotal + performanceTotalCount + learningTotalCount;
   // AI enabled when result + debrief complete
   const canGenerateAI = hasResult && debriefComplete;
 
@@ -462,51 +555,85 @@ export function AfterRaceContent({
         </ReviewChecklistItem>
       </View>
 
-      {/* Section 3: Performance Analysis - Flat items directly rendered */}
-      {isExpanded && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Target size={16} color={IOS_COLORS.blue} />
-            <Text style={styles.sectionLabel}>PERFORMANCE</Text>
-            <Text style={styles.sectionCount}>{performanceCompletedCount}/{performanceTotalCount}</Text>
-          </View>
-          <View style={styles.checklistContainer}>
-            {POST_RACE_REVIEW_CONFIG.items.map((item) => (
-              <SimpleChecklistItem
-                key={item.id}
-                label={item.label}
-                isCompleted={isPerformanceItemCompleted(item.id)}
-                onPress={() => togglePerformanceItem(item.id)}
-                subtitle={item.description}
-              />
-            ))}
-          </View>
+      {/* ================================================================== */}
+      {/* TIER 1: AI ANALYSIS - Immediate reward after debrief */}
+      {/* ================================================================== */}
+      <Animated.View style={[
+        styles.section,
+        isAIAnalysisNew && styles.aiAnalysisHighlight,
+        {
+          borderColor: aiAnalysisHighlightAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: ['transparent', IOS_COLORS.purple],
+          }),
+        },
+      ]}>
+        <View style={styles.sectionHeader}>
+          <Brain size={16} color={IOS_COLORS.purple} />
+          <Text style={styles.sectionLabel}>AI ANALYSIS</Text>
+          {isAIAnalysisNew && (
+            <View style={styles.newBadge}>
+              <Sparkles size={10} color="#FFFFFF" />
+              <Text style={styles.newBadgeText}>NEW</Text>
+            </View>
+          )}
+          <Text style={styles.sectionCount}>
+            {hasAIAnalysis ? 'Generated' : canGenerateAI ? 'Ready' : 'Complete debrief first'}
+          </Text>
         </View>
-      )}
+        <ReviewChecklistItem
+          label="Generate AI analysis"
+          isCompleted={!!hasAIAnalysis}
+          isDisabled={!canGenerateAI && !hasAIAnalysis}
+          onPress={canGenerateAI && !hasAIAnalysis && !isGeneratingAnalysis ? triggerAnalysis : undefined}
+        >
+          {hasAIAnalysis ? (
+            <View style={[styles.analysisCard, isAIAnalysisNew && styles.analysisCardHighlight]}>
+              {analysisData?.focusNextRace && (
+                <View style={styles.analysisItem}>
+                  <Text style={styles.analysisLabel}>Focus for next race</Text>
+                  <Text style={styles.analysisValue} numberOfLines={2}>
+                    {analysisData.focusNextRace}
+                  </Text>
+                </View>
+              )}
+              {analysisData?.strengthIdentified && (
+                <View style={styles.analysisItem}>
+                  <Text style={styles.analysisLabel}>Strength</Text>
+                  <Text style={styles.analysisValue} numberOfLines={2}>
+                    {analysisData.strengthIdentified}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : isGeneratingAnalysis ? (
+            <View style={styles.generatingRow}>
+              <ActivityIndicator size="small" color={IOS_COLORS.purple} />
+              <Text style={styles.pendingText}>Generating analysis...</Text>
+            </View>
+          ) : analysisError ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{analysisError}</Text>
+              <Pressable onPress={triggerAnalysis} style={styles.retryButton}>
+                <RefreshCw size={14} color={IOS_COLORS.blue} />
+                <Text style={styles.retryText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={[styles.absenceHint, !canGenerateAI && styles.disabledHint]}>
+              {canGenerateAI
+                ? 'Tap to generate AI analysis'
+                : 'Complete result and structured debrief first'}
+            </Text>
+          )}
+        </ReviewChecklistItem>
+      </Animated.View>
 
-      {/* Section 4: Learning & Improvement - Flat items directly rendered */}
-      {isExpanded && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <GraduationCap size={16} color={IOS_COLORS.purple} />
-            <Text style={styles.sectionLabel}>LEARNING</Text>
-            <Text style={styles.sectionCount}>{learningCompletedCount}/{learningTotalCount}</Text>
-          </View>
-          <View style={styles.checklistContainer}>
-            {LEARNING_CAPTURE_CONFIG.items.map((item) => (
-              <SimpleChecklistItem
-                key={item.id}
-                label={item.label}
-                isCompleted={isLearningItemCompleted(item.id)}
-                onPress={() => toggleLearningItem(item.id)}
-                subtitle={item.description}
-              />
-            ))}
-          </View>
-        </View>
-      )}
+      {/* ================================================================== */}
+      {/* TIER 2: ACTIONABLE INSIGHTS */}
+      {/* ================================================================== */}
 
-      {/* Section 5: Next Race Focus - Deliberate practice loop */}
+      {/* Next Race Focus - Deliberate practice loop */}
       {isExpanded && (
         <NextRaceFocusSection
           raceId={race.id}
@@ -515,7 +642,76 @@ export function AfterRaceContent({
         />
       )}
 
-      {/* Section 6: Equipment & Maintenance - Flat header */}
+      {/* ================================================================== */}
+      {/* TIER 3: OPTIONAL CHECKLISTS - Only show if debrief NOT complete */}
+      {/* These are redundant once debrief is done (questions cover same topics) */}
+      {/* ================================================================== */}
+
+      {/* Performance Review - Collapsible, hidden when debrief complete */}
+      {isExpanded && !debriefComplete && (
+        <View style={styles.section}>
+          <Pressable
+            style={styles.collapsibleHeader}
+            onPress={togglePerformanceSection}
+          >
+            <Target size={16} color={IOS_COLORS.blue} />
+            <Text style={styles.sectionLabel}>PERFORMANCE REVIEW</Text>
+            <Text style={styles.sectionCount}>{performanceCompletedCount}/{performanceTotalCount}</Text>
+            {isPerformanceExpanded ? (
+              <ChevronDown size={16} color={IOS_COLORS.gray} />
+            ) : (
+              <ChevronRight size={16} color={IOS_COLORS.gray} />
+            )}
+          </Pressable>
+          {isPerformanceExpanded && (
+            <View style={styles.checklistContainer}>
+              {POST_RACE_REVIEW_CONFIG.items.map((item) => (
+                <SimpleChecklistItem
+                  key={item.id}
+                  label={item.label}
+                  isCompleted={isPerformanceItemCompleted(item.id)}
+                  onPress={() => togglePerformanceItem(item.id)}
+                  subtitle={item.description}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Learning Capture - Collapsible, hidden when debrief complete */}
+      {isExpanded && !debriefComplete && (
+        <View style={styles.section}>
+          <Pressable
+            style={styles.collapsibleHeader}
+            onPress={toggleLearningSection}
+          >
+            <GraduationCap size={16} color={IOS_COLORS.purple} />
+            <Text style={styles.sectionLabel}>LEARNING CAPTURE</Text>
+            <Text style={styles.sectionCount}>{learningCompletedCount}/{learningTotalCount}</Text>
+            {isLearningExpanded ? (
+              <ChevronDown size={16} color={IOS_COLORS.gray} />
+            ) : (
+              <ChevronRight size={16} color={IOS_COLORS.gray} />
+            )}
+          </Pressable>
+          {isLearningExpanded && (
+            <View style={styles.checklistContainer}>
+              {LEARNING_CAPTURE_CONFIG.items.map((item) => (
+                <SimpleChecklistItem
+                  key={item.id}
+                  label={item.label}
+                  isCompleted={isLearningItemCompleted(item.id)}
+                  onPress={() => toggleLearningItem(item.id)}
+                  subtitle={item.description}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Equipment & Maintenance */}
       {isExpanded && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -570,64 +766,11 @@ export function AfterRaceContent({
         </View>
       )}
 
-      {/* Section 7: AI Analysis - Flat header */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Brain size={16} color={IOS_COLORS.purple} />
-          <Text style={styles.sectionLabel}>AI ANALYSIS</Text>
-          <Text style={styles.sectionCount}>
-            {hasAIAnalysis ? 'Generated' : canGenerateAI ? 'Ready' : 'Complete debrief first'}
-          </Text>
-        </View>
-        <ReviewChecklistItem
-          label="Generate AI analysis"
-          isCompleted={!!hasAIAnalysis}
-          isDisabled={!canGenerateAI && !hasAIAnalysis}
-          onPress={canGenerateAI && !hasAIAnalysis && !isGeneratingAnalysis ? triggerAnalysis : undefined}
-        >
-          {hasAIAnalysis ? (
-            <View style={styles.analysisCard}>
-              {analysisData?.focusNextRace && (
-                <View style={styles.analysisItem}>
-                  <Text style={styles.analysisLabel}>Focus for next race</Text>
-                  <Text style={styles.analysisValue} numberOfLines={2}>
-                    {analysisData.focusNextRace}
-                  </Text>
-                </View>
-              )}
-              {analysisData?.strengthIdentified && (
-                <View style={styles.analysisItem}>
-                  <Text style={styles.analysisLabel}>Strength</Text>
-                  <Text style={styles.analysisValue} numberOfLines={2}>
-                    {analysisData.strengthIdentified}
-                  </Text>
-                </View>
-              )}
-            </View>
-          ) : isGeneratingAnalysis ? (
-            <View style={styles.generatingRow}>
-              <ActivityIndicator size="small" color={IOS_COLORS.purple} />
-              <Text style={styles.pendingText}>Generating analysis...</Text>
-            </View>
-          ) : analysisError ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{analysisError}</Text>
-              <Pressable onPress={triggerAnalysis} style={styles.retryButton}>
-                <RefreshCw size={14} color={IOS_COLORS.blue} />
-                <Text style={styles.retryText}>Retry</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Text style={[styles.absenceHint, !canGenerateAI && styles.disabledHint]}>
-              {canGenerateAI
-                ? 'Tap to generate AI analysis'
-                : 'Complete result and structured debrief first'}
-            </Text>
-          )}
-        </ReviewChecklistItem>
-      </View>
+      {/* ================================================================== */}
+      {/* TIER 4: SUMMARY & SHARING */}
+      {/* ================================================================== */}
 
-      {/* Coach Feedback (if any general feedback) - Flat header */}
+      {/* Coach Feedback (if any general feedback) */}
       {coachAnnotations.find(a => a.field === 'general') && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -641,19 +784,6 @@ export function AfterRaceContent({
             isNew={!coachAnnotations.find(a => a.field === 'general')!.isRead}
           />
         </View>
-      )}
-
-      {/* Detailed Review Entry Point */}
-      {hasResult && debriefComplete && onOpenDetailedReview && isExpanded && (
-        <Pressable style={styles.detailedReviewButton} onPress={onOpenDetailedReview}>
-          <View style={styles.detailedReviewContent}>
-            <Text style={styles.detailedReviewTitle}>Debrief complete</Text>
-            <Text style={styles.detailedReviewSubtitle}>
-              Want to go deeper? Add tactical details, tack counts, and more.
-            </Text>
-          </View>
-          <ChevronRight size={20} color={IOS_COLORS.blue} />
-        </Pressable>
       )}
 
       {/* Share Your Analysis - Flat header */}
@@ -761,13 +891,30 @@ export function AfterRaceContent({
         raceId={race.id}
         userId={userId || ''}
         raceName={race.name}
-        onClose={() => setShowInterviewModal(false)}
+        onClose={() => {
+          setShowInterviewModal(false);
+          // Refetch in case user answered questions before closing
+          refetchDebrief();
+          refetchData();
+        }}
         onComplete={() => {
           setShowInterviewModal(false);
-          // Refetch state to update UI
+          // Refetch all data to update UI and trigger auto-analysis
+          refetchDebrief();
           refetchState();
+          refetchData(); // Needed to get timerSessionId for AI analysis
         }}
       />
+
+      {/* Toast notification for AI Analysis completion */}
+      {showAIToast && (
+        <Animated.View style={[styles.aiToast, { opacity: aiToastOpacity }]}>
+          <View style={styles.aiToastContent}>
+            <Sparkles size={16} color="#FFFFFF" />
+            <Text style={styles.aiToastText}>AI Analysis ready!</Text>
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -1024,6 +1171,10 @@ const styles = StyleSheet.create({
     borderLeftColor: IOS_COLORS.purple,
     gap: 12,
   },
+  analysisCardHighlight: {
+    backgroundColor: `${IOS_COLORS.purple}20`,
+    borderLeftWidth: 4,
+  },
   analysisItem: {
     gap: 4,
   },
@@ -1038,6 +1189,69 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: IOS_COLORS.label,
     lineHeight: 20,
+  },
+
+  // AI Analysis highlight (when newly generated)
+  aiAnalysisHighlight: {
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: -12,
+    paddingHorizontal: 12,
+  },
+
+  // "NEW" badge for AI Analysis
+  newBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: IOS_COLORS.purple,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  newBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+
+  // Collapsible section header
+  collapsibleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+
+  // Toast notification for AI Analysis
+  aiToast: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  aiToastContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: IOS_COLORS.purple,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  aiToastText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 
   // Pending
@@ -1109,32 +1323,6 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: IOS_COLORS.green,
     borderRadius: 2,
-  },
-
-  // Detailed Review Button
-  detailedReviewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: `${IOS_COLORS.blue}10`,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: `${IOS_COLORS.blue}30`,
-  },
-  detailedReviewContent: {
-    flex: 1,
-    gap: 2,
-  },
-  detailedReviewTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: IOS_COLORS.blue,
-  },
-  detailedReviewSubtitle: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: IOS_COLORS.secondaryLabel,
   },
 
   // Race Summary Section

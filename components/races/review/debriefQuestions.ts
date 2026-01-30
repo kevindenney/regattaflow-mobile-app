@@ -213,6 +213,20 @@ export const DEBRIEF_PHASES: DebriefPhase[] = [
         placeholder: 'Boat to leeward, started too low in the row...',
         showWhen: { questionId: 'start_clear_air', answerIn: ['false'] },
       },
+      {
+        id: 'start_strategy',
+        type: 'multi-select',
+        label: 'What starting strategy did you use?',
+        hint: 'Select all that apply',
+        options: [
+          { value: 'port_tack_approach', label: 'Port tack approach' },
+          { value: 'time_on_distance', label: 'Time on distance' },
+          { value: 'dip_start', label: 'Dip start' },
+          { value: 'mid_line_sag', label: 'Mid-line sag' },
+          { value: 'barging', label: 'Barging (risky!)' },
+          { value: 'conservative', label: 'Conservative/safe start' },
+        ],
+      },
     ],
   },
   {
@@ -230,6 +244,18 @@ export const DEBRIEF_PHASES: DebriefPhase[] = [
           { value: 'target', label: 'Target speed/angle' },
           { value: 'low_fast', label: 'Low and fast (footing)' },
           { value: 'mixed', label: 'Mixed based on conditions' },
+        ],
+      },
+      {
+        id: 'upwind_puff_handling',
+        type: 'select',
+        label: 'How did you handle puffs?',
+        hint: 'Trim response, not helm response',
+        options: [
+          { value: 'traveler', label: 'Traveler down/up', hint: 'Recommended for moderate keelboats' },
+          { value: 'mainsheet', label: 'Mainsheet ease/trim', hint: 'Better for dinghies and hot boats' },
+          { value: 'feathered', label: 'Feathered (turned toward wind)' },
+          { value: 'not_sure', label: 'Not sure' },
         ],
       },
       {
@@ -257,6 +283,20 @@ export const DEBRIEF_PHASES: DebriefPhase[] = [
         label: 'What shifts did you miss?',
         placeholder: 'Missed the left shift, tacked too early on the header...',
         showWhen: { questionId: 'upwind_shifts', answerIn: ['poor'] },
+      },
+      {
+        id: 'upwind_tactics_used',
+        type: 'multi-select',
+        label: 'What tactics did you use?',
+        hint: 'Select all that apply',
+        options: [
+          { value: 'delayed_tack', label: 'Delayed tack', hint: 'Signature playbook move' },
+          { value: 'cross_and_cover', label: 'Cross & cover' },
+          { value: 'slam_dunk', label: 'Slam dunk' },
+          { value: 'lee_bow', label: 'Lee bow' },
+          { value: 'tack_on_header', label: 'Tack on header' },
+          { value: 'loose_cover', label: 'Loose cover' },
+        ],
       },
       {
         id: 'upwind_notes',
@@ -336,6 +376,24 @@ export const DEBRIEF_PHASES: DebriefPhase[] = [
         label: 'Approximately how many jibes?',
         min: 0,
         max: 30,
+      },
+      {
+        id: 'downwind_shift_detection',
+        type: 'select',
+        label: 'How did you detect shifts downwind?',
+        hint: 'Apparent wind feel is the playbook method',
+        options: [
+          { value: 'apparent_wind', label: 'Apparent wind feel', hint: 'Recommended method' },
+          { value: 'compass', label: 'Compass' },
+          { value: 'watched_upwind_boats', label: 'Watched upwind boats' },
+          { value: 'didnt_track', label: 'Didn\'t track shifts' },
+        ],
+      },
+      {
+        id: 'downwind_in_phase',
+        type: 'boolean',
+        label: 'Did you feel "in phase" with shifts?',
+        hint: 'Jibing at the right times, gaining on shifts',
       },
       {
         id: 'downwind_pressure',
@@ -445,6 +503,20 @@ export const DEBRIEF_PHASES: DebriefPhase[] = [
         label: 'What was most frustrating?',
         placeholder: 'The main thing that went wrong...',
         showWhen: { questionId: 'finish_overall', answerIn: ['frustrating'] },
+      },
+      {
+        id: 'finish_what_worked',
+        type: 'textarea',
+        label: 'What worked well?',
+        hint: 'Recognize your strengths and successes',
+        placeholder: 'Good decisions, smooth maneuvers, things to repeat...',
+      },
+      {
+        id: 'finish_key_decision',
+        type: 'textarea',
+        label: 'What was your key tactical decision?',
+        hint: 'The pivotal choice that most affected your result',
+        placeholder: 'e.g., Going left on the first beat, covering X at the finish...',
       },
       {
         id: 'finish_key_learning',
