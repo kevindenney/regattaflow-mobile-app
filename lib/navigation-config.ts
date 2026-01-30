@@ -114,11 +114,7 @@ export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },
 ];
 
-export const SAILOR_SECONDARY_ITEMS: NavItem[] = [
-  { key: 'courses', label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
-  { key: 'crew', label: 'Crew', route: '/(tabs)/crew', icon: 'people-outline' },
-  { key: 'coaches', label: 'Coaches', route: '/(tabs)/coaching', icon: 'school-outline' },
-];
+export const SAILOR_SECONDARY_ITEMS: NavItem[] = [];
 
 export const COACH_NAV_ITEMS: NavItem[] = [
   { key: 'clients', label: 'Clients', route: '/(tabs)/clients', icon: 'people-outline' },
