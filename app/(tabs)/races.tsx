@@ -3230,6 +3230,7 @@ export default function RacesScreen() {
           onAddRace={handleShowAddRaceSheet}
           onAddPractice={handleAddPractice}
           onNewSeason={() => setShowSeasonSettings(true)}
+          onBrowseCatalog={() => router.push('/catalog-race')}
           onAddButtonLayout={setAddButtonLayout}
           measureTrigger={tourVisible}
           totalRaces={enrichedRaces?.length || 0}

@@ -4,8 +4,7 @@
  * Consistent tab screen header using the shared TabScreenToolbar:
  * - Large left-aligned "Races" title
  * - Race counter subtitle ("13 of 22 | 11 upcoming")
- * - White capsule with search + add icons
- * - Search bar (toggled via capsule icon)
+ * - White capsule with add (+) icon
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -17,7 +16,6 @@ import {
   Platform,
   Modal,
   Pressable,
-  TextInput,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -27,6 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
+import { NotificationBell } from '@/components/social/NotificationBell';
 import {
   TabScreenToolbar,
   capsuleStyles,
@@ -59,12 +58,10 @@ export interface RacesFloatingHeaderProps {
   onAddPractice?: () => void;
   /** Callback when new season is pressed */
   onNewSeason?: () => void;
+  /** Callback when browse catalog is pressed */
+  onBrowseCatalog?: () => void;
   /** Current scroll offset for large title collapse */
   scrollOffset?: number;
-  /** Callback when search text changes */
-  onSearchChange?: (text: string) => void;
-  /** Whether search is active */
-  searchActive?: boolean;
   /** Callback to expose the + button's layout for onboarding tour spotlight */
   onAddButtonLayout?: (layout: LayoutRectangle) => void;
   /** Trigger value to force re-measurement of add button (e.g., when tour becomes visible) */
@@ -77,6 +74,10 @@ export interface RacesFloatingHeaderProps {
   currentRaceIndex?: number;
   /** Callback when "X upcoming" is pressed to navigate to next race */
   onUpcomingPress?: () => void;
+  /** Callback reporting the measured height of the toolbar (for content paddingTop) */
+  onMeasuredHeight?: (height: number) => void;
+  /** When true the toolbar slides up off-screen */
+  hidden?: boolean;
   /** Legacy drawer props - kept for compatibility but not rendered */
   drawerVisible?: boolean;
   onDrawerVisibleChange?: (visible: boolean) => void;
@@ -100,19 +101,18 @@ export function RacesFloatingHeader({
   onAddRace,
   onAddPractice,
   onNewSeason,
+  onBrowseCatalog,
   scrollOffset: _scrollOffset = 0,
-  onSearchChange,
   onAddButtonLayout,
   measureTrigger,
   totalRaces,
   upcomingRaces,
   currentRaceIndex,
   onUpcomingPress,
+  onMeasuredHeight,
+  hidden,
 }: RacesFloatingHeaderProps) {
   const [menuVisible, setMenuVisible] = useState(false);
-  const [searchVisible, setSearchVisible] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  const searchInputRef = useRef<TextInput>(null);
 
   // Animation values
   const menuFadeAnim = useSharedValue(0);
@@ -178,25 +178,6 @@ export function RacesFloatingHeader({
     }, 100);
   };
 
-  // Handle search toggle
-  const handleSearchToggle = () => {
-    triggerHaptic('selection');
-    if (searchVisible) {
-      setSearchVisible(false);
-      setSearchText('');
-      onSearchChange?.('');
-    } else {
-      setSearchVisible(true);
-      setTimeout(() => searchInputRef.current?.focus(), 100);
-    }
-  };
-
-  // Handle search text change
-  const handleSearchTextChange = (text: string) => {
-    setSearchText(text);
-    onSearchChange?.(text);
-  };
-
   // Animated styles
   const menuOverlayStyle = useAnimatedStyle(() => ({
     opacity: menuFadeAnim.value,
@@ -225,22 +206,13 @@ export function RacesFloatingHeader({
   }
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' | ') : undefined;
 
-  // Custom right capsule with search + add buttons (preserving add button ref)
+  // Custom right capsule with notification bell and add button (preserving add button ref)
   const rightCapsule = (
     <View style={capsuleStyles.capsule}>
-      {/* Search toggle */}
-      <AnimatedPressable
-        style={capsuleStyles.actionButton}
-        accessibilityLabel="Search races"
-        accessibilityRole="button"
-        onPress={handleSearchToggle}
-      >
-        <Ionicons
-          name={searchVisible ? 'search' : 'search-outline'}
-          size={20}
-          color={searchVisible ? IOS_COLORS.systemBlue : IOS_COLORS.secondaryLabel}
-        />
-      </AnimatedPressable>
+      {/* Notification bell */}
+      <View style={capsuleStyles.actionButton}>
+        <NotificationBell size={20} color={IOS_COLORS.secondaryLabel} />
+      </View>
 
       <View style={capsuleStyles.capsuleDivider} />
 
@@ -267,12 +239,14 @@ export function RacesFloatingHeader({
   return (
     <>
       <TabScreenToolbar
-        title="Races"
+        title="Race"
         subtitle={subtitle}
         onSubtitlePress={hasUpcoming ? onUpcomingPress : undefined}
         topInset={topInset}
         isLoading={isLoading}
         rightContent={rightCapsule}
+        onMeasuredHeight={onMeasuredHeight}
+        hidden={hidden}
       >
         {/* Offline indicator */}
         {!isOnline && (
@@ -280,31 +254,6 @@ export function RacesFloatingHeader({
             <OfflineIndicator />
           </View>
         )}
-
-        {/* Search Bar (conditionally visible) */}
-        {searchVisible && (
-          <View style={styles.searchContainer}>
-            <View style={styles.searchBar}>
-              <Ionicons
-                name="search"
-                size={18}
-                color={IOS_COLORS.secondaryLabel}
-                style={styles.searchIcon}
-              />
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Search races..."
-                placeholderTextColor={IOS_COLORS.tertiaryLabel}
-                value={searchText}
-                onChangeText={handleSearchTextChange}
-                returnKeyType="search"
-                clearButtonMode="while-editing"
-              />
-            </View>
-          </View>
-        )}
-
       </TabScreenToolbar>
 
       {/* Add Menu Modal */}
@@ -395,6 +344,29 @@ export function RacesFloatingHeader({
                   </TouchableOpacity>
                 </>
               )}
+
+              {/* Browse Catalog Option */}
+              {onBrowseCatalog && (
+                <>
+                  <View style={styles.menuSeparator} />
+                  <TouchableOpacity
+                    style={styles.menuOption}
+                    onPress={() => handleMenuOption(onBrowseCatalog)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemPurple}15` }]}>
+                      <MaterialCommunityIcons name="trophy-outline" size={24} color={IOS_COLORS.systemPurple} />
+                    </View>
+                    <View style={styles.menuOptionContent}>
+                      <Text style={styles.menuOptionTitle}>Browse Race Catalog</Text>
+                      <Text style={styles.menuOptionSubtitle}>
+                        Find and follow major regattas
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </Animated.View>
         </Animated.View>
@@ -407,27 +379,6 @@ const styles = StyleSheet.create({
   offlineContainer: {
     paddingHorizontal: IOS_SPACING.lg,
     paddingBottom: IOS_SPACING.xs,
-  },
-  searchContainer: {
-    paddingHorizontal: IOS_SPACING.lg,
-    paddingBottom: IOS_SPACING.md,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: IOS_COLORS.tertiarySystemFill || IOS_COLORS.systemGray6,
-    borderRadius: IOS_RADIUS.sm,
-    paddingHorizontal: IOS_SPACING.sm,
-    height: 36,
-  },
-  searchIcon: {
-    marginRight: IOS_SPACING.xs,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: IOS_TYPOGRAPHY.body.fontSize,
-    color: IOS_COLORS.label,
-    paddingVertical: 0,
   },
   // Menu styles
   menuOverlay: {
