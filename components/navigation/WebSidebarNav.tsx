@@ -4,11 +4,12 @@
  * Slides in from the left as an overlay drawer (not persistent sidebar).
  * Contains:
  * - Close button
- * - User profile header (avatar, name)
+ * - User profile header (clickable - opens Account modal, same as mobile)
  * - Primary nav items (persona-aware, from shared config)
  * - Secondary items (all "More" menu items flattened)
- * - Footer: Account, Sign Out
+ * - Footer: Sign In/Sign Up (guests) or Upgrade CTA (free users)
  *
+ * Account, Plans, and Sign Out are accessed via the profile header (like mobile).
  * Only rendered on web when USE_WEB_SIDEBAR_LAYOUT feature flag is enabled.
  */
 
@@ -21,7 +22,6 @@ import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import {
   type NavItem,
-  COMMON_FOOTER_ITEMS,
   getNavItemsForUserType,
   isRouteActive,
 } from '@/lib/navigation-config';
@@ -33,7 +33,7 @@ interface WebSidebarNavProps {
 }
 
 function WebSidebarNav({ onClose }: WebSidebarNavProps) {
-  const { userType, userProfile, user, signOut, isGuest } = useAuth();
+  const { userType, userProfile, user, isGuest } = useAuth();
   const { isFree } = useFeatureGate();
   const pathname = usePathname();
   const router = useRouter();
@@ -48,15 +48,6 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
   const handleNavigation = (route: string) => {
     router.push(route as Parameters<typeof router.push>[0]);
     onClose?.();
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      onClose?.();
-    } catch (e) {
-      console.error('Sign out failed:', e);
-    }
   };
 
   const renderNavItem = (item: NavItem) => {
@@ -99,8 +90,14 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* User Profile Header */}
-        <View style={styles.userSection}>
+        {/* User Profile Header - clickable to open Account */}
+        <TouchableOpacity
+          style={styles.userSection}
+          onPress={() => {
+            handleNavigation('/account');
+          }}
+          activeOpacity={0.7}
+        >
           <View style={styles.userAvatar}>
             <Text style={styles.userAvatarText}>{userInitial}</Text>
           </View>
@@ -119,7 +116,8 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
               </Text>
             )}
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
+        </TouchableOpacity>
 
         <View style={styles.divider} />
 
@@ -142,44 +140,31 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
         {/* Spacer */}
         <View style={styles.spacer} />
 
-        {/* Footer */}
-        <View style={styles.divider} />
-        <View style={styles.navSection}>
-          {!isGuest && COMMON_FOOTER_ITEMS.map(renderNavItem)}
-
-          {(isGuest || isFree) && (
-            <TouchableOpacity
-              style={styles.navItem}
-              onPress={() => handleNavigation('/pricing')}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="pricetags-outline" size={20} color={IOS_COLORS.label} />
-              <Text style={styles.navItemText}>Plans</Text>
-            </TouchableOpacity>
-          )}
-
-          {isGuest ? (
-            <>
-              <TouchableOpacity
-                style={styles.navItem}
-                onPress={() => handleNavigation('/(auth)/login')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="log-in-outline" size={20} color={IOS_COLORS.systemBlue} />
-                <Text style={[styles.navItemText, styles.signInText]}>Sign In</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.navItem}
-                onPress={() => handleNavigation('/(auth)/signup')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="person-add-outline" size={20} color={IOS_COLORS.systemBlue} />
-                <Text style={[styles.navItemText, styles.signInText]}>Sign Up</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              {isFree && (
+        {/* Footer - Guest auth options or Upgrade CTA */}
+        {(isGuest || isFree) && (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.navSection}>
+              {isGuest ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.navItem}
+                    onPress={() => handleNavigation('/(auth)/login')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="log-in-outline" size={20} color={IOS_COLORS.systemBlue} />
+                    <Text style={[styles.navItemText, styles.signInText]}>Sign In</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.navItem}
+                    onPress={() => handleNavigation('/(auth)/signup')}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="person-add-outline" size={20} color={IOS_COLORS.systemBlue} />
+                    <Text style={[styles.navItemText, styles.signInText]}>Sign Up</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
                 <TouchableOpacity
                   style={styles.upgradeButton}
                   onPress={() => handleNavigation('/pricing?upgrade=pro')}
@@ -189,18 +174,9 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
                   <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
                 </TouchableOpacity>
               )}
-
-              <TouchableOpacity
-                style={styles.navItem}
-                onPress={handleSignOut}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="log-out-outline" size={20} color={IOS_COLORS.systemRed} />
-                <Text style={[styles.navItemText, styles.signOutText]}>Sign Out</Text>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -314,9 +290,6 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
     minHeight: 20,
-  },
-  signOutText: {
-    color: IOS_COLORS.systemRed,
   },
   signInText: {
     color: IOS_COLORS.systemBlue,
