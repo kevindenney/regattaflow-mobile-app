@@ -77,6 +77,8 @@ import { RaceTypeSelector, type RaceType } from '../RaceTypeSelector';
 import { LocationMapPicker } from '../LocationMapPicker';
 import { BoatSelector } from '../AddRaceDialog/BoatSelector';
 import { DistanceRouteMap, type RouteWaypoint } from '@/components/races/DistanceRouteMap';
+import { CoursePositionEditor } from '../CoursePositionEditor';
+import type { PositionedCourse } from '@/types/courses';
 import { TufteTokens, colors } from '@/constants/designSystem';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { supabase } from '@/services/supabase';
@@ -358,6 +360,10 @@ export function EditRaceForm({
   // Route map state (for distance races - unified map component)
   const [showRouteMap, setShowRouteMap] = useState(false);
   const [tempWaypoints, setTempWaypoints] = useState<RouteWaypoint[]>([]);
+
+  // Course position editor state
+  const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
+  const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
 
   // ==========================================================================
   // DATA LOADING
@@ -651,6 +657,15 @@ export function EditRaceForm({
   const handleTotalDistanceChange = useCallback((distance: number) => {
     updateField('totalDistanceNm', distance.toFixed(1));
   }, [updateField]);
+
+  // Handle positioned course save
+  const handlePositionedCourseSave = useCallback((course: PositionedCourse) => {
+    setPositionedCourse(course);
+    setShowCoursePositionEditor(false);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, []);
 
   const formatDate = (dateStr: string): string => {
     if (!dateStr) return '';
@@ -1156,8 +1171,20 @@ export function EditRaceForm({
                 value={formData.courseType}
                 placeholder="e.g., Windward-Leeward"
                 onChangeText={(text) => updateField('courseType', text)}
-                showSeparator={false}
+                showSeparator={!!formData.venueCoordinates}
               />
+              {formData.venueCoordinates && (
+                <EditFormRow
+                  label="Position Course"
+                  value={positionedCourse
+                    ? `${positionedCourse.marks.length} marks positioned`
+                    : 'Tap to position on map'}
+                  placeholder="Position marks on map"
+                  accessory="chevron"
+                  onPress={() => setShowCoursePositionEditor(true)}
+                  showSeparator={false}
+                />
+              )}
             </EditFormSection>
           )}
 
@@ -1869,6 +1896,20 @@ export function EditRaceForm({
         initialLocation={formData.venueCoordinates}
         initialName={formData.venue}
       />
+
+      {/* Course Position Editor */}
+      {formData.venueCoordinates && (
+        <CoursePositionEditor
+          visible={showCoursePositionEditor}
+          regattaId={raceId}
+          initialCourseType={formData.courseType === 'windward_leeward' || formData.courseType === 'triangle' || formData.courseType === 'olympic' || formData.courseType === 'trapezoid'
+            ? formData.courseType as any
+            : 'windward_leeward'}
+          initialLocation={formData.venueCoordinates}
+          onSave={handlePositionedCourseSave}
+          onCancel={() => setShowCoursePositionEditor(false)}
+        />
+      )}
 
       {/* Route Map for Distance Races (unified map component - works on web + native) */}
       <Modal
