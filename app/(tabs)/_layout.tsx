@@ -1,5 +1,5 @@
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
-import FloatingTabBar, { FLOATING_TAB_BAR_BOTTOM_MARGIN, FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
+import FloatingTabBar from '@/components/navigation/FloatingTabBar';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import { GlobalSearchProvider } from '@/providers/GlobalSearchProvider';
 import { useWebDrawer, WebDrawerProvider } from '@/providers/WebDrawerProvider';
@@ -180,6 +180,7 @@ function TabLayoutInner() {
   const profileTab = findTab('profile');
   const settingsTab = findTab('settings');
   const learnTab = findTab('learn');
+  const reflectTab = findTab('reflect');
   const coursesTab = findTab('courses');
   const venueTab = findTab('venue');
   const discoverTab = findTab('discover');
@@ -204,13 +205,8 @@ function TabLayoutInner() {
     }
 
     // Native / web without sidebar: existing behavior
-    // iPad portrait: tab bar at top → use paddingTop instead of paddingBottom
-    const tabBarPadding = isSailorUser
-      ? isIPadPortrait
-        ? { paddingTop: FLOATING_TAB_BAR_HEIGHT + 20 }
-        : { paddingBottom: FLOATING_TAB_BAR_HEIGHT + FLOATING_TAB_BAR_BOTTOM_MARGIN + 20 }
-      : undefined;
-
+    // Each tab screen handles its own scroll content bottom padding so content
+    // flows underneath the floating tab bar (blur visible through).
     return {
       tabBar: isSailorUser ? (props: any) => (
         <FloatingTabBar
@@ -230,7 +226,7 @@ function TabLayoutInner() {
             display: 'flex' as const,
           }
           : { display: 'none' as const },
-      sceneStyle: tabBarPadding,
+      sceneStyle: undefined,
     };
   };
 
@@ -262,11 +258,11 @@ function TabLayoutInner() {
         };
       }}
     >
-        {/* Tab 1: Races */}
+        {/* Tab 1: Race */}
         <Tabs.Screen
           name="races"
           options={{
-            title: racesTab?.title ?? 'Races',
+            title: racesTab?.title ?? 'Race',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
                 name={getIconName(racesTab, focused, racesTab?.iconFocused ?? 'flag', racesTab?.icon ?? 'flag-outline') as any}
@@ -277,18 +273,18 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('races')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('races', racesTab?.title ?? 'Races', racesTab)
+                ? renderSailorTabButton('races', racesTab?.title ?? 'Race', racesTab)
                 : undefined,
           }}
         />
-        {/* Tab 2: Community (discover) */}
+        {/* Tab 2: Follow (discover) */}
         <Tabs.Screen
           name="discover"
           options={{
-            title: 'Community',
+            title: 'Follow',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={focused ? 'people' : 'people-outline'}
+                name={focused ? 'heart' : 'heart-outline'}
                 size={size}
                 color={color}
               />
@@ -296,18 +292,18 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('discover')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('discover', discoverTab?.title ?? 'Community', findTab('discover'))
+                ? renderSailorTabButton('discover', discoverTab?.title ?? 'Follow', findTab('discover'))
                 : undefined,
           }}
         />
-        {/* Tab 3: Venue */}
+        {/* Tab 3: Discuss (venue) */}
         <Tabs.Screen
           name="venue"
           options={{
-            title: venueTab?.title ?? 'Local',
+            title: venueTab?.title ?? 'Discuss',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'compass', venueTab?.icon ?? 'compass-outline') as any}
+                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'chatbubbles', venueTab?.icon ?? 'chatbubbles-outline') as any}
                 size={size}
                 color={color}
               />
@@ -315,7 +311,7 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('venue')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('venue', venueTab?.title ?? 'Local', venueTab)
+                ? renderSailorTabButton('venue', venueTab?.title ?? 'Discuss', venueTab)
                 : undefined,
           }}
         />
@@ -335,6 +331,25 @@ function TabLayoutInner() {
               ? () => null
               : isSailorUser
                 ? renderSailorTabButton('learn', learnTab?.title ?? 'Learn', learnTab)
+                : undefined,
+          }}
+        />
+        {/* Tab 5: Reflect (Progress/Stats) */}
+        <Tabs.Screen
+          name="reflect"
+          options={{
+            title: reflectTab?.title ?? 'Reflect',
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(reflectTab, focused, reflectTab?.iconFocused ?? 'stats-chart', reflectTab?.icon ?? 'stats-chart-outline') as any}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: !isTabVisible('reflect')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('reflect', reflectTab?.title ?? 'Reflect', reflectTab)
                 : undefined,
           }}
         />
@@ -502,13 +517,6 @@ function TabLayoutInner() {
           }}
         />
         <Tabs.Screen
-          name="account"
-          options={{
-            title: 'Account',
-            href: null, // Hidden from tab bar, accessible via menu
-          }}
-        />
-        <Tabs.Screen
           name="strategy"
           options={{
             title: strategyTab?.title ?? 'Strategy',
@@ -520,6 +528,13 @@ function TabLayoutInner() {
           options={{
             title: mapTab?.title ?? 'Map',
             tabBarButton: isTabVisible('map') ? undefined : () => null,
+          }}
+        />
+        <Tabs.Screen
+          name="search"
+          options={{
+            title: 'Search',
+            href: null,
           }}
         />
         <Tabs.Screen
