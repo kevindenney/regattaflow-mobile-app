@@ -16,17 +16,17 @@ import { Dimensions } from 'react-native';
  * Warm paper background - inspired by financial newspapers (FT salmon, WSJ)
  * Creates hue contrast with cool white cards, not just luminance
  */
-export const TUFTE_BACKGROUND = '#F0EDE8';
+export const TUFTE_BACKGROUND = '#F2F2F7';
 
 /**
  * Slightly darker warm tone for drawer/secondary backgrounds
  */
-export const TUFTE_BACKGROUND_SECONDARY = '#E8E5DF';
+export const TUFTE_BACKGROUND_SECONDARY = '#E5E5EA';
 
 /**
  * Warm gray for text - complements paper background
  */
-export const TUFTE_TEXT = '#3D3832';
+export const TUFTE_TEXT = '#000000';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)

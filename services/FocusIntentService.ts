@@ -25,6 +25,7 @@ export class FocusIntentService {
   /**
    * Get the active (unevaluated) focus intent for a sailor.
    * Returns the most recent intent with status 'active'.
+   * Returns null gracefully on errors.
    */
   static async getActiveIntent(sailorId: string): Promise<FocusIntent | null> {
     try {
@@ -38,23 +39,31 @@ export class FocusIntentService {
         .maybeSingle();
 
       if (error) {
-        logger.error('Error fetching active focus intent', { error, sailorId });
-        throw error;
+        // Log but don't throw - return null gracefully
+        logger.warn('Error fetching active focus intent', { error, sailorId });
+        return null;
       }
 
       return data ? mapRowToFocusIntent(data as FocusIntentRow) : null;
     } catch (error) {
-      logger.error('Exception in getActiveIntent', { error, sailorId });
-      throw error;
+      // Log and return null instead of throwing - prevents UI crashes
+      logger.warn('Exception in getActiveIntent', { error, sailorId });
+      return null;
     }
   }
 
   /**
    * Get the focus intent set for a specific race (as source).
    * Returns the intent that was set after reviewing the given race.
+   * Returns null gracefully on errors.
    */
   static async getIntentFromRace(sailorId: string, sourceRaceId: string): Promise<FocusIntent | null> {
     try {
+      // Skip query for demo races or invalid IDs
+      if (!sourceRaceId || sourceRaceId.startsWith('demo-')) {
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('sailor_focus_intents')
         .select('*')
@@ -65,23 +74,31 @@ export class FocusIntentService {
         .maybeSingle();
 
       if (error) {
-        logger.error('Error fetching focus intent from race', { error, sailorId, sourceRaceId });
-        throw error;
+        // Log but don't throw - return null gracefully
+        logger.warn('Error fetching focus intent from race', { error, sailorId, sourceRaceId });
+        return null;
       }
 
       return data ? mapRowToFocusIntent(data as FocusIntentRow) : null;
     } catch (error) {
-      logger.error('Exception in getIntentFromRace', { error, sailorId, sourceRaceId });
-      throw error;
+      // Log and return null instead of throwing - prevents UI crashes
+      logger.warn('Exception in getIntentFromRace', { error, sailorId, sourceRaceId });
+      return null;
     }
   }
 
   /**
    * Get the focus intent that applies to a specific race (as target).
    * Also checks for intents with null target_race_id (applies to "next" race).
+   * Returns null gracefully on errors (e.g., for demo races with non-UUID IDs).
    */
   static async getIntentForRace(sailorId: string, targetRaceId: string): Promise<FocusIntent | null> {
     try {
+      // Skip query for demo races or invalid IDs
+      if (!targetRaceId || targetRaceId.startsWith('demo-')) {
+        return null;
+      }
+
       // First check for explicitly targeted intents
       const { data: targeted, error: targetedError } = await supabase
         .from('sailor_focus_intents')
@@ -94,8 +111,9 @@ export class FocusIntentService {
         .maybeSingle();
 
       if (targetedError) {
-        logger.error('Error fetching targeted focus intent', { error: targetedError, sailorId, targetRaceId });
-        throw targetedError;
+        // Log but don't throw - return null gracefully
+        logger.warn('Error fetching targeted focus intent', { error: targetedError, sailorId, targetRaceId });
+        return null;
       }
 
       if (targeted) {
@@ -114,19 +132,22 @@ export class FocusIntentService {
         .maybeSingle();
 
       if (generalError) {
-        logger.error('Error fetching general focus intent', { error: generalError, sailorId });
-        throw generalError;
+        // Log but don't throw - return null gracefully
+        logger.warn('Error fetching general focus intent', { error: generalError, sailorId });
+        return null;
       }
 
       return general ? mapRowToFocusIntent(general as FocusIntentRow) : null;
     } catch (error) {
-      logger.error('Exception in getIntentForRace', { error, sailorId, targetRaceId });
-      throw error;
+      // Log and return null instead of throwing - prevents UI crashes
+      logger.warn('Exception in getIntentForRace', { error, sailorId, targetRaceId });
+      return null;
     }
   }
 
   /**
    * Get recent evaluated intents for progress tracking.
+   * Returns empty array gracefully on errors.
    */
   static async getRecentEvaluations(sailorId: string, limit = 10): Promise<FocusIntent[]> {
     try {
@@ -139,14 +160,16 @@ export class FocusIntentService {
         .limit(limit);
 
       if (error) {
-        logger.error('Error fetching recent evaluations', { error, sailorId });
-        throw error;
+        // Log but don't throw - return empty array gracefully
+        logger.warn('Error fetching recent evaluations', { error, sailorId });
+        return [];
       }
 
       return (data || []).map((row) => mapRowToFocusIntent(row as FocusIntentRow));
     } catch (error) {
-      logger.error('Exception in getRecentEvaluations', { error, sailorId });
-      throw error;
+      // Log and return empty array instead of throwing
+      logger.warn('Exception in getRecentEvaluations', { error, sailorId });
+      return [];
     }
   }
 

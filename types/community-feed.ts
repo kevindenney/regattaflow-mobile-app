@@ -24,10 +24,10 @@ export const POST_TYPE_CONFIG: Record<PostType, {
   color: string;
   bgColor: string;
 }> = {
-  tip: { label: 'Tip', icon: 'bulb-outline', color: '#D97706', bgColor: '#FEF3C7' },
-  question: { label: 'Question', icon: 'help-circle-outline', color: '#2563EB', bgColor: '#DBEAFE' },
+  tip: { label: 'Tip', icon: 'bulb-outline', color: '#0D9488', bgColor: '#CCFBF1' },
+  question: { label: 'Question', icon: 'help-circle-outline', color: '#EA580C', bgColor: '#FFEDD5' },
   report: { label: 'Report', icon: 'document-text-outline', color: '#059669', bgColor: '#D1FAE5' },
-  discussion: { label: 'Discussion', icon: 'chatbubbles-outline', color: '#6B7280', bgColor: '#F3F4F6' },
+  discussion: { label: 'Discussion', icon: 'chatbubbles-outline', color: '#2563EB', bgColor: '#DBEAFE' },
   safety_alert: { label: 'Safety', icon: 'warning-outline', color: '#DC2626', bgColor: '#FEE2E2' },
 };
 
@@ -69,6 +69,19 @@ export interface FeedPost {
     id: string;
     area_name: string;
   };
+  venue?: {
+    id: string;
+    name: string;
+    country?: string;
+    region?: string;
+  };
+  catalog_race_id?: string | null;
+  catalog_race?: {
+    id: string;
+    name: string;
+    short_name: string | null;
+    slug: string;
+  } | null;
   topic_tags?: TopicTag[];
   condition_tags?: ConditionTag[];
   user_vote?: number | null;
@@ -164,6 +177,7 @@ export interface CreatePostParams {
   location_label?: string;
   topic_tag_ids?: string[];
   condition_tags?: Omit<ConditionTag, 'id' | 'discussion_id'>[];
+  catalog_race_id?: string;
 }
 
 export interface UpdatePostParams {
@@ -183,6 +197,7 @@ export interface FeedQueryParams {
   racingAreaId?: string | null;
   topPeriod?: TopPeriod;
   currentConditions?: CurrentConditions;
+  catalogRaceId?: string;
   page?: number;
   limit?: number;
 }

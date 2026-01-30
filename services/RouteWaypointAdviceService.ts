@@ -83,22 +83,11 @@ export class RouteWaypointAdviceService {
 
       const prompt = this.buildAdvicePrompt(context);
 
-      const message = await anthropic.beta.messages.create({
+      // claude-3-haiku-20240307 does not support skills or code_execution betas
+      const message = await anthropic.messages.create({
         model: 'claude-3-haiku-20240307',
         max_tokens: 1024,
         temperature: 0.3,
-        betas: ['code-execution-2025-08-25', 'skills-2025-10-02'],
-        container: {
-          skills: [{
-            type: 'custom',
-            skill_id: this.LONG_DISTANCE_SKILL_ID,
-            version: 'latest'
-          }]
-        },
-        tools: [{
-          type: 'code_execution_20250825',
-          name: 'code_execution'
-        }],
         messages: [{
           role: 'user',
           content: prompt

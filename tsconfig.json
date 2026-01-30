@@ -15,6 +15,8 @@
     "app/legacy.tsx",
     "app/(auth)/**/*.ts",
     "app/(auth)/**/*.tsx",
+    "app/onboarding/**/*.ts",
+    "app/onboarding/**/*.tsx",
     "app/race-analysis.tsx",
     "app/race/simulation/**/*.ts",
     "app/race/simulation/**/*.tsx",

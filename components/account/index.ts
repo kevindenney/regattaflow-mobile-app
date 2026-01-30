@@ -1,10 +1,7 @@
 /**
  * Account Components
- * Tufte-style account management UI
+ * iOS HIG-style account management UI
  */
 
 export { TufteProfileHeader } from './TufteProfileHeader';
-export { TufteAccountSection } from './TufteAccountSection';
-export { TufteSettingRow, TufteDataRow, TufteToggleRow, TufteBoatRow } from './TufteSettingRow';
-export { TufteInlineEditRow } from './TufteInlineEditRow';
-export { tufteAccountStyles, STATUS_COLORS, getStatusColor, getInitials, formatMemberSince } from './accountStyles';
+export { accountStyles, STATUS_COLORS, ICON_BACKGROUNDS, getStatusColor, getInitials, formatMemberSince } from './accountStyles';

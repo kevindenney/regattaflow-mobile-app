@@ -676,7 +676,8 @@ class CrewFinderServiceClass {
                 if (profile.id === userId || !profile.full_name) continue;
 
                 const existing = suggestionsMap.get(profile.id);
-                const raceName = otherCollaborators.find((c: any) => c.user_id === profile.id)?.regattas?.name || 'past race';
+                const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
+                const raceName = (collab?.regattas as any)?.name || 'past race';
 
                 if (existing) {
                   existing.score += 1; // Boost for race collaboration
@@ -845,7 +846,8 @@ class CrewFinderServiceClass {
                 if (profile.id === userId || !profile.full_name) continue;
 
                 const existing = suggestionsMap.get(profile.id);
-                const raceName = otherCollaborators.find((c: any) => c.user_id === profile.id)?.regattas?.name || 'past race';
+                const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
+                const raceName = (collab?.regattas as any)?.name || 'past race';
 
                 if (existing) {
                   existing.score += 1;
@@ -1285,7 +1287,7 @@ class CrewFinderServiceClass {
       const sailorProfile = sailorProfilesMap[profile.id];
       return {
         user: {
-          id: profile.id,
+          userId: profile.id,
           fullName: profile.full_name || 'Unknown',
           avatarEmoji: sailorProfile?.avatar_emoji,
           avatarColor: sailorProfile?.avatar_color,
@@ -1920,11 +1922,13 @@ class CrewFinderServiceClass {
     logger.info('[CrewFinderService] getActiveSailors called', { userId, limit });
 
     // Find users with the most races (excluding current user)
+    // IMPORTANT: Add limit to prevent unbounded query that hangs the UI
     const { data: racesByUser, error: racesError } = await supabase
       .from('regattas')
       .select('created_by')
       .neq('created_by', userId)
-      .not('created_by', 'is', null);
+      .not('created_by', 'is', null)
+      .limit(1000);
 
     if (racesError) {
       logger.error('Failed to get races for active sailors:', racesError);

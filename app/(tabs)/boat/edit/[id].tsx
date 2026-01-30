@@ -218,12 +218,12 @@ export default function EditBoatScreen() {
               if (!id) return;
               await sailorBoatService.deleteBoat(id);
               Alert.alert('Success', 'Boat deleted successfully', [
-                { text: 'OK', onPress: () => router.replace('/(tabs)/account') },
+                { text: 'OK', onPress: () => router.push('/account') },
               ]);
             } catch (error: any) {
               if (error?.queuedForSync) {
                 Alert.alert('Offline', 'Boat deletion will complete once you are back online.', [
-                  { text: 'OK', onPress: () => router.replace('/(tabs)/account') },
+                  { text: 'OK', onPress: () => router.push('/account') },
                 ]);
               } else {
                 console.error('Error deleting boat:', error);

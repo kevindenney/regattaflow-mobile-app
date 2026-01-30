@@ -87,10 +87,10 @@ export function calculateCountdown(date: string, startTime?: string): CountdownR
     urgencyColor = IOS_COLORS.systemRed;
     label = minutes < 60 ? `${minutes}m` : `${hours}h ${minutes}m`;
   } else if (isToday) {
-    urgencyColor = IOS_COLORS.systemGreen;
+    urgencyColor = IOS_COLORS.systemBlue;
     label = 'Today';
   } else if (isTomorrow) {
-    urgencyColor = IOS_COLORS.systemGreen;
+    urgencyColor = IOS_COLORS.systemBlue;
     label = 'Tomorrow';
   } else if (days <= 7) {
     urgencyColor = IOS_COLORS.systemBlue;

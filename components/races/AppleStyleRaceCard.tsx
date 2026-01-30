@@ -10,13 +10,13 @@
  * - Proper depth with multi-layer shadows
  */
 
+import { IOS_COLORS } from '@/components/cards/constants';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { calculateCountdown } from '@/constants/mockData';
-import { Calendar, Clock, MapPin, Play, Trophy, Wind, Waves, Radio } from 'lucide-react-native';
-import React, { useMemo, useState, useEffect } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, Dimensions } from 'react-native';
+import { Calendar, Clock, MapPin, Play, Radio, Trophy, Waves, Wind } from 'lucide-react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Dimensions, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { RaceTypeBadge, type RaceType } from './RaceTypeSelector';
-import { IOS_COLORS } from '@/components/cards/constants';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -59,6 +59,8 @@ export interface AppleStyleRaceCardProps {
   cardHeight?: number;
   /** Show loading overlay when race is being deleted */
   isDeleting?: boolean;
+  /** Whether the race is sample data */
+  isSample?: boolean;
 }
 
 // =============================================================================
@@ -123,6 +125,7 @@ export function AppleStyleRaceCard({
   cardWidth: propCardWidth,
   cardHeight: propCardHeight,
   isDeleting = false,
+  isSample = false,
 }: AppleStyleRaceCardProps) {
   const cardWidth = propCardWidth ?? Math.min(SCREEN_WIDTH - 32, 375);
   const cardHeight = propCardHeight ?? 520;
@@ -143,6 +146,13 @@ export function AppleStyleRaceCard({
   const isPast = raceStatus === 'past';
   const statusConfig = STATUS_CONFIG[raceStatus];
   const countdownStyle = getCountdownStyle(countdown.days, countdown.hours, isPast);
+
+  // Sample badge config
+  const sampleBadgeConfig = {
+    label: 'SAMPLE',
+    color: '#9333EA', // Purple
+    bgColor: '#F3E8FF', // Light Purple
+  };
 
   // Format date
   const formattedDate = useMemo(() => {
@@ -248,6 +258,14 @@ export function AppleStyleRaceCard({
               {statusConfig.label}
             </Text>
           </View>
+
+          {isSample && (
+            <View style={[styles.statusPill, { backgroundColor: sampleBadgeConfig.bgColor }]}>
+              <Text style={[styles.statusLabel, { color: sampleBadgeConfig.color }]}>
+                {sampleBadgeConfig.label}
+              </Text>
+            </View>
+          )}
 
           {menuItems.length > 0 && (
             <CardMenu items={menuItems} iconSize={20} iconColor={IOS_COLORS.gray} />

@@ -5,33 +5,33 @@
  * Uses inset grouped IOSListSections with IOSListItems.
  */
 
+import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import { Ionicons } from '@expo/vector-icons';
 
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/services/supabase';
-import { sailorBoatService } from '@/services/SailorBoatService';
-import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
-import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { useUserSettings } from '@/hooks/useUserSettings';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
+import { getCurrentLocale, localeConfig } from '@/lib/i18n';
+import { useAuth } from '@/providers/AuthProvider';
+import { sailorBoatService } from '@/services/SailorBoatService';
+import { supabase } from '@/services/supabase';
 
-import { IOSListSection } from '@/components/ui/ios/IOSListSection';
 import { IOSListItem } from '@/components/ui/ios/IOSListItem';
+import { IOSListSection } from '@/components/ui/ios/IOSListSection';
 import { TufteProfileHeader } from './TufteProfileHeader';
 import { accountStyles, ICON_BACKGROUNDS } from './accountStyles';
 
@@ -196,7 +196,7 @@ export default function AccountModalContent() {
     <Text style={accountStyles.trailingValueText}>{text}</Text>
   );
 
-  // Early return for unauthenticated
+  // Early return for unauthenticated - show sign-in options
   if (!user) {
     return (
       <SafeAreaView style={styles.container}>
@@ -213,9 +213,42 @@ export default function AccountModalContent() {
           </View>
         </View>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <Text style={{ fontSize: 14, color: IOS_COLORS.secondaryLabel, textAlign: 'center' }}>
-            Sign in to manage your account.
+          <Ionicons name="person-circle-outline" size={64} color={IOS_COLORS.systemGray3} style={{ marginBottom: 16 }} />
+          <Text style={{ fontSize: 20, fontWeight: '600', color: IOS_COLORS.label, marginBottom: 8 }}>
+            Sign In
           </Text>
+          <Text style={{ fontSize: 14, color: IOS_COLORS.secondaryLabel, textAlign: 'center', marginBottom: 24 }}>
+            Sign in to manage your account, track your races, and sync across devices.
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: IOS_COLORS.systemBlue,
+              paddingVertical: 14,
+              paddingHorizontal: 32,
+              borderRadius: 12,
+              marginBottom: 12,
+              minWidth: 200,
+              alignItems: 'center',
+            }}
+            onPress={() => {
+              handleDone();
+              router.push('/(auth)/login');
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Sign In</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              paddingVertical: 12,
+              paddingHorizontal: 32,
+            }}
+            onPress={() => {
+              handleDone();
+              router.push('/onboarding/welcome');
+            }}
+          >
+            <Text style={{ color: IOS_COLORS.systemBlue, fontSize: 16, fontWeight: '500' }}>Create Account</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -347,6 +380,13 @@ export default function AccountModalContent() {
             leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
             trailingAccessory="chevron"
             onPress={() => router.push('/settings/change-password')}
+          />
+          <IOSListItem
+            title="Restart Onboarding"
+            leadingIcon="infinite-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingAccessory="chevron"
+            onPress={() => router.replace('/onboarding/welcome')}
           />
           {isDemoProfile && (
             <IOSListItem

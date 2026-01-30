@@ -1,12 +1,15 @@
 /**
  * GlobalSearchProvider
  *
- * Provides a shared `openGlobalSearch()` function so any tab screen
- * can trigger the full-screen search overlay without owning the state.
+ * Provides a shared `openGlobalSearch()` function that navigates to the
+ * Search tab for a unified search experience.
+ *
+ * Previously this opened a modal overlay, but we've consolidated search
+ * to the Search Tab for a better, more actionable UX.
  */
 
-import GlobalSearchOverlay from '@/components/search/GlobalSearchOverlay';
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import { router } from 'expo-router';
+import React, { createContext, useCallback, useContext } from 'react';
 
 interface GlobalSearchContextValue {
   openGlobalSearch: () => void;
@@ -15,20 +18,14 @@ interface GlobalSearchContextValue {
 const GlobalSearchContext = createContext<GlobalSearchContextValue | null>(null);
 
 export function GlobalSearchProvider({ children }: { children: React.ReactNode }) {
-  const [visible, setVisible] = useState(false);
-
   const openGlobalSearch = useCallback(() => {
-    setVisible(true);
-  }, []);
-
-  const handleClose = useCallback(() => {
-    setVisible(false);
+    // Navigate to the Search Tab instead of opening a modal
+    router.push('/search');
   }, []);
 
   return (
     <GlobalSearchContext.Provider value={{ openGlobalSearch }}>
       {children}
-      <GlobalSearchOverlay visible={visible} onClose={handleClose} />
     </GlobalSearchContext.Provider>
   );
 }

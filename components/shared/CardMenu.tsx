@@ -118,7 +118,9 @@ export function CardMenu({ items, iconSize = 20, iconColor = '#64748B' }: CardMe
                   onPress={(event: GestureResponderEvent) => {
                     event.stopPropagation();
                     closeMenu();
-                    item.onPress();
+                    // Delay action so the Modal fully dismisses before
+                    // presenting another native UI (e.g. Share sheet).
+                    setTimeout(() => item.onPress(), 400);
                   }}
                   activeOpacity={0.7}
                 >

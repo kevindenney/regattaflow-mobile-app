@@ -277,6 +277,8 @@ export interface CardShellProps {
   testID?: string;
   /** Whether this is the next upcoming race (subtle background tint) */
   isNextRace?: boolean;
+  /** Whether this race is in the past (warm off-white background) */
+  isPast?: boolean;
   /** Whether this race is currently being deleted (show loading overlay) */
   isDeleting?: boolean;
 }
@@ -319,6 +321,14 @@ export interface CardGridProps {
   deletingRaceId?: string | null;
   /** Callback when dismiss is requested for the sample race */
   onDismissSample?: () => void;
+  /** Top inset to push card content below an absolutely-positioned toolbar */
+  topInset?: number;
+  /** Safe-area top inset (notch / Dynamic Island height) */
+  safeAreaTop?: number;
+  /** Whether the toolbar is currently hidden */
+  toolbarHidden?: boolean;
+  /** Scroll handler forwarded to card content for toolbar hide/show */
+  onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void;
 }
 
 /**
@@ -373,6 +383,8 @@ export interface CardContentProps {
   onSelectRace?: (index: number) => void;
   /** Timeline navigation - index of next upcoming race */
   nextRaceIndex?: number;
+  /** Scroll handler forwarded from parent for toolbar hide/show */
+  onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void;
 }
 
 // =============================================================================

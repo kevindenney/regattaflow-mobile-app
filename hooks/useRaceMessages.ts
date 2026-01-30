@@ -18,6 +18,12 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useRaceMessages');
 
+/**
+ * Validates if a string is a valid UUID format
+ */
+const isValidUUID = (id: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
 interface UseRaceMessagesOptions {
   regattaId: string | undefined;
   /** Whether to subscribe to realtime updates (default: true) */
@@ -84,7 +90,8 @@ export function useRaceMessages({
   const profileCacheRef = useRef<Record<string, RaceMessage['profile']>>({});
 
   const fetchMessages = useCallback(async () => {
-    if (!regattaId) {
+    if (!regattaId || !isValidUUID(regattaId)) {
+      // Skip Supabase query for missing or demo race IDs
       setMessages([]);
       setIsLoading(false);
       return;
@@ -150,7 +157,7 @@ export function useRaceMessages({
 
   // Realtime subscription
   useEffect(() => {
-    if (!regattaId || !realtime) return;
+    if (!regattaId || !realtime || !isValidUUID(regattaId)) return;
 
     const channel = supabase
       .channel(`race-messages:${regattaId}`)

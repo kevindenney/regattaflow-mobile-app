@@ -15,7 +15,7 @@
  * (NO star ratings - uses descriptive options instead)
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -296,6 +296,7 @@ function MultiSelectInput({ question, value, onChange }: QuestionInputProps) {
 
 /**
  * Sail select input - shows user's actual sails from intentions or boat inventory
+ * Supports multi-select (checkboxes) so user can select multiple sails
  */
 interface SailSelectInputProps {
   value: DebriefResponseValue;
@@ -306,7 +307,21 @@ interface SailSelectInputProps {
 }
 
 function SailSelectInput({ value, onChange, sailOptions, isLoading, placeholder }: SailSelectInputProps) {
-  const currentValue = typeof value === 'string' ? value : null;
+  // Support both array (multi-select) and string (legacy single-select) values
+  const currentValues: string[] = Array.isArray(value)
+    ? value
+    : (typeof value === 'string' && value ? [value] : []);
+
+  const toggleSail = (sailValue: string) => {
+    if (currentValues.includes(sailValue)) {
+      // Remove the sail
+      const newValues = currentValues.filter((v) => v !== sailValue);
+      onChange(newValues.length > 0 ? newValues : null);
+    } else {
+      // Add the sail
+      onChange([...currentValues, sailValue]);
+    }
+  };
 
   // Group sails by category for better organization
   const groupedSails = useMemo(() => {
@@ -364,7 +379,7 @@ function SailSelectInput({ value, onChange, sailOptions, isLoading, placeholder 
             </Text>
           )}
           {sails.map((sail) => {
-            const isSelected = currentValue === sail.value;
+            const isSelected = currentValues.includes(sail.value);
             return (
               <Pressable
                 key={sail.value}
@@ -373,10 +388,10 @@ function SailSelectInput({ value, onChange, sailOptions, isLoading, placeholder 
                   isSelected && inputStyles.selectOptionSelected,
                   sail.isPlanned && inputStyles.plannedSailOption,
                 ]}
-                onPress={() => onChange(isSelected ? null : sail.value)}
+                onPress={() => toggleSail(sail.value)}
               >
-                <View style={inputStyles.selectRadio}>
-                  {isSelected && <View style={inputStyles.selectRadioInner} />}
+                <View style={[inputStyles.checkbox, isSelected && inputStyles.checkboxSelected]}>
+                  {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
                 </View>
                 <View style={inputStyles.selectTextContainer}>
                   <Text
@@ -439,14 +454,24 @@ export function StructuredDebriefInterview({
     isLoading: sailsLoading,
   } = useDebriefSailContext({ raceId, userId });
 
+  // Local save error state (for completion failures)
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   // Current response value
   const currentValue = currentQuestion ? responses[currentQuestion.id] : null;
 
   // Handle next/finish
   const handleNext = useCallback(async () => {
     if (isLast) {
-      await markComplete();
-      onComplete();
+      try {
+        setSaveError(null);
+        await markComplete();
+        onComplete(); // Only close on success
+      } catch (err) {
+        console.error('[StructuredDebriefInterview] Failed to complete debrief:', err);
+        setSaveError('Failed to save your responses. Please try again.');
+        // Don't call onComplete - keep modal open so user can retry
+      }
     } else {
       next();
     }
@@ -600,30 +625,37 @@ export function StructuredDebriefInterview({
 
             {/* Navigation Footer */}
             <View style={styles.footer}>
-              <View style={styles.footerLeft}>
-                {!isFirst && (
-                  <TouchableOpacity style={styles.backButton} onPress={back}>
-                    <ChevronLeft size={20} color={IOS_COLORS.blue} />
-                    <Text style={styles.backButtonText}>Back</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              {saveError && (
+                <View style={styles.footerError}>
+                  <Text style={styles.footerErrorText}>{saveError}</Text>
+                </View>
+              )}
+              <View style={styles.footerNav}>
+                <View style={styles.footerLeft}>
+                  {!isFirst && (
+                    <TouchableOpacity style={styles.backButton} onPress={back}>
+                      <ChevronLeft size={20} color={IOS_COLORS.blue} />
+                      <Text style={styles.backButtonText}>Back</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
 
-              <View style={styles.footerRight}>
-                {!hasAnswer && !isLast && (
-                  <TouchableOpacity style={styles.skipButton} onPress={skip}>
-                    <Text style={styles.skipButtonText}>Skip</Text>
+                <View style={styles.footerRight}>
+                  {!hasAnswer && !isLast && (
+                    <TouchableOpacity style={styles.skipButton} onPress={skip}>
+                      <Text style={styles.skipButtonText}>Skip</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.nextButton, isLast && styles.finishButton]}
+                    onPress={handleNext}
+                  >
+                    <Text style={[styles.nextButtonText, isLast && styles.finishButtonText]}>
+                      {isLast ? 'Finish' : 'Next'}
+                    </Text>
+                    {!isLast && <ChevronRight size={20} color="#FFFFFF" />}
                   </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={[styles.nextButton, isLast && styles.finishButton]}
-                  onPress={handleNext}
-                >
-                  <Text style={[styles.nextButtonText, isLast && styles.finishButtonText]}>
-                    {isLast ? 'Finish' : 'Next'}
-                  </Text>
-                  {!isLast && <ChevronRight size={20} color="#FFFFFF" />}
-                </TouchableOpacity>
+                </View>
               </View>
             </View>
           </>
@@ -795,15 +827,28 @@ const styles = StyleSheet.create({
 
   // Footer
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 16,
     paddingBottom: Platform.OS === 'ios' ? 34 : 16,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: IOS_COLORS.separator,
     backgroundColor: IOS_COLORS.systemBackground,
+  },
+  footerError: {
+    backgroundColor: '#FFEBEE',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  footerErrorText: {
+    fontSize: 14,
+    color: '#D32F2F',
+    textAlign: 'center',
+  },
+  footerNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   footerLeft: {
     flex: 1,

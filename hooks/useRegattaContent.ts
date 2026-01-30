@@ -5,7 +5,7 @@
  * for the Sailor Discovery feature.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
@@ -99,7 +99,11 @@ export function useRegattaContent({
 
   // Fetch content from database
   const refetch = useCallback(async () => {
-    if (!regattaId) return;
+    // Skip fetch for empty, demo, or invalid UUIDs
+    if (!regattaId || regattaId.startsWith('demo-') || regattaId.length < 36) {
+      setContent(null);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -112,8 +116,11 @@ export function useRegattaContent({
         .single();
 
       if (fetchError) {
-        logger.error('[useRegattaContent] Fetch error:', fetchError);
-        setError(fetchError.message);
+        // Don't log error for non-existent records (404/PGRST116)
+        if (fetchError.code !== 'PGRST116') {
+          logger.warn('[useRegattaContent] Fetch error:', fetchError);
+        }
+        setContent(null);
         return;
       }
 
@@ -125,12 +132,17 @@ export function useRegattaContent({
         contentVisibility: data?.content_visibility || 'fleet',
       });
     } catch (err) {
-      logger.error('[useRegattaContent] Exception:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load content');
+      logger.warn('[useRegattaContent] Exception:', err);
+      setContent(null);
     } finally {
       setIsLoading(false);
     }
   }, [regattaId]);
+
+  // Fetch content on mount and when regattaId changes
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
 
   // Save pre-race content
   const savePreRaceContent = useCallback(async (data: {
@@ -138,7 +150,11 @@ export function useRegattaContent({
     tuningSettings?: TuningSettings;
     contentVisibility?: ContentVisibility;
   }): Promise<boolean> => {
-    if (!regattaId || !user?.id) {
+    // Skip save for demo races or invalid UUIDs
+    if (!regattaId || regattaId.startsWith('demo-') || regattaId.length < 36) {
+      return false;
+    }
+    if (!user?.id) {
       Alert.alert('Error', 'Must be logged in to save content');
       return false;
     }
@@ -201,7 +217,11 @@ export function useRegattaContent({
     lessonsLearned?: string[];
     contentVisibility?: ContentVisibility;
   }): Promise<boolean> => {
-    if (!regattaId || !user?.id) {
+    // Skip save for demo races or invalid UUIDs
+    if (!regattaId || regattaId.startsWith('demo-') || regattaId.length < 36) {
+      return false;
+    }
+    if (!user?.id) {
       Alert.alert('Error', 'Must be logged in to save content');
       return false;
     }
@@ -262,7 +282,8 @@ export function useRegattaContent({
 
   // Save just visibility
   const saveVisibility = useCallback(async (visibility: ContentVisibility): Promise<boolean> => {
-    if (!regattaId || !user?.id) {
+    // Skip save for demo races or invalid UUIDs
+    if (!regattaId || regattaId.startsWith('demo-') || regattaId.length < 36 || !user?.id) {
       return false;
     }
 

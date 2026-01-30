@@ -25,7 +25,7 @@ import { useAuth } from '@/providers/AuthProvider';
 
 // Tufte design tokens
 const TUFTE = {
-  background: '#F0EDE8',
+  background: '#F2F2F7',
   backgroundSecondary: '#E8E5DF',
   text: '#3D3832',
   textMuted: '#6B6560',

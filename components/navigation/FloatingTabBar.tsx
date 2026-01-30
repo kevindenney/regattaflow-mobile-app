@@ -6,11 +6,11 @@
  * Includes active indicator pill, press animation, and keyboard hiding.
  */
 
-import { IOS_COLORS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
+import { useGlobalSearch } from '@/providers/GlobalSearchProvider';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { BlurView } from 'expo-blur';
 import React, { useCallback, useEffect } from 'react';
 import {
   Keyboard,
@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -51,7 +52,7 @@ interface FloatingTabBarProps extends BottomTabBarProps {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
- * Individual tab item with press scale animation
+ * Individual tab item with press scale animation and animated active capsule
  */
 function TabItem({
   tab,
@@ -63,9 +64,22 @@ function TabItem({
   onPress: () => void;
 }) {
   const scale = useSharedValue(1);
+  const activeProgress = useSharedValue(isActive ? 1 : 0);
+
+  useEffect(() => {
+    activeProgress.value = withTiming(isActive ? 1 : 0, { duration: 200 });
+  }, [isActive, activeProgress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+  }));
+
+  const innerAnimatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      activeProgress.value,
+      [0, 1],
+      ['transparent', '#FFFFFF']
+    ),
   }));
 
   const handlePressIn = useCallback(() => {
@@ -91,10 +105,10 @@ function TabItem({
       style={[styles.tabItem, animatedStyle]}
       hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
     >
-      <View style={[styles.tabItemInner, isActive && styles.tabItemActive]}>
+      <Animated.View style={[styles.tabItemInner, innerAnimatedStyle, isActive && styles.tabItemActiveShadow]}>
         <Ionicons
           name={iconName as any}
-          size={22}
+          size={20}
           color={isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
         />
         <Text
@@ -106,7 +120,40 @@ function TabItem({
         >
           {tab.title}
         </Text>
-      </View>
+      </Animated.View>
+    </AnimatedPressable>
+  );
+}
+
+/**
+ * Search button rendered in its own circular container beside the pill
+ */
+function SearchCircleButton({ onPress }: { onPress: () => void }) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = useCallback(() => {
+    scale.value = withSpring(0.9, { damping: 15, stiffness: 300 });
+  }, [scale]);
+
+  const handlePressOut = useCallback(() => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+  }, [scale]);
+
+  return (
+    <AnimatedPressable
+      accessibilityRole="button"
+      accessibilityLabel="Search"
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[styles.searchCircle, animatedStyle]}
+      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+    >
+      <Ionicons name="search" size={18} color={IOS_COLORS.systemGray} />
     </AnimatedPressable>
   );
 }
@@ -120,6 +167,7 @@ export default function FloatingTabBar({
   position = 'bottom',
 }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { openGlobalSearch } = useGlobalSearch();
   const isTop = position === 'top';
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
@@ -217,20 +265,16 @@ export default function FloatingTabBar({
       ]}
       pointerEvents="box-none"
     >
-      <View style={styles.pillContainer}>
-        {Platform.OS === 'ios' ? (
-          <BlurView
-            intensity={80}
-            tint="systemChromeMaterial"
-            style={styles.blurBackground}
-          >
-            {barContent}
-          </BlurView>
-        ) : (
-          <View style={styles.solidBackground}>
-            {barContent}
-          </View>
-        )}
+      <View style={styles.barRow}>
+        <View style={styles.pillContainer}>
+          {barContent}
+        </View>
+        <SearchCircleButton
+          onPress={() => {
+            triggerHaptic('selection');
+            openGlobalSearch();
+          }}
+        />
       </View>
     </Animated.View>
   );
@@ -250,66 +294,87 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
+  barRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   pillContainer: {
     borderRadius: 32,
-    overflow: 'hidden',
+    backgroundColor: 'rgba(235, 235, 240, 0.97)',
     ...Platform.select({
       ios: {
-        ...IOS_SHADOWS.lg,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
       },
       android: {
         elevation: 8,
-        backgroundColor: 'rgba(255, 255, 255, 0.97)',
       },
       web: {
-        boxShadow: '0 4px 16px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
       } as any,
     }),
   },
-  blurBackground: {
-    borderRadius: 32,
-    overflow: 'hidden',
-  },
-  solidBackground: {
-    borderRadius: 32,
-    overflow: 'hidden',
+  searchCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(235, 235, 240, 0.97)',
+    alignItems: 'center',
+    justifyContent: 'center',
     ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
       android: {
-        backgroundColor: 'rgba(255, 255, 255, 0.97)',
+        elevation: 8,
       },
       web: {
-        backgroundColor: 'rgba(255, 255, 255, 0.85)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
       } as any,
-      default: {
-        backgroundColor: '#FFFFFF',
-      },
     }),
   },
   tabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    height: FLOATING_TAB_BAR_HEIGHT,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    height: 56,
   },
   tabItem: {
-    minWidth: 56,
-    minHeight: 48,
+    minWidth: 48,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 2,
   },
   tabItemInner: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingVertical: 5,
+    borderRadius: 14,
   },
-  tabItemActive: {
-    backgroundColor: 'rgba(0, 122, 255, 0.12)',
+  tabItemActiveShadow: {
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+      } as any,
+    }),
   },
   tabLabel: {
     fontSize: 10,

@@ -16,12 +16,20 @@ import {
   RefreshControl,
   StyleSheet,
 } from 'react-native';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { router } from 'expo-router';
 import { useClubs } from '@/hooks/useData';
 import { TufteClubRow } from '@/components/affiliations/TufteClubRow';
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
 
-export function ClubsContent() {
+interface ClubsContentProps {
+  /** Extra top padding to clear an absolutely-positioned toolbar */
+  toolbarOffset?: number;
+  /** Scroll handler forwarded from parent for toolbar hide/show */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+}
+
+export function ClubsContent({ toolbarOffset = 0, onScroll }: ClubsContentProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -77,10 +85,12 @@ export function ClubsContent() {
   return (
     <ScrollView
       style={styles.scrollView}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, toolbarOffset > 0 && { paddingTop: toolbarOffset }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
       }
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       {/* Search */}
       <View style={styles.searchContainer}>
@@ -137,7 +147,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,

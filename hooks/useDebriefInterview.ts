@@ -108,7 +108,7 @@ export function useDebriefInterview({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [responses, setResponses] = useState<DebriefResponses>({});
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start true to prevent adjustment effect during initial load
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isComplete, setIsComplete] = useState(false);
@@ -131,27 +131,73 @@ export function useDebriefInterview({
   // Adjust current index when question list changes
   // ==========================================================================
 
+  // Track previous questions IDs to detect actual content changes (not just reference)
+  const prevQuestionIdsRef = useRef<string>('');
+
   useEffect(() => {
-    // If we have a tracked question ID, find it in the new list
+    // Skip during initial load - loadResponses will set the correct index and ref
+    if (isLoading) {
+      return;
+    }
+
+    // Create a stable string of question IDs to detect actual content changes
+    const currentQuestionIds = questions.map(q => q.id).join(',');
+
+    // Skip if questions haven't actually changed
+    if (currentQuestionIds === prevQuestionIdsRef.current) {
+      return;
+    }
+    prevQuestionIdsRef.current = currentQuestionIds;
+
+    // Only run adjustment logic when questions array content actually changes
     if (currentQuestionIdRef.current) {
       const newIndex = questions.findIndex(q => q.id === currentQuestionIdRef.current);
-      if (newIndex !== -1 && newIndex !== currentIndex) {
-        // Question still exists, update index if needed
-        setCurrentIndex(newIndex);
-      } else if (newIndex === -1) {
-        // Question no longer visible (condition changed), stay at current index or move back
-        const safeIndex = Math.min(currentIndex, questions.length - 1);
-        setCurrentIndex(Math.max(0, safeIndex));
-      }
-    }
-  }, [questions, currentIndex]);
 
-  // Update current question ID when index changes
+      if (newIndex !== -1) {
+        // Question still exists - update index using functional update
+        setCurrentIndex(prevIndex => {
+          if (newIndex !== prevIndex) {
+            return newIndex;
+          }
+          return prevIndex;
+        });
+        // Update ref to current question
+        currentQuestionIdRef.current = questions[newIndex].id;
+      } else {
+        // Question no longer visible - use functional update to get current index
+        setCurrentIndex(prevIndex => {
+          const safeIndex = Math.max(0, Math.min(prevIndex, questions.length - 1));
+          // Update ref to the new valid question
+          if (questions[safeIndex]) {
+            currentQuestionIdRef.current = questions[safeIndex].id;
+          }
+          return safeIndex;
+        });
+      }
+    } else if (questions.length > 0) {
+      // No tracked question yet, set ref to first question
+      currentQuestionIdRef.current = questions[0].id;
+    }
+  }, [questions, isLoading]); // Only depend on questions and isLoading, NOT currentIndex
+
+  // ==========================================================================
+  // Keep ref in sync with current question when user navigates
+  // ==========================================================================
+
+  // This effect updates the ref when the user manually navigates (next/back/skip)
+  // It's separate from the adjustment effect to avoid dependency cycles
   useEffect(() => {
-    if (questions[currentIndex]) {
+    // Skip during loading - loadResponses handles the initial ref setup
+    if (isLoading) {
+      return;
+    }
+
+    // Only update ref if there's a valid question at the current index
+    // and the ref doesn't already point to it
+    if (questions[currentIndex] && currentQuestionIdRef.current !== questions[currentIndex].id) {
       currentQuestionIdRef.current = questions[currentIndex].id;
     }
-  }, [currentIndex, questions]);
+  }, [currentIndex, questions, isLoading]);
 
   // ==========================================================================
   // Load existing responses
@@ -168,10 +214,10 @@ export function useDebriefInterview({
         setIsComplete(false);
         setCurrentIndex(0);
         currentQuestionIdRef.current = null;
+        setIsLoading(false);
         return;
       }
 
-      setIsLoading(true);
       setError(null);
 
       try {
@@ -320,6 +366,7 @@ export function useDebriefInterview({
       } catch (err) {
         logger.error('[useDebriefInterview] Save error:', err);
         setError('Failed to save responses');
+        throw err; // Re-throw so callers know the save failed
       } finally {
         setIsSaving(false);
       }

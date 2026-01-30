@@ -1,21 +1,23 @@
 /**
  * FeedPostCard
  *
- * Post card for the community feed showing: post type icon, title, body preview,
- * author badge, upvote count, comment count, topic tags, condition match %,
- * map pin indicator, pinned banner.
+ * Clean, spacious feed card matching iOS design patterns.
+ * Layout: venue header, title, body preview, horizontal footer with metadata.
  */
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { TufteTokens } from '@/constants/designSystem';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 import type { FeedPost } from '@/types/community-feed';
 
 interface FeedPostCardProps {
   post: FeedPost;
   onPress?: () => void;
+  onVenuePress?: (venueId: string) => void;
+  onRacePress?: (slug: string) => void;
+  showVenueName?: boolean;
   showConditionMatch?: boolean;
 }
 
@@ -32,115 +34,88 @@ function timeAgo(dateStr: string): string {
   return `${months}mo`;
 }
 
-export function FeedPostCard({ post, onPress, showConditionMatch }: FeedPostCardProps) {
+export function FeedPostCard({
+  post,
+  onPress,
+  onVenuePress,
+  showVenueName = false,
+}: FeedPostCardProps) {
   const typeConfig = POST_TYPE_CONFIG[post.post_type] || POST_TYPE_CONFIG.discussion;
-  const hasLocation = post.location_lat != null && post.location_lng != null;
 
   return (
-    <Pressable style={styles.container} onPress={onPress}>
-      {/* Pinned banner */}
-      {post.pinned && (
-        <View style={styles.pinnedBanner}>
-          <Ionicons name="pin" size={10} color="#059669" />
-          <Text style={styles.pinnedText}>Pinned</Text>
+    <Pressable
+      style={({ pressed }) => [
+        styles.container,
+        pressed && styles.containerPressed,
+      ]}
+      onPress={onPress}
+      accessibilityRole="button"
+    >
+      {/* Venue provenance line */}
+      {showVenueName && post.venue && (
+        <View style={styles.venueRow}>
+          <Pressable
+            style={styles.venueTextWrapper}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              onVenuePress?.(post.venue!.id);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.venueTextContainer} numberOfLines={1}>
+              <Text style={styles.venueName}>{post.venue.name.toUpperCase()}</Text>
+              {post.venue.region && post.venue.region !== 'Unknown' && (
+                <Text style={styles.venueDetails}>  ·  {post.venue.region}</Text>
+              )}
+              <Text style={styles.venueDetails}>  ·  {timeAgo(post.created_at)}</Text>
+            </Text>
+          </Pressable>
+          <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
         </View>
       )}
 
-      <View style={styles.row}>
-        {/* Vote column */}
-        <View style={styles.voteColumn}>
-          <Ionicons
-            name={post.user_vote === 1 ? 'arrow-up' : 'arrow-up-outline'}
-            size={16}
-            color={post.user_vote === 1 ? '#2563EB' : '#9CA3AF'}
-          />
-          <Text style={[
-            styles.voteCount,
-            post.user_vote === 1 && styles.voteCountActive,
-          ]}>
-            {post.upvotes || 0}
+      {/* Title with optional pin icon */}
+      <View style={styles.titleRow}>
+        {post.pinned && (
+          <Ionicons name="arrow-up" size={16} color="#FF9500" style={styles.pinIcon} />
+        )}
+        <Text style={styles.title} numberOfLines={2}>
+          {post.title}
+        </Text>
+      </View>
+
+      {/* Body preview */}
+      {post.body && (
+        <Text style={styles.body} numberOfLines={2}>
+          {post.body}
+        </Text>
+      )}
+
+      {/* Footer: author + badge on left, metrics on right */}
+      <View style={styles.footer}>
+        {/* Left side: avatar + name + badge */}
+        <View style={styles.footerLeft}>
+          <View style={styles.authorAvatar}>
+            <Text style={styles.authorAvatarText}>
+              {(post.author?.full_name || 'A').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+          <Text style={styles.authorName} numberOfLines={1}>
+            {post.author?.full_name || 'Anonymous'}
           </Text>
+          <View style={[styles.typeBadge, { backgroundColor: typeConfig.bgColor }]}>
+            <Text style={[styles.typeBadgeText, { color: typeConfig.color }]}>
+              {typeConfig.label}
+            </Text>
+          </View>
         </View>
 
-        {/* Content */}
-        <View style={styles.content}>
-          {/* Type + Meta Row */}
-          <View style={styles.metaRow}>
-            <View style={[styles.typeBadge, { backgroundColor: typeConfig.bgColor }]}>
-              <Ionicons name={typeConfig.icon as any} size={10} color={typeConfig.color} />
-              <Text style={[styles.typeText, { color: typeConfig.color }]}>
-                {typeConfig.label}
-              </Text>
-            </View>
-
-            {post.is_resolved && (
-              <View style={styles.resolvedBadge}>
-                <Ionicons name="checkmark-circle" size={10} color="#059669" />
-                <Text style={styles.resolvedText}>Resolved</Text>
-              </View>
-            )}
-
-            {showConditionMatch && post.condition_match_score != null && post.condition_match_score > 0 && (
-              <View style={styles.matchBadge}>
-                <Text style={styles.matchText}>
-                  {post.condition_match_score}% match
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Title */}
-          <Text style={styles.title} numberOfLines={2}>
-            {post.title}
-          </Text>
-
-          {/* Body preview */}
-          {post.body && (
-            <Text style={styles.body} numberOfLines={2}>
-              {post.body}
-            </Text>
-          )}
-
-          {/* Topic tags */}
-          {post.topic_tags && post.topic_tags.length > 0 && (
-            <View style={styles.tagRow}>
-              {post.topic_tags.slice(0, 3).map(tag => (
-                <View key={tag.id} style={[styles.tag, { backgroundColor: `${tag.color}15` }]}>
-                  <Text style={[styles.tagText, { color: tag.color || '#6B7280' }]}>
-                    {tag.display_name}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* Footer: author, time, comments, location */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              {post.author?.full_name || 'Anonymous'}
-            </Text>
-            <Text style={styles.footerDot}>·</Text>
-            <Text style={styles.footerText}>
-              {timeAgo(post.created_at)}
-            </Text>
-            <Text style={styles.footerDot}>·</Text>
-            <View style={styles.footerItem}>
-              <Ionicons name="chatbubble-outline" size={10} color="#9CA3AF" />
-              <Text style={styles.footerText}>{post.comment_count}</Text>
-            </View>
-            {hasLocation && (
-              <>
-                <Text style={styles.footerDot}>·</Text>
-                <Ionicons name="location-outline" size={10} color="#9CA3AF" />
-              </>
-            )}
-            {post.racing_area?.area_name && (
-              <>
-                <Text style={styles.footerDot}>·</Text>
-                <Text style={styles.areaTag}>{post.racing_area.area_name}</Text>
-              </>
-            )}
-          </View>
+        {/* Right side: metrics */}
+        <View style={styles.footerRight}>
+          <Ionicons name="heart-outline" size={15} color="#8E8E93" />
+          <Text style={styles.metricText}>{post.upvotes}</Text>
+          <Ionicons name="chatbubble-outline" size={15} color="#8E8E93" style={styles.commentIcon} />
+          <Text style={styles.metricText}>{post.comment_count}</Text>
         </View>
       </View>
     </Pressable>
@@ -149,143 +124,119 @@ export function FeedPostCard({ post, onPress, showConditionMatch }: FeedPostCard
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: TufteTokens.spacing.section,
-    paddingVertical: TufteTokens.spacing.standard,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
   },
-  pinnedBanner: {
+  containerPressed: {
+    backgroundColor: '#F8F8F8',
+  },
+
+  // Venue header
+  venueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: TufteTokens.spacing.tight,
-    paddingLeft: 32, // Align with content (past vote column)
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  pinnedText: {
-    ...TufteTokens.typography.micro,
-    fontSize: 9,
-    color: '#059669',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: TufteTokens.spacing.standard,
-  },
-  // Vote column
-  voteColumn: {
-    alignItems: 'center',
-    gap: 2,
-    width: 24,
-    paddingTop: 2,
-  },
-  voteCount: {
-    ...TufteTokens.typography.micro,
-    color: '#9CA3AF',
-    fontWeight: '600',
-  },
-  voteCountActive: {
-    color: '#2563EB',
-  },
-  // Content
-  content: {
+  venueTextWrapper: {
     flex: 1,
-    gap: 4,
   },
-  metaRow: {
+  venueTextContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: TufteTokens.spacing.compact,
-    flexWrap: 'wrap',
   },
-  typeBadge: {
+  venueName: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#8E8E93',
+    letterSpacing: 0.2,
+  },
+  venueDetails: {
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#8E8E93',
+  },
+
+  // Title
+  titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: TufteTokens.borderRadius.minimal,
+    alignItems: 'flex-start',
+    marginBottom: 6,
   },
-  typeText: {
-    fontSize: 9,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  resolvedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  resolvedText: {
-    ...TufteTokens.typography.micro,
-    fontSize: 9,
-    color: '#059669',
-    fontWeight: '600',
-  },
-  matchBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: '#DBEAFE',
-    borderRadius: TufteTokens.borderRadius.minimal,
-  },
-  matchText: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: '#2563EB',
+  pinIcon: {
+    marginRight: 6,
+    marginTop: 1,
   },
   title: {
-    ...TufteTokens.typography.secondary,
-    color: '#111827',
-    fontWeight: '500',
-    lineHeight: 18,
-  },
-  body: {
-    ...TufteTokens.typography.tertiary,
-    color: '#6B7280',
-    lineHeight: 16,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    gap: 4,
-    flexWrap: 'wrap',
-    marginTop: 2,
-  },
-  tag: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: TufteTokens.borderRadius.minimal,
-  },
-  tagText: {
-    fontSize: 9,
+    fontSize: 17,
     fontWeight: '600',
+    color: '#000000',
+    lineHeight: 22,
+    flex: 1,
+    letterSpacing: -0.2,
   },
+
+  // Body
+  body: {
+    fontSize: 15,
+    color: '#6B6B6B',
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+
+  // Footer
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    flexWrap: 'wrap',
-    marginTop: 2,
+    justifyContent: 'space-between',
   },
-  footerText: {
-    ...TufteTokens.typography.micro,
-    color: '#9CA3AF',
-  },
-  footerDot: {
-    ...TufteTokens.typography.micro,
-    color: '#D1D5DB',
-  },
-  footerItem: {
+  footerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 8,
+    flex: 1,
   },
-  areaTag: {
-    ...TufteTokens.typography.micro,
-    color: '#6B7280',
-    backgroundColor: TufteTokens.backgrounds.subtle,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: TufteTokens.borderRadius.minimal,
+  footerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  authorAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E5E5EA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authorAvatarText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B6B6B',
+  },
+  authorName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#000000',
+  },
+  typeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  typeBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  metricText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    minWidth: 20,
+  },
+  commentIcon: {
+    marginLeft: 12,
   },
 });
 

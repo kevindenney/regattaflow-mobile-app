@@ -295,7 +295,7 @@ export default function BoatsScreen() {
         </View>
       ) : activeTab === 'boats' ? (
         /* ===== MY BOATS TAB ===== */
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {boats.length > 0 ? (
             <>
               {/* Search */}
@@ -419,7 +419,7 @@ export default function BoatsScreen() {
         </ScrollView>
       ) : (
         /* ===== TUNING GUIDES TAB ===== */
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Search */}
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={18} color={IOS_COLORS.gray} />
@@ -595,6 +595,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 120,
   },
   searchContainer: {
     flexDirection: 'row',

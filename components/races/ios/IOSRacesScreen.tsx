@@ -40,6 +40,7 @@ import {
   IOS_SPACING,
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
+import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { triggerHaptic } from '@/lib/haptics';
 import { IOSRaceCard } from './IOSRaceCard';
 
@@ -382,7 +383,7 @@ export function IOSRacesScreen({
           />
 
           {/* Page Indicator */}
-          <View style={[styles.pageIndicatorContainer, { paddingBottom: insets.bottom || IOS_SPACING.lg }]}>
+          <View style={[styles.pageIndicatorContainer, { paddingBottom: FLOATING_TAB_BAR_HEIGHT + (insets.bottom || IOS_SPACING.lg) }]}>
             <PageIndicator
               count={races.length}
               activeIndex={activeIndex}

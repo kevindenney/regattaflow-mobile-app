@@ -112,11 +112,11 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
     switch (userType) {
       case 'sailor':
         return [
-          { label: 'Races', route: '/(tabs)/races', icon: 'flag-outline' },
+          { label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
           { label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
           { label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
           { label: 'Boats', route: '/(tabs)/boat/index', icon: 'boat-outline' },
-          { label: 'Local', route: '/(tabs)/venue', icon: 'compass-outline' },
+          { label: 'Discuss', route: '/(tabs)/venue', icon: 'chatbubbles-outline' },
         ];
       case 'coach':
         return [
@@ -132,7 +132,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
         ];
       default:
         return [
-          { label: 'Races', route: '/(tabs)/races', icon: 'flag-outline' },
+          { label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
         ];
     }
   };

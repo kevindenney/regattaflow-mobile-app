@@ -1,9 +1,9 @@
 /**
- * TufteProfileHeader
+ * ProfileCard
  *
- * Dense profile header with avatar initials, name, email, home club/venue.
- * Supports inline editing - tap name or Edit link to edit in place.
- * No decorative elements - typography does the work.
+ * Apple ID-style profile card rendered inside an IOSListSection.
+ * Shows avatar initials, name, email, home club/venue, and a chevron.
+ * Supports inline editing — tap the card row to start editing fields.
  */
 
 import React, { useState, useRef, useCallback } from 'react';
@@ -16,9 +16,10 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { tufteAccountStyles as styles, getInitials, formatMemberSince } from './accountStyles';
-import { IOS_COLORS } from '@/components/cards/constants';
-import { TufteTokens } from '@/constants/designSystem';
+import { Ionicons } from '@expo/vector-icons';
+import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING } from '@/lib/design-tokens-ios';
+import { accountStyles, getInitials, formatMemberSince } from './accountStyles';
+import { IOSListSection } from '@/components/ui/ios/IOSListSection';
 
 interface ProfileUpdates {
   full_name?: string;
@@ -26,14 +27,13 @@ interface ProfileUpdates {
   home_venue?: string;
 }
 
-interface TufteProfileHeaderProps {
+interface ProfileCardProps {
   name: string;
   email?: string;
   homeClub?: string;
   homeVenue?: string;
   memberSince?: string | Date | null;
   onSave?: (updates: ProfileUpdates) => Promise<void>;
-  onEditPress?: () => void;
 }
 
 export function TufteProfileHeader({
@@ -43,8 +43,7 @@ export function TufteProfileHeader({
   homeVenue,
   memberSince,
   onSave,
-  onEditPress,
-}: TufteProfileHeaderProps) {
+}: ProfileCardProps) {
   const initials = getInitials(name);
   const memberSinceText = formatMemberSince(memberSince);
 
@@ -56,7 +55,6 @@ export function TufteProfileHeader({
 
   const handleStartEdit = useCallback((field: 'name' | 'club' | 'venue') => {
     if (!onSave) return;
-
     const currentValue = field === 'name' ? name : field === 'club' ? homeClub : homeVenue;
     setEditValue(currentValue || '');
     setEditingField(field);
@@ -69,7 +67,6 @@ export function TufteProfileHeader({
     const trimmedValue = editValue.trim();
     const currentValue = editingField === 'name' ? name : editingField === 'club' ? homeClub : homeVenue;
 
-    // If unchanged, just exit edit mode
     if (trimmedValue === (currentValue || '')) {
       setEditingField(null);
       return;
@@ -78,145 +75,106 @@ export function TufteProfileHeader({
     setIsSaving(true);
     try {
       const updates: ProfileUpdates = {};
-      if (editingField === 'name') {
-        updates.full_name = trimmedValue;
-      } else if (editingField === 'club') {
-        updates.home_club = trimmedValue;
-      } else if (editingField === 'venue') {
-        updates.home_venue = trimmedValue;
-      }
+      if (editingField === 'name') updates.full_name = trimmedValue;
+      else if (editingField === 'club') updates.home_club = trimmedValue;
+      else if (editingField === 'venue') updates.home_venue = trimmedValue;
       await onSave(updates);
       setEditingField(null);
     } catch (error) {
-      console.error('[TufteProfileHeader] Save error:', error);
+      console.error('[ProfileCard] Save error:', error);
       setEditingField(null);
     } finally {
       setIsSaving(false);
     }
   }, [editingField, editValue, name, homeClub, homeVenue, onSave]);
 
-  const handleCancel = useCallback(() => {
-    setEditingField(null);
-    setEditValue('');
-  }, []);
-
-  // Build home location string
-  const homeLocation = [homeClub, homeVenue].filter(Boolean).join(' · ');
-
-  // Render editable field
-  const renderEditableField = (
-    field: 'name' | 'club' | 'venue',
-    value: string | undefined,
-    placeholder: string,
-    textStyle: any
-  ) => {
-    if (editingField === field) {
-      return (
-        <View style={localStyles.editContainer}>
-          <TextInput
-            ref={inputRef}
-            style={[localStyles.input, textStyle, isSaving && localStyles.inputSaving]}
-            value={editValue}
-            onChangeText={setEditValue}
-            onBlur={handleSave}
-            onSubmitEditing={handleSave}
-            placeholder={placeholder}
-            placeholderTextColor={IOS_COLORS.tertiaryLabel}
-            returnKeyType="done"
-            autoCapitalize="words"
-            editable={!isSaving}
-            selectTextOnFocus
-          />
-          {isSaving && (
-            <ActivityIndicator
-              size="small"
-              color={IOS_COLORS.blue}
-              style={localStyles.spinner}
-            />
-          )}
-        </View>
-      );
+  const handleCardPress = useCallback(() => {
+    if (onSave && !editingField) {
+      handleStartEdit('name');
     }
+  }, [onSave, editingField, handleStartEdit]);
 
+  // Build subtitle
+  const homeLocation = [homeClub, homeVenue].filter(Boolean).join(' \u00b7 ');
+  const subtitleParts: string[] = [];
+  if (email) subtitleParts.push(email);
+  if (homeLocation) {
+    subtitleParts.push(homeLocation);
+  } else if (onSave) {
+    subtitleParts.push('Add home club & venue');
+  }
+
+  // Render editing inline field
+  const renderEditField = (field: 'name' | 'club' | 'venue', placeholder: string) => {
+    if (editingField !== field) return null;
     return (
-      <TouchableOpacity
-        onPress={() => handleStartEdit(field)}
-        disabled={!onSave || isSaving}
-        activeOpacity={0.6}
-        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-      >
-        <Text style={[textStyle, !value && localStyles.placeholder]}>
-          {value || placeholder}
-        </Text>
-      </TouchableOpacity>
+      <View style={localStyles.editContainer}>
+        <TextInput
+          ref={inputRef}
+          style={[localStyles.editInput, isSaving && localStyles.editInputSaving]}
+          value={editValue}
+          onChangeText={setEditValue}
+          onBlur={handleSave}
+          onSubmitEditing={handleSave}
+          placeholder={placeholder}
+          placeholderTextColor={IOS_COLORS.tertiaryLabel}
+          returnKeyType="done"
+          autoCapitalize="words"
+          editable={!isSaving}
+          selectTextOnFocus
+        />
+        {isSaving && (
+          <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} style={{ marginLeft: 6 }} />
+        )}
+      </View>
     );
   };
 
   return (
-    <View style={styles.profileHeader}>
-      <View style={styles.profileHeaderContent}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
-        <View style={styles.profileInfo}>
-          {/* Name - editable */}
-          {renderEditableField('name', name, 'Your Name', styles.profileName)}
-
-          {/* Email - not editable */}
-          {email ? <Text style={styles.profileEmail}>{email}</Text> : null}
-
-          {/* Home location - club and venue editable */}
-          {onSave ? (
-            <View style={localStyles.locationContainer}>
-              {/* Show combined placeholder when both empty, otherwise show individual fields */}
-              {!homeClub && !homeVenue && editingField !== 'club' && editingField !== 'venue' ? (
-                <TouchableOpacity
-                  onPress={() => handleStartEdit('club')}
-                  activeOpacity={0.6}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <Text style={[localStyles.locationText, localStyles.placeholder]}>
-                    Add home club & venue
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  {renderEditableField('club', homeClub, 'Home Club', localStyles.locationText)}
-                  {/* Show separator only when both have values */}
-                  {homeClub && homeVenue && (
-                    <Text style={localStyles.locationSeparator}> · </Text>
-                  )}
-                  {/* Only show venue field if club has value or venue is being edited or has value */}
-                  {(homeClub || homeVenue || editingField === 'venue') &&
-                    renderEditableField('venue', homeVenue, 'Home Venue', localStyles.locationText)}
-                </>
-              )}
-            </View>
-          ) : homeLocation ? (
-            <Text style={styles.profileMeta}>{homeLocation}</Text>
-          ) : null}
-
-          {/* Member since */}
-          {memberSinceText ? <Text style={styles.profileMeta}>{memberSinceText}</Text> : null}
+    <IOSListSection footer={memberSinceText || undefined}>
+      <TouchableOpacity
+        style={accountStyles.profileCardRow}
+        onPress={handleCardPress}
+        activeOpacity={0.6}
+        disabled={!!editingField}
+      >
+        {/* Avatar */}
+        <View style={accountStyles.profileAvatar}>
+          <Text style={accountStyles.profileAvatarText}>{initials}</Text>
         </View>
 
-        {/* Edit link - shows when not editing and either onSave or onEditPress provided */}
-        {!editingField && (onSave || onEditPress) && (
-          <TouchableOpacity
-            onPress={() => {
-              if (onSave) {
-                handleStartEdit('name');
-              } else if (onEditPress) {
-                onEditPress();
-              }
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={styles.editLink}>Edit</Text>
-          </TouchableOpacity>
+        {/* Text content */}
+        <View style={accountStyles.profileTextContainer}>
+          {editingField === 'name' ? (
+            renderEditField('name', 'Your Name')
+          ) : (
+            <Text style={accountStyles.profileName} numberOfLines={1}>{name}</Text>
+          )}
+
+          {subtitleParts.map((part, i) => (
+            <Text
+              key={i}
+              style={[
+                accountStyles.profileSubtitle,
+                part === 'Add home club & venue' && accountStyles.profilePlaceholder,
+              ]}
+              numberOfLines={1}
+            >
+              {part}
+            </Text>
+          ))}
+
+          {/* Inline edit fields for club/venue when editing */}
+          {editingField === 'club' && renderEditField('club', 'Home Club')}
+          {editingField === 'venue' && renderEditField('venue', 'Home Venue')}
+        </View>
+
+        {/* Trailing chevron */}
+        {!editingField && (
+          <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.tertiaryLabel} />
         )}
-      </View>
-    </View>
+      </TouchableOpacity>
+    </IOSListSection>
   );
 }
 
@@ -224,41 +182,23 @@ const localStyles = StyleSheet.create({
   editContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 4,
   },
-  input: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
+  editInput: {
+    flex: 1,
+    fontSize: IOS_TYPOGRAPHY.body.fontSize,
+    color: IOS_COLORS.label,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderWidth: 1,
-    borderColor: IOS_COLORS.blue,
-    borderRadius: 4,
+    borderColor: IOS_COLORS.systemBlue,
+    borderRadius: 6,
     backgroundColor: 'rgba(0, 122, 255, 0.05)',
-    minWidth: 120,
     ...Platform.select({
-      web: { outlineStyle: 'none' },
+      web: { outlineStyle: 'none' } as any,
     }),
   },
-  inputSaving: {
+  editInputSaving: {
     opacity: 0.6,
-  },
-  spinner: {
-    marginLeft: 6,
-  },
-  placeholder: {
-    color: IOS_COLORS.tertiaryLabel,
-    fontStyle: 'italic',
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginTop: 2,
-  },
-  locationText: {
-    fontSize: 13,
-    color: IOS_COLORS.secondaryLabel,
-  },
-  locationSeparator: {
-    fontSize: 13,
-    color: IOS_COLORS.tertiaryLabel,
   },
 });

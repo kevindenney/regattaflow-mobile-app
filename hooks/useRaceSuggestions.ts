@@ -56,7 +56,7 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
       const timeoutPromise = new Promise<CategorizedSuggestions>((resolve) =>
         setTimeout(() => {
           logger.debug('[loadSuggestions] Fast path timeout, returning empty');
-          resolve({ clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 });
+          resolve({ clubRaces: [], fleetRaces: [], communityRaces: [], catalogMatches: [], previousYearRaces: [], patterns: [], templates: [], total: 0 });
         }, timeoutMs)
       );
 
@@ -95,7 +95,7 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
       logger.error('[loadSuggestions] Error loading suggestions:', err);
       setError(err as Error);
       // Set empty suggestions on error so UI doesn't stay in loading state
-      setSuggestions({ clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 });
+      setSuggestions({ clubRaces: [], fleetRaces: [], communityRaces: [], catalogMatches: [], previousYearRaces: [], patterns: [], templates: [], total: 0 });
       setLoading(false);
     }
   }, [user?.id]);
@@ -145,6 +145,9 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
           setSuggestions({
             clubRaces: suggestions.clubRaces.filter(filterSuggestion),
             fleetRaces: suggestions.fleetRaces.filter(filterSuggestion),
+            communityRaces: suggestions.communityRaces.filter(filterSuggestion),
+            catalogMatches: suggestions.catalogMatches.filter(filterSuggestion),
+            previousYearRaces: suggestions.previousYearRaces.filter(filterSuggestion),
             patterns: suggestions.patterns.filter(filterSuggestion),
             templates: suggestions.templates.filter(filterSuggestion),
             total: suggestions.total - 1,
@@ -175,6 +178,9 @@ export function useRaceSuggestions(): UseRaceSuggestionsResult {
           setSuggestions({
             clubRaces: suggestions.clubRaces.filter(filterSuggestion),
             fleetRaces: suggestions.fleetRaces.filter(filterSuggestion),
+            communityRaces: suggestions.communityRaces.filter(filterSuggestion),
+            catalogMatches: suggestions.catalogMatches.filter(filterSuggestion),
+            previousYearRaces: suggestions.previousYearRaces.filter(filterSuggestion),
             patterns: suggestions.patterns.filter(filterSuggestion),
             templates: suggestions.templates.filter(filterSuggestion),
             total: suggestions.total - 1,
@@ -240,6 +246,9 @@ export function useRaceSuggestion(suggestionId: string | null): {
     const allSuggestions = [
       ...suggestions.clubRaces,
       ...suggestions.fleetRaces,
+      ...suggestions.communityRaces,
+      ...suggestions.catalogMatches,
+      ...suggestions.previousYearRaces,
       ...suggestions.patterns,
       ...suggestions.templates,
     ];

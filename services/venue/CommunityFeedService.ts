@@ -19,6 +19,7 @@ import type {
   MembershipStatus,
   MapBounds,
   FeedSortType,
+  PostType,
   TopPeriod,
 } from '@/types/community-feed';
 
@@ -38,6 +39,7 @@ class CommunityFeedServiceClass {
       tagIds,
       racingAreaId,
       topPeriod = 'all',
+      catalogRaceId,
       page = 0,
       limit = 20,
     } = params;
@@ -64,6 +66,11 @@ class CommunityFeedServiceClass {
     // Filter by post type
     if (postType) {
       query = query.eq('post_type', postType);
+    }
+
+    // Filter by catalog race
+    if (catalogRaceId) {
+      query = query.eq('catalog_race_id', catalogRaceId);
     }
 
     // Filter by racing area
@@ -172,6 +179,243 @@ class CommunityFeedServiceClass {
   }
 
   /**
+   * Get aggregated feed across multiple venues
+   */
+  async getAggregatedFeed(params: {
+    venueIds: string[];
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: FeedPost[]; count: number; nextPage: number | null }> {
+    const {
+      venueIds,
+      sort = 'hot',
+      postType,
+      tagIds,
+      topPeriod = 'all',
+      page = 0,
+      limit = 20,
+    } = params;
+
+    if (venueIds.length === 0) {
+      return { data: [], count: 0, nextPage: null };
+    }
+
+    const offset = page * limit;
+
+    let query = supabase
+      .from('venue_discussions')
+      .select(`
+        *,
+        author:profiles!author_id (
+          id,
+          full_name,
+          avatar_url
+        ),
+        racing_area:venue_racing_areas!racing_area_id (
+          id,
+          area_name
+        )
+      `, { count: 'exact' })
+      .in('venue_id', venueIds)
+      .eq('is_public', true);
+
+    if (postType) {
+      query = query.eq('post_type', postType);
+    }
+
+    if (sort === 'rising') {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('created_at', oneDayAgo);
+    } else if (sort === 'top' && topPeriod !== 'all') {
+      const periodMs: Record<TopPeriod, number> = {
+        today: 24 * 60 * 60 * 1000,
+        week: 7 * 24 * 60 * 60 * 1000,
+        month: 30 * 24 * 60 * 60 * 1000,
+        all: 0,
+      };
+      const since = new Date(Date.now() - periodMs[topPeriod]).toISOString();
+      query = query.gte('created_at', since);
+    }
+
+    switch (sort) {
+      case 'new':
+        query = query.order('created_at', { ascending: false });
+        break;
+      case 'top':
+        query = query.order('upvotes', { ascending: false });
+        break;
+      case 'rising':
+      case 'hot':
+      default:
+        query = query
+          .order('pinned', { ascending: false })
+          .order('last_activity_at', { ascending: false });
+        break;
+    }
+
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('[CommunityFeedService] Error fetching aggregated feed:', error);
+      throw error;
+    }
+
+    let posts: FeedPost[] = (data || []).map((d: any) => ({
+      ...d,
+      post_type: d.post_type || 'discussion',
+      view_count: d.view_count || 0,
+      is_resolved: d.is_resolved || false,
+      accepted_answer_id: d.accepted_answer_id || null,
+      location_lat: d.location_lat || null,
+      location_lng: d.location_lng || null,
+      location_label: d.location_label || null,
+    }));
+
+    // Join venue names
+    const uniqueVenueIds = [...new Set(posts.map(p => p.venue_id))];
+    if (uniqueVenueIds.length > 0) {
+      const { data: venues } = await supabase
+        .from('sailing_venues')
+        .select('id, name, country, region')
+        .in('id', uniqueVenueIds);
+
+      if (venues) {
+        const venueMap = new Map(venues.map(v => [v.id, v]));
+        posts = posts.map(p => ({
+          ...p,
+          venue: venueMap.get(p.venue_id) || undefined,
+        }));
+      }
+    }
+
+    if (sort === 'hot' || sort === 'rising') {
+      posts = posts.map(p => ({
+        ...p,
+        hot_score: this.computeHotScore(p),
+      }));
+      posts.sort((a, b) => (b.hot_score || 0) - (a.hot_score || 0));
+    }
+
+    // Get user votes
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && posts.length > 0) {
+      const postIds = posts.map(p => p.id);
+      const { data: votes } = await supabase
+        .from('venue_discussion_votes')
+        .select('target_id, vote')
+        .eq('user_id', user.id)
+        .eq('target_type', 'discussion')
+        .in('target_id', postIds);
+
+      const voteMap = new Map(votes?.map(v => [v.target_id, v.vote]) || []);
+      posts = posts.map(p => ({ ...p, user_vote: voteMap.get(p.id) || null }));
+    }
+
+    // Load topic tags
+    if (posts.length > 0) {
+      posts = await this.attachTopicTags(posts);
+    }
+
+    // Filter by tag IDs (client-side)
+    if (tagIds && tagIds.length > 0) {
+      posts = posts.filter(p =>
+        p.topic_tags?.some(t => tagIds.includes(t.id))
+      );
+    }
+
+    const totalCount = count || 0;
+    const hasMore = offset + limit < totalCount;
+
+    return {
+      data: posts,
+      count: totalCount,
+      nextPage: hasMore ? page + 1 : null,
+    };
+  }
+
+  /**
+   * Get posts authored by a specific user, paginated
+   */
+  async getUserPosts(
+    userId: string,
+    page = 0,
+    limit = 20,
+  ): Promise<{ data: FeedPost[]; count: number; nextPage: number | null }> {
+    const offset = page * limit;
+
+    const { data, error, count } = await supabase
+      .from('venue_discussions')
+      .select(`
+        *,
+        author:profiles!author_id (
+          id,
+          full_name,
+          avatar_url
+        ),
+        racing_area:venue_racing_areas!racing_area_id (
+          id,
+          area_name
+        )
+      `, { count: 'exact' })
+      .eq('author_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('[CommunityFeedService] Error fetching user posts:', error);
+      throw error;
+    }
+
+    let posts: FeedPost[] = (data || []).map((d: any) => ({
+      ...d,
+      post_type: d.post_type || 'discussion',
+      view_count: d.view_count || 0,
+      is_resolved: d.is_resolved || false,
+      accepted_answer_id: d.accepted_answer_id || null,
+      location_lat: d.location_lat || null,
+      location_lng: d.location_lng || null,
+      location_label: d.location_label || null,
+    }));
+
+    // Join venue names
+    const uniqueVenueIds = [...new Set(posts.map(p => p.venue_id))];
+    if (uniqueVenueIds.length > 0) {
+      const { data: venues } = await supabase
+        .from('sailing_venues')
+        .select('id, name, country, region')
+        .in('id', uniqueVenueIds);
+
+      if (venues) {
+        const venueMap = new Map(venues.map(v => [v.id, v]));
+        posts = posts.map(p => ({
+          ...p,
+          venue: venueMap.get(p.venue_id) || undefined,
+        }));
+      }
+    }
+
+    // Load topic tags
+    if (posts.length > 0) {
+      posts = await this.attachTopicTags(posts);
+    }
+
+    const totalCount = count || 0;
+    const hasMore = offset + limit < totalCount;
+
+    return {
+      data: posts,
+      count: totalCount,
+      nextPage: hasMore ? page + 1 : null,
+    };
+  }
+
+  /**
    * Get a single post by ID with all joined data
    */
   async getPostById(postId: string): Promise<FeedPost | null> {
@@ -255,7 +499,7 @@ class CommunityFeedServiceClass {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Must be logged in to create a post');
 
-    const { topic_tag_ids, condition_tags, ...postData } = params;
+    const { topic_tag_ids, condition_tags, catalog_race_id, ...postData } = params;
 
     // Create the discussion
     const { data, error } = await supabase
@@ -273,6 +517,7 @@ class CommunityFeedServiceClass {
         location_lat: postData.location_lat || null,
         location_lng: postData.location_lng || null,
         location_label: postData.location_label || null,
+        catalog_race_id: catalog_race_id || null,
       })
       .select()
       .single();
@@ -642,6 +887,87 @@ class CommunityFeedServiceClass {
     }
 
     return (data || []) as unknown as FeedPost[];
+  }
+
+  // ============================================================================
+  // RACE-TAGGED POSTS
+  // ============================================================================
+
+  /**
+   * Get posts tagged with a specific catalog race
+   */
+  async getPostsByRace(
+    catalogRaceId: string,
+    page = 0,
+    limit = 20,
+  ): Promise<{ data: FeedPost[]; count: number; nextPage: number | null }> {
+    const offset = page * limit;
+
+    const { data, error, count } = await supabase
+      .from('venue_discussions')
+      .select(`
+        *,
+        author:profiles!author_id (
+          id,
+          full_name,
+          avatar_url
+        ),
+        racing_area:venue_racing_areas!racing_area_id (
+          id,
+          area_name
+        )
+      `, { count: 'exact' })
+      .eq('catalog_race_id', catalogRaceId)
+      .eq('is_public', true)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('[CommunityFeedService] Error fetching race posts:', error);
+      throw error;
+    }
+
+    let posts: FeedPost[] = (data || []).map((d: any) => ({
+      ...d,
+      post_type: d.post_type || 'discussion',
+      view_count: d.view_count || 0,
+      is_resolved: d.is_resolved || false,
+      accepted_answer_id: d.accepted_answer_id || null,
+      location_lat: d.location_lat || null,
+      location_lng: d.location_lng || null,
+      location_label: d.location_label || null,
+    }));
+
+    // Join venue names
+    const uniqueVenueIds = [...new Set(posts.map(p => p.venue_id))];
+    if (uniqueVenueIds.length > 0) {
+      const { data: venues } = await supabase
+        .from('sailing_venues')
+        .select('id, name, country, region')
+        .in('id', uniqueVenueIds);
+
+      if (venues) {
+        const venueMap = new Map(venues.map(v => [v.id, v]));
+        posts = posts.map(p => ({
+          ...p,
+          venue: venueMap.get(p.venue_id) || undefined,
+        }));
+      }
+    }
+
+    // Load topic tags
+    if (posts.length > 0) {
+      posts = await this.attachTopicTags(posts);
+    }
+
+    const totalCount = count || 0;
+    const hasMore = offset + limit < totalCount;
+
+    return {
+      data: posts,
+      count: totalCount,
+      nextPage: hasMore ? page + 1 : null,
+    };
   }
 
   // ============================================================================

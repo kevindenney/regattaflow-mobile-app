@@ -109,8 +109,9 @@ export class EnhancedClaudeClient extends ClaudeClient {
       }));
     }
 
-    // Add code execution if enabled (required for Skills)
-    if (request.enableCodeExecution || request.skills) {
+    // Add code execution if explicitly enabled and model supports it
+    // Note: claude-3-haiku-20240307 does NOT support code_execution
+    if (request.enableCodeExecution && !request.model.includes('haiku')) {
       betas.push('code-execution-2025-08-25');
 
       if (!body.tools) {

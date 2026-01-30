@@ -30,9 +30,10 @@ export type LearningCategory =
   | 'rig';
 
 /**
- * Mapping from common checklist item keys to their learning category, lookup key, and lesson ID
+ * Mapping from common checklist item keys to their learning category, lookup key, lesson ID, and course slug
+ * The courseSlug must match the course that contains the lessonId
  */
-export const CHECKLIST_LEARNING_MAP: Record<string, { category: LearningCategory; key: string; lessonId?: string }> = {
+export const CHECKLIST_LEARNING_MAP: Record<string, { category: LearningCategory; key: string; lessonId?: string; courseSlug?: string }> = {
   // Weather checklist items → Race Preparation Mastery Module 1
   'check_forecast': { category: 'weather', key: 'weather_window', lessonId: 'lesson-13-1-1' },
   'check_weather_forecast': { category: 'weather', key: 'weather_window', lessonId: 'lesson-13-1-1' },
@@ -112,11 +113,11 @@ export const CHECKLIST_LEARNING_MAP: Record<string, { category: LearningCategory
   'restricted_areas': { category: 'rules', key: 'restricted_areas', lessonId: 'lesson-13-4-2' },
 
   // Distance racing checklist items → Distance Racing Strategy Course (course-12)
-  'route_briefing': { category: 'tactics', key: 'route_briefing', lessonId: 'lesson-12-1-1' },
-  'weather_routing': { category: 'weather', key: 'weather_routing', lessonId: 'lesson-12-1-2' },
+  'route_briefing': { category: 'tactics', key: 'route_briefing', lessonId: 'lesson-12-1-1', courseSlug: 'distance-racing-strategy' },
+  'weather_routing': { category: 'weather', key: 'weather_routing', lessonId: 'lesson-12-1-2', courseSlug: 'distance-racing-strategy' },
 
-  // On-water checklist items
-  'check_in': { category: 'rules', key: 'check_in', lessonId: 'lesson-1-3-1' },
+  // On-water checklist items → Racing Basics Course (course-1)
+  'check_in': { category: 'rules', key: 'check_in', lessonId: 'lesson-1-3-1', courseSlug: 'racing-basics' },
 
   // Crew checklist items
   'role_assignments': { category: 'crew', key: 'role_assignments' },
@@ -239,4 +240,18 @@ export function getItemCategory(itemKey: string): LearningCategory | undefined {
 export function getLessonId(itemKey: string): string | undefined {
   const normalized = itemKey.toLowerCase().replace(/\s+/g, '_');
   return CHECKLIST_LEARNING_MAP[normalized]?.lessonId;
+}
+
+/**
+ * Get lesson link info for an item (lessonId + courseSlug)
+ * Used for deep-linking to specific lessons in the correct course
+ */
+export function getLessonLink(itemKey: string): { lessonId: string; courseSlug: string } | undefined {
+  const normalized = itemKey.toLowerCase().replace(/\s+/g, '_');
+  const mapping = CHECKLIST_LEARNING_MAP[normalized];
+  if (!mapping?.lessonId) return undefined;
+
+  // Default to race-preparation-mastery for lesson-13-x-x lessons
+  const courseSlug = mapping.courseSlug || 'race-preparation-mastery';
+  return { lessonId: mapping.lessonId, courseSlug };
 }

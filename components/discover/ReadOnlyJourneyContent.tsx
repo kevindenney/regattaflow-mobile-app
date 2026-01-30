@@ -76,7 +76,11 @@ function DaysBeforeContent({
     intentions?.forecastCheck?.snapshots && intentions.forecastCheck.snapshots.length > 0
   );
 
-  const hasAnyContent = hasStrategyBrief || hasChecklist || hasRigSettings || hasSailSelection || hasCourseNotes || hasForecast;
+  // Also check for prep_notes and tuning_settings on the race itself (legacy/seed data)
+  const hasPrepNotes = Boolean(race.prep_notes);
+  const hasTuningSettings = Boolean(race.tuning_settings && Object.keys(race.tuning_settings).length > 0);
+
+  const hasAnyContent = hasStrategyBrief || hasChecklist || hasRigSettings || hasSailSelection || hasCourseNotes || hasForecast || hasPrepNotes || hasTuningSettings;
 
   if (!hasAnyContent) {
     return (
@@ -90,7 +94,7 @@ function DaysBeforeContent({
 
   return (
     <View style={styles.phaseContent}>
-      {/* Strategy Brief */}
+      {/* Strategy Brief (from intentions) */}
       {hasStrategyBrief && (
         <AccordionSection
           title="Race Intention"
@@ -101,6 +105,17 @@ function DaysBeforeContent({
             strategyBrief={intentions?.strategyBrief}
             strategyNotes={intentions?.strategyNotes}
           />
+        </AccordionSection>
+      )}
+
+      {/* Prep Notes (from race record - fallback for seed/legacy data) */}
+      {hasPrepNotes && !hasStrategyBrief && (
+        <AccordionSection
+          title="Race Plan"
+          icon={<Target size={18} color={IOS_COLORS.systemBlue} />}
+          defaultExpanded={true}
+        >
+          <Text style={styles.prepNotesText}>{race.prep_notes}</Text>
         </AccordionSection>
       )}
 
@@ -130,7 +145,7 @@ function DaysBeforeContent({
         </AccordionSection>
       )}
 
-      {/* Rig Settings */}
+      {/* Rig Settings (from intentions) */}
       {hasRigSettings && (
         <AccordionSection
           title="Rig Tuning"
@@ -141,6 +156,22 @@ function DaysBeforeContent({
             rigNotes={preparation?.rig_notes}
             rigPresetId={preparation?.selected_rig_preset_id}
             rigIntentions={intentions?.rigIntentions}
+            tuningSettings={race.tuning_settings}
+          />
+        </AccordionSection>
+      )}
+
+      {/* Tuning Settings (from race record - fallback for seed/legacy data) */}
+      {hasTuningSettings && !hasRigSettings && (
+        <AccordionSection
+          title="Rig Tuning"
+          icon={<Sliders size={18} color={IOS_COLORS.systemOrange} />}
+          defaultExpanded={false}
+        >
+          <ReadOnlyRigSettings
+            rigNotes={null}
+            rigPresetId={null}
+            rigIntentions={null}
             tuningSettings={race.tuning_settings}
           />
         </AccordionSection>
@@ -174,6 +205,7 @@ function DaysBeforeContent({
 
 /**
  * On Water Phase Content
+ * Shows on-water strategy and pre-start specifications (NOT prep_notes - that's in Plan tab)
  */
 function OnWaterContent({
   race,
@@ -187,7 +219,8 @@ function OnWaterContent({
     intentions?.preStartSpecifications && Object.keys(intentions.preStartSpecifications).length > 0
   );
 
-  const hasAnyContent = hasStrategyNotes || hasPreStartSpecs || Boolean(race.prep_notes);
+  // Note: prep_notes is shown in Plan tab, NOT here
+  const hasAnyContent = hasStrategyNotes || hasPreStartSpecs;
 
   if (!hasAnyContent) {
     return (
@@ -201,8 +234,8 @@ function OnWaterContent({
 
   return (
     <View style={styles.phaseContent}>
-      {/* Strategy Notes */}
-      {(hasStrategyNotes || race.prep_notes) && (
+      {/* Strategy Notes (from intentions, NOT prep_notes) */}
+      {hasStrategyNotes && (
         <AccordionSection
           title="Strategy Notes"
           icon={<Compass size={18} color={IOS_COLORS.systemBlue} />}
@@ -211,7 +244,6 @@ function OnWaterContent({
           <ReadOnlyStrategyBrief
             strategyBrief={intentions?.strategyBrief}
             strategyNotes={intentions?.strategyNotes}
-            prepNotes={race.prep_notes}
           />
         </AccordionSection>
       )}
@@ -344,6 +376,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
+    lineHeight: 22,
+  },
+  prepNotesText: {
+    fontSize: 15,
+    color: IOS_COLORS.label,
     lineHeight: 22,
   },
   preStartSpecs: {

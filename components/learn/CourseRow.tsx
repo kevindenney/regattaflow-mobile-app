@@ -8,23 +8,31 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { Course } from '@/services/CourseCatalogService';
-import { ProgressDots } from './ProgressDots';
+import { ProgressRing } from './ProgressRing';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
 
-// Design tokens (Tufte-inspired)
+// Design tokens
 const TOKENS = {
   rowMinHeight: 80,
   rowPadding: 16,
   metadataSeparator: ' \u00B7 ', // middle dot
   colors: {
-    title: '#000000',
-    description: '#3C3C43',
-    metadata: '#8E8E93',
-    border: '#E5E7EB',
-    chevron: '#C7C7CC',
-    statusIndicatorStarted: '#007AFF',
+    title: IOS_COLORS.label,
+    description: IOS_COLORS.secondaryLabel,
+    metadata: IOS_COLORS.systemGray,
+    border: IOS_COLORS.separator,
+    chevron: IOS_COLORS.systemGray3,
+    statusIndicatorStarted: IOS_COLORS.systemBlue,
     statusIndicatorNotStarted: '#E5E7EB',
     comingSoon: '#9CA3AF',
   },
+};
+
+const LEVEL_ACCENT_COLORS: Record<string, string> = {
+  'level-1': '#10B981',
+  'level-2': '#F59E0B',
+  'level-3': '#EF4444',
+  'specializations': '#8B5CF6',
 };
 
 interface CourseRowProps {
@@ -77,6 +85,8 @@ export function CourseRow({
   const hasStarted = progress !== undefined && progress > 0;
   const isCompleted = progress === 100;
 
+  const accentColor = LEVEL_ACCENT_COLORS[course.level] || TOKENS.colors.metadata;
+
   return (
     <TouchableOpacity
       style={styles.container}
@@ -84,6 +94,9 @@ export function CourseRow({
       activeOpacity={0.7}
       disabled={isComingSoon}
     >
+      {/* Level accent bar on left edge */}
+      <View style={[styles.accentBar, { backgroundColor: accentColor }]} />
+
       {/* Status indicator: lock icon for locked, dot for accessible */}
       <View style={styles.statusContainer}>
         {isLocked ? (
@@ -119,12 +132,16 @@ export function CourseRow({
             {course.title}
           </Text>
 
-          {/* Status badges - inline */}
+          {/* Pill-style badges */}
           {isComingSoon && (
-            <Text style={styles.comingSoonBadge}>Coming Soon</Text>
+            <View style={styles.comingSoonPill}>
+              <Text style={styles.comingSoonPillText}>COMING SOON</Text>
+            </View>
           )}
           {isFree && !isComingSoon && (
-            <Text style={styles.freeBadge}>Free</Text>
+            <View style={styles.freePill}>
+              <Text style={styles.freePillText}>FREE</Text>
+            </View>
           )}
         </View>
 
@@ -146,14 +163,14 @@ export function CourseRow({
             {formatMetadata(course)}
           </Text>
 
-          {/* Progress indicator */}
+          {/* Progress ring indicator */}
           {!isComingSoon && progress !== undefined && (
             <View style={styles.progressContainer}>
-              <ProgressDots
+              <ProgressRing
                 progress={progress}
-                dotCount={5}
-                dotSize={5}
-                gap={2}
+                size={20}
+                strokeWidth={2.5}
+                showLabel={false}
               />
               {progress > 0 && progress < 100 && (
                 <Text style={styles.progressText}>{Math.round(progress)}%</Text>
@@ -192,6 +209,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: TOKENS.colors.border,
+    position: 'relative',
+  },
+  accentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
   },
   statusContainer: {
     width: 24,
@@ -224,14 +249,26 @@ const styles = StyleSheet.create({
   titleLocked: {
     color: TOKENS.colors.metadata,
   },
-  comingSoonBadge: {
+  comingSoonPill: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  comingSoonPillText: {
     fontSize: 11,
     fontWeight: '500',
     color: TOKENS.colors.comingSoon,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
-  freeBadge: {
+  freePill: {
+    backgroundColor: '#10B98115',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  freePillText: {
     fontSize: 11,
     fontWeight: '600',
     color: '#10B981',

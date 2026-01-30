@@ -16,7 +16,7 @@ export interface YachtClub {
   sailing_venues?: {
     id: string;
     name: string;
-    city?: string;
+    region?: string;
     country?: string;
   };
 }
@@ -156,7 +156,7 @@ export class ClubDiscoveryService {
           .from('yacht_clubs')
           .select(`
             *,
-            sailing_venues(id, name, city, country)
+            sailing_venues(id, name, region, country)
           `)
           .in('venue_id', venueIds);
 
@@ -205,7 +205,7 @@ export class ClubDiscoveryService {
           *,
           yacht_clubs(
             *,
-            sailing_venues(id, name, city, country)
+            sailing_venues(id, name, region, country)
           )
         `)
         .single();
@@ -285,7 +285,7 @@ export class ClubDiscoveryService {
           *,
           yacht_clubs(
             *,
-            sailing_venues(id, name, city, country)
+            sailing_venues(id, name, region, country)
           ),
           class_associations(
             *,
@@ -312,7 +312,7 @@ export class ClubDiscoveryService {
         .from('yacht_clubs')
         .select(`
           *,
-          sailing_venues(id, name, city, country)
+          sailing_venues(id, name, region, country)
         `)
         .ilike('name', `%${query}%`)
         .limit(limit);
@@ -420,4 +420,597 @@ export class ClubDiscoveryService {
       return false;
     }
   }
+
+  // ===========================================================================
+  // CLUB SEARCH METHODS (used by useClubSearch hook)
+  // ===========================================================================
+
+  /**
+   * Search clubs with optional filters
+   * Uses the unified global_clubs table
+   * Used by the Search Tab's Clubs segment
+   */
+  static async searchClubs(options: {
+    query?: string;
+    region?: string;
+    countryCode?: string;
+    boatClassId?: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    name: string;
+    description?: string;
+    region?: string;
+    logoUrl?: string;
+    memberCount: number;
+    boatClassName?: string;
+    source?: 'platform' | 'directory';
+  }>> {
+    const { query, countryCode, boatClassId, limit = 100 } = options;
+    const searchTerm = query?.trim() || '';
+
+    try {
+      // Build the query on global_clubs
+      let clubsQuery = supabase
+        .from('global_clubs')
+        .select(`
+          id,
+          name,
+          description,
+          city,
+          region,
+          country,
+          country_code,
+          logo_url,
+          platform_club_id,
+          typical_classes
+        `)
+        .order('name');
+
+      // Apply search filter
+      if (searchTerm) {
+        clubsQuery = clubsQuery.ilike('name', `%${searchTerm}%`);
+      }
+
+      // Apply country filter if provided
+      if (countryCode) {
+        clubsQuery = clubsQuery.eq('country_code', countryCode);
+      }
+
+      // Apply boat class filter if provided
+      if (boatClassId) {
+        clubsQuery = clubsQuery.contains('typical_classes', [boatClassId]);
+      }
+
+      clubsQuery = clubsQuery.limit(limit);
+
+      const { data: clubs, error } = await clubsQuery;
+
+      if (error) {
+        console.error('Error fetching global clubs:', error);
+        return [];
+      }
+
+      // Get member counts from global_club_members
+      const clubIds = (clubs || []).map((c: any) => c.id);
+      let memberCountMap: Record<string, number> = {};
+
+      if (clubIds.length > 0) {
+        const { data: memberCounts } = await supabase
+          .from('global_club_members')
+          .select('global_club_id')
+          .in('global_club_id', clubIds);
+
+        (memberCounts || []).forEach((m: any) => {
+          memberCountMap[m.global_club_id] = (memberCountMap[m.global_club_id] || 0) + 1;
+        });
+      }
+
+      // Transform to return format
+      return (clubs || []).map((club: any) => {
+        // Build location string
+        const locationParts = [club.city, club.region, club.country].filter(Boolean);
+        const region = locationParts.length > 0 ? locationParts.slice(0, 2).join(', ') : undefined;
+
+        return {
+          id: club.id,
+          name: club.name,
+          description: club.description,
+          region,
+          logoUrl: club.logo_url,
+          memberCount: memberCountMap[club.id] || 0,
+          boatClassName: club.typical_classes?.[0] || undefined,
+          // If it has a platform_club_id, it's a claimed/platform club, otherwise directory
+          source: club.platform_club_id ? 'platform' as const : 'directory' as const,
+        };
+      });
+    } catch (error) {
+      console.error('Error in searchClubs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get clubs a user is a member of
+   * Uses the unified global_club_members table
+   * Used by useClubSearch to check membership status
+   */
+  static async getUserClubs(userId: string): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const { data: memberships, error } = await supabase
+        .from('global_club_members')
+        .select('global_club_id, global_clubs(id, name)')
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error fetching user clubs:', error);
+        return [];
+      }
+
+      return (memberships || [])
+        .filter((m: any) => m.global_clubs)
+        .map((m: any) => ({
+          id: m.global_clubs.id,
+          name: m.global_clubs.name,
+        }));
+    } catch (error) {
+      console.error('Error in getUserClubs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Join a club
+   * Uses the unified global_club_members table
+   */
+  static async joinClub(userId: string, clubId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('global_club_members')
+        .insert({
+          user_id: userId,
+          global_club_id: clubId,
+          role: 'member',
+        });
+
+      // Ignore duplicate key error (already a member)
+      if (error && error.code !== '23505') throw error;
+    } catch (error) {
+      console.error('Error joining club:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Leave a club
+   * Uses the unified global_club_members table
+   */
+  static async leaveClub(userId: string, clubId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('global_club_members')
+        .delete()
+        .eq('user_id', userId)
+        .eq('global_club_id', clubId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error leaving club:', error);
+      throw error;
+    }
+  }
+
+  // ===========================================================================
+  // GLOBAL CLUBS METHODS (unified directory)
+  // ===========================================================================
+
+  /**
+   * Search the global clubs directory
+   * Uses the unified global_clubs table
+   */
+  static async searchGlobalClubs(options: {
+    query?: string;
+    country?: string;
+    clubType?: string;
+    verifiedOnly?: boolean;
+    limit?: number;
+  }): Promise<GlobalClubResult[]> {
+    const { query, country, clubType, verifiedOnly = false, limit = 50 } = options;
+
+    try {
+      let clubQuery = supabase
+        .from('global_clubs')
+        .select(`
+          id,
+          name,
+          short_name,
+          description,
+          club_type,
+          country,
+          country_code,
+          region,
+          city,
+          website,
+          logo_url,
+          established_year,
+          verified,
+          platform_club_id,
+          typical_classes,
+          facilities
+        `)
+        .order('verified', { ascending: false })
+        .order('name', { ascending: true })
+        .limit(limit);
+
+      // Apply filters
+      if (query && query.trim().length > 0) {
+        clubQuery = clubQuery.ilike('name', `%${query.trim()}%`);
+      }
+      if (country) {
+        clubQuery = clubQuery.or(`country.ilike.%${country}%,country_code.eq.${country.toUpperCase()}`);
+      }
+      if (clubType) {
+        clubQuery = clubQuery.eq('club_type', clubType);
+      }
+      if (verifiedOnly) {
+        clubQuery = clubQuery.eq('verified', true);
+      }
+
+      const { data: clubs, error } = await clubQuery;
+
+      if (error) {
+        console.error('Error searching global clubs:', error);
+        return [];
+      }
+
+      if (!clubs || clubs.length === 0) {
+        return [];
+      }
+
+      // Get member counts
+      const clubIds = clubs.map((c: any) => c.id);
+      const { data: memberCounts } = await supabase
+        .from('global_club_members')
+        .select('global_club_id')
+        .in('global_club_id', clubIds);
+
+      const memberCountMap: Record<string, number> = {};
+      (memberCounts || []).forEach((m: any) => {
+        memberCountMap[m.global_club_id] = (memberCountMap[m.global_club_id] || 0) + 1;
+      });
+
+      return clubs.map((club: any) => ({
+        id: club.id,
+        name: club.name,
+        shortName: club.short_name,
+        description: club.description,
+        clubType: club.club_type,
+        country: club.country,
+        countryCode: club.country_code,
+        region: club.region,
+        city: club.city,
+        website: club.website,
+        logoUrl: club.logo_url,
+        establishedYear: club.established_year,
+        verified: club.verified,
+        platformClubId: club.platform_club_id,
+        memberCount: memberCountMap[club.id] || 0,
+        typicalClasses: club.typical_classes || [],
+        facilities: club.facilities || [],
+        isClaimed: !!club.platform_club_id,
+      }));
+    } catch (error) {
+      console.error('Error in searchGlobalClubs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get a single global club by ID
+   */
+  static async getGlobalClub(clubId: string): Promise<GlobalClubResult | null> {
+    try {
+      const { data: club, error } = await supabase
+        .from('global_clubs')
+        .select('*')
+        .eq('id', clubId)
+        .single();
+
+      if (error || !club) {
+        return null;
+      }
+
+      // Get member count
+      const { count } = await supabase
+        .from('global_club_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('global_club_id', clubId);
+
+      return {
+        id: club.id,
+        name: club.name,
+        shortName: club.short_name,
+        description: club.description,
+        clubType: club.club_type,
+        country: club.country,
+        countryCode: club.country_code,
+        region: club.region,
+        city: club.city,
+        website: club.website,
+        logoUrl: club.logo_url,
+        establishedYear: club.established_year,
+        verified: club.verified,
+        platformClubId: club.platform_club_id,
+        memberCount: count || 0,
+        typicalClasses: club.typical_classes || [],
+        facilities: club.facilities || [],
+        isClaimed: !!club.platform_club_id,
+      };
+    } catch (error) {
+      console.error('Error getting global club:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Claim a club from the directory
+   * Creates a platform club and links it to the global club entry
+   */
+  static async claimClub(
+    userId: string,
+    globalClubId: string,
+    claimData: {
+      email: string;
+      role: string;
+      message?: string;
+    }
+  ): Promise<{ success: boolean; platformClubId?: string; error?: string }> {
+    try {
+      // Get the global club
+      const { data: globalClub, error: fetchError } = await supabase
+        .from('global_clubs')
+        .select('*')
+        .eq('id', globalClubId)
+        .single();
+
+      if (fetchError || !globalClub) {
+        return { success: false, error: 'Club not found' };
+      }
+
+      // Check if already claimed
+      if (globalClub.platform_club_id) {
+        return { success: false, error: 'This club has already been claimed' };
+      }
+
+      // Create a platform club
+      const { data: platformClub, error: createError } = await supabase
+        .from('clubs')
+        .insert({
+          name: globalClub.name,
+          short_name: globalClub.short_name,
+          description: globalClub.description,
+          website: globalClub.website,
+          email: claimData.email,
+          logo_url: globalClub.logo_url,
+          club_type: globalClub.club_type,
+          established_year: globalClub.established_year,
+          facilities: globalClub.facilities,
+          location: {
+            country: globalClub.country,
+            city: globalClub.city,
+            address: globalClub.address,
+          },
+          subscription_tier: 'free',
+          subscription_status: 'trial',
+        })
+        .select('id')
+        .single();
+
+      if (createError || !platformClub) {
+        console.error('Error creating platform club:', createError);
+        return { success: false, error: 'Failed to create club' };
+      }
+
+      // Link global club to platform club
+      const { error: linkError } = await supabase
+        .from('global_clubs')
+        .update({
+          platform_club_id: platformClub.id,
+          claimed_at: new Date().toISOString(),
+          claimed_by: userId,
+        })
+        .eq('id', globalClubId);
+
+      if (linkError) {
+        console.error('Error linking clubs:', linkError);
+      }
+
+      // Add user as club owner
+      await supabase
+        .from('club_members')
+        .insert({
+          club_id: platformClub.id,
+          user_id: userId,
+          role: 'owner',
+          is_active: true,
+        });
+
+      // Also add to global_club_members
+      await supabase
+        .from('global_club_members')
+        .insert({
+          global_club_id: globalClubId,
+          user_id: userId,
+          role: 'owner',
+        });
+
+      return { success: true, platformClubId: platformClub.id };
+    } catch (error) {
+      console.error('Error claiming club:', error);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Submit a new club to the directory
+   */
+  static async submitClub(
+    userId: string,
+    clubData: {
+      name: string;
+      shortName?: string;
+      description?: string;
+      clubType: string;
+      country: string;
+      countryCode?: string;
+      region?: string;
+      city?: string;
+      website?: string;
+      email?: string;
+    }
+  ): Promise<{ success: boolean; clubId?: string; error?: string }> {
+    try {
+      // Check for duplicates
+      const { data: existing } = await supabase
+        .from('global_clubs')
+        .select('id, name')
+        .ilike('name', clubData.name)
+        .maybeSingle();
+
+      if (existing) {
+        return { success: false, error: 'A club with this name already exists' };
+      }
+
+      // Insert the new club
+      const { data: newClub, error } = await supabase
+        .from('global_clubs')
+        .insert({
+          name: clubData.name,
+          short_name: clubData.shortName,
+          description: clubData.description,
+          club_type: clubData.clubType,
+          country: clubData.country,
+          country_code: clubData.countryCode,
+          region: clubData.region,
+          city: clubData.city,
+          website: clubData.website,
+          email: clubData.email,
+          source: 'user_submitted',
+          verified: false,
+        })
+        .select('id')
+        .single();
+
+      if (error || !newClub) {
+        console.error('Error submitting club:', error);
+        return { success: false, error: 'Failed to submit club' };
+      }
+
+      // Auto-join the submitter
+      await supabase
+        .from('global_club_members')
+        .insert({
+          global_club_id: newClub.id,
+          user_id: userId,
+          role: 'member',
+        });
+
+      return { success: true, clubId: newClub.id };
+    } catch (error) {
+      console.error('Error submitting club:', error);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  }
+
+  /**
+   * Join a global club
+   */
+  static async joinGlobalClub(userId: string, globalClubId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('global_club_members')
+        .insert({
+          global_club_id: globalClubId,
+          user_id: userId,
+          role: 'member',
+        });
+
+      if (error && error.code !== '23505') {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error joining global club:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Leave a global club
+   */
+  static async leaveGlobalClub(userId: string, globalClubId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('global_club_members')
+        .delete()
+        .eq('user_id', userId)
+        .eq('global_club_id', globalClubId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error leaving global club:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's global club memberships
+   */
+  static async getUserGlobalClubs(userId: string): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const { data, error } = await supabase
+        .from('global_club_members')
+        .select('global_club_id, global_clubs(id, name)')
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error getting user global clubs:', error);
+        return [];
+      }
+
+      return (data || [])
+        .filter((m: any) => m.global_clubs)
+        .map((m: any) => ({
+          id: m.global_clubs.id,
+          name: m.global_clubs.name,
+        }));
+    } catch (error) {
+      console.error('Error in getUserGlobalClubs:', error);
+      return [];
+    }
+  }
+}
+
+// ===========================================================================
+// TYPES
+// ===========================================================================
+
+export interface GlobalClubResult {
+  id: string;
+  name: string;
+  shortName?: string;
+  description?: string;
+  clubType: string;
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  city?: string;
+  website?: string;
+  logoUrl?: string;
+  establishedYear?: number;
+  verified: boolean;
+  platformClubId?: string;
+  memberCount: number;
+  typicalClasses: string[];
+  facilities: string[];
+  isClaimed: boolean;
 }

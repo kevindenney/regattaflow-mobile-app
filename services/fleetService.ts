@@ -505,7 +505,7 @@ class FleetService {
       // Build query with columns that actually exist in race_events table
       let query = supabase
         .from('race_events')
-        .select('id, name, start_time, boat_class, boat_classes, race_series, venue_id')
+        .select('id, name, start_time, boat_class, boat_classes, race_series, location, racing_area_name')
         .gte('start_time', nowIso)
         .order('start_time', { ascending: true });
 
@@ -536,33 +536,15 @@ class FleetService {
         throw error;
       }
 
-      const venueIds = (data || [])
-        .map(event => event.venue_id)
-        .filter((id): id is string => Boolean(id));
-
-      let venuesById: Record<string, string> = {};
-      if (venueIds.length) {
-        const { data: venues, error: venuesError } = await supabase
-          .from('sailing_venues')
-          .select('id, name')
-          .in('id', venueIds);
-
-        if (venuesError) {
-          logger.warn('Unable to load venue names for upcoming races:', venuesError);
-        } else {
-          venuesById = Object.fromEntries((venues || []).map(venue => [venue.id, venue.name]));
-        }
-      }
-
       return (data || []).map(event => ({
         id: event.id,
         raceName: event.name || 'Untitled Race',
         startTime: event.start_time,
         boatClass: this.extractBoatClassName(event, resolvedClassName),
         raceSeries: event.race_series,
-        venueId: event.venue_id,
-        racingAreaName: null,
-        venueName: event.venue_id ? venuesById[event.venue_id] ?? null : null,
+        venueId: null,
+        racingAreaName: event.racing_area_name ?? null,
+        venueName: event.location ?? event.racing_area_name ?? null,
       }));
     } catch (error) {
       logger.warn('Unable to load upcoming fleet races - returning empty list', error);

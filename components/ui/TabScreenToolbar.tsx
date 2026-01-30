@@ -7,7 +7,7 @@
  * Inspired by the Apple Health "Records" screen pattern.
  */
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,17 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
+  type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { SFSymbolIcon } from './SFSymbolIcon';
 import {
   IOS_COLORS,
   IOS_SHADOWS,
@@ -40,6 +43,8 @@ import { useAuth } from '@/providers/AuthProvider';
 export interface ToolbarAction {
   /** Ionicons name (e.g. 'search-outline') */
   icon: string;
+  /** SF Symbol name for iOS (e.g. 'person.badge.plus') - falls back to icon on other platforms */
+  sfSymbol?: string;
   /** Accessibility label */
   label: string;
   onPress: () => void;
@@ -54,11 +59,6 @@ export interface TabScreenToolbarProps {
   subtitle?: string;
   onSubtitlePress?: () => void;
   actions?: ToolbarAction[];
-  /**
-   * When provided, a magnifying-glass icon is auto-prepended to the
-   * capsule action list. This callback opens the global search overlay.
-   */
-  onGlobalSearch?: () => void;
   /**
    * Custom right-side content that replaces the default actions capsule.
    * Use this when you need a ref or custom layout for the right element.
@@ -76,6 +76,10 @@ export interface TabScreenToolbarProps {
   showProfileAvatar?: boolean;
   /** Extra content below the nav row (e.g. segmented controls, search bar) */
   children?: React.ReactNode;
+  /** Callback reporting the measured height of the toolbar (for content paddingTop) */
+  onMeasuredHeight?: (height: number) => void;
+  /** When true the toolbar slides up off-screen */
+  hidden?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +172,17 @@ function ActionButton({ action }: { action: ToolbarAction }) {
         scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
       }}
     >
-      <Ionicons name={iconName as any} size={20} color={tint} />
+      {action.sfSymbol ? (
+        <SFSymbolIcon
+          name={action.sfSymbol}
+          fallback={iconName}
+          size={20}
+          color={tint}
+          weight="medium"
+        />
+      ) : (
+        <Ionicons name={iconName as any} size={20} color={tint} />
+      )}
     </AnimatedPressable>
   );
 }
@@ -182,40 +196,59 @@ export function TabScreenToolbar({
   subtitle,
   onSubtitlePress,
   actions,
-  onGlobalSearch,
   rightContent,
   topInset = 0,
-  backgroundColor = IOS_COLORS.systemGroupedBackground,
-  showBorder = true,
+  backgroundColor,
+  showBorder = false,
   isLoading = false,
   showProfileAvatar = true,
   children,
+  onMeasuredHeight,
+  hidden = false,
 }: TabScreenToolbarProps) {
   const { isDrawerOpen, toggleDrawer } = useWebDrawer();
 
   // Show hamburger menu on web when sidebar drawer is enabled
   const showWebMenuButton = Platform.OS === 'web' && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
 
-  // Auto-prepend a search action when onGlobalSearch is provided
-  const mergedActions = useMemo(() => {
-    if (!onGlobalSearch) return actions;
-    const searchAction: ToolbarAction = {
-      icon: 'search-outline',
-      label: 'Search',
-      onPress: onGlobalSearch,
-    };
-    return [searchAction, ...(actions ?? [])];
-  }, [onGlobalSearch, actions]);
+  const hasActions = actions && actions.length > 0;
 
-  const hasActions = mergedActions && mergedActions.length > 0;
+  // Measured height for hide animation
+  const measuredHeight = useRef(0);
+
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const h = event.nativeEvent.layout.height;
+      measuredHeight.current = h;
+      onMeasuredHeight?.(h);
+    },
+    [onMeasuredHeight],
+  );
+
+  // Scroll-to-hide animation
+  const hideTranslateY = useSharedValue(0);
+
+  React.useEffect(() => {
+    hideTranslateY.value = withTiming(
+      hidden ? -measuredHeight.current : 0,
+      { duration: 250 },
+    );
+  }, [hidden, hideTranslateY]);
+
+  const hideAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: hideTranslateY.value }],
+  }));
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.container,
-        { paddingTop: topInset, backgroundColor },
+        { paddingTop: topInset },
+        backgroundColor ? { backgroundColor } : undefined,
         showBorder && styles.border,
+        hideAnimatedStyle,
       ]}
+      onLayout={handleLayout}
     >
       {/* Nav row: title left  |  capsule right */}
       <View style={styles.navRow}>
@@ -278,7 +311,7 @@ export function TabScreenToolbar({
             ? rightContent
             : hasActions && (
                 <View style={styles.capsule}>
-                  {mergedActions.map((action, idx) => (
+                  {actions!.map((action, idx) => (
                     <React.Fragment key={action.label}>
                       {idx > 0 && <View style={styles.capsuleDivider} />}
                       <ActionButton action={action} />
@@ -292,7 +325,7 @@ export function TabScreenToolbar({
 
       {/* Children slot for tab-specific extras */}
       {children}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -302,7 +335,12 @@ export function TabScreenToolbar({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: IOS_COLORS.systemGroupedBackground,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    backgroundColor: 'rgba(242, 242, 247, 0.92)',
   },
   border: {
     borderBottomWidth: StyleSheet.hairlineWidth,

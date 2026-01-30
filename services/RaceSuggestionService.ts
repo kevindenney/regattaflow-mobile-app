@@ -15,9 +15,19 @@ const stringifyPatternData = (value: Record<string, unknown> | null | undefined)
 // Types
 // =====================================================
 
+export type RaceSuggestionType =
+  | 'club_event'
+  | 'fleet_race'
+  | 'pattern_match'
+  | 'template'
+  | 'similar_sailor'
+  | 'community_race'
+  | 'catalog_match'
+  | 'previous_year';
+
 export interface RaceSuggestion {
   id: string;
-  type: 'club_event' | 'fleet_race' | 'pattern_match' | 'template' | 'similar_sailor';
+  type: RaceSuggestionType;
   confidenceScore: number;
   raceData: {
     raceName: string;
@@ -33,19 +43,35 @@ export interface RaceSuggestion {
       nor?: string;
       si?: string;
     };
+    raceType?: string;
+    location?: string;
+    time?: string;
+    vhfChannel?: string;
+    totalDistanceNm?: number;
+    timeLimitHours?: number;
+    routeDescription?: string;
+    courseType?: string;
   };
   reason: string;
   source?: {
     id: string;
     name: string;
-    type: 'club' | 'fleet' | 'pattern';
+    type: 'club' | 'fleet' | 'pattern' | 'community' | 'catalog';
   };
   canAddDirectly: boolean;
+  catalogRaceId?: string;
+  updateGuidance?: {
+    fieldsToReview: string[];
+    message: string;
+  };
 }
 
 export interface CategorizedSuggestions {
   clubRaces: RaceSuggestion[];
   fleetRaces: RaceSuggestion[];
+  communityRaces: RaceSuggestion[];
+  catalogMatches: RaceSuggestion[];
+  previousYearRaces: RaceSuggestion[];
   patterns: RaceSuggestion[];
   templates: RaceSuggestion[];
   total: number;
@@ -113,13 +139,7 @@ class RaceSuggestionService {
       });
       logger.error('[getSuggestionsForUser] Error fetching suggestions:', error);
       // Return empty suggestions on error
-      return {
-        clubRaces: [],
-        fleetRaces: [],
-        patterns: [],
-        templates: [],
-        total: 0,
-      };
+      return this.emptySuggestions();
     }
   }
 
@@ -139,11 +159,11 @@ class RaceSuggestionService {
     if (error) {
       console.error('❌ [getCachedSuggestions] Error fetching cached suggestions:', error);
       logger.error('[getCachedSuggestions] Error fetching cached suggestions:', error);
-      return { clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 };
+      return this.emptySuggestions();
     }
 
     if (!data || data.length === 0) {
-      return { clubRaces: [], fleetRaces: [], patterns: [], templates: [], total: 0 };
+      return this.emptySuggestions();
     }
 
     // Categorize suggestions
@@ -154,19 +174,32 @@ class RaceSuggestionService {
    * Generate fresh suggestions from all sources
    */
   private async generateFreshSuggestions(userId: string): Promise<CategorizedSuggestions> {
-    const [clubRaces, fleetRaces, patterns, templates] = await Promise.all([
+    const [clubRaces, fleetRaces, communityRaces, catalogMatches, previousYearRaces, patterns, templates] = await Promise.all([
       this.getClubUpcomingRaces(userId),
       this.getFleetUpcomingRaces(userId),
+      this.getCommunityRaces(userId),
+      this.getCatalogMatches(userId),
+      this.getPreviousYearRaces(userId),
       this.getPatternBasedSuggestions(userId),
       this.getTemplateSuggestions(userId),
     ]);
 
+    // Cross-category dedup: if same race appears in multiple categories, keep highest confidence
+    const allSuggestions = [
+      ...clubRaces, ...fleetRaces, ...communityRaces,
+      ...catalogMatches, ...previousYearRaces, ...patterns, ...templates,
+    ];
+    const deduped = this.crossCategoryDedup(allSuggestions);
+
     return {
-      clubRaces,
-      fleetRaces,
-      patterns,
-      templates,
-      total: clubRaces.length + fleetRaces.length + patterns.length + templates.length,
+      clubRaces: deduped.filter(s => s.type === 'club_event'),
+      fleetRaces: deduped.filter(s => s.type === 'fleet_race'),
+      communityRaces: deduped.filter(s => s.type === 'community_race'),
+      catalogMatches: deduped.filter(s => s.type === 'catalog_match'),
+      previousYearRaces: deduped.filter(s => s.type === 'previous_year'),
+      patterns: deduped.filter(s => s.type === 'pattern_match'),
+      templates: deduped.filter(s => s.type === 'template'),
+      total: deduped.length,
     };
   }
 
@@ -616,6 +649,9 @@ class RaceSuggestionService {
     const allSuggestions = [
       ...suggestions.clubRaces,
       ...suggestions.fleetRaces,
+      ...suggestions.communityRaces,
+      ...suggestions.catalogMatches,
+      ...suggestions.previousYearRaces,
       ...suggestions.patterns,
       ...suggestions.templates,
     ];
@@ -705,8 +741,381 @@ class RaceSuggestionService {
   }
 
   // =====================================================
+  // Community Race Suggestions
+  // =====================================================
+
+  /**
+   * Get races that other users in the same clubs/fleets have recently added
+   */
+  async getCommunityRaces(userId: string): Promise<RaceSuggestion[]> {
+    try {
+      // Get user's club and fleet memberships
+      const { data: clubMemberships } = await supabase
+        .from('club_members')
+        .select('club_id, clubs(id, name)')
+        .eq('user_id', userId)
+        .eq('is_active', true);
+
+      if (!clubMemberships || clubMemberships.length === 0) {
+        logger.debug('[getCommunityRaces] No club memberships found');
+        return [];
+      }
+
+      const clubIds = clubMemberships.map((m) => m.club_id);
+
+      // Get co-members (other users in the same clubs)
+      const { data: coMembers } = await supabase
+        .from('club_members')
+        .select('user_id')
+        .in('club_id', clubIds)
+        .eq('is_active', true)
+        .neq('user_id', userId);
+
+      if (!coMembers || coMembers.length === 0) {
+        logger.debug('[getCommunityRaces] No co-members found');
+        return [];
+      }
+
+      const coMemberIds = [...new Set(coMembers.map((m) => m.user_id))];
+
+      // Get future races created by co-members
+      const { data: communityRaces } = await supabase
+        .from('regattas')
+        .select('id, name, start_date, start_area_name, race_type, metadata, created_by')
+        .in('created_by', coMemberIds)
+        .gte('start_date', new Date().toISOString())
+        .order('start_date', { ascending: true })
+        .limit(30);
+
+      if (!communityRaces || communityRaces.length === 0) {
+        return [];
+      }
+
+      // Group by race name + date to count community participation
+      const raceGroups = new Map<string, { race: any; count: number }>();
+      for (const race of communityRaces) {
+        const dateStr = race.start_date?.split('T')[0] || '';
+        const key = `${race.name?.toLowerCase().trim()}_${dateStr}`;
+        const existing = raceGroups.get(key);
+        if (existing) {
+          existing.count++;
+        } else {
+          raceGroups.set(key, { race, count: 1 });
+        }
+      }
+
+      // Map to suggestions
+      return Array.from(raceGroups.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 20)
+        .map(({ race, count }) => {
+          const confidence = Math.min(0.7 + count * 0.05, 0.9);
+          const sailorLabel = count === 1 ? '1 sailor' : `${count} sailors`;
+          return {
+            id: `community_${race.id}`,
+            type: 'community_race' as const,
+            confidenceScore: confidence,
+            raceData: {
+              raceName: race.name,
+              venue: race.start_area_name || race.metadata?.venue_name,
+              startDate: race.start_date,
+              raceType: race.race_type,
+            },
+            reason: `${sailorLabel} in your club are racing this`,
+            source: {
+              id: race.id,
+              name: race.name,
+              type: 'community' as const,
+            },
+            canAddDirectly: true,
+          };
+        });
+    } catch (error) {
+      logger.error('[getCommunityRaces] Error:', error);
+      return [];
+    }
+  }
+
+  // =====================================================
+  // Catalog Race Match Suggestions
+  // =====================================================
+
+  /**
+   * Match catalog races to user context (boat classes, followed races, region)
+   */
+  async getCatalogMatches(userId: string): Promise<RaceSuggestion[]> {
+    try {
+      // Get user's boat classes
+      const { data: sailorBoats } = await supabase
+        .from('sailor_boats')
+        .select('boat_classes(name)')
+        .eq('user_id', userId);
+
+      const userClasses = (sailorBoats || [])
+        .map((sb: any) => sb.boat_classes?.name)
+        .filter(Boolean) as string[];
+
+      // Get followed catalog race IDs
+      const { data: followedRaces } = await supabase
+        .from('saved_catalog_races')
+        .select('catalog_race_id')
+        .eq('user_id', userId);
+
+      const followedIds = new Set((followedRaces || []).map((r) => r.catalog_race_id));
+
+      // Get user's region from profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('country, region')
+        .eq('id', userId)
+        .single();
+
+      const userCountry = profile?.country;
+
+      // Query catalog races matching boat classes or upcoming
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // 1-based
+      const threeMonthsLater = ((currentMonth + 2) % 12) + 1;
+      const sixMonthsFromNow = new Date(now);
+      sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+
+      let query = supabase
+        .from('catalog_races')
+        .select('*')
+        .order('follower_count', { ascending: false })
+        .limit(50);
+
+      const { data: catalogRaces } = await query;
+
+      if (!catalogRaces || catalogRaces.length === 0) {
+        return [];
+      }
+
+      // Score and filter matches
+      const suggestions: RaceSuggestion[] = [];
+
+      for (const race of catalogRaces) {
+        const isFollowed = followedIds.has(race.id);
+        const classMatch = userClasses.length > 0 && race.boat_classes?.some(
+          (bc: string) => userClasses.some(uc => uc.toLowerCase() === bc.toLowerCase())
+        );
+        const countryMatch = userCountry && race.country?.toLowerCase() === userCountry.toLowerCase();
+
+        // Check if race is upcoming (within next 3 months by typical_month or 6 months by date)
+        const monthMatch = race.typical_month &&
+          race.typical_month >= currentMonth &&
+          race.typical_month <= (currentMonth + 3 > 12 ? currentMonth + 3 - 12 : currentMonth + 3);
+        const dateMatch = race.next_edition_date &&
+          new Date(race.next_edition_date) <= sixMonthsFromNow &&
+          new Date(race.next_edition_date) >= now;
+
+        const isUpcoming = monthMatch || dateMatch;
+
+        // Skip if no relevance signals
+        if (!isFollowed && !classMatch && !countryMatch && !isUpcoming) continue;
+
+        // Calculate confidence
+        let confidence: number;
+        if (isFollowed && classMatch) confidence = 0.95;
+        else if (isFollowed) confidence = 0.85;
+        else if (classMatch && countryMatch) confidence = 0.8;
+        else if (classMatch) confidence = 0.7;
+        else if (countryMatch && isUpcoming) confidence = 0.65;
+        else confidence = 0.6;
+
+        // Build reason
+        const reasons: string[] = [];
+        if (isFollowed) reasons.push('you follow this race');
+        if (classMatch) reasons.push('matches your boat class');
+        if (countryMatch) reasons.push('in your region');
+        if (isUpcoming) reasons.push('coming up soon');
+
+        suggestions.push({
+          id: `catalog_${race.id}`,
+          type: 'catalog_match',
+          confidenceScore: confidence,
+          raceData: {
+            raceName: race.name,
+            venue: race.region ? `${race.region}, ${race.country}` : race.country || undefined,
+            startDate: race.next_edition_date || undefined,
+            boatClass: race.boat_classes?.[0],
+            description: race.description || undefined,
+            registrationUrl: race.website_url || undefined,
+          },
+          reason: reasons.length > 0
+            ? reasons.join(', ').replace(/^./, (c) => c.toUpperCase())
+            : 'Popular race in the catalog',
+          source: {
+            id: race.id,
+            name: race.short_name || race.name,
+            type: 'catalog',
+          },
+          catalogRaceId: race.id,
+          canAddDirectly: true,
+        });
+      }
+
+      return suggestions
+        .sort((a, b) => b.confidenceScore - a.confidenceScore)
+        .slice(0, 15);
+    } catch (error) {
+      logger.error('[getCatalogMatches] Error:', error);
+      return [];
+    }
+  }
+
+  // =====================================================
+  // Previous Year Re-Race Suggestions
+  // =====================================================
+
+  /**
+   * Suggest races from ~12 months ago with date bumping
+   */
+  async getPreviousYearRaces(userId: string): Promise<RaceSuggestion[]> {
+    try {
+      const now = new Date();
+      const currentMonth = now.getMonth(); // 0-based
+      const currentYear = now.getFullYear();
+
+      // Look for races created by this user in months [current, current+1, current+2]
+      // from any previous year
+      const monthsToMatch = [currentMonth, (currentMonth + 1) % 12, (currentMonth + 2) % 12];
+
+      const { data: pastRaces } = await supabase
+        .from('regattas')
+        .select('*')
+        .eq('created_by', userId)
+        .lt('start_date', `${currentYear}-01-01T00:00:00`)
+        .order('start_date', { ascending: false })
+        .limit(100);
+
+      if (!pastRaces || pastRaces.length === 0) {
+        return [];
+      }
+
+      // Filter to races in matching months
+      const candidates = pastRaces.filter((race) => {
+        const raceDate = new Date(race.start_date);
+        return monthsToMatch.includes(raceDate.getMonth());
+      });
+
+      if (candidates.length === 0) {
+        return [];
+      }
+
+      // Deduplicate by race name (keep most recent)
+      const byName = new Map<string, any>();
+      for (const race of candidates) {
+        const key = race.name?.toLowerCase().trim();
+        if (key && !byName.has(key)) {
+          byName.set(key, race);
+        }
+      }
+
+      return Array.from(byName.values()).slice(0, 10).map((race) => {
+        const originalDate = new Date(race.start_date);
+        const yearDelta = currentYear - originalDate.getFullYear();
+        const bumpedDate = new Date(originalDate);
+        bumpedDate.setFullYear(bumpedDate.getFullYear() + yearDelta);
+
+        // Adjust to nearest matching weekday
+        const originalDow = originalDate.getDay();
+        const bumpedDow = bumpedDate.getDay();
+        if (originalDow !== bumpedDow) {
+          const diff = originalDow - bumpedDow;
+          const adjustment = diff > 3 ? diff - 7 : diff < -3 ? diff + 7 : diff;
+          bumpedDate.setDate(bumpedDate.getDate() + adjustment);
+        }
+
+        // If bumped date is in the past, push forward one week
+        if (bumpedDate < now) {
+          bumpedDate.setDate(bumpedDate.getDate() + 7);
+        }
+
+        const bumpedDateStr = bumpedDate.toISOString().split('T')[0];
+        const timeStr = race.start_date?.includes('T')
+          ? race.start_date.split('T')[1]?.substring(0, 5)
+          : undefined;
+
+        // Determine fields to review
+        const fieldsToReview: string[] = ['date', 'time'];
+        if (race.metadata?.venue_name) fieldsToReview.push('location');
+        if (race.notice_of_race_url) fieldsToReview.push('NOR URL');
+        if (race.entry_fees) fieldsToReview.push('entry fees');
+        if (race.event_website) fieldsToReview.push('event website');
+
+        return {
+          id: `prev_year_${race.id}`,
+          type: 'previous_year' as const,
+          confidenceScore: 0.85,
+          raceData: {
+            raceName: race.name,
+            venue: race.start_area_name || race.metadata?.venue_name,
+            startDate: `${bumpedDateStr}T${timeStr || '12:00'}:00`,
+            boatClass: race.metadata?.class_name || race.metadata?.class,
+            raceType: race.race_type,
+            location: race.start_area_name,
+            time: timeStr || '12:00',
+            totalDistanceNm: race.total_distance_nm,
+            timeLimitHours: race.time_limit_hours,
+            routeDescription: race.metadata?.route_description,
+            courseType: race.metadata?.course_type,
+            vhfChannel: race.vhf_channel,
+          },
+          reason: `You raced this in ${originalDate.getFullYear()}`,
+          canAddDirectly: true,
+          updateGuidance: {
+            fieldsToReview,
+            message: 'Review dates, NOR, and entry fees before saving',
+          },
+        };
+      });
+    } catch (error) {
+      logger.error('[getPreviousYearRaces] Error:', error);
+      return [];
+    }
+  }
+
+  // =====================================================
+  // Cross-Category Dedup
+  // =====================================================
+
+  /**
+   * Deduplicate suggestions across categories - keep highest confidence version
+   */
+  private crossCategoryDedup(suggestions: RaceSuggestion[]): RaceSuggestion[] {
+    const byKey = new Map<string, RaceSuggestion>();
+
+    for (const suggestion of suggestions) {
+      const name = suggestion.raceData.raceName?.toLowerCase().trim() || '';
+      const date = suggestion.raceData.startDate?.split('T')[0] || '';
+      const key = `${name}_${date}`;
+
+      const existing = byKey.get(key);
+      if (!existing || suggestion.confidenceScore > existing.confidenceScore) {
+        byKey.set(key, suggestion);
+      }
+    }
+
+    return Array.from(byKey.values());
+  }
+
+  // =====================================================
   // Helper Methods
   // =====================================================
+
+  private emptySuggestions(): CategorizedSuggestions {
+    return {
+      clubRaces: [],
+      fleetRaces: [],
+      communityRaces: [],
+      catalogMatches: [],
+      previousYearRaces: [],
+      patterns: [],
+      templates: [],
+      total: 0,
+    };
+  }
 
   private mapClubEventToSuggestion(event: any, club: any): RaceSuggestion {
     return {
@@ -788,6 +1197,9 @@ class RaceSuggestionService {
     return {
       clubRaces: suggestions.filter((s) => s.type === 'club_event'),
       fleetRaces: suggestions.filter((s) => s.type === 'fleet_race'),
+      communityRaces: suggestions.filter((s) => s.type === 'community_race'),
+      catalogMatches: suggestions.filter((s) => s.type === 'catalog_match'),
+      previousYearRaces: suggestions.filter((s) => s.type === 'previous_year'),
       patterns: suggestions.filter((s) => s.type === 'pattern_match'),
       templates: suggestions.filter((s) => s.type === 'template'),
       total: suggestions.length,

@@ -1,280 +1,107 @@
 /**
- * Tufte-Style Account Screen Styles
+ * Account Screen Styles — iOS HIG
  *
- * Design principles:
- * 1. Maximum data-ink ratio - remove decorative elements
- * 2. Typography hierarchy - use weight/size instead of boxes
- * 3. Inline status dots - small colored indicators
- * 4. Dense row layout - all data visible, scannable
- * 5. Whitespace separation - no background fills
+ * Apple Settings-style account screen with inset grouped lists.
+ * Uses IOS_COLORS from design-tokens-ios for full HIG compliance.
  */
 
 import { StyleSheet, Platform } from 'react-native';
-import { TufteTokens } from '@/constants/designSystem';
-import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING } from '@/lib/design-tokens-ios';
 
 // =============================================================================
 // STATUS COLORS
 // =============================================================================
 
 export const STATUS_COLORS = {
-  active: IOS_COLORS.green,
-  enabled: IOS_COLORS.green,
-  inactive: IOS_COLORS.gray,
-  disabled: IOS_COLORS.gray,
-  pending: IOS_COLORS.orange,
-  stored: IOS_COLORS.orange,
-  warning: IOS_COLORS.orange,
-  error: IOS_COLORS.red,
+  active: IOS_COLORS.systemGreen,
+  enabled: IOS_COLORS.systemGreen,
+  inactive: IOS_COLORS.systemGray,
+  disabled: IOS_COLORS.systemGray,
+  pending: IOS_COLORS.systemOrange,
+  stored: IOS_COLORS.systemOrange,
+  warning: IOS_COLORS.systemOrange,
+  error: IOS_COLORS.systemRed,
 } as const;
 
 // =============================================================================
-// TUFTE ACCOUNT STYLES
+// ICON COLORS — colored background squares for leading icons
 // =============================================================================
 
-export const tufteAccountStyles = StyleSheet.create({
+export const ICON_BACKGROUNDS = {
+  blue: IOS_COLORS.systemBlue,
+  red: IOS_COLORS.systemRed,
+  orange: IOS_COLORS.systemOrange,
+  yellow: '#FF9500', // system orange (used for bulb)
+  green: IOS_COLORS.systemGreen,
+  teal: IOS_COLORS.systemTeal,
+  purple: IOS_COLORS.systemPurple,
+  gray: IOS_COLORS.systemGray,
+} as const;
+
+// =============================================================================
+// ACCOUNT STYLES
+// =============================================================================
+
+export const accountStyles = StyleSheet.create({
   // ---------------------------------------------------------------------------
-  // CONTAINER
+  // SCROLL CONTENT
   // ---------------------------------------------------------------------------
-  container: {
-    flex: 1,
-    backgroundColor: TUFTE_BACKGROUND,
-  },
   scrollContent: {
     paddingBottom: 40,
   },
 
   // ---------------------------------------------------------------------------
-  // PROFILE HEADER
+  // PROFILE CARD (Apple ID–style)
   // ---------------------------------------------------------------------------
-  profileHeader: {
-    paddingVertical: TufteTokens.spacing.section,
-    paddingHorizontal: TufteTokens.spacing.section,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.color,
-  },
-  profileHeaderContent: {
+  profileCardRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: IOS_SPACING.md,
+    paddingHorizontal: IOS_SPACING.lg,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    minHeight: 72,
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: IOS_COLORS.blue,
+  profileAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: IOS_COLORS.systemBlue,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: TufteTokens.spacing.standard,
+    marginRight: IOS_SPACING.md,
   },
-  avatarText: {
-    fontSize: 20,
+  profileAvatarText: {
+    fontSize: 22,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  profileInfo: {
+  profileTextContainer: {
     flex: 1,
+    justifyContent: 'center',
   },
   profileName: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-    marginBottom: 2,
-  },
-  profileEmail: {
-    fontSize: 13,
-    color: IOS_COLORS.secondaryLabel,
-    marginBottom: 2,
-  },
-  profileMeta: {
-    fontSize: 11,
-    color: IOS_COLORS.tertiaryLabel,
-  },
-  editLink: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.blue,
-  },
-
-  // ---------------------------------------------------------------------------
-  // SECTION HEADER (UPPERCASE label with hairline)
-  // ---------------------------------------------------------------------------
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    paddingTop: TufteTokens.spacing.section * 1.5,
-    paddingBottom: TufteTokens.spacing.compact,
-    paddingHorizontal: TufteTokens.spacing.section,
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.color,
-    backgroundColor: 'transparent',
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: IOS_COLORS.secondaryLabel,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  sectionAction: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.blue,
-  },
-
-  // ---------------------------------------------------------------------------
-  // SETTING ROW (Dense layout)
-  // ---------------------------------------------------------------------------
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: TufteTokens.spacing.standard,
-    paddingHorizontal: TufteTokens.spacing.section,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.colorSubtle,
-    minHeight: 44, // Touch target minimum
-  },
-  settingRowLast: {
-    borderBottomWidth: 0,
-  },
-  settingRowDanger: {
-    backgroundColor: 'transparent',
-  },
-  settingLabel: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: IOS_COLORS.label,
-    flex: 1,
-  },
-  settingLabelDanger: {
-    color: IOS_COLORS.red,
-  },
-  settingValue: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: IOS_COLORS.secondaryLabel,
-    marginRight: TufteTokens.spacing.tight,
-  },
-  settingChevron: {
-    fontSize: 15,
-    color: IOS_COLORS.gray3,
-  },
-
-  // ---------------------------------------------------------------------------
-  // DATA ROW (Label + Value inline)
-  // ---------------------------------------------------------------------------
-  dataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: TufteTokens.spacing.compact,
-    paddingHorizontal: TufteTokens.spacing.section,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.colorSubtle,
-    minHeight: 40,
-  },
-  dataRowLast: {
-    borderBottomWidth: 0,
-  },
-  dataLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
-  },
-  dataValue: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: IOS_TYPOGRAPHY.headline.fontSize,
+    fontWeight: IOS_TYPOGRAPHY.headline.fontWeight,
+    lineHeight: IOS_TYPOGRAPHY.headline.lineHeight,
     color: IOS_COLORS.label,
   },
-  dataValueWithStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-
-  // ---------------------------------------------------------------------------
-  // STATUS DOT
-  // ---------------------------------------------------------------------------
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusDotOutline: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    borderWidth: 1.5,
-    backgroundColor: 'transparent',
-  },
-
-  // ---------------------------------------------------------------------------
-  // BOAT ROW (Name + Class + Status)
-  // ---------------------------------------------------------------------------
-  boatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: TufteTokens.spacing.compact,
-    paddingHorizontal: TufteTokens.spacing.section,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.colorSubtle,
-    minHeight: 44,
-  },
-  boatInfo: {
-    flex: 1,
-  },
-  boatName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-  },
-  boatClass: {
-    fontSize: 12,
+  profileSubtitle: {
+    fontSize: IOS_TYPOGRAPHY.subhead.fontSize,
+    fontWeight: IOS_TYPOGRAPHY.subhead.fontWeight,
+    lineHeight: IOS_TYPOGRAPHY.subhead.lineHeight,
     color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
   },
-  boatStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  boatStatusText: {
-    fontSize: 11,
+  profilePlaceholder: {
     color: IOS_COLORS.tertiaryLabel,
   },
 
   // ---------------------------------------------------------------------------
-  // TOGGLE ROW (with Switch)
+  // SIGN OUT ROW
   // ---------------------------------------------------------------------------
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: TufteTokens.spacing.compact,
-    paddingHorizontal: TufteTokens.spacing.section,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.colorSubtle,
-    minHeight: 44,
-  },
-  toggleLabel: {
-    fontSize: 15,
-    fontWeight: '400',
-    color: IOS_COLORS.label,
-  },
-  toggleValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  toggleValueText: {
-    fontSize: 13,
-    color: IOS_COLORS.tertiaryLabel,
+  signOutText: {
+    color: IOS_COLORS.systemRed,
+    textAlign: 'center',
   },
 
   // ---------------------------------------------------------------------------
@@ -282,12 +109,12 @@ export const tufteAccountStyles = StyleSheet.create({
   // ---------------------------------------------------------------------------
   appInfo: {
     alignItems: 'center',
-    paddingVertical: TufteTokens.spacing.section * 2,
-    paddingHorizontal: TufteTokens.spacing.section,
+    paddingVertical: IOS_SPACING.xxl,
+    paddingHorizontal: IOS_SPACING.lg,
   },
   appInfoText: {
-    fontSize: 11,
-    color: IOS_COLORS.tertiaryLabel,
+    fontSize: IOS_TYPOGRAPHY.footnote.fontSize,
+    color: IOS_COLORS.secondaryLabel,
     marginBottom: 2,
   },
 
@@ -295,18 +122,19 @@ export const tufteAccountStyles = StyleSheet.create({
   // EMPTY STATE
   // ---------------------------------------------------------------------------
   emptyState: {
-    paddingVertical: TufteTokens.spacing.section,
-    paddingHorizontal: TufteTokens.spacing.section,
+    paddingVertical: IOS_SPACING.lg,
+    paddingHorizontal: IOS_SPACING.lg,
     alignItems: 'center',
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: IOS_TYPOGRAPHY.subhead.fontSize,
     color: IOS_COLORS.tertiaryLabel,
     textAlign: 'center',
   },
 
   // ---------------------------------------------------------------------------
-  // MODAL STYLES
+  // CLAIM WORKSPACE MODAL
   // ---------------------------------------------------------------------------
   modalOverlay: {
     flex: 1,
@@ -315,40 +143,36 @@ export const tufteAccountStyles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: TufteTokens.borderRadius.subtle,
-    borderTopRightRadius: TufteTokens.borderRadius.subtle,
-    paddingTop: TufteTokens.spacing.section,
-    paddingBottom: Platform.OS === 'ios' ? 34 : TufteTokens.spacing.section,
-    paddingHorizontal: TufteTokens.spacing.section,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    paddingTop: IOS_SPACING.lg,
+    paddingBottom: Platform.OS === 'ios' ? 34 : IOS_SPACING.lg,
+    paddingHorizontal: IOS_SPACING.lg,
     maxHeight: '80%',
   },
-  modalHeader: {
+  claimModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: TufteTokens.spacing.standard,
-    borderBottomWidth: TufteTokens.borders.hairline,
-    borderBottomColor: TufteTokens.borders.color,
-    marginBottom: TufteTokens.spacing.section,
+    paddingBottom: IOS_SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+    marginBottom: IOS_SPACING.lg,
   },
-  modalTitle: {
-    fontSize: 17,
-    fontWeight: '600',
+  claimModalTitle: {
+    fontSize: IOS_TYPOGRAPHY.headline.fontSize,
+    fontWeight: IOS_TYPOGRAPHY.headline.fontWeight,
     color: IOS_COLORS.label,
   },
-  modalCloseButton: {
+  claimModalCloseButton: {
     padding: 4,
   },
-
-  // ---------------------------------------------------------------------------
-  // FORM STYLES (Tufte)
-  // ---------------------------------------------------------------------------
   formGroup: {
-    gap: TufteTokens.spacing.tight,
-    marginBottom: TufteTokens.spacing.section,
+    gap: IOS_SPACING.xs,
+    marginBottom: IOS_SPACING.lg,
   },
   formLabel: {
-    fontSize: 11,
+    fontSize: IOS_TYPOGRAPHY.caption2.fontSize,
     fontWeight: '600',
     color: IOS_COLORS.secondaryLabel,
     textTransform: 'uppercase',
@@ -356,45 +180,33 @@ export const tufteAccountStyles = StyleSheet.create({
   },
   formInput: {
     borderWidth: 1,
-    borderColor: TufteTokens.borders.color,
-    borderRadius: TufteTokens.borderRadius.subtle,
+    borderColor: IOS_COLORS.separator,
+    borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    fontSize: 15,
+    fontSize: IOS_TYPOGRAPHY.body.fontSize,
     color: IOS_COLORS.label,
     backgroundColor: 'transparent',
   },
-  formInputFocused: {
-    borderColor: IOS_COLORS.blue,
-  },
-
-  // ---------------------------------------------------------------------------
-  // ACTION BUTTONS
-  // ---------------------------------------------------------------------------
   primaryButton: {
-    backgroundColor: IOS_COLORS.blue,
+    backgroundColor: IOS_COLORS.systemBlue,
     paddingVertical: 14,
-    borderRadius: TufteTokens.borderRadius.subtle,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: TufteTokens.spacing.section,
+    marginTop: IOS_SPACING.lg,
   },
   primaryButtonText: {
-    fontSize: 15,
+    fontSize: IOS_TYPOGRAPHY.body.fontSize,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    paddingVertical: 14,
-    borderRadius: TufteTokens.borderRadius.subtle,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: TufteTokens.borders.color,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
+
+  // ---------------------------------------------------------------------------
+  // TRAILING VALUE TEXT (for rows like "Free Plan", "English")
+  // ---------------------------------------------------------------------------
+  trailingValueText: {
+    fontSize: IOS_TYPOGRAPHY.body.fontSize,
+    color: IOS_COLORS.secondaryLabel,
   },
 });
 
@@ -403,7 +215,7 @@ export const tufteAccountStyles = StyleSheet.create({
 // =============================================================================
 
 export function getStatusColor(status: keyof typeof STATUS_COLORS): string {
-  return STATUS_COLORS[status] || IOS_COLORS.gray;
+  return STATUS_COLORS[status] || IOS_COLORS.systemGray;
 }
 
 export function getInitials(name: string): string {

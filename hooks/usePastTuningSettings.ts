@@ -92,15 +92,16 @@ export function usePastTuningSettings({
         .order('start_date', { ascending: false })
         .limit(5); // Get a few in case the first matches are excluded
 
-      // Exclude current regatta
-      if (excludeRegattaId) {
+      // Exclude current regatta (only if it's a valid UUID to avoid query errors)
+      if (excludeRegattaId && !excludeRegattaId.startsWith('demo-') && excludeRegattaId.length >= 36) {
         query = query.neq('id', excludeRegattaId);
       }
 
       const { data, error } = await query;
 
       if (error) {
-        logger.error('[usePastTuningSettings] Query error:', error);
+        // Log as warning, not error - this is non-critical
+        logger.warn('[usePastTuningSettings] Query error:', error);
         return;
       }
 
@@ -143,7 +144,7 @@ export function usePastTuningSettings({
 
       logger.debug('[usePastTuningSettings] Found past settings from:', bestMatch.name);
     } catch (err) {
-      logger.error('[usePastTuningSettings] Exception:', err);
+      logger.warn('[usePastTuningSettings] Exception:', err);
     } finally {
       setIsLoading(false);
     }

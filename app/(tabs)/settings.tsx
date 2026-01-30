@@ -7,13 +7,13 @@ import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataSe
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
   Modal,
-  
+
   ScrollView,
   StyleSheet,
   Switch,
@@ -389,6 +389,12 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Actions</Text>
           <View style={styles.settingsGroup}>
+            <SettingItem
+              icon="infinite-outline"
+              title="Restart Onboarding"
+              subtitle="View the new onboarding flow"
+              onPress={() => router.replace('/onboarding/welcome')}
+            />
             <SettingItem
               icon="log-out-outline"
               title="Sign Out"

@@ -14,7 +14,7 @@ import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import { TinySparkline } from '@/components/shared/charts';
 import { calculateCountdown } from '@/constants/mockData';
 import { IOS_COLORS } from '@/components/cards/constants';
-import { MapPin, Trophy, Wind, Waves, Radio } from 'lucide-react-native';
+import { MapPin, Trophy, Wind, Waves, Radio, MessageCircle, Heart } from 'lucide-react-native';
 import React, { useMemo, useState, useEffect } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, Dimensions, ActivityIndicator } from 'react-native';
 import { RaceTypeBadge, type RaceType } from './RaceTypeSelector';
@@ -67,6 +67,20 @@ export interface AppleRaceCardProps {
   tideForecast?: number[];
   /** Index of "now" in forecast arrays (0 = first point) */
   forecastNowIndex?: number;
+  /** Number of community discussions linked to this race's catalog entry */
+  discussionCount?: number;
+  /** Callback when discussion badge is pressed */
+  onDiscussionPress?: () => void;
+  /** Whether the current user has liked this race */
+  isLiked?: boolean;
+  /** Number of likes on this race */
+  likeCount?: number;
+  /** Callback when like button is pressed */
+  onLikePress?: () => void;
+  /** Number of comments on this race */
+  commentCount?: number;
+  /** Callback when comment button is pressed */
+  onCommentPress?: () => void;
 }
 
 // Status configuration with iOS semantic colors
@@ -121,6 +135,13 @@ export function AppleRaceCard({
   windForecast,
   tideForecast,
   forecastNowIndex = 0,
+  discussionCount,
+  onDiscussionPress,
+  isLiked,
+  likeCount,
+  onLikePress,
+  commentCount,
+  onCommentPress,
 }: AppleRaceCardProps) {
   const cardWidth = propCardWidth ?? Math.min(SCREEN_WIDTH - 32, 375);
 
@@ -337,6 +358,64 @@ export function AppleRaceCard({
                 <Radio size={14} color={IOS_COLORS.purple} strokeWidth={2.5} />
                 <Text style={styles.conditionValue}>Ch {vhfChannel}</Text>
               </View>
+            )}
+
+            {/* Discussion count badge */}
+            {discussionCount != null && discussionCount > 0 && (
+              <Pressable
+                style={styles.conditionItem}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  onDiscussionPress?.();
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <MessageCircle size={14} color={IOS_COLORS.blue} strokeWidth={2.5} />
+                <Text style={[styles.conditionValue, { color: IOS_COLORS.blue }]}>
+                  {discussionCount}
+                </Text>
+              </Pressable>
+            )}
+
+            {/* Like button */}
+            {onLikePress && (
+              <Pressable
+                style={styles.conditionItem}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  onLikePress();
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Heart
+                  size={14}
+                  color={isLiked ? IOS_COLORS.red : IOS_COLORS.gray}
+                  fill={isLiked ? IOS_COLORS.red : 'transparent'}
+                  strokeWidth={2.5}
+                />
+                {(likeCount ?? 0) > 0 && (
+                  <Text style={[styles.conditionValue, isLiked && { color: IOS_COLORS.red }]}>
+                    {likeCount}
+                  </Text>
+                )}
+              </Pressable>
+            )}
+
+            {/* Comment count */}
+            {onCommentPress && (
+              <Pressable
+                style={styles.conditionItem}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  onCommentPress();
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <MessageCircle size={14} color={IOS_COLORS.gray} strokeWidth={2.5} />
+                {(commentCount ?? 0) > 0 && (
+                  <Text style={styles.conditionValue}>{commentCount}</Text>
+                )}
+              </Pressable>
             )}
           </>
         )}

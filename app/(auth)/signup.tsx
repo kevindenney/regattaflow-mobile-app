@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { roleHome } from '@/lib/gates';
 import { useAuth } from '../../providers/AuthProvider';
-import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
+// Sample data is created in profile-setup.tsx or races.tsx fallback
 import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
@@ -91,20 +91,8 @@ export default function SignUp() {
 
       // Route to appropriate onboarding based on persona
       // Sailors skip onboarding and go directly to the main app
+      // Sample data will be created by races.tsx fallback if needed
       if (persona === 'sailor') {
-        // Create sample data for sailors and wait for it to complete
-        // so the data is visible when they reach the races page
-        if (result?.user?.id) {
-          try {
-            await createSailorSampleData({
-              userId: result.user.id,
-              userName: trimmedUsername,
-            });
-          } catch (err: any) {
-            // Log but don't fail signup - sample data is not critical
-            console.warn('[Signup] Sample data creation failed:', err?.message);
-          }
-        }
         router.replace('/(tabs)/races');
       } else if (persona === 'coach') {
         router.replace('/(auth)/coach-onboarding-welcome');

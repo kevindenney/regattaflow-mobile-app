@@ -37,6 +37,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -57,13 +58,17 @@ import { DistanceRouteMap } from '@/components/races/DistanceRouteMap';
 import { LocationMapPicker } from '@/components/races/LocationMapPicker';
 import type { CourseType as PositionedCourseType, PositionedCourse } from '@/types/courses';
 import { MultiRaceSelectionScreen } from '@/components/races/MultiRaceSelectionScreen';
+import { RaceSuggestionChips } from '@/components/races/RaceSuggestionChips';
+import { RaceSuggestionsDrawer } from '@/components/races/RaceSuggestionsDrawer';
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
+import { useRaceSuggestions } from '@/hooks/useRaceSuggestions';
 import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
 import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { geocodeExtractedLocations, geocodeSingleLocation } from '@/services/location/geocodeExtractedLocations';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
 import { supabase } from '@/services/supabase';
+import type { RaceSuggestion } from '@/services/RaceSuggestionService';
 
 import type { RaceType } from '@/components/races/RaceTypeSelector';
 
@@ -126,15 +131,6 @@ interface CourseMark {
   type: string;
   color?: string;
   shape?: string;
-}
-
-interface ClubEventSuggestion {
-  id: string;
-  title: string;
-  date: string;
-  time?: string;
-  location?: string;
-  clubName: string;
 }
 
 interface FormState {
@@ -232,8 +228,16 @@ export default function AddRaceScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showRouteMap, setShowRouteMap] = useState(false);
-  const [clubSuggestion, setClubSuggestion] = useState<ClubEventSuggestion | null>(null);
   const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
+
+  // Race suggestions from the full suggestion engine
+  const {
+    suggestions,
+    loading: suggestionsLoading,
+    acceptSuggestion,
+    dismissSuggestion,
+  } = useRaceSuggestions();
 
   // Multi-race detection state
   const [showMultiRaceModal, setShowMultiRaceModal] = useState(false);
@@ -253,73 +257,54 @@ export default function AddRaceScreen() {
       setForm(getInitialState());
       setIsExtracting(false);
       setIsSaving(false);
-      setClubSuggestion(null);
       setCalculatedDistance(null);
       setShowRouteMap(false);
       setSsiDocumentId(null);
       setShowCoursePositionEditor(false);
       setPositionedCourse(null);
+      setShowAllSuggestions(false);
       logger.debug('[AddRaceScreen] Form reset on focus');
-
-      // Load club suggestion
-      loadClubSuggestion();
     }, [])
   );
 
-  // Load club event suggestion
-  const loadClubSuggestion = useCallback(async () => {
-    if (!user?.id) return;
+  // Apply a suggestion from the suggestion engine to the form
+  const applySuggestion = useCallback((suggestion: RaceSuggestion) => {
+    const data = suggestion.raceData;
+    const updates: Partial<FormState> = {};
 
-    try {
-      const { data: memberships } = await supabase
-        .from('club_members')
-        .select('club_id, clubs(id, name)')
-        .eq('user_id', user.id)
-        .eq('is_active', true);
-
-      if (!memberships || memberships.length === 0) return;
-
-      const clubIds = memberships.map((m: any) => m.club_id);
-
-      const { data: events } = await supabase
-        .from('club_events')
-        .select('*')
-        .in('club_id', clubIds)
-        .gte('start_date', new Date().toISOString())
-        .in('status', ['published', 'registration_open'])
-        .order('start_date', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-
-      if (events) {
-        const club = memberships.find((m: any) => m.club_id === events.club_id)?.clubs as any;
-        setClubSuggestion({
-          id: events.id,
-          title: events.title,
-          date: events.start_date.split('T')[0],
-          time: events.start_date.includes('T') ? events.start_date.split('T')[1]?.substring(0, 5) : undefined,
-          location: events.location_name,
-          clubName: club?.name || 'Your club',
-        });
-      }
-    } catch (error) {
-      logger.error('[AddRaceScreen] Failed to load club suggestion:', error);
+    if (data.raceName) updates.name = data.raceName;
+    if (data.startDate) {
+      const dateStr = data.startDate.split('T')[0];
+      if (dateStr) updates.date = dateStr;
+      const timeStr = data.startDate.includes('T')
+        ? data.startDate.split('T')[1]?.substring(0, 5)
+        : data.time;
+      if (timeStr) updates.time = timeStr;
     }
-  }, [user?.id]);
+    if (data.time && !updates.time) updates.time = data.time;
+    if (data.venue || data.location) updates.location = data.venue || data.location || '';
+    if (data.boatClass) updates.boatClass = data.boatClass;
+    if (data.raceType && ['fleet', 'distance', 'match', 'team'].includes(data.raceType)) {
+      updates.raceType = data.raceType as RaceType;
+    }
+    if (data.vhfChannel) updates.vhfChannel = data.vhfChannel;
+    if (data.totalDistanceNm) updates.totalDistanceNm = data.totalDistanceNm.toString();
+    if (data.timeLimitHours) updates.timeLimitHours = data.timeLimitHours.toString();
+    if (data.routeDescription) updates.routeDescription = data.routeDescription;
+    if (data.courseType) updates.courseType = data.courseType;
 
-  // Apply club suggestion
-  const applyClubSuggestion = useCallback(() => {
-    if (!clubSuggestion) return;
+    setForm(prev => ({ ...prev, ...updates }));
 
-    setForm(prev => ({
-      ...prev,
-      name: clubSuggestion.title,
-      date: clubSuggestion.date,
-      time: clubSuggestion.time || '12:00',
-      location: clubSuggestion.location || '',
-    }));
-    setClubSuggestion(null);
-  }, [clubSuggestion]);
+    // Record acceptance
+    acceptSuggestion(suggestion.id);
+    logger.debug('[AddRaceScreen] Applied suggestion:', suggestion.id, suggestion.type);
+  }, [acceptSuggestion]);
+
+  // Handle suggestion dismissal
+  const handleDismissSuggestion = useCallback((suggestionId: string) => {
+    dismissSuggestion(suggestionId);
+    logger.debug('[AddRaceScreen] Dismissed suggestion:', suggestionId);
+  }, [dismissSuggestion]);
 
   // Update form field
   const updateField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
@@ -1248,19 +1233,14 @@ export default function AddRaceScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Club Suggestion Banner */}
-          {clubSuggestion && (
-            <Pressable style={styles.suggestionBanner} onPress={applyClubSuggestion}>
-              <View style={styles.suggestionContent}>
-                <Info size={16} color={COLORS.success} />
-                <View style={styles.suggestionText}>
-                  <Text style={styles.suggestionTitle}>Upcoming from {clubSuggestion.clubName}</Text>
-                  <Text style={styles.suggestionSubtitle}>{clubSuggestion.title} • {clubSuggestion.date}</Text>
-                </View>
-              </View>
-              <Text style={styles.suggestionAction}>Use</Text>
-            </Pressable>
-          )}
+          {/* Race Suggestion Chips */}
+          <RaceSuggestionChips
+            suggestions={suggestions}
+            loading={suggestionsLoading}
+            onUseSuggestion={applySuggestion}
+            onDismissSuggestion={handleDismissSuggestion}
+            onSeeAll={() => setShowAllSuggestions(true)}
+          />
 
           {/* Race Type Selector */}
           <View style={styles.section}>
@@ -1693,6 +1673,33 @@ export default function AddRaceScreen() {
         onCancel={() => setShowCoursePositionEditor(false)}
       />
 
+      {/* All Suggestions Modal */}
+      <Modal
+        visible={showAllSuggestions}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAllSuggestions(false)}
+      >
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.header}>
+            <Pressable onPress={() => setShowAllSuggestions(false)} hitSlop={12}>
+              <ChevronLeft size={28} color={COLORS.accent} />
+            </Pressable>
+            <Text style={styles.headerTitle}>All Suggestions</Text>
+            <View style={{ width: 28 }} />
+          </View>
+          <RaceSuggestionsDrawer
+            suggestions={suggestions}
+            loading={suggestionsLoading}
+            onSelectSuggestion={(suggestion) => {
+              applySuggestion(suggestion);
+              setShowAllSuggestions(false);
+            }}
+            onDismissSuggestion={handleDismissSuggestion}
+          />
+        </SafeAreaView>
+      </Modal>
+
       {/* Multi-Race Selection Modal */}
       {showMultiRaceModal && multiRaceData && (
         <View style={styles.multiRaceModalOverlay}>
@@ -1799,43 +1806,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-  },
-
-  // Suggestion banner
-  suggestionBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
-  },
-  suggestionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 10,
-  },
-  suggestionText: {
-    flex: 1,
-  },
-  suggestionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.success,
-  },
-  suggestionSubtitle: {
-    fontSize: 12,
-    color: COLORS.secondary,
-    marginTop: 2,
-  },
-  suggestionAction: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.accent,
   },
 
   // Section

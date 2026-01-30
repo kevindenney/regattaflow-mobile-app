@@ -22,6 +22,8 @@ import { LessonProgressService } from '@/services/LessonProgressService';
 import { useAuth } from '@/providers/AuthProvider';
 import { LessonPlayer } from '@/components/learn';
 import CourseCatalogService, { type Course as CatalogCourse } from '@/services/CourseCatalogService';
+import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
 
 export default function LessonPlayerScreen() {
   const { courseId, lessonId } = useLocalSearchParams<{ courseId: string; lessonId: string }>();
@@ -446,7 +448,7 @@ export default function LessonPlayerScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color="#3B82F6" />
+          <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
           <Text style={styles.loadingText}>Loading lesson...</Text>
         </View>
       </SafeAreaView>
@@ -595,7 +597,7 @@ export default function LessonPlayerScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
   },
   loadingState: {
     flex: 1,
@@ -638,7 +640,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
     gap: 6,
@@ -648,7 +650,7 @@ const styles = StyleSheet.create({
   },
   breadcrumbText: {
     fontSize: 12,
-    color: '#3B82F6',
+    color: IOS_COLORS.systemBlue,
     fontWeight: '500',
   },
   breadcrumbItemText: {
@@ -672,7 +674,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: IOS_COLORS.systemBlue,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -702,7 +704,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   enrollButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: IOS_COLORS.systemBlue,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -718,7 +720,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    ...(Platform.OS === 'ios' && { paddingBottom: 34 }),
+    ...(Platform.OS !== 'web' && { paddingBottom: FLOATING_TAB_BAR_HEIGHT + 16 }),
   },
   completeButton: {
     flexDirection: 'row',

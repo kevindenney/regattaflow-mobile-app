@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   // Modal - Tufte style
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F0EDE8', // TUFTE_BACKGROUND
+    backgroundColor: '#F2F2F7', // systemGroupedBackground
   },
   modalCloseBar: {
     flexDirection: 'row',

@@ -33,6 +33,7 @@ import {
   Info,
   FileText,
   Pencil,
+  Sliders,
 } from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
@@ -68,7 +69,7 @@ import { hasTool } from '@/lib/checklists/toolRegistry';
 import { CATEGORY_CONFIG, ChecklistCategory } from '@/types/checklists';
 import { IOSInsetGroupedSection } from '@/components/ui/ios';
 import type { RaceType } from '@/types/raceEvents';
-import { getLearningLinks, getLearningBrief, getItemCategory, getLessonId, getLearningForItem } from '@/data/learningLinks';
+import { getLearningLinks, getLearningBrief, getItemCategory, getLessonLink, getLearningForItem } from '@/data/learningLinks';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { useFocusIntentForRace } from '@/hooks/useFocusIntent';
 
@@ -655,14 +656,14 @@ export function DaysBeforeContent({
     setActiveTool(null);
   }, []);
 
-  // Handle learning module press - navigate to Race Preparation Mastery course with specific lesson
+  // Handle learning module press - navigate to the correct course with specific lesson
   const handleLearnPress = useCallback((item: ChecklistItemWithState) => {
-    // Get lesson ID from registry for deep-linking to specific lesson
-    const lessonId = getLessonId(item.id);
+    // Get lesson link info (lessonId + courseSlug) from registry for deep-linking
+    const lessonLink = getLessonLink(item.id);
     const academyLinks = getLearningLinks(item.id);
     const category = getItemCategory(item.id) || item.category;
 
-    // Map category to module ID in Race Preparation Mastery course
+    // Map category to module ID in Race Preparation Mastery course (fallback)
     const categoryToModule: Record<string, string> = {
       weather: 'module-13-1',      // Weather & Conditions
       tactics: 'module-13-2',      // Tactical Planning
@@ -675,15 +676,16 @@ export function DaysBeforeContent({
     };
 
     const moduleId = categoryToModule[category || ''] || 'module-13-1';
-    const courseId = academyLinks?.courseId || 'race-preparation-mastery';
 
-    // Navigate directly to lesson player if we have a lessonId, otherwise go to course overview
-    if (lessonId) {
+    // Navigate directly to lesson player if we have a lesson link, otherwise go to course overview
+    if (lessonLink) {
       router.push({
         pathname: '/(tabs)/learn/[courseId]/player',
-        params: { courseId, lessonId },
+        params: { courseId: lessonLink.courseSlug, lessonId: lessonLink.lessonId },
       });
     } else {
+      // Fallback to course overview
+      const courseId = academyLinks?.courseId || 'race-preparation-mastery';
       router.push({
         pathname: `/(tabs)/learn/${courseId}`,
         params: { moduleId },
@@ -771,8 +773,8 @@ export function DaysBeforeContent({
     };
   }, [intentions?.rigIntentions, intentions?.updatedAt]);
 
-  // Regatta content for fleet sharing
-  const { savePreRaceContent } = useRegattaContent({
+  // Regatta content for fleet sharing and displaying copied tuning settings
+  const { content: regattaContent, savePreRaceContent } = useRegattaContent({
     regattaId: race.id,
   });
 
@@ -949,22 +951,6 @@ export function DaysBeforeContent({
   // RENDER
   // ==========================================================================
 
-  // DEBUG: Log render state to identify blank card issue
-  console.log('[DaysBeforeContent] RENDER STATE:', {
-    raceId: race.id,
-    raceName: race.name,
-    raceType,
-    isTeamRace,
-    isInitialLoading,
-    hasData,
-    categoriesCount: categories.length,
-    categories: categories.join(','),
-    visibleCategoriesCount: visibleCategories.length,
-    totalCount,
-    completedCount,
-    isExpanded,
-  });
-
   // Only show loading skeleton on initial load - when we have no cached data yet
   // On subsequent tab switches, show existing data immediately (background refresh if needed)
   if (isInitialLoading && !hasData) {
@@ -1067,20 +1053,6 @@ export function DaysBeforeContent({
           </>
         )}
 
-        {/* Progress Summary */}
-        <View style={styles.progressContainer}>
-          <Text style={styles.progressLabel}>
-            {effectiveCompleted} / {effectiveTotal} items completed
-          </Text>
-          <View style={styles.progressBar}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${effectiveProgress * 100}%` },
-              ]}
-            />
-          </View>
-        </View>
 
         {/* Team Invite Modal */}
         <TeamInviteModal
@@ -1128,6 +1100,41 @@ export function DaysBeforeContent({
         </View>
       )}
 
+      {/* Race Intention Card - shows user's race plan (copied from Connect tab or manually set) */}
+      {intentions?.strategyBrief?.raceIntention && (
+        <View style={styles.raceIntentionCard}>
+          <View style={styles.raceIntentionHeader}>
+            <Target size={14} color={IOS_COLORS.blue} />
+            <Text style={styles.raceIntentionLabel}>Race Plan</Text>
+          </View>
+          <Text style={styles.raceIntentionText}>
+            {intentions.strategyBrief.raceIntention}
+          </Text>
+        </View>
+      )}
+
+      {/* Rig Tuning Card - shows copied tuning settings from Connect tab */}
+      {regattaContent?.tuningSettings && Object.keys(regattaContent.tuningSettings).length > 0 && (
+        <View style={styles.rigTuningCard}>
+          <View style={styles.rigTuningHeader}>
+            <Sliders size={14} color={IOS_COLORS.orange} />
+            <Text style={styles.rigTuningLabel}>Rig Tuning</Text>
+          </View>
+          <View style={styles.rigTuningGrid}>
+            {Object.entries(regattaContent.tuningSettings)
+              .filter(([_, value]) => value !== null && value !== undefined && value !== '')
+              .map(([key, value]) => (
+                <View key={key} style={styles.rigTuningRow}>
+                  <Text style={styles.rigTuningKey}>
+                    {key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </Text>
+                  <Text style={styles.rigTuningValue}>{String(value)}</Text>
+                </View>
+              ))}
+          </View>
+        </View>
+      )}
+
       {/* Category Sections - Flat headers with simple checklist items */}
       {visibleCategories.map((category) => {
         const items = itemsByCategory[category];
@@ -1148,20 +1155,6 @@ export function DaysBeforeContent({
         );
       })}
 
-      {/* Progress Summary */}
-      <View style={styles.progressContainer}>
-        <Text style={styles.progressLabel}>
-          {completedCount} / {totalCount} items completed
-        </Text>
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${progress * 100}%` },
-            ]}
-          />
-        </View>
-      </View>
 
       {/* Sail Picker Modal */}
       <Modal
@@ -2010,6 +2003,74 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
   },
 
+  // Race Intention Card (copied from Connect tab or manually set)
+  raceIntentionCard: {
+    backgroundColor: `${IOS_COLORS.blue}12`,
+    borderRadius: 10,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: IOS_COLORS.blue,
+    gap: 6,
+  },
+  raceIntentionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  raceIntentionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  raceIntentionText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+    lineHeight: 22,
+  },
+
+  // Rig Tuning Card (copied from Connect tab)
+  rigTuningCard: {
+    backgroundColor: `${IOS_COLORS.orange}12`,
+    borderRadius: 10,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: IOS_COLORS.orange,
+    gap: 8,
+  },
+  rigTuningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  rigTuningLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.orange,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  rigTuningGrid: {
+    gap: 4,
+  },
+  rigTuningRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  rigTuningKey: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  rigTuningValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+
   // Carryover
   carryoverContainer: {
     backgroundColor: `${IOS_COLORS.orange}15`,
@@ -2093,7 +2154,7 @@ const styles = StyleSheet.create({
   completedByText: {
     fontSize: 11,
     fontWeight: '400',
-    color: IOS_COLORS.green,
+    color: IOS_COLORS.secondaryLabel,
   },
   priorityBadge: {
     width: 20,
@@ -2142,27 +2203,6 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
 
-  // Progress
-  progressContainer: {
-    gap: 6,
-  },
-  progressLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: IOS_COLORS.gray,
-    textAlign: 'center',
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: IOS_COLORS.gray5,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: IOS_COLORS.green,
-    borderRadius: 2,
-  },
 
   // Team Racing
   teamHeader: {

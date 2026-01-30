@@ -25,6 +25,7 @@ interface VenueDirectoryCardProps {
   onJoinToggle: () => void;
   postCount?: number;
   lastActiveAt?: string | null;
+  matchedClubName?: string | null;
 }
 
 function formatLocation(country: string, region: string): string | null {
@@ -58,6 +59,7 @@ export function VenueDirectoryCard({
   onJoinToggle,
   postCount,
   lastActiveAt,
+  matchedClubName,
 }: VenueDirectoryCardProps) {
   const location = formatLocation(country, region);
   const hasActivity = postCount != null && postCount > 0;
@@ -75,7 +77,11 @@ export function VenueDirectoryCard({
           <Text style={styles.name} numberOfLines={1}>
             {name}
           </Text>
-          {location ? (
+          {matchedClubName ? (
+            <Text style={styles.clubMatch} numberOfLines={1}>
+              via {matchedClubName}
+            </Text>
+          ) : location ? (
             <Text style={styles.subtitle} numberOfLines={1}>
               {location}
             </Text>
@@ -139,6 +145,12 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 13,
     color: IOS_COLORS.secondaryLabel,
+    letterSpacing: -0.08,
+    marginTop: 1,
+  },
+  clubMatch: {
+    fontSize: 13,
+    color: IOS_COLORS.systemBlue,
     letterSpacing: -0.08,
     marginTop: 1,
   },

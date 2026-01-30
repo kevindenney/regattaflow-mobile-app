@@ -3,17 +3,17 @@
  * Migrated from Next.js to React Native Universal
  */
 
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Platform, type ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useAuth } from '@/providers/AuthProvider';
-import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { HeroPhones } from '@/components/landing/HeroPhones';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { ScrollFix } from '@/components/landing/ScrollFix';
-import { hasPersistedSessionHint, hasPersistedSessionHintAsync } from '@/services/supabase';
 import { DashboardSkeleton } from '@/components/ui/loading';
+import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
+import { useAuth } from '@/providers/AuthProvider';
+import { hasPersistedSessionHint, hasPersistedSessionHintAsync } from '@/services/supabase';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LandingPage() {
   const { signedIn, ready, userProfile, loading, isGuest, state, enterGuestMode } = useAuth();
@@ -58,10 +58,14 @@ export default function LandingPage() {
         router.replace(destination);
       }
     } else if (ready && !signedIn && !isGuest && !bypassRedirect) {
-      // Dawn Patrol-style freemium: auto-enter guest mode for first-time visitors
-      // This gives immediate access to /races tab with demo races
-      setIsRedirecting(true);
-      enterGuestMode();
+      // Platform-specific behavior for non-logged-in users:
+      // - Web: Show landing page (marketing content) - no redirect
+      // - Mobile: Enter guest mode for browsing without login
+      if (Platform.OS !== 'web') {
+        enterGuestMode();
+      }
+      // On web, do nothing - let the landing page render below
+
     } else if (ready && !signedIn && !isGuest && showSkeleton) {
       // Session hint was wrong (expired/invalid token) - show landing page
       setShowSkeleton(false);
@@ -69,9 +73,10 @@ export default function LandingPage() {
   }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state, enterGuestMode]);
 
   // Show skeleton while auth is loading, for returning users, or during redirect
-  // This prevents flash of landing page before auto-guest mode kicks in
-  // Also show skeleton if we're about to auto-enter guest mode (ready && !signedIn && !isGuest)
-  const willAutoEnterGuest = ready && !signedIn && !isGuest && !bypassRedirect;
+  // This prevents flash of landing page before auto-guest mode kicks in on mobile
+  // On web: show landing page for non-logged-in users (no skeleton)
+  // On mobile: show skeleton briefly while entering guest mode
+  const willAutoEnterGuest = ready && !signedIn && !isGuest && !bypassRedirect && Platform.OS !== 'web';
   if ((!ready || showSkeleton || signedIn || isRedirecting || willAutoEnterGuest) && !bypassRedirect) {
     return <DashboardSkeleton />;
   }

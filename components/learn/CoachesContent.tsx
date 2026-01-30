@@ -17,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
@@ -396,7 +397,14 @@ function TufteResourceRow({
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export function CoachesContent() {
+interface CoachesContentProps {
+  /** Extra top padding to clear an absolutely-positioned toolbar */
+  toolbarOffset?: number;
+  /** Scroll handler forwarded from parent for toolbar hide/show */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+}
+
+export function CoachesContent({ toolbarOffset = 0, onScroll }: CoachesContentProps) {
   const router = useRouter();
   const { user, isGuest, capabilities } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
@@ -526,11 +534,13 @@ export function CoachesContent() {
   return (
     <ScrollView
       style={styles.scrollView}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, toolbarOffset > 0 && { paddingTop: toolbarOffset }]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={IOS_COLORS.blue} />
       }
       showsVerticalScrollIndicator={false}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       {/* Metrics Row */}
       <View style={styles.metricsRow}>
@@ -705,7 +715,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,

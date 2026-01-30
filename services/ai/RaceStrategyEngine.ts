@@ -644,35 +644,11 @@ CRITICAL OUTPUT RULES:
     });
 
     try {
-      const response = await this.anthropic.beta.messages.create({
-        model: 'claude-3-haiku-20240307', // Claude Haiku - cost-effective for strategy generation
+      // claude-3-haiku-20240307 does not support skills or code_execution betas
+      const response = await this.anthropic.messages.create({
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4000,
         temperature: 0.7,
-        betas: selectedSkillId
-          ? ['code-execution-2025-08-25', 'skills-2025-10-02']
-          : ['code-execution-2025-08-25'], // Only include skills beta if we have a skill
-
-        // CLAUDE SKILLS (Optional) 🎉
-        // Dynamically selects between:
-        // - race-strategy-analyst (fleet/buoy racing)
-        // - long-distance-racing-analyst (offshore/passage racing)
-        // This reduces prompt tokens by ~60% and improves consistency
-        // If no skill is available, the full prompt works just as well (just uses more tokens)
-        ...(selectedSkillId && {
-          container: {
-            skills: [{
-              type: 'custom',
-              skill_id: selectedSkillId,
-              version: 'latest'
-            }]
-          }
-        }),
-
-        tools: [{
-          type: 'code_execution_20250825',
-          name: 'code_execution'
-        }],
-
         messages: [{
           role: 'user',
           content: strategyPrompt
@@ -869,37 +845,11 @@ CRITICAL OUTPUT RULES:
     });
 
     try {
-      // Using Claude 3.5 Haiku for cost optimization (12x cheaper than Sonnet)
-      // Excellent for structured strategy generation tasks
-      const message = await this.anthropic.beta.messages.create({
+      // claude-3-haiku-20240307 does not support skills or code_execution betas
+      const message = await this.anthropic.messages.create({
         model: 'claude-3-haiku-20240307',
         max_tokens: 2048,
-        temperature: 0.3, // Creative but consistent strategy generation
-        betas: selectedSkillId
-          ? ['code-execution-2025-08-25', 'skills-2025-10-02']
-          : ['code-execution-2025-08-25'], // Only include skills beta if we have a skill
-
-        // CLAUDE SKILLS (Optional) 🎉
-        // Dynamically selects between:
-        // - race-strategy-analyst (fleet/buoy racing)
-        // - long-distance-racing-analyst (offshore/passage racing)
-        // This reduces prompt tokens by ~60% (massive cost savings on Haiku!)
-        // If no skill is available, the full prompt works just as well (just uses more tokens)
-        ...(selectedSkillId && {
-          container: {
-            skills: [{
-              type: 'custom',
-              skill_id: selectedSkillId,
-              version: 'latest'
-            }]
-          }
-        }),
-
-        tools: [{
-          type: 'code_execution_20250825',
-          name: 'code_execution'
-        }],
-
+        temperature: 0.3,
         messages: [{
           role: 'user',
           content: strategyPrompt

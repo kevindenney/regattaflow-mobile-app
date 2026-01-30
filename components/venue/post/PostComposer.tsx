@@ -24,12 +24,16 @@ import { TufteTokens } from '@/constants/designSystem';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 import { useCreatePost } from '@/hooks/useCommunityFeed';
 import { useTopicTags } from '@/hooks/useCommunityFeed';
+import { CatalogRaceService } from '@/services/CatalogRaceService';
 import type { PostType } from '@/types/community-feed';
+import type { CatalogRace } from '@/types/catalog-race';
 
 interface PostComposerProps {
   visible: boolean;
   venueId: string;
   racingAreaId?: string | null;
+  catalogRaceId?: string | null;
+  catalogRaceName?: string | null;
   onDismiss: () => void;
   onSuccess?: () => void;
 }
@@ -40,6 +44,8 @@ export function PostComposer({
   visible,
   venueId,
   racingAreaId,
+  catalogRaceId: initialCatalogRaceId,
+  catalogRaceName: initialCatalogRaceName,
   onDismiss,
   onSuccess,
 }: PostComposerProps) {
@@ -48,6 +54,13 @@ export function PostComposer({
   const [postType, setPostType] = useState<PostType>('discussion');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [conditionLabel, setConditionLabel] = useState('');
+
+  // Race tagging
+  const [selectedRaceId, setSelectedRaceId] = useState<string | null>(initialCatalogRaceId || null);
+  const [selectedRaceName, setSelectedRaceName] = useState<string | null>(initialCatalogRaceName || null);
+  const [showRacePicker, setShowRacePicker] = useState(false);
+  const [raceSearchQuery, setRaceSearchQuery] = useState('');
+  const [raceSearchResults, setRaceSearchResults] = useState<CatalogRace[]>([]);
 
   const { data: topicTags } = useTopicTags();
   const createPost = useCreatePost();
@@ -58,6 +71,10 @@ export function PostComposer({
     setPostType('discussion');
     setSelectedTagIds([]);
     setConditionLabel('');
+    setSelectedRaceId(null);
+    setSelectedRaceName(null);
+    setRaceSearchQuery('');
+    setRaceSearchResults([]);
   }, []);
 
   const handleSubmit = useCallback(async () => {
@@ -92,6 +109,7 @@ export function PostComposer({
         racing_area_id: racingAreaId || undefined,
         topic_tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
         condition_tags: conditionTags,
+        catalog_race_id: selectedRaceId || undefined,
       });
 
       resetForm();
@@ -100,7 +118,7 @@ export function PostComposer({
     } catch (error) {
       Alert.alert('Error', 'Failed to create post. Please try again.');
     }
-  }, [title, body, postType, venueId, racingAreaId, selectedTagIds, conditionLabel, createPost, resetForm, onSuccess, onDismiss]);
+  }, [title, body, postType, venueId, racingAreaId, selectedTagIds, conditionLabel, selectedRaceId, createPost, resetForm, onSuccess, onDismiss]);
 
   const handleDismiss = useCallback(() => {
     if (title.trim() || body.trim()) {
@@ -123,6 +141,33 @@ export function PostComposer({
         ? prev.filter(id => id !== tagId)
         : [...prev, tagId]
     );
+  }, []);
+
+  const handleRaceSearch = useCallback(async (query: string) => {
+    setRaceSearchQuery(query);
+    if (query.trim().length < 2) {
+      setRaceSearchResults([]);
+      return;
+    }
+    try {
+      const results = await CatalogRaceService.searchRaces(query.trim());
+      setRaceSearchResults(results);
+    } catch {
+      setRaceSearchResults([]);
+    }
+  }, []);
+
+  const handleSelectRace = useCallback((race: CatalogRace) => {
+    setSelectedRaceId(race.id);
+    setSelectedRaceName(race.short_name || race.name);
+    setShowRacePicker(false);
+    setRaceSearchQuery('');
+    setRaceSearchResults([]);
+  }, []);
+
+  const handleClearRace = useCallback(() => {
+    setSelectedRaceId(null);
+    setSelectedRaceName(null);
   }, []);
 
   return (
@@ -259,6 +304,75 @@ export function PostComposer({
               </View>
             </View>
           )}
+
+          {/* Tag a Race */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Race (optional)</Text>
+            {selectedRaceId && selectedRaceName ? (
+              <View style={styles.raceChipRow}>
+                <View style={styles.raceChipSelected}>
+                  <Ionicons name="flag" size={12} color={TufteTokens.colors?.accent || '#5856D6'} />
+                  <Text style={styles.raceChipSelectedText} numberOfLines={1}>
+                    {selectedRaceName}
+                  </Text>
+                  <Pressable onPress={handleClearRace} hitSlop={8}>
+                    <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+                  </Pressable>
+                </View>
+              </View>
+            ) : showRacePicker ? (
+              <View style={styles.racePickerContainer}>
+                <View style={styles.raceSearchRow}>
+                  <Ionicons name="search" size={14} color="#9CA3AF" />
+                  <TextInput
+                    style={styles.raceSearchInput}
+                    placeholder="Search races..."
+                    placeholderTextColor="#9CA3AF"
+                    value={raceSearchQuery}
+                    onChangeText={handleRaceSearch}
+                    autoFocus
+                  />
+                  <Pressable onPress={() => { setShowRacePicker(false); setRaceSearchQuery(''); setRaceSearchResults([]); }}>
+                    <Text style={styles.raceSearchCancel}>Cancel</Text>
+                  </Pressable>
+                </View>
+                {raceSearchResults.length > 0 && (
+                  <View style={styles.raceResultsList}>
+                    {raceSearchResults.slice(0, 6).map(race => (
+                      <Pressable
+                        key={race.id}
+                        style={styles.raceResultRow}
+                        onPress={() => handleSelectRace(race)}
+                      >
+                        <View style={styles.raceResultInfo}>
+                          <Text style={styles.raceResultName} numberOfLines={1}>
+                            {race.name}
+                          </Text>
+                          {race.country && (
+                            <Text style={styles.raceResultMeta} numberOfLines={1}>
+                              {[race.organizing_authority, race.country].filter(Boolean).join(' · ')}
+                            </Text>
+                          )}
+                        </View>
+                        <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+                {raceSearchQuery.trim().length >= 2 && raceSearchResults.length === 0 && (
+                  <Text style={styles.raceNoResults}>No races found</Text>
+                )}
+              </View>
+            ) : (
+              <Pressable
+                style={styles.raceChipEmpty}
+                onPress={() => setShowRacePicker(true)}
+              >
+                <Ionicons name="flag-outline" size={14} color="#9CA3AF" />
+                <Text style={styles.raceChipEmptyText}>Tag a Race</Text>
+              </Pressable>
+            )}
+          </View>
 
           {/* Condition Label (simplified) */}
           <View style={styles.section}>
@@ -410,6 +524,98 @@ const styles = StyleSheet.create({
     ...TufteTokens.typography.tertiary,
     color: '#9CA3AF',
   },
+  // Race picker
+  raceChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  raceChipSelected: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: TufteTokens.spacing.standard,
+    paddingVertical: TufteTokens.spacing.compact,
+    backgroundColor: '#5856D612',
+    borderRadius: TufteTokens.borderRadius.subtle,
+    borderWidth: 1,
+    borderColor: '#5856D630',
+  },
+  raceChipSelectedText: {
+    ...TufteTokens.typography.tertiary,
+    color: '#5856D6',
+    fontWeight: '600',
+    maxWidth: 200,
+  },
+  raceChipEmpty: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: TufteTokens.spacing.standard,
+    paddingVertical: TufteTokens.spacing.compact,
+    backgroundColor: TufteTokens.backgrounds.subtle,
+    borderRadius: TufteTokens.borderRadius.subtle,
+    alignSelf: 'flex-start',
+  },
+  raceChipEmptyText: {
+    ...TufteTokens.typography.tertiary,
+    color: '#9CA3AF',
+  },
+  racePickerContainer: {
+    gap: TufteTokens.spacing.compact,
+  },
+  raceSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: TufteTokens.spacing.standard,
+    paddingVertical: TufteTokens.spacing.compact,
+    backgroundColor: TufteTokens.backgrounds.subtle,
+    borderRadius: TufteTokens.borderRadius.subtle,
+  },
+  raceSearchInput: {
+    flex: 1,
+    ...TufteTokens.typography.secondary,
+    color: '#374151',
+    padding: 0,
+  },
+  raceSearchCancel: {
+    ...TufteTokens.typography.tertiary,
+    color: '#6B7280',
+  },
+  raceResultsList: {
+    backgroundColor: TufteTokens.backgrounds.subtle,
+    borderRadius: TufteTokens.borderRadius.subtle,
+    overflow: 'hidden',
+  },
+  raceResultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: TufteTokens.spacing.standard,
+    paddingVertical: TufteTokens.spacing.compact + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  raceResultInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  raceResultName: {
+    ...TufteTokens.typography.secondary,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  raceResultMeta: {
+    ...TufteTokens.typography.micro,
+    color: '#9CA3AF',
+    marginTop: 1,
+  },
+  raceNoResults: {
+    ...TufteTokens.typography.micro,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingVertical: TufteTokens.spacing.compact,
+  },
+
   // Conditions
   conditionInput: {
     ...TufteTokens.typography.secondary,

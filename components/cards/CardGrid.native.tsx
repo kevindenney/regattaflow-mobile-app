@@ -20,6 +20,7 @@ import {
 import Animated, {
   useAnimatedStyle,
   withSpring,
+  withTiming,
   runOnJS,
   useSharedValue,
 } from 'react-native-reanimated';
@@ -31,6 +32,7 @@ import {
   CardType,
   CARD_TYPES,
   CardPosition,
+  isRacePast,
 } from './types';
 import {
   SNAP_SPRING_CONFIG,
@@ -74,7 +76,9 @@ interface CardGridNativeProps extends CardGridProps {
     timelineRaces?: Array<{ id: string; date: string; raceType?: 'fleet' | 'distance' | 'match' | 'team'; seriesName?: string; name?: string }>,
     currentRaceIndex?: number,
     onSelectRace?: (index: number) => void,
-    nextRaceIndex?: number
+    nextRaceIndex?: number,
+    // Scroll handler for toolbar hide/show
+    onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void
   ) => React.ReactNode;
 }
 
@@ -99,6 +103,10 @@ function CardGridComponent({
   nextRaceIndex,
   deletingRaceId,
   onDismissSample,
+  topInset = 0,
+  safeAreaTop = 0,
+  toolbarHidden = false,
+  onContentScroll,
 }: CardGridNativeProps) {
   // Track actual container dimensions
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
@@ -116,18 +124,34 @@ function CardGridComponent({
   const horizontalOffset = useSharedValue(0);
   const isGestureActive = useSharedValue(false);
 
+  // Animated top inset: shrinks from toolbarHeight to safeAreaTop when toolbar hides
+  const animatedTopInset = useSharedValue(topInset);
+
+  useEffect(() => {
+    animatedTopInset.value = withTiming(
+      toolbarHidden ? safeAreaTop : topInset,
+      { duration: 250 },
+    );
+  }, [toolbarHidden, topInset, safeAreaTop, animatedTopInset]);
+
+  const animatedWrapperStyle = useAnimatedStyle(() => ({
+    paddingTop: animatedTopInset.value,
+  }));
+
   // Calculate dimensions
   const effectiveWidth = containerSize?.width ?? 393;
   const effectiveHeight = containerSize?.height ?? 700;
 
+  // Card height based on current animated top inset target (not animated, drives layout)
+  const currentTopInset = toolbarHidden ? safeAreaTop : topInset;
+
   const dimensions = useMemo(() => {
     const baseCalc = calculateCardDimensions(effectiveWidth, effectiveHeight);
-    // Override card height to fill available space (small bottom padding for breathing room)
     return {
       ...baseCalc,
-      cardHeight: effectiveHeight - 24, // Bottom margin for dots + visual breathing room
+      cardHeight: effectiveHeight - 24 - currentTopInset,
     };
-  }, [effectiveWidth, effectiveHeight]);
+  }, [effectiveWidth, effectiveHeight, currentTopInset]);
 
   // Update horizontal offset when dimensions change
   useEffect(() => {
@@ -205,6 +229,8 @@ function CardGridComponent({
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
+        .activeOffsetX([-10, 10])
+        .failOffsetY([-10, 10])
         .onStart(() => {
           'worklet';
           isGestureActive.value = true;
@@ -318,6 +344,9 @@ function CardGridComponent({
       // Use != to catch both null and undefined
       const isNextRace = nextRaceIndex != null && raceIndex === nextRaceIndex;
 
+      // Determine if race is in the past (for warm off-white background)
+      const isPastRace = isRacePast(race.date, race.startTime);
+
       return (
         <View
           key={race.id}
@@ -331,6 +360,7 @@ function CardGridComponent({
         >
           <CardShell
             isNextRace={isNextRace}
+            isPast={isPastRace}
             position={position}
             dimensions={dimensions}
             gridState={gridState}
@@ -357,7 +387,9 @@ function CardGridComponent({
               timeAxisRaces,
               jsRaceIndex,
               goToRace,
-              nextRaceIndex ?? undefined
+              nextRaceIndex ?? undefined,
+              // Scroll handler for toolbar hide/show
+              onContentScroll
             )}
           </CardShell>
         </View>
@@ -377,6 +409,7 @@ function CardGridComponent({
       deletingRaceId,
       onDismissSample,
       races.length,
+      onContentScroll,
     ]
   );
 
@@ -414,7 +447,7 @@ function CardGridComponent({
       testID={testID}
       onLayout={handleLayout}
     >
-      <View style={styles.gestureWrapper}>
+      <Animated.View style={[styles.gestureWrapper, animatedWrapperStyle]}>
         <GestureDetector gesture={panGesture}>
           <Animated.View
             style={[
@@ -430,7 +463,7 @@ function CardGridComponent({
             {renderCards}
           </Animated.View>
         </GestureDetector>
-      </View>
+      </Animated.View>
 
       {/* TimelineTimeAxis moved inside RaceSummaryCard footer for compactness */}
     </GestureHandlerRootView>

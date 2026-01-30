@@ -1,9 +1,15 @@
 import { createChannelName, realtimeService } from '@/services/RealtimeService';
 import { supabase } from '@/services/supabase';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('RaceResults');
+
+/**
+ * Validates if a string is a valid UUID format
+ */
+const isValidUUID = (id: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 export interface RaceResult {
   id: string;
@@ -41,7 +47,8 @@ export function useRaceResults(raceId?: string) {
 
   // Load initial results
   const loadResults = useCallback(async () => {
-    if (!raceId) {
+    if (!raceId || !isValidUUID(raceId)) {
+      // Skip Supabase query for missing or demo race IDs
       setLoading(false);
       return;
     }
@@ -79,7 +86,7 @@ export function useRaceResults(raceId?: string) {
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!raceId) return;
+    if (!raceId || !isValidUUID(raceId)) return;
 
     loadResults();
 
@@ -142,6 +149,8 @@ export function useRaceResults(raceId?: string) {
 export function useLiveRaces(userId?: string) {
   const [liveRaces, setLiveRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   const loadLiveRaces = useCallback(async () => {
     if (!userId) {
@@ -149,7 +158,13 @@ export function useLiveRaces(userId?: string) {
       return;
     }
 
-    setLoading(true);
+    // Only show full loading skeleton on the first fetch.
+    // Subsequent fetches (tab re-focus, pull-to-refresh) keep existing data visible.
+    if (!hasLoadedRef.current) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
 
     try {
       const racesById = new Map<string, Race>();
@@ -341,11 +356,13 @@ export function useLiveRaces(userId?: string) {
       });
 
       setLiveRaces(merged);
+      hasLoadedRef.current = true;
     } catch (err) {
       logger.error('Error loading races:', err);
       setLiveRaces([]);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, [userId]);
 
@@ -507,6 +524,7 @@ export function useLiveRaces(userId?: string) {
   return {
     liveRaces,
     loading,
+    isRefreshing,
     refresh: loadLiveRaces,
   };
 }
@@ -579,8 +597,11 @@ export interface UserRaceResult {
  */
 export async function fetchUserResults(userId: string, regattaIds: string[]): Promise<Map<string, UserRaceResult>> {
   const resultsMap = new Map<string, UserRaceResult>();
-  
-  if (!userId || regattaIds.length === 0) {
+
+  // Filter out demo race IDs (non-UUIDs) before querying Supabase
+  const validRegattaIds = regattaIds.filter(isValidUUID);
+
+  if (!userId || validRegattaIds.length === 0) {
     return resultsMap;
   }
 
@@ -596,7 +617,7 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
         race_scores,
         sailor_id
       `)
-      .in('regatta_id', regattaIds);
+      .in('regatta_id', validRegattaIds);
 
     if (!standingsError && standings) {
       // Filter standings for this user and map to results
@@ -637,7 +658,7 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
       for (const result of raceResults) {
         const regattaId = result.regatta_id;
 
-        if (regattaId && regattaIds.includes(regattaId) && !resultsMap.has(regattaId)) {
+        if (regattaId && validRegattaIds.includes(regattaId) && !resultsMap.has(regattaId)) {
           // Count fleet size for this regatta + race_number
           const { count } = await supabase
             .from('race_results')
@@ -661,7 +682,7 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
       .from('race_participants')
       .select('regatta_id, finish_position, points_scored, status')
       .eq('user_id', userId)
-      .in('regatta_id', regattaIds)
+      .in('regatta_id', validRegattaIds)
       .not('finish_position', 'is', null);
 
     if (!participantsError && participants) {

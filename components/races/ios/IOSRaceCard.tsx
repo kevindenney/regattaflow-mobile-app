@@ -256,17 +256,44 @@ export function IOSRaceCard({
     onPress?.();
   }, [onPress]);
 
-  // Format date
-  const formattedDate = useMemo(() => {
-    const d = new Date(race.date);
-    if (race.daysUntil === 0) return 'Today';
-    if (race.daysUntil === 1) return 'Tomorrow';
-    return d.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'short',
-      day: 'numeric',
+  // Format date and time with proper timezone handling
+  const { formattedDate, formattedTime } = useMemo(() => {
+    // Combine date and time into a full datetime
+    // startTime could be "HH:MM", "HH:MM:SS", or already include date info
+    let dateTime: Date;
+
+    if (race.startTime && race.startTime.includes(':')) {
+      // Combine date with time - treat the stored time as UTC
+      const dateStr = race.date.split('T')[0]; // Get just the date part
+      const timeStr = race.startTime.length === 5 ? `${race.startTime}:00` : race.startTime;
+      dateTime = new Date(`${dateStr}T${timeStr}Z`); // Parse as UTC
+    } else {
+      dateTime = new Date(race.date);
+    }
+
+    // Format date part
+    let datePart: string;
+    if (race.daysUntil === 0) {
+      datePart = 'Today';
+    } else if (race.daysUntil === 1) {
+      datePart = 'Tomorrow';
+    } else {
+      datePart = dateTime.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+
+    // Format time part in local timezone
+    const timePart = dateTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
     });
-  }, [race.date, race.daysUntil]);
+
+    return { formattedDate: datePart, formattedTime: timePart };
+  }, [race.date, race.startTime, race.daysUntil]);
 
   return (
     <Animated.View
@@ -300,7 +327,7 @@ export function IOSRaceCard({
           <View style={styles.metaRow}>
             <Ionicons name="calendar" size={14} color={IOS_COLORS.secondaryLabel} />
             <Text style={styles.metaText}>
-              {formattedDate} at {race.startTime}
+              {formattedDate} at {formattedTime}
             </Text>
           </View>
         </View>

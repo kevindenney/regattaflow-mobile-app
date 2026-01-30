@@ -6,7 +6,7 @@
  * - On mobile/narrow: Navigates to full-screen race detail via router.push()
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -20,11 +20,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
+import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { MasterDetailLayout } from '@/components/layout/MasterDetailLayout';
 import { RaceDetailContent } from '@/components/races/RaceDetailContent';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { useAuth } from '@/providers/AuthProvider';
-import { useGlobalSearch } from '@/providers/GlobalSearchProvider';
 import { supabase } from '@/services/supabase';
 
 interface Race {
@@ -39,13 +39,14 @@ export default function RaceBrowserScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { openGlobalSearch } = useGlobalSearch();
   const { showMasterDetail } = useResponsiveLayout();
 
   const [races, setRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
+  const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
 
   useEffect(() => {
     if (!user?.id) {
@@ -168,11 +169,7 @@ export default function RaceBrowserScreen() {
 
   const masterContent = (
     <View style={styles.container}>
-      <TabScreenToolbar
-        title="Race Detail"
-        topInset={insets.top}
-        onGlobalSearch={openGlobalSearch}
-      />
+      {/* Scroll content first — flows behind absolutely-positioned toolbar */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
@@ -189,10 +186,19 @@ export default function RaceBrowserScreen() {
           renderItem={renderRaceRow}
           ItemSeparatorComponent={renderSeparator}
           ListEmptyComponent={renderEmpty}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingTop: toolbarHeight + 12 }]}
           showsVerticalScrollIndicator={false}
+          onScroll={handleToolbarScroll}
+          scrollEventThrottle={16}
         />
       )}
+      {/* Toolbar rendered last — absolutely positioned over content */}
+      <TabScreenToolbar
+        title="Race Detail"
+        topInset={insets.top}
+        onMeasuredHeight={setToolbarHeight}
+        hidden={toolbarHidden}
+      />
     </View>
   );
 
@@ -231,7 +237,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: 12,
     paddingHorizontal: 16,
-    paddingBottom: 100,
+    paddingBottom: 120,
   },
   raceRow: {
     flexDirection: 'row',

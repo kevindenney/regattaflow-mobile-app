@@ -198,18 +198,20 @@ export async function createSailorSampleData(
     // Step 0: Check if sample data already exists (avoid duplicates)
     // Skip this check if force=true (used for Reset Sample Data in Settings)
     if (!force) {
-      const { data: existingSampleRace } = await supabase
+      const { data: existingSampleRaces, error: checkError } = await supabase
         .from('regattas')
         .select('id')
         .eq('created_by', userId)
         .contains('metadata', { is_sample: true })
-        .maybeSingle();
+        .limit(5);
 
-      if (existingSampleRace) {
-        logger.info('[SailorSampleDataService] Sample data already exists, skipping creation');
+      if (!checkError && existingSampleRaces && existingSampleRaces.length > 0) {
+        logger.info('[SailorSampleDataService] Sample data already exists, skipping creation', {
+          existingCount: existingSampleRaces.length,
+        });
         return {
           success: true,
-          raceId: existingSampleRace.id,
+          raceId: existingSampleRaces[0].id,
         };
       }
     }
@@ -390,17 +392,37 @@ async function createSampleBoat(
   userId: string,
   userName: string
 ): Promise<string> {
-  // Check if user already has a boat (any boat will do for sample data)
-  const { data: existingBoat } = await supabase
+  // Check if user already has ANY boat
+  const { data: existingBoats, error: fetchError } = await supabase
+    .from('sailor_boats')
+    .select('id, class_id, is_primary')
+    .eq('sailor_id', userId);
+
+  if (fetchError) {
+    logger.warn('[SailorSampleDataService] Error checking existing boats:', fetchError);
+  }
+
+  // If user has any boat, use the first one (prefer primary)
+  if (existingBoats && existingBoats.length > 0) {
+    const primaryBoat = existingBoats.find((b) => b.is_primary);
+    const boatToUse = primaryBoat || existingBoats[0];
+    logger.info('[SailorSampleDataService] User already has a boat, using existing:', boatToUse.id);
+    return boatToUse.id;
+  }
+
+  // Check specifically if a Dragon boat already exists with is_primary=true
+  // This handles the unique constraint: idx_sailor_boats_one_primary_per_class
+  const { data: existingDragonPrimary } = await supabase
     .from('sailor_boats')
     .select('id')
     .eq('sailor_id', userId)
-    .limit(1)
+    .eq('class_id', DRAGON_CLASS_ID)
+    .eq('is_primary', true)
     .maybeSingle();
 
-  if (existingBoat) {
-    logger.info('[SailorSampleDataService] User already has a boat, using existing:', existingBoat.id);
-    return existingBoat.id;
+  if (existingDragonPrimary) {
+    logger.info('[SailorSampleDataService] User already has a primary Dragon boat:', existingDragonPrimary.id);
+    return existingDragonPrimary.id;
   }
 
   // Generate a memorable boat name
@@ -424,6 +446,20 @@ async function createSampleBoat(
     .single();
 
   if (error) {
+    // If it's a duplicate key error, try to fetch the existing boat
+    if (error.message?.includes('duplicate') || error.code === '23505') {
+      logger.warn('[SailorSampleDataService] Duplicate boat detected, fetching existing...');
+      const { data: fallbackBoat } = await supabase
+        .from('sailor_boats')
+        .select('id')
+        .eq('sailor_id', userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (fallbackBoat) {
+        return fallbackBoat.id;
+      }
+    }
     logger.error('[SailorSampleDataService] Failed to create boat:', error);
     throw error;
   }
@@ -540,7 +576,7 @@ async function createSampleRace(
   boatId: string,
   raceDate: Date
 ): Promise<string> {
-  const raceName = 'RHKYC Dragon Spring Series - Race 1';
+  const raceName = 'RHKYC Dragon Spring Series - Race 1 (Sample)';
   const startTime = new Date(raceDate);
   startTime.setHours(11, 0, 0, 0); // 11:00 AM start (typical first warning signal time)
 
@@ -715,7 +751,7 @@ async function createCompletedSampleRace(
   boatId: string,
   raceDate: Date
 ): Promise<string> {
-  const raceName = 'RHKYC Dragon Winter Series - Race 4';
+  const raceName = 'RHKYC Dragon Winter Series - Race 4 (Sample)';
   const startTime = new Date(raceDate);
   startTime.setHours(14, 0, 0, 0); // 2:00 PM start
 

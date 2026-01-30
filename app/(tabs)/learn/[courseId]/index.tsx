@@ -16,7 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Linking } from 'react-native';
@@ -25,10 +25,13 @@ import { LessonProgressService, type LessonProgress } from '@/services/LessonPro
 import { coursePaymentService } from '@/services/CoursePaymentService';
 import CourseCatalogService, { type Course as CatalogCourse } from '@/services/CourseCatalogService';
 import { useAuth } from '@/providers/AuthProvider';
+import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
 
 export default function CourseDetailScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [course, setCourse] = useState<LearningCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -598,7 +601,7 @@ export default function CourseDetailScreen() {
         <View style={styles.moduleHeader}>
           <View style={styles.moduleHeaderLeft}>
             <View style={styles.moduleIcon}>
-              <Ionicons name="book-outline" size={20} color="#3B82F6" />
+              <Ionicons name="book-outline" size={20} color={IOS_COLORS.systemBlue} />
             </View>
             <View style={styles.moduleHeaderText}>
               <Text style={styles.moduleTitle}>{module.title}</Text>
@@ -680,7 +683,7 @@ export default function CourseDetailScreen() {
                   <Ionicons 
                     name={isLessonCompleted ? "checkmark-circle" : (enrolled || lesson.is_free_preview ? "play-circle-outline" : "lock-closed-outline")} 
                     size={24} 
-                    color={isLessonCompleted ? "#10B981" : (enrolled || lesson.is_free_preview ? "#3B82F6" : "#94A3B8")} 
+                    color={isLessonCompleted ? "#10B981" : (enrolled || lesson.is_free_preview ? IOS_COLORS.systemBlue : "#94A3B8")}
                   />
                 </TouchableOpacity>
               );
@@ -695,7 +698,7 @@ export default function CourseDetailScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingState}>
-          <ActivityIndicator size="large" color="#3B82F6" />
+          <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
           <Text style={styles.loadingText}>Loading course...</Text>
         </View>
       </SafeAreaView>
@@ -719,7 +722,7 @@ export default function CourseDetailScreen() {
   const modules = course.learning_modules || [];
   const levelColors: Record<string, string> = {
     beginner: '#10B981',
-    intermediate: '#3B82F6',
+    intermediate: IOS_COLORS.systemBlue,
     advanced: '#8B5CF6',
   };
 
@@ -821,8 +824,8 @@ export default function CourseDetailScreen() {
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Enroll CTA */}
-      <View style={styles.ctaContainer}>
+      {/* Enroll CTA — positioned above floating tab bar */}
+      <View style={[styles.ctaContainer, Platform.OS !== 'web' && { bottom: FLOATING_TAB_BAR_HEIGHT + Math.max(Math.round(insets.bottom / 2), 8) + 8 }]}>
         {enrolled ? (
           <View style={styles.enrolledContainer}>
             <View style={styles.enrolledBadge}>
@@ -889,13 +892,13 @@ export default function CourseDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 120,
+    paddingBottom: 180,
   },
   loadingState: {
     flex: 1,
@@ -920,7 +923,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: IOS_COLORS.systemBlue,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1073,7 +1076,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
   },
   moduleHeaderLeft: {
     flexDirection: 'row',
@@ -1173,7 +1176,7 @@ const styles = StyleSheet.create({
   lessonFreeBadge: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#3B82F6',
+    color: IOS_COLORS.systemBlue,
   },
   lessonCompletedBadge: {
     fontSize: 11,
@@ -1202,7 +1205,7 @@ const styles = StyleSheet.create({
   },
   ctaContainer: {
     position: 'absolute',
-    bottom: Platform.OS === 'web' ? 70 : 0, // Account for tab bar on web
+    bottom: Platform.OS === 'web' ? 70 : 0,
     left: 0,
     right: 0,
     backgroundColor: '#FFFFFF',
@@ -1211,8 +1214,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     zIndex: 100,
-    ...(Platform.OS === 'ios' && { paddingBottom: 34 }),
-    ...(Platform.OS === 'web' && { 
+    borderRadius: 12,
+    marginHorizontal: 8,
+    ...(Platform.OS !== 'web' && {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 8,
+      elevation: 4,
+    }),
+    ...(Platform.OS === 'web' && {
       boxShadow: '0px -2px 10px rgba(0, 0, 0, 0.1)',
     }),
   },
@@ -1236,7 +1247,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#3B82F6',
+    backgroundColor: IOS_COLORS.systemBlue,
     paddingVertical: 14,
     borderRadius: 10,
   },

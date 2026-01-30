@@ -464,6 +464,7 @@ export function RealRacesCarousel({
           onEdit={canManage && onEditRace ? () => onEditRace(race.id) : undefined}
           onDelete={canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined}
           isDeleting={deletingRaceId === race.id}
+          isSample={!!race.metadata?.is_sample}
         />
       );
     }

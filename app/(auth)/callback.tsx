@@ -6,7 +6,7 @@ import {getDashboardRoute} from '@/lib/utils/userTypeRouting'
 import {ActivityIndicator, View, Text,
 } from "react-native"
 import {createLogger} from '@/lib/utils/logger'
-import {createSailorSampleData} from '@/services/onboarding/SailorSampleDataService'
+// Sample data is created in profile-setup.tsx or races.tsx fallback
 import {GuestStorageService} from '@/services/GuestStorageService'
 
 const logger = createLogger('OAuthCallback')
@@ -181,12 +181,13 @@ export default function Callback(){
           setStatus('Setting up your account...')
 
           // Create or update the user profile with the selected persona
+          // Note: onboarding_completed stays false - sailors must complete onboarding too
           const profilePayload = {
             id: session.user.id,
             email: session.user.email,
             full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
             user_type: pendingPersona,
-            onboarding_completed: pendingPersona === 'sailor', // Sailors skip onboarding
+            onboarding_completed: false, // All users must complete onboarding
           }
 
           const { error: upsertError } = await supabase
@@ -198,19 +199,6 @@ export default function Callback(){
           } else {
             logger.info('Successfully saved persona to profile:', pendingPersona)
             effectiveUserType = pendingPersona
-
-            // For new sailors, create sample data and wait for completion
-            // so it's visible when they reach the races page
-            if (pendingPersona === 'sailor') {
-              try {
-                await createSailorSampleData({
-                  userId: session.user.id,
-                  userName: profilePayload.full_name || 'Sailor',
-                })
-              } catch (err: any) {
-                logger.warn('Sample data creation failed:', err?.message)
-              }
-            }
           }
         }
 
@@ -225,14 +213,18 @@ export default function Callback(){
 
         // Route based on the effective user type
         // Route to onboarding if: (1) new OAuth user with pending persona, OR (2) existing user who hasn't completed onboarding
-        // Sailors skip onboarding and go directly to the main app
+        // All user types must complete onboarding
         const personaForOnboarding = pendingPersona || effectiveUserType
-        if (needsOnboarding && personaForOnboarding && personaForOnboarding !== 'sailor') {
+        if (needsOnboarding && personaForOnboarding) {
           logger.info('Routing user to onboarding for persona:', personaForOnboarding)
           setStatus('Redirecting to setup...')
 
           let onboardingRoute: string
-          if (personaForOnboarding === 'coach') {
+          if (personaForOnboarding === 'sailor') {
+            // Sailors go through the new onboarding flow
+            const userName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Sailor'
+            onboardingRoute = `/onboarding/setup-choice?name=${encodeURIComponent(userName)}`
+          } else if (personaForOnboarding === 'coach') {
             onboardingRoute = '/(auth)/coach-onboarding-welcome'
           } else if (personaForOnboarding === 'club') {
             onboardingRoute = '/(auth)/club-onboarding-chat'

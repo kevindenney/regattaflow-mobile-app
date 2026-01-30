@@ -1209,19 +1209,8 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setUserProfile((prev: any) => ({ ...(prev ?? {}), ...profilePayload }))
         setUserType(persona)
 
-        // For new sailors, create sample data
-        if (persona === 'sailor') {
-          try {
-            const { createSailorSampleData } = await import('@/services/onboarding/SailorSampleDataService')
-            await createSailorSampleData({
-              userId: user.id,
-              userName: profilePayload.full_name || 'Sailor',
-            })
-            authDebugLog('🔍 [LOGIN] Sample data created for new sailor')
-          } catch (sampleError) {
-            console.warn('🔍 [LOGIN] Sample data creation failed:', sampleError)
-          }
-        }
+        // Sample data will be created by races.tsx fallback if needed
+        authDebugLog('🔍 [LOGIN] Sailor profile saved, sample data will be created on races page')
       }
     } catch (error) {
       console.error('🔍 [LOGIN] handleNativeOAuthProfile error:', error)

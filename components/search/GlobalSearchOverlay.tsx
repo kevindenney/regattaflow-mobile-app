@@ -3,9 +3,15 @@
  *
  * Slides up from the bottom with auto-focused search input.
  * Searches races, sailors, venues, and boat classes via GlobalSearchService.
+ *
+ * Empty state organised by user behavior (WWDC25 Discoverable Design):
+ *   1. "Try searching for..." — concrete example queries
+ *   2. "Quick Access" — behavior-based chip strip
+ *   3. "Recent" — conditional recents (progressive disclosure)
  */
 
-import { IOS_COLORS } from '@/lib/design-tokens-ios';
+import { useRecentSearches } from '@/hooks/useRecentSearches';
+import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   GlobalSearchService,
@@ -28,9 +34,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SuggestedSailorsSection } from './SuggestedSailorsSection';
+import { InviteFriendsBanner } from './InviteFriendsBanner';
 
 interface GlobalSearchOverlayProps {
   visible: boolean;
@@ -67,201 +76,222 @@ function buildSections(results: SearchResults): SectionData[] {
     }));
 }
 
-// ── Suggested searches ──────────────────────────────────────────────
+// ── Empty-state data ────────────────────────────────────────────────
 
-interface SearchSuggestion {
-  label: string;
-  query: string;
-  icon: keyof typeof Ionicons.glyphMap;
-}
-
-const SUGGESTED_SEARCHES: { category: string; icon: keyof typeof Ionicons.glyphMap; color: string; suggestions: SearchSuggestion[] }[] = [
-  {
-    category: 'Races',
-    icon: 'flag-outline',
-    color: IOS_COLORS.systemBlue,
-    suggestions: [
-      { label: 'Weekend regattas', query: 'regatta', icon: 'flag-outline' },
-      { label: 'Frostbite series', query: 'frostbite', icon: 'flag-outline' },
-      { label: 'Club championships', query: 'championship', icon: 'flag-outline' },
-    ],
-  },
-  {
-    category: 'Venues',
-    icon: 'location-outline',
-    color: IOS_COLORS.systemGreen,
-    suggestions: [
-      { label: 'Local sailing clubs', query: 'yacht club', icon: 'location-outline' },
-      { label: 'Harbor venues', query: 'harbor', icon: 'location-outline' },
-    ],
-  },
-  {
-    category: 'Boat Classes',
-    icon: 'boat-outline',
-    color: IOS_COLORS.systemOrange,
-    suggestions: [
-      { label: 'Laser / ILCA', query: 'laser', icon: 'boat-outline' },
-      { label: 'J/24', query: 'J/24', icon: 'boat-outline' },
-      { label: '420', query: '420', icon: 'boat-outline' },
-    ],
-  },
+const EXAMPLE_QUERIES = [
+  'Frostbite Series',
+  'Royal Hong Kong YC',
+  'ILCA 7',
+  'Jane Smith',
 ];
 
-function SearchSuggestions({ onSuggestionPress }: { onSuggestionPress: (query: string) => void }) {
+const QUICK_ACCESS_CHIPS: { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; query: string }[] = [
+  { label: 'Upcoming races', icon: 'calendar-outline', color: IOS_COLORS.systemBlue, query: 'upcoming' },
+  { label: 'Nearby venues', icon: 'navigate-outline', color: IOS_COLORS.systemGreen, query: 'nearby' },
+  { label: 'My fleet', icon: 'boat-outline', color: IOS_COLORS.systemOrange, query: 'fleet' },
+  { label: 'Popular classes', icon: 'trophy-outline', color: IOS_COLORS.systemPurple, query: 'popular class' },
+];
+
+// ── Empty-state sub-sections ────────────────────────────────────────
+
+function SearchExamples({ onPress }: { onPress: (query: string) => void }) {
   return (
-    <ScrollView
-      style={suggestStyles.container}
-      contentContainerStyle={suggestStyles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={suggestStyles.heading}>Try searching for</Text>
-
-      {SUGGESTED_SEARCHES.map((group) => (
-        <View key={group.category} style={suggestStyles.group}>
-          <View style={suggestStyles.groupHeader}>
-            <Ionicons name={group.icon} size={14} color={group.color} />
-            <Text style={[suggestStyles.groupTitle, { color: group.color }]}>
-              {group.category.toUpperCase()}
-            </Text>
-          </View>
-          {group.suggestions.map((item) => (
-            <Pressable
-              key={item.query}
-              style={({ pressed }) => [
-                suggestStyles.suggestion,
-                pressed && suggestStyles.suggestionPressed,
-              ]}
-              onPress={() => onSuggestionPress(item.query)}
+    <View style={emptyStyles.section}>
+      <Text style={emptyStyles.sectionLabel}>TRY SEARCHING FOR&hellip;</Text>
+      <View style={emptyStyles.card}>
+        {EXAMPLE_QUERIES.map((example, index) => (
+          <React.Fragment key={example}>
+            {index > 0 && <View style={emptyStyles.insetSeparator} />}
+            <TouchableOpacity
+              style={emptyStyles.exampleRow}
+              activeOpacity={0.6}
+              onPress={() => onPress(example)}
             >
-              <Ionicons
-                name="search"
-                size={16}
-                color={IOS_COLORS.systemGray2}
-                style={suggestStyles.suggestionIcon}
-              />
-              <Text style={suggestStyles.suggestionText}>{item.label}</Text>
-              <Ionicons
-                name="arrow-up-outline"
-                size={14}
-                color={IOS_COLORS.systemGray3}
-                style={{ transform: [{ rotate: '-45deg' }] }}
-              />
-            </Pressable>
-          ))}
-        </View>
-      ))}
-
-      <View style={suggestStyles.browseSection}>
-        <Text style={suggestStyles.browseTitle}>Browse by category</Text>
-        <View style={suggestStyles.browsePills}>
-          {(['Races', 'Sailors', 'Venues', 'Boat Classes'] as const).map((cat) => {
-            const meta = {
-              Races: { icon: 'flag-outline' as const, color: IOS_COLORS.systemBlue },
-              Sailors: { icon: 'people-outline' as const, color: IOS_COLORS.systemPurple },
-              Venues: { icon: 'location-outline' as const, color: IOS_COLORS.systemGreen },
-              'Boat Classes': { icon: 'boat-outline' as const, color: IOS_COLORS.systemOrange },
-            }[cat];
-            return (
-              <Pressable
-                key={cat}
-                style={({ pressed }) => [
-                  suggestStyles.browsePill,
-                  { borderColor: `${meta.color}30` },
-                  pressed && { backgroundColor: `${meta.color}10` },
-                ]}
-                onPress={() => onSuggestionPress(cat === 'Boat Classes' ? 'class' : cat.toLowerCase().slice(0, -1))}
-              >
-                <Ionicons name={meta.icon} size={16} color={meta.color} />
-                <Text style={[suggestStyles.browsePillText, { color: meta.color }]}>{cat}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+              <View style={emptyStyles.iconWrap}>
+                <Ionicons name="search" size={16} color={IOS_COLORS.systemGray} />
+              </View>
+              <Text style={emptyStyles.exampleText}>{example}</Text>
+              <Ionicons name="arrow-forward" size={15} color={IOS_COLORS.tertiaryLabel} />
+            </TouchableOpacity>
+          </React.Fragment>
+        ))}
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
-const suggestStyles = StyleSheet.create({
+function QuickAccessChips({ onPress }: { onPress: (query: string) => void }) {
+  return (
+    <View style={emptyStyles.chipSection}>
+      <Text style={emptyStyles.chipSectionLabel}>QUICK ACCESS</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={emptyStyles.chipStrip}
+      >
+        {QUICK_ACCESS_CHIPS.map((chip) => (
+          <TouchableOpacity
+            key={chip.label}
+            style={emptyStyles.chip}
+            activeOpacity={0.7}
+            onPress={() => onPress(chip.query)}
+          >
+            <Ionicons name={chip.icon} size={16} color={chip.color} />
+            <Text style={emptyStyles.chipLabel}>{chip.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function RecentSearches({
+  recents,
+  onPress,
+  onClear,
+}: {
+  recents: string[];
+  onPress: (query: string) => void;
+  onClear: () => void;
+}) {
+  if (recents.length === 0) return null;
+
+  return (
+    <View style={emptyStyles.section}>
+      <View style={emptyStyles.sectionHeaderRow}>
+        <Text style={emptyStyles.sectionLabel}>RECENT</Text>
+        <Pressable onPress={onClear} hitSlop={8}>
+          <Text style={emptyStyles.clearButton}>Clear</Text>
+        </Pressable>
+      </View>
+      <View style={emptyStyles.card}>
+        {recents.map((q, index) => (
+          <React.Fragment key={q}>
+            {index > 0 && <View style={emptyStyles.insetSeparator} />}
+            <TouchableOpacity
+              style={emptyStyles.exampleRow}
+              activeOpacity={0.6}
+              onPress={() => onPress(q)}
+            >
+              <View style={emptyStyles.iconWrap}>
+                <Ionicons name="time-outline" size={16} color={IOS_COLORS.systemGray} />
+              </View>
+              <Text style={emptyStyles.exampleText}>{q}</Text>
+              <Ionicons name="chevron-forward" size={15} color={IOS_COLORS.tertiaryLabel} />
+            </TouchableOpacity>
+          </React.Fragment>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ── Empty-state styles ──────────────────────────────────────────────
+
+const emptyStyles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 24,
+    paddingTop: 20,
     paddingBottom: 60,
   },
-  heading: {
+
+  // Sections
+  section: {
+    marginBottom: 24,
+  },
+  chipSection: {
+    marginBottom: 24,
+    marginHorizontal: -16, // let horizontal ScrollView bleed to screen edges
+  },
+  chipSectionLabel: {
     fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
-    letterSpacing: 0.3,
-    marginBottom: 16,
-  },
-  group: {
-    marginBottom: 20,
-  },
-  groupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
-  },
-  groupTitle: {
-    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 0.8,
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginLeft: 20, // 16 (parent negative offset) + 4 (original inset)
   },
-  suggestion: {
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingRight: 4,
+  },
+  clearButton: {
+    fontSize: 15,
+    color: IOS_COLORS.systemBlue,
+    fontWeight: '400',
+  },
+
+  // Inset grouped card
+  card: {
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  insetSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+    marginLeft: 44,
+  },
+
+  // Example / recent rows
+  exampleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingRight: 14,
+    minHeight: 44,
   },
-  suggestionPressed: {
-    backgroundColor: IOS_COLORS.systemGray6,
-    borderRadius: 8,
+  iconWrap: {
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  suggestionIcon: {
-    marginRight: 10,
-  },
-  suggestionText: {
+  exampleText: {
     flex: 1,
     fontSize: 17,
     color: IOS_COLORS.label,
+    letterSpacing: -0.41,
   },
-  browseSection: {
-    marginTop: 8,
-    paddingTop: 20,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: IOS_COLORS.separator,
-  },
-  browseTitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
-    letterSpacing: 0.3,
-    marginBottom: 12,
-  },
-  browsePills: {
+
+  // Chip strip
+  chipStrip: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
+    paddingLeft: 20,
+    paddingRight: 20,
   },
-  browsePill: {
+  chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
+    gap: 5,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    backgroundColor: IOS_COLORS.systemBackground,
+    borderRadius: 18,
+    backgroundColor: '#F2F2F7',
   },
-  browsePillText: {
-    fontSize: 15,
+  chipLabel: {
+    fontSize: 14,
     fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Sailor suggestions
+  suggestionsSection: {
+    marginTop: IOS_SPACING.md,
   },
 });
 
@@ -276,6 +306,7 @@ export default function GlobalSearchOverlay({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const { user } = useAuth();
+  const { recentSearches, addRecentSearch, clearRecent } = useRecentSearches();
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResults | null>(null);
@@ -313,6 +344,7 @@ export default function GlobalSearchOverlay({
       try {
         const res = await GlobalSearchService.search(query, user?.id ?? '');
         setResults(res);
+        addRecentSearch(query);
       } catch {
         setResults(null);
       } finally {
@@ -324,7 +356,7 @@ export default function GlobalSearchOverlay({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, user?.id]);
+  }, [query, user?.id, addRecentSearch]);
 
   const handleClose = useCallback(() => {
     inputRef.current?.blur();
@@ -430,7 +462,7 @@ export default function GlobalSearchOverlay({
             <TextInput
               ref={inputRef}
               style={styles.searchInput}
-              placeholder="Search races, sailors, venues..."
+              placeholder="Race name, club, or boat class..."
               placeholderTextColor={IOS_COLORS.systemGray2}
               value={query}
               onChangeText={setQuery}
@@ -448,9 +480,26 @@ export default function GlobalSearchOverlay({
         {/* Results area */}
         <View style={styles.content}>
           {showEmpty ? (
-            <SearchSuggestions
-              onSuggestionPress={(suggestion) => setQuery(suggestion)}
-            />
+            <ScrollView
+              style={emptyStyles.container}
+              contentContainerStyle={emptyStyles.content}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <SearchExamples onPress={(q) => setQuery(q)} />
+              <QuickAccessChips onPress={(q) => setQuery(q)} />
+              <RecentSearches
+                recents={recentSearches}
+                onPress={(q) => setQuery(q)}
+                onClear={clearRecent}
+              />
+              {/* Sailor suggestions for discovery */}
+              <View style={emptyStyles.suggestionsSection}>
+                <SuggestedSailorsSection onSailorPress={handleClose} />
+              </View>
+              {/* Invite friends CTA */}
+              <InviteFriendsBanner />
+            </ScrollView>
           ) : loading && !hasResults ? (
             <View style={styles.emptyState}>
               <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
@@ -539,6 +588,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   listContent: {
     paddingBottom: 32,

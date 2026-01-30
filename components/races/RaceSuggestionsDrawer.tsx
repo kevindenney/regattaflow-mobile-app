@@ -126,6 +126,72 @@ export function RaceSuggestionsDrawer({
           </SuggestionSection>
         )}
 
+        {/* Community Races */}
+        {suggestions.communityRaces.length > 0 && (
+          <SuggestionSection
+            title="Community Races"
+            icon="account-group"
+            iconColor="#059669"
+            count={suggestions.communityRaces.length}
+            expanded={expandedSection === 'community'}
+            onToggle={() => toggleSection('community')}
+          >
+            {suggestions.communityRaces.map((suggestion) => (
+              <SuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                isProcessing={processingSuggestionId === suggestion.id}
+                onSelect={() => onSelectSuggestion(suggestion)}
+                onDismiss={onDismissSuggestion ? () => onDismissSuggestion(suggestion.id) : undefined}
+              />
+            ))}
+          </SuggestionSection>
+        )}
+
+        {/* Catalog Matches */}
+        {suggestions.catalogMatches.length > 0 && (
+          <SuggestionSection
+            title="From Race Catalog"
+            icon="earth"
+            iconColor="#DC2626"
+            count={suggestions.catalogMatches.length}
+            expanded={expandedSection === 'catalog'}
+            onToggle={() => toggleSection('catalog')}
+          >
+            {suggestions.catalogMatches.map((suggestion) => (
+              <SuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                isProcessing={processingSuggestionId === suggestion.id}
+                onSelect={() => onSelectSuggestion(suggestion)}
+                onDismiss={onDismissSuggestion ? () => onDismissSuggestion(suggestion.id) : undefined}
+              />
+            ))}
+          </SuggestionSection>
+        )}
+
+        {/* Previous Year Races */}
+        {suggestions.previousYearRaces.length > 0 && (
+          <SuggestionSection
+            title="Race Again This Year"
+            icon="calendar-refresh"
+            iconColor="#7C3AED"
+            count={suggestions.previousYearRaces.length}
+            expanded={expandedSection === 'previous_year'}
+            onToggle={() => toggleSection('previous_year')}
+          >
+            {suggestions.previousYearRaces.map((suggestion) => (
+              <SuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                isProcessing={processingSuggestionId === suggestion.id}
+                onSelect={() => onSelectSuggestion(suggestion)}
+                onDismiss={onDismissSuggestion ? () => onDismissSuggestion(suggestion.id) : undefined}
+              />
+            ))}
+          </SuggestionSection>
+        )}
+
         {/* Pattern-Based Suggestions */}
         {suggestions.patterns.length > 0 && (
           <SuggestionSection

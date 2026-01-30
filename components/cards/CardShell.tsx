@@ -30,6 +30,13 @@ import {
 // COMPONENT
 // =============================================================================
 
+/**
+ * Past race cards use white background (same as all cards).
+ * Status is communicated through badges and content styling, not background color.
+ * This ensures proper contrast against the systemGroupedBackground (#F2F2F7).
+ */
+const PAST_CARD_BG = IOS_COLORS.systemBackground;
+
 export function CardShell({
   position,
   dimensions,
@@ -38,6 +45,7 @@ export function CardShell({
   style,
   testID,
   isNextRace = false,
+  isPast = false,
   isDeleting = false,
 }: CardShellProps) {
   const relativeX = position.x;
@@ -100,9 +108,9 @@ export function CardShell({
       width: dimensions.cardWidth,
       height: dimensions.cardHeight,
       borderRadius: dimensions.borderRadius,
-      backgroundColor: IOS_COLORS.systemBackground,
+      backgroundColor: isPast ? PAST_CARD_BG : IOS_COLORS.systemBackground,
     }),
-    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius]
+    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius, isPast]
   );
 
   return (

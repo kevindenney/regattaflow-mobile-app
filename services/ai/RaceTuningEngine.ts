@@ -412,26 +412,11 @@ Context:
 ${JSON.stringify(payload, null, 2)}`;
 
     try {
-      const response = await this.anthropic.beta.messages.create({
+      // claude-3-haiku-20240307 does not support skills or code_execution betas
+      const response = await this.anthropic.messages.create({
         model: 'claude-3-haiku-20240307',
         max_tokens: 2000,
         temperature: 0.5,
-        betas: this.customSkillId
-          ? ['code-execution-2025-08-25', 'skills-2025-10-02']
-          : ['code-execution-2025-08-25'],
-        ...(this.customSkillId && {
-          container: {
-            skills: [{
-              type: 'custom',
-              skill_id: this.customSkillId,
-              version: 'latest'
-            }]
-          }
-        }),
-        tools: [{
-          type: 'code_execution_20250825',
-          name: 'code_execution'
-        }],
         messages: [{
           role: 'user',
           content: instruction

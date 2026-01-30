@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Copy, Download, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { templateService } from '@/services/TemplateService';
@@ -44,6 +45,7 @@ export function TemplateActionBar({
 }: TemplateActionBarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, isGuest } = useAuth();
   const [isApplying, setIsApplying] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
@@ -105,6 +107,11 @@ export function TemplateActionBar({
       );
 
       if (result.success && result.raceId) {
+        // Invalidate queries to ensure fresh data is loaded
+        await queryClient.invalidateQueries({ queryKey: ['regattas'] });
+        await queryClient.invalidateQueries({ queryKey: ['enrichedRaces'] });
+        await queryClient.invalidateQueries({ queryKey: ['sailorRacePreparation'] });
+
         // Navigate to the races tab with the new race selected
         router.replace({
           pathname: '/(tabs)/races',
@@ -123,7 +130,7 @@ export function TemplateActionBar({
     } finally {
       setIsCopying(false);
     }
-  }, [user, isGuest, raceId, sailorId, race, preparation, intentions, router]);
+  }, [user, isGuest, raceId, sailorId, race, preparation, intentions, router, queryClient]);
 
   // Check if there's any content worth copying
   const hasPreparation = Boolean(

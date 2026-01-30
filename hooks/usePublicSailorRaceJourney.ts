@@ -10,12 +10,12 @@
  * Used by the SailorRaceJourneyScreen for the full-screen detailed view.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '@/services/supabase';
-import { sailorRacePreparationService, SailorRacePreparation } from '@/services/SailorRacePreparationService';
-import { RaceIntentions } from '@/types/raceIntentions';
 import { TuningSettings } from '@/hooks/useRegattaContent';
 import { createLogger } from '@/lib/utils/logger';
+import { SailorRacePreparation, sailorRacePreparationService } from '@/services/SailorRacePreparationService';
+import { supabase } from '@/services/supabase';
+import { RaceIntentions } from '@/types/raceIntentions';
+import { useCallback, useEffect, useState } from 'react';
 
 const logger = createLogger('usePublicSailorRaceJourney');
 
@@ -43,6 +43,12 @@ export interface RaceData {
   post_race_notes?: string;
   lessons_learned?: string[];
   metadata?: Record<string, any>;
+  race_type?: string;
+  class_id?: string;
+  status?: string;
+  vhf_channel?: string;
+  boat_class?: string;
+  venue_name?: string;
 }
 
 /**
@@ -188,7 +194,7 @@ export function usePublicSailorRaceJourney(
             .select(
               `id, name, event_series_name, start_date,
                content_visibility, prep_notes, tuning_settings, post_race_notes,
-               lessons_learned, metadata`
+               lessons_learned, metadata, race_type, class_id, status, vhf_channel`
             )
             .eq('id', resolvedRaceId)
             .eq('created_by', sailorId)
@@ -204,6 +210,9 @@ export function usePublicSailorRaceJourney(
           return {
             ...raceData,
             race_series: raceData.event_series_name,
+            // Map boat_class from metadata if not present (legacy support)
+            boat_class: raceData.metadata?.class_name,
+            venue_name: raceData.metadata?.venue_name,
           } as RaceData;
         })(),
 

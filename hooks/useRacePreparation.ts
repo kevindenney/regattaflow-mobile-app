@@ -231,6 +231,12 @@ export function useRacePreparation({
       return;
     }
 
+    // For non-demo races, we require authentication
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const data = await sailorRacePreparationService.getPreparation(regattaId, user.id);
 
@@ -317,10 +323,17 @@ export function useRacePreparation({
         logger.warn('Regatta does not exist, skipping save', { regattaId });
         pendingChangesRef.current = {};
       }
-    } catch (error) {
-      console.error('[useRacePreparation] Failed to save race preparation:', error);
-      logger.error('Failed to save race preparation:', error);
-      // Keep pending changes so they can be retried
+    } catch (error: any) {
+      // RLS errors (42501) are expected when race doesn't exist or user doesn't have access yet
+      // This happens during sample data creation - just log as warning and clear pending changes
+      if (error?.code === '42501') {
+        logger.warn('RLS policy prevented save (race may not exist yet)', { regattaId });
+        pendingChangesRef.current = {};
+      } else {
+        console.warn('[useRacePreparation] Failed to save race preparation:', error);
+        logger.warn('Failed to save race preparation:', error);
+        // Keep pending changes so they can be retried
+      }
     } finally {
       setIsSaving(false);
     }

@@ -27,11 +27,17 @@ const withGoogleMaps = (config) => {
       if (fs.existsSync(podfilePath)) {
         let podfileContent = fs.readFileSync(podfilePath, 'utf8');
 
-        // Remove any lines that try to add react-native-google-maps as a separate pod
-        // This is the problematic line that Expo's built-in Maps plugin adds
+        // Remove the auto-generated react-native-maps block that uses wrong podspec name
+        // This block is added by Expo autolinking but references non-existent 'react-native-google-maps'
         podfileContent = podfileContent.replace(
-          /^\s*pod\s+['"]react-native-google-maps['"].*$/gm,
-          '  # react-native-google-maps removed by withGoogleMaps plugin'
+          /# @generated begin react-native-maps[\s\S]*?# @generated end react-native-maps\n?/g,
+          ''
+        );
+
+        // Also remove any standalone react-native-google-maps pod lines
+        podfileContent = podfileContent.replace(
+          /^\s*pod\s+['"]react-native-google-maps['"].*\n?/gm,
+          ''
         );
 
         // Check if we already have react-native-maps with Google subspec
