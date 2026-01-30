@@ -1,3 +1,9 @@
+/**
+ * Onboarding Pricing Screen
+ *
+ * Updated: 2026-01-30
+ * New pricing: Individual $10/mo ($120/yr) / Team $40/mo ($480/yr)
+ */
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -63,9 +69,13 @@ export default function PricingScreen() {
                                     </View>
                                 )}
                             </View>
+                            <View style={styles.popularBadge}>
+                                <Text style={styles.popularBadgeText}>MOST POPULAR</Text>
+                            </View>
                             <Text style={styles.planName}>Individual</Text>
                             <Text style={styles.planPrice}>$10<Text style={styles.period}>/month</Text></Text>
-                            <Text style={styles.planDesc}>Perfect for solo sailors tracking their own progress.</Text>
+                            <Text style={styles.annualPrice}>$120/year when billed annually</Text>
+                            <Text style={styles.planDesc}>Full racing features for solo sailors tracking their progress.</Text>
                         </TouchableOpacity>
 
                         {/* Team Plan */}
@@ -88,25 +98,41 @@ export default function PricingScreen() {
                                 )}
                             </View>
                             <Text style={styles.planName}>Team</Text>
-                            <Text style={styles.planPrice}>$35<Text style={styles.period}>/month</Text></Text>
-                            <Text style={styles.planDesc}>Up to 5 users. ideal for crews and sailing teams.</Text>
+                            <Text style={styles.planPrice}>$40<Text style={styles.period}>/month</Text></Text>
+                            <Text style={styles.annualPrice}>$480/year when billed annually</Text>
+                            <Text style={styles.planDesc}>Up to 5 team members. Ideal for crews and sailing teams.</Text>
                         </TouchableOpacity>
                     </View>
 
                     <View style={styles.featuresList}>
-                        <Text style={styles.featuresTitle}>Includes:</Text>
+                        <Text style={styles.featuresTitle}>Both plans include:</Text>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
                             <Text style={styles.featureText}>Unlimited Race Logging</Text>
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                            <Text style={styles.featureText}>Advanced Analytics</Text>
+                            <Text style={styles.featureText}>Unlimited AI Queries</Text>
+                        </View>
+                        <View style={styles.featureItem}>
+                            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                            <Text style={styles.featureText}>AI Strategy Analysis</Text>
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
                             <Text style={styles.featureText}>Weather & Tide Integration</Text>
                         </View>
+                        <View style={styles.featureItem}>
+                            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+                            <Text style={styles.featureText}>Advanced Analytics</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.learningNote}>
+                        <Ionicons name="school-outline" size={20} color="#F59E0B" />
+                        <Text style={styles.learningNoteText}>
+                            Learning modules available separately at $30/year each
+                        </Text>
                     </View>
 
                 </ScrollView>
@@ -126,7 +152,7 @@ export default function PricingScreen() {
                         style={styles.skipButton}
                         onPress={handleSkip}
                     >
-                        <Text style={styles.skipButtonText}>I'll decide later</Text>
+                        <Text style={styles.skipButtonText}>Start with Free plan</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -204,6 +230,20 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    popularBadge: {
+        alignSelf: 'flex-start',
+        backgroundColor: '#3B82F6',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 4,
+        marginBottom: 8,
+    },
+    popularBadgeText: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        letterSpacing: 0.5,
+    },
     planName: {
         fontSize: 18,
         fontWeight: '700',
@@ -214,12 +254,17 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: '800',
         color: '#0F172A',
-        marginBottom: 8,
+        marginBottom: 4,
     },
     period: {
         fontSize: 16,
         fontWeight: '500',
         color: '#64748B',
+    },
+    annualPrice: {
+        fontSize: 13,
+        color: '#64748B',
+        marginBottom: 8,
     },
     planDesc: {
         fontSize: 14,
@@ -247,6 +292,19 @@ const styles = StyleSheet.create({
     featureText: {
         fontSize: 16,
         color: '#334155',
+    },
+    learningNote: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FEF3C7',
+        padding: 12,
+        borderRadius: 8,
+        gap: 8,
+    },
+    learningNoteText: {
+        fontSize: 14,
+        color: '#92400E',
+        flex: 1,
     },
     footer: {
         padding: 24,

@@ -1,9 +1,12 @@
 /**
  * Subscription Service - Web Version
  * Uses Stripe for web subscriptions instead of native in-app purchases
+ *
+ * Updated: 2026-01-30
+ * New pricing: Individual $120/yr, Team $480/yr
+ * Learning modules purchased separately at $30/yr each
  */
 
-import { Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -23,7 +26,7 @@ export interface SubscriptionProduct {
 export interface SubscriptionStatus {
   isActive: boolean;
   productId: string | null;
-  tier: 'free' | 'basic' | 'pro';
+  tier: 'free' | 'individual' | 'team';
   expiresAt: Date | null;
   willRenew: boolean;
   platform: 'ios' | 'android' | 'web';
@@ -42,58 +45,57 @@ const logger = createLogger('subscriptionService.web');
 
 /**
  * Stripe Price IDs for subscriptions
- * Updated: 2026-01-15
+ * Updated: 2026-01-30
  *
- * Race Strategy: Free / Basic $120/yr / Pro $360/yr
- * Learning: Free / Module $30/yr / Bundle $100/yr
+ * Race Strategy: Free / Individual $120/yr / Team $480/yr
+ * Learning: $30/yr per module (purchased separately)
  */
 export const STRIPE_PRICE_IDS = {
   // Race Strategy Plans (yearly only)
-  basic_yearly: 'price_1Splo2BbfEeOhHXbHi1ENal0',     // $120/year
-  pro_yearly: 'price_1SplplBbfEeOhHXbRunl0IIa',       // $360/year
+  individual_yearly: 'price_1Splo2BbfEeOhHXbHi1ENal0',  // $120/year (was Basic)
+  team_yearly: 'price_1SplqqBbfEeOhHXbTeam480Y',       // $480/year (new Team)
 
-  // Racing Academy / Learning
-  academy_module: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',   // $30/year per module
-  academy_bundle: 'price_1Splr8BbfEeOhHXbUEa1Yrn6',   // $100/year all modules
+  // Racing Academy / Learning (separate purchase)
+  academy_module: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',    // $30/year per module
 };
 
 export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
-  basic: {
-    id: STRIPE_PRICE_IDS.basic_yearly,
-    title: 'Basic',
-    description: 'Essential tools for club racers',
+  individual: {
+    id: STRIPE_PRICE_IDS.individual_yearly,
+    title: 'Individual',
+    description: 'Full racing features for solo sailors',
     price: '$120/year',
     priceAmountMicros: 120000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
     effectiveMonthly: '$10/mo',
-    features: [
-      'Unlimited races',
-      '20 AI queries per month',
-      'Automatic weather updates',
-      'Race checklists & prep tools',
-      'Document upload & storage',
-      'Cloud backup & sync',
-    ],
-  },
-  pro: {
-    id: STRIPE_PRICE_IDS.pro_yearly,
-    title: 'Pro',
-    description: 'Full racing features for serious sailors',
-    price: '$360/year',
-    priceAmountMicros: 360000000,
-    priceCurrencyCode: 'USD',
-    billingPeriod: 'yearly',
-    effectiveMonthly: '$30/mo',
     isPopular: true,
     features: [
-      'Everything in Basic',
+      'Unlimited races',
       'Unlimited AI queries',
       'AI strategy analysis',
-      'Team sharing & collaboration',
+      'Automatic weather updates',
       'Historical race data',
       'Offline mode',
       'Advanced analytics',
+      'Cloud backup & sync',
+    ],
+  },
+  team: {
+    id: STRIPE_PRICE_IDS.team_yearly,
+    title: 'Team',
+    description: 'Full racing features for teams',
+    price: '$480/year',
+    priceAmountMicros: 480000000,
+    priceCurrencyCode: 'USD',
+    billingPeriod: 'yearly',
+    effectiveMonthly: '$40/mo',
+    features: [
+      'Everything in Individual',
+      'Up to 5 team members',
+      'Team sharing & collaboration',
+      'Shared race preparation',
+      'Team analytics dashboard',
       'Priority support',
     ],
   },
@@ -101,6 +103,7 @@ export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
 
 /**
  * Learning/Academy subscription products
+ * Note: Learning modules are purchased separately, NOT bundled with subscriptions
  */
 export const LEARNING_PRODUCTS: Record<string, SubscriptionProduct> = {
   module: {
@@ -116,23 +119,6 @@ export const LEARNING_PRODUCTS: Record<string, SubscriptionProduct> = {
       'Interactive lessons',
       'Progress tracking',
       'Certificate on completion',
-    ],
-  },
-  bundle: {
-    id: STRIPE_PRICE_IDS.academy_bundle,
-    title: 'All Modules',
-    description: 'Access all learning content',
-    price: '$100/year',
-    priceAmountMicros: 100000000,
-    priceCurrencyCode: 'USD',
-    billingPeriod: 'yearly',
-    isPopular: true,
-    features: [
-      'All learning modules included',
-      'Interactive lessons & simulations',
-      'Progress tracking',
-      'Certificates on completion',
-      'New modules as released',
     ],
   },
 };
@@ -272,10 +258,19 @@ export class SubscriptionService {
 
       if (error) throw error;
 
+      // Normalize tier name (handle legacy values)
+      let tier: 'free' | 'individual' | 'team' = 'free';
+      const rawTier = data.subscription_tier?.toLowerCase();
+      if (rawTier === 'individual' || rawTier === 'basic') {
+        tier = 'individual';
+      } else if (rawTier === 'team' || rawTier === 'pro' || rawTier === 'championship') {
+        tier = 'team';
+      }
+
       this.currentStatus = {
         isActive: data.subscription_status === 'active',
         productId: data.subscription_tier || null,
-        tier: data.subscription_tier || 'free',
+        tier,
         expiresAt: data.subscription_expires_at ? new Date(data.subscription_expires_at) : null,
         willRenew: data.subscription_status === 'active',
         platform: 'web',
@@ -331,4 +326,3 @@ export class SubscriptionService {
 
 export const subscriptionService = SubscriptionService.getInstance();
 export default subscriptionService;
-

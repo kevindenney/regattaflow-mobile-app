@@ -4,8 +4,11 @@
  * Subscription Service
  * Marine-grade subscription management for professional sailing platform
  * Handles native in-app purchases and subscription lifecycle
- * 
- * NOTE: expo-in-app-purchases was deprecated in SDK 50. 
+ *
+ * Updated: 2026-01-30
+ * New pricing: Individual $120/yr, Team $480/yr
+ *
+ * NOTE: expo-in-app-purchases was deprecated in SDK 50.
  * Using mock implementation until expo-iap is configured.
  */
 
@@ -45,7 +48,7 @@ export interface SubscriptionProduct {
 export interface SubscriptionStatus {
   isActive: boolean;
   productId: string | null;
-  tier: 'free' | 'pro' | 'championship';
+  tier: 'free' | 'individual' | 'team';
   expiresAt: Date | null;
   isTrialing?: boolean;
   trialEndsAt?: Date | null;
@@ -64,6 +67,7 @@ export interface PurchaseResult {
 /**
  * RegattaFlow Subscription Products
  * Professional sailing platform pricing tiers
+ * Updated: 2026-01-30
  */
 
 const logger = createLogger('subscriptionService');
@@ -73,52 +77,55 @@ const logger = createLogger('subscriptionService');
  * Note: Native uses App Store/Play Store product IDs
  */
 const STRIPE_PRICE_IDS = {
-  pro_yearly: 'price_1Sl0i8BbfEeOhHXbmUQ5OBkV',           // $300/year
-  championship_yearly: 'price_1Sl0ljBbfEeOhHXbKmEU06Ha', // $480/year
+  individual_yearly: 'price_1Splo2BbfEeOhHXbHi1ENal0',  // $120/year
+  team_yearly: 'price_1SplqqBbfEeOhHXbTeam480Y',       // $480/year
 };
 
 export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
-  pro: {
+  individual: {
     id: Platform.select({
-      ios: 'regattaflow_pro_yearly',
-      android: 'regattaflow_pro_yearly',
-      default: STRIPE_PRICE_IDS.pro_yearly,
+      ios: 'regattaflow_individual_yearly',
+      android: 'regattaflow_individual_yearly',
+      default: STRIPE_PRICE_IDS.individual_yearly,
     }),
-    title: 'Pro',
-    description: 'Full racing features for serious sailors',
-    price: '$300/year',
-    priceAmountMicros: 300000000,
+    title: 'Individual',
+    description: 'Full racing features for solo sailors',
+    price: '$120/year',
+    priceAmountMicros: 120000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
-    effectiveMonthly: '$25/mo',
+    effectiveMonthly: '$10/mo',
     isPopular: true,
     features: [
+      'Unlimited races',
       'Unlimited AI queries',
-      'Full venue intelligence access',
-      'Advanced race strategy',
-      'Performance analytics',
+      'AI strategy analysis',
+      'Automatic weather updates',
+      'Historical race data',
       'Offline mode',
-      'Cloud backup and sync',
+      'Advanced analytics',
+      'Cloud backup & sync',
     ],
   },
-  championship: {
+  team: {
     id: Platform.select({
-      ios: 'regattaflow_championship_yearly',
-      android: 'regattaflow_championship_yearly',
-      default: STRIPE_PRICE_IDS.championship_yearly,
+      ios: 'regattaflow_team_yearly',
+      android: 'regattaflow_team_yearly',
+      default: STRIPE_PRICE_IDS.team_yearly,
     }),
-    title: 'Championship',
-    description: 'For teams & serious competitors',
+    title: 'Team',
+    description: 'Full racing features for teams',
     price: '$480/year',
     priceAmountMicros: 480000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
     effectiveMonthly: '$40/mo',
     features: [
-      'Everything in Pro',
+      'Everything in Individual',
       'Up to 5 team members',
-      'Advanced team analytics',
-      'All Racing Academy modules included',
+      'Team sharing & collaboration',
+      'Shared race preparation',
+      'Team analytics dashboard',
       'Priority support',
     ],
   },
@@ -228,14 +235,14 @@ export class SubscriptionService {
       await InAppPurchases.finishTransactionAsync(purchase, true);
 
       Alert.alert(
-        '🌊 Subscription Active',
-        'Welcome to RegattaFlow Pro! Your subscription is now active and all features are unlocked.',
+        'Subscription Active',
+        'Welcome to RegattaFlow! Your subscription is now active and all features are unlocked.',
         [{ text: 'Start Racing', style: 'default' }]
       );
     } catch (error) {
 
       Alert.alert(
-        '🔴 Purchase Error',
+        'Purchase Error',
         'There was an issue processing your purchase. Please contact support if the problem persists.'
       );
     }
@@ -394,10 +401,19 @@ export class SubscriptionService {
         throw error;
       }
 
+      // Normalize tier name (handle legacy values)
+      let tier: 'free' | 'individual' | 'team' = 'free';
+      const rawTier = data.subscription_tier?.toLowerCase();
+      if (rawTier === 'individual' || rawTier === 'basic') {
+        tier = 'individual';
+      } else if (rawTier === 'team' || rawTier === 'pro' || rawTier === 'championship') {
+        tier = 'team';
+      }
+
       this.currentStatus = {
         isActive: data.subscription_status === 'active',
         productId: data.subscription_tier || null,
-        tier: data.subscription_tier || 'free',
+        tier,
         expiresAt: data.subscription_expires_at ? new Date(data.subscription_expires_at) : null,
         willRenew: data.subscription_status === 'active',
         platform: data.subscription_platform || Platform.OS,
@@ -436,7 +452,7 @@ export class SubscriptionService {
       });
 
       Alert.alert(
-        '⚠️ Cancel Subscription',
+        'Cancel Subscription',
         message,
         [
           { text: 'Cancel', style: 'cancel' },

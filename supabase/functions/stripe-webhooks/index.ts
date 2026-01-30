@@ -307,11 +307,11 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
  */
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
-  
+
   // Find user by Stripe customer ID
   const { data: user } = await supabase
     .from('users')
-    .select('id')
+    .select('id, email, full_name')
     .eq('stripe_customer_id', customerId)
     .single();
 
@@ -332,19 +332,22 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   };
 
   // Get the price/product to determine tier
-  // Price IDs: Basic $120/yr, Pro $360/yr (updated 2026-01-15)
+  // Price IDs: Individual $120/yr, Team $480/yr (updated 2026-01-30)
   const priceId = subscription.items.data[0]?.price.id;
   const tierMap: Record<string, string> = {
     // Use env vars if set, with hardcoded fallbacks
-    [Deno.env.get('STRIPE_BASIC_PRICE_ID') || 'price_1Splo2BbfEeOhHXbHi1ENal0']: 'basic',
-    [Deno.env.get('STRIPE_PRO_PRICE_ID') || 'price_1SplplBbfEeOhHXbRunl0IIa']: 'pro',
-    // Hardcoded price IDs (in case env vars differ)
-    'price_1Splo2BbfEeOhHXbHi1ENal0': 'basic',  // $120/year
-    'price_1SplplBbfEeOhHXbRunl0IIa': 'pro',    // $360/year
-    // Legacy price IDs (map old prices to appropriate tiers)
-    'price_1Sl0i8BbfEeOhHXbmUQ5OBkV': 'basic',  // old $300/year Pro -> basic
-    'price_1Sl0ljBbfEeOhHXbKmEU06Ha': 'pro',    // old $480/year Championship -> pro
+    [Deno.env.get('STRIPE_INDIVIDUAL_PRICE_ID') || 'price_individual_yearly']: 'individual',
+    [Deno.env.get('STRIPE_TEAM_PRICE_ID') || 'price_team_yearly']: 'team',
+    // Legacy price IDs (map old prices to new tiers)
+    'price_1Splo2BbfEeOhHXbHi1ENal0': 'individual',  // old basic $120/year -> individual
+    'price_1SplplBbfEeOhHXbRunl0IIa': 'team',        // old pro $360/year -> team
+    'price_1Sl0i8BbfEeOhHXbmUQ5OBkV': 'individual',  // old $300/year Pro -> individual
+    'price_1Sl0ljBbfEeOhHXbKmEU06Ha': 'team',        // old $480/year Championship -> team
   };
+
+  const tier = tierMap[priceId] || 'individual';
+  const isTeamPlan = tier === 'team';
+  const isNewOrReactivated = subscription.status === 'active';
 
   const { error } = await supabase
     .from('subscriptions')
@@ -353,17 +356,17 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
       stripe_subscription_id: subscription.id,
       stripe_customer_id: customerId,
       status: statusMap[subscription.status] || subscription.status,
-      tier: tierMap[priceId] || 'basic',
+      tier: tier,
       current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
       current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-      cancel_at: subscription.cancel_at 
-        ? new Date(subscription.cancel_at * 1000).toISOString() 
+      cancel_at: subscription.cancel_at
+        ? new Date(subscription.cancel_at * 1000).toISOString()
         : null,
-      canceled_at: subscription.canceled_at 
-        ? new Date(subscription.canceled_at * 1000).toISOString() 
+      canceled_at: subscription.canceled_at
+        ? new Date(subscription.canceled_at * 1000).toISOString()
         : null,
-      trial_end: subscription.trial_end 
-        ? new Date(subscription.trial_end * 1000).toISOString() 
+      trial_end: subscription.trial_end
+        ? new Date(subscription.trial_end * 1000).toISOString()
         : null,
       updated_at: new Date().toISOString(),
     }, {
@@ -379,10 +382,93 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     .from('users')
     .update({
       subscription_status: statusMap[subscription.status] || subscription.status,
-      subscription_tier: tierMap[priceId] || 'basic',
+      subscription_tier: tier,
       subscription_updated_at: new Date().toISOString(),
     })
     .eq('id', user.id);
+
+  // Create subscription team for Team plan subscribers
+  if (isTeamPlan && isNewOrReactivated) {
+    await ensureSubscriptionTeam(user.id, user.full_name, user.email);
+  }
+}
+
+/**
+ * Create or ensure subscription team exists for a user
+ */
+async function ensureSubscriptionTeam(userId: string, userName?: string, userEmail?: string) {
+  // Check if user already has a team as owner
+  const { data: existingTeam } = await supabase
+    .from('subscription_teams')
+    .select('id')
+    .eq('owner_id', userId)
+    .single();
+
+  if (existingTeam) {
+    // Already has a team, just ensure profile is linked
+    await supabase
+      .from('profiles')
+      .update({ subscription_team_id: existingTeam.id })
+      .eq('id', userId);
+    return;
+  }
+
+  // Generate invite code
+  const inviteCode = generateInviteCode();
+
+  // Create new team
+  const teamName = userName ? `${userName}'s Team` : 'My Team';
+  const { data: newTeam, error: teamError } = await supabase
+    .from('subscription_teams')
+    .insert({
+      owner_id: userId,
+      name: teamName,
+      max_seats: 5,
+      invite_code: inviteCode,
+    })
+    .select()
+    .single();
+
+  if (teamError || !newTeam) {
+    console.error('Failed to create subscription team:', teamError);
+    return;
+  }
+
+  // Add owner as first member
+  const { error: memberError } = await supabase
+    .from('subscription_team_members')
+    .insert({
+      team_id: newTeam.id,
+      user_id: userId,
+      email: userEmail || '',
+      role: 'owner',
+      status: 'active',
+      joined_at: new Date().toISOString(),
+    });
+
+  if (memberError) {
+    console.error('Failed to add owner as team member:', memberError);
+  }
+
+  // Link profile to team
+  await supabase
+    .from('profiles')
+    .update({ subscription_team_id: newTeam.id })
+    .eq('id', userId);
+
+  console.log(`Created subscription team ${newTeam.id} for user ${userId}`);
+}
+
+/**
+ * Generate a random invite code
+ */
+function generateInviteCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
 }
 
 /**
@@ -390,7 +476,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
  */
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
-  
+
   const { data: user } = await supabase
     .from('users')
     .select('id')
@@ -416,6 +502,87 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
       subscription_updated_at: new Date().toISOString(),
     })
     .eq('id', user.id);
+
+  // Handle subscription team cleanup
+  await handleSubscriptionTeamCleanup(user.id);
+}
+
+/**
+ * Clean up subscription team when subscription is canceled
+ * - If user is team owner: update all team members to free tier
+ * - If user is team member: remove them from the team
+ */
+async function handleSubscriptionTeamCleanup(userId: string) {
+  // Check if user owns a team
+  const { data: ownedTeam } = await supabase
+    .from('subscription_teams')
+    .select('id')
+    .eq('owner_id', userId)
+    .single();
+
+  if (ownedTeam) {
+    // User owns a team - downgrade all members to free tier
+    const { data: members } = await supabase
+      .from('subscription_team_members')
+      .select('user_id')
+      .eq('team_id', ownedTeam.id)
+      .neq('user_id', userId);
+
+    if (members && members.length > 0) {
+      // Update all team members to free tier
+      for (const member of members) {
+        if (member.user_id) {
+          await supabase
+            .from('users')
+            .update({
+              subscription_tier: 'free',
+              subscription_status: 'canceled',
+              subscription_updated_at: new Date().toISOString(),
+            })
+            .eq('id', member.user_id);
+
+          // Remove their team link
+          await supabase
+            .from('profiles')
+            .update({ subscription_team_id: null })
+            .eq('id', member.user_id);
+        }
+      }
+    }
+
+    // Remove owner's team link
+    await supabase
+      .from('profiles')
+      .update({ subscription_team_id: null })
+      .eq('id', userId);
+
+    console.log(`Cleaned up team ${ownedTeam.id} after owner subscription canceled`);
+    return;
+  }
+
+  // Check if user is a team member (not owner)
+  const { data: membership } = await supabase
+    .from('subscription_team_members')
+    .select('id, team_id')
+    .eq('user_id', userId)
+    .neq('role', 'owner')
+    .single();
+
+  if (membership) {
+    // Remove user from team
+    await supabase
+      .from('subscription_team_members')
+      .delete()
+      .eq('id', membership.id);
+
+    // Remove team link from profile
+    await supabase
+      .from('profiles')
+      .update({ subscription_team_id: null })
+      .eq('id', userId);
+
+    console.log(`Removed user ${userId} from team ${membership.team_id}`);
+  }
 }
 
 /**

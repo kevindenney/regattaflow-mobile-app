@@ -1,6 +1,9 @@
 /**
  * Subscription Manager Component
  * Handles subscription display, upgrade, and management
+ *
+ * Updated: 2026-01-30
+ * New pricing: Free / Individual $120/yr / Team $480/yr
  */
 
 import React, { useState, useEffect } from 'react';
@@ -17,45 +20,53 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  priceId: string;
+  features: string[];
+  popular?: boolean;
+}
+
 // Web-only stub to completely avoid Stripe React Native imports
 const webStripeService = {
   plans: [
     {
-      id: 'basic',
-      name: 'Basic',
+      id: 'free',
+      name: 'Free',
       price: 0,
       priceId: '',
-      features: ['Basic race tracking', '3 document uploads/month', 'Weather forecasts', 'Basic analytics']
+      features: ['Up to 3 races', 'Basic race checklists', 'Manual weather lookup', '5 AI queries per month']
     },
     {
-      id: 'professional',
-      name: 'Professional',
-      price: 29,
-      priceId: '',
+      id: 'individual',
+      name: 'Individual',
+      price: 120,
+      priceId: 'price_1Splo2BbfEeOhHXbHi1ENal0',
       features: [
-        'Unlimited race tracking',
-        'Unlimited document uploads',
+        'Unlimited races',
+        'Unlimited AI queries',
         'AI strategy analysis',
+        'Venue intelligence',
+        'Historical race data',
+        'Offline mode',
         'Advanced analytics',
-        'Multi-venue support',
-        'Performance insights',
-        'Priority support'
       ],
       popular: true
     },
     {
       id: 'team',
       name: 'Team',
-      price: 49,
-      priceId: '',
+      price: 480,
+      priceId: 'price_1SplqqBbfEeOhHXbTeam480Y',
       features: [
-        'Everything in Professional',
-        'Team collaboration',
-        'Coach integration',
-        'Custom training plans',
-        'Team analytics',
-        'API access',
-        'Dedicated support'
+        'Everything in Individual',
+        'Up to 5 team members',
+        'Team sharing & collaboration',
+        'Shared race preparation',
+        'Team analytics dashboard',
+        'Priority support',
       ]
     }
   ],
@@ -71,7 +82,7 @@ const stripeService = webStripeService;
 
 interface SubscriptionStatus {
   active: boolean;
-  plan?: any;
+  plan?: SubscriptionPlan;
   currentPeriodEnd?: Date;
   cancelAtPeriodEnd?: boolean;
 }
@@ -135,7 +146,7 @@ export const SubscriptionManager: React.FC = () => {
       } else {
         Alert.alert('Error', result.error);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       Alert.alert('Error', 'Failed to start checkout process');
     } finally {
       setProcessingPlan(null);
@@ -208,6 +219,11 @@ export const SubscriptionManager: React.FC = () => {
     setLoading(false);
   };
 
+  const formatPrice = (price: number) => {
+    if (price === 0) return '$0';
+    return `$${price}/year`;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -238,7 +254,7 @@ export const SubscriptionManager: React.FC = () => {
             </View>
           </View>
           <Text style={styles.currentPlanName}>{subscriptionStatus.plan.name}</Text>
-          <Text style={styles.currentPlanPrice}>${subscriptionStatus.plan.price}/month</Text>
+          <Text style={styles.currentPlanPrice}>{formatPrice(subscriptionStatus.plan.price)}</Text>
 
           {subscriptionStatus.currentPeriodEnd && (
             <Text style={styles.periodEnd}>
@@ -300,8 +316,12 @@ export const SubscriptionManager: React.FC = () => {
 
               <Text style={styles.planName}>{plan.name}</Text>
               <View style={styles.priceContainer}>
-                <Text style={styles.priceAmount}>${plan.price}</Text>
-                <Text style={styles.pricePeriod}>/month</Text>
+                <Text style={styles.priceAmount}>{formatPrice(plan.price)}</Text>
+                {plan.price > 0 && (
+                  <Text style={styles.pricePeriod}>
+                    ({plan.id === 'individual' ? '$10/mo' : '$40/mo'})
+                  </Text>
+                )}
               </View>
 
               <View style={styles.featuresContainer}>
@@ -320,7 +340,7 @@ export const SubscriptionManager: React.FC = () => {
                   isProcessing && styles.processingButton
                 ]}
                 onPress={() => handleSelectPlan(plan)}
-                disabled={isCurrentPlan || isProcessing}
+                disabled={isCurrentPlan || isProcessing || plan.price === 0}
               >
                 {isProcessing ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -329,7 +349,7 @@ export const SubscriptionManager: React.FC = () => {
                     styles.selectButtonText,
                     isCurrentPlan && styles.currentButtonText
                   ]}>
-                    {isCurrentPlan ? 'Current Plan' : 'Select Plan'}
+                    {isCurrentPlan ? 'Current Plan' : plan.price === 0 ? 'Free Plan' : 'Select Plan'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -343,22 +363,22 @@ export const SubscriptionManager: React.FC = () => {
         <Text style={styles.sectionTitle}>Feature Comparison</Text>
         <View style={styles.comparisonTable}>
           <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonFeature}>Document Uploads</Text>
-            <Text style={styles.comparisonValue}>3/mo</Text>
+            <Text style={styles.comparisonFeature}>Races</Text>
+            <Text style={styles.comparisonValue}>3</Text>
             <Text style={styles.comparisonValue}>Unlimited</Text>
             <Text style={styles.comparisonValue}>Unlimited</Text>
           </View>
           <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonFeature}>AI Analysis</Text>
-            <Ionicons name="close" size={20} color="#FF3B30" />
-            <Ionicons name="checkmark" size={20} color="#4CAF50" />
-            <Ionicons name="checkmark" size={20} color="#4CAF50" />
+            <Text style={styles.comparisonFeature}>AI Queries</Text>
+            <Text style={styles.comparisonValue}>5/mo</Text>
+            <Text style={styles.comparisonValue}>Unlimited</Text>
+            <Text style={styles.comparisonValue}>Unlimited</Text>
           </View>
           <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonFeature}>Team Features</Text>
+            <Text style={styles.comparisonFeature}>Team Members</Text>
             <Ionicons name="close" size={20} color="#FF3B30" />
             <Ionicons name="close" size={20} color="#FF3B30" />
-            <Ionicons name="checkmark" size={20} color="#4CAF50" />
+            <Text style={styles.comparisonValue}>5</Text>
           </View>
         </View>
       </View>
@@ -515,9 +535,9 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
   pricePeriod: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
-    marginLeft: 4,
+    marginLeft: 8,
   },
   featuresContainer: {
     marginBottom: 20,

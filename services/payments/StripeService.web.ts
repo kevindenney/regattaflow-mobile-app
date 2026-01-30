@@ -1,6 +1,9 @@
 /**
  * Stripe Payment Service for RegattaFlow (Web)
  * Handles subscriptions, payment methods, and billing for web platform
+ *
+ * Updated: 2026-01-30
+ * New pricing: Individual $120/yr, Team $480/yr
  */
 
 import { supabase } from '@/services/supabase';
@@ -23,52 +26,52 @@ export interface SubscriptionStatus {
 }
 
 const logger = createLogger('StripeService.web');
+
 export class StripeService {
   private readonly apiUrl = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:3000';
 
-  // Subscription Plans
+  // Subscription Plans - Updated 2026-01-30
   readonly plans: SubscriptionPlan[] = [
     {
-      id: 'basic',
-      name: 'Basic',
+      id: 'free',
+      name: 'Free',
       price: 0,
       priceId: '',
       features: [
-        'Basic race tracking',
-        '3 document uploads/month',
-        'Weather forecasts',
-        'Basic analytics'
+        'Up to 3 races',
+        'Basic race checklists',
+        'Manual weather lookup',
+        '5 AI queries per month'
       ]
     },
     {
-      id: 'professional',
-      name: 'Professional',
-      price: 29,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_PRICE_ID || '',
+      id: 'individual',
+      name: 'Individual',
+      price: 120,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_PRICE_ID || 'price_1Splo2BbfEeOhHXbHi1ENal0',
       features: [
-        'Unlimited race tracking',
-        'Unlimited document uploads',
+        'Unlimited races',
+        'Unlimited AI queries',
         'AI strategy analysis',
+        'Venue intelligence',
+        'Historical race data',
+        'Offline mode',
         'Advanced analytics',
-        'Multi-venue support',
-        'Performance insights',
-        'Priority support'
       ],
       popular: true
     },
     {
       id: 'team',
       name: 'Team',
-      price: 49,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_TEAM_PRICE_ID || '',
+      price: 480,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_TEAM_PRICE_ID || 'price_1SplqqBbfEeOhHXbTeam480Y',
       features: [
-        'Everything in Professional',
-        'Team collaboration',
-        'Coach integration',
-        'Custom training plans',
-        'Team analytics',
-        'API access',
-        'Dedicated support'
+        'Everything in Individual',
+        'Up to 5 team members',
+        'Team sharing & collaboration',
+        'Shared race preparation',
+        'Team analytics dashboard',
+        'Priority support',
       ]
     }
   ];
@@ -110,9 +113,10 @@ export class StripeService {
 
       return { url: data.url };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Checkout session error:', error);
-      return { error: error.message };
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { error: message };
     }
   }
 
@@ -146,9 +150,10 @@ export class StripeService {
 
       return { url: data.url };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Portal session error:', error);
-      return { error: error.message };
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { error: message };
     }
   }
 
@@ -176,7 +181,7 @@ export class StripeService {
         cancelAtPeriodEnd: data.cancel_at_period_end
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to get subscription status:', error);
       return { active: false };
     }
@@ -209,9 +214,10 @@ export class StripeService {
 
       return { success: true };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Cancel subscription error:', error);
-      return { success: false, error: error.message };
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: message };
     }
   }
 
@@ -242,9 +248,10 @@ export class StripeService {
 
       return { success: true };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Resume subscription error:', error);
-      return { success: false, error: error.message };
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: message };
     }
   }
 
@@ -262,7 +269,7 @@ export class StripeService {
 
     // Define feature access by plan
     const featureMap: Record<string, string[]> = {
-      professional: [
+      individual: [
         'unlimited_documents',
         'ai_analysis',
         'advanced_analytics',
@@ -333,9 +340,10 @@ export class StripeService {
 
       return { success: true };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Payment error:', error);
-      return { success: false, error: error.message };
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return { success: false, error: message };
     }
   }
 }

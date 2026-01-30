@@ -1,8 +1,9 @@
 /**
- * Subscription Page — Compact Sailor Plans (Annual Only)
+ * Subscription Page - Compact Sailor Plans (Annual Only)
  *
- * Each plan is a self-contained section with an inline subscribe button.
- * Features are collapsed into compact multi-line rows.
+ * Updated: 2026-01-30
+ * New pricing: Free / Individual $120/yr / Team $480/yr
+ * Learning modules purchased separately ($30/yr each)
  */
 
 import React, { useState } from 'react';
@@ -18,7 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Zap, Crown, Anchor } from 'lucide-react-native';
+import { Zap, Users, Anchor } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 
 import { useAuth } from '@/providers/AuthProvider';
@@ -42,6 +43,7 @@ interface Plan {
   id: string;
   name: string;
   annualPrice: number;
+  monthlyEquivalent: string;
   description: string;
   icon: LucideIcon;
   color: string;
@@ -55,14 +57,15 @@ const PLANS: Plan[] = [
     id: 'free',
     name: 'Free',
     annualPrice: 0,
+    monthlyEquivalent: '$0',
     description: 'Get started with sailing',
     icon: Anchor,
     color: IOS_COLORS.systemGray,
     features: [
-      'Race calendar & entries',
-      'Basic race preparation',
-      'Weather overview',
-      'Community access',
+      'Up to 3 races',
+      'Basic race checklists',
+      'Manual weather lookup',
+      '5 AI queries per month',
     ],
     limitations: [
       'AI race strategy',
@@ -71,42 +74,45 @@ const PLANS: Plan[] = [
     ],
   },
   {
-    id: 'basic',
-    name: 'Basic',
+    id: 'individual',
+    name: 'Individual',
     annualPrice: 120,
-    description: 'Essential tools for club racers',
+    monthlyEquivalent: '$10/mo',
+    description: 'Full racing features for solo sailors',
     icon: Zap,
     color: IOS_COLORS.systemBlue,
     popular: true,
     features: [
-      'Everything in Free',
-      'AI race strategy queries',
+      'Unlimited races',
+      'Unlimited AI queries',
+      'AI strategy analysis',
       'Venue intelligence',
-      'Tide & current overlays',
-      'Race preparation checklists',
-      'Email support',
+      'Historical race data',
+      'Offline mode',
+      'Advanced analytics',
     ],
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    annualPrice: 300,
-    description: 'Full features for serious sailors',
-    icon: Crown,
+    id: 'team',
+    name: 'Team',
+    annualPrice: 480,
+    monthlyEquivalent: '$40/mo',
+    description: 'Full racing features for teams',
+    icon: Users,
     color: IOS_COLORS.systemPurple,
     features: [
-      'Everything in Basic',
-      'Unlimited AI queries',
-      'Performance analytics',
-      'Competitor analysis',
-      'Advanced weather models',
+      'Everything in Individual',
+      'Up to 5 team members',
+      'Team sharing & collaboration',
+      'Shared race preparation',
+      'Team analytics dashboard',
       'Priority support',
     ],
   },
 ];
 
 // =============================================================================
-// Plan icon component (28×28 colored square matching IOSListItem leading icon)
+// Plan icon component (28x28 colored square matching IOSListItem leading icon)
 // =============================================================================
 
 function PlanIcon({ icon: Icon, color }: { icon: LucideIcon; color: string }) {
@@ -128,7 +134,7 @@ export default function SubscriptionPage() {
 
   const [processingPlan, setProcessingPlan] = useState<string | null>(null);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // -- Handlers ----------------------------------------------------------------
 
   const handleCheckout = async (planId: string) => {
     if (!user?.id) {
@@ -170,16 +176,23 @@ export default function SubscriptionPage() {
     }
   };
 
-  // ── Derived state ─────────────────────────────────────────────────────────
+  // -- Derived state -----------------------------------------------------------
 
-  const currentPlan = userProfile?.subscription_tier || 'free';
+  // Normalize tier name for comparison
+  const rawTier = userProfile?.subscription_tier?.toLowerCase() || 'free';
+  let currentPlan = 'free';
+  if (rawTier === 'individual' || rawTier === 'basic') {
+    currentPlan = 'individual';
+  } else if (rawTier === 'team' || rawTier === 'pro' || rawTier === 'championship') {
+    currentPlan = 'team';
+  }
 
   const formatPrice = (plan: Plan) => {
     if (plan.annualPrice === 0) return '$0/yr';
     return `$${plan.annualPrice}/yr`;
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // -- Render ------------------------------------------------------------------
 
   return (
     <SafeAreaView style={s.container}>
@@ -202,7 +215,7 @@ export default function SubscriptionPage() {
         contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Trial Banner ─────────────────────────────────────────── */}
+        {/* -- Trial Banner --------------------------------------------------- */}
         {trialStatus.isOnTrial && (
           <IOSListSection>
             <View
@@ -234,11 +247,11 @@ export default function SubscriptionPage() {
           </IOSListSection>
         )}
 
-        {/* ── Plan Sections ────────────────────────────────────────── */}
+        {/* -- Plan Sections -------------------------------------------------- */}
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id;
           const isFree = plan.annualPrice === 0;
-          const isPro = plan.id === 'pro';
+          const isTeam = plan.id === 'team';
           const isProcessing = processingPlan === plan.id;
 
           const sectionHeader = plan.popular
@@ -261,18 +274,23 @@ export default function SubscriptionPage() {
                 subtitle={plan.description}
                 leadingComponent={<PlanIcon icon={plan.icon} color={plan.color} />}
                 trailingComponent={
-                  <Text style={s.priceText}>{formatPrice(plan)}</Text>
+                  <View style={s.priceContainer}>
+                    <Text style={s.priceText}>{formatPrice(plan)}</Text>
+                    {plan.monthlyEquivalent !== '$0' && (
+                      <Text style={s.priceSubtext}>{plan.monthlyEquivalent}</Text>
+                    )}
+                  </View>
                 }
                 trailingAccessory="none"
               />
 
-              {/* Racing Academy highlight (Pro only) */}
-              {isPro && (
+              {/* Team members highlight (Team only) */}
+              {isTeam && (
                 <IOSListItem
-                  title="Includes Racing Academy"
-                  subtitle="All course modules included ($100/yr value)"
-                  leadingIcon="school-outline"
-                  leadingIconBackgroundColor={IOS_COLORS.systemOrange}
+                  title="Team Collaboration"
+                  subtitle="Invite up to 5 team members to share your subscription"
+                  leadingIcon="people-outline"
+                  leadingIconBackgroundColor={IOS_COLORS.systemPurple}
                   trailingAccessory="none"
                 />
               )}
@@ -323,7 +341,7 @@ export default function SubscriptionPage() {
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                       <Text style={s.planButtonText}>
-                        Subscribe — ${plan.annualPrice}/yr
+                        Subscribe - ${plan.annualPrice}/yr
                       </Text>
                     )}
                   </Pressable>
@@ -333,7 +351,19 @@ export default function SubscriptionPage() {
           );
         })}
 
-        {/* ── Security footnote ────────────────────────────────────── */}
+        {/* -- Learning Modules Note ------------------------------------------ */}
+        <IOSListSection header="LEARNING MODULES">
+          <IOSListItem
+            title="Racing Academy"
+            subtitle="Purchase learning modules separately at $30/yr each. One free module included for everyone."
+            leadingIcon="school-outline"
+            leadingIconBackgroundColor={IOS_COLORS.systemOrange}
+            trailingAccessory="chevron"
+            onPress={() => router.push('/learn')}
+          />
+        </IOSListSection>
+
+        {/* -- Security footnote ---------------------------------------------- */}
         <Text style={s.securityFootnote}>
           Secure payment via Stripe{' \u00b7 '}Cancel anytime
         </Text>
@@ -355,7 +385,7 @@ const s = StyleSheet.create({
     backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
 
-  // ── Navigation bar ────────────────────────────────────────────────────────
+  // -- Navigation bar ----------------------------------------------------------
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -382,7 +412,7 @@ const s = StyleSheet.create({
     flex: 1,
   },
 
-  // ── Scroll ────────────────────────────────────────────────────────────────
+  // -- Scroll ------------------------------------------------------------------
   scrollView: {
     flex: 1,
   },
@@ -390,7 +420,7 @@ const s = StyleSheet.create({
     paddingBottom: IOS_SPACING.lg,
   },
 
-  // ── Trial banner ──────────────────────────────────────────────────────────
+  // -- Trial banner ------------------------------------------------------------
   trialBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -417,7 +447,7 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── Plan icon ─────────────────────────────────────────────────────────────
+  // -- Plan icon ---------------------------------------------------------------
   planIcon: {
     width: 28,
     height: 28,
@@ -426,13 +456,20 @@ const s = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // ── Price text ────────────────────────────────────────────────────────────
+  // -- Price text --------------------------------------------------------------
+  priceContainer: {
+    alignItems: 'flex-end',
+  },
   priceText: {
     ...IOS_TYPOGRAPHY.headline,
     color: IOS_COLORS.label,
   },
+  priceSubtext: {
+    ...IOS_TYPOGRAPHY.caption1,
+    color: IOS_COLORS.secondaryLabel,
+  },
 
-  // ── Limitation styles ─────────────────────────────────────────────────────
+  // -- Limitation styles -------------------------------------------------------
   limitationTitle: {
     color: IOS_COLORS.tertiaryLabel,
   },
@@ -440,7 +477,7 @@ const s = StyleSheet.create({
     color: IOS_COLORS.tertiaryLabel,
   },
 
-  // ── Inline plan button ────────────────────────────────────────────────────
+  // -- Inline plan button ------------------------------------------------------
   buttonRow: {
     paddingHorizontal: IOS_SPACING.lg,
     paddingVertical: IOS_SPACING.md,
@@ -467,7 +504,7 @@ const s = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
   },
 
-  // ── Security footnote ─────────────────────────────────────────────────────
+  // -- Security footnote -------------------------------------------------------
   securityFootnote: {
     ...IOS_TYPOGRAPHY.footnote,
     color: IOS_COLORS.secondaryLabel,

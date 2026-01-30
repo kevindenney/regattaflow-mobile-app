@@ -1,11 +1,9 @@
 /**
  * Pricing Page - Tufte-Style Design
  *
- * Clean, minimal presentation following Edward Tufte principles:
- * - High data-ink ratio: every element conveys information
- * - No chartjunk: no decorative gradients, badges, or visual noise
- * - Typography hierarchy: let text do the work
- * - Generous whitespace: room to breathe
+ * Updated: 2026-01-30
+ * New pricing: Free / Individual $120/yr / Team $480/yr
+ * Learning modules: $30/yr each (purchased separately)
  */
 
 import React from 'react';
@@ -40,6 +38,7 @@ interface PlanTier {
   name: string;
   price: string;
   period: string;
+  monthlyEquivalent?: string;
   description: string;
   features: string[];
   cta: string;
@@ -65,38 +64,40 @@ const STRATEGY_PLANS: PlanTier[] = [
     cta: 'Start Free',
   },
   {
-    id: 'basic',
-    name: 'Basic',
+    id: 'individual',
+    name: 'Individual',
     price: '$120',
     period: '/year',
-    description: 'Essential tools for club racers',
+    monthlyEquivalent: '$10/mo',
+    description: 'Full racing features for solo sailors',
     features: [
       'Unlimited races',
-      '20 AI queries per month',
-      'Automatic weather updates',
-      'Race checklists & prep tools',
-      'Document storage',
-      'Cloud backup & sync',
-    ],
-    cta: 'Go Basic',
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '$360',
-    period: '/year',
-    description: 'Full features for serious sailors',
-    features: [
-      'Everything in Basic',
       'Unlimited AI queries',
       'AI strategy analysis',
-      'Team sharing & collaboration',
+      'Venue intelligence',
       'Historical race data',
       'Offline mode',
       'Advanced analytics',
     ],
-    cta: 'Go Pro',
+    cta: 'Go Individual',
     highlighted: true,
+  },
+  {
+    id: 'team',
+    name: 'Team',
+    price: '$480',
+    period: '/year',
+    monthlyEquivalent: '$40/mo',
+    description: 'Full racing features for teams',
+    features: [
+      'Everything in Individual',
+      'Up to 5 team members',
+      'Team sharing & collaboration',
+      'Shared race preparation',
+      'Team analytics dashboard',
+      'Priority support',
+    ],
+    cta: 'Go Team',
   },
 ];
 
@@ -129,22 +130,6 @@ const LEARNING_PLANS: PlanTier[] = [
       'Certificate on completion',
     ],
     cta: 'Get Module',
-  },
-  {
-    id: 'learn-bundle',
-    name: 'All Modules',
-    price: '$100',
-    period: '/year',
-    description: 'Complete racing education',
-    features: [
-      'All learning modules',
-      'Interactive simulations',
-      'Progress tracking',
-      'Certificates on completion',
-      'New modules as released',
-      'Best value',
-    ],
-    cta: 'Get All Modules',
     highlighted: true,
   },
 ];
@@ -173,7 +158,8 @@ export default function PricingScreen() {
       if (isGuest) {
         router.push(`/(auth)/signup?plan=${planId}`);
       } else {
-        // TODO: Connect to Stripe payment flow
+        // Direct to subscription page for checkout
+        router.push('/subscription');
       }
     }
   };
@@ -265,6 +251,9 @@ export default function PricingScreen() {
                     <Text style={styles.planPeriod}>{plan.period}</Text>
                   )}
                 </View>
+                {plan.monthlyEquivalent && (
+                  <Text style={styles.monthlyEquivalent}>{plan.monthlyEquivalent}</Text>
+                )}
                 <Text style={styles.planDescription}>{plan.description}</Text>
               </View>
 
@@ -432,7 +421,7 @@ const styles = StyleSheet.create({
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   planPrice: {
     fontSize: 42,
@@ -444,6 +433,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: TUFTE.textLight,
     marginLeft: 4,
+  },
+  monthlyEquivalent: {
+    fontSize: 14,
+    color: TUFTE.textMuted,
+    marginBottom: 8,
   },
   planDescription: {
     fontSize: 15,

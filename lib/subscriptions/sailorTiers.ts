@@ -3,12 +3,13 @@
  *
  * Freemium model for individual sailors:
  * - Free: Limited races, basic features
- * - Pro: Unlimited races, AI features, team sharing
+ * - Individual: Full race features for solo sailors ($10/mo or $120/yr)
+ * - Team: Full race features for teams up to 5 people ($40/mo or $480/yr)
  *
- * Aligns with existing subscription tiers in subscriptionService.ts
+ * Learning modules are purchased separately ($30/yr each)
  */
 
-export type SailorTier = 'free' | 'basic' | 'pro';
+export type SailorTier = 'free' | 'individual' | 'team';
 
 export interface TierLimits {
   maxRaces: number;
@@ -18,6 +19,7 @@ export interface TierLimits {
   historicalData: boolean;
   offlineMode: boolean;
   advancedAnalytics: boolean;
+  maxSeats: number;
 }
 
 export interface TierDefinition {
@@ -34,7 +36,12 @@ export interface TierDefinition {
 
 /**
  * Sailor tier configuration
- * Yearly-only pricing (no monthly)
+ * Updated: 2026-01-30
+ *
+ * New pricing structure:
+ * - Free: $0
+ * - Individual: $10/mo ($120/yr) - renamed from Basic
+ * - Team: $40/mo ($480/yr) - renamed from Pro/Championship
  */
 export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
   free: {
@@ -52,6 +59,7 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       historicalData: false,
       offlineMode: false,
       advancedAnalytics: false,
+      maxSeats: 1,
     },
     features: [
       'Up to 3 races',
@@ -61,38 +69,42 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       'Document upload',
     ],
   },
-  basic: {
-    id: 'basic',
-    name: 'Basic',
-    description: 'Essential tools for club racers',
+  individual: {
+    id: 'individual',
+    name: 'Individual',
+    description: 'Full racing features for solo sailors',
     price: '$120/year',
-    priceMonthly: null,
+    priceMonthly: '$10',
     priceYearly: '$120',
     limits: {
       maxRaces: Infinity,
-      aiQueriesPerMonth: 20,
+      aiQueriesPerMonth: Infinity,
       teamSharing: false,
       weatherAutomation: true,
-      historicalData: false,
-      offlineMode: false,
-      advancedAnalytics: false,
+      historicalData: true,
+      offlineMode: true,
+      advancedAnalytics: true,
+      maxSeats: 1,
     },
     features: [
       'Unlimited races',
-      '20 AI queries per month',
+      'Unlimited AI queries',
+      'AI strategy analysis',
       'Automatic weather updates',
-      'Race checklists & prep tools',
-      'Document upload & storage',
+      'Historical race data',
+      'Offline mode',
+      'Advanced analytics',
       'Cloud backup & sync',
     ],
+    isPopular: true,
   },
-  pro: {
-    id: 'pro',
-    name: 'Pro',
-    description: 'Full racing features for serious sailors',
-    price: '$360/year',
-    priceMonthly: null,
-    priceYearly: '$360',
+  team: {
+    id: 'team',
+    name: 'Team',
+    description: 'Full racing features for teams',
+    price: '$480/year',
+    priceMonthly: '$40',
+    priceYearly: '$480',
     limits: {
       maxRaces: Infinity,
       aiQueriesPerMonth: Infinity,
@@ -101,20 +113,43 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       historicalData: true,
       offlineMode: true,
       advancedAnalytics: true,
+      maxSeats: 5,
     },
     features: [
-      'Everything in Basic',
-      'Unlimited AI queries',
-      'AI strategy analysis',
+      'Everything in Individual',
+      'Up to 5 team members',
       'Team sharing & collaboration',
-      'Historical race data',
-      'Offline mode',
-      'Advanced analytics',
+      'Shared race preparation',
+      'Team analytics dashboard',
       'Priority support',
     ],
-    isPopular: true,
   },
 };
+
+/**
+ * Legacy tier mapping for backward compatibility
+ * Maps old tier names to new tier names
+ */
+export const LEGACY_TIER_MAP: Record<string, SailorTier> = {
+  basic: 'individual',
+  pro: 'team',
+  championship: 'team',
+};
+
+/**
+ * Normalize tier name (handle legacy names)
+ */
+export function normalizeTier(tier: string | null | undefined): SailorTier {
+  if (!tier) return 'free';
+  const lowerTier = tier.toLowerCase();
+  if (lowerTier in LEGACY_TIER_MAP) {
+    return LEGACY_TIER_MAP[lowerTier];
+  }
+  if (lowerTier in SAILOR_TIERS) {
+    return lowerTier as SailorTier;
+  }
+  return 'free';
+}
 
 /**
  * Feature definitions for gating
@@ -129,27 +164,29 @@ export type GatedFeature =
   | 'advanced_analytics';
 
 export const FEATURE_REQUIREMENTS: Record<GatedFeature, SailorTier[]> = {
-  unlimited_races: ['basic', 'pro'],
-  ai_strategy: ['pro'],
-  team_sharing: ['pro'],
-  weather_automation: ['basic', 'pro'],
-  historical_data: ['pro'],
-  offline_mode: ['pro'],
-  advanced_analytics: ['pro'],
+  unlimited_races: ['individual', 'team'],
+  ai_strategy: ['individual', 'team'],
+  team_sharing: ['team'],
+  weather_automation: ['individual', 'team'],
+  historical_data: ['individual', 'team'],
+  offline_mode: ['individual', 'team'],
+  advanced_analytics: ['individual', 'team'],
 };
 
 /**
  * Get tier limits for a given tier
  */
 export function getTierLimits(tier: SailorTier): TierLimits {
-  return SAILOR_TIERS[tier].limits;
+  const normalizedTier = normalizeTier(tier);
+  return SAILOR_TIERS[normalizedTier].limits;
 }
 
 /**
  * Check if a feature is available for a tier
  */
 export function isFeatureAvailable(feature: GatedFeature, tier: SailorTier): boolean {
-  return FEATURE_REQUIREMENTS[feature].includes(tier);
+  const normalizedTier = normalizeTier(tier);
+  return FEATURE_REQUIREMENTS[feature].includes(normalizedTier);
 }
 
 /**
@@ -174,4 +211,20 @@ export function getRemainingRaces(raceCount: number, tier: SailorTier): number |
   const limits = getTierLimits(tier);
   if (limits.maxRaces === Infinity) return null;
   return Math.max(0, limits.maxRaces - raceCount);
+}
+
+/**
+ * Check if a tier supports team features
+ */
+export function hasTeamFeatures(tier: SailorTier): boolean {
+  const normalizedTier = normalizeTier(tier);
+  return SAILOR_TIERS[normalizedTier].limits.teamSharing;
+}
+
+/**
+ * Get max seats for a tier
+ */
+export function getMaxSeats(tier: SailorTier): number {
+  const normalizedTier = normalizeTier(tier);
+  return SAILOR_TIERS[normalizedTier].limits.maxSeats;
 }
