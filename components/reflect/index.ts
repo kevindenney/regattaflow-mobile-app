@@ -42,3 +42,11 @@ export {
   ShareMilestoneButton,
 } from './ShareActivityButton';
 export type { RaceShareData, ActivityShareData } from './ShareActivityButton';
+
+// Phase 6 - Training, Heatmap, Recap, Records, Photos, Journal
+export { TrainingPlansSection } from './TrainingPlansSection';
+export { VenueHeatmap } from './VenueHeatmap';
+export { SeasonRecapCard } from './SeasonRecapCard';
+export { CourseRecordsSection } from './CourseRecordsSection';
+export { PhotoGallerySection } from './PhotoGallerySection';
+export { RaceJournalSection } from './RaceJournalSection';

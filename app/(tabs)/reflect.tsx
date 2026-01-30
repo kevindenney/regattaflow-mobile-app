@@ -55,9 +55,16 @@ import {
   ComparisonCard,
   WeeklySummaryCard,
   GearManagementSection,
+  // Phase 6: Training, Heatmap, Recap, Records, Photos, Journal
+  TrainingPlansSection,
+  VenueHeatmap,
+  SeasonRecapCard,
+  CourseRecordsSection,
+  PhotoGallerySection,
+  RaceJournalSection,
 } from '@/components/reflect';
 import type { RecentActivity } from '@/components/reflect';
-import type { SeasonGoal, PerformanceInsight, BoatWithMaintenance, MaintenanceLog } from '@/hooks/useReflectProfile';
+import type { SeasonGoal, PerformanceInsight, BoatWithMaintenance, MaintenanceLog, TrainingPlan, CourseRecord, RaceJournalEntry } from '@/hooks/useReflectProfile';
 
 // =============================================================================
 // TYPES
@@ -345,6 +352,60 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
     Alert.alert('Coming Soon', 'Full maintenance history is coming in a future update');
   };
 
+  // Phase 6: Training Plans handlers
+  const handleStartPlan = (planId: string) => {
+    Alert.alert('Coming Soon', 'Training plan management is coming in a future update');
+  };
+
+  const handleCompleteActivity = (planId: string, activityId: string) => {
+    Alert.alert('Coming Soon', 'Activity completion is coming in a future update');
+  };
+
+  const handleViewPlanDetails = (planId: string) => {
+    // Modal opens in the component
+  };
+
+  const handleCreatePlan = () => {
+    Alert.alert('Coming Soon', 'Plan creation is coming in a future update');
+  };
+
+  // Phase 6: Venue Heatmap handlers
+  const handleVenuePress = (venueId: string) => {
+    Alert.alert('Coming Soon', 'Venue details are coming in a future update');
+  };
+
+  // Phase 6: Season Recap handlers
+  const handleShareRecap = () => {
+    // Built-in share functionality in component
+  };
+
+  const handleViewFullRecap = () => {
+    // Modal opens in the component
+  };
+
+  // Phase 6: Course Records handlers
+  const handleRecordPress = (recordId: string) => {
+    Alert.alert('Coming Soon', 'Course record details are coming in a future update');
+  };
+
+  // Phase 6: Photo Gallery handlers
+  const handlePhotoPress = (photoId: string) => {
+    // Lightbox opens in the component
+  };
+
+  const handleAddPhoto = () => {
+    Alert.alert('Coming Soon', 'Photo upload is coming in a future update');
+  };
+
+  // Phase 6: Race Journal handlers
+  const handleJournalEntryPress = (entryId: string) => {
+    // Modal opens in the component
+  };
+
+  const handleAddJournalEntry = () => {
+    Alert.alert('Coming Soon', 'Journal entry creation is coming in a future update');
+  };
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: toolbarHeight + 20 }]}>
@@ -481,6 +542,48 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
           onMaintenancePress={handleMaintenanceLogPress}
           onAddMaintenance={handleAddMaintenance}
           onSeeAllMaintenance={handleSeeAllMaintenance}
+        />
+
+        {/* Phase 6: Training Plans */}
+        <TrainingPlansSection
+          plans={data.trainingPlans}
+          onStartPlan={handleStartPlan}
+          onCompleteActivity={handleCompleteActivity}
+          onViewPlanDetails={handleViewPlanDetails}
+          onCreatePlan={handleCreatePlan}
+        />
+
+        {/* Phase 6: Venue Heatmap */}
+        <VenueHeatmap
+          venues={data.venuesWithCoordinates}
+          onVenuePress={handleVenuePress}
+        />
+
+        {/* Phase 6: Season Recap */}
+        <SeasonRecapCard
+          recap={data.seasonRecap}
+          onShare={handleShareRecap}
+          onViewFullRecap={handleViewFullRecap}
+        />
+
+        {/* Phase 6: Course Records */}
+        <CourseRecordsSection
+          records={data.courseRecords}
+          onRecordPress={handleRecordPress}
+        />
+
+        {/* Phase 6: Photo Gallery */}
+        <PhotoGallerySection
+          photos={data.racePhotos}
+          onPhotoPress={handlePhotoPress}
+          onAddPhoto={handleAddPhoto}
+        />
+
+        {/* Phase 6: Race Journal */}
+        <RaceJournalSection
+          entries={data.raceJournal}
+          onEntryPress={handleJournalEntryPress}
+          onAddEntry={handleAddJournalEntry}
         />
       </View>
     </ScrollView>

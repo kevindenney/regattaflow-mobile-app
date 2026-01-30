@@ -260,6 +260,151 @@ export interface BoatWithMaintenance extends UserBoat {
   healthScore?: number; // 0-100
 }
 
+// =============================================================================
+// PHASE 6 TYPES
+// =============================================================================
+
+// Training Plans
+export type TrainingActivityType = 'video' | 'article' | 'drill' | 'workout' | 'race_review' | 'mental';
+export type TrainingPlanStatus = 'not_started' | 'in_progress' | 'completed';
+
+export interface TrainingActivity {
+  id: string;
+  type: TrainingActivityType;
+  title: string;
+  description?: string;
+  duration?: number; // minutes
+  isCompleted: boolean;
+  completedAt?: string;
+  resourceUrl?: string;
+  icon: string;
+}
+
+export interface TrainingPlan {
+  id: string;
+  title: string;
+  description?: string;
+  targetRace?: string;
+  targetDate?: string;
+  status: TrainingPlanStatus;
+  activities: TrainingActivity[];
+  totalActivities: number;
+  completedActivities: number;
+  estimatedDuration: number; // total minutes
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+// Venue Heatmap
+export interface VenueWithCoordinates extends VenueVisited {
+  latitude: number;
+  longitude: number;
+  intensity: number; // 0-1, based on race count relative to max
+}
+
+// Season Recap / Year in Review
+export interface SeasonHighlight {
+  type: 'best_race' | 'longest_streak' | 'most_races_month' | 'biggest_improvement' | 'new_venue' | 'milestone';
+  title: string;
+  value: string | number;
+  date?: string;
+  detail?: string;
+  icon: string;
+}
+
+export interface SeasonRecap {
+  year: number;
+  totalRaces: number;
+  totalWins: number;
+  totalPodiums: number;
+  averageFinish: number | null;
+  timeOnWater: number; // minutes
+  venuesVisited: number;
+  newVenues: string[];
+  bestMonth: string;
+  bestMonthRaces: number;
+  highlights: SeasonHighlight[];
+  topRaces: {
+    name: string;
+    position: number;
+    fleetSize: number;
+    date: string;
+    venue: string;
+  }[];
+  comparedToPreviousYear: {
+    races: number;
+    wins: number;
+    avgFinish: number | null;
+  } | null;
+  isShareable: boolean;
+}
+
+// Course Records / Personal Bests
+export interface CourseRecord {
+  id: string;
+  courseName: string;
+  venueName: string;
+  venueId?: string;
+  bestPosition: number;
+  fleetSize: number;
+  date: string;
+  conditions?: {
+    windSpeed?: number;
+    windDirection?: string;
+    waveHeight?: number;
+  };
+  previousBest?: number;
+  timesRaced: number;
+  avgPosition: number;
+}
+
+// Photo Gallery
+export type PhotoSource = 'upload' | 'race_result' | 'shared' | 'club';
+
+export interface RacePhoto {
+  id: string;
+  url: string;
+  thumbnailUrl?: string;
+  caption?: string;
+  takenAt: string;
+  uploadedAt: string;
+  source: PhotoSource;
+  regattaId?: string;
+  regattaName?: string;
+  venueName?: string;
+  tags?: string[];
+  width?: number;
+  height?: number;
+}
+
+// Race Journal
+export type JournalMood = 'great' | 'good' | 'neutral' | 'challenging' | 'difficult';
+
+export interface RaceJournalEntry {
+  id: string;
+  regattaId: string;
+  regattaName: string;
+  raceDate: string;
+  position?: number;
+  fleetSize?: number;
+  mood: JournalMood;
+  preRaceNotes?: string;
+  postRaceNotes?: string;
+  whatWorked?: string[];
+  whatToImprove?: string[];
+  conditions?: {
+    windSpeed?: number;
+    windDirection?: string;
+    waveHeight?: number;
+    current?: string;
+  };
+  tuningSettings?: Record<string, string | number>;
+  keyMoments?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ReflectProfileData {
   profile: UserProfile;
   stats: ProfileStats;
@@ -278,6 +423,13 @@ export interface ReflectProfileData {
   sailorComparisons: SailorComparison[];
   weeklySummary?: WeeklySummary;
   boatsWithMaintenance: BoatWithMaintenance[];
+  // Phase 6: Training, Heatmap, Recap, Records, Photos, Journal
+  trainingPlans: TrainingPlan[];
+  venuesWithCoordinates: VenueWithCoordinates[];
+  seasonRecap?: SeasonRecap;
+  courseRecords: CourseRecord[];
+  racePhotos: RacePhoto[];
+  raceJournal: RaceJournalEntry[];
 }
 
 // =============================================================================
@@ -731,6 +883,13 @@ export function useReflectProfile() {
         sailorComparisons: [],
         weeklySummary: undefined,
         boatsWithMaintenance: [],
+        // Phase 6: Empty for now (would come from respective tables)
+        trainingPlans: [],
+        venuesWithCoordinates: [],
+        seasonRecap: undefined,
+        courseRecords: [],
+        racePhotos: [],
+        raceJournal: [],
       });
     } catch (err) {
       logger.error('Error loading profile data:', err);
@@ -1310,6 +1469,444 @@ export function useReflectProfileMock(): {
             nextDueDate: '2026-02-01',
           },
         ],
+      },
+    ],
+    // Phase 6: Training Plans
+    trainingPlans: [
+      {
+        id: 'plan-1',
+        title: 'Spring Championship Prep',
+        description: 'Comprehensive training plan for the upcoming Spring Championship',
+        targetRace: 'Spring Championship',
+        targetDate: '2026-03-15',
+        status: 'in_progress',
+        totalActivities: 8,
+        completedActivities: 3,
+        estimatedDuration: 420,
+        createdAt: '2026-01-10T00:00:00Z',
+        startedAt: '2026-01-15T00:00:00Z',
+        activities: [
+          {
+            id: 'act-1',
+            type: 'video',
+            title: 'Starting Line Tactics',
+            description: 'Watch expert analysis of championship-level starts',
+            duration: 45,
+            isCompleted: true,
+            completedAt: '2026-01-16T10:00:00Z',
+            resourceUrl: '/learn/videos/starting-tactics',
+            icon: 'play-circle',
+          },
+          {
+            id: 'act-2',
+            type: 'drill',
+            title: 'Practice Starts',
+            description: 'Complete 10 timed practice starts',
+            duration: 60,
+            isCompleted: true,
+            completedAt: '2026-01-18T14:00:00Z',
+            icon: 'timer',
+          },
+          {
+            id: 'act-3',
+            type: 'article',
+            title: 'Weather Pattern Analysis',
+            description: 'Learn to read local weather patterns',
+            duration: 30,
+            isCompleted: true,
+            completedAt: '2026-01-20T09:00:00Z',
+            resourceUrl: '/learn/articles/weather',
+            icon: 'document-text',
+          },
+          {
+            id: 'act-4',
+            type: 'workout',
+            title: 'Hiking Strength',
+            description: 'Complete hiking fitness routine',
+            duration: 45,
+            isCompleted: false,
+            icon: 'fitness',
+          },
+          {
+            id: 'act-5',
+            type: 'mental',
+            title: 'Race Visualization',
+            description: 'Practice mental race preparation',
+            duration: 20,
+            isCompleted: false,
+            icon: 'eye',
+          },
+        ],
+      },
+      {
+        id: 'plan-2',
+        title: 'Light Wind Mastery',
+        description: 'Improve performance in light air conditions',
+        status: 'not_started',
+        totalActivities: 5,
+        completedActivities: 0,
+        estimatedDuration: 180,
+        createdAt: '2026-01-25T00:00:00Z',
+        activities: [
+          {
+            id: 'act-6',
+            type: 'video',
+            title: 'Light Air Trim',
+            duration: 30,
+            isCompleted: false,
+            icon: 'play-circle',
+          },
+          {
+            id: 'act-7',
+            type: 'drill',
+            title: 'Roll Tacking Practice',
+            duration: 45,
+            isCompleted: false,
+            icon: 'repeat',
+          },
+        ],
+      },
+    ],
+    // Phase 6: Venues with Coordinates (for heatmap)
+    venuesWithCoordinates: [
+      {
+        id: 'rhkyc',
+        name: 'Royal Hong Kong Yacht Club',
+        location: 'Victoria Harbour',
+        raceCount: 45,
+        lastRaceDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        bestFinish: 1,
+        averageFinish: 3.8,
+        latitude: 22.2855,
+        longitude: 114.1713,
+        intensity: 1.0,
+      },
+      {
+        id: 'abc',
+        name: 'Aberdeen Boat Club',
+        location: 'Aberdeen',
+        raceCount: 22,
+        lastRaceDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+        bestFinish: 2,
+        averageFinish: 4.5,
+        latitude: 22.2480,
+        longitude: 114.1494,
+        intensity: 0.49,
+      },
+      {
+        id: 'hhyc',
+        name: 'Hebe Haven Yacht Club',
+        location: 'Sai Kung',
+        raceCount: 12,
+        lastRaceDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        bestFinish: 1,
+        averageFinish: 3.2,
+        latitude: 22.3679,
+        longitude: 114.2900,
+        intensity: 0.27,
+      },
+      {
+        id: 'myc',
+        name: 'Middle Island Yacht Club',
+        location: 'Repulse Bay',
+        raceCount: 8,
+        lastRaceDate: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+        bestFinish: 3,
+        averageFinish: 5.1,
+        latitude: 22.2405,
+        longitude: 114.1926,
+        intensity: 0.18,
+      },
+    ],
+    // Phase 6: Season Recap (2025)
+    seasonRecap: {
+      year: 2025,
+      totalRaces: 42,
+      totalWins: 8,
+      totalPodiums: 18,
+      averageFinish: 4.1,
+      timeOnWater: 5040, // 84 hours
+      venuesVisited: 4,
+      newVenues: ['Middle Island Yacht Club'],
+      bestMonth: 'October',
+      bestMonthRaces: 8,
+      highlights: [
+        {
+          type: 'best_race',
+          title: 'Season Best',
+          value: '1st of 45',
+          date: '2025-11-30',
+          detail: 'Autumn Championship Finals',
+          icon: 'trophy',
+        },
+        {
+          type: 'longest_streak',
+          title: 'Win Streak',
+          value: 5,
+          date: '2025-08-10',
+          detail: 'Summer Series',
+          icon: 'flame',
+        },
+        {
+          type: 'most_races_month',
+          title: 'Most Active Month',
+          value: 'October',
+          detail: '8 races completed',
+          icon: 'calendar',
+        },
+        {
+          type: 'biggest_improvement',
+          title: 'Improved Avg Finish',
+          value: '-0.8',
+          detail: 'From 4.9 to 4.1',
+          icon: 'trending-up',
+        },
+        {
+          type: 'milestone',
+          title: 'Career Milestone',
+          value: '75 races',
+          detail: 'Reached 75 total races',
+          icon: 'star',
+        },
+      ],
+      topRaces: [
+        {
+          name: 'Autumn Championship Finals',
+          position: 1,
+          fleetSize: 45,
+          date: '2025-11-30',
+          venue: 'Royal Hong Kong Yacht Club',
+        },
+        {
+          name: 'Summer Series Race 5',
+          position: 1,
+          fleetSize: 32,
+          date: '2025-08-10',
+          venue: 'Royal Hong Kong Yacht Club',
+        },
+        {
+          name: 'Around the Island Race',
+          position: 2,
+          fleetSize: 52,
+          date: '2025-10-15',
+          venue: 'Aberdeen Boat Club',
+        },
+      ],
+      comparedToPreviousYear: {
+        races: 5,
+        wins: 3,
+        avgFinish: -0.4,
+      },
+      isShareable: true,
+    },
+    // Phase 6: Course Records
+    courseRecords: [
+      {
+        id: 'cr-1',
+        courseName: 'Victoria Harbour Triangle',
+        venueName: 'Royal Hong Kong Yacht Club',
+        venueId: 'rhkyc',
+        bestPosition: 1,
+        fleetSize: 45,
+        date: '2025-11-30',
+        conditions: {
+          windSpeed: 12,
+          windDirection: 'NE',
+        },
+        previousBest: 3,
+        timesRaced: 18,
+        avgPosition: 4.2,
+      },
+      {
+        id: 'cr-2',
+        courseName: 'Aberdeen Outer Course',
+        venueName: 'Aberdeen Boat Club',
+        venueId: 'abc',
+        bestPosition: 2,
+        fleetSize: 28,
+        date: '2025-09-20',
+        conditions: {
+          windSpeed: 8,
+          windDirection: 'S',
+        },
+        timesRaced: 12,
+        avgPosition: 5.1,
+      },
+      {
+        id: 'cr-3',
+        courseName: 'Sai Kung Bay Circuit',
+        venueName: 'Hebe Haven Yacht Club',
+        venueId: 'hhyc',
+        bestPosition: 1,
+        fleetSize: 22,
+        date: '2025-07-15',
+        conditions: {
+          windSpeed: 15,
+          windDirection: 'E',
+          waveHeight: 1.2,
+        },
+        timesRaced: 8,
+        avgPosition: 3.5,
+      },
+      {
+        id: 'cr-4',
+        courseName: 'Repulse Bay Sprint',
+        venueName: 'Middle Island Yacht Club',
+        venueId: 'myc',
+        bestPosition: 3,
+        fleetSize: 18,
+        date: '2025-06-01',
+        timesRaced: 5,
+        avgPosition: 6.2,
+      },
+    ],
+    // Phase 6: Race Photos
+    racePhotos: [
+      {
+        id: 'photo-1',
+        url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200',
+        caption: 'Crossing the finish line at Autumn Championship',
+        takenAt: '2025-11-30T15:30:00Z',
+        uploadedAt: '2025-11-30T18:00:00Z',
+        source: 'club',
+        regattaId: 'reg-autumn-finals',
+        regattaName: 'Autumn Championship Finals',
+        venueName: 'Royal Hong Kong Yacht Club',
+        tags: ['finish', 'win', 'championship'],
+        width: 1600,
+        height: 1067,
+      },
+      {
+        id: 'photo-2',
+        url: 'https://images.unsplash.com/photo-1500930287596-c1ecaa373bb2?w=800',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1500930287596-c1ecaa373bb2?w=200',
+        caption: 'Rounding the windward mark',
+        takenAt: '2025-10-15T14:15:00Z',
+        uploadedAt: '2025-10-15T20:00:00Z',
+        source: 'upload',
+        regattaId: 'reg-island-race',
+        regattaName: 'Around the Island Race',
+        venueName: 'Aberdeen Boat Club',
+        tags: ['mark rounding', 'upwind'],
+        width: 1600,
+        height: 1200,
+      },
+      {
+        id: 'photo-3',
+        url: 'https://images.unsplash.com/photo-1559825481-12a05cc00344?w=800',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1559825481-12a05cc00344?w=200',
+        caption: 'Sunset sailing after the race',
+        takenAt: '2025-08-10T18:45:00Z',
+        uploadedAt: '2025-08-10T21:00:00Z',
+        source: 'upload',
+        venueName: 'Royal Hong Kong Yacht Club',
+        tags: ['sunset', 'post-race'],
+        width: 1600,
+        height: 900,
+      },
+      {
+        id: 'photo-4',
+        url: 'https://images.unsplash.com/photo-1540946485063-a40da27545f8?w=800',
+        thumbnailUrl: 'https://images.unsplash.com/photo-1540946485063-a40da27545f8?w=200',
+        caption: 'Starting line action',
+        takenAt: '2025-07-15T10:02:00Z',
+        uploadedAt: '2025-07-15T19:00:00Z',
+        source: 'club',
+        regattaId: 'reg-summer-series-5',
+        regattaName: 'Summer Series Race 5',
+        venueName: 'Hebe Haven Yacht Club',
+        tags: ['start', 'fleet'],
+        width: 1600,
+        height: 1067,
+      },
+    ],
+    // Phase 6: Race Journal
+    raceJournal: [
+      {
+        id: 'journal-1',
+        regattaId: 'reg-spring-4',
+        regattaName: 'Spring Series Race 4',
+        raceDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        position: 2,
+        fleetSize: 18,
+        mood: 'good',
+        preRaceNotes: 'Wind forecast showing NE 10-12 knots. Plan to start at pin end.',
+        postRaceNotes: 'Great start but lost a position on the final downwind leg. Need to work on gybes in pressure.',
+        whatWorked: ['Pin end start', 'Upwind boat speed', 'Mark roundings'],
+        whatToImprove: ['Downwind gybes in gusts', 'Final leg tactics'],
+        conditions: {
+          windSpeed: 11,
+          windDirection: 'NE',
+          waveHeight: 0.5,
+        },
+        tuningSettings: {
+          'Jib Lead': 'Hole 3',
+          'Backstay': '8/10',
+          'Outhaul': 'Medium',
+        },
+        keyMoments: [
+          'Won the pin by 2 boat lengths',
+          'Gained 3 boats on first beat',
+          'Lost to Sarah on final run',
+        ],
+        createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'journal-2',
+        regattaId: 'reg-spring-3',
+        regattaName: 'Spring Series Race 3',
+        raceDate: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+        position: 1,
+        fleetSize: 16,
+        mood: 'great',
+        preRaceNotes: 'Light wind day. Focus on keeping the boat moving.',
+        postRaceNotes: 'Executed the plan perfectly. Light air trim changes made the difference.',
+        whatWorked: ['Boat handling in light air', 'Current awareness', 'Patience'],
+        whatToImprove: ['Could have extended lead on second beat'],
+        conditions: {
+          windSpeed: 6,
+          windDirection: 'S',
+        },
+        keyMoments: [
+          'Found better pressure on the right side',
+          'Perfect gybe at the leeward mark',
+          'Led from start to finish',
+        ],
+        createdAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+        updatedAt: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 'journal-3',
+        regattaId: 'reg-spring-2',
+        regattaName: 'Spring Series Race 2',
+        raceDate: new Date(Date.now() - 16 * 24 * 60 * 60 * 1000).toISOString(),
+        position: 5,
+        fleetSize: 20,
+        mood: 'challenging',
+        preRaceNotes: 'Expecting strong winds. Need to be conservative at the start.',
+        postRaceNotes: 'Got caught in a bad position at the start and never recovered. Struggled with overpowered conditions.',
+        whatWorked: ['Boat handling improved as race went on'],
+        whatToImprove: ['Start positioning in strong winds', 'Depowering earlier', 'Hiking endurance'],
+        conditions: {
+          windSpeed: 18,
+          windDirection: 'E',
+          waveHeight: 1.0,
+        },
+        tuningSettings: {
+          'Jib Lead': 'Hole 2',
+          'Backstay': '10/10',
+          'Outhaul': 'Max',
+          'Cunningham': 'On',
+        },
+        keyMoments: [
+          'Got squeezed out at start',
+          'Capsized on first run',
+          'Recovered well in final leg',
+        ],
+        createdAt: new Date(Date.now() - 16 * 24 * 60 * 60 * 1000).toISOString(),
+        updatedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ],
   }), [reflectData]);
