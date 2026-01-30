@@ -13,7 +13,7 @@
 
 import React, { useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { ChevronRight, X } from 'lucide-react-native';
+import { ChevronRight, X, Heart, MessageCircle, UserPlus, UserCheck } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -49,12 +49,20 @@ export interface SailorRaceRowData {
   isPast: boolean;
   daysUntil: number;
   isFollowing?: boolean;
+  // Social interaction data
+  isLiked?: boolean;
+  likeCount?: number;
+  commentCount?: number;
 }
 
 interface SailorRaceRowProps {
   data: SailorRaceRowData;
   onPress: (data: SailorRaceRowData) => void;
   onDismiss?: (data: SailorRaceRowData) => void;
+  onLikePress?: (data: SailorRaceRowData) => void;
+  onCommentPress?: (data: SailorRaceRowData) => void;
+  onFollowToggle?: (userId: string) => void;
+  isOwnUser?: boolean;
   showSeparator?: boolean;
   isLast?: boolean;
 }
@@ -122,7 +130,7 @@ function formatRelativeDate(daysUntil: number, isPast: boolean): string {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function SailorRaceRow({ data, onPress, onDismiss, showSeparator = true, isLast = false }: SailorRaceRowProps) {
+export function SailorRaceRow({ data, onPress, onDismiss, onLikePress, onCommentPress, onFollowToggle, isOwnUser = false, showSeparator = true, isLast = false }: SailorRaceRowProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -141,9 +149,25 @@ export function SailorRaceRow({ data, onPress, onDismiss, showSeparator = true, 
     onPress(data);
   }, [onPress, data]);
 
-  const handleDismiss = useCallback(() => {
+  const handleDismiss = useCallback((e: any) => {
+    e?.stopPropagation?.();
     onDismiss?.(data);
   }, [onDismiss, data]);
+
+  const handleLikePress = useCallback((e: any) => {
+    e?.stopPropagation?.();
+    onLikePress?.(data);
+  }, [onLikePress, data]);
+
+  const handleCommentPress = useCallback((e: any) => {
+    e?.stopPropagation?.();
+    onCommentPress?.(data);
+  }, [onCommentPress, data]);
+
+  const handleFollowToggle = useCallback((e: any) => {
+    e?.stopPropagation?.();
+    onFollowToggle?.(data.userId);
+  }, [onFollowToggle, data.userId]);
 
   const relativeDate = formatRelativeDate(data.daysUntil, data.isPast);
   const activeTags = CONTENT_TAGS.filter(
@@ -172,6 +196,16 @@ export function SailorRaceRow({ data, onPress, onDismiss, showSeparator = true, 
       ? IOS_COLORS.systemOrange
       : IOS_COLORS.secondaryLabel;
   const footnoteWeight = isToday ? '600' as const : '400' as const;
+
+  // Follow button config
+  const showFollowButton = !isOwnUser && !!onFollowToggle;
+  const FollowIcon = data.isFollowing ? UserCheck : UserPlus;
+  const followColor = data.isFollowing
+    ? IOS_COLORS.systemGreen
+    : IOS_COLORS.systemBlue;
+  const followLabel = data.isFollowing
+    ? `Unfollow ${data.userName}`
+    : `Follow ${data.userName}`;
 
   return (
     <AnimatedPressable
@@ -234,17 +268,73 @@ export function SailorRaceRow({ data, onPress, onDismiss, showSeparator = true, 
           </View>
         )}
 
-        <Text
-          style={[
-            styles.footnote,
-            { color: footnoteColor, fontWeight: footnoteWeight },
-          ]}
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.5}
-        >
-          {footnote}
-        </Text>
+        {/* Footer row: Date/Venue + Social interactions */}
+        <View style={styles.footerRow}>
+          <Text
+            style={[
+              styles.footnote,
+              { color: footnoteColor, fontWeight: footnoteWeight },
+            ]}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.5}
+          >
+            {footnote}
+          </Text>
+
+          {/* Social interaction buttons */}
+          {(onLikePress || onCommentPress) && (
+            <View style={styles.socialRow}>
+              {onLikePress && (
+                <Pressable
+                  onPress={handleLikePress}
+                  hitSlop={6}
+                  style={styles.socialButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={data.isLiked ? 'Unlike' : 'Like'}
+                >
+                  <Heart
+                    size={14}
+                    color={data.isLiked ? IOS_COLORS.systemRed : IOS_COLORS.systemGray2}
+                    fill={data.isLiked ? IOS_COLORS.systemRed : 'transparent'}
+                  />
+                  {(data.likeCount ?? 0) > 0 && (
+                    <Text style={[styles.socialCount, data.isLiked && styles.socialCountLiked]}>
+                      {data.likeCount}
+                    </Text>
+                  )}
+                </Pressable>
+              )}
+              {onCommentPress && (
+                <Pressable
+                  onPress={handleCommentPress}
+                  hitSlop={6}
+                  style={styles.socialButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Comments"
+                >
+                  <MessageCircle size={14} color={IOS_COLORS.systemGray2} />
+                  {(data.commentCount ?? 0) > 0 && (
+                    <Text style={styles.socialCount}>{data.commentCount}</Text>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          )}
+        </View>
       </View>
+
+      {/* Follow button — visible when onFollowToggle is provided and not own user */}
+      {showFollowButton && (
+        <Pressable
+          onPress={handleFollowToggle}
+          hitSlop={8}
+          style={styles.followButton}
+          accessibilityRole="button"
+          accessibilityLabel={followLabel}
+        >
+          <FollowIcon size={18} color={followColor} />
+        </Pressable>
+      )}
 
       {/* Dismiss button — visible when onDismiss is provided (Discover section) */}
       {onDismiss && (
@@ -338,6 +428,13 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     marginLeft: 2,
   },
+  followButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: IOS_SPACING.xs,
+  },
   dismissButton: {
     width: 28,
     height: 28,
@@ -345,10 +442,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 2,
   },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
   footnote: {
     ...IOS_TYPOGRAPHY.footnote,
     color: IOS_COLORS.secondaryLabel,
-    marginTop: 2,
+    flex: 1,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginLeft: IOS_SPACING.sm,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    padding: 2,
+  },
+  socialCount: {
+    ...IOS_TYPOGRAPHY.caption2,
+    color: IOS_COLORS.systemGray2,
+    fontWeight: '500',
+  },
+  socialCountLiked: {
+    color: IOS_COLORS.systemRed,
   },
   separator: {
     position: 'absolute',

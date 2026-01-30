@@ -22,14 +22,15 @@ import {
   Platform,
   UIManager,
   StyleSheet,
+  Alert,
 } from 'react-native';
+import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Users,
   Anchor,
   Trophy,
   Compass,
-  Info,
 } from 'lucide-react-native';
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { getInitials } from '@/components/account/accountStyles';
@@ -51,6 +52,9 @@ import {
   type EmptyStateConfig,
 } from '@/hooks/useGroupedDiscoverSections';
 import type { ClassExpert } from '@/hooks/useClassExperts';
+import { useAuth } from '@/providers/AuthProvider';
+import { SocialService } from '@/services/SocialService';
+import { triggerHaptic } from '@/lib/haptics';
 
 // Enable LayoutAnimation on Android
 if (
@@ -129,21 +133,80 @@ function getAvatarColor(userId: string): string {
 // COMPONENT
 // =============================================================================
 
-export function SailorsGroupedList() {
+interface SailorsGroupedListProps {
+  /** Extra top padding to clear an absolutely-positioned toolbar */
+  toolbarOffset?: number;
+  /** Scroll handler forwarded from parent for toolbar hide/show */
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+}
+
+export function SailorsGroupedList({ toolbarOffset = 0, onScroll }: SailorsGroupedListProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const {
     sections,
     isLoading,
     refresh,
     loadMore,
     isLoadingMore,
-    toggleFollow: _toggleFollow,
+    toggleFollow,
     toggleExpertFollow,
     collapsedSections,
     toggleSectionCollapsed,
     className,
     dismissRace,
   } = useGroupedDiscoverSections();
+
+  // Track like state locally for optimistic UI
+  const [likedRaces, setLikedRaces] = React.useState<Set<string>>(new Set());
+
+  // Handle like press with optimistic update
+  const handleLikePress = useCallback(async (data: SailorRaceRowData) => {
+    if (!user?.id) {
+      Alert.alert('Sign In Required', 'Please sign in to like races.');
+      return;
+    }
+
+    triggerHaptic('impactLight');
+    const isCurrentlyLiked = likedRaces.has(data.id);
+
+    // Optimistic update
+    setLikedRaces(prev => {
+      const next = new Set(prev);
+      if (isCurrentlyLiked) {
+        next.delete(data.id);
+      } else {
+        next.add(data.id);
+      }
+      return next;
+    });
+
+    try {
+      await SocialService.toggleLike(user.id, data.id);
+    } catch (error) {
+      // Revert on error
+      setLikedRaces(prev => {
+        const next = new Set(prev);
+        if (isCurrentlyLiked) {
+          next.add(data.id);
+        } else {
+          next.delete(data.id);
+        }
+        return next;
+      });
+    }
+  }, [user?.id, likedRaces]);
+
+  // Handle comment press - navigate to journey detail with comments
+  const handleCommentPress = useCallback((data: SailorRaceRowData) => {
+    router.push(`/sailor-journey/${data.userId}/${data.id}?showComments=true`);
+  }, [router]);
+
+  // Handle follow toggle with haptic feedback
+  const handleFollowToggle = useCallback(async (userId: string) => {
+    triggerHaptic('impactLight');
+    await toggleFollow(userId);
+  }, [toggleFollow]);
 
   // Build SectionList data — collapsed sections get empty data arrays
   const sectionListData: SectionData[] = useMemo(() => {
@@ -308,18 +371,29 @@ export function SailorsGroupedList() {
 
       // Only show dismiss button for Discover section items
       const showDismiss = section.key === 'discover';
+      const raceData = item as SailorRaceRowData;
+
+      // Check if this race is liked (from local optimistic state)
+      const isLiked = likedRaces.has(raceData.id);
+
+      // Check if this is the current user's own race
+      const isOwnUser = raceData.userId === user?.id;
 
       return (
         <SailorRaceRow
-          data={item as SailorRaceRowData}
+          data={{ ...raceData, isLiked }}
           onPress={handleRaceRowPress}
           onDismiss={showDismiss ? handleDismissRace : undefined}
+          onLikePress={handleLikePress}
+          onCommentPress={handleCommentPress}
+          onFollowToggle={handleFollowToggle}
+          isOwnUser={isOwnUser}
           showSeparator={!isLast}
           isLast={isLast}
         />
       );
     },
-    [className, handleExpertPress, handleRaceRowPress, handleDismissRace, toggleExpertFollow]
+    [className, handleExpertPress, handleRaceRowPress, handleDismissRace, toggleExpertFollow, likedRaces, handleLikePress, handleCommentPress, handleFollowToggle, user?.id]
   );
 
   // Render section footer — show empty message, peek preview, or bottom radius
@@ -486,11 +560,13 @@ export function SailorsGroupedList() {
       refreshing={refreshing}
       ListFooterComponent={renderListFooter}
       keyboardDismissMode="on-drag"
-      contentContainerStyle={styles.contentContainer}
+      contentContainerStyle={[styles.contentContainer, toolbarOffset > 0 && { paddingTop: toolbarOffset + IOS_SPACING.md }]}
       showsVerticalScrollIndicator={true}
       initialNumToRender={15}
       maxToRenderPerBatch={10}
       windowSize={11}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     />
   );
 }
