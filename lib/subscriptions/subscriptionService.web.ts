@@ -52,8 +52,8 @@ const logger = createLogger('subscriptionService.web');
  */
 export const STRIPE_PRICE_IDS = {
   // Race Strategy Plans (yearly only)
-  individual_yearly: 'price_1Splo2BbfEeOhHXbHi1ENal0',  // $120/year (was Basic)
-  team_yearly: 'price_1SplqqBbfEeOhHXbTeam480Y',       // $480/year (new Team)
+  individual_yearly: 'price_1SvDDBBbfEeOhHXbyxF7XSKY',  // $120/year
+  team_yearly: 'price_1SvDDCBbfEeOhHXbRi18kcG1',       // $480/year (up to 5 users)
 
   // Racing Academy / Learning (separate purchase)
   academy_module: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',    // $30/year per module

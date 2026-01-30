@@ -335,7 +335,10 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   // Price IDs: Individual $120/yr, Team $480/yr (updated 2026-01-30)
   const priceId = subscription.items.data[0]?.price.id;
   const tierMap: Record<string, string> = {
-    // Use env vars if set, with hardcoded fallbacks
+    // Current price IDs
+    'price_1SvDDBBbfEeOhHXbyxF7XSKY': 'individual',  // $120/year Individual
+    'price_1SvDDCBbfEeOhHXbRi18kcG1': 'team',        // $480/year Team (up to 5 users)
+    // Use env vars if set
     [Deno.env.get('STRIPE_INDIVIDUAL_PRICE_ID') || 'price_individual_yearly']: 'individual',
     [Deno.env.get('STRIPE_TEAM_PRICE_ID') || 'price_team_yearly']: 'team',
     // Legacy price IDs (map old prices to new tiers)
