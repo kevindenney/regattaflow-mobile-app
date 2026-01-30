@@ -30,7 +30,7 @@ import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { useReflectDataMock, type RaceLogEntry } from '@/hooks/useReflectData';
-import { useReflectProfileMock } from '@/hooks/useReflectProfile';
+import { useReflectProfile } from '@/hooks/useReflectProfile';
 
 import {
   WeeklyCalendar,
@@ -225,7 +225,7 @@ interface ProfileViewProps {
 }
 
 function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
-  const { data, loading, refresh } = useReflectProfileMock();
+  const { data, loading, refresh } = useReflectProfile();
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {

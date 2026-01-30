@@ -835,11 +835,600 @@ export function useReflectProfile() {
         });
       }
 
-      // For now, challenges are empty (would come from a challenges table)
-      const challenges: Challenge[] = [];
+      // =========================================================================
+      // FETCH CHALLENGES FROM DATABASE
+      // =========================================================================
+      const { data: challengesData } = await supabase
+        .from('sailor_challenges')
+        .select('*')
+        .eq('user_id', userId)
+        .order('end_date', { ascending: true });
 
-      // For now, recent activity is empty (would come from activity feed)
+      const challenges: Challenge[] = (challengesData || []).map((c: any) => ({
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        type: c.type,
+        targetValue: c.target_value,
+        currentValue: c.current_value,
+        startDate: c.start_date,
+        endDate: c.end_date,
+        isCompleted: c.is_completed,
+        completedAt: c.completed_at,
+        reward: c.reward,
+        icon: c.icon || 'flag',
+      }));
+
+      // =========================================================================
+      // FETCH GOALS FROM DATABASE
+      // =========================================================================
+      const { data: goalsData } = await supabase
+        .from('sailor_goals')
+        .select('*')
+        .eq('user_id', userId)
+        .order('end_date', { ascending: true });
+
+      const goals: SeasonGoal[] = (goalsData || []).map((g: any) => ({
+        id: g.id,
+        type: g.type,
+        title: g.title,
+        description: g.description,
+        targetValue: g.target_value,
+        currentValue: g.current_value,
+        unit: g.unit,
+        period: g.period,
+        startDate: g.start_date,
+        endDate: g.end_date,
+        isCompleted: g.is_completed,
+        completedAt: g.completed_at,
+        icon: g.icon || 'flag',
+        color: g.color || 'systemBlue',
+      }));
+
+      // =========================================================================
+      // BUILD RECENT ACTIVITY FROM MULTIPLE SOURCES
+      // =========================================================================
       const recentActivity: RecentActivity[] = [];
+
+      // Fetch recent races completed (from user's own regattas)
+      const recentRaces = finishedRaces.slice(0, 5);
+      recentRaces.forEach((race: any) => {
+        const p = participantsMap.get(race.id);
+        if (p?.finish_position) {
+          recentActivity.push({
+            id: `race-${race.id}`,
+            type: 'race_completed',
+            title: `Finished ${getOrdinal(p.finish_position)} in ${race.name}`,
+            description: race.venue_name || race.metadata?.venue_name,
+            timestamp: race.start_date,
+            relatedRegattaId: race.id,
+            relatedRegattaName: race.name,
+          });
+        }
+      });
+
+      // Fetch recent followers
+      const { data: recentFollowers } = await supabase
+        .from('user_follows')
+        .select(`
+          id,
+          created_at,
+          follower_id,
+          profiles!user_follows_follower_id_fkey(full_name),
+          sailor_profiles!user_follows_follower_id_fkey(avatar_url)
+        `)
+        .eq('following_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      (recentFollowers || []).forEach((f: any) => {
+        recentActivity.push({
+          id: `follow-${f.id}`,
+          type: 'new_follower',
+          title: `${f.profiles?.full_name || 'Someone'} started following you`,
+          timestamp: f.created_at,
+          relatedUserId: f.follower_id,
+          relatedUserName: f.profiles?.full_name,
+          relatedUserAvatar: f.sailor_profiles?.avatar_url,
+        });
+      });
+
+      // Sort all activity by timestamp
+      recentActivity.sort((a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+
+      // =========================================================================
+      // CALCULATE WEEKLY SUMMARY
+      // =========================================================================
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - 7);
+      const weekEnd = new Date();
+
+      const weekRaces = finishedRaces.filter(
+        (r: any) => new Date(r.start_date) >= weekStart
+      );
+
+      let weeklyWins = 0;
+      let weeklyPodiums = 0;
+      const weeklyPositions: number[] = [];
+      let highlightRace: { name: string; position: number; fleetSize: number } | undefined;
+
+      weekRaces.forEach((race: any) => {
+        const p = participantsMap.get(race.id);
+        if (p?.finish_position) {
+          weeklyPositions.push(p.finish_position);
+          if (p.finish_position === 1) weeklyWins++;
+          if (p.finish_position <= 3) weeklyPodiums++;
+
+          // Track best race of the week
+          if (!highlightRace || p.finish_position < highlightRace.position) {
+            highlightRace = {
+              name: race.name,
+              position: p.finish_position,
+              fleetSize: race.metadata?.fleet_size || 0,
+            };
+          }
+        }
+      });
+
+      // Calculate previous week for comparison
+      const prevWeekStart = new Date(weekStart);
+      prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+      const prevWeekRaces = finishedRaces.filter(
+        (r: any) => new Date(r.start_date) >= prevWeekStart && new Date(r.start_date) < weekStart
+      );
+      const prevWeekPositions: number[] = [];
+      prevWeekRaces.forEach((race: any) => {
+        const p = participantsMap.get(race.id);
+        if (p?.finish_position) {
+          prevWeekPositions.push(p.finish_position);
+        }
+      });
+
+      const prevWeekAvg = prevWeekPositions.length > 0
+        ? prevWeekPositions.reduce((a, b) => a + b, 0) / prevWeekPositions.length
+        : null;
+      const weekAvg = weeklyPositions.length > 0
+        ? Math.round((weeklyPositions.reduce((a, b) => a + b, 0) / weeklyPositions.length) * 10) / 10
+        : null;
+
+      const weeklySummary: WeeklySummary | undefined = weekRaces.length > 0 ? {
+        weekStartDate: weekStart.toISOString(),
+        weekEndDate: weekEnd.toISOString(),
+        racesCompleted: weekRaces.length,
+        wins: weeklyWins,
+        podiums: weeklyPodiums,
+        avgFinish: weekAvg,
+        timeOnWater: 0, // Would need to calculate from timer sessions
+        highlightRace,
+        streakDays: 0, // TODO: Calculate actual streak days
+        comparedToLastWeek: {
+          races: weekRaces.length - prevWeekRaces.length,
+          avgFinish: prevWeekAvg && weekAvg ? weekAvg - prevWeekAvg : null,
+        },
+        isShareable: weekRaces.length > 0,
+      } : undefined;
+
+      // =========================================================================
+      // CALCULATE SEASON RECAP (Previous Year)
+      // =========================================================================
+      const lastYear = now.getFullYear() - 1;
+      const lastYearStart = new Date(lastYear, 0, 1);
+      const lastYearEnd = new Date(lastYear, 11, 31);
+
+      const lastYearRaces = finishedRaces.filter(
+        (r: any) => {
+          const d = new Date(r.start_date);
+          return d >= lastYearStart && d <= lastYearEnd;
+        }
+      );
+
+      let lastYearWins = 0;
+      let lastYearPodiums = 0;
+      const lastYearPositions: number[] = [];
+      const monthlyRaces = new Map<string, number>();
+      const lastYearVenues = new Set<string>();
+
+      lastYearRaces.forEach((race: any) => {
+        const p = participantsMap.get(race.id);
+        if (p?.finish_position) {
+          lastYearPositions.push(p.finish_position);
+          if (p.finish_position === 1) lastYearWins++;
+          if (p.finish_position <= 3) lastYearPodiums++;
+        }
+
+        // Track monthly activity
+        const month = new Date(race.start_date).toLocaleString('default', { month: 'long' });
+        monthlyRaces.set(month, (monthlyRaces.get(month) || 0) + 1);
+
+        // Track venues
+        const venueName = race.venue_name || race.metadata?.venue_name;
+        if (venueName) {
+          lastYearVenues.add(venueName);
+        }
+      });
+
+      // Find best month
+      let bestMonth = '';
+      let bestMonthCount = 0;
+      monthlyRaces.forEach((count, month) => {
+        if (count > bestMonthCount) {
+          bestMonth = month;
+          bestMonthCount = count;
+        }
+      });
+
+      // Get top 3 races by position
+      const topRaces = lastYearRaces
+        .map((race: any) => ({
+          race,
+          position: participantsMap.get(race.id)?.finish_position,
+        }))
+        .filter((r) => r.position)
+        .sort((a, b) => (a.position || 99) - (b.position || 99))
+        .slice(0, 3)
+        .map(({ race, position }) => ({
+          name: race.name,
+          position: position!,
+          fleetSize: race.metadata?.fleet_size || 0,
+          date: race.start_date,
+          venue: race.venue_name || race.metadata?.venue_name || '',
+        }));
+
+      const lastYearAvg = lastYearPositions.length > 0
+        ? Math.round((lastYearPositions.reduce((a, b) => a + b, 0) / lastYearPositions.length) * 10) / 10
+        : null;
+
+      // Calculate previous year comparison (year before last)
+      const twoYearsAgo = lastYear - 1;
+      const twoYearsAgoRaces = finishedRaces.filter(
+        (r: any) => new Date(r.start_date).getFullYear() === twoYearsAgo
+      );
+      let twoYearsAgoWins = 0;
+      const twoYearsAgoPositions: number[] = [];
+      twoYearsAgoRaces.forEach((race: any) => {
+        const p = participantsMap.get(race.id);
+        if (p?.finish_position) {
+          twoYearsAgoPositions.push(p.finish_position);
+          if (p.finish_position === 1) twoYearsAgoWins++;
+        }
+      });
+      const twoYearsAgoAvg = twoYearsAgoPositions.length > 0
+        ? twoYearsAgoPositions.reduce((a, b) => a + b, 0) / twoYearsAgoPositions.length
+        : null;
+
+      const seasonRecap: SeasonRecap | undefined = lastYearRaces.length > 0 ? {
+        year: lastYear,
+        totalRaces: lastYearRaces.length,
+        totalWins: lastYearWins,
+        totalPodiums: lastYearPodiums,
+        averageFinish: lastYearAvg,
+        timeOnWater: 0, // Would need to calculate from timer sessions
+        venuesVisited: lastYearVenues.size,
+        newVenues: [], // Would need to compare with previous years
+        bestMonth,
+        bestMonthRaces: bestMonthCount,
+        highlights: [
+          ...(lastYearWins > 0 ? [{
+            type: 'best_race' as const,
+            title: 'Season Wins',
+            value: lastYearWins,
+            icon: 'trophy',
+          }] : []),
+          ...(bestMonth ? [{
+            type: 'most_races_month' as const,
+            title: 'Most Active Month',
+            value: bestMonth,
+            detail: `${bestMonthCount} races completed`,
+            icon: 'calendar',
+          }] : []),
+        ],
+        topRaces,
+        comparedToPreviousYear: twoYearsAgoRaces.length > 0 ? {
+          races: lastYearRaces.length - twoYearsAgoRaces.length,
+          wins: lastYearWins - twoYearsAgoWins,
+          avgFinish: lastYearAvg && twoYearsAgoAvg ? lastYearAvg - twoYearsAgoAvg : null,
+        } : null,
+        isShareable: lastYearRaces.length > 0,
+      } : undefined;
+
+      // =========================================================================
+      // CALCULATE COURSE RECORDS
+      // =========================================================================
+      const courseMap = new Map<string, {
+        courseName: string;
+        venueName: string;
+        venueId: string;
+        races: { position: number; fleetSize: number; date: string; conditions?: any }[];
+      }>();
+
+      finishedRaces.forEach((race: any) => {
+        const p = participantsMap.get(race.id);
+        if (!p?.finish_position) return;
+
+        const venueName = race.venue_name || race.metadata?.venue_name;
+        const courseName = race.metadata?.course_type || 'Standard';
+        if (!venueName) return;
+
+        const courseKey = `${venueName}-${courseName}`.toLowerCase();
+
+        if (!courseMap.has(courseKey)) {
+          courseMap.set(courseKey, {
+            courseName,
+            venueName,
+            venueId: venueName.toLowerCase().replace(/\s+/g, '-'),
+            races: [],
+          });
+        }
+
+        courseMap.get(courseKey)!.races.push({
+          position: p.finish_position,
+          fleetSize: race.metadata?.fleet_size || 0,
+          date: race.start_date,
+          conditions: race.metadata?.conditions,
+        });
+      });
+
+      const courseRecords: CourseRecord[] = Array.from(courseMap.entries())
+        .map(([id, course]) => {
+          const bestRace = course.races.reduce((best, current) =>
+            current.position < best.position ? current : best
+          );
+          const avgPosition = course.races.reduce((sum, r) => sum + r.position, 0) / course.races.length;
+
+          return {
+            id,
+            courseName: course.courseName,
+            venueName: course.venueName,
+            venueId: course.venueId,
+            bestPosition: bestRace.position,
+            fleetSize: bestRace.fleetSize,
+            date: bestRace.date,
+            conditions: bestRace.conditions,
+            timesRaced: course.races.length,
+            avgPosition: Math.round(avgPosition * 10) / 10,
+          };
+        })
+        .sort((a, b) => a.bestPosition - b.bestPosition)
+        .slice(0, 10); // Top 10 course records
+
+      // =========================================================================
+      // FETCH RACE PHOTOS FROM SAILOR_MEDIA
+      // =========================================================================
+      const { data: photosData } = await supabase
+        .from('sailor_media')
+        .select(`
+          id,
+          media_url,
+          thumbnail_url,
+          caption,
+          upload_date,
+          regatta_id,
+          metadata,
+          regattas(name, venue_name)
+        `)
+        .eq('user_id', userId)
+        .eq('media_type', 'image')
+        .order('upload_date', { ascending: false })
+        .limit(20);
+
+      const racePhotos: RacePhoto[] = (photosData || []).map((p: any) => ({
+        id: p.id,
+        url: p.media_url,
+        thumbnailUrl: p.thumbnail_url,
+        caption: p.caption,
+        takenAt: p.metadata?.taken_at || p.upload_date,
+        uploadedAt: p.upload_date,
+        source: p.metadata?.source || 'upload',
+        regattaId: p.regatta_id,
+        regattaName: p.regattas?.name,
+        venueName: p.regattas?.venue_name,
+        tags: p.metadata?.tags || [],
+        width: p.metadata?.width,
+        height: p.metadata?.height,
+      }));
+
+      // =========================================================================
+      // FETCH RACE JOURNAL ENTRIES
+      // =========================================================================
+      const { data: journalData } = await supabase
+        .from('race_journals')
+        .select('*')
+        .eq('user_id', userId)
+        .order('race_date', { ascending: false })
+        .limit(20);
+
+      const raceJournal: RaceJournalEntry[] = (journalData || []).map((j: any) => ({
+        id: j.id,
+        regattaId: j.regatta_id,
+        regattaName: j.regatta_name,
+        raceDate: j.race_date,
+        position: j.position,
+        fleetSize: j.fleet_size,
+        mood: j.mood,
+        preRaceNotes: j.pre_race_notes,
+        postRaceNotes: j.post_race_notes,
+        whatWorked: j.what_worked || [],
+        whatToImprove: j.what_to_improve || [],
+        conditions: j.conditions,
+        tuningSettings: j.tuning_settings,
+        keyMoments: j.key_moments || [],
+        createdAt: j.created_at,
+        updatedAt: j.updated_at,
+      }));
+
+      // =========================================================================
+      // FETCH TRAINING PLANS WITH ACTIVITIES
+      // =========================================================================
+      const { data: plansData } = await supabase
+        .from('training_plans')
+        .select(`
+          *,
+          training_activities(*)
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      const trainingPlans: TrainingPlan[] = (plansData || []).map((plan: any) => {
+        const activities = (plan.training_activities || [])
+          .sort((a: any, b: any) => a.sort_order - b.sort_order)
+          .map((a: any) => ({
+            id: a.id,
+            type: a.type,
+            title: a.title,
+            description: a.description,
+            duration: a.duration,
+            isCompleted: a.is_completed,
+            completedAt: a.completed_at,
+            resourceUrl: a.resource_url,
+            icon: a.icon || 'play-circle',
+          }));
+
+        const completedCount = activities.filter((a: any) => a.isCompleted).length;
+        const totalDuration = activities.reduce((sum: number, a: any) => sum + (a.duration || 0), 0);
+
+        return {
+          id: plan.id,
+          title: plan.title,
+          description: plan.description,
+          targetRace: plan.target_race,
+          targetDate: plan.target_date,
+          status: plan.status,
+          activities,
+          totalActivities: activities.length,
+          completedActivities: completedCount,
+          estimatedDuration: totalDuration,
+          createdAt: plan.created_at,
+          startedAt: plan.started_at,
+          completedAt: plan.completed_at,
+        };
+      });
+
+      // =========================================================================
+      // BUILD VENUES WITH COORDINATES (using known HK venues)
+      // =========================================================================
+      const VENUE_COORDINATES: Record<string, { lat: number; lng: number }> = {
+        'royal hong kong yacht club': { lat: 22.2855, lng: 114.1713 },
+        'rhkyc': { lat: 22.2855, lng: 114.1713 },
+        'aberdeen boat club': { lat: 22.2480, lng: 114.1494 },
+        'abc': { lat: 22.2480, lng: 114.1494 },
+        'hebe haven yacht club': { lat: 22.3679, lng: 114.2900 },
+        'hhyc': { lat: 22.3679, lng: 114.2900 },
+        'middle island yacht club': { lat: 22.2405, lng: 114.1926 },
+        'myc': { lat: 22.2405, lng: 114.1926 },
+        'clearwater bay country club': { lat: 22.2775, lng: 114.2983 },
+        'discovery bay marina club': { lat: 22.2897, lng: 114.0089 },
+      };
+
+      const maxRaceCount = Math.max(...venuesVisited.map(v => v.raceCount), 1);
+      const venuesWithCoordinates: VenueWithCoordinates[] = venuesVisited
+        .map(venue => {
+          const coords = VENUE_COORDINATES[venue.name.toLowerCase()] ||
+                        VENUE_COORDINATES[venue.id.toLowerCase()];
+          if (!coords) return null;
+          return {
+            ...venue,
+            latitude: coords.lat,
+            longitude: coords.lng,
+            intensity: venue.raceCount / maxRaceCount,
+          };
+        })
+        .filter((v): v is VenueWithCoordinates => v !== null);
+
+      // =========================================================================
+      // FETCH BOATS WITH MAINTENANCE (from sail_inspections)
+      // =========================================================================
+      const boatsWithMaintenance: BoatWithMaintenance[] = await Promise.all(
+        boats.map(async (boat) => {
+          // Try to find sail inspections for this boat
+          const { data: inspections } = await supabase
+            .from('sail_inspections')
+            .select('*')
+            .eq('sailor_id', userId)
+            .order('inspection_date', { ascending: false })
+            .limit(5);
+
+          const logs: MaintenanceLog[] = (inspections || []).map((i: any) => ({
+            id: i.id,
+            boatId: boat.id,
+            type: 'inspection' as const,
+            title: `${i.inspection_type.charAt(0).toUpperCase() + i.inspection_type.slice(1)} Inspection`,
+            description: i.notes,
+            date: i.inspection_date,
+            status: 'completed' as const,
+          }));
+
+          const lastInspection = logs[0];
+
+          return {
+            ...boat,
+            lastMaintenanceDate: lastInspection?.date,
+            healthScore: inspections?.[0]?.overall_condition_score,
+            maintenanceLogs: logs,
+          };
+        })
+      );
+
+      // =========================================================================
+      // GENERATE INSIGHTS FROM STATS
+      // =========================================================================
+      const insights: PerformanceInsight[] = [];
+
+      // Approaching milestone
+      if (finishedRaces.length > 0 && finishedRaces.length < 100) {
+        const nextMilestone = finishedRaces.length < 10 ? 10 :
+                             finishedRaces.length < 50 ? 50 : 100;
+        const remaining = nextMilestone - finishedRaces.length;
+        if (remaining <= 15) {
+          insights.push({
+            id: 'insight-milestone',
+            type: 'milestone',
+            title: `Approaching ${nextMilestone} Races`,
+            description: `You're only ${remaining} races away from your ${nextMilestone}-race milestone!`,
+            sentiment: 'positive',
+            metric: 'Total Races',
+            metricValue: finishedRaces.length,
+            icon: 'star',
+            color: 'systemPurple',
+            generatedAt: new Date().toISOString(),
+          });
+        }
+      }
+
+      // Improvement insight
+      if (seasonAverageFinish && averageFinish && seasonAverageFinish < averageFinish) {
+        const improvement = Math.round((averageFinish - seasonAverageFinish) * 10) / 10;
+        insights.push({
+          id: 'insight-improvement',
+          type: 'trend',
+          title: 'Strong Season Performance',
+          description: `Your average finish has improved by ${improvement} positions this season compared to your career average.`,
+          sentiment: 'positive',
+          metric: 'Average Finish',
+          metricValue: seasonAverageFinish,
+          metricChange: -Math.round((improvement / averageFinish) * 100),
+          icon: 'trending-up',
+          color: 'systemGreen',
+          generatedAt: new Date().toISOString(),
+        });
+      }
+
+      // Win rate insight
+      if (winRate && winRate > 0.15) {
+        insights.push({
+          id: 'insight-winrate',
+          type: 'comparison',
+          title: 'Top Competitor',
+          description: `Your ${Math.round(winRate * 100)}% win rate puts you among the top performers in your fleet.`,
+          sentiment: 'positive',
+          metric: 'Win Rate',
+          metricValue: `${Math.round(winRate * 100)}%`,
+          icon: 'trophy',
+          color: 'systemYellow',
+          generatedAt: new Date().toISOString(),
+        });
+      }
 
       setData({
         profile: {
@@ -875,21 +1464,19 @@ export function useReflectProfile() {
         achievements,
         personalRecords,
         challenges,
-        recentActivity,
-        // Phase 5: Empty for now (would come from respective tables)
-        goals: [],
-        insights: [],
-        fleetComparison: undefined,
-        sailorComparisons: [],
-        weeklySummary: undefined,
-        boatsWithMaintenance: [],
-        // Phase 6: Empty for now (would come from respective tables)
-        trainingPlans: [],
-        venuesWithCoordinates: [],
-        seasonRecap: undefined,
-        courseRecords: [],
-        racePhotos: [],
-        raceJournal: [],
+        recentActivity: recentActivity.slice(0, 10), // Limit to 10 most recent
+        goals,
+        insights,
+        fleetComparison: undefined, // Complex to compute, would need fleet membership data
+        sailorComparisons: [], // Complex to compute, would need head-to-head race data
+        weeklySummary,
+        boatsWithMaintenance,
+        trainingPlans,
+        venuesWithCoordinates,
+        seasonRecap,
+        courseRecords,
+        racePhotos,
+        raceJournal,
       });
     } catch (err) {
       logger.error('Error loading profile data:', err);
