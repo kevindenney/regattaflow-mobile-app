@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -47,26 +47,39 @@ export default function SettingsScreen() {
   );
 
   const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              // AuthProvider will handle navigation via auth state change - no need for manual redirect
-            } catch (error) {
-              console.error('[SETTINGS] Fallback sign out error:', error);
-              Alert.alert('Error', 'Failed to sign out. Please try again.');
-            }
+    const doSignOut = async () => {
+      try {
+        await signOut();
+        // AuthProvider will handle navigation via auth state change - no need for manual redirect
+      } catch (error) {
+        console.error('[SETTINGS] Fallback sign out error:', error);
+        if (Platform.OS === 'web') {
+          window.alert('Failed to sign out. Please try again.');
+        } else {
+          Alert.alert('Error', 'Failed to sign out. Please try again.');
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      // Use window.confirm for web since Alert.alert doesn't work
+      if (window.confirm('Are you sure you want to sign out?')) {
+        await doSignOut();
+      }
+    } else {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to sign out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign Out',
+            style: 'destructive',
+            onPress: doSignOut,
           },
-        },
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const handleClaimWorkspace = async () => {

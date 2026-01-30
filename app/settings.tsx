@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import {
   ArrowLeft,
@@ -83,55 +83,76 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/(auth)/login' as Href);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to sign out');
-            }
-          }
+    const doSignOut = async () => {
+      try {
+        await signOut();
+        router.replace('/(auth)/login' as Href);
+      } catch (error) {
+        if (Platform.OS === 'web') {
+          window.alert('Failed to sign out');
+        } else {
+          Alert.alert('Error', 'Failed to sign out');
         }
-      ]
-    );
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      // Use window.confirm for web since Alert.alert doesn't work
+      if (window.confirm('Are you sure you want to sign out?')) {
+        await doSignOut();
+      }
+    } else {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to sign out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign Out',
+            style: 'destructive',
+            onPress: doSignOut
+          }
+        ]
+      );
+    }
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      'Delete Account',
-      'Are you absolutely sure? This action cannot be undone. All your data will be permanently deleted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Final Confirmation',
-              'Type DELETE to confirm account deletion',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Confirm Delete',
-                  style: 'destructive',
-                  onPress: async () => {
-                    router.push('/settings/delete-account');
-                  }
-                }
-              ]
-            );
-          }
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you absolutely sure? This action cannot be undone. All your data will be permanently deleted.')) {
+        if (window.confirm('Final Confirmation: Are you sure you want to delete your account?')) {
+          router.push('/settings/delete-account');
         }
-      ]
-    );
+      }
+    } else {
+      Alert.alert(
+        'Delete Account',
+        'Are you absolutely sure? This action cannot be undone. All your data will be permanently deleted.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Final Confirmation',
+                'Type DELETE to confirm account deletion',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Confirm Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                      router.push('/settings/delete-account');
+                    }
+                  }
+                ]
+              );
+            }
+          }
+        ]
+      );
+    }
   };
 
   if (loading) {
