@@ -1,15 +1,14 @@
 /**
- * WebSidebarNav - Overlay drawer navigation for web
+ * WebSidebarNav - Persistent sidebar navigation for web
  *
- * Slides in from the left as an overlay drawer (not persistent sidebar).
- * Contains:
- * - Close button
- * - User profile header (clickable - opens Account modal, same as mobile)
+ * Apple HIG-style sidebar with:
+ * - Sidebar toggle button (collapse/expand)
  * - Primary nav items (persona-aware, from shared config)
  * - Secondary items (all "More" menu items flattened)
- * - Footer: Sign In/Sign Up (guests) or Upgrade CTA (free users)
+ * - Footer: Sign In/Sign Up for guests
  *
- * Account, Plans, and Sign Out are accessed via the profile header (like mobile).
+ * Profile/Account access is via the profile avatar button in the toolbar.
+ * Plan upgrades are available in the profile dropdown menu.
  * Only rendered on web when USE_WEB_SIDEBAR_LAYOUT feature flag is enabled.
  */
 
@@ -18,7 +17,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 
 import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
-import { useFeatureGate } from '@/hooks/useFeatureGate';
+import { useWebDrawer } from '@/providers/WebDrawerProvider';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import {
   type NavItem,
@@ -33,21 +32,27 @@ interface WebSidebarNavProps {
 }
 
 function WebSidebarNav({ onClose }: WebSidebarNavProps) {
-  const { userType, userProfile, user, isGuest } = useAuth();
-  const { isFree } = useFeatureGate();
+  const { userType, isGuest } = useAuth();
+  const { isPinned, togglePin, closeDrawer } = useWebDrawer();
   const pathname = usePathname();
   const router = useRouter();
 
   const { primary, secondary } = getNavItemsForUserType(userType ?? null);
 
-  const userInitial = isGuest
-    ? 'G'
-    : (userProfile?.full_name || user?.email || 'U').charAt(0).toUpperCase();
-  const displayName = isGuest ? 'Guest' : (userProfile?.full_name || 'Sailor');
-
   const handleNavigation = (route: string) => {
     router.push(route as Parameters<typeof router.push>[0]);
-    onClose?.();
+    // Don't auto-close if pinned
+    if (!isPinned) {
+      onClose?.();
+    }
+  };
+
+  // Handle sidebar toggle - if pinned, unpin and close; otherwise just close
+  const handleToggleSidebar = () => {
+    if (isPinned) {
+      togglePin();
+    }
+    closeDrawer();
   };
 
   const renderNavItem = (item: NavItem) => {
@@ -73,15 +78,23 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
 
   return (
     <View style={styles.container}>
-      {/* Collapse button row */}
-      <View style={styles.collapseRow}>
+      {/* Apple HIG-style header with sidebar toggle */}
+      <View style={styles.headerRow}>
         <Pressable
-          onPress={onClose}
-          style={({ pressed }) => [styles.collapseButton, pressed && { opacity: 0.6 }]}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Collapse sidebar"
+          onPress={handleToggleSidebar}
+          style={({ pressed, hovered }) => [
+            styles.sidebarToggle,
+            (hovered as boolean) && styles.sidebarToggleHover,
+            pressed && styles.sidebarTogglePressed,
+          ]}
+          accessibilityLabel="Hide sidebar"
+          accessibilityRole="button"
         >
-          <Ionicons name="chevron-back" size={20} color={IOS_COLORS.secondaryLabel} />
+          {/* Apple-style sidebar icon: rectangle with left panel */}
+          <View style={styles.sidebarIcon}>
+            <View style={styles.sidebarIconLeft} />
+            <View style={styles.sidebarIconRight} />
+          </View>
         </Pressable>
       </View>
 
@@ -90,37 +103,6 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* User Profile Header - clickable to open Account */}
-        <TouchableOpacity
-          style={styles.userSection}
-          onPress={() => {
-            handleNavigation('/account');
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.userAvatar}>
-            <Text style={styles.userAvatarText}>{userInitial}</Text>
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {displayName}
-            </Text>
-            {!isGuest && user?.email && (
-              <Text style={styles.userEmail} numberOfLines={1}>
-                {user.email}
-              </Text>
-            )}
-            {isGuest && (
-              <Text style={styles.userEmail} numberOfLines={1}>
-                Exploring the app
-              </Text>
-            )}
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
         {/* Primary Navigation */}
         <View style={styles.navSection}>
           {primary.map(renderNavItem)}
@@ -140,40 +122,27 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
         {/* Spacer */}
         <View style={styles.spacer} />
 
-        {/* Footer - Guest auth options or Upgrade CTA */}
-        {(isGuest || isFree) && (
+        {/* Footer - Guest auth options */}
+        {isGuest && (
           <>
             <View style={styles.divider} />
             <View style={styles.navSection}>
-              {isGuest ? (
-                <>
-                  <TouchableOpacity
-                    style={styles.navItem}
-                    onPress={() => handleNavigation('/(auth)/login')}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="log-in-outline" size={20} color={IOS_COLORS.systemBlue} />
-                    <Text style={[styles.navItemText, styles.signInText]}>Sign In</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.navItem}
-                    onPress={() => handleNavigation('/(auth)/signup')}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="person-add-outline" size={20} color={IOS_COLORS.systemBlue} />
-                    <Text style={[styles.navItemText, styles.signInText]}>Sign Up</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <TouchableOpacity
-                  style={styles.upgradeButton}
-                  onPress={() => handleNavigation('/pricing?upgrade=pro')}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="rocket" size={18} color="#FFFFFF" />
-                  <Text style={styles.upgradeButtonText}>Upgrade to Pro</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.navItem}
+                onPress={() => handleNavigation('/(auth)/login')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="log-in-outline" size={20} color={IOS_COLORS.systemBlue} />
+                <Text style={[styles.navItemText, styles.signInText]}>Sign In</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.navItem}
+                onPress={() => handleNavigation('/(auth)/signup')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="person-add-outline" size={20} color={IOS_COLORS.systemBlue} />
+                <Text style={[styles.navItemText, styles.signInText]}>Sign Up</Text>
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -192,60 +161,58 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: IOS_COLORS.separator,
   },
-  collapseRow: {
+  // Apple HIG-style header row with toggle
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    paddingTop: 12,
-    paddingLeft: 12,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingTop: 8,
+    paddingHorizontal: 12,
     paddingBottom: 4,
   },
-  collapseButton: {
+  // Apple-style sidebar toggle button (matches macOS window chrome)
+  sidebarToggle: {
     width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: IOS_COLORS.tertiarySystemFill,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    backgroundColor: IOS_COLORS.systemBackground,
+  },
+  sidebarToggleHover: {
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderColor: IOS_COLORS.opaqueSeparator,
+  },
+  sidebarTogglePressed: {
+    backgroundColor: IOS_COLORS.tertiarySystemFill,
+  },
+  // Custom sidebar icon (rectangle with left panel - matches Apple's sidebar.left)
+  sidebarIcon: {
+    width: 16,
+    height: 12,
+    flexDirection: 'row',
+    borderRadius: 2,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.secondaryLabel,
+    overflow: 'hidden',
+  },
+  sidebarIconLeft: {
+    width: 5,
+    height: '100%',
+    backgroundColor: IOS_COLORS.secondaryLabel,
+  },
+  sidebarIconRight: {
+    flex: 1,
   },
   scrollArea: {
     flex: 1,
   },
   scrollContent: {
+    paddingTop: 8,
     paddingBottom: 20,
     minHeight: '100%',
-  },
-  userSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: IOS_COLORS.systemGray5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  userAvatarText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-    marginBottom: 1,
-  },
-  userEmail: {
-    fontSize: 12,
-    color: IOS_COLORS.secondaryLabel,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
@@ -293,21 +260,5 @@ const styles = StyleSheet.create({
   },
   signInText: {
     color: IOS_COLORS.systemBlue,
-  },
-  upgradeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: '#0284c7',
-    marginBottom: 6,
-    gap: 8,
-  },
-  upgradeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });
