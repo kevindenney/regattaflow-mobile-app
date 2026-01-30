@@ -43,10 +43,14 @@ export const getTabsForUserType = (
   isGuest: boolean = false,
   capabilities?: UserCapabilities
 ): TabConfig[] => {
-  // Guests get limited sailor-style tabs (Races only for now)
+  // Guests get full sailor-style tabs (same as logged-in sailors)
   if (isGuest) {
     return [
-      { name: 'races', title: 'Races', icon: '', iconFocused: '' },
+      { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'discover', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'venue', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
+      { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
+      { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
     ];
   }
 
@@ -73,10 +77,11 @@ export const getTabsForUserType = (
   // Sailors (including sailors with coaching capability)
   if (userType === 'sailor' || userType === 'coach') {
     const tabs: TabConfig[] = [
-      { name: 'races', title: 'Races', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'discover', title: 'Community', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'venue', title: 'Local', icon: 'compass-outline', iconFocused: 'compass' },
+      { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'discover', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'venue', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
+      { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
     ];
 
     // Add coaching tabs if user has coaching capability
@@ -101,17 +106,18 @@ export const getTabsForUserType = (
 
 // Navigation items by persona (used by NavigationDrawer and WebSidebarNav)
 export const SAILOR_NAV_ITEMS: NavItem[] = [
-  { key: 'races', label: 'Races', route: '/(tabs)/races', icon: 'flag-outline' },
+  { key: 'races', label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
+  { key: 'discover', label: 'Connect', route: '/(tabs)/discover', icon: 'people-outline' },
+  { key: 'venue', label: 'Discuss', route: '/(tabs)/venue', icon: 'chatbubbles-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
-  { key: 'venue', label: 'Local', route: '/(tabs)/venue', icon: 'compass-outline' },
+  { key: 'reflect', label: 'Reflect', route: '/(tabs)/reflect', icon: 'stats-chart-outline' },
+  { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },
 ];
 
 export const SAILOR_SECONDARY_ITEMS: NavItem[] = [
   { key: 'courses', label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
-  { key: 'sailors', label: 'Community', route: '/(tabs)/discover', icon: 'people-outline' },
   { key: 'crew', label: 'Crew', route: '/(tabs)/crew', icon: 'people-outline' },
   { key: 'coaches', label: 'Coaches', route: '/(tabs)/coaching', icon: 'school-outline' },
-  { key: 'race-browser', label: 'Race Detail', route: '/(tabs)/race-browser', icon: 'flag-outline' },
 ];
 
 export const COACH_NAV_ITEMS: NavItem[] = [
