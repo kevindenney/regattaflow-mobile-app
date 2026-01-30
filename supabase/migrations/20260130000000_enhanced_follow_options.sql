@@ -33,6 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_user_follows_muted
 -- =============================================================================
 
 -- Users can update their own follows (for setting favorites, notifications, mute)
+DROP POLICY IF EXISTS "Users can update their own follows" ON user_follows;
 CREATE POLICY "Users can update their own follows" ON user_follows
   FOR UPDATE
   USING (auth.uid() = follower_id)
