@@ -755,20 +755,19 @@ export function AfterRaceContent({
       </View>
 
       {/* Structured Debrief Interview Modal */}
-      {userId && (
-        <StructuredDebriefInterview
-          visible={showInterviewModal}
-          raceId={race.id}
-          userId={userId}
-          raceName={race.name}
-          onClose={() => setShowInterviewModal(false)}
-          onComplete={() => {
-            setShowInterviewModal(false);
-            // Refetch state to update UI
-            refetchState();
-          }}
-        />
-      )}
+      {/* Always render modal to prevent unmount/remount issues - control visibility only via visible prop */}
+      <StructuredDebriefInterview
+        visible={showInterviewModal && !!userId}
+        raceId={race.id}
+        userId={userId || ''}
+        raceName={race.name}
+        onClose={() => setShowInterviewModal(false)}
+        onComplete={() => {
+          setShowInterviewModal(false);
+          // Refetch state to update UI
+          refetchState();
+        }}
+      />
     </View>
   );
 }
