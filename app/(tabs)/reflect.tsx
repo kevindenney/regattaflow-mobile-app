@@ -29,7 +29,7 @@ import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
-import { useReflectDataMock, type RaceLogEntry } from '@/hooks/useReflectData';
+import { useReflectData, type RaceLogEntry } from '@/hooks/useReflectData';
 import { useReflectProfile } from '@/hooks/useReflectProfile';
 
 import {
@@ -89,7 +89,7 @@ interface ProgressViewProps {
 }
 
 function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps) {
-  const { data, loading, refresh } = useReflectDataMock();
+  const { data, loading, refresh } = useReflectData();
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -601,7 +601,7 @@ interface RaceLogViewProps {
 }
 
 function RaceLogView({ toolbarHeight, onScroll, isDesktop }: RaceLogViewProps) {
-  const { data, loading, refresh } = useReflectDataMock();
+  const { data, loading, refresh } = useReflectData();
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
