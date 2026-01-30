@@ -45,7 +45,6 @@ import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { OnboardingTour, TourStep } from '@/components/onboarding/OnboardingTour';
 import { useOnboardingTour } from '@/hooks/useOnboardingTour';
-import NavigationDrawer, { NavigationDrawerContent } from '@/components/navigation/NavigationDrawer';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { MOCK_RACES } from '@/constants/mockData';
@@ -85,6 +84,7 @@ import { useVenueCenter } from '@/hooks/useVenueCenter';
 import { useVenueCoordinates } from '@/hooks/useVenueCoordinates';
 import { useVenueDetection } from '@/hooks/useVenueDetection';
 import { useVenueInsights } from '@/hooks/useVenueInsights';
+import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import {
   ADD_RACE_CARD_DISMISSED_KEY,
@@ -204,6 +204,10 @@ export default function RacesScreen() {
   // Add race state is now provided by useAddRace hook below
   // Post-race interview state is now provided by usePostRaceInterview hook below
 
+  // Toolbar measured height for content padding
+  const [toolbarHeight, setToolbarHeight] = useState(0);
+  const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
+
   // Selected race detail state
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
   const hasActiveRace = selectedRaceId !== null;
@@ -296,15 +300,6 @@ export default function RacesScreen() {
   const headerRef = useRef<View>(null);
   const cardGridRef = useRef<View>(null);
 
-  // Drawer state (controlled by tour for menu spotlight steps)
-  const [drawerVisible, setDrawerVisible] = useState(false);
-
-  // Menu item layouts for tour spotlight (from NavigationDrawer)
-  const [learnItemLayout, setLearnItemLayout] = useState<LayoutRectangle | null>(null);
-  const [venueItemLayout, setVenueItemLayout] = useState<LayoutRectangle | null>(null);
-  const [coachingItemLayout, setCoachingItemLayout] = useState<LayoutRectangle | null>(null);
-  const [pricingItemLayout, setPricingItemLayout] = useState<LayoutRectangle | null>(null);
-
   // Measure tour target elements using platform-appropriate method
   const measureTourTargets = useCallback(() => {
     // On web, use getBoundingClientRect for accurate measurements
@@ -358,8 +353,7 @@ export default function RacesScreen() {
     }
   }, [tourStepIndex, tourVisible, measureTourTargets]);
 
-  // Tour step definitions with dynamic layouts - 8 steps total
-  // Steps 4-7 target menu items in the drawer (opened during tour)
+  // Tour step definitions with dynamic layouts - 5 steps total
   const tourSteps: TourStep[] = useMemo(() => [
     {
       id: 'timeline',
@@ -389,40 +383,10 @@ export default function RacesScreen() {
       spotlightBorderRadius: 20,
     },
     {
-      id: 'learn-tab',
-      title: 'Learn & Improve',
-      description: 'Access sailing courses, tutorials, and training resources to level up your skills.',
-      targetLayout: learnItemLayout,
-      position: 'right',
-      spotlightPadding: 8,
-      spotlightBorderRadius: 12,
-    },
-    {
-      id: 'venue-tab',
-      title: 'Venue Intelligence',
-      description: 'Get local wind patterns, tide data, and racing area insights before race day.',
-      targetLayout: venueItemLayout,
-      position: 'right',
-      spotlightPadding: 8,
-      spotlightBorderRadius: 12,
-    },
-    {
-      id: 'coaching',
-      title: 'Find a Coach',
-      description: 'Connect with sailing coaches for personalized training and race preparation.',
-      targetLayout: coachingItemLayout,
-      position: 'right',
-      spotlightPadding: 8,
-      spotlightBorderRadius: 12,
-    },
-    {
-      id: 'pricing',
-      title: 'Pricing & Plans',
-      description: 'Start free, then upgrade anytime for AI strategy, unlimited races, and team features.',
-      targetLayout: pricingItemLayout,
-      position: 'right',
-      spotlightPadding: 8,
-      spotlightBorderRadius: 12,
+      id: 'explore-tabs',
+      title: 'Explore the App',
+      description: 'Use the tabs below to discover more: Learn for courses and tutorials, Discuss for venue insights, and Connect to find other sailors.',
+      position: 'center',
     },
     {
       id: 'get-started',
@@ -430,21 +394,19 @@ export default function RacesScreen() {
       description: "You're all set. Start by adding your first race or exploring a demo race.",
       position: 'center',
     },
-  ], [cardGridLayout, addButtonLayout, learnItemLayout, venueItemLayout, coachingItemLayout, pricingItemLayout]);
-
-  // Steps that require the drawer to be open
-  const DRAWER_STEPS = ['learn-tab', 'venue-tab', 'coaching', 'pricing'];
+  ], [cardGridLayout, addButtonLayout]);
 
   // Dynamic layout map - layouts resolved at render time by OnboardingTour
   const stepLayouts = useMemo(() => ({
     'timeline': cardGridLayout,
     'add-race': addButtonLayout,
     'race-cards': cardGridLayout,
-    'learn-tab': learnItemLayout,
-    'venue-tab': venueItemLayout,
-    'coaching': coachingItemLayout,
-    'pricing': pricingItemLayout,
-  }), [cardGridLayout, addButtonLayout, learnItemLayout, venueItemLayout, coachingItemLayout, pricingItemLayout]);
+  }), [cardGridLayout, addButtonLayout]);
+
+  const handleDismissTour = useCallback(() => {
+    setTourVisible(false);
+    markTourComplete(); // Mark tour as completed in storage
+  }, [markTourComplete]);
 
   const handleTourNext = useCallback(() => {
     const nextIndex = tourStepIndex + 1;
@@ -454,40 +416,8 @@ export default function RacesScreen() {
       return;
     }
 
-    const currentStep = tourSteps[tourStepIndex];
-    const nextStep = tourSteps[nextIndex];
-    const currentNeedsDrawer = DRAWER_STEPS.includes(currentStep?.id || '');
-    const nextNeedsDrawer = DRAWER_STEPS.includes(nextStep.id);
-
-    // Only change drawer state when transitioning between drawer/non-drawer steps
-    if (nextNeedsDrawer && !currentNeedsDrawer) {
-      // Entering drawer steps - open drawer first, then advance
-      setTimeout(() => {
-        setDrawerVisible(true);
-        // Wait for drawer animation (300ms spring) + measurement (400ms) + React state buffer
-        setTimeout(() => {
-          setTourStepIndex(nextIndex);
-        }, 650);
-      }, 0);
-    } else if (!nextNeedsDrawer && currentNeedsDrawer) {
-      // Leaving drawer steps - close drawer, then advance
-      setTimeout(() => {
-        setDrawerVisible(false);
-        setTimeout(() => {
-          setTourStepIndex(nextIndex);
-        }, 300);
-      }, 0);
-    } else {
-      // Same state (both drawer or both non-drawer) - just advance
-      setTourStepIndex(nextIndex);
-    }
-  }, [tourStepIndex, tourSteps]);
-
-  const handleDismissTour = useCallback(() => {
-    setDrawerVisible(false);
-    setTourVisible(false);
-    markTourComplete(); // Mark tour as completed in storage
-  }, [markTourComplete]);
+    setTourStepIndex(nextIndex);
+  }, [tourStepIndex, tourSteps, handleDismissTour]);
 
   // Clear any stuck loading states on mount
 
@@ -525,11 +455,13 @@ export default function RacesScreen() {
   const {
     liveRaces,
     loading: liveRacesLoading,
+    isRefreshing: liveRacesRefreshing,
     refresh: refetchRaces,
   } = isGuest
       ? {
         liveRaces: guestRacesResult.liveRaces,
         loading: guestRacesResult.loading,
+        isRefreshing: false as boolean,
         refresh: guestRacesResult.refresh,
       }
       : authenticatedRacesResult;
@@ -979,7 +911,14 @@ export default function RacesScreen() {
       userId?: string,
       onDismiss?: () => void,
       raceIndex?: number,
-      totalRaces?: number
+      totalRaces?: number,
+      // Timeline navigation props
+      _timelineRaces?: any[],
+      _currentRaceIndex?: number,
+      _onSelectRace?: (index: number) => void,
+      _nextRaceIndex?: number,
+      // Scroll handler for toolbar hide/show
+      onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void
     ) => {
       const ContentComponent = getCardContentComponent(cardType);
       return (
@@ -1001,6 +940,7 @@ export default function RacesScreen() {
           seasonWeek={currentSeasonWeek}
           raceNumber={raceIndex !== undefined ? raceIndex + 1 : undefined}
           totalRaces={totalRaces}
+          onContentScroll={onContentScroll}
         />
       );
     },
@@ -2755,30 +2695,7 @@ export default function RacesScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: TUFTE_BACKGROUND }}>
-      {/* Floating Header - wrapped for tour spotlight */}
-      <View ref={headerRef} collapsable={false}>
-        <RacesFloatingHeader
-          topInset={insets.top}
-          loadingInsights={loadingInsights}
-          weatherLoading={weatherLoading}
-          isOnline={isOnline}
-          onAddRace={handleShowAddRaceSheet}
-          onAddPractice={handleAddPractice}
-          onNewSeason={() => setShowSeasonSettings(true)}
-          onAddButtonLayout={setAddButtonLayout}
-          measureTrigger={tourVisible}
-          totalRaces={enrichedRaces?.length || 0}
-          upcomingRaces={upcomingRacesCount}
-          currentRaceIndex={selectedRaceId ? (enrichedRaces?.findIndex((r: any) => r.id === selectedRaceId) ?? -1) + 1 : undefined}
-          onUpcomingPress={handleUpcomingPress}
-        />
-      </View>
-
-      {/* Season Header removed - counter info moved to RacesFloatingHeader */}
-
-      {/* Getting Started Tips - TODO: implement TufteTipsCarousel */}
-
-      {/* Main Content - RaceListView, CardGrid, or ScrollView based on feature flag */}
+      {/* Main Content first — flows behind absolutely-positioned toolbar */}
       {/* Show loading state when creating sample data for new users */}
       {creatingSampleData ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: TUFTE_BACKGROUND }}>
@@ -2884,6 +2801,10 @@ export default function RacesScreen() {
             persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
             style={{ flex: 1 }}
             userId={user?.id}
+            topInset={toolbarHeight}
+            safeAreaTop={insets.top}
+            toolbarHidden={toolbarHidden}
+            onContentScroll={handleToolbarScroll}
             onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
             onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
             deletingRaceId={deletingRaceId}
@@ -2915,6 +2836,8 @@ export default function RacesScreen() {
             />
           }
           showsVerticalScrollIndicator={false}
+          onScroll={handleToolbarScroll}
+          scrollEventThrottle={16}
         >
           {/* Demo notice */}
           <DemoNotice
@@ -3297,6 +3220,27 @@ export default function RacesScreen() {
         </ScrollView>
       )}
 
+      {/* Floating Header rendered last — absolutely positioned over content */}
+      <View ref={headerRef} collapsable={false} style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }} pointerEvents="box-none">
+        <RacesFloatingHeader
+          topInset={insets.top}
+          loadingInsights={loadingInsights}
+          weatherLoading={weatherLoading}
+          isOnline={isOnline}
+          onAddRace={handleShowAddRaceSheet}
+          onAddPractice={handleAddPractice}
+          onNewSeason={() => setShowSeasonSettings(true)}
+          onAddButtonLayout={setAddButtonLayout}
+          measureTrigger={tourVisible}
+          totalRaces={enrichedRaces?.length || 0}
+          upcomingRaces={upcomingRacesCount}
+          currentRaceIndex={selectedRaceId ? (enrichedRaces?.findIndex((r: any) => r.id === selectedRaceId) ?? -1) + 1 : undefined}
+          onUpcomingPress={handleUpcomingPress}
+          onMeasuredHeight={setToolbarHeight}
+          hidden={toolbarHidden}
+        />
+      </View>
+
       <RaceModalsSection
         // Document Type Picker
         documentTypePickerVisible={documentTypePickerVisible}
@@ -3376,20 +3320,7 @@ export default function RacesScreen() {
         feature="multiple_races"
       />
 
-      {/* Navigation Drawer - standalone modal (shown when hamburger pressed) */}
-      {!tourVisible && (
-        <NavigationDrawer
-          visible={drawerVisible}
-          onClose={() => setDrawerVisible(false)}
-          onLearnItemLayout={setLearnItemLayout}
-          onVenueItemLayout={setVenueItemLayout}
-          onCoachingItemLayout={setCoachingItemLayout}
-          onPricingItemLayout={setPricingItemLayout}
-        />
-      )}
-
       {/* Onboarding Tour - shown for first-time users */}
-      {/* Drawer content rendered inside tour Modal to fix iOS z-index stacking */}
       <OnboardingTour
         visible={tourVisible}
         steps={tourSteps}
@@ -3397,16 +3328,6 @@ export default function RacesScreen() {
         onNext={handleTourNext}
         onDismiss={handleDismissTour}
         stepLayouts={stepLayouts}
-        drawerContent={
-          <NavigationDrawerContent
-            visible={drawerVisible}
-            onClose={() => setDrawerVisible(false)}
-            onLearnItemLayout={setLearnItemLayout}
-            onVenueItemLayout={setVenueItemLayout}
-            onCoachingItemLayout={setCoachingItemLayout}
-            onPricingItemLayout={setPricingItemLayout}
-          />
-        }
       />
 
       {/* </PlanModeLayout> - temporarily removed */}
