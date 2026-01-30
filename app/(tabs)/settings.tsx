@@ -1,5 +1,6 @@
 import { ClubAiAssistant } from '@/components/ai/ClubAiAssistant';
 import { LanguageSelector } from '@/components/settings/LanguageSelector';
+import { TeamSeatManager } from '@/components/subscription/TeamSeatManager';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { useAuth } from '@/providers/AuthProvider';
@@ -7,7 +8,7 @@ import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataSe
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -35,6 +36,10 @@ export default function SettingsScreen() {
   const [languageVisible, setLanguageVisible] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [resetSampleLoading, setResetSampleLoading] = useState(false);
+  const [teamManagerVisible, setTeamManagerVisible] = useState(false);
+
+  // Check if user has a team subscription
+  const isTeamSubscriber = userProfile?.subscription_tier === 'team';
 
   // Get current language display name
   const currentLocale = getCurrentLocale();
@@ -272,6 +277,14 @@ export default function SettingsScreen() {
               subtitle={`Current plan: ${userProfile?.subscription_tier?.charAt(0).toUpperCase() + userProfile?.subscription_tier?.slice(1) || 'Free'}`}
               onPress={() => router.push('/subscription')}
             />
+            {isTeamSubscriber && (
+              <SettingItem
+                icon="people-outline"
+                title="Manage Team"
+                subtitle="Invite members and manage your team"
+                onPress={() => setTeamManagerVisible(true)}
+              />
+            )}
             {userProfile?.user_type === 'sailor' && (
               <SettingItem
                 icon="refresh-outline"
@@ -431,6 +444,16 @@ export default function SettingsScreen() {
         visible={languageVisible}
         onClose={() => setLanguageVisible(false)}
       />
+
+      {/* Team Manager Modal */}
+      <Modal
+        visible={teamManagerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setTeamManagerVisible(false)}
+      >
+        <TeamSeatManager onClose={() => setTeamManagerVisible(false)} />
+      </Modal>
 
       <Modal
         visible={claimVisible}
