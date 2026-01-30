@@ -28,3 +28,17 @@ export { SocialStatsCard } from './SocialStatsCard';
 export { RecentActivitySection } from './RecentActivitySection';
 export type { ActivityType, RecentActivity } from './RecentActivitySection';
 export { NotificationBellButton } from './NotificationBellButton';
+
+// Phase 5 - Goals, Insights, Comparisons, Sharing & Gear Management
+export { GoalsSection } from './GoalsSection';
+export { InsightsCard } from './InsightsCard';
+export { ComparisonCard } from './ComparisonCard';
+export { WeeklySummaryCard } from './WeeklySummaryCard';
+export { GearManagementSection } from './GearManagementSection';
+export {
+  ShareActivityButton,
+  ShareRaceButton,
+  ShareAchievementButton,
+  ShareMilestoneButton,
+} from './ShareActivityButton';
+export type { RaceShareData, ActivityShareData } from './ShareActivityButton';

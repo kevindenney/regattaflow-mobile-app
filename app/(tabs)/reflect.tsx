@@ -49,8 +49,15 @@ import {
   SocialStatsCard,
   RecentActivitySection,
   NotificationBellButton,
+  // Phase 5: Goals, Insights, Comparisons, Sharing & Gear
+  GoalsSection,
+  InsightsCard,
+  ComparisonCard,
+  WeeklySummaryCard,
+  GearManagementSection,
 } from '@/components/reflect';
 import type { RecentActivity } from '@/components/reflect';
+import type { SeasonGoal, PerformanceInsight, BoatWithMaintenance, MaintenanceLog } from '@/hooks/useReflectProfile';
 
 // =============================================================================
 // TYPES
@@ -279,6 +286,65 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
     }
   };
 
+  // Phase 5: Goals handlers
+  const handleSeeAllGoals = () => {
+    Alert.alert('Coming Soon', 'Full goals management is coming in a future update');
+  };
+
+  const handleGoalPress = (goal: SeasonGoal) => {
+    Alert.alert(
+      goal.title,
+      `${goal.description || ''}\n\nProgress: ${goal.currentValue}/${goal.targetValue} ${goal.unit}\nPeriod: ${goal.period}`
+    );
+  };
+
+  const handleAddGoal = () => {
+    Alert.alert('Coming Soon', 'Goal creation is coming in a future update');
+  };
+
+  // Phase 5: Insights handlers
+  const handleSeeAllInsights = () => {
+    Alert.alert('Coming Soon', 'Full insights view is coming in a future update');
+  };
+
+  const handleInsightPress = (insight: PerformanceInsight) => {
+    Alert.alert(insight.title, insight.description);
+  };
+
+  // Phase 5: Comparison handlers
+  const handleSeeAllComparisons = () => {
+    Alert.alert('Coming Soon', 'Full leaderboard view is coming in a future update');
+  };
+
+  // Phase 5: Weekly Summary handlers
+  const handleShareWeeklySummary = () => {
+    // The WeeklySummaryCard has built-in share functionality
+  };
+
+  const handleSeeWeekDetails = () => {
+    Alert.alert('Coming Soon', 'Detailed weekly breakdown is coming in a future update');
+  };
+
+  // Phase 5: Gear Management handlers
+  const handleBoatMaintenancePress = (boat: BoatWithMaintenance) => {
+    router.push(`/(tabs)/boat/edit/${boat.id}`);
+  };
+
+  const handleMaintenanceLogPress = (log: MaintenanceLog) => {
+    Alert.alert(
+      log.title,
+      `${log.description || ''}\n\nType: ${log.type}\nDate: ${new Date(log.date).toLocaleDateString()}\nStatus: ${log.status}${log.cost ? `\nCost: $${log.cost}` : ''}${log.vendor ? `\nVendor: ${log.vendor}` : ''}`
+    );
+  };
+
+  const handleAddMaintenance = (boatId: string) => {
+    Alert.alert('Coming Soon', 'Maintenance logging is coming in a future update');
+  };
+
+  const handleSeeAllMaintenance = () => {
+    Alert.alert('Coming Soon', 'Full maintenance history is coming in a future update');
+  };
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: toolbarHeight + 20 }]}>
@@ -377,6 +443,44 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
           challenges={data.challenges}
           onSeeMore={handleSeeAllChallenges}
           onJoinChallenge={handleJoinChallenge}
+        />
+
+        {/* Phase 5: Weekly Summary */}
+        <WeeklySummaryCard
+          summary={data.weeklySummary}
+          onShare={handleShareWeeklySummary}
+          onSeeDetails={handleSeeWeekDetails}
+        />
+
+        {/* Phase 5: Season Goals */}
+        <GoalsSection
+          goals={data.goals}
+          onSeeMore={handleSeeAllGoals}
+          onGoalPress={handleGoalPress}
+          onAddGoal={handleAddGoal}
+        />
+
+        {/* Phase 5: AI Insights */}
+        <InsightsCard
+          insights={data.insights}
+          onSeeMore={handleSeeAllInsights}
+          onInsightPress={handleInsightPress}
+        />
+
+        {/* Phase 5: Fleet & Sailor Comparisons */}
+        <ComparisonCard
+          fleetComparison={data.fleetComparison}
+          sailorComparisons={data.sailorComparisons}
+          onSeeMore={handleSeeAllComparisons}
+        />
+
+        {/* Phase 5: Gear Management */}
+        <GearManagementSection
+          boats={data.boatsWithMaintenance}
+          onBoatPress={handleBoatMaintenancePress}
+          onMaintenancePress={handleMaintenanceLogPress}
+          onAddMaintenance={handleAddMaintenance}
+          onSeeAllMaintenance={handleSeeAllMaintenance}
         />
       </View>
     </ScrollView>

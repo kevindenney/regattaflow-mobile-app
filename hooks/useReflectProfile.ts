@@ -149,6 +149,117 @@ export interface RecentActivity {
   metadata?: Record<string, unknown>;
 }
 
+// Phase 5: Goals & Training
+export type GoalType = 'races' | 'wins' | 'podiums' | 'time_on_water' | 'venues' | 'improvement' | 'custom';
+export type GoalPeriod = 'weekly' | 'monthly' | 'season' | 'yearly';
+
+export interface SeasonGoal {
+  id: string;
+  type: GoalType;
+  title: string;
+  description?: string;
+  targetValue: number;
+  currentValue: number;
+  unit: string;
+  period: GoalPeriod;
+  startDate: string;
+  endDate: string;
+  isCompleted: boolean;
+  completedAt?: string;
+  icon: string;
+  color: string;
+}
+
+// Phase 5: Insights & Analytics
+export type InsightType = 'trend' | 'milestone' | 'recommendation' | 'comparison' | 'streak' | 'improvement';
+export type InsightSentiment = 'positive' | 'neutral' | 'needs_attention';
+
+export interface PerformanceInsight {
+  id: string;
+  type: InsightType;
+  title: string;
+  description: string;
+  sentiment: InsightSentiment;
+  metric?: string;
+  metricValue?: string | number;
+  metricChange?: number; // percentage change
+  actionLabel?: string;
+  actionRoute?: string;
+  icon: string;
+  color: string;
+  generatedAt: string;
+}
+
+// Phase 5: Comparisons
+export interface FleetComparison {
+  fleetName: string;
+  fleetSize: number;
+  yourRank: number;
+  yourPercentile: number;
+  avgFinish: number;
+  fleetAvgFinish: number;
+  topSailorName?: string;
+  topSailorWins?: number;
+}
+
+export interface SailorComparison {
+  sailorId: string;
+  sailorName: string;
+  sailorAvatar?: string;
+  yourWins: number;
+  theirWins: number;
+  headToHeadRaces: number;
+  lastRaceResult?: 'won' | 'lost' | 'tied';
+}
+
+// Phase 5: Weekly Summary
+export interface WeeklySummary {
+  weekStartDate: string;
+  weekEndDate: string;
+  racesCompleted: number;
+  wins: number;
+  podiums: number;
+  avgFinish: number | null;
+  timeOnWater: number; // minutes
+  highlightRace?: {
+    name: string;
+    position: number;
+    fleetSize: number;
+  };
+  streakDays: number;
+  comparedToLastWeek: {
+    races: number;
+    avgFinish: number | null;
+  };
+  isShareable: boolean;
+}
+
+// Phase 5: Gear Management
+export type MaintenanceType = 'inspection' | 'repair' | 'replacement' | 'upgrade' | 'cleaning' | 'tuning';
+export type MaintenanceStatus = 'scheduled' | 'completed' | 'overdue';
+
+export interface MaintenanceLog {
+  id: string;
+  boatId: string;
+  type: MaintenanceType;
+  title: string;
+  description?: string;
+  date: string;
+  status: MaintenanceStatus;
+  cost?: number;
+  vendor?: string;
+  nextDueDate?: string;
+  photos?: string[];
+}
+
+export interface BoatWithMaintenance extends UserBoat {
+  lastMaintenanceDate?: string;
+  nextMaintenanceDate?: string;
+  maintenanceLogs: MaintenanceLog[];
+  totalMaintenanceCost?: number;
+  healthScore?: number; // 0-100
+}
+
 export interface ReflectProfileData {
   profile: UserProfile;
   stats: ProfileStats;
@@ -160,6 +271,13 @@ export interface ReflectProfileData {
   challenges: Challenge[];
   // Phase 4: Recent Activity
   recentActivity: RecentActivity[];
+  // Phase 5: Goals, Insights, Comparisons, Summary, Gear
+  goals: SeasonGoal[];
+  insights: PerformanceInsight[];
+  fleetComparison?: FleetComparison;
+  sailorComparisons: SailorComparison[];
+  weeklySummary?: WeeklySummary;
+  boatsWithMaintenance: BoatWithMaintenance[];
 }
 
 // =============================================================================
@@ -606,6 +724,13 @@ export function useReflectProfile() {
         personalRecords,
         challenges,
         recentActivity,
+        // Phase 5: Empty for now (would come from respective tables)
+        goals: [],
+        insights: [],
+        fleetComparison: undefined,
+        sailorComparisons: [],
+        weeklySummary: undefined,
+        boatsWithMaintenance: [],
       });
     } catch (err) {
       logger.error('Error loading profile data:', err);
@@ -923,6 +1048,268 @@ export function useReflectProfileMock(): {
         relatedUserId: 'user-345',
         relatedUserName: 'James Tan',
         relatedUserAvatar: 'https://i.pravatar.cc/150?u=james',
+      },
+    ],
+    // Phase 5: Goals
+    goals: [
+      {
+        id: 'goal-1',
+        type: 'races',
+        title: '50 Races This Season',
+        description: 'Complete 50 races in 2026',
+        targetValue: 50,
+        currentValue: 12,
+        unit: 'races',
+        period: 'season',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        isCompleted: false,
+        icon: 'flag',
+        color: 'systemBlue',
+      },
+      {
+        id: 'goal-2',
+        type: 'wins',
+        title: 'Win 10 Races',
+        description: 'Achieve 10 race victories this year',
+        targetValue: 10,
+        currentValue: 3,
+        unit: 'wins',
+        period: 'season',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        isCompleted: false,
+        icon: 'trophy',
+        color: 'systemYellow',
+      },
+      {
+        id: 'goal-3',
+        type: 'improvement',
+        title: 'Improve Average Finish',
+        description: 'Get average finish under 3.5',
+        targetValue: 3.5,
+        currentValue: 3.8,
+        unit: 'avg position',
+        period: 'season',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        isCompleted: false,
+        icon: 'trending-up',
+        color: 'systemGreen',
+      },
+      {
+        id: 'goal-4',
+        type: 'time_on_water',
+        title: '100 Hours On Water',
+        description: 'Spend 100 hours racing and training',
+        targetValue: 100,
+        currentValue: 32,
+        unit: 'hours',
+        period: 'season',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        isCompleted: false,
+        icon: 'time',
+        color: 'systemTeal',
+      },
+    ],
+    // Phase 5: Insights
+    insights: [
+      {
+        id: 'insight-1',
+        type: 'trend',
+        title: 'Strong Start to 2026',
+        description: 'Your average finish has improved by 15% compared to the same period last year.',
+        sentiment: 'positive',
+        metric: 'Average Finish',
+        metricValue: 3.8,
+        metricChange: -15,
+        icon: 'trending-up',
+        color: 'systemGreen',
+        generatedAt: new Date().toISOString(),
+      },
+      {
+        id: 'insight-2',
+        type: 'recommendation',
+        title: 'Focus on Starts',
+        description: 'Analysis shows you lose an average of 2 positions in the first leg. Working on starts could boost your results.',
+        sentiment: 'needs_attention',
+        actionLabel: 'View Start Tips',
+        actionRoute: '/learn',
+        icon: 'bulb',
+        color: 'systemOrange',
+        generatedAt: new Date().toISOString(),
+      },
+      {
+        id: 'insight-3',
+        type: 'milestone',
+        title: 'Approaching 100 Races',
+        description: "You're only 13 races away from your 100th race milestone!",
+        sentiment: 'positive',
+        metric: 'Total Races',
+        metricValue: 87,
+        icon: 'star',
+        color: 'systemPurple',
+        generatedAt: new Date().toISOString(),
+      },
+      {
+        id: 'insight-4',
+        type: 'streak',
+        title: 'Consistent Racing',
+        description: "You've raced every week for 3 weeks straight. Keep the momentum going!",
+        sentiment: 'positive',
+        metric: 'Week Streak',
+        metricValue: 3,
+        icon: 'flame',
+        color: 'systemRed',
+        generatedAt: new Date().toISOString(),
+      },
+    ],
+    // Phase 5: Fleet Comparison
+    fleetComparison: {
+      fleetName: 'HK Dragon Association',
+      fleetSize: 28,
+      yourRank: 5,
+      yourPercentile: 82,
+      avgFinish: 3.8,
+      fleetAvgFinish: 5.2,
+      topSailorName: 'Sarah Chen',
+      topSailorWins: 15,
+    },
+    // Phase 5: Sailor Comparisons
+    sailorComparisons: [
+      {
+        sailorId: 'sailor-1',
+        sailorName: 'Sarah Chen',
+        sailorAvatar: 'https://i.pravatar.cc/150?u=sarah-chen',
+        yourWins: 3,
+        theirWins: 5,
+        headToHeadRaces: 12,
+        lastRaceResult: 'lost',
+      },
+      {
+        sailorId: 'sailor-2',
+        sailorName: 'Mike Thompson',
+        sailorAvatar: 'https://i.pravatar.cc/150?u=mike-t',
+        yourWins: 4,
+        theirWins: 3,
+        headToHeadRaces: 8,
+        lastRaceResult: 'won',
+      },
+      {
+        sailorId: 'sailor-3',
+        sailorName: 'James Wong',
+        sailorAvatar: 'https://i.pravatar.cc/150?u=james-w',
+        yourWins: 2,
+        theirWins: 2,
+        headToHeadRaces: 6,
+        lastRaceResult: 'tied',
+      },
+    ],
+    // Phase 5: Weekly Summary
+    weeklySummary: {
+      weekStartDate: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
+      weekEndDate: new Date().toISOString(),
+      racesCompleted: 2,
+      wins: 0,
+      podiums: 1,
+      avgFinish: 2.5,
+      timeOnWater: 240, // 4 hours
+      highlightRace: {
+        name: 'Spring Series Race 4',
+        position: 2,
+        fleetSize: 18,
+      },
+      streakDays: 3,
+      comparedToLastWeek: {
+        races: 1,
+        avgFinish: -0.5,
+      },
+      isShareable: true,
+    },
+    // Phase 5: Boats with Maintenance
+    boatsWithMaintenance: [
+      {
+        id: 'boat-1',
+        name: 'Wind Dancer',
+        className: 'J/80',
+        sailNumber: 'HKG 1234',
+        isPrimary: true,
+        raceCount: 65,
+        winCount: 10,
+        lastMaintenanceDate: '2026-01-15',
+        nextMaintenanceDate: '2026-04-15',
+        healthScore: 92,
+        totalMaintenanceCost: 2500,
+        maintenanceLogs: [
+          {
+            id: 'maint-1',
+            boatId: 'boat-1',
+            type: 'inspection',
+            title: 'Pre-season Inspection',
+            description: 'Full hull and rigging inspection before racing season',
+            date: '2026-01-15',
+            status: 'completed',
+            cost: 350,
+            vendor: 'RHKYC Marine Services',
+          },
+          {
+            id: 'maint-2',
+            boatId: 'boat-1',
+            type: 'tuning',
+            title: 'Rig Tuning',
+            description: 'Adjusted shroud tension and mast rake',
+            date: '2026-01-10',
+            status: 'completed',
+            cost: 200,
+          },
+          {
+            id: 'maint-3',
+            boatId: 'boat-1',
+            type: 'replacement',
+            title: 'Replace Main Halyard',
+            description: 'New Dyneema halyard installed',
+            date: '2025-12-20',
+            status: 'completed',
+            cost: 450,
+            vendor: 'Sail Supplies HK',
+          },
+        ],
+      },
+      {
+        id: 'boat-2',
+        name: 'Silver Arrow',
+        className: 'Laser',
+        sailNumber: 'HKG 567',
+        isPrimary: false,
+        raceCount: 22,
+        winCount: 2,
+        lastMaintenanceDate: '2025-11-01',
+        nextMaintenanceDate: '2026-02-01',
+        healthScore: 78,
+        totalMaintenanceCost: 800,
+        maintenanceLogs: [
+          {
+            id: 'maint-4',
+            boatId: 'boat-2',
+            type: 'cleaning',
+            title: 'Hull Cleaning',
+            description: 'Bottom cleaned and waxed',
+            date: '2025-11-01',
+            status: 'completed',
+            cost: 150,
+          },
+          {
+            id: 'maint-5',
+            boatId: 'boat-2',
+            type: 'inspection',
+            title: 'Annual Inspection',
+            description: 'Check all fittings and sail condition',
+            date: '2026-02-01',
+            status: 'scheduled',
+            nextDueDate: '2026-02-01',
+          },
+        ],
       },
     ],
   }), [reflectData]);
