@@ -48,3 +48,6 @@ bugreport-*.zip
 
 # Vercel
 .vercel
+
+# Google Play service account credentials
+google-play-service-account.json

@@ -24,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.regattaflow.app",
-      "buildNumber": "2",
+      "buildNumber": "4",
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "RegattaFlow needs your location to track race performance and provide accurate wind and current data.",
@@ -53,9 +53,7 @@
         "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
-      ],
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -90,7 +88,9 @@
       "typedRoutes": true
     },
     "autolinking": {
-      "exclude": ["react-native-maps"]
+      "exclude": [
+        "react-native-maps"
+      ]
     },
     "extra": {
       "eas": {
