@@ -84,6 +84,9 @@ export default function BoatsScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="close" size={24} color="#1E293B" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>My Boats</Text>
         <TouchableOpacity onPress={handleAddBoat} style={styles.addButton}>
           <Ionicons name="add-circle" size={28} color="#3B82F6" />
@@ -191,14 +194,18 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
+  backButton: {
+    padding: 4,
+    marginRight: 12,
+  },
   headerTitle: {
+    flex: 1,
     fontSize: 24,
     fontWeight: '700',
     color: '#1E293B',

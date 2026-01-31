@@ -14,6 +14,7 @@ import {
   Platform,
   StyleSheet,
 } from 'react-native';
+import { router } from 'expo-router';
 import {
   Layers,
   Wind,
@@ -28,6 +29,7 @@ import {
   Play,
   Settings,
   ChevronRight,
+  ChevronLeft,
   Info,
   Download,
   Eye,
@@ -407,6 +409,9 @@ const CourseViewScreen = () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity style={styles.headerBackButton} onPress={() => router.back()}>
+          <ChevronLeft color="white" size={28} />
+        </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Course Visualization</Text>
           <Text style={styles.headerSubtitle}>{courseDetails.name}</Text>
@@ -615,6 +620,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  headerBackButton: {
+    padding: 4,
+    marginRight: 8,
   },
   headerContent: {
     flex: 1,

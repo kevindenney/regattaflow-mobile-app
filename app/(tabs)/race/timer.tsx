@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Animated, Dimensions, Platform } from 'react-native';
+import { router } from 'expo-router';
 
 // Dynamic import helper for expo-location (native only)
 let LocationModule: typeof import('expo-location') | null = null;
@@ -1118,7 +1119,7 @@ const RaceTimerProScreen = () => {
       {/* Header */}
       <View className="bg-white pt-12 pb-4 px-4 shadow-sm">
         <View className="flex-row items-center mb-4">
-          <TouchableOpacity className="p-2 -ml-2">
+          <TouchableOpacity className="p-2 -ml-2" onPress={() => router.back()}>
             <ChevronLeft color="#1F2937" size={28} />
           </TouchableOpacity>
           <Text className="text-xl font-bold text-gray-800 ml-2">Pro Race Timer</Text>

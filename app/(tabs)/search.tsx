@@ -9,6 +9,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { TabScreenToolbar, type ToolbarAction } from '@/components/ui/TabScreenToolbar';
 import { SailorSearchContent } from '@/components/search/SailorSearchContent';
@@ -32,7 +33,11 @@ export default function SearchTab() {
   // Toolbar actions
   const toolbarActions: ToolbarAction[] = useMemo(
     () => [
-      // Actions will be segment-specific, passed down to child components
+      {
+        icon: 'close',
+        label: 'Close',
+        onPress: () => router.back(),
+      },
     ],
     []
   );
