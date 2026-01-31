@@ -60,7 +60,7 @@ module.exports = {
       predictiveBackGestureEnabled: false,
       config: {
         googleMaps: {
-          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || 'YOUR_GOOGLE_MAPS_ANDROID_API_KEY',
+          apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
         },
       },
     },
