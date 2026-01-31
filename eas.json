@@ -32,7 +32,7 @@
         "buildConfiguration": "Release"
       },
       "android": {
-        "buildType": "apk",
+        "buildType": "app-bundle",
         "resourceClass": "medium"
       }
     },
@@ -51,6 +51,10 @@
         "appleId": "kdenney@me.com",
         "ascAppId": "6757738277",
         "appleTeamId": "67845JJJZJ"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
       }
     },
     "production": {
