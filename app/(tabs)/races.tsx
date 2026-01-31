@@ -95,6 +95,7 @@ import {
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { DemoRaceService } from '@/services/DemoRaceService';
+import { isDemoRaceId } from '@/lib/demo/demoRaceData';
 import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import type { RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { supabase } from '@/services/supabase';
@@ -1702,9 +1703,9 @@ export default function RacesScreen() {
         return;
       }
 
-      if (localRace && !localRace.id?.includes('-')) {
-        // If we have local race data and it's likely a fallback race (not a UUID)
-        logger.debug('[races.tsx] 📦 Using local race data (fallback):', localRace.name);
+      if (localRace && isDemoRaceId(selectedRaceId)) {
+        // If we have local race data and it's a demo race (not a real UUID)
+        logger.debug('[races.tsx] 📦 Using local race data (demo race):', localRace.name);
         setLoadingRaceDetail(false);
         setSelectedRaceData(localRace);
         setSelectedRaceMarks([]);

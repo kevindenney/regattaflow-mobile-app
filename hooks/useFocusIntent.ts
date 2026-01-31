@@ -160,6 +160,31 @@ export function useFocusProgress() {
 }
 
 /**
+ * Hook to get focus history (recent evaluated intents)
+ */
+export function useFocusHistory(limit = 10) {
+  const { user } = useAuth();
+  const sailorId = user?.id;
+
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: sailorId ? [...FOCUS_INTENT_KEYS.all, 'history', sailorId, limit] : ['no-user'],
+    queryFn: async () => {
+      if (!sailorId) return [];
+      return FocusIntentService.getRecentEvaluations(sailorId, limit);
+    },
+    enabled: !!sailorId,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  return {
+    history: data ?? [],
+    isLoading,
+    error,
+    refetch,
+  };
+}
+
+/**
  * Hook for creating a new focus intent (mutation)
  */
 export function useSetFocusIntent() {

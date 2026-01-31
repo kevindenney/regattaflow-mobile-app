@@ -156,6 +156,16 @@ class SailorRacePreparationService {
         return null; // Return null instead of throwing for RLS errors
       }
 
+      // Foreign key violations (23503) happen when trying to save for demo/sample races
+      // that don't exist in the database. This is expected behavior - just skip silently.
+      if (error.code === '23503') {
+        logger.warn('Foreign key constraint (demo race does not exist in DB):', {
+          regattaId: preparation.regatta_id,
+          code: error.code,
+        });
+        return null; // Return null instead of throwing for FK errors
+      }
+
       console.error('[SailorRacePreparationService] Supabase upsert error:', {
         code: error.code,
         message: error.message,

@@ -153,16 +153,31 @@ export function ForecastCheckWizard({
   const [newSnapshot, setNewSnapshot] = useState<ForecastSnapshot | null>(null);
   const [newAnalysis, setNewAnalysis] = useState<ForecastAnalysis | null>(null);
   const [captureComplete, setCaptureComplete] = useState(false);
+  // Track whether we've completed the initial load attempt (for smoother UX)
+  const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
 
-  // Determine initial step once forecast loads
+  // Track when initial loading completes (with brief delay for smoother UX)
   useEffect(() => {
-    if (!isLoadingForecast && currentForecast) {
+    if (!isLoadingForecast) {
+      // Small delay ensures user sees "searching" message before any error
+      const timer = setTimeout(() => {
+        setHasAttemptedLoad(true);
+      }, 400);
+      return () => clearTimeout(timer);
+    } else {
+      setHasAttemptedLoad(false);
+    }
+  }, [isLoadingForecast]);
+
+  // Determine initial step once load attempt completes
+  useEffect(() => {
+    if (hasAttemptedLoad && currentForecast) {
       setStep('current');
-    } else if (!isLoadingForecast && !currentForecast) {
+    } else if (hasAttemptedLoad && !currentForecast) {
       // No forecast available - show error state
       setStep('current');
     }
-  }, [isLoadingForecast, currentForecast]);
+  }, [hasAttemptedLoad, currentForecast]);
 
   // Format time for display (relative)
   const formatTime = useCallback((isoString: string) => {
@@ -293,7 +308,9 @@ export function ForecastCheckWizard({
   const renderLoading = () => (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={IOS_COLORS.blue} />
-      <Text style={styles.loadingText}>Loading forecast data...</Text>
+      <Text style={styles.loadingText}>
+        {venue ? 'Updating weather forecast...' : 'Searching for forecast data...'}
+      </Text>
     </View>
   );
 

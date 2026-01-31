@@ -37,6 +37,56 @@ export default function SettingsScreen() {
   const [darkMode, setDarkMode] = useState(false);
   const [resetSampleLoading, setResetSampleLoading] = useState(false);
   const [teamManagerVisible, setTeamManagerVisible] = useState(false);
+  const [allowFollowerSharing, setAllowFollowerSharing] = useState(true);
+  const [sharingSettingLoading, setSharingSettingLoading] = useState(false);
+
+  // Load follower sharing setting on mount
+  useEffect(() => {
+    async function loadFollowerSharingSetting() {
+      if (!user?.id) return;
+
+      try {
+        const { data } = await supabase
+          .from('sailor_profiles')
+          .select('allow_follower_sharing')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (data) {
+          setAllowFollowerSharing(data.allow_follower_sharing ?? true);
+        }
+      } catch (error) {
+        console.error('[Settings] Error loading follower sharing setting:', error);
+      }
+    }
+
+    loadFollowerSharingSetting();
+  }, [user?.id]);
+
+  // Save follower sharing setting
+  const handleFollowerSharingChange = async (value: boolean) => {
+    setAllowFollowerSharing(value);
+    setSharingSettingLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('sailor_profiles')
+        .update({ allow_follower_sharing: value })
+        .eq('user_id', user?.id);
+
+      if (error) {
+        console.error('[Settings] Error saving follower sharing setting:', error);
+        // Revert on error
+        setAllowFollowerSharing(!value);
+        Alert.alert('Error', 'Failed to save privacy setting. Please try again.');
+      }
+    } catch (error) {
+      console.error('[Settings] Exception saving follower sharing setting:', error);
+      setAllowFollowerSharing(!value);
+    } finally {
+      setSharingSettingLoading(false);
+    }
+  };
 
   // Check if user has a team subscription
   const isTeamSubscriber = userProfile?.subscription_tier === 'team';
@@ -372,6 +422,37 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
+
+        {/* Privacy & Sharing */}
+        {userProfile?.user_type === 'sailor' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Privacy & Sharing</Text>
+            <View style={styles.settingsGroup}>
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <View style={styles.settingIcon}>
+                    <Ionicons name="people-outline" size={20} color="#3B82F6" />
+                  </View>
+                  <View style={styles.settingText}>
+                    <Text style={styles.settingTitle}>Share race prep with followers</Text>
+                    <Text style={styles.settingSubtitle}>
+                      {allowFollowerSharing
+                        ? 'Followers can see your race preparation notes'
+                        : 'Your race prep is private'}
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={allowFollowerSharing}
+                  onValueChange={handleFollowerSharingChange}
+                  trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
+                  thumbColor="#FFFFFF"
+                  disabled={sharingSettingLoading}
+                />
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Claude Assistant */}
         <View style={styles.section}>

@@ -10,6 +10,91 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/services/supabase';
 
+/**
+ * Labels for select option values to create readable summaries
+ */
+const RESPONSE_LABELS: Record<string, Record<string, string>> = {
+  finish_overall: {
+    great: 'Executed the plan well',
+    good: 'Solid overall performance',
+    mixed: 'Mixed results - some good, some to improve',
+    frustrating: 'Difficult race with lessons learned',
+    learning: 'Good learning experience',
+  },
+  start_execution: {
+    nailed: 'Strong start execution',
+    good: 'Good start, close to plan',
+    ok: 'Start needs improvement',
+    poor: 'Start didn\'t go as planned',
+    ocs: 'OCS - work on timing',
+  },
+  upwind_shifts: {
+    great: 'Read the shifts well upwind',
+    ok: 'Mixed shift reading',
+    poor: 'Missed key wind shifts',
+    no_shifts: 'Steady wind conditions',
+  },
+  marks_rounding_quality: {
+    clean: 'Clean mark roundings',
+    ok: 'Decent mark work',
+    wide: 'Roundings too wide - tighten up',
+    tight: 'Roundings too tight - give more room',
+    traffic: 'Got caught in traffic at marks',
+  },
+  finish_approach: {
+    favored_end: 'Good finish approach to favored end',
+    safe: 'Safe, conservative finish',
+    aggressive: 'Took calculated risk at finish',
+    no_plan: 'Need better finish strategy',
+  },
+};
+
+/**
+ * Synthesize a key insight from structured debrief responses
+ * when no explicit text was entered
+ */
+function synthesizeFromResponses(responses: Record<string, unknown>): string | undefined {
+  if (!responses || Object.keys(responses).length === 0) {
+    return undefined;
+  }
+
+  const insights: string[] = [];
+
+  // Check for overall feeling first
+  const finishOverall = responses.finish_overall as string | undefined;
+  if (finishOverall && RESPONSE_LABELS.finish_overall?.[finishOverall]) {
+    insights.push(RESPONSE_LABELS.finish_overall[finishOverall]);
+  }
+
+  // Add start insight if notable
+  const startExecution = responses.start_execution as string | undefined;
+  if (startExecution === 'nailed' || startExecution === 'poor' || startExecution === 'ocs') {
+    const label = RESPONSE_LABELS.start_execution?.[startExecution];
+    if (label) insights.push(label);
+  }
+
+  // Add shift reading if notable
+  const upwindShifts = responses.upwind_shifts as string | undefined;
+  if (upwindShifts === 'great' || upwindShifts === 'poor') {
+    const label = RESPONSE_LABELS.upwind_shifts?.[upwindShifts];
+    if (label) insights.push(label);
+  }
+
+  // Add mark rounding if there were issues
+  const marksQuality = responses.marks_rounding_quality as string | undefined;
+  if (marksQuality === 'wide' || marksQuality === 'tight' || marksQuality === 'traffic') {
+    const label = RESPONSE_LABELS.marks_rounding_quality?.[marksQuality];
+    if (label) insights.push(label);
+  }
+
+  // Return first 1-2 insights joined, or undefined if none
+  if (insights.length === 0) {
+    return undefined;
+  }
+
+  return insights.slice(0, 2).join('. ');
+}
+
 /** Per-race result for multi-race regattas */
 export interface RaceResult {
   raceNumber: number;
@@ -75,10 +160,24 @@ export function useRaceAnalysisData(
       setError(null);
 
       try {
-        // Check for timer session with notes, self-reported data, key moment, and multi-race results
+        // First, get the sailor profile ID from the auth user ID
+        // This is necessary because race_analysis stores sailor_profiles.id, not auth user.id
+        const { data: sailorProfile, error: profileError } = await supabase
+          .from('sailor_profiles')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (profileError) {
+          console.warn('[useRaceAnalysisData] Error fetching sailor profile:', profileError);
+        }
+
+        const sailorProfileId = sailorProfile?.id;
+
+        // Check for timer session with notes, self-reported data, key moment, debrief responses, and multi-race results
         const { data: sessionData, error: sessionError } = await supabase
           .from('race_timer_sessions')
-          .select('id, notes, end_time, self_reported_position, self_reported_fleet_size, key_moment, race_count, race_results')
+          .select('id, notes, end_time, self_reported_position, self_reported_fleet_size, key_moment, race_count, race_results, debrief_responses')
           .eq('regatta_id', raceId)
           .eq('sailor_id', userId)
           .order('end_time', { ascending: false })
@@ -92,6 +191,33 @@ export function useRaceAnalysisData(
         const hasSession = !!sessionData;
         const hasNotes = hasSession && typeof sessionData.notes === 'string' && sessionData.notes.trim().length > 0;
         const explicitKeyMoment = sessionData?.key_moment?.trim() || undefined;
+
+        // Extract key learning from structured debrief responses
+        // Try multiple fields in priority order
+        const debriefResponses = sessionData?.debrief_responses as Record<string, unknown> | null;
+
+        // Debug log to see what's in debrief_responses
+        if (debriefResponses) {
+          console.log('[useRaceAnalysisData] debrief_responses keys:', Object.keys(debriefResponses));
+          console.log('[useRaceAnalysisData] finish fields:', {
+            finish_key_learning: debriefResponses.finish_key_learning,
+            finish_key_decision: debriefResponses.finish_key_decision,
+            finish_work_on: debriefResponses.finish_work_on,
+            finish_what_worked: debriefResponses.finish_what_worked,
+          });
+        }
+
+        // Try finish phase fields first, then any notes from other phases
+        const debriefKeyLearning =
+          (typeof debriefResponses?.finish_key_learning === 'string' && debriefResponses.finish_key_learning.trim()) ||
+          (typeof debriefResponses?.finish_key_decision === 'string' && debriefResponses.finish_key_decision.trim()) ||
+          (typeof debriefResponses?.finish_work_on === 'string' && debriefResponses.finish_work_on.trim()) ||
+          (typeof debriefResponses?.finish_what_worked === 'string' && debriefResponses.finish_what_worked.trim()) ||
+          // Fall back to notes from other phases
+          (typeof debriefResponses?.upwind_notes === 'string' && debriefResponses.upwind_notes.trim()) ||
+          (typeof debriefResponses?.downwind_notes === 'string' && debriefResponses.downwind_notes.trim()) ||
+          (typeof debriefResponses?.start_strategy === 'string' && debriefResponses.start_strategy.trim()) ||
+          undefined;
         const selfReportedPosition = sessionData?.self_reported_position ?? undefined;
         const selfReportedFleetSize = sessionData?.self_reported_fleet_size ?? undefined;
         const raceCount = sessionData?.race_count ?? undefined;
@@ -135,12 +261,15 @@ export function useRaceAnalysisData(
         }
 
         // Check for race_analysis (structured form-based analysis)
-        const { data: raceAnalysis, error: raceAnalysisError } = await supabase
-          .from('race_analysis')
-          .select('id, key_learnings, overall_satisfaction')
-          .eq('race_id', raceId)
-          .eq('sailor_id', userId)
-          .maybeSingle();
+        // Note: race_analysis uses sailor_profiles.id, not auth user.id
+        const { data: raceAnalysis, error: raceAnalysisError } = sailorProfileId
+          ? await supabase
+              .from('race_analysis')
+              .select('id, key_learnings, overall_satisfaction')
+              .eq('race_id', raceId)
+              .eq('sailor_id', sailorProfileId)
+              .maybeSingle()
+          : { data: null, error: null };
 
         if (raceAnalysisError) {
           console.warn('[useRaceAnalysisData] Race analysis query error:', raceAnalysisError);
@@ -159,7 +288,7 @@ export function useRaceAnalysisData(
             ? aiAnalysis.recommendations[1]
             : undefined;
         }
-        // Priority 2: Race analysis key learnings
+        // Priority 2: Race analysis key learnings (from PostRaceAnalysisForm)
         else if (raceAnalysis?.key_learnings) {
           const learnings = Array.isArray(raceAnalysis.key_learnings)
             ? raceAnalysis.key_learnings
@@ -172,6 +301,17 @@ export function useRaceAnalysisData(
             focusNextRace = learnings.length > 1 ? learnings[1] : undefined;
           }
         }
+        // Priority 3: Structured debrief interview key learning (textarea text)
+        else if (debriefKeyLearning) {
+          keyLearning = debriefKeyLearning;
+        }
+        // Priority 4: Synthesize from structured select responses
+        else if (debriefResponses) {
+          const synthesized = synthesizeFromResponses(debriefResponses);
+          if (synthesized) {
+            keyLearning = synthesized;
+          }
+        }
 
         // Extract insights from AI summary
         let analysisInsights: string[] = [];
@@ -179,8 +319,11 @@ export function useRaceAnalysisData(
           analysisInsights = aiAnalysis.recommendations.slice(0, 3);
         }
 
+        // Check if debrief has any meaningful responses
+        const hasDebriefResponses = debriefResponses && Object.keys(debriefResponses).length > 0;
+
         setAnalysisData({
-          hasDebrief: hasNotes || !!aiAnalysis || !!raceAnalysis || !!explicitKeyMoment || (raceResults && raceResults.length > 0),
+          hasDebrief: hasNotes || !!aiAnalysis || !!raceAnalysis || !!explicitKeyMoment || !!hasDebriefResponses || (raceResults && raceResults.length > 0),
           analysisId: aiAnalysis?.id || raceAnalysis?.id,
           analysisSummary: aiAnalysis?.overall_summary,
           analysisInsights: analysisInsights.length > 0 ? analysisInsights : undefined,
@@ -238,10 +381,20 @@ export async function fetchAnalysisDataForRaces(
   }
 
   try {
-    // Batch fetch sessions with self-reported data and key moment
+    // First, get the sailor profile ID from the auth user ID
+    // This is necessary because race_analysis stores sailor_profiles.id, not auth user.id
+    const { data: sailorProfile } = await supabase
+      .from('sailor_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const sailorProfileId = sailorProfile?.id;
+
+    // Batch fetch sessions with self-reported data, key moment, and debrief responses
     const { data: sessions } = await supabase
       .from('race_timer_sessions')
-      .select('id, regatta_id, notes, self_reported_position, self_reported_fleet_size, key_moment')
+      .select('id, regatta_id, notes, self_reported_position, self_reported_fleet_size, key_moment, debrief_responses')
       .in('regatta_id', validRaceIds)
       .eq('sailor_id', userId);
 
@@ -251,6 +404,7 @@ export async function fetchAnalysisDataForRaces(
       self_reported_position: number | null;
       self_reported_fleet_size: number | null;
       key_moment: string | null;
+      debrief_responses: Record<string, unknown> | null;
     }>();
     const sessionIds: string[] = [];
 
@@ -262,6 +416,7 @@ export async function fetchAnalysisDataForRaces(
           self_reported_position: session.self_reported_position,
           self_reported_fleet_size: session.self_reported_fleet_size,
           key_moment: session.key_moment,
+          debrief_responses: session.debrief_responses as Record<string, unknown> | null,
         });
         sessionIds.push(session.id);
       }
@@ -288,16 +443,20 @@ export async function fetchAnalysisDataForRaces(
     }
 
     // Batch fetch race analyses
-    const { data: raceAnalyses } = await supabase
-      .from('race_analysis')
-      .select('race_id, key_learnings')
-      .in('race_id', validRaceIds)
-      .eq('sailor_id', userId);
-
+    // Note: race_analysis uses sailor_profiles.id, not auth user.id
     const raceAnalysesByRace = new Map<string, { key_learnings: any }>();
-    for (const analysis of raceAnalyses || []) {
-      if (analysis.race_id) {
-        raceAnalysesByRace.set(analysis.race_id, analysis);
+
+    if (sailorProfileId) {
+      const { data: raceAnalyses } = await supabase
+        .from('race_analysis')
+        .select('race_id, key_learnings')
+        .in('race_id', validRaceIds)
+        .eq('sailor_id', sailorProfileId);
+
+      for (const analysis of raceAnalyses || []) {
+        if (analysis.race_id) {
+          raceAnalysesByRace.set(analysis.race_id, analysis);
+        }
       }
     }
 
@@ -311,6 +470,19 @@ export async function fetchAnalysisDataForRaces(
       const explicitKeyMoment = session?.key_moment?.trim() || undefined;
       const selfReportedPosition = session?.self_reported_position ?? undefined;
       const selfReportedFleetSize = session?.self_reported_fleet_size ?? undefined;
+
+      // Extract key learning from structured debrief responses
+      // Try finish phase fields first, then any notes from other phases
+      const dr = session?.debrief_responses;
+      const debriefKeyLearning =
+        (typeof dr?.finish_key_learning === 'string' && (dr.finish_key_learning as string).trim()) ||
+        (typeof dr?.finish_key_decision === 'string' && (dr.finish_key_decision as string).trim()) ||
+        (typeof dr?.finish_work_on === 'string' && (dr.finish_work_on as string).trim()) ||
+        (typeof dr?.finish_what_worked === 'string' && (dr.finish_what_worked as string).trim()) ||
+        (typeof dr?.upwind_notes === 'string' && (dr.upwind_notes as string).trim()) ||
+        (typeof dr?.downwind_notes === 'string' && (dr.downwind_notes as string).trim()) ||
+        (typeof dr?.start_strategy === 'string' && (dr.start_strategy as string).trim()) ||
+        undefined;
 
       let keyLearning: string | undefined;
       let focusNextRace: string | undefined;
@@ -326,10 +498,21 @@ export async function fetchAnalysisDataForRaces(
           : [raceAnalysis.key_learnings];
         keyLearning = learnings[0];
         focusNextRace = learnings[1];
+      } else if (debriefKeyLearning) {
+        keyLearning = debriefKeyLearning;
+      } else if (dr) {
+        // Synthesize from structured select responses
+        const synthesized = synthesizeFromResponses(dr);
+        if (synthesized) {
+          keyLearning = synthesized;
+        }
       }
 
+      // Check if debrief has any meaningful responses
+      const hasDebriefResponses = dr && Object.keys(dr).length > 0;
+
       result.set(raceId, {
-        hasDebrief: hasNotes || !!aiAnalysis || !!raceAnalysis || !!explicitKeyMoment,
+        hasDebrief: hasNotes || !!aiAnalysis || !!raceAnalysis || !!explicitKeyMoment || !!hasDebriefResponses,
         analysisSummary: aiAnalysis?.overall_summary,
         analysisInsights: aiAnalysis?.recommendations?.slice(0, 3),
         analysisConfidence: aiAnalysis?.confidence_score,

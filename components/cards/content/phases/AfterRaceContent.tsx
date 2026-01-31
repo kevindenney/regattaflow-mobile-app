@@ -458,20 +458,8 @@ export function AfterRaceContent({
   // RENDER
   // ==========================================================================
 
-  // Calculate progress
-  const hasEquipmentNote = equipmentNotes.trim().length > 0;
-  // Core items: result, debrief, equipment
-  const coreCompleted = (hasResult ? 1 : 0) + (debriefComplete ? 1 : 0) + (hasEquipmentNote ? 1 : 0);
-  const coreTotal = 3;
-  // Only include educational items in progress if debrief is NOT complete
-  // (once debrief is done, those checklists are hidden as redundant)
-  const totalCompleted = debriefComplete
-    ? coreCompleted
-    : coreCompleted + performanceCompletedCount + learningCompletedCount;
-  const totalItems = debriefComplete
-    ? coreTotal
-    : coreTotal + performanceTotalCount + learningTotalCount;
   // AI enabled when result + debrief complete
+  const hasEquipmentNote = equipmentNotes.trim().length > 0;
   const canGenerateAI = hasResult && debriefComplete;
 
   return (
@@ -791,7 +779,7 @@ export function AfterRaceContent({
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Lightbulb size={16} color={IOS_COLORS.purple} />
-            <Text style={styles.sectionLabel}>SHARE WITH FLEET</Text>
+            <Text style={styles.sectionLabel}>SHARE YOUR INSIGHTS</Text>
           </View>
           <RaceContentActions
             regattaId={race.id}
@@ -875,14 +863,6 @@ export function AfterRaceContent({
           </View>
         </View>
       )}
-
-      {/* Progress Indicator */}
-      <View style={styles.progressContainer}>
-        <Text style={styles.progressLabel}>{totalCompleted}/{totalItems} completed</Text>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${(totalCompleted / totalItems) * 100}%` }]} />
-        </View>
-      </View>
 
       {/* Structured Debrief Interview Modal */}
       {/* Always render modal to prevent unmount/remount issues - control visibility only via visible prop */}
@@ -1300,29 +1280,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: IOS_COLORS.blue,
-  },
-
-  // Progress
-  progressContainer: {
-    marginTop: 8,
-    gap: 6,
-  },
-  progressLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: IOS_COLORS.gray,
-    textAlign: 'center',
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: IOS_COLORS.gray5,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: IOS_COLORS.green,
-    borderRadius: 2,
   },
 
   // Race Summary Section

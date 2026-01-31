@@ -503,8 +503,13 @@ export function DaysBeforeContent({
   const metadata = (race as any).metadata || {};
   const metadataCoords = metadata.start_coordinates || metadata.venue_coordinates || metadata.racing_area_coordinates;
 
-  // Use venueCoordinates (from enrichment) or fall back to metadata coordinates
-  const coords = venueCoordinates || metadataCoords;
+  // Also check for direct latitude/longitude fields (used by demo races)
+  const directCoords = (race as any).latitude != null && (race as any).longitude != null
+    ? { lat: Number((race as any).latitude), lng: Number((race as any).longitude) }
+    : null;
+
+  // Priority: venueCoordinates (enriched) > metadataCoords > directCoords (demo/fallback)
+  const coords = venueCoordinates || metadataCoords || directCoords;
 
   // Memoize location object for CoursePositionEditor to prevent unnecessary re-renders
   const memoizedLocation = useMemo(() =>

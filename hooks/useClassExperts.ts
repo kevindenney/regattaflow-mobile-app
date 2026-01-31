@@ -152,11 +152,26 @@ export function useClassExperts(
   // Load race previews for an expert
   const loadExpertRaces = useCallback(async (expertUserId: string): Promise<ExpertRacePreview[]> => {
     try {
+      // Check if expert allows sharing
+      const { data: sailorProfile, error: profileError } = await supabase
+        .from('sailor_profiles')
+        .select('allow_follower_sharing')
+        .eq('user_id', expertUserId)
+        .maybeSingle();
+
+      if (profileError) {
+        logger.warn('[useClassExperts] Error checking sharing setting:', profileError);
+      }
+
+      // If sharing is explicitly disabled, return empty
+      if (sailorProfile?.allow_follower_sharing === false) {
+        return [];
+      }
+
       const { data, error: fetchError } = await supabase
         .from('regattas')
         .select('id, name, start_date, prep_notes, post_race_notes')
         .eq('created_by', expertUserId)
-        .eq('content_visibility', 'public')
         .order('start_date', { ascending: false })
         .limit(5);
 

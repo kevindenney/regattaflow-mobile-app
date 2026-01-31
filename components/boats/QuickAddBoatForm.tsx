@@ -4,7 +4,7 @@
  * Uses iOS-friendly custom pickers instead of @react-native-picker/picker
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,20 +30,88 @@ interface QuickAddBoatFormProps {
   onBoatAdded: (boatId: string) => void;
 }
 
+interface BoatClassMetadata {
+  type?: string;
+  crew?: number;
+  one_design?: boolean;
+  foiling?: boolean;
+  olympic?: boolean;
+  youth?: boolean;
+}
+
 interface BoatClass {
   id: string;
   name: string;
   class_association: string | null;
+  metadata: BoatClassMetadata | null;
 }
 
-// Sail categories for selection
-const SAIL_CATEGORIES = [
+// All available sail categories
+const ALL_SAIL_CATEGORIES = [
   { id: 'mainsail', name: 'Mainsail', short: 'Main' },
   { id: 'jib', name: 'Jib', short: 'Jib' },
   { id: 'genoa', name: 'Genoa', short: 'Genoa' },
   { id: 'spinnaker', name: 'Spinnaker', short: 'Spin' },
+  { id: 'asymmetric', name: 'Asymmetric Spinnaker', short: 'Asym' },
   { id: 'code_zero', name: 'Code Zero', short: 'C0' },
+  { id: 'gennaker', name: 'Gennaker', short: 'Genn' },
+  { id: 'storm_jib', name: 'Storm Jib', short: 'Storm' },
+  { id: 'reacher', name: 'Reacher', short: 'Reach' },
 ] as const;
+
+// Default sails by boat type - auto-selected when class is chosen
+const DEFAULT_SAILS_BY_TYPE: Record<string, string[]> = {
+  dinghy: ['mainsail', 'jib'],
+  skiff: ['mainsail', 'jib', 'spinnaker'],
+  keelboat: ['mainsail', 'jib', 'spinnaker'],
+  sport_boat: ['mainsail', 'jib', 'spinnaker', 'code_zero'],
+  multihull: ['mainsail', 'jib', 'spinnaker'],
+  monohull: ['mainsail', 'jib', 'spinnaker', 'code_zero'],
+  windsurf: ['mainsail'],
+  kite: [],
+  handicap: ['mainsail', 'jib', 'genoa', 'spinnaker'],
+};
+
+// Single-handed dinghies (no jib)
+const SINGLE_HANDED_CLASSES = [
+  'ILCA 7 (Laser)',
+  'ILCA 6 (Laser Radial)',
+  'ILCA 4 (Laser 4.7)',
+  'Optimist',
+  'Sunfish',
+  'Finn',
+  'RS Aero',
+  'Moth',
+  'Waszp',
+  'OK Dinghy',
+  'Europe',
+  'Topper',
+  'Laser Pico',
+  'Solo',
+  'Phantom',
+  'Streaker',
+  'Blaze',
+  'Supernova',
+  'Contender',
+  'Melges MC',
+  'Melges 14',
+  'RS 100',
+  'RS 300',
+  'RS 600',
+  'RS 700',
+  'Musto Skiff',
+  'Byte',
+  'Byte CII',
+  'Comet',
+  'Sabot',
+  'Naples Sabot',
+  'El Toro',
+  'Bug',
+  'Splash',
+];
+
+// Backward compatibility - keep SAIL_CATEGORIES name for existing usage
+const SAIL_CATEGORIES = ALL_SAIL_CATEGORIES;
 
 const logger = createLogger('QuickAddBoatForm');
 
@@ -65,9 +133,21 @@ export function QuickAddBoatForm({
   const [loading, setLoading] = useState(false);
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [showClassPicker, setShowClassPicker] = useState(false);
+  const [classSearchQuery, setClassSearchQuery] = useState('');
 
   // Get selected class object
   const selectedClass = classes.find((c) => c.id === classId);
+
+  // Filter classes based on search query
+  const filteredClasses = useMemo(() => {
+    if (!classSearchQuery.trim()) return classes;
+    const query = classSearchQuery.toLowerCase();
+    return classes.filter(
+      (c) =>
+        c.name.toLowerCase().includes(query) ||
+        c.class_association?.toLowerCase().includes(query)
+    );
+  }, [classes, classSearchQuery]);
 
   useEffect(() => {
     if (visible) {
@@ -80,7 +160,7 @@ export function QuickAddBoatForm({
     try {
       const { data, error } = await supabase
         .from('boat_classes')
-        .select('id, name, class_association')
+        .select('id, name, class_association, metadata')
         .order('name');
 
       if (error) throw error;
@@ -91,6 +171,37 @@ export function QuickAddBoatForm({
     } finally {
       setLoadingClasses(false);
     }
+  };
+
+  // Auto-select sails based on boat class type
+  const getDefaultSailsForClass = (boatClass: BoatClass): string[] => {
+    // Check if this is a single-handed class (only mainsail)
+    if (SINGLE_HANDED_CLASSES.includes(boatClass.name)) {
+      return ['mainsail'];
+    }
+
+    // Get boat type from metadata
+    const boatType = boatClass.metadata?.type || 'keelboat';
+    const defaultSails = DEFAULT_SAILS_BY_TYPE[boatType] || ['mainsail'];
+
+    // For single-crew boats without jib (crew: 1), typically just mainsail
+    if (boatClass.metadata?.crew === 1 && boatType === 'dinghy') {
+      return ['mainsail'];
+    }
+
+    return defaultSails;
+  };
+
+  const handleClassSelect = (boatClass: BoatClass) => {
+    setClassId(boatClass.id);
+
+    // Auto-select default sails for this boat type
+    const defaultSails = getDefaultSailsForClass(boatClass);
+    setSelectedSails(defaultSails);
+
+    // Close picker and clear search
+    setShowClassPicker(false);
+    setClassSearchQuery('');
   };
 
   const toggleSail = (sailId: string) => {
@@ -146,7 +257,7 @@ export function QuickAddBoatForm({
       if (selectedSails.length > 0) {
         for (const sailCategory of selectedSails) {
           try {
-            const sailName = SAIL_CATEGORIES.find((c) => c.id === sailCategory)?.name || sailCategory;
+            const sailName = ALL_SAIL_CATEGORIES.find((c) => c.id === sailCategory)?.name || sailCategory;
             await equipmentService.createEquipment({
               boat_id: newBoat.id,
               category: sailCategory,
@@ -177,6 +288,7 @@ export function QuickAddBoatForm({
       setClassId('');
       setSelectedSails(['mainsail']);
       setShowClassPicker(false);
+      setClassSearchQuery('');
 
       // Call callback with new boat ID
       onBoatAdded(newBoat.id);
@@ -193,6 +305,7 @@ export function QuickAddBoatForm({
         setSailNumber('');
         setClassId('');
         setSelectedSails(['mainsail']);
+        setClassSearchQuery('');
         onClose();
       } else {
         console.error('[QuickAddBoatForm] Error creating boat:', err);
@@ -218,6 +331,7 @@ export function QuickAddBoatForm({
     setClassId('');
     setSelectedSails(['mainsail']);
     setShowClassPicker(false);
+    setClassSearchQuery('');
     onClose();
   };
 
@@ -299,34 +413,60 @@ export function QuickAddBoatForm({
 
                 {showClassPicker && (
                   <View style={styles.pickerOptions}>
-                    <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
-                      {classes.map((c) => (
+                    <View style={styles.searchContainer}>
+                      <Ionicons name="search" size={18} color="#9CA3AF" style={styles.searchIcon} />
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search boat classes..."
+                        placeholderTextColor="#9CA3AF"
+                        value={classSearchQuery}
+                        onChangeText={setClassSearchQuery}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoFocus
+                      />
+                      {classSearchQuery.length > 0 && (
                         <TouchableOpacity
-                          key={c.id}
-                          style={[
-                            styles.pickerOption,
-                            c.id === classId && styles.pickerOptionSelected,
-                          ]}
-                          onPress={() => {
-                            setClassId(c.id);
-                            setShowClassPicker(false);
-                          }}
+                          onPress={() => setClassSearchQuery('')}
+                          style={styles.clearButton}
                         >
-                          <Text
-                            style={[
-                              styles.pickerOptionText,
-                              c.id === classId && styles.pickerOptionTextSelected,
-                            ]}
-                          >
-                            {c.name}
-                          </Text>
-                          {c.class_association && (
-                            <Text style={styles.pickerOptionSubtext}>
-                              {c.class_association}
-                            </Text>
-                          )}
+                          <Ionicons name="close-circle" size={18} color="#9CA3AF" />
                         </TouchableOpacity>
-                      ))}
+                      )}
+                    </View>
+                    <ScrollView style={styles.pickerScroll} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                      {filteredClasses.length === 0 ? (
+                        <View style={styles.noResultsContainer}>
+                          <Text style={styles.noResultsText}>
+                            No classes found for "{classSearchQuery}"
+                          </Text>
+                        </View>
+                      ) : (
+                        filteredClasses.map((c) => (
+                          <TouchableOpacity
+                            key={c.id}
+                            style={[
+                              styles.pickerOption,
+                              c.id === classId && styles.pickerOptionSelected,
+                            ]}
+                            onPress={() => handleClassSelect(c)}
+                          >
+                            <Text
+                              style={[
+                                styles.pickerOptionText,
+                                c.id === classId && styles.pickerOptionTextSelected,
+                              ]}
+                            >
+                              {c.name}
+                            </Text>
+                            {c.class_association && (
+                              <Text style={styles.pickerOptionSubtext}>
+                                {c.class_association}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        ))
+                      )}
                     </ScrollView>
                   </View>
                 )}
@@ -335,9 +475,11 @@ export function QuickAddBoatForm({
               {/* Sails Selection */}
               <View style={styles.field}>
                 <Text style={styles.label}>Sails</Text>
-                <Text style={styles.helpText}>Select the sails this boat has</Text>
+                <Text style={styles.helpText}>
+                  {selectedClass ? 'Default sails selected for this class. Tap to adjust.' : 'Select the sails this boat has'}
+                </Text>
                 <View style={styles.sailsRow}>
-                  {SAIL_CATEGORIES.map((sail) => (
+                  {ALL_SAIL_CATEGORIES.map((sail) => (
                     <TouchableOpacity
                       key={sail.id}
                       style={[
@@ -489,11 +631,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#D1D5DB',
     borderRadius: 8,
-    maxHeight: 200,
+    maxHeight: 280,
     overflow: 'hidden',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+    paddingVertical: 4,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  noResultsContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
   },
   pickerScroll: {
     flexGrow: 0,
+    maxHeight: 220,
   },
   pickerOption: {
     paddingHorizontal: 16,

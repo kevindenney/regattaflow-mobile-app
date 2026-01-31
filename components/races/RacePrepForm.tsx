@@ -20,18 +20,14 @@ import {
   View,
 } from 'react-native';
 import {
-  Check,
   ChevronDown,
-  Eye,
-  EyeOff,
   History,
   Settings2,
   Sparkles,
-  Users,
   X,
 } from 'lucide-react-native';
 import { IOS_COLORS, IOS_SPACING, IOS_RADIUS, IOS_TYPOGRAPHY, IOS_SHADOWS } from '@/lib/design-tokens-ios';
-import { useRegattaContent, ContentVisibility, TuningSettings } from '@/hooks/useRegattaContent';
+import { useRegattaContent, TuningSettings } from '@/hooks/useRegattaContent';
 import { usePastTuningSettings } from '@/hooks/usePastTuningSettings';
 
 // =============================================================================
@@ -49,87 +45,6 @@ export interface RacePrepFormProps {
   onClose: () => void;
   /** Callback when content is saved successfully */
   onSaved?: () => void;
-}
-
-// =============================================================================
-// VISIBILITY SELECTOR
-// =============================================================================
-
-const VISIBILITY_OPTIONS: { value: ContentVisibility; label: string; description: string; icon: React.ReactNode }[] = [
-  {
-    value: 'private',
-    label: 'Private',
-    description: 'Only you can see this',
-    icon: <EyeOff size={16} color={IOS_COLORS.systemGray} />,
-  },
-  {
-    value: 'fleet',
-    label: 'Fleet Only',
-    description: 'Fleet mates can see this',
-    icon: <Users size={16} color={IOS_COLORS.systemBlue} />,
-  },
-  {
-    value: 'public',
-    label: 'Public',
-    description: 'Anyone can discover this',
-    icon: <Eye size={16} color={IOS_COLORS.systemGreen} />,
-  },
-];
-
-function VisibilitySelector({
-  value,
-  onChange,
-}: {
-  value: ContentVisibility;
-  onChange: (v: ContentVisibility) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const selected = VISIBILITY_OPTIONS.find(o => o.value === value) || VISIBILITY_OPTIONS[1];
-
-  return (
-    <View style={styles.visibilityContainer}>
-      <Text style={styles.label}>Who can see this?</Text>
-      <Pressable
-        style={styles.visibilityButton}
-        onPress={() => setExpanded(!expanded)}
-      >
-        {selected.icon}
-        <Text style={styles.visibilityButtonText}>{selected.label}</Text>
-        <ChevronDown
-          size={16}
-          color={IOS_COLORS.secondaryLabel}
-          style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}
-        />
-      </Pressable>
-
-      {expanded && (
-        <View style={styles.visibilityOptions}>
-          {VISIBILITY_OPTIONS.map(option => (
-            <Pressable
-              key={option.value}
-              style={[
-                styles.visibilityOption,
-                option.value === value && styles.visibilityOptionSelected,
-              ]}
-              onPress={() => {
-                onChange(option.value);
-                setExpanded(false);
-              }}
-            >
-              {option.icon}
-              <View style={styles.visibilityOptionText}>
-                <Text style={styles.visibilityOptionLabel}>{option.label}</Text>
-                <Text style={styles.visibilityOptionDescription}>{option.description}</Text>
-              </View>
-              {option.value === value && (
-                <Check size={16} color={IOS_COLORS.systemBlue} />
-              )}
-            </Pressable>
-          ))}
-        </View>
-      )}
-    </View>
-  );
 }
 
 // =============================================================================
@@ -330,7 +245,6 @@ export function RacePrepForm({
   // Local form state
   const [prepNotes, setPrepNotes] = useState('');
   const [tuningSettings, setTuningSettings] = useState<TuningSettings>({});
-  const [visibility, setVisibility] = useState<ContentVisibility>('fleet');
 
   // Load existing content when modal opens
   useEffect(() => {
@@ -355,7 +269,6 @@ export function RacePrepForm({
       }
 
       setTuningSettings(normalized);
-      setVisibility(content.contentVisibility || 'fleet');
     }
   }, [content]);
 
@@ -383,16 +296,14 @@ export function RacePrepForm({
     const success = await savePreRaceContent({
       prepNotes,
       tuningSettings,
-      contentVisibility: visibility,
     });
     if (success) {
       onClose();
     }
-  }, [prepNotes, tuningSettings, visibility, savePreRaceContent, onClose]);
+  }, [prepNotes, tuningSettings, savePreRaceContent, onClose]);
 
   const hasChanges = prepNotes !== (content?.prepNotes || '') ||
-    JSON.stringify(tuningSettings) !== JSON.stringify(content?.tuningSettings || {}) ||
-    visibility !== (content?.contentVisibility || 'fleet');
+    JSON.stringify(tuningSettings) !== JSON.stringify(content?.tuningSettings || {});
 
   return (
     <Modal
@@ -472,21 +383,6 @@ export function RacePrepForm({
               pastRaceName={pastRaceName}
               onApplyPastSettings={handleApplyPastSettings}
             />
-
-            {/* Visibility */}
-            <VisibilitySelector
-              value={visibility}
-              onChange={setVisibility}
-            />
-
-            {/* Info footer */}
-            <View style={styles.infoFooter}>
-              <Text style={styles.infoText}>
-                {visibility === 'private' && 'Only you will see this content.'}
-                {visibility === 'fleet' && 'Your fleet mates will see this when they view this race.'}
-                {visibility === 'public' && 'Anyone preparing for this race can discover your prep notes.'}
-              </Text>
-            </View>
           </ScrollView>
         )}
       </KeyboardAvoidingView>
@@ -587,55 +483,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: IOS_COLORS.systemGray5,
   },
-  // Visibility styles
-  visibilityContainer: {
-    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
-    borderRadius: IOS_RADIUS.lg,
-    padding: IOS_SPACING.lg,
-    ...IOS_SHADOWS.sm,
-  },
-  visibilityButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: IOS_SPACING.sm,
-    backgroundColor: IOS_COLORS.systemBackground,
-    padding: IOS_SPACING.md,
-    borderRadius: IOS_RADIUS.md,
-    borderWidth: 1,
-    borderColor: IOS_COLORS.systemGray5,
-  },
-  visibilityButtonText: {
-    ...IOS_TYPOGRAPHY.body,
-    color: IOS_COLORS.label,
-    flex: 1,
-  },
-  visibilityOptions: {
-    marginTop: IOS_SPACING.sm,
-    gap: IOS_SPACING.xs,
-  },
-  visibilityOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: IOS_SPACING.md,
-    padding: IOS_SPACING.md,
-    borderRadius: IOS_RADIUS.md,
-    backgroundColor: IOS_COLORS.systemBackground,
-  },
-  visibilityOptionSelected: {
-    backgroundColor: `${IOS_COLORS.systemBlue}10`,
-  },
-  visibilityOptionText: {
-    flex: 1,
-  },
-  visibilityOptionLabel: {
-    ...IOS_TYPOGRAPHY.subhead,
-    fontWeight: '500',
-    color: IOS_COLORS.label,
-  },
-  visibilityOptionDescription: {
-    ...IOS_TYPOGRAPHY.caption1,
-    color: IOS_COLORS.secondaryLabel,
-  },
   // Tuning styles
   tuningContainer: {
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
@@ -732,16 +579,6 @@ const styles = StyleSheet.create({
     padding: IOS_SPACING.md,
     borderWidth: 1,
     borderColor: IOS_COLORS.systemGray5,
-  },
-  // Info footer
-  infoFooter: {
-    padding: IOS_SPACING.lg,
-    alignItems: 'center',
-  },
-  infoText: {
-    ...IOS_TYPOGRAPHY.footnote,
-    color: IOS_COLORS.secondaryLabel,
-    textAlign: 'center',
   },
 });
 

@@ -37,7 +37,6 @@ export interface RaceData {
   name: string;
   race_series?: string;
   start_date: string;
-  content_visibility?: string;
   prep_notes?: string;
   tuning_settings?: TuningSettings;
   post_race_notes?: string;
@@ -143,20 +142,35 @@ export function usePublicSailorRaceJourney(
     setError(null);
 
     try {
-      // Resolve 'latest' to the most recent public race for the sailor
+      // Check if the sailor allows sharing with followers
+      const { data: sailorSharingProfile, error: sharingError } = await supabase
+        .from('sailor_profiles')
+        .select('allow_follower_sharing')
+        .eq('user_id', sailorId)
+        .maybeSingle();
+
+      if (sharingError) {
+        logger.warn('Error checking sailor sharing setting:', sharingError);
+      }
+
+      // If the sailor has sharing disabled (explicitly false), throw error
+      if (sailorSharingProfile?.allow_follower_sharing === false) {
+        throw new Error('This sailor has made their content private');
+      }
+
+      // Resolve 'latest' to the most recent race for the sailor
       let resolvedRaceId = raceId;
       if (raceId === 'latest') {
         const { data: latestRace, error: latestError } = await supabase
           .from('regattas')
           .select('id')
           .eq('created_by', sailorId)
-          .in('content_visibility', ['public', 'fleet'])
           .order('start_date', { ascending: false })
           .limit(1)
           .maybeSingle();
 
         if (latestError || !latestRace) {
-          throw new Error('No public races found for this sailor');
+          throw new Error('No races found for this sailor');
         }
         resolvedRaceId = latestRace.id;
       }
@@ -187,13 +201,13 @@ export function usePublicSailorRaceJourney(
           } as SailorProfile;
         })(),
 
-        // Fetch race data - check visibility
+        // Fetch race data
         (async () => {
           const { data: raceData, error: raceError } = await supabase
             .from('regattas')
             .select(
               `id, name, event_series_name, start_date,
-               content_visibility, prep_notes, tuning_settings, post_race_notes,
+               prep_notes, tuning_settings, post_race_notes,
                lessons_learned, metadata, race_type, class_id, status, vhf_channel`
             )
             .eq('id', resolvedRaceId)
@@ -201,11 +215,6 @@ export function usePublicSailorRaceJourney(
             .single();
 
           if (raceError) throw raceError;
-
-          // Check visibility - only allow public or fleet races to be viewed
-          if (raceData.content_visibility === 'private') {
-            throw new Error('This race is private');
-          }
 
           return {
             ...raceData,

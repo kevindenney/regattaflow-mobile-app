@@ -1694,32 +1694,49 @@ class CrewFinderServiceClass {
       }
     }
 
-    // Build query for public races
+    // Build query for public races (from users who allow follower sharing)
     // Include races from past 30 days and all future races
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    // First, get all users who have enabled sharing
+    const { data: sharingProfiles, error: sharingError } = await supabase
+      .from('sailor_profiles')
+      .select('user_id')
+      .eq('allow_follower_sharing', true);
+
+    if (sharingError) {
+      logger.warn('Error fetching sharing profiles for public races:', sharingError);
+    }
+
+    const sharingUserIds = (sharingProfiles || []).map((p: { user_id: string }) => p.user_id);
+
+    // If no users allow sharing, return empty
+    if (sharingUserIds.length === 0) {
+      return { races: [], hasMore: false };
+    }
+
+    // Filter out excluded users
+    let filteredSharingUserIds = sharingUserIds;
+    if (excludeUserId) {
+      filteredSharingUserIds = filteredSharingUserIds.filter(id => id !== excludeUserId);
+    }
+    if (excludeUserIds.length > 0) {
+      const excludeSet = new Set(excludeUserIds);
+      filteredSharingUserIds = filteredSharingUserIds.filter(id => !excludeSet.has(id));
+    }
+
+    if (filteredSharingUserIds.length === 0) {
+      return { races: [], hasMore: false };
+    }
+
     let query = supabase
       .from('regattas')
       .select('*', { count: 'exact' })
-      .eq('content_visibility', 'public')
+      .in('created_by', filteredSharingUserIds)
       .gte('start_date', thirtyDaysAgo.toISOString())
       .order('start_date', { ascending: false })
       .range(offset, offset + limit - 1);
-
-    // Exclude current user's races
-    if (excludeUserId) {
-      query = query.neq('created_by', excludeUserId);
-    }
-
-    // Exclude additional user IDs (e.g., already shown followed users)
-    if (excludeUserIds.length > 0) {
-      // Use .not() with 'in' to exclude multiple IDs
-      const allExcludeIds = excludeUserId
-        ? [excludeUserId, ...excludeUserIds]
-        : excludeUserIds;
-      query = query.not('created_by', 'in', `(${allExcludeIds.join(',')})`);
-    }
 
     const { data: races, error: racesError, count } = await query;
 
@@ -1820,16 +1837,31 @@ class CrewFinderServiceClass {
       return { races: [], hasMore: false, followingCount: 0 };
     }
 
-    // Get races from followed users
-    // Include races visible to at least fleet level (public or fleet)
+    // Filter followed users by those who have sharing enabled
+    const { data: sharingProfiles, error: sharingError } = await supabase
+      .from('sailor_profiles')
+      .select('user_id')
+      .in('user_id', followingIds)
+      .eq('allow_follower_sharing', true);
+
+    if (sharingError) {
+      logger.warn('Error fetching sharing profiles for followed users:', sharingError);
+    }
+
+    const sharingFollowingIds = (sharingProfiles || []).map((p: { user_id: string }) => p.user_id);
+
+    if (sharingFollowingIds.length === 0) {
+      return { races: [], hasMore: false, followingCount: followingIds.length };
+    }
+
+    // Get races from followed users who allow sharing
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const { data: races, error: racesError, count } = await supabase
       .from('regattas')
       .select('*', { count: 'exact' })
-      .in('created_by', followingIds)
-      .in('content_visibility', ['public', 'fleet'])
+      .in('created_by', sharingFollowingIds)
       .gte('start_date', thirtyDaysAgo.toISOString())
       .order('start_date', { ascending: false })
       .range(offset, offset + limit - 1);

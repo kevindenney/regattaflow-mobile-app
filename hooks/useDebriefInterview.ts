@@ -90,6 +90,8 @@ export interface UseDebriefInterviewReturn {
   reset: () => void;
   /** Mark interview as fully complete */
   markComplete: () => Promise<void>;
+  /** Refetch responses from database */
+  refetch: () => Promise<void>;
 }
 
 // =============================================================================
@@ -203,99 +205,97 @@ export function useDebriefInterview({
   // Load existing responses
   // ==========================================================================
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadResponses() {
-      // Skip for demo races or missing params
-      if (!raceId || !userId || raceId.startsWith('demo-')) {
-        setResponses({});
-        setSessionId(null);
-        setIsComplete(false);
+  // Extracted load function for reuse in useEffect and refetch
+  const loadResponsesFromDb = useCallback(async (skipResumePosition = false) => {
+    // Skip for demo races or missing params
+    if (!raceId || !userId || raceId.startsWith('demo-')) {
+      setResponses({});
+      setSessionId(null);
+      setIsComplete(false);
+      if (!skipResumePosition) {
         setCurrentIndex(0);
         currentQuestionIdRef.current = null;
-        setIsLoading(false);
+      }
+      setIsLoading(false);
+      return;
+    }
+
+    setError(null);
+
+    try {
+      // Find existing timer session for this race
+      const { data: session, error: sessionError } = await supabase
+        .from('race_timer_sessions')
+        .select('id, debrief_responses, debrief_complete')
+        .eq('regatta_id', raceId)
+        .eq('sailor_id', userId)
+        .order('end_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (sessionError) {
+        logger.warn('[useDebriefInterview] Session query error:', sessionError);
+        setError('Failed to load interview');
         return;
       }
 
-      setError(null);
+      if (session) {
+        setSessionId(session.id);
+        // Parse debrief_responses JSONB
+        const savedResponses = session.debrief_responses as DebriefResponses | null;
+        setResponses(savedResponses || {});
+        setIsComplete(session.debrief_complete || false);
 
-      try {
-        // Find existing timer session for this race
-        const { data: session, error: sessionError } = await supabase
-          .from('race_timer_sessions')
-          .select('id, debrief_responses, debrief_complete')
-          .eq('regatta_id', raceId)
-          .eq('sailor_id', userId)
-          .order('end_time', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        // Resume from last answered question (only on initial load, not refetch)
+        if (savedResponses && !skipResumePosition) {
+          // Get active questions based on saved responses
+          const activeQs = getActiveQuestions(savedResponses);
+          const answeredIds = Object.keys(savedResponses).filter(
+            (k) => savedResponses[k] !== null && savedResponses[k] !== undefined
+          );
 
-        if (sessionError) {
-          logger.warn('[useDebriefInterview] Session query error:', sessionError);
-          if (isMounted) {
-            setError('Failed to load interview');
-          }
-          return;
-        }
-
-        if (isMounted) {
-          if (session) {
-            setSessionId(session.id);
-            // Parse debrief_responses JSONB
-            const savedResponses = session.debrief_responses as DebriefResponses | null;
-            setResponses(savedResponses || {});
-            setIsComplete(session.debrief_complete || false);
-
-            // Resume from last answered question
-            if (savedResponses) {
-              // Get active questions based on saved responses
-              const activeQs = getActiveQuestions(savedResponses);
-              const answeredIds = Object.keys(savedResponses).filter(
-                (k) => savedResponses[k] !== null && savedResponses[k] !== undefined
-              );
-
-              if (answeredIds.length > 0) {
-                // Find highest index that was answered in the active list
-                const lastAnsweredIndex = activeQs.reduce((maxIdx, q, idx) => {
-                  if (answeredIds.includes(q.id)) {
-                    return Math.max(maxIdx, idx);
-                  }
-                  return maxIdx;
-                }, -1);
-                // Resume at next question (or last if at end)
-                const resumeIndex = Math.min(lastAnsweredIndex + 1, activeQs.length - 1);
-                setCurrentIndex(resumeIndex);
-                currentQuestionIdRef.current = activeQs[resumeIndex]?.id || null;
+          if (answeredIds.length > 0) {
+            // Find highest index that was answered in the active list
+            const lastAnsweredIndex = activeQs.reduce((maxIdx, q, idx) => {
+              if (answeredIds.includes(q.id)) {
+                return Math.max(maxIdx, idx);
               }
-            }
-          } else {
-            // No session exists yet - will be created on first save
-            setSessionId(null);
-            setResponses({});
-            setIsComplete(false);
-            setCurrentIndex(0);
-            currentQuestionIdRef.current = null;
+              return maxIdx;
+            }, -1);
+            // Resume at next question (or last if at end)
+            const resumeIndex = Math.min(lastAnsweredIndex + 1, activeQs.length - 1);
+            setCurrentIndex(resumeIndex);
+            currentQuestionIdRef.current = activeQs[resumeIndex]?.id || null;
           }
         }
-      } catch (err) {
-        logger.error('[useDebriefInterview] Unexpected error:', err);
-        if (isMounted) {
-          setError('Unexpected error loading interview');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
+      } else {
+        // No session exists yet - will be created on first save
+        setSessionId(null);
+        setResponses({});
+        setIsComplete(false);
+        if (!skipResumePosition) {
+          setCurrentIndex(0);
+          currentQuestionIdRef.current = null;
         }
       }
+    } catch (err) {
+      logger.error('[useDebriefInterview] Unexpected error:', err);
+      setError('Unexpected error loading interview');
+    } finally {
+      setIsLoading(false);
     }
-
-    loadResponses();
-
-    return () => {
-      isMounted = false;
-    };
   }, [raceId, userId]);
+
+  // Initial load on mount
+  useEffect(() => {
+    loadResponsesFromDb(false);
+  }, [loadResponsesFromDb]);
+
+  // Refetch function for external callers
+  const refetch = useCallback(async () => {
+    // Skip resume position adjustment on refetch - just update data
+    await loadResponsesFromDb(true);
+  }, [loadResponsesFromDb]);
 
   // ==========================================================================
   // Save responses (debounced)
@@ -536,6 +536,7 @@ export function useDebriefInterview({
     save,
     reset,
     markComplete,
+    refetch,
   };
 }
 

@@ -15,6 +15,7 @@ import {
   Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 import type { CoachProfile, ShareResult } from './types';
@@ -40,8 +41,9 @@ export function CoachSharePrompt({
   raceName,
   shareType,
 }: CoachSharePromptProps) {
+  const router = useRouter();
   const [coach, setCoach] = useState<CoachProfile | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start as true to prevent flash of "no coach" state
   const [sharing, setSharing] = useState(false);
   const slideAnim = useState(new Animated.Value(-100))[0];
 
@@ -157,11 +159,64 @@ export function CoachSharePrompt({
     }
   };
 
-  // Don't render if no coach or still loading
-  if (!visible || loading || !coach) {
+  // Handle "Find a Coach" navigation
+  const handleFindCoach = () => {
+    onDismiss();
+    router.push('/coach');
+  };
+
+  // Don't render if not visible or still loading
+  if (!visible || loading) {
     return null;
   }
 
+  // No coach found - show "Find a Coach" prompt
+  if (!coach) {
+    return (
+      <Animated.View
+        style={[
+          styles.container,
+          styles.noCoachContainer,
+          { transform: [{ translateY: slideAnim }] },
+        ]}
+      >
+        <View style={styles.content}>
+          <View style={[styles.iconContainer, styles.noCoachIconContainer]}>
+            <MaterialCommunityIcons name="account-search" size={24} color="#10B981" />
+          </View>
+          <View style={styles.textContainer}>
+            <Text style={styles.title}>Want coaching feedback?</Text>
+            <Text style={styles.subtitle}>
+              Connect with a coach for personalized feedback on your races
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.dismissButton}
+            onPress={onDismiss}
+          >
+            <Text style={styles.dismissText}>Not now</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.shareButton, styles.findCoachButton]}
+            onPress={handleFindCoach}
+          >
+            <MaterialCommunityIcons
+              name="magnify"
+              size={18}
+              color="white"
+            />
+            <Text style={styles.shareText}>Find a Coach</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  }
+
+  // Coach found - show share prompt
   return (
     <Animated.View
       style={[
@@ -224,6 +279,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  noCoachContainer: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
+  },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -237,6 +296,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+  },
+  noCoachIconContainer: {
+    backgroundColor: '#D1FAE5',
   },
   textContainer: {
     flex: 1,
@@ -273,6 +335,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
+  },
+  findCoachButton: {
+    backgroundColor: '#10B981',
   },
   shareButtonDisabled: {
     opacity: 0.6,

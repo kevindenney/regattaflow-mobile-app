@@ -13,8 +13,7 @@
     "seed:rhkyc": "node scripts/seed-rhkyc-demo.mjs",
     "seed:sailors": "node scripts/seed-sailors-tab-demo.mjs",
     "lint": "npx eslint . --ext .js,.jsx,.ts,.tsx",
-    "typecheck": "npx tsc --noEmit",
-    "eas-build-post-install": "./scripts/eas-build-post-install.sh"
+    "typecheck": "npx tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",

@@ -104,10 +104,10 @@ export function SailorTimelineModal({
 
         if (profileError) throw profileError;
 
-        // Fetch sailor_profile for avatar data
+        // Fetch sailor_profile for avatar data and sharing setting
         const { data: sailorProfileData } = await supabase
           .from('sailor_profiles')
-          .select('avatar_emoji, avatar_color')
+          .select('avatar_emoji, avatar_color, allow_follower_sharing')
           .eq('user_id', sailorId)
           .single();
 
@@ -117,23 +117,25 @@ export function SailorTimelineModal({
           avatar_color: sailorProfileData?.avatar_color,
         });
 
-        // Fetch races - show all if viewing own timeline, or public/fleet for others
-        let racesQuery = supabase
-          .from('regattas')
-          .select('*')
-          .eq('created_by', sailorId)
-          .order('start_date', { ascending: false })
-          .limit(20);
+        // Check if sailor allows sharing (for viewing other people's timelines)
+        const isOwnTimeline = user?.id === sailorId;
+        const allowsSharing = sailorProfileData?.allow_follower_sharing !== false;
 
-        // If viewing someone else's timeline, filter by visibility
-        if (user?.id !== sailorId) {
-          racesQuery = racesQuery.in('content_visibility', ['public', 'fleet']);
+        // Only fetch races if viewing own timeline or sailor allows sharing
+        let racesData: any[] = [];
+        if (isOwnTimeline || allowsSharing) {
+          const { data, error: racesError } = await supabase
+            .from('regattas')
+            .select('*')
+            .eq('created_by', sailorId)
+            .order('start_date', { ascending: false })
+            .limit(20);
+
+          if (racesError) throw racesError;
+          racesData = data || [];
         }
 
-        const { data: racesData, error: racesError } = await racesQuery;
-
-        if (racesError) throw racesError;
-        setRaces(racesData || []);
+        setRaces(racesData);
       } catch (err) {
         console.error('[SailorTimelineModal] Error:', err);
       } finally {

@@ -35,7 +35,6 @@ export interface FleetMateRace {
   tuningSettings?: Record<string, unknown>;
   postRaceNotes?: string;
   lessonsLearned?: string[];
-  contentVisibility: 'private' | 'fleet' | 'public';
   // Metadata
   isPast: boolean;
   daysUntil: number;
@@ -135,7 +134,32 @@ export function useFleetActivity(): UseFleetActivityResult {
         return;
       }
 
-      // Step 3: Fetch races from fleet mates
+      // Step 3: Filter fleet mates by their sharing setting
+      // Only show content from users who have allow_follower_sharing = true
+      const { data: sharingProfiles, error: sharingError } = await supabase
+        .from('sailor_profiles')
+        .select('user_id')
+        .in('user_id', Array.from(fleetMateIds))
+        .eq('allow_follower_sharing', true);
+
+      if (sharingError) {
+        logger.warn('[useFleetActivity] Error fetching sharing profiles:', sharingError);
+        // Continue with all fleet mates if there's an error (graceful degradation)
+      }
+
+      // Use only fleet mates who have sharing enabled
+      const sharingUserIds = sharingProfiles
+        ? sharingProfiles.map((p: { user_id: string }) => p.user_id)
+        : Array.from(fleetMateIds); // Fallback to all if query fails
+
+      if (sharingUserIds.length === 0) {
+        logger.info('[useFleetActivity] No fleet mates with sharing enabled');
+        setFleetRaces(new Map());
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 4: Fetch races from fleet mates who allow sharing
       // Get races from last 30 days and all future races
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -143,16 +167,15 @@ export function useFleetActivity(): UseFleetActivityResult {
       const { data: races, error: racesError } = await supabase
         .from('regattas')
         .select('*')
-        .in('created_by', Array.from(fleetMateIds))
+        .in('created_by', sharingUserIds)
         .gte('start_date', thirtyDaysAgo.toISOString())
-        .in('content_visibility', ['fleet', 'public'])
         .order('start_date', { ascending: true });
 
       if (racesError) {
         throw racesError;
       }
 
-      // Step 4: Transform and group races
+      // Step 5: Transform and group races
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -178,7 +201,6 @@ export function useFleetActivity(): UseFleetActivityResult {
           tuningSettings: race.tuning_settings,
           postRaceNotes: race.post_race_notes,
           lessonsLearned: race.lessons_learned,
-          contentVisibility: race.content_visibility,
           isPast: daysUntil < 0,
           daysUntil,
         };

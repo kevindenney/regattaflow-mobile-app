@@ -206,10 +206,11 @@ export function TabScreenToolbar({
   onMeasuredHeight,
   hidden = false,
 }: TabScreenToolbarProps) {
-  const { isDrawerOpen, toggleDrawer } = useWebDrawer();
+  const { isDrawerOpen, openDrawer } = useWebDrawer();
 
-  // Show hamburger menu on web when sidebar drawer is enabled
-  const showWebMenuButton = Platform.OS === 'web' && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
+  // Show sidebar toggle on web ONLY when sidebar is closed (so user can re-open it)
+  // When sidebar is open, the toggle inside the sidebar handles closing
+  const showWebSidebarToggle = Platform.OS === 'web' && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT && !isDrawerOpen;
 
   const hasActions = actions && actions.length > 0;
 
@@ -252,19 +253,23 @@ export function TabScreenToolbar({
     >
       {/* Nav row: title left  |  capsule right */}
       <View style={styles.navRow}>
-        {/* Web: shelf toggle button */}
-        {showWebMenuButton && (
+        {/* Web: Apple HIG-style sidebar toggle button (only shown when sidebar is closed) */}
+        {showWebSidebarToggle && (
           <Pressable
-            onPress={toggleDrawer}
-            style={({ pressed }) => [styles.menuButton, pressed && { opacity: 0.6 }]}
-            accessibilityLabel={isDrawerOpen ? 'Collapse sidebar' : 'Open sidebar'}
+            onPress={openDrawer}
+            style={({ pressed, hovered }) => [
+              styles.sidebarToggle,
+              (hovered as boolean) && styles.sidebarToggleHover,
+              pressed && styles.sidebarTogglePressed,
+            ]}
+            accessibilityLabel="Show sidebar"
             accessibilityRole="button"
           >
-            <Ionicons
-              name={isDrawerOpen ? 'chevron-back' : 'menu'}
-              size={24}
-              color={IOS_COLORS.secondaryLabel}
-            />
+            {/* Apple-style sidebar icon: rectangle with left panel */}
+            <View style={styles.sidebarIcon}>
+              <View style={styles.sidebarIconLeft} />
+              <View style={styles.sidebarIconRight} />
+            </View>
           </Pressable>
         )}
         {/* Left: title + optional subtitle */}
@@ -357,14 +362,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  // Web menu button
-  menuButton: {
-    width: 40,
-    height: 40,
+  // Apple HIG-style sidebar toggle button (matches macOS window chrome)
+  sidebarToggle: {
+    width: 32,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 4,
-    borderRadius: 8,
+    marginRight: 8,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    backgroundColor: IOS_COLORS.systemBackground,
+  },
+  sidebarToggleHover: {
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderColor: IOS_COLORS.opaqueSeparator,
+  },
+  sidebarTogglePressed: {
+    backgroundColor: IOS_COLORS.tertiarySystemFill,
+  },
+  // Custom sidebar icon (rectangle with left panel - matches Apple's sidebar.left)
+  sidebarIcon: {
+    width: 16,
+    height: 12,
+    flexDirection: 'row',
+    borderRadius: 2,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.secondaryLabel,
+    overflow: 'hidden',
+  },
+  sidebarIconLeft: {
+    width: 5,
+    height: '100%',
+    backgroundColor: IOS_COLORS.secondaryLabel,
+  },
+  sidebarIconRight: {
+    flex: 1,
   },
 
   // Title

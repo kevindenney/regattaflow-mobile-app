@@ -938,6 +938,16 @@ export function useReflectProfile() {
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
       );
 
+      // Deduplicate activity by ID (in case of data inconsistencies)
+      const seenActivityIds = new Set<string>();
+      const uniqueRecentActivity = recentActivity.filter((activity) => {
+        if (seenActivityIds.has(activity.id)) {
+          return false;
+        }
+        seenActivityIds.add(activity.id);
+        return true;
+      });
+
       // =========================================================================
       // CALCULATE WEEKLY SUMMARY
       // =========================================================================
@@ -1464,7 +1474,7 @@ export function useReflectProfile() {
         achievements,
         personalRecords,
         challenges,
-        recentActivity: recentActivity.slice(0, 10), // Limit to 10 most recent
+        recentActivity: uniqueRecentActivity.slice(0, 10), // Limit to 10 most recent
         goals,
         insights,
         fleetComparison: undefined, // Complex to compute, would need fleet membership data
