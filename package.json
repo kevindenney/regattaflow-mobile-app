@@ -14,7 +14,7 @@
     "seed:sailors": "node scripts/seed-sailors-tab-demo.mjs",
     "lint": "npx eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "npx tsc --noEmit",
-    "eas-build-pre-install": "./scripts/eas-build-pre-install.sh"
+    "eas-build-post-install": "./scripts/eas-build-post-install.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",
