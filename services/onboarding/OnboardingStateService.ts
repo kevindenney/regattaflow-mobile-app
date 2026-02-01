@@ -19,8 +19,11 @@ import { createLogger } from '@/lib/utils/logger';
 const logger = createLogger('OnboardingStateService');
 
 const STORAGE_KEY = 'regattaflow_onboarding_state';
+const FLOW_KEY = 'regattaflow_onboarding_flow';
+const ONBOARDING_SEEN_KEY = 'regattaflow_onboarding_seen';
+const CACHED_USERNAME_KEY = 'regattaflow_cached_username';
 
-// Step order for the full setup path
+// Step order for the full setup path (legacy)
 const FULL_SETUP_STEPS: OnboardingStep[] = [
   'welcome',
   'features',
@@ -36,7 +39,7 @@ const FULL_SETUP_STEPS: OnboardingStep[] = [
   'complete',
 ];
 
-// Step order for the quick setup path
+// Step order for the quick setup path (legacy)
 const QUICK_SETUP_STEPS: OnboardingStep[] = [
   'welcome',
   'features',
@@ -47,12 +50,27 @@ const QUICK_SETUP_STEPS: OnboardingStep[] = [
   'complete',
 ];
 
+// NEW: Strava-inspired flow steps
+const NEW_ONBOARDING_STEPS: OnboardingStep[] = [
+  'value-track-races',
+  'value-prepare-pro',
+  'value-join-crew',
+  'auth-choice-new',
+  'name-photo',
+  'boat-picker',
+  'location-permission',
+  'club-nearby',
+  'find-sailors',
+  'race-calendar',
+  'add-race',
+];
+
 /**
  * Create initial onboarding state
  */
-function createInitialState(): OnboardingState {
+function createInitialState(useNewFlow: boolean = true): OnboardingState {
   return {
-    currentStep: 'welcome',
+    currentStep: useNewFlow ? 'value-track-races' : 'welcome',
     completedSteps: [],
     preferences: {},
     startedAt: new Date().toISOString(),
@@ -62,6 +80,132 @@ function createInitialState(): OnboardingState {
 
 export class OnboardingStateService {
   private static state: OnboardingState | null = null;
+  private static useNewFlow: boolean = true; // Feature flag for new onboarding flow
+
+  // ============================================================================
+  // Returning User Detection
+  // ============================================================================
+
+  /**
+   * Check if user has completed onboarding before (returning user)
+   */
+  static async hasSeenOnboarding(): Promise<boolean> {
+    try {
+      const value = await AsyncStorage.getItem(ONBOARDING_SEEN_KEY);
+      return value === 'true';
+    } catch (error) {
+      logger.error('[OnboardingStateService] Failed to check hasSeenOnboarding', error);
+      return false;
+    }
+  }
+
+  /**
+   * Mark onboarding as seen (call on completion)
+   */
+  static async markOnboardingSeen(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(ONBOARDING_SEEN_KEY, 'true');
+      logger.debug('[OnboardingStateService] Marked onboarding as seen');
+    } catch (error) {
+      logger.error('[OnboardingStateService] Failed to mark onboarding as seen', error);
+    }
+  }
+
+  /**
+   * Cache username for welcome back screen (call on sign out)
+   */
+  static async cacheUsername(name: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(CACHED_USERNAME_KEY, name);
+      logger.debug('[OnboardingStateService] Cached username:', name);
+    } catch (error) {
+      logger.error('[OnboardingStateService] Failed to cache username', error);
+    }
+  }
+
+  /**
+   * Get cached username for welcome back screen
+   */
+  static async getCachedUsername(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(CACHED_USERNAME_KEY);
+    } catch (error) {
+      logger.error('[OnboardingStateService] Failed to get cached username', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clear cached username (call on account deletion)
+   */
+  static async clearCachedUsername(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(CACHED_USERNAME_KEY);
+      logger.debug('[OnboardingStateService] Cleared cached username');
+    } catch (error) {
+      logger.error('[OnboardingStateService] Failed to clear cached username', error);
+    }
+  }
+
+  /**
+   * Reset onboarding seen flag (for testing/dev purposes)
+   */
+  static async resetOnboardingSeen(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(ONBOARDING_SEEN_KEY);
+      logger.debug('[OnboardingStateService] Reset onboarding seen flag');
+    } catch (error) {
+      logger.error('[OnboardingStateService] Failed to reset onboarding seen flag', error);
+    }
+  }
+
+  // ============================================================================
+  // Flow Type Management
+  // ============================================================================
+
+  /**
+   * Check if new onboarding flow is enabled
+   */
+  static isNewFlowEnabled(): boolean {
+    return this.useNewFlow;
+  }
+
+  /**
+   * Set which onboarding flow to use
+   */
+  static setFlowType(useNew: boolean): void {
+    this.useNewFlow = useNew;
+  }
+
+  /**
+   * Get the appropriate step list based on flow type
+   */
+  private static getStepList(): OnboardingStep[] {
+    if (this.useNewFlow) {
+      return NEW_ONBOARDING_STEPS;
+    }
+    const path = this.state?.preferences.setupPath;
+    return path === 'quick' ? QUICK_SETUP_STEPS : FULL_SETUP_STEPS;
+  }
+
+  /**
+   * Get the first step for the current flow
+   */
+  static getFirstStep(): OnboardingStep {
+    return this.useNewFlow ? 'value-track-races' : 'welcome';
+  }
+
+  /**
+   * Get the starting route for onboarding, checking if user is returning
+   * Returns 'welcome-back' for returning users, or the normal first step for new users
+   */
+  static async getStartingRoute(): Promise<string> {
+    const hasSeen = await this.hasSeenOnboarding();
+    if (hasSeen && this.useNewFlow) {
+      return '/onboarding/welcome-back';
+    }
+    return this.useNewFlow ? '/onboarding/value/track-races' : '/onboarding/welcome';
+  }
 
   /**
    * Load onboarding state from storage
@@ -82,11 +226,11 @@ export class OnboardingStateService {
         return this.state;
       }
 
-      this.state = createInitialState();
+      this.state = createInitialState(this.useNewFlow);
       return this.state;
     } catch (error) {
       logger.error('[OnboardingStateService] Failed to load state', error);
-      this.state = createInitialState();
+      this.state = createInitialState(this.useNewFlow);
       return this.state;
     }
   }
@@ -161,8 +305,8 @@ export class OnboardingStateService {
    * Get next step based on current path
    */
   static async getNextStep(currentStep: OnboardingStep): Promise<OnboardingStep | null> {
-    const state = await this.loadState();
-    const path = state.preferences.setupPath === 'quick' ? QUICK_SETUP_STEPS : FULL_SETUP_STEPS;
+    await this.loadState();
+    const path = this.getStepList();
     const currentIndex = path.indexOf(currentStep);
 
     if (currentIndex === -1 || currentIndex === path.length - 1) {
@@ -176,8 +320,8 @@ export class OnboardingStateService {
    * Get previous step based on current path
    */
   static async getPreviousStep(currentStep: OnboardingStep): Promise<OnboardingStep | null> {
-    const state = await this.loadState();
-    const path = state.preferences.setupPath === 'quick' ? QUICK_SETUP_STEPS : FULL_SETUP_STEPS;
+    await this.loadState();
+    const path = this.getStepList();
     const currentIndex = path.indexOf(currentStep);
 
     if (currentIndex <= 0) {
@@ -192,7 +336,7 @@ export class OnboardingStateService {
    */
   static async getProgress(): Promise<number> {
     const state = await this.loadState();
-    const path = state.preferences.setupPath === 'quick' ? QUICK_SETUP_STEPS : FULL_SETUP_STEPS;
+    const path = this.getStepList();
     const currentIndex = path.indexOf(state.currentStep);
 
     if (currentIndex === -1) {
@@ -206,8 +350,8 @@ export class OnboardingStateService {
    * Get step number (1-indexed)
    */
   static async getStepNumber(step: OnboardingStep): Promise<{ current: number; total: number }> {
-    const state = await this.loadState();
-    const path = state.preferences.setupPath === 'quick' ? QUICK_SETUP_STEPS : FULL_SETUP_STEPS;
+    await this.loadState();
+    const path = this.getStepList();
     const currentIndex = path.indexOf(step);
 
     return {

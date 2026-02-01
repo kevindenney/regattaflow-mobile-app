@@ -73,6 +73,7 @@ export interface OnboardingPreferences {
  * Onboarding step information
  */
 export type OnboardingStep =
+  // Legacy flow steps
   | 'welcome'
   | 'features'
   | 'auth-choice'
@@ -84,7 +85,26 @@ export type OnboardingStep =
   | 'home-club'
   | 'primary-fleet'
   | 'find-races'
-  | 'complete';
+  | 'complete'
+  // Returning user flow
+  | 'welcome-back'
+  // New Strava-inspired flow steps
+  | 'value-track-races'
+  | 'value-prepare-pro'
+  | 'value-join-crew'
+  | 'auth-choice-new'
+  | 'name-photo'
+  | 'boat-picker'
+  | 'location-permission'
+  | 'club-nearby'
+  | 'find-sailors'
+  | 'race-calendar'
+  | 'add-race';
+
+/**
+ * New onboarding flow type for feature flag
+ */
+export type OnboardingFlow = 'legacy' | 'strava-inspired';
 
 /**
  * Onboarding state for tracking progress
