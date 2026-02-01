@@ -45,6 +45,10 @@
   ],
   "rewrites": [
     {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/:path*"
     },
