@@ -7,7 +7,7 @@
  * Inspired by the Apple Health "Records" screen pattern.
  */
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -214,13 +214,13 @@ export function TabScreenToolbar({
 
   const hasActions = actions && actions.length > 0;
 
-  // Measured height for hide animation
-  const measuredHeight = useRef(0);
+  // Measured height for hide animation - use state to trigger re-renders
+  const [measuredHeight, setMeasuredHeight] = React.useState(0);
 
   const handleLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const h = event.nativeEvent.layout.height;
-      measuredHeight.current = h;
+      setMeasuredHeight(h);
       onMeasuredHeight?.(h);
     },
     [onMeasuredHeight],
@@ -229,12 +229,16 @@ export function TabScreenToolbar({
   // Scroll-to-hide animation
   const hideTranslateY = useSharedValue(0);
 
+  // Re-run animation when hidden changes OR when height is measured
+  // This fixes the race condition where hidden changes before layout fires
   React.useEffect(() => {
-    hideTranslateY.value = withTiming(
-      hidden ? -measuredHeight.current : 0,
-      { duration: 250 },
-    );
-  }, [hidden, hideTranslateY]);
+    if (measuredHeight > 0) {
+      hideTranslateY.value = withTiming(
+        hidden ? -measuredHeight : 0,
+        { duration: 250 },
+      );
+    }
+  }, [hidden, measuredHeight, hideTranslateY]);
 
   const hideAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: hideTranslateY.value }],
@@ -357,8 +361,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 52,
-    paddingTop: 12,
-    paddingBottom: 4,
+    // On web, add extra top padding since there's no safe area inset
+    paddingTop: Platform.OS === 'web' ? 20 : 12,
+    paddingBottom: Platform.OS === 'web' ? 12 : 4,
     paddingHorizontal: 16,
   },
 

@@ -99,23 +99,41 @@ export function RaceTimelineLayout({
   const [isScrolling, setIsScrolling] = useState(false);
   const [activeDetailIndex, setActiveDetailIndex] = useState(0);
 
-  // Track if this is initial mount to avoid redundant scroll
-  const hasMountedRef = useRef(false);
+  // Track if we've done the initial scroll when data first loads
+  const hasInitialScrollRef = useRef(false);
   const prevSelectedIndexRef = useRef(selectedRaceIndex);
+  const prevRacesLengthRef = useRef(0);
 
-  // Scroll to selected race when it changes (handles async data loading)
+  // Scroll to selected race when it changes or when data first loads
   useEffect(() => {
     // Skip if races not yet loaded
-    if (races.length === 0) return;
-
-    // On first mount, FlatList's initialScrollIndex handles it
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
-      prevSelectedIndexRef.current = selectedRaceIndex;
+    if (races.length === 0) {
+      hasInitialScrollRef.current = false;
+      prevRacesLengthRef.current = 0;
       return;
     }
 
-    // Only scroll if index actually changed (not from our own scroll events)
+    // Detect when data first becomes available (transition from 0 to > 0)
+    const dataJustLoaded = prevRacesLengthRef.current === 0 && races.length > 0;
+    prevRacesLengthRef.current = races.length;
+
+    // On first data load, scroll to the selected index (next upcoming race)
+    if (dataJustLoaded && !hasInitialScrollRef.current) {
+      hasInitialScrollRef.current = true;
+      prevSelectedIndexRef.current = selectedRaceIndex;
+
+      // Small delay to ensure FlatList has rendered with the new data
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToIndex({
+          index: selectedRaceIndex,
+          animated: false, // No animation on initial load
+        });
+      }, 150);
+
+      return () => clearTimeout(timer);
+    }
+
+    // Handle subsequent index changes (user navigation)
     if (prevSelectedIndexRef.current !== selectedRaceIndex) {
       prevSelectedIndexRef.current = selectedRaceIndex;
 
@@ -206,15 +224,36 @@ export function RaceTimelineLayout({
     });
   }, []);
 
-  // Render individual race card
+  // Render individual race card - clickable to navigate to that card
   const renderItem = useCallback(({ item, index }: { item: any; index: number }) => {
+    const isSelected = index === selectedRaceIndex;
+
     return (
-      <View style={[styles.cardContainer, { width: cardWidth }]}>
+      <TouchableOpacity
+        activeOpacity={isSelected ? 1 : 0.8}
+        onPress={() => {
+          // Only handle press for non-selected cards (clicking adjacent cards to navigate)
+          if (!isSelected) {
+            // Scroll to the clicked card
+            flatListRef.current?.scrollToIndex({
+              index,
+              animated: true,
+            });
+            // Notify parent of the change
+            onRaceChange(index);
+            // Haptic feedback
+            if (enableHaptics && Platform.OS !== 'web') {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+          }
+        }}
+        style={[styles.cardContainer, { width: cardWidth }]}
+      >
         {/* Tufte: Trust the timeline metaphor - position indicates next race */}
         {renderRaceCard(item, index)}
-      </View>
+      </TouchableOpacity>
     );
-  }, [cardWidth, renderRaceCard, nextRaceIndex]);
+  }, [cardWidth, renderRaceCard, selectedRaceIndex, onRaceChange, enableHaptics]);
 
   // Key extractor
   const keyExtractor = useCallback((item: any, index: number) => {
@@ -257,6 +296,7 @@ export function RaceTimelineLayout({
           windowSize={5}
           initialNumToRender={3}
         />
+
 
         {/* Timeline Indicators (Dots) */}
         {races.length > 1 && (
@@ -430,6 +470,7 @@ const styles = StyleSheet.create({
 
   // Hero Zone
   heroZone: {
+    position: 'relative', // Required for absolute positioned nav arrows
     backgroundColor: IOS_COLORS.systemBackground,
     borderBottomWidth: 1,
     borderBottomColor: IOS_COLORS.separator,
@@ -538,6 +579,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginLeft: 8,
   },
+
 });
 
 export default RaceTimelineLayout;

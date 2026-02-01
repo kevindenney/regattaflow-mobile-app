@@ -80,7 +80,8 @@ function CardGridComponent({
   onRaceComplete,
   onOpenPostRaceInterview,
   nextRaceIndex,
-}: CardGridWebProps & { nextRaceIndex?: number | null }) {
+  topInset,
+}: CardGridWebProps & { nextRaceIndex?: number | null; topInset?: number }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
   const containerRef = useRef<View>(null);
@@ -326,7 +327,10 @@ function CardGridComponent({
         style={styles.horizontalScroll}
         contentContainerStyle={[
           styles.horizontalContent,
-          { paddingHorizontal: dimensions.contentPaddingLeft },
+          {
+            paddingHorizontal: dimensions.contentPaddingLeft,
+            paddingTop: topInset || 40,
+          },
         ]}
         showsHorizontalScrollIndicator={false}
         snapToInterval={dimensions.cardWidth + HORIZONTAL_CARD_GAP}
@@ -374,7 +378,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: HORIZONTAL_CARD_GAP,
     alignItems: 'flex-start',
-    paddingTop: 40,
+    // paddingTop is applied dynamically via topInset prop
   },
   card: {
     backgroundColor: IOS_COLORS.systemBackground,
