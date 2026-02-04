@@ -160,12 +160,12 @@ export default function MessagesScreen() {
 
           <Pressable
             style={({ pressed }) => [
-              styles.editButton,
+              styles.composeButton,
               pressed && styles.buttonPressed,
             ]}
             onPress={handleNewChat}
           >
-            <Pencil size={20} color={IOS_COLORS.systemBlue} />
+            <Pencil size={22} color={IOS_COLORS.systemBlue} />
           </Pressable>
         </View>
 
@@ -216,19 +216,6 @@ export default function MessagesScreen() {
         />
       </View>
 
-      {/* Floating Action Button */}
-      <View style={[styles.fabContainer, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
-        <Pressable
-          style={({ pressed }) => [
-            styles.fab,
-            pressed && styles.fabPressed,
-          ]}
-          onPress={handleNewChat}
-        >
-          <Pencil size={26} color="#FFFFFF" strokeWidth={2} />
-        </Pressable>
-      </View>
-
       {/* New Chat Action Sheet */}
       <NewChatSheet
         isOpen={showNewChatSheet}
@@ -263,7 +250,7 @@ const styles = StyleSheet.create({
     padding: IOS_SPACING.sm,
     borderRadius: IOS_RADIUS.full,
   },
-  editButton: {
+  composeButton: {
     padding: IOS_SPACING.sm,
     borderRadius: IOS_RADIUS.full,
   },
@@ -349,27 +336,4 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // FAB
-  fabContainer: {
-    position: 'absolute',
-    right: 24,
-    zIndex: 1000,
-  },
-  fab: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  fabPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.95 }],
-  },
 });
