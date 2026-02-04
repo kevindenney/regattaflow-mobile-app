@@ -34,6 +34,8 @@ interface SeasonHeaderProps {
   onStartSeasonPress?: () => void;
   /** Whether to show compact version */
   compact?: boolean;
+  /** Whether we're in "All Races" mode (no season filter) */
+  showAllRaces?: boolean;
 }
 
 export function SeasonHeader({
@@ -45,16 +47,37 @@ export function SeasonHeader({
   onUpcomingPress,
   onStartSeasonPress,
   compact = false,
+  showAllRaces = false,
 }: SeasonHeaderProps) {
+  // "All Races" mode - show all races without season filter
+  if (showAllRaces && !season) {
+    return (
+      <Pressable
+        style={[styles.container, compact && styles.containerCompact]}
+        onPress={onSeasonPress}
+        onLongPress={onArchivePress}
+      >
+        <Text style={[styles.seasonName, styles.allRacesText, compact && styles.seasonNameCompact]}>
+          All Races
+        </Text>
+        {totalRaces !== undefined && (
+          <Text style={[styles.fraction, compact && styles.fractionCompact]}>
+            {totalRaces} total
+          </Text>
+        )}
+      </Pressable>
+    );
+  }
+
   // No season state - minimal, clean
   if (!season) {
     return (
       <Pressable
-        style={styles.container}
+        style={[styles.container, compact && styles.containerCompact]}
         onPress={onStartSeasonPress}
         onLongPress={onArchivePress}
       >
-        <Text style={styles.noSeasonText}>No active season</Text>
+        <Text style={[styles.noSeasonText, compact && styles.noSeasonTextCompact]}>No active season</Text>
       </Pressable>
     );
   }
@@ -104,6 +127,13 @@ const styles = StyleSheet.create({
   noSeasonText: {
     fontSize: 15,
     fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  noSeasonTextCompact: {
+    fontSize: 14,
+  },
+  // All races mode
+  allRacesText: {
     color: IOS_COLORS.secondaryLabel,
   },
 

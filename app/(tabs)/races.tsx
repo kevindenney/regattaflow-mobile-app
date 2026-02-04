@@ -6,6 +6,7 @@ import {
   type CardRaceData,
   type CardType
 } from '@/components/cards';
+import { IOS_COLORS } from '@/components/cards/constants';
 
 import {
   PreRaceStrategySection,
@@ -41,6 +42,7 @@ import { calculatePerformanceMetrics } from '@/components/races/PerformanceMetri
 import { PlanModeContent } from '@/components/races/plan';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
 import { SeasonHeader } from '@/components/seasons/SeasonHeader';
+import { SeasonPickerModal } from '@/components/seasons/SeasonPickerModal';
 import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { OnboardingTour, TourStep } from '@/components/onboarding/OnboardingTour';
@@ -76,7 +78,7 @@ import { useLiveRaces, useUserRaceResults, withdrawFromRace } from '@/hooks/useR
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
 import { useSailorProfile } from '@/hooks/useSailorProfile';
-import { useCurrentSeason, useUserSeasons } from '@/hooks/useSeason';
+import { useCurrentSeason, useUserSeasons, useSeasonRegattas } from '@/hooks/useSeason';
 import { useStrategySharing } from '@/hooks/useStrategySharing';
 import { useTacticalSnapshots } from '@/hooks/useTacticalSnapshots';
 import { useTideDepthSnapshots } from '@/hooks/useTideDepthSnapshots';
@@ -105,7 +107,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const logger = createLogger('RacesScreen');
@@ -142,6 +144,9 @@ export default function RacesScreen() {
 
   // Season state and hooks
   const [showSeasonSettings, setShowSeasonSettings] = useState(false);
+  const [showSeasonPicker, setShowSeasonPicker] = useState(false);
+  // filterSeasonId: null = "All Races", undefined = use current season, string = specific season
+  const [filterSeasonId, setFilterSeasonId] = useState<string | null | undefined>(undefined);
   const { data: currentSeason, isLoading: loadingCurrentSeason, refetch: refetchCurrentSeason } = useCurrentSeason();
   const { data: userSeasons, refetch: refetchSeasons } = useUserSeasons();
 
@@ -152,6 +157,47 @@ export default function RacesScreen() {
     }
     return currentSeason;
   }, [isGuest, currentSeason]);
+
+  // Determine the actual season to use for filtering
+  // If filterSeasonId is undefined, use current season (default behavior)
+  // If filterSeasonId is null, show all races (no filter)
+  // If filterSeasonId is a string, filter by that specific season
+  const activeFilterSeasonId = filterSeasonId === undefined
+    ? effectiveSeason?.id ?? null // Default to current season, or null if no current season
+    : filterSeasonId;
+
+  // Get the display season for the header (either the filter season or current season)
+  const displaySeason = useMemo(() => {
+    if (activeFilterSeasonId === null) {
+      // "All Races" mode - no specific season
+      return null;
+    }
+    if (activeFilterSeasonId === effectiveSeason?.id) {
+      return effectiveSeason;
+    }
+    // Find the season in userSeasons
+    const found = userSeasons?.find(s => s.id === activeFilterSeasonId);
+    if (found) {
+      // Convert SeasonListItem to SeasonWithSummary-like structure for SeasonHeader
+      return {
+        ...found,
+        summary: {
+          regatta_count: found.regatta_count,
+          total_races: found.race_count,
+          completed_races: found.completed_count,
+          upcoming_races: found.race_count - found.completed_count,
+        },
+      } as any;
+    }
+    return effectiveSeason;
+  }, [activeFilterSeasonId, effectiveSeason, userSeasons]);
+
+  // Get regattas linked to the filter season for filtering
+  const { data: seasonRegattas } = useSeasonRegattas(activeFilterSeasonId || undefined);
+  const seasonRegattaIds = useMemo(() => {
+    if (!seasonRegattas) return new Set<string>();
+    return new Set(seasonRegattas.map(sr => sr.regatta_id));
+  }, [seasonRegattas]);
 
   const fetchUserProfileRef = useRef(auth.fetchUserProfile);
   useEffect(() => {
@@ -207,7 +253,11 @@ export default function RacesScreen() {
 
   // Toolbar measured height for content padding
   const [toolbarHeight, setToolbarHeight] = useState(0);
+  // SeasonHeader compact height: paddingVertical: 8 * 2 + text ~18px = ~34px
+  const SEASON_HEADER_HEIGHT = 34;
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
+  // Total header height including SeasonHeader (always visible now)
+  const totalHeaderHeight = toolbarHeight + SEASON_HEADER_HEIGHT;
 
   // Selected race detail state
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
@@ -220,6 +270,8 @@ export default function RacesScreen() {
   const [deletingRaceId, setDeletingRaceId] = useState<string | null>(null);
   const isDeletingRace = deletingRaceId !== null;
   const [raceDetailReloadKey, setRaceDetailReloadKey] = useState(0);
+  // Trigger for AfterRaceContent to refetch data after PostRaceInterview completes
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
   const triggerRaceDetailReload = useCallback(() => {
     setRaceDetailReloadKey((prev) => prev + 1);
   }, []);
@@ -781,6 +833,38 @@ export default function RacesScreen() {
     }).length;
   }, [safeRecentRaces]);
 
+  // Season-filtered race counts for display in header
+  // When a season filter is active, show only races in that season
+  const seasonFilteredRaces = useMemo(() => {
+    if (!activeFilterSeasonId) {
+      // "All Races" mode or no season filter - return all races
+      return safeRecentRaces;
+    }
+    // Filter races that belong to the selected filter season
+    return safeRecentRaces.filter((race: any) => {
+      // Check if race has season_id matching the filter season (race_events)
+      if (race.season_id === activeFilterSeasonId ||
+          race.metadata?.season_id === activeFilterSeasonId) {
+        return true;
+      }
+      // Check if regatta is linked to the season via season_regattas table
+      if (seasonRegattaIds.has(race.id)) {
+        return true;
+      }
+      return false;
+    });
+  }, [safeRecentRaces, activeFilterSeasonId, seasonRegattaIds]);
+
+  const seasonFilteredRacesCount = seasonFilteredRaces.length;
+
+  const seasonUpcomingRacesCount = useMemo(() => {
+    const now = new Date();
+    return seasonFilteredRaces.filter((race: any) => {
+      const raceDate = new Date(race.start_date || race.date);
+      return raceDate > now;
+    }).length;
+  }, [seasonFilteredRaces]);
+
   const selectedDemoRace = useMemo(
     () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
     [selectedDemoRaceId]
@@ -918,8 +1002,10 @@ export default function RacesScreen() {
       _currentRaceIndex?: number,
       _onSelectRace?: (index: number) => void,
       _nextRaceIndex?: number,
-      // Scroll handler for toolbar hide/show
-      onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void
+      // Handler for card press (navigation to this card when clicking partially visible cards)
+      onCardPress?: () => void,
+      // Refetch trigger for AfterRaceContent
+      refetchTrigger?: number
     ) => {
       const ContentComponent = getCardContentComponent(cardType);
       return (
@@ -941,7 +1027,8 @@ export default function RacesScreen() {
           seasonWeek={currentSeasonWeek}
           raceNumber={raceIndex !== undefined ? raceIndex + 1 : undefined}
           totalRaces={totalRaces}
-          onContentScroll={onContentScroll}
+          onCardPress={onCardPress}
+          refetchTrigger={refetchTrigger}
         />
       );
     },
@@ -1883,6 +1970,13 @@ export default function RacesScreen() {
     refetch,
   });
 
+  // Wrapper to trigger AfterRaceContent refetch when PostRaceInterview completes
+  const handlePostRaceInterviewCompleteWithRefetch = useCallback(() => {
+    handlePostRaceInterviewComplete();
+    // Increment trigger to cause AfterRaceContent to refetch its data
+    setRefetchTrigger(prev => prev + 1);
+  }, [handlePostRaceInterviewComplete]);
+
   // Sailor profile (extracted to useSailorProfile hook)
   const { sailorId } = useSailorProfile({ user });
 
@@ -2802,7 +2896,7 @@ export default function RacesScreen() {
             persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
             style={{ flex: 1 }}
             userId={user?.id}
-            topInset={toolbarHeight}
+            topInset={totalHeaderHeight}
             safeAreaTop={insets.top}
             toolbarHidden={toolbarHidden}
             onContentScroll={handleToolbarScroll}
@@ -2812,17 +2906,18 @@ export default function RacesScreen() {
             onUploadDocument={isViewingOtherTimeline ? undefined : handleCardGridUploadDocument}
             onRaceComplete={isViewingOtherTimeline ? undefined : handleRaceComplete}
             onOpenPostRaceInterview={isViewingOtherTimeline ? undefined : (raceId, _raceName) => {
-              // Select the race if different, then open interview
+              // Find the race data from cardGridRaces to pass directly (avoids stale closure issues)
+              const raceData = cardGridRaces.find(r => r.id === raceId);
+              // Select the race if different
               if (raceId !== selectedRaceId) {
                 setSelectedRaceId(raceId);
                 setHasManuallySelected(true);
               }
-              // Small delay to allow selection to update, then open interview
-              setTimeout(() => {
-                handleOpenPostRaceInterviewManually();
-              }, 100);
+              // Pass raceId and raceData directly to avoid stale closure issues with setTimeout
+              handleOpenPostRaceInterviewManually(raceId, raceData ? { name: raceData.name, start_date: raceData.start_date || raceData.date } : undefined);
             }}
             onDismissSample={isViewingOtherTimeline ? undefined : handleDismissSampleRace}
+            refetchTrigger={refetchTrigger}
           />
         </View>
       ) : (
@@ -2898,14 +2993,14 @@ export default function RacesScreen() {
                 useRefinedStyle={FEATURE_FLAGS.USE_REFINED_STYLE_CARDS}
                 pastRaceIds={pastRaceIds}
                 onAddDebrief={(raceId) => {
-                  // Ensure the race is selected, then open the post-race interview
+                  // Find the race data to pass directly (avoids stale closure issues)
+                  const raceData = safeRecentRaces.find(r => r.id === raceId);
+                  // Ensure the race is selected
                   if (raceId !== selectedRaceId) {
                     setSelectedRaceId(raceId);
                   }
-                  // Small delay to allow selection to update, then open interview
-                  setTimeout(() => {
-                    handleOpenPostRaceInterviewManually();
-                  }, 100);
+                  // Pass raceId and raceData directly to avoid stale closure issues with setTimeout
+                  handleOpenPostRaceInterviewManually(raceId, raceData ? { name: raceData.name, start_date: raceData.start_date || raceData.date } : undefined);
                 }}
               />
 
@@ -3222,7 +3317,12 @@ export default function RacesScreen() {
       )}
 
       {/* Floating Header rendered last — absolutely positioned over content */}
-      <View ref={headerRef} collapsable={false} style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }} pointerEvents="box-none">
+      <View
+        ref={headerRef}
+        collapsable={false}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }}
+        pointerEvents="box-none"
+      >
         <RacesFloatingHeader
           topInset={insets.top}
           loadingInsights={loadingInsights}
@@ -3243,6 +3343,33 @@ export default function RacesScreen() {
         />
       </View>
 
+      {/* Season Header - separately positioned below the floating header */}
+      {!toolbarHidden && toolbarHeight > 0 && (
+        <Pressable
+          style={{
+            position: 'absolute',
+            top: toolbarHeight,
+            left: 0,
+            right: 0,
+            zIndex: 99,
+            backgroundColor: 'rgba(242, 242, 247, 0.92)',
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: IOS_COLORS.separator,
+          }}
+          onPress={() => setShowSeasonPicker(true)}
+          onLongPress={() => setShowFullArchive(true)}
+        >
+          <SeasonHeader
+            season={displaySeason}
+            totalRaces={seasonFilteredRacesCount}
+            onSeasonPress={() => setShowSeasonPicker(true)}
+            onArchivePress={() => setShowFullArchive(true)}
+            showAllRaces={!activeFilterSeasonId}
+            compact
+          />
+        </Pressable>
+      )}
+
       <RaceModalsSection
         // Document Type Picker
         documentTypePickerVisible={documentTypePickerVisible}
@@ -3260,7 +3387,7 @@ export default function RacesScreen() {
         completedRaceId={completedRaceId}
         completedSessionGpsPoints={completedSessionGpsPoints}
         onPostRaceInterviewClose={handleClosePostRaceInterview}
-        onPostRaceInterviewComplete={handlePostRaceInterviewComplete}
+        onPostRaceInterviewComplete={handlePostRaceInterviewCompleteWithRefetch}
         // Strategy Sharing
         showCoachSelectionModal={showCoachSelectionModal}
         sailorId={sailorId}
@@ -3275,6 +3402,21 @@ export default function RacesScreen() {
         onBoatClassSelected={handleBoatClassSelected}
       />
 
+      {/* Season Picker Modal - Select which season to filter by */}
+      <SeasonPickerModal
+        visible={showSeasonPicker}
+        selectedSeasonId={activeFilterSeasonId}
+        currentSeason={effectiveSeason}
+        allSeasons={userSeasons ?? []}
+        isLoading={loadingCurrentSeason}
+        onClose={() => setShowSeasonPicker(false)}
+        onSelectSeason={(seasonId) => {
+          logger.info('[RacesScreen] Season filter changed', { seasonId });
+          setFilterSeasonId(seasonId);
+        }}
+        onManageSeasons={() => setShowSeasonSettings(true)}
+      />
+
       {/* Season Settings Modal - Create/Edit/End Season */}
       <SeasonSettingsModal
         visible={showSeasonSettings}
@@ -3284,6 +3426,8 @@ export default function RacesScreen() {
           logger.info('[RacesScreen] Season created', { seasonId });
           refetchCurrentSeason();
           refetchSeasons();
+          // Set the filter to the newly created season
+          setFilterSeasonId(seasonId);
         }}
         onSeasonUpdated={(seasonId) => {
           logger.info('[RacesScreen] Season updated', { seasonId });
@@ -3294,6 +3438,8 @@ export default function RacesScreen() {
           logger.info('[RacesScreen] Season ended', { seasonId });
           refetchCurrentSeason();
           refetchSeasons();
+          // Reset filter to undefined (will use next current season)
+          setFilterSeasonId(undefined);
         }}
       />
 
@@ -3309,6 +3455,8 @@ export default function RacesScreen() {
           isLoading={false}
           onRefresh={() => refetchSeasons()}
           onSeasonPress={(seasonId) => {
+            // Set the filter to view races from the selected season
+            setFilterSeasonId(seasonId);
             setShowFullArchive(false);
           }}
           onBackPress={() => setShowFullArchive(false)}
