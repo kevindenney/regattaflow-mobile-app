@@ -771,26 +771,49 @@ export class CrewThreadService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { users: [], error: 'Not authenticated' };
 
-      // Search profiles - handle potential RLS issues gracefully
-      const { data, error } = await supabase
+      // Search profiles
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, avatar_emoji, avatar_color')
+        .select('id, full_name')
         .neq('id', user.id)
         .ilike('full_name', `%${query}%`)
         .limit(10);
 
-      if (error) {
-        logger.warn('searchUsers query failed:', error.message);
+      if (profilesError) {
+        logger.warn('searchUsers profiles query failed:', profilesError.message);
         return { users: [], error: 'Search unavailable' };
       }
 
+      if (!profiles || profiles.length === 0) {
+        return { users: [] };
+      }
+
+      // Get sailor_profiles for avatar data
+      const userIds = profiles.map(p => p.id);
+      const { data: sailorProfiles } = await supabase
+        .from('sailor_profiles')
+        .select('user_id, avatar_emoji, avatar_color')
+        .in('user_id', userIds);
+
+      // Create a map of user_id -> avatar data
+      const avatarMap = new Map<string, { emoji: string | null; color: string | null }>();
+      for (const sp of sailorProfiles || []) {
+        avatarMap.set(sp.user_id, {
+          emoji: sp.avatar_emoji,
+          color: sp.avatar_color,
+        });
+      }
+
       return {
-        users: (data || []).map((p: any) => ({
-          id: p.id,
-          fullName: p.full_name || 'Unknown',
-          avatarEmoji: p.avatar_emoji,
-          avatarColor: p.avatar_color,
-        })),
+        users: profiles.map((p: any) => {
+          const avatar = avatarMap.get(p.id);
+          return {
+            id: p.id,
+            fullName: p.full_name || 'Unknown',
+            avatarEmoji: avatar?.emoji || null,
+            avatarColor: avatar?.color || null,
+          };
+        }),
       };
     } catch (error: any) {
       logger.error('searchUsers failed:', error);
