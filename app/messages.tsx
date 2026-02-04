@@ -2,6 +2,7 @@
  * Messages Screen
  *
  * WhatsApp-style messaging hub with filter tabs, search, and FAB.
+ * Supports light and dark mode via useIOSColors hook.
  */
 
 import React, { useCallback, useState, useMemo } from 'react';
@@ -15,7 +16,9 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Search, X, Pencil } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { useCrewThreads } from '@/hooks/useCrewThreads';
+import { useIOSColors } from '@/hooks/useIOSColors';
 import { CrewThreadList } from '@/components/crew/CrewThreadList';
 import { NewChatSheet } from '@/components/crew/NewChatSheet';
 import {
@@ -31,6 +34,7 @@ import type { CrewThread } from '@/services/CrewThreadService';
 // =============================================================================
 
 type FilterTab = 'all' | 'unread' | 'groups';
+type IOSColorsType = typeof IOS_COLORS;
 
 // =============================================================================
 // FILTER TABS
@@ -40,10 +44,12 @@ function FilterTabs({
   activeTab,
   onTabChange,
   unreadCount,
+  colors,
 }: {
   activeTab: FilterTab;
   onTabChange: (tab: FilterTab) => void;
   unreadCount: number;
+  colors: IOSColorsType;
 }) {
   const tabs: { key: FilterTab; label: string; badge?: number }[] = [
     { key: 'all', label: 'All' },
@@ -52,27 +58,37 @@ function FilterTabs({
   ];
 
   return (
-    <View style={styles.tabsContainer}>
+    <View
+      style={[
+        staticStyles.tabsContainer,
+        {
+          backgroundColor: colors.secondarySystemGroupedBackground,
+          borderBottomColor: colors.separator,
+        },
+      ]}
+    >
       {tabs.map((tab) => (
         <Pressable
           key={tab.key}
           style={[
-            styles.tab,
-            activeTab === tab.key && styles.tabActive,
+            staticStyles.tab,
+            { backgroundColor: colors.tertiarySystemFill },
+            activeTab === tab.key && { backgroundColor: colors.systemBlue },
           ]}
           onPress={() => onTabChange(tab.key)}
         >
           <Text
             style={[
-              styles.tabText,
-              activeTab === tab.key && styles.tabTextActive,
+              staticStyles.tabText,
+              { color: colors.secondaryLabel },
+              activeTab === tab.key && staticStyles.tabTextActive,
             ]}
           >
             {tab.label}
           </Text>
           {tab.badge !== undefined && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>
+            <View style={[staticStyles.tabBadge, { backgroundColor: colors.systemRed }]}>
+              <Text style={staticStyles.tabBadgeText}>
                 {tab.badge > 99 ? '99+' : tab.badge}
               </Text>
             </View>
@@ -90,6 +106,7 @@ function FilterTabs({
 export default function MessagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = useIOSColors();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewChatSheet, setShowNewChatSheet] = useState(false);
@@ -127,10 +144,14 @@ export default function MessagesScreen() {
   }, [router]);
 
   const handleNewChat = useCallback(() => {
+    // Light haptic feedback on compose button tap
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowNewChatSheet(true);
   }, []);
 
   const handleThreadCreated = useCallback((threadId: string) => {
+    // Success haptic feedback on thread creation
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setShowNewChatSheet(false);
     router.push(`/crew-thread/${threadId}`);
   }, [router]);
@@ -140,48 +161,59 @@ export default function MessagesScreen() {
   }, []);
 
   return (
-    <View style={styles.screenWrapper}>
+    <View style={staticStyles.screenWrapper}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.container}>
+      <View style={[staticStyles.container, { backgroundColor: colors.systemGroupedBackground }]}>
         {/* Header */}
-        <View style={[styles.header, { paddingTop: insets.top }]}>
+        <View
+          style={[
+            staticStyles.header,
+            { paddingTop: insets.top, backgroundColor: colors.secondarySystemGroupedBackground },
+          ]}
+        >
           <Pressable
             style={({ pressed }) => [
-              styles.backButton,
-              pressed && styles.buttonPressed,
+              staticStyles.backButton,
+              pressed && { backgroundColor: colors.quaternarySystemFill },
             ]}
             onPress={handleBack}
           >
-            <ChevronLeft size={24} color={IOS_COLORS.systemBlue} />
+            <ChevronLeft size={24} color={colors.systemBlue} />
           </Pressable>
 
-          <Text style={styles.title}>Messages</Text>
+          <Text style={[staticStyles.title, { color: colors.label }]}>Messages</Text>
 
           <Pressable
             style={({ pressed }) => [
-              styles.composeButton,
-              pressed && styles.buttonPressed,
+              staticStyles.composeButton,
+              pressed && { backgroundColor: colors.quaternarySystemFill },
             ]}
             onPress={handleNewChat}
           >
-            <Pencil size={22} color={IOS_COLORS.systemBlue} />
+            <Pencil size={22} color={colors.systemBlue} />
           </Pressable>
         </View>
 
         {/* Search Bar */}
-        <View style={styles.searchContainer}>
+        <View
+          style={[
+            staticStyles.searchContainer,
+            { backgroundColor: colors.secondarySystemGroupedBackground },
+          ]}
+        >
           <View
             style={[
-              styles.searchInputWrapper,
-              isSearchFocused && styles.searchInputWrapperFocused,
+              staticStyles.searchInputWrapper,
+              { backgroundColor: colors.tertiarySystemFill },
+              isSearchFocused && { borderWidth: 1, borderColor: colors.systemBlue },
             ]}
           >
-            <Search size={16} color={IOS_COLORS.secondaryLabel} />
+            <Search size={16} color={colors.secondaryLabel} />
             <TextInput
-              style={styles.searchInput}
+              style={[staticStyles.searchInput, { color: colors.label }]}
               placeholder="Search conversations..."
-              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              placeholderTextColor={colors.tertiaryLabel}
               value={searchQuery}
               onChangeText={setSearchQuery}
               onFocus={() => setIsSearchFocused(true)}
@@ -191,8 +223,8 @@ export default function MessagesScreen() {
               autoCorrect={false}
             />
             {searchQuery.length > 0 && (
-              <Pressable style={styles.clearButton} onPress={clearSearch}>
-                <X size={16} color={IOS_COLORS.secondaryLabel} />
+              <Pressable style={staticStyles.clearButton} onPress={clearSearch}>
+                <X size={16} color={colors.secondaryLabel} />
               </Pressable>
             )}
           </View>
@@ -201,8 +233,12 @@ export default function MessagesScreen() {
         {/* Filter Tabs */}
         <FilterTabs
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={(tab) => {
+            Haptics.selectionAsync();
+            setActiveTab(tab);
+          }}
           unreadCount={totalUnreadCount}
+          colors={colors}
         />
 
         {/* Thread List */}
@@ -227,16 +263,15 @@ export default function MessagesScreen() {
 }
 
 // =============================================================================
-// STYLES
+// STATIC STYLES (non-color dependent)
 // =============================================================================
 
-const styles = StyleSheet.create({
+const staticStyles = StyleSheet.create({
   screenWrapper: {
     flex: 1,
   },
   container: {
     flex: 1,
-    backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
   header: {
     flexDirection: 'row',
@@ -244,7 +279,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: IOS_SPACING.sm,
     paddingBottom: IOS_SPACING.sm,
-    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
   },
   backButton: {
     padding: IOS_SPACING.sm,
@@ -254,37 +288,26 @@ const styles = StyleSheet.create({
     padding: IOS_SPACING.sm,
     borderRadius: IOS_RADIUS.full,
   },
-  buttonPressed: {
-    backgroundColor: IOS_COLORS.quaternarySystemFill,
-  },
   title: {
     ...IOS_TYPOGRAPHY.headline,
-    color: IOS_COLORS.label,
   },
 
   // Search
   searchContainer: {
     paddingHorizontal: IOS_SPACING.lg,
     paddingVertical: IOS_SPACING.sm,
-    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
   },
   searchInputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: IOS_COLORS.tertiarySystemFill,
     borderRadius: 10,
     paddingHorizontal: 10,
     height: 36,
     gap: 8,
   },
-  searchInputWrapperFocused: {
-    borderWidth: 1,
-    borderColor: IOS_COLORS.systemBlue,
-  },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: IOS_COLORS.label,
     paddingVertical: 0,
   },
   clearButton: {
@@ -296,9 +319,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: IOS_SPACING.lg,
     paddingVertical: IOS_SPACING.sm,
-    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: IOS_COLORS.separator,
     gap: IOS_SPACING.sm,
   },
   tab: {
@@ -307,22 +328,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: IOS_SPACING.md,
     paddingVertical: IOS_SPACING.xs,
     borderRadius: IOS_RADIUS.lg,
-    backgroundColor: IOS_COLORS.tertiarySystemFill,
     gap: 4,
-  },
-  tabActive: {
-    backgroundColor: IOS_COLORS.systemBlue,
   },
   tabText: {
     ...IOS_TYPOGRAPHY.subhead,
-    color: IOS_COLORS.secondaryLabel,
     fontWeight: '500',
   },
   tabTextActive: {
     color: '#FFFFFF',
   },
   tabBadge: {
-    backgroundColor: IOS_COLORS.systemRed,
     borderRadius: 8,
     minWidth: 16,
     height: 16,
@@ -335,5 +350,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
-
 });

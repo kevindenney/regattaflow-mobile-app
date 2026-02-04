@@ -17,8 +17,10 @@ import {
   Keyboard,
 } from 'react-native';
 import { ChevronLeft, Search, X, Check } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { CrewThreadService } from '@/services/CrewThreadService';
 import { getInitials } from '@/components/account/accountStyles';
+import { ContactListSkeleton } from './MessagingSkeleton';
 import {
   IOS_COLORS,
   IOS_SPACING,
@@ -181,6 +183,7 @@ export function ContactPicker({
     async (user: SearchUser) => {
       if (mode === 'single') {
         // Create direct message thread
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setIsCreatingDirect(true);
         Keyboard.dismiss();
         const thread = await CrewThreadService.getOrCreateDirectThread(user.id);
@@ -189,10 +192,12 @@ export function ContactPicker({
         if (thread) {
           onSelect(thread.id);
         } else {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           setSearchError('Could not create conversation');
         }
       } else {
-        // Toggle selection
+        // Toggle selection with haptic feedback
+        Haptics.selectionAsync();
         setSelectedIds((prev) => {
           const next = new Set(prev);
           if (next.has(user.id)) {
@@ -208,7 +213,8 @@ export function ContactPicker({
   );
 
   const handleNext = useCallback(() => {
-    if (selectedIds.size > 0 && onNext) {
+    // Require at least 2 members for group creation
+    if (selectedIds.size >= 2 && onNext) {
       onNext(Array.from(selectedIds));
     }
   }, [selectedIds, onNext]);
@@ -248,16 +254,16 @@ export function ContactPicker({
           <Pressable
             style={({ pressed }) => [
               styles.nextButton,
-              selectedIds.size === 0 && styles.nextButtonDisabled,
-              pressed && selectedIds.size > 0 && styles.nextButtonPressed,
+              selectedIds.size < 2 && styles.nextButtonDisabled,
+              pressed && selectedIds.size >= 2 && styles.nextButtonPressed,
             ]}
             onPress={handleNext}
-            disabled={selectedIds.size === 0}
+            disabled={selectedIds.size < 2}
           >
             <Text
               style={[
                 styles.nextButtonText,
-                selectedIds.size === 0 && styles.nextButtonTextDisabled,
+                selectedIds.size < 2 && styles.nextButtonTextDisabled,
               ]}
             >
               Next
@@ -269,10 +275,17 @@ export function ContactPicker({
       </View>
 
       {/* Selected users preview (multi mode) */}
-      {mode === 'multi' && selectedIds.size > 0 && (
+      {mode === 'multi' && (
         <View style={styles.selectedPreview}>
-          <Text style={styles.selectedCount}>
-            {selectedIds.size} selected
+          <Text style={[
+            styles.selectedCount,
+            selectedIds.size < 2 && styles.selectedCountWarning,
+          ]}>
+            {selectedIds.size === 0
+              ? 'Select at least 2 members'
+              : selectedIds.size === 1
+              ? '1 selected (need at least 2)'
+              : `${selectedIds.size} selected`}
           </Text>
         </View>
       )}
@@ -304,13 +317,13 @@ export function ContactPicker({
       </View>
 
       {/* Content */}
-      {isSearching || isCreatingDirect ? (
+      {isCreatingDirect ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
-          {isCreatingDirect && (
-            <Text style={styles.loadingText}>Creating conversation...</Text>
-          )}
+          <Text style={styles.loadingText}>Creating conversation...</Text>
         </View>
+      ) : isSearching ? (
+        <ContactListSkeleton count={4} />
       ) : searchError ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.errorText}>Unable to search</Text>
@@ -415,6 +428,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: IOS_COLORS.systemBlue,
+  },
+  selectedCountWarning: {
+    color: IOS_COLORS.systemOrange,
   },
 
   // Search

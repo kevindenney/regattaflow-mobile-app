@@ -267,3 +267,11 @@ export type IOSTypographyStyle = keyof typeof IOS_TYPOGRAPHY;
 export type IOSSpacing = keyof typeof IOS_SPACING;
 export type IOSRadius = keyof typeof IOS_RADIUS;
 export type IOSShadow = keyof typeof IOS_SHADOWS;
+
+/**
+ * Helper function to get colors based on color scheme
+ * For use outside of React components (e.g., in StyleSheet.create)
+ */
+export function getIOSColors(colorScheme: 'light' | 'dark' | null | undefined) {
+  return colorScheme === 'dark' ? IOS_COLORS_DARK : IOS_COLORS;
+}

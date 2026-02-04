@@ -270,7 +270,13 @@ export class CrewThreadService {
 
       const threadType = input.threadType || 'group';
 
-      // Create the thread
+      // For group threads, use the SECURITY DEFINER RPC function to bypass RLS
+      if (threadType === 'group') {
+        return this.createGroupThreadViaRPC(input, user.id);
+      }
+
+      // For other thread types (direct, fleet, crew), use direct insert
+      // Note: Direct threads should typically use getOrCreateDirectThread instead
       const { data: thread, error: threadError } = await supabase
         .from('crew_threads')
         .insert({
@@ -332,6 +338,60 @@ export class CrewThreadService {
       };
     } catch (error) {
       logger.error('createThread failed:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a group thread using the SECURITY DEFINER RPC function
+   * This bypasses RLS policies for thread creation
+   */
+  private static async createGroupThreadViaRPC(
+    input: CreateThreadInput,
+    userId: string
+  ): Promise<CrewThread | null> {
+    try {
+      // Call the RPC function
+      const { data: threadId, error } = await supabase.rpc('create_group_thread', {
+        thread_name: input.name,
+        thread_emoji: input.avatarEmoji || '⛵',
+        member_ids: input.memberIds || [],
+      });
+
+      if (error) {
+        logger.error('create_group_thread RPC failed:', error);
+        throw error;
+      }
+
+      if (!threadId) {
+        throw new Error('No thread ID returned from create_group_thread');
+      }
+
+      // Fetch the full thread data
+      const thread = await this.getThread(threadId);
+      if (thread) {
+        return thread;
+      }
+
+      // Fallback: return basic thread data
+      return {
+        id: threadId,
+        name: input.name,
+        ownerId: userId,
+        avatarEmoji: input.avatarEmoji || '⛵',
+        threadType: 'group',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        unreadCount: 0,
+        lastMessage: null,
+        lastMessageAt: null,
+        lastMessageUserId: null,
+        role: 'owner',
+        memberCount: 1 + (input.memberIds?.filter((id) => id !== userId).length || 0),
+        otherUser: null,
+      };
+    } catch (error) {
+      logger.error('createGroupThreadViaRPC failed:', error);
       return null;
     }
   }

@@ -4,15 +4,16 @@ import { TeamSeatManager } from '@/components/subscription/TeamSeatManager';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { useAuth } from '@/providers/AuthProvider';
+import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { supabase } from '@/services/supabase';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -78,7 +79,7 @@ export default function SettingsScreen() {
         console.error('[Settings] Error saving follower sharing setting:', error);
         // Revert on error
         setAllowFollowerSharing(!value);
-        Alert.alert('Error', 'Failed to save privacy setting. Please try again.');
+        showAlert('Error', 'Failed to save privacy setting. Please try again.');
       }
     } catch (error) {
       console.error('[Settings] Exception saving follower sharing setting:', error);
@@ -108,43 +109,26 @@ export default function SettingsScreen() {
         // AuthProvider will handle navigation via auth state change - no need for manual redirect
       } catch (error) {
         console.error('[SETTINGS] Fallback sign out error:', error);
-        if (Platform.OS === 'web') {
-          window.alert('Failed to sign out. Please try again.');
-        } else {
-          Alert.alert('Error', 'Failed to sign out. Please try again.');
-        }
+        showAlert('Error', 'Failed to sign out. Please try again.');
       }
     };
 
-    if (Platform.OS === 'web') {
-      // Use window.confirm for web since Alert.alert doesn't work
-      if (window.confirm('Are you sure you want to sign out?')) {
-        await doSignOut();
-      }
-    } else {
-      Alert.alert(
-        'Sign Out',
-        'Are you sure you want to sign out?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign Out',
-            style: 'destructive',
-            onPress: doSignOut,
-          },
-        ]
-      );
-    }
+    showConfirm(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      doSignOut,
+      { destructive: true, confirmText: 'Sign Out' }
+    );
   };
 
   const handleClaimWorkspace = async () => {
     if (claimPassword.length < 6) {
-      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      showAlert('Weak password', 'Password must be at least 6 characters.');
       return;
     }
 
     if (claimPassword !== claimPasswordConfirm) {
-      Alert.alert('Mismatch', 'Passwords do not match.');
+      showAlert('Mismatch', 'Passwords do not match.');
       return;
     }
 
@@ -181,14 +165,14 @@ export default function SettingsScreen() {
         demo_converted_at: new Date().toISOString(),
       });
 
-      Alert.alert(
+      showAlertWithButtons(
         'Workspace claimed',
         'Your password is set. Check your email for any verification requests.',
         [{ text: 'Great!', onPress: () => setClaimVisible(false) }]
       );
     } catch (error: any) {
       console.error('[Settings] Claim workspace error:', error);
-      Alert.alert(
+      showAlert(
         'Unable to claim workspace',
         error?.message || 'Please try again or contact support.'
       );
@@ -200,35 +184,45 @@ export default function SettingsScreen() {
   };
 
   const handleResetSampleData = async () => {
-    Alert.alert(
+    showConfirm(
       'Reset Sample Data',
       'This will create sample races to help you explore the app. Any existing sample races will remain.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create',
-          onPress: async () => {
-            setResetSampleLoading(true);
-            try {
-              const result = await createSailorSampleData({
-                userId: user!.id,
-                userName: userProfile?.full_name || 'Sailor',
-                force: true,
-              });
-              if (result.success) {
-                Alert.alert('Success', 'Sample races have been created! Check your races list.');
-              } else {
-                Alert.alert('Error', result.error || 'Failed to create sample data.');
-              }
-            } catch (error: any) {
-              console.error('[Settings] Reset sample data error:', error);
-              Alert.alert('Error', 'Failed to create sample data. Please try again.');
-            } finally {
-              setResetSampleLoading(false);
-            }
-          },
-        },
-      ]
+      async () => {
+        setResetSampleLoading(true);
+        try {
+          const result = await createSailorSampleData({
+            userId: user!.id,
+            userName: userProfile?.full_name || 'Sailor',
+            force: true,
+          });
+          if (result.success) {
+            showAlert('Success', 'Sample races have been created! Check your races list.');
+          } else {
+            showAlert('Error', result.error || 'Failed to create sample data.');
+          }
+        } catch (error: any) {
+          console.error('[Settings] Reset sample data error:', error);
+          showAlert('Error', 'Failed to create sample data. Please try again.');
+        } finally {
+          setResetSampleLoading(false);
+        }
+      },
+      { confirmText: 'Create' }
+    );
+  };
+
+  const handleResetOnboarding = async () => {
+    showConfirm(
+      'Reset Onboarding',
+      'This will reset onboarding state and show the full onboarding flow. Continue?',
+      async () => {
+        await OnboardingStateService.resetOnboardingSeen();
+        await OnboardingStateService.clearState();
+        // Force new flow and navigate - index will route to value/track-races
+        OnboardingStateService.setFlowType(true);
+        router.replace('/onboarding');
+      },
+      { destructive: true, confirmText: 'Reset' }
     );
   };
 
@@ -475,19 +469,19 @@ export default function SettingsScreen() {
               icon="help-circle-outline"
               title="Help & Support"
               subtitle="Get help and contact support"
-              onPress={() => Alert.alert('Support', 'Email us at support@regattaflow.com')}
+              onPress={() => showAlert('Support', 'Email us at support@regattaflow.com')}
             />
             <SettingItem
               icon="document-text-outline"
               title="Privacy Policy"
               subtitle="Read our privacy policy"
-              onPress={() => Alert.alert('Coming Soon', 'Privacy policy link will be available soon!')}
+              onPress={() => showAlert('Coming Soon', 'Privacy policy link will be available soon!')}
             />
             <SettingItem
               icon="shield-checkmark-outline"
               title="Terms of Service"
               subtitle="Read our terms of service"
-              onPress={() => Alert.alert('Coming Soon', 'Terms of service link will be available soon!')}
+              onPress={() => showAlert('Coming Soon', 'Terms of service link will be available soon!')}
             />
           </View>
         </View>
@@ -496,12 +490,14 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Actions</Text>
           <View style={styles.settingsGroup}>
-            <SettingItem
-              icon="infinite-outline"
-              title="Restart Onboarding"
-              subtitle="View the new onboarding flow"
-              onPress={() => router.replace('/onboarding/welcome')}
-            />
+{__DEV__ && (
+              <SettingItem
+                icon="infinite-outline"
+                title="Reset Onboarding"
+                subtitle="Reset state and view full onboarding flow"
+                onPress={handleResetOnboarding}
+              />
+            )}
             <SettingItem
               icon="log-out-outline"
               title="Sign Out"

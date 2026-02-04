@@ -1,6 +1,7 @@
 import { ErrorBoundary } from '@/components/ui/error';
 import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
 import { NetworkStatusBanner } from '@/components/ui/network';
+import { PushNotificationHandler } from '@/components/notifications/PushNotificationHandler';
 import '@/global.css';
 import { initializeImageCache } from '@/lib/imageConfig';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
@@ -18,7 +19,41 @@ import {
   Manrope_700Bold,
 } from '@expo-google-fonts/manrope';
 import React, { useEffect, useState } from 'react';
-import { Platform } from 'react-native';
+import { LogBox, Platform } from 'react-native';
+
+// Suppress known warnings for native modules not available in Expo Go
+// These errors occur because expo-notifications and expo-device require a development build
+LogBox.ignoreLogs([
+  'Cannot find native module',
+  'ExpoPushTokenManager',
+  'ExpoDevice',
+  'Notifications.addNotificationReceivedListener is not a function',
+  'Push notifications',
+]);
+
+// Suppress red box errors for native modules not available in Expo Go (native platforms only)
+if (Platform.OS !== 'web' && __DEV__) {
+  // ErrorUtils is a React Native global for error handling
+  const RNErrorUtils = (global as any).ErrorUtils;
+  if (RNErrorUtils) {
+    const originalErrorHandler = RNErrorUtils.getGlobalHandler();
+    RNErrorUtils.setGlobalHandler((error: Error, isFatal: boolean) => {
+      // Suppress push notification native module errors in Expo Go
+      if (
+        error?.message?.includes('Cannot find native module') ||
+        error?.message?.includes('ExpoPushTokenManager') ||
+        error?.message?.includes('ExpoDevice') ||
+        error?.message?.includes('is not a function (it is undefined)')
+      ) {
+        // Log to console instead of showing red box
+        console.log('[Suppressed] Push notification error (expected in Expo Go):', error.message);
+        return;
+      }
+      // Pass other errors to the original handler
+      originalErrorHandler(error, isFatal);
+    });
+  }
+}
 
 // Configure Reanimated logger to suppress strict mode warnings
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
@@ -327,7 +362,9 @@ export default function RootLayout() {
         <GluestackUIProvider mode="light">
           <StripeProvider>
             <AuthProvider>
+              <PushNotificationHandler>
                 <StackWithSplash />
+              </PushNotificationHandler>
             </AuthProvider>
           </StripeProvider>
         </GluestackUIProvider>

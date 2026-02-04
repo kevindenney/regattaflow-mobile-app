@@ -13,10 +13,10 @@ import {
   Pressable,
   StyleSheet,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Users, ChevronRight, Plus } from 'lucide-react-native';
+import { ThreadListSkeleton } from './MessagingSkeleton';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -283,11 +283,7 @@ export function CrewThreadList({
 
   const renderEmpty = useCallback(() => {
     if (isLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
-        </View>
-      );
+      return <ThreadListSkeleton count={5} compact={compact} />;
     }
 
     return (
