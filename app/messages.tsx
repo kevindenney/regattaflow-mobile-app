@@ -216,17 +216,18 @@ export default function MessagesScreen() {
         />
       </View>
 
-      {/* Floating Action Button - outside container to avoid clipping */}
-      <Pressable
-        style={({ pressed }) => [
-          styles.fab,
-          { bottom: insets.bottom + 24 },
-          pressed && styles.fabPressed,
-        ]}
-        onPress={handleNewChat}
-      >
-        <Pencil size={26} color="#FFFFFF" strokeWidth={2} />
-      </Pressable>
+      {/* Floating Action Button */}
+      <View style={[styles.fabContainer, { bottom: insets.bottom + 24 }]} pointerEvents="box-none">
+        <Pressable
+          style={({ pressed }) => [
+            styles.fab,
+            pressed && styles.fabPressed,
+          ]}
+          onPress={handleNewChat}
+        >
+          <Pencil size={26} color="#FFFFFF" strokeWidth={2} />
+        </Pressable>
+      </View>
 
       {/* New Chat Action Sheet */}
       <NewChatSheet
@@ -349,9 +350,12 @@ const styles = StyleSheet.create({
   },
 
   // FAB
-  fab: {
+  fabContainer: {
     position: 'absolute',
     right: 24,
+    zIndex: 1000,
+  },
+  fab: {
     width: 60,
     height: 60,
     borderRadius: 30,
