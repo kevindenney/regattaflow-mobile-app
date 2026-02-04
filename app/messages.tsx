@@ -140,7 +140,7 @@ export default function MessagesScreen() {
   }, []);
 
   return (
-    <>
+    <View style={styles.screenWrapper}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.container}>
@@ -214,19 +214,19 @@ export default function MessagesScreen() {
           showCreateButton={false}
           searchQuery={searchQuery}
         />
-
-        {/* Floating Action Button */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.fab,
-            { bottom: insets.bottom + 16 },
-            pressed && styles.fabPressed,
-          ]}
-          onPress={handleNewChat}
-        >
-          <Pencil size={24} color="#FFFFFF" />
-        </Pressable>
       </View>
+
+      {/* Floating Action Button - outside container to avoid clipping */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.fab,
+          { bottom: insets.bottom + 24 },
+          pressed && styles.fabPressed,
+        ]}
+        onPress={handleNewChat}
+      >
+        <Pencil size={26} color="#FFFFFF" strokeWidth={2} />
+      </Pressable>
 
       {/* New Chat Action Sheet */}
       <NewChatSheet
@@ -234,7 +234,7 @@ export default function MessagesScreen() {
         onClose={() => setShowNewChatSheet(false)}
         onThreadCreated={handleThreadCreated}
       />
-    </>
+    </View>
   );
 }
 
@@ -243,6 +243,9 @@ export default function MessagesScreen() {
 // =============================================================================
 
 const styles = StyleSheet.create({
+  screenWrapper: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: IOS_COLORS.systemGroupedBackground,
@@ -348,18 +351,18 @@ const styles = StyleSheet.create({
   // FAB
   fab: {
     position: 'absolute',
-    right: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    right: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: IOS_COLORS.systemBlue,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
   },
   fabPressed: {
     opacity: 0.9,
