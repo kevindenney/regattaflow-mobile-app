@@ -1,62 +1,368 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, MessageCircle, Users } from 'lucide-react-native';
+/**
+ * Messages Screen
+ *
+ * WhatsApp-style messaging hub with filter tabs, search, and FAB.
+ */
 
-export default function MessagesScreen() {
-  const router = useRouter();
+import React, { useCallback, useState, useMemo } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  TextInput,
+} from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, Search, X, Pencil } from 'lucide-react-native';
+import { useCrewThreads } from '@/hooks/useCrewThreads';
+import { CrewThreadList } from '@/components/crew/CrewThreadList';
+import { NewChatSheet } from '@/components/crew/NewChatSheet';
+import {
+  IOS_COLORS,
+  IOS_TYPOGRAPHY,
+  IOS_SPACING,
+  IOS_RADIUS,
+} from '@/lib/design-tokens-ios';
+import type { CrewThread } from '@/services/CrewThreadService';
 
-  const conversations = [
-    { name: 'Dragon Fleet', lastMessage: 'Race starts at 1400 tomorrow', time: '2h ago', unread: 3 },
-    { name: 'Sarah Lee', lastMessage: 'Great race today!', time: '5h ago', unread: 0 },
-    { name: 'RHKYC Race Committee', lastMessage: 'Course change notification', time: '1d ago', unread: 1 },
-    { name: 'Mike Chen', lastMessage: 'Can you crew this weekend?', time: '2d ago', unread: 0 },
+// =============================================================================
+// TYPES
+// =============================================================================
+
+type FilterTab = 'all' | 'unread' | 'groups';
+
+// =============================================================================
+// FILTER TABS
+// =============================================================================
+
+function FilterTabs({
+  activeTab,
+  onTabChange,
+  unreadCount,
+}: {
+  activeTab: FilterTab;
+  onTabChange: (tab: FilterTab) => void;
+  unreadCount: number;
+}) {
+  const tabs: { key: FilterTab; label: string; badge?: number }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'unread', label: 'Unread', badge: unreadCount > 0 ? unreadCount : undefined },
+    { key: 'groups', label: 'Groups' },
   ];
 
   return (
-    <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/')} className="mr-4">
-            <ArrowLeft size={24} color="#1F2937" />
-          </TouchableOpacity>
-          <Text className="text-xl font-bold text-gray-800">Messages</Text>
-        </View>
-      </View>
-
-      <ScrollView className="flex-1">
-        {conversations.map((conv, index) => (
-          <TouchableOpacity
-            key={index}
-            className="bg-white px-4 py-4 border-b border-gray-100"
+    <View style={styles.tabsContainer}>
+      {tabs.map((tab) => (
+        <Pressable
+          key={tab.key}
+          style={[
+            styles.tab,
+            activeTab === tab.key && styles.tabActive,
+          ]}
+          onPress={() => onTabChange(tab.key)}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === tab.key && styles.tabTextActive,
+            ]}
           >
-            <View className="flex-row items-center">
-              <View className="w-12 h-12 rounded-full bg-blue-100 items-center justify-center mr-3">
-                {conv.name.includes('Fleet') || conv.name.includes('Committee') ? (
-                  <Users size={24} color="#2563EB" />
-                ) : (
-                  <MessageCircle size={24} color="#2563EB" />
-                )}
-              </View>
-              <View className="flex-1">
-                <View className="flex-row items-center justify-between mb-1">
-                  <Text className="text-gray-800 font-semibold">{conv.name}</Text>
-                  <Text className="text-gray-400 text-sm">{conv.time}</Text>
-                </View>
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-gray-500 flex-1" numberOfLines={1}>{conv.lastMessage}</Text>
-                  {conv.unread > 0 && (
-                    <View className="bg-blue-600 rounded-full w-6 h-6 items-center justify-center ml-2">
-                      <Text className="text-white text-xs font-bold">{conv.unread}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
+            {tab.label}
+          </Text>
+          {tab.badge !== undefined && (
+            <View style={styles.tabBadge}>
+              <Text style={styles.tabBadgeText}>
+                {tab.badge > 99 ? '99+' : tab.badge}
+              </Text>
             </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+          )}
+        </Pressable>
+      ))}
     </View>
   );
 }
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
+
+export default function MessagesScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showNewChatSheet, setShowNewChatSheet] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  const {
+    threads,
+    isLoading,
+    refetch,
+  } = useCrewThreads();
+
+  // Calculate total unread count
+  const totalUnreadCount = useMemo(() => {
+    return threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+  }, [threads]);
+
+  // Filter threads based on active tab
+  const filteredThreads = useMemo(() => {
+    switch (activeTab) {
+      case 'unread':
+        return threads.filter((t) => t.unreadCount > 0);
+      case 'groups':
+        return threads.filter((t) => t.threadType !== 'direct');
+      default:
+        return threads;
+    }
+  }, [threads, activeTab]);
+
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  }, [router]);
+
+  const handleNewChat = useCallback(() => {
+    setShowNewChatSheet(true);
+  }, []);
+
+  const handleThreadCreated = useCallback((threadId: string) => {
+    setShowNewChatSheet(false);
+    router.push(`/crew-thread/${threadId}`);
+  }, [router]);
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, []);
+
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={[styles.header, { paddingTop: insets.top }]}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.backButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={handleBack}
+          >
+            <ChevronLeft size={24} color={IOS_COLORS.systemBlue} />
+          </Pressable>
+
+          <Text style={styles.title}>Messages</Text>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.editButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={handleNewChat}
+          >
+            <Pencil size={20} color={IOS_COLORS.systemBlue} />
+          </Pressable>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <View
+            style={[
+              styles.searchInputWrapper,
+              isSearchFocused && styles.searchInputWrapperFocused,
+            ]}
+          >
+            <Search size={16} color={IOS_COLORS.secondaryLabel} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search conversations..."
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setIsSearchFocused(true)}
+              onBlur={() => setIsSearchFocused(false)}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable style={styles.clearButton} onPress={clearSearch}>
+                <X size={16} color={IOS_COLORS.secondaryLabel} />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        {/* Filter Tabs */}
+        <FilterTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          unreadCount={totalUnreadCount}
+        />
+
+        {/* Thread List */}
+        <CrewThreadList
+          threads={filteredThreads}
+          isLoading={isLoading}
+          onRefresh={refetch}
+          onCreateThread={handleNewChat}
+          showCreateButton={false}
+          searchQuery={searchQuery}
+        />
+
+        {/* Floating Action Button */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.fab,
+            { bottom: insets.bottom + 16 },
+            pressed && styles.fabPressed,
+          ]}
+          onPress={handleNewChat}
+        >
+          <Pencil size={24} color="#FFFFFF" />
+        </Pressable>
+      </View>
+
+      {/* New Chat Action Sheet */}
+      <NewChatSheet
+        isOpen={showNewChatSheet}
+        onClose={() => setShowNewChatSheet(false)}
+        onThreadCreated={handleThreadCreated}
+      />
+    </>
+  );
+}
+
+// =============================================================================
+// STYLES
+// =============================================================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingBottom: IOS_SPACING.sm,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+  },
+  backButton: {
+    padding: IOS_SPACING.sm,
+    borderRadius: IOS_RADIUS.full,
+  },
+  editButton: {
+    padding: IOS_SPACING.sm,
+    borderRadius: IOS_RADIUS.full,
+  },
+  buttonPressed: {
+    backgroundColor: IOS_COLORS.quaternarySystemFill,
+  },
+  title: {
+    ...IOS_TYPOGRAPHY.headline,
+    color: IOS_COLORS.label,
+  },
+
+  // Search
+  searchContainer: {
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.sm,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.tertiarySystemFill,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 36,
+    gap: 8,
+  },
+  searchInputWrapperFocused: {
+    borderWidth: 1,
+    borderColor: IOS_COLORS.systemBlue,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: IOS_COLORS.label,
+    paddingVertical: 0,
+  },
+  clearButton: {
+    padding: 4,
+  },
+
+  // Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.sm,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+    gap: IOS_SPACING.sm,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: IOS_SPACING.md,
+    paddingVertical: IOS_SPACING.xs,
+    borderRadius: IOS_RADIUS.lg,
+    backgroundColor: IOS_COLORS.tertiarySystemFill,
+    gap: 4,
+  },
+  tabActive: {
+    backgroundColor: IOS_COLORS.systemBlue,
+  },
+  tabText: {
+    ...IOS_TYPOGRAPHY.subhead,
+    color: IOS_COLORS.secondaryLabel,
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+  },
+  tabBadge: {
+    backgroundColor: IOS_COLORS.systemRed,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    right: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  fabPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.95 }],
+  },
+});
