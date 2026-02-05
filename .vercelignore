@@ -1,19 +1,19 @@
-# iOS native files
-ios/
-android/
+# iOS/Android native build directories (at root level only)
+/ios/
+/android/
 
 # Logs
-logs/
+/logs/
 
 # Build artifacts
-dist/
-build/
-.expo/
+/dist/
+/build/
+/.expo/
 
 # Large files
 *.tar.gz
 *.xcframework
 
 # Development
-.git/
+/.git/
 node_modules/.cache/
