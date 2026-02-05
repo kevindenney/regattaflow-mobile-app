@@ -1,0 +1,124 @@
+# Sign In Flow Test
+# Tests navigation to the login screen and form presence
+# Note: Full credential entry requires testID selector improvements
+appId: com.regattaflow.app
+tags:
+  - auth
+  - critical
+env:
+  TEST_EMAIL: "demo-sailor@regattaflow.app"
+  TEST_PASSWORD: "Demo123!"
+---
+
+# Launch the app
+- launchApp
+
+# Wait for app to load
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 15000
+
+# Handle Expo dev launcher if present
+- tapOn:
+    text: "http://localhost:8081"
+    optional: true
+
+# Wait for app to fully load
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 20000
+
+# Handle onboarding screens if they appear
+- repeat:
+    times: 8
+    commands:
+      - tapOn:
+          text: "Continue"
+          optional: true
+      - tapOn:
+          text: "Get Started"
+          optional: true
+      - tapOn:
+          text: "Next"
+          optional: true
+      - tapOn:
+          text: "Skip"
+          optional: true
+
+# Wait for UI to stabilize
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 5000
+
+# Try to navigate to login
+# First tap Sign In if on landing page
+- tapOn:
+    text: "Sign In"
+    optional: true
+
+# Wait for navigation
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 3000
+
+# Tap Sign In again if on Account modal
+- tapOn:
+    text: "Sign In"
+    optional: true
+
+# Wait for login form
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 5000
+
+# Verify login form title is visible using testID
+- assertVisible:
+    id: "login-title"
+    optional: true
+
+# Alternative: Check for "Welcome back" text
+- assertVisible:
+    text: "Continue with Google"
+    optional: true
+
+# ============================================================
+# CREDENTIAL ENTRY
+# Note: TextInput testID selectors don't work reliably on iOS.
+# Using coordinate-based input as fallback.
+# ============================================================
+
+# Tap email field (approximate position)
+- tapOn:
+    point: "50%,47%"
+
+# Enter email
+- inputText: ${TEST_EMAIL}
+
+# Hide keyboard for consistent positioning
+- hideKeyboard
+
+# Tap password field
+- tapOn:
+    point: "50%,54%"
+
+# Enter password
+- inputText: ${TEST_PASSWORD}
+
+# Hide keyboard
+- hideKeyboard
+
+# Tap Sign In button
+- tapOn:
+    point: "50%,68%"
+
+# ============================================================
+# VERIFY SIGN IN SUCCESS
+# ============================================================
+
+# Wait for Race screen to appear (successful sign in)
+- extendedWaitUntil:
+    visible: "Race"
+    timeout: 60000
+
+# Verify we're on the Race screen
+- assertVisible: "Race"

@@ -1,0 +1,45 @@
+# Guest Mode Flow Test
+# Tests entering and using guest mode without authentication
+appId: com.regattaflow.app
+tags:
+  - auth
+  - guest
+---
+
+# Launch the app fresh
+- launchApp:
+    clearState: true
+
+# Wait for landing/login screen
+- extendedWaitUntil:
+    visible: "Welcome"
+    timeout: 10000
+
+# Look for "Continue as Guest" or close button to enter guest mode
+- tapOn:
+    text: "Continue as Guest"
+    optional: true
+
+# Alternative: Close the login modal to enter guest mode
+- tapOn:
+    text: "Close"
+    optional: true
+
+# Wait for main app to load
+- extendedWaitUntil:
+    visible: "Races"
+    timeout: 10000
+
+# Verify guest mode - should see limited functionality or upgrade prompts
+- assertVisible: "Races"
+
+# Try creating a race in guest mode
+- tapOn:
+    text: "Add Race"
+    optional: true
+
+# Guest mode should allow basic race creation
+- extendedWaitUntil:
+    visible: "Add Race"
+    timeout: 5000
+    optional: true

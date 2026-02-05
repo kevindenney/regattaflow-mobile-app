@@ -1,0 +1,58 @@
+# Sign Out Flow Test
+# Tests the sign out functionality with crossPlatformAlert confirmation
+#
+# PREREQUISITE: User must be signed in before running this test.
+# Run sign-in.yaml first if needed.
+appId: com.regattaflow.app
+tags:
+  - auth
+  - alert
+  - critical
+---
+
+# Launch the app
+- launchApp
+
+# Wait for main app (Race screen) - assumes user is signed in
+- extendedWaitUntil:
+    visible: "Race"
+    timeout: 30000
+
+# Navigate to account via deeplink
+- openLink: "exp+regattaflow-app://account"
+
+# Wait for Account modal to appear
+- extendedWaitUntil:
+    visible: "Account"
+    timeout: 5000
+
+# Scroll down to find Sign Out button
+- scroll
+- scroll
+
+# Wait for Sign Out to be visible
+- extendedWaitUntil:
+    visible: "Sign Out"
+    timeout: 5000
+
+# Tap the Sign Out button using testID
+- tapOn:
+    id: "account-sign-out-button"
+
+# Wait for confirmation dialog (crossPlatformAlert!)
+# The dialog shows "Sign Out" title, "Are you sure..." message, Cancel and Sign Out buttons
+- extendedWaitUntil:
+    visible: "Cancel"
+    timeout: 5000
+
+# Confirm sign out by tapping the dialog Sign Out button (index 1 since there are multiple)
+- tapOn:
+    text: "Sign Out"
+    index: 1
+
+# Verify signed out - should see the login screen with "Welcome back"
+- extendedWaitUntil:
+    visible: "Welcome back"
+    timeout: 15000
+
+- assertVisible: "Welcome back"

@@ -1,0 +1,28 @@
+# Maestro Configuration for RegattaFlow
+# See: https://maestro.mobile.dev/reference/configuration
+
+# App configuration
+appId: com.regattaflow.app
+
+# Default flow settings
+flows:
+  - auth/*
+  - races/*
+  - settings/*
+
+# Test execution options
+executionOptions:
+  continueOnFailure: false
+  debugOutput: false
+
+# Timeouts (milliseconds)
+timeouts:
+  default: 10000
+  launch: 30000
+  element: 5000
+
+# Environment variables for tests
+env:
+  BASE_URL: "http://localhost:8081"
+  DEMO_USER_EMAIL: "demo-sailor@regattaflow.app"
+  DEMO_USER_PASSWORD: "Demo123!"

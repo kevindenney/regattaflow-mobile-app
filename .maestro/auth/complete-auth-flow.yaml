@@ -1,0 +1,174 @@
+# Complete Authentication Flow Test
+# Tests the entire auth cycle: sign in → verify logged in → sign out → verify logged out
+#
+# This test validates the crossPlatformAlert migration works correctly by testing
+# the full sign-out confirmation flow after logging in.
+appId: com.regattaflow.app
+tags:
+  - auth
+  - alert
+  - critical
+  - e2e
+env:
+  TEST_EMAIL: "demo-sailor@regattaflow.app"
+  TEST_PASSWORD: "Demo123!"
+---
+
+# ============================================================
+# PHASE 1: SIGN IN
+# ============================================================
+
+# Launch the app fresh
+- launchApp
+
+# Wait for app to load
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 15000
+
+# Handle Expo dev launcher if present
+- tapOn:
+    text: "http://localhost:8081"
+    optional: true
+
+# Wait for app to fully load
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 20000
+
+# Handle any onboarding screens
+- repeat:
+    times: 8
+    commands:
+      - tapOn:
+          text: "Continue"
+          optional: true
+      - tapOn:
+          text: "Get Started"
+          optional: true
+      - tapOn:
+          text: "Next"
+          optional: true
+      - tapOn:
+          text: "Skip"
+          optional: true
+
+# Wait for UI to settle
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 5000
+
+# Try to navigate to login form (may need 1-2 taps depending on app state)
+- tapOn:
+    text: "Sign In"
+    optional: true
+
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 3000
+
+- tapOn:
+    text: "Sign In"
+    optional: true
+
+# Wait for login form to appear (using testID for reliability)
+- extendedWaitUntil:
+    visible:
+      id: "login-title"
+    timeout: 15000
+
+# Enter credentials using coordinates (TextInput testID not reliable on iOS)
+- tapOn:
+    point: "50%,47%"
+
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 2000
+
+- inputText: ${TEST_EMAIL}
+
+- hideKeyboard
+
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 1500
+
+- tapOn:
+    point: "50%,54%"
+
+- extendedWaitUntil:
+    visible: ".*"
+    timeout: 2000
+
+- inputText: ${TEST_PASSWORD}
+
+- hideKeyboard
+
+# Submit login
+- tapOn:
+    point: "50%,68%"
+
+# ============================================================
+# PHASE 2: VERIFY LOGGED IN
+# ============================================================
+
+# Wait for main app (Race screen)
+- extendedWaitUntil:
+    visible: "Race"
+    timeout: 60000
+
+# Verify we see the Race screen
+- assertVisible: "Race"
+
+# ============================================================
+# PHASE 3: SIGN OUT
+# ============================================================
+
+# Navigate to Account via deeplink
+- openLink: "exp+regattaflow-app://account"
+
+# Wait for Account modal
+- extendedWaitUntil:
+    visible: "Account"
+    timeout: 5000
+
+# Scroll down to find Sign Out
+- scroll
+- scroll
+
+# Wait for Sign Out to be visible
+- extendedWaitUntil:
+    visible: "Sign Out"
+    timeout: 5000
+
+# Tap Sign Out using testID
+- tapOn:
+    id: "account-sign-out-button"
+
+# Wait for crossPlatformAlert confirmation dialog
+- extendedWaitUntil:
+    visible: "Cancel"
+    timeout: 5000
+
+# Confirm sign out (tap the dialog's Sign Out button)
+- tapOn:
+    text: "Sign Out"
+    index: 1
+
+# ============================================================
+# PHASE 4: VERIFY LOGGED OUT
+# ============================================================
+
+# Wait for login screen (using testID for reliability)
+- extendedWaitUntil:
+    visible:
+      id: "login-title"
+    timeout: 15000
+
+# Verify we're back at the login screen using testID
+- assertVisible:
+    id: "login-title"
+
+# Verify the login form is visible
+- assertVisible:
+    text: "Continue with Google"

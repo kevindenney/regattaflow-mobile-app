@@ -25,6 +25,7 @@ const getAuthErrorMessage = (error: any): string => {
   const message = error?.message?.toLowerCase() || '';
   const code = error?.code || '';
 
+  // Email/password errors
   if (message.includes('invalid login credentials') || code === 'invalid_credentials') {
     return 'Invalid email or password. Please check your credentials and try again.';
   }
@@ -34,12 +35,46 @@ const getAuthErrorMessage = (error: any): string => {
   if (message.includes('too many requests') || code === 'over_request_limit') {
     return 'Too many sign-in attempts. Please wait a moment and try again.';
   }
+
+  // Network errors
   if (message.includes('network') || message.includes('fetch')) {
     return 'Network error. Please check your internet connection.';
   }
   if (message.includes('timeout')) {
     return 'The request timed out. Please try again.';
   }
+
+  // Apple Sign-In specific errors (expo-apple-authentication)
+  if (code === 'ERR_REQUEST_CANCELED' || message.includes('canceled') || message.includes('cancelled')) {
+    return ''; // User cancelled - no error message needed
+  }
+  if (code === 'ERR_INVALID_RESPONSE' || message.includes('invalid response')) {
+    return 'Apple Sign In returned an invalid response. Please try again.';
+  }
+  if (code === 'ERR_REQUEST_FAILED' || message.includes('request failed')) {
+    return 'Apple Sign In request failed. Please check your internet connection and try again.';
+  }
+  if (code === 'ERR_REQUEST_NOT_HANDLED') {
+    return 'Apple Sign In is not available. Please use another sign-in method.';
+  }
+  if (message.includes('authorization attempt failed') || message.includes('unknown reason')) {
+    return 'Apple Sign In failed. Please ensure you are signed into iCloud and try again.';
+  }
+  if (message.includes('no identity token')) {
+    return 'Apple Sign In did not return required credentials. Please try again.';
+  }
+
+  // Google Sign-In specific errors
+  if (message.includes('google sign-in was cancelled') || message.includes('sign_in_cancelled')) {
+    return ''; // User cancelled - no error message needed
+  }
+  if (message.includes('no id token')) {
+    return 'Google Sign In did not return required credentials. Please try again.';
+  }
+  if (message.includes('play services')) {
+    return 'Google Play Services is required. Please update and try again.';
+  }
+
   return error?.message || 'Sign in failed. Please try again.';
 };
 
@@ -85,9 +120,12 @@ export default function Login() {
     } catch (e: any) {
       console.error('[LOGIN] Google sign in failed:', e);
       const friendlyMessage = getAuthErrorMessage(e);
-      setErrorMessage(friendlyMessage);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Google sign-in failed', friendlyMessage);
+      // Don't show error message if user cancelled
+      if (friendlyMessage) {
+        setErrorMessage(friendlyMessage);
+        if (Platform.OS !== 'web') {
+          Alert.alert('Google sign-in failed', friendlyMessage);
+        }
       }
     }
   };
@@ -99,9 +137,12 @@ export default function Login() {
     } catch (e: any) {
       console.error('[LOGIN] Apple sign in failed:', e);
       const friendlyMessage = getAuthErrorMessage(e);
-      setErrorMessage(friendlyMessage);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Apple sign-in failed', friendlyMessage);
+      // Don't show error message if user cancelled
+      if (friendlyMessage) {
+        setErrorMessage(friendlyMessage);
+        if (Platform.OS !== 'web') {
+          Alert.alert('Apple sign-in failed', friendlyMessage);
+        }
       }
     }
   };
@@ -172,6 +213,7 @@ export default function Login() {
           <View style={styles.cardHeader}>
             <View style={styles.headerSpacer} />
             <TouchableOpacity
+              testID="login-close-button"
               accessibilityRole="button"
               accessibilityLabel="Close sign in"
               onPress={() => enterGuestMode()}
@@ -182,7 +224,7 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
-          <Text accessibilityRole="header" accessibilityLabel="login-title" style={styles.title}>Welcome back</Text>
+          <Text testID="login-title" accessibilityRole="header" style={styles.title}>Welcome back</Text>
           <Text style={styles.subtitle}>Sign in to continue to RegattaFlow</Text>
 
           {/* Error Message Banner */}
@@ -199,6 +241,7 @@ export default function Login() {
           <View style={styles.socialButtonsContainer}>
             {/* Google Sign-in */}
             <TouchableOpacity
+              testID="login-google-button"
               accessibilityRole="button"
               accessibilityLabel="google-sign-in"
               onPress={onGoogleLogin}
@@ -221,6 +264,7 @@ export default function Login() {
                 />
               ) : (
                 <TouchableOpacity
+                  testID="login-apple-button"
                   accessibilityRole="button"
                   accessibilityLabel="apple-sign-in"
                   onPress={onAppleLogin}
@@ -247,7 +291,8 @@ export default function Login() {
           >
             {/* Username or Email */}
             <TextInput
-              accessibilityLabel="identifier-input"
+              testID="login-identifier-input"
+              accessibilityLabel="Username or email"
               style={styles.input}
               placeholder="Username or email"
               value={identifier}
@@ -261,7 +306,8 @@ export default function Login() {
 
             {/* Password */}
             <TextInput
-              accessibilityLabel="password-input"
+              testID="login-password-input"
+              accessibilityLabel="Password"
               style={styles.input}
               placeholder="Password"
               value={password}
@@ -273,11 +319,12 @@ export default function Login() {
             />
 
             {/* Forgot Password Link */}
-            <TouchableOpacity onPress={onForgotPassword}>
+            <TouchableOpacity testID="login-forgot-password" onPress={onForgotPassword}>
               <Text style={styles.forgotPasswordText}>Forgot password?</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
+              testID="login-submit-button"
               accessibilityRole="button"
               accessibilityLabel="submit-sign-in"
               onPress={onEmailLogin}
@@ -292,7 +339,7 @@ export default function Login() {
           <View style={styles.footerRow}>
             <Text style={styles.footerText}>Don't have an account?</Text>
             <Link href="/(auth)/signup" asChild>
-              <TouchableOpacity>
+              <TouchableOpacity testID="login-create-account-link">
                 <Text style={styles.linkText}>Create one</Text>
               </TouchableOpacity>
             </Link>

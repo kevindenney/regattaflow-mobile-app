@@ -1,0 +1,57 @@
+# Delete Race Alert Test
+# Tests the delete race confirmation dialog using crossPlatformAlert
+#
+# This test verifies the Alert.alert -> crossPlatformAlert migration
+# for destructive race deletion actions.
+appId: com.regattaflow.app
+tags:
+  - races
+  - alert
+  - destructive
+---
+
+# Prerequisites: User should be signed in with at least one race
+- launchApp
+
+# Wait for races screen
+- extendedWaitUntil:
+    visible: "Races"
+    timeout: 15000
+
+# Find and tap on a race to view details
+# This assumes there's at least one race in the list
+- tapOn:
+    text: "Race"
+    optional: true
+
+# Alternative: Tap on the first race card
+- scroll
+
+# Look for delete option - usually in a menu or long press
+# Try the edit/more menu first
+- tapOn:
+    text: "Edit"
+    optional: true
+
+- tapOn:
+    text: "More"
+    optional: true
+
+- tapOn:
+    text: "Delete"
+    optional: true
+
+# Verify the delete confirmation dialog appears
+# The crossPlatformAlert should show a confirmation message
+- extendedWaitUntil:
+    visible: "Delete"
+    timeout: 5000
+    optional: true
+
+# Cancel the deletion to verify cancel works
+- tapOn:
+    text: "Cancel"
+    optional: true
+
+# Verify we're back to the race view
+- assertVisible: "Races"

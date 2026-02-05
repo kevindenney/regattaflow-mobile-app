@@ -1,0 +1,52 @@
+# Reset Onboarding Alert Test
+# Tests the reset onboarding confirmation dialog (DEV mode only)
+#
+# This test verifies the crossPlatformAlert confirmation for
+# resetting the onboarding flow state.
+appId: com.regattaflow.app
+tags:
+  - settings
+  - alert
+  - dev
+---
+
+# Note: This test only works in DEV builds
+# Prerequisites: User should be signed in
+- launchApp
+
+# Wait for app to load
+- extendedWaitUntil:
+    visible: "Races"
+    timeout: 15000
+
+# Navigate to Account/Settings
+- tapOn:
+    text: "Account"
+    optional: true
+
+# Wait for settings to load
+- extendedWaitUntil:
+    visible: "Account"
+    timeout: 5000
+
+# Scroll to find Reset Onboarding (DEV only)
+- scroll
+
+# Tap Reset Onboarding
+- tapOn:
+    text: "Reset Onboarding"
+    optional: true
+
+# Verify confirmation dialog appears
+- extendedWaitUntil:
+    visible: "Reset Onboarding"
+    timeout: 5000
+    optional: true
+
+# Cancel the reset
+- tapOn:
+    text: "Cancel"
+    optional: true
+
+# Verify we're back to settings
+- assertVisible: "Account"

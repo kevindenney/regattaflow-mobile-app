@@ -13,7 +13,12 @@
     "seed:rhkyc": "node scripts/seed-rhkyc-demo.mjs",
     "seed:sailors": "node scripts/seed-sailors-tab-demo.mjs",
     "lint": "npx eslint . --ext .js,.jsx,.ts,.tsx",
-    "typecheck": "npx tsc --noEmit"
+    "typecheck": "npx tsc --noEmit",
+    "test:e2e": "maestro test .maestro/",
+    "test:e2e:auth": "maestro test .maestro/auth/",
+    "test:e2e:auth-complete": "maestro test .maestro/auth/complete-auth-flow.yaml",
+    "test:e2e:critical": "maestro test .maestro/ --include-tags=critical",
+    "test:e2e:alerts": "maestro test .maestro/ --include-tags=alert"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.67.0",

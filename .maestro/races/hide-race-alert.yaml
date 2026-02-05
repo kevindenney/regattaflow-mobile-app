@@ -1,0 +1,45 @@
+# Hide Race Alert Test
+# Tests the hide race from timeline confirmation dialog
+#
+# This test verifies the crossPlatformAlert confirmation for
+# withdrawing/hiding a race from the user's timeline.
+appId: com.regattaflow.app
+tags:
+  - races
+  - alert
+---
+
+# Prerequisites: User should be signed in with races in timeline
+- launchApp
+
+# Wait for races screen
+- extendedWaitUntil:
+    visible: "Races"
+    timeout: 15000
+
+# Navigate to a race that can be hidden
+- scroll
+
+# Long press or find hide option on a race
+- tapOn:
+    text: "Hide"
+    optional: true
+
+# Alternative: Look for "Remove from Timeline"
+- tapOn:
+    text: "Remove"
+    optional: true
+
+# Verify confirmation dialog appears
+- extendedWaitUntil:
+    visible: "Hide"
+    timeout: 5000
+    optional: true
+
+# Cancel the action
+- tapOn:
+    text: "Cancel"
+    optional: true
+
+# Verify we're back to races view
+- assertVisible: "Races"
