@@ -1,95 +1,56 @@
-import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native';
-import {
-  IOS_COLORS,
-  IOS_SHADOWS,
-} from '@/lib/design-tokens-ios';
-import { triggerHaptic } from '@/lib/haptics';
-
-interface Segment<T extends string = string> {
-  value: T;
-  label: string;
-  icon?: React.ReactNode;
-}
-
-interface IOSSegmentedControlProps<T extends string = string> {
-  /** Array of segment options */
-  segments: Segment<T>[];
-  /** Currently selected segment value */
-  selectedValue: T;
-  /** Callback when selection changes */
-  onValueChange: (value: T) => void;
-  /** Size variant */
-  size?: 'small' | 'regular' | 'large';
-  /** Whether to use filled style (iOS 13+) */
-  filled?: boolean;
-  /** Additional container style */
-  style?: ViewStyle;
-  /** Whether the control is disabled */
-  disabled?: boolean;
-}
-
 /**
- * iOS-style segmented control with animated selection indicator
- * Following Apple Human Interface Guidelines
+ * IOSSegmentedControl - iOS-style segmented control component
  */
-export function IOSSegmentedControl<T extends string = string>({
+
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+
+interface Segment {
+  key: string;
+  label: string;
+}
+
+interface IOSSegmentedControlProps {
+  segments: Segment[];
+  selectedKey: string;
+  onSelect: (key: string) => void;
+  style?: object;
+}
+
+export function IOSSegmentedControl({
   segments,
-  selectedValue,
-  onValueChange,
-  size = 'regular',
-  filled = true,
+  selectedKey,
+  onSelect,
   style,
-  disabled = false,
-}: IOSSegmentedControlProps<T>) {
-  const handleSegmentPress = useCallback(
-    (value: T) => {
-      if (disabled) return;
-      triggerHaptic('selection');
-      onValueChange(value);
-    },
-    [disabled, onValueChange]
-  );
-
-  const segmentWidthPercent = `${(100 / segments.length).toFixed(2)}%` as `${number}%`;
-
+}: IOSSegmentedControlProps) {
   return (
-    <View
-      style={[
-        styles.segmentedControl,
-        disabled && styles.disabledContainer,
-        style,
-      ]}
-    >
-      {segments.map((segment) => {
-        const isSelected = segment.value === selectedValue;
+    <View style={[styles.container, style]}>
+      {segments.map((segment, index) => {
+        const isSelected = segment.key === selectedKey;
+        const isFirst = index === 0;
+        const isLast = index === segments.length - 1;
+
         return (
-          <Pressable
-            key={segment.value}
+          <TouchableOpacity
+            key={segment.key}
             style={[
-              styles.tab,
-              { width: segmentWidthPercent },
-              isSelected && filled && styles.tabActive,
-              isSelected && !filled && styles.selectedSegmentUnfilled,
-              disabled && styles.tabDisabled,
+              styles.segment,
+              isSelected && styles.selectedSegment,
+              isFirst && styles.firstSegment,
+              isLast && styles.lastSegment,
             ]}
-            onPress={() => handleSegmentPress(segment.value)}
-            disabled={disabled}
+            onPress={() => onSelect(segment.key)}
+            activeOpacity={0.7}
           >
-            {segment.icon && (
-              <View style={styles.segmentIcon}>{segment.icon}</View>
-            )}
             <Text
               style={[
-                styles.label,
-                isSelected ? styles.labelActive : styles.labelInactive,
-                disabled && styles.disabledText,
+                styles.segmentText,
+                isSelected && styles.selectedSegmentText,
               ]}
-              numberOfLines={1}
             >
               {segment.label}
             </Text>
-          </Pressable>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -97,58 +58,43 @@ export function IOSSegmentedControl<T extends string = string>({
 }
 
 const styles = StyleSheet.create({
-  segmentedControl: {
+  container: {
     flexDirection: 'row',
-    backgroundColor: IOS_COLORS.systemGray5,
-    borderRadius: 8.91,
+    backgroundColor: 'rgba(118, 118, 128, 0.12)',
+    borderRadius: 8,
     padding: 2,
-    height: 32,
-    width: '100%',
-    justifyContent: 'space-between',
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     alignItems: 'center',
-  },
-  disabledContainer: {
-    opacity: 0.5,
-  },
-  tab: {
-    height: '100%',
     justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 6.93,
-    flexDirection: 'row',
-  },
-  tabActive: {
-    backgroundColor: IOS_COLORS.systemBackground,
-    ...IOS_SHADOWS.sm,
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0,0,0,0.04)',
-  },
-  tabDisabled: {
-    opacity: 0.5,
-  },
-  selectedSegmentUnfilled: {
-    backgroundColor: IOS_COLORS.systemBlue,
     borderRadius: 6,
   },
-  segmentIcon: {
-    marginRight: 4,
+  selectedSegment: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  label: {
+  firstSegment: {
+    borderTopLeftRadius: 6,
+    borderBottomLeftRadius: 6,
+  },
+  lastSegment: {
+    borderTopRightRadius: 6,
+    borderBottomRightRadius: 6,
+  },
+  segmentText: {
     fontSize: 13,
-    letterSpacing: -0.08,
-  },
-  labelActive: {
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-  },
-  labelInactive: {
     fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
+    color: '#8E8E93',
   },
-  disabledText: {
-    color: IOS_COLORS.tertiaryLabel,
+  selectedSegmentText: {
+    color: '#000000',
   },
 });
 

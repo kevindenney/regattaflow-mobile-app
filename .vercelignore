@@ -1,34 +1,19 @@
-# Dependencies
-node_modules/
-!public/assets/node_modules/
-
-# Build outputs
-.expo/
-dist/
-web-build/
-
-# Native folders
-/ios
-/android
+# iOS native files
+ios/
+android/
 
 # Logs
 logs/
-*.log
 
-# Environment files
-.env
-.env.*
-.env*.local
+# Build artifacts
+dist/
+build/
+.expo/
 
-# Cache and temp files
-.cache/
-.chrome-devtools/
-*.tsbuildinfo
+# Large files
+*.tar.gz
+*.xcframework
 
-# Debug files
-bugreport-*.txt
-bugreport-*.zip
-
-# Disabled API routes
-api/**/*.disabled/
-api/**/cron.disabled/
+# Development
+.git/
+node_modules/.cache/
