@@ -216,6 +216,12 @@ export default function CommunityDetailScreen() {
 
   const isJoinPending = joinMutation.isPending || leaveMutation.isPending;
 
+  // Membership status is loading when:
+  // - User is signed in but hasn't refetched yet, AND
+  // - Community data shows them as not a member (which may be stale)
+  // This prevents showing "Join Community" to users who are already auto-joined via auth bridge
+  const isMembershipLoading = signedIn && !hasRefetchedAfterAuth.current && community && !community.is_member;
+
   // Render helpers - must be defined before early return to maintain hooks order
   const renderItem = useCallback(
     ({ item }: { item: FeedPost }) => (
@@ -237,6 +243,7 @@ export default function CommunityDetailScreen() {
             community={community}
             onJoinToggle={handleJoinToggle}
             isJoinPending={isJoinPending}
+            isMembershipLoading={isMembershipLoading}
           />
 
         {/* Filter Bar */}
@@ -265,7 +272,7 @@ export default function CommunityDetailScreen() {
       </>
       );
     },
-    [community, handleJoinToggle, isJoinPending, feedSort, feedPostType, openSortPicker, openFilterPicker, handleCreatePost, canPost]
+    [community, handleJoinToggle, isJoinPending, isMembershipLoading, feedSort, feedPostType, openSortPicker, openFilterPicker, handleCreatePost, canPost]
   );
 
   const ListEmpty = useMemo(

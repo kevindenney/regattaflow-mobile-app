@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Image,
   ImageBackground,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,6 +32,8 @@ interface CommunityDetailHeaderProps {
   community: Community;
   onJoinToggle: () => void;
   isJoinPending?: boolean;
+  /** True when membership status is being determined (e.g., after auth bridge) */
+  isMembershipLoading?: boolean;
 }
 
 function formatMemberCount(count: number): string {
@@ -62,9 +65,13 @@ export function CommunityDetailHeader({
   community,
   onJoinToggle,
   isJoinPending = false,
+  isMembershipLoading = false,
 }: CommunityDetailHeaderProps) {
   const typeConfig = COMMUNITY_TYPE_CONFIG[community.community_type] || COMMUNITY_TYPE_CONFIG.general;
   const isJoined = community.is_member ?? false;
+
+  // Don't allow interaction while membership is being determined
+  const isButtonDisabled = isJoinPending || isMembershipLoading;
 
   // Default banner gradient if no banner_url
   const defaultBannerColors: [string, string] = [typeConfig.color, `${typeConfig.color}80`];
@@ -170,11 +177,16 @@ export function CommunityDetailHeader({
             styles.joinButton,
             isJoined && styles.joinedButton,
             pressed && styles.joinButtonPressed,
-            isJoinPending && styles.joinButtonPending,
+            isButtonDisabled && styles.joinButtonPending,
           ]}
-          disabled={isJoinPending}
+          disabled={isButtonDisabled}
         >
-          {isJoined ? (
+          {isMembershipLoading ? (
+            <>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.joinButtonText}>Checking...</Text>
+            </>
+          ) : isJoined ? (
             <>
               <Ionicons name="checkmark" size={18} color={IOS_COLORS.secondaryLabel} />
               <Text style={styles.joinedButtonText}>Joined</Text>
