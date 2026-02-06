@@ -237,20 +237,32 @@ export function useJoinCommunity() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       communityId,
       role = 'member',
     }: {
       communityId: string;
       role?: CommunityMemberRole;
-    }) => CommunityService.joinCommunity(communityId, role),
+    }) => {
+      console.log('[useJoinCommunity] mutationFn called, communityId:', communityId, 'role:', role);
+      try {
+        const result = await CommunityService.joinCommunity(communityId, role);
+        console.log('[useJoinCommunity] joinCommunity success');
+        return result;
+      } catch (error) {
+        console.error('[useJoinCommunity] joinCommunity error:', error);
+        throw error;
+      }
+    },
     onMutate: async ({ communityId }) => {
+      console.log('[useJoinCommunity] onMutate called, communityId:', communityId);
       // Optimistic update
       await queryClient.cancelQueries({ queryKey: communityKeys.detail(communityId) });
 
       const previousCommunity = queryClient.getQueryData<Community>(
         communityKeys.detail(communityId)
       );
+      console.log('[useJoinCommunity] previousCommunity:', previousCommunity?.id);
 
       if (previousCommunity) {
         queryClient.setQueryData<Community>(communityKeys.detail(communityId), {
@@ -263,7 +275,8 @@ export function useJoinCommunity() {
 
       return { previousCommunity };
     },
-    onError: (_err, { communityId }, context) => {
+    onError: (err, { communityId }, context) => {
+      console.error('[useJoinCommunity] onError:', err);
       if (context?.previousCommunity) {
         queryClient.setQueryData(
           communityKeys.detail(communityId),
@@ -271,7 +284,11 @@ export function useJoinCommunity() {
         );
       }
     },
-    onSettled: (_data, _error, { communityId }) => {
+    onSuccess: (data, { communityId }) => {
+      console.log('[useJoinCommunity] onSuccess, communityId:', communityId);
+    },
+    onSettled: (_data, error, { communityId }) => {
+      console.log('[useJoinCommunity] onSettled, communityId:', communityId, 'error:', error);
       queryClient.invalidateQueries({ queryKey: communityKeys.detail(communityId) });
       queryClient.invalidateQueries({ queryKey: communityKeys.userCommunities() });
       queryClient.invalidateQueries({ queryKey: communityKeys.lists() });

@@ -1,45 +1,79 @@
 /**
  * IOSSegmentedControl - iOS-style segmented control component
+ *
+ * Supports two API styles:
+ * 1. Original: segments with {key, label}, selectedKey, onSelect
+ * 2. Alternative: segments with {value, label}, selectedValue, onValueChange
  */
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 
-interface Segment {
+interface SegmentWithKey {
   key: string;
   label: string;
 }
 
-interface IOSSegmentedControlProps {
-  segments: Segment[];
-  selectedKey: string;
-  onSelect: (key: string) => void;
+interface SegmentWithValue<T extends string = string> {
+  value: T;
+  label: string;
+}
+
+type Segment<T extends string = string> = SegmentWithKey | SegmentWithValue<T>;
+
+interface IOSSegmentedControlProps<T extends string = string> {
+  segments: Segment<T>[];
+  // Original API
+  selectedKey?: string;
+  onSelect?: (key: string) => void;
+  // Alternative API (for compatibility)
+  selectedValue?: T;
+  onValueChange?: (value: T) => void;
   style?: object;
 }
 
-export function IOSSegmentedControl({
+export function IOSSegmentedControl<T extends string = string>({
   segments,
   selectedKey,
   onSelect,
+  selectedValue,
+  onValueChange,
   style,
-}: IOSSegmentedControlProps) {
+}: IOSSegmentedControlProps<T>) {
+  // Support both API styles
+  const getSegmentKey = (segment: Segment<T>): string => {
+    if ('key' in segment) return segment.key;
+    if ('value' in segment) return segment.value;
+    return '';
+  };
+
+  const currentSelectedKey = selectedKey ?? selectedValue;
+  const handleSelect = (key: string) => {
+    if (onSelect) {
+      onSelect(key);
+    } else if (onValueChange) {
+      onValueChange(key as T);
+    }
+  };
+
   return (
     <View style={[styles.container, style]}>
       {segments.map((segment, index) => {
-        const isSelected = segment.key === selectedKey;
+        const segmentKey = getSegmentKey(segment);
+        const isSelected = segmentKey === currentSelectedKey;
         const isFirst = index === 0;
         const isLast = index === segments.length - 1;
 
         return (
           <TouchableOpacity
-            key={segment.key}
+            key={segmentKey}
             style={[
               styles.segment,
               isSelected && styles.selectedSegment,
               isFirst && styles.firstSegment,
               isLast && styles.lastSegment,
             ]}
-            onPress={() => onSelect(segment.key)}
+            onPress={() => handleSelect(segmentKey)}
             activeOpacity={0.7}
           >
             <Text

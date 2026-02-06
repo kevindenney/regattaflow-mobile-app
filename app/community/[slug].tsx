@@ -5,7 +5,7 @@
  * Reddit-inspired layout with header, flairs/filters, and post list.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -33,9 +33,11 @@ import {
   useCommunityBySlug,
   useJoinCommunity,
   useLeaveCommunity,
+  communityKeys,
 } from '@/hooks/useCommunities';
-import { useCommunityFeed, communityFeedKeys } from '@/hooks/useCommunityFeed';
+import { useCommunityFeed, useCommunityPostsFeed, communityFeedKeys } from '@/hooks/useCommunityFeed';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/providers/AuthProvider';
 import type { FeedPost, FeedSortType, PostType } from '@/types/community-feed';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 
@@ -60,6 +62,10 @@ export default function CommunityDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const { user, signedIn } = useAuth();
+
+  // Track if we've refetched after auth became available
+  const hasRefetchedAfterAuth = useRef(false);
 
   // State
   const [feedSort, setFeedSort] = useState<FeedSortType>('hot');
@@ -70,6 +76,18 @@ export default function CommunityDetailScreen() {
   const joinMutation = useJoinCommunity();
   const leaveMutation = useLeaveCommunity();
 
+  // Refetch community data when auth state changes to signed in
+  // This ensures membership status is correctly fetched after auth is established
+  useEffect(() => {
+    if (signedIn && user && !hasRefetchedAfterAuth.current && community && !community.is_member) {
+      console.log('[Community] Auth detected, refetching community data for membership status');
+      hasRefetchedAfterAuth.current = true;
+      // Invalidate and refetch community data to get correct membership status
+      queryClient.invalidateQueries({ queryKey: communityKeys.bySlug(slug || '') });
+      refetchCommunity();
+    }
+  }, [signedIn, user, community, slug, queryClient, refetchCommunity]);
+
   // Get the linked venue_id for the feed query (if it's a venue community)
   const venueId = useMemo(() => {
     if (community?.linked_entity_type === 'sailing_venue' && community?.linked_entity_id) {
@@ -78,7 +96,24 @@ export default function CommunityDetailScreen() {
     return null;
   }, [community]);
 
-  // Feed data - only fetch if we have a venue community with linked_entity_id
+  // Determine if user can post (must be a member)
+  const canPost = community?.is_member;
+
+  // Feed data for venue-linked communities (uses venue_id)
+  const venueFeed = useCommunityFeed(venueId || '', {
+    sort: feedSort,
+    postType: feedPostType,
+    enabled: !!venueId,
+  });
+
+  // Feed data for non-venue communities (uses community_id)
+  const communityFeed = useCommunityPostsFeed(community?.id, {
+    sort: feedSort,
+    postType: feedPostType,
+    enabled: !venueId && !!community?.id,
+  });
+
+  // Use the appropriate feed based on community type
   const {
     data: feedData,
     fetchNextPage,
@@ -86,11 +121,7 @@ export default function CommunityDetailScreen() {
     isFetchingNextPage,
     isLoading: isLoadingFeed,
     refetch: refetchFeed,
-  } = useCommunityFeed(venueId || '', {
-    sort: feedSort,
-    postType: feedPostType,
-    enabled: !!venueId,
-  });
+  } = venueId ? venueFeed : communityFeed;
 
   const posts = useMemo(
     () => feedData?.pages.flatMap((page) => page.data) || [],
@@ -99,11 +130,22 @@ export default function CommunityDetailScreen() {
 
   // Handlers
   const handleJoinToggle = useCallback(() => {
-    if (!community) return;
+    console.log('[Community] handleJoinToggle called');
+    console.log('[Community] community:', community?.id, community?.slug);
+    console.log('[Community] is_member:', community?.is_member);
+
+    if (!community) {
+      console.log('[Community] No community data, returning');
+      return;
+    }
+
     triggerHaptic('impactMedium');
+
     if (community.is_member) {
+      console.log('[Community] Leaving community:', community.id);
       leaveMutation.mutate(community.id);
     } else {
+      console.log('[Community] Joining community:', community.id);
       joinMutation.mutate({ communityId: community.id });
     }
   }, [community, joinMutation, leaveMutation]);
@@ -121,9 +163,15 @@ export default function CommunityDetailScreen() {
   );
 
   const handleCreatePost = useCallback(() => {
-    if (!venueId) return;
-    router.push(`/venue/post/create?venueId=${venueId}`);
-  }, [router, venueId]);
+    if (!community) return;
+    // Pass communityId as primary parameter, with optional venueId for venue-linked communities
+    const params = new URLSearchParams();
+    params.set('communityId', community.id);
+    if (venueId) {
+      params.set('venueId', venueId);
+    }
+    router.push(`/venue/post/create?${params.toString()}`);
+  }, [router, community, venueId]);
 
   const openSortPicker = useCallback(() => {
     if (Platform.OS === 'ios') {
@@ -207,7 +255,7 @@ export default function CommunityDetailScreen() {
               </Text>
             </Pressable>
           </View>
-          {venueId && (
+          {canPost && (
             <Pressable onPress={handleCreatePost} style={styles.createButton}>
               <Ionicons name="add" size={18} color="#FFFFFF" />
               <Text style={styles.createButtonText}>Post</Text>
@@ -217,7 +265,7 @@ export default function CommunityDetailScreen() {
       </>
       );
     },
-    [community, handleJoinToggle, isJoinPending, feedSort, feedPostType, openSortPicker, openFilterPicker, handleCreatePost, venueId]
+    [community, handleJoinToggle, isJoinPending, feedSort, feedPostType, openSortPicker, openFilterPicker, handleCreatePost, canPost]
   );
 
   const ListEmpty = useMemo(
@@ -233,14 +281,14 @@ export default function CommunityDetailScreen() {
           <Text style={styles.emptySubtext}>
             Be the first to start a discussion
           </Text>
-          {venueId && (
+          {canPost && (
             <Pressable onPress={handleCreatePost} style={styles.emptyButton}>
               <Text style={styles.emptyButtonText}>Create Post</Text>
             </Pressable>
           )}
         </View>
       ),
-    [isLoadingFeed, handleCreatePost, venueId]
+    [isLoadingFeed, handleCreatePost, canPost]
   );
 
   // Loading state - placed after all hooks to maintain consistent hook order

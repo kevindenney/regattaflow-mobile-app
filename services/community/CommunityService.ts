@@ -331,10 +331,18 @@ class CommunityServiceClass {
    * Join a community
    */
   async joinCommunity(communityId: string, role: CommunityMemberRole = 'member'): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Must be logged in to join a community');
+    console.log('[CommunityService] joinCommunity called, communityId:', communityId, 'role:', role);
 
-    const { error } = await supabase
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log('[CommunityService] getUser result, user:', user?.id, 'authError:', authError);
+
+    if (!user) {
+      console.error('[CommunityService] No user found - must be logged in to join');
+      throw new Error('Must be logged in to join a community');
+    }
+
+    console.log('[CommunityService] Upserting membership for user:', user.id);
+    const { data, error } = await supabase
       .from('community_memberships')
       .upsert({
         user_id: user.id,
@@ -343,12 +351,17 @@ class CommunityServiceClass {
         notifications_enabled: true,
       }, {
         onConflict: 'user_id,community_id',
-      });
+      })
+      .select();
+
+    console.log('[CommunityService] Upsert result, data:', data, 'error:', error);
 
     if (error) {
       console.error('[CommunityService] Error joining community:', error);
       throw error;
     }
+
+    console.log('[CommunityService] Successfully joined community');
   }
 
   /**
