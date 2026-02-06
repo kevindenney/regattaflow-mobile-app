@@ -61,8 +61,8 @@
       "destination": "/_expo/:path*"
     },
     {
-      "source": "/:path*",
-      "destination": "/index.html"
+      "source": "/((?!api|assets|_expo|favicon.ico).*)",
+      "destination": "/"
     }
   ]
 }
