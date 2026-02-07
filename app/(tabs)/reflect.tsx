@@ -15,6 +15,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
   useWindowDimensions,
   RefreshControl,
@@ -31,6 +32,7 @@ import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { useReflectData, type RaceLogEntry } from '@/hooks/useReflectData';
 import { useReflectProfile } from '@/hooks/useReflectProfile';
+import { useAuth } from '@/providers/AuthProvider';
 
 import {
   WeeklyCalendar,
@@ -48,7 +50,6 @@ import {
   // Phase 4: Social
   SocialStatsCard,
   RecentActivitySection,
-  NotificationBellButton,
   // Phase 5: Goals, Insights, Comparisons, Sharing & Gear
   GoalsSection,
   InsightsCard,
@@ -226,7 +227,9 @@ interface ProfileViewProps {
 
 function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   const { data, loading, refresh } = useReflectProfile();
+  const { userProfile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const isFreeUser = !userProfile?.subscription_tier || userProfile?.subscription_tier === 'free';
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -451,6 +454,24 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
           stats={data.stats}
           onEditProfile={handleEditProfile}
         />
+
+        {/* Upgrade Plan Card for free users */}
+        {isFreeUser && (
+          <TouchableOpacity
+            style={styles.upgradePlanCard}
+            onPress={() => router.push('/pricing')}
+            activeOpacity={0.7}
+          >
+            <View style={styles.upgradePlanContent}>
+              <Ionicons name="rocket-outline" size={24} color="#2563EB" />
+              <View style={styles.upgradePlanText}>
+                <Text style={styles.upgradePlanTitle}>Upgrade Plan</Text>
+                <Text style={styles.upgradePlanSubtitle}>Unlock unlimited races, AI, and more</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+          </TouchableOpacity>
+        )}
 
         {/* Phase 4: Social Stats */}
         <SocialStatsCard
@@ -736,14 +757,6 @@ export default function ReflectScreen() {
 
   const isDesktop = width > 768;
 
-  const handleSettingsPress = () => {
-    router.push('/(tabs)/settings');
-  };
-
-  const handleNotificationsPress = () => {
-    router.push('/social-notifications');
-  };
-
   return (
     <View style={styles.container}>
       {/* Content */}
@@ -773,18 +786,7 @@ export default function ReflectScreen() {
       <TabScreenToolbar
         title="Reflect"
         topInset={insets.top}
-        actions={[
-          {
-            icon: 'notifications-outline',
-            label: 'Notifications',
-            onPress: handleNotificationsPress,
-          },
-          {
-            icon: 'settings-outline',
-            label: 'Settings',
-            onPress: handleSettingsPress,
-          },
-        ]}
+        showProfileAvatar={false}
         onMeasuredHeight={setToolbarHeight}
         hidden={toolbarHidden}
       >
@@ -964,5 +966,36 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
+  },
+  // Upgrade Plan Card
+  upgradePlanCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  upgradePlanContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  upgradePlanText: {
+    flex: 1,
+  },
+  upgradePlanTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E40AF',
+  },
+  upgradePlanSubtitle: {
+    fontSize: 13,
+    color: '#3B82F6',
+    marginTop: 2,
   },
 });
