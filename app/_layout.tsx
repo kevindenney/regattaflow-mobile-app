@@ -353,8 +353,8 @@ export default function RootLayout() {
           margin: 0;
           padding: 0;
           overflow: auto;
-          font-size: 118%;
-          zoom: 1.1;
+          font-size: 110%;
+          zoom: 1.0;
         }
         #root {
           height: 100%;
