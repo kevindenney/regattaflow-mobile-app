@@ -10,15 +10,16 @@
 // ============================================================================
 
 export type CommunityType =
-  | 'venue'       // Physical sailing location
-  | 'boat_class'  // Dragon, Laser, J/70, etc.
-  | 'race'        // Specific regatta/event
-  | 'sailmaker'   // North, Doyle, Quantum, etc.
-  | 'gear'        // Foul weather gear, sunglasses, electronics
-  | 'rules'       // Racing rules, protests, marks
-  | 'tactics'     // General tactical discussion
-  | 'tuning'      // Rig tuning, sail trim
-  | 'general';    // Catch-all
+  | 'venue'        // Physical sailing location
+  | 'boat_class'   // Dragon, Laser, J/70, etc.
+  | 'race'         // Specific regatta/event
+  | 'sailmaker'    // North, Doyle, Quantum, etc.
+  | 'boat_builder' // Petticrows, Doomernik, Børresen, etc.
+  | 'gear'         // Foul weather gear, sunglasses, electronics
+  | 'rules'        // Racing rules, protests, marks
+  | 'tactics'      // General tactical discussion
+  | 'tuning'       // Rig tuning, sail trim
+  | 'general';     // Catch-all
 
 export type CommunityMemberRole = 'member' | 'moderator' | 'admin';
 
@@ -58,6 +59,13 @@ export const COMMUNITY_TYPE_CONFIG: Record<CommunityType, {
     icon: 'flag-outline',
     color: '#7C3AED',
     bgColor: '#EDE9FE',
+  },
+  boat_builder: {
+    label: 'Boat Builder',
+    pluralLabel: 'Boat Builders',
+    icon: 'hammer-outline',
+    color: '#8B5CF6',
+    bgColor: '#F5F3FF',
   },
   gear: {
     label: 'Gear',

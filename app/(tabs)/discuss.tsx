@@ -200,7 +200,7 @@ export default function DiscussScreen() {
   // Flatten paginated feed data
   const feedPosts = useMemo(() => {
     if (!feedData?.pages) return [];
-    return feedData.pages.flatMap((page) => page.posts);
+    return feedData.pages.flatMap((page) => page.data);
   }, [feedData?.pages]);
 
   // ---------------------------------------------------------------------------

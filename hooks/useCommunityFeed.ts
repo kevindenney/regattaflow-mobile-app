@@ -377,6 +377,7 @@ export function useVotePost() {
       targetType: 'discussion' | 'comment';
       targetId: string;
       vote: 1 | -1 | 0;
+      postId?: string;
     }) => CommunityFeedService.vote(targetType, targetId, vote),
     onMutate: async ({ targetType, targetId, vote }) => {
       if (targetType !== 'discussion') return;
@@ -425,6 +426,9 @@ export function useVotePost() {
     onSettled: (_data, _error, variables) => {
       if (variables.targetType === 'discussion') {
         queryClient.invalidateQueries({ queryKey: communityFeedKeys.post(variables.targetId) });
+      }
+      if (variables.targetType === 'comment' && variables.postId) {
+        queryClient.invalidateQueries({ queryKey: communityFeedKeys.comments(variables.postId) });
       }
       queryClient.invalidateQueries({ queryKey: communityFeedKeys.feeds() });
     },

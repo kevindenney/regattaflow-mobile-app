@@ -1603,7 +1603,7 @@ export default function RacesScreen() {
 
   // Memoized navigation handlers
   const handleVenuePress = useCallback(() => {
-    router.push('/venue');
+    router.push('/discuss');
   }, [router]);
 
   // Venue insights handlers (loadCachedInsights, handleGetVenueInsights) and

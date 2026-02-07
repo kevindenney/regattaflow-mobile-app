@@ -131,7 +131,7 @@ export default function PostCreateRoute() {
   }, [router]);
 
   const handleSuccess = useCallback(() => {
-    router.replace('/(tabs)/venue');
+    router.replace('/(tabs)/discuss');
   }, [router]);
 
   const handleSelectCommunity = useCallback((community: Community) => {

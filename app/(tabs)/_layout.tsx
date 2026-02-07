@@ -182,7 +182,7 @@ function TabLayoutInner() {
   const learnTab = findTab('learn');
   const reflectTab = findTab('reflect');
   const coursesTab = findTab('courses');
-  const venueTab = findTab('venue');
+  const venueTab = findTab('discuss');
   const discoverTab = findTab('discover');
   const strategyTab = findTab('strategy');
   const mapTab = findTab('map');
@@ -296,9 +296,9 @@ function TabLayoutInner() {
                 : undefined,
           }}
         />
-        {/* Tab 3: Discuss (venue) */}
+        {/* Tab 3: Discuss */}
         <Tabs.Screen
-          name="venue"
+          name="discuss"
           options={{
             title: venueTab?.title ?? 'Discuss',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
@@ -308,10 +308,10 @@ function TabLayoutInner() {
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('venue')
+            tabBarButton: !isTabVisible('discuss')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('venue', venueTab?.title ?? 'Discuss', venueTab)
+                ? renderSailorTabButton('discuss', venueTab?.title ?? 'Discuss', venueTab)
                 : undefined,
           }}
         />

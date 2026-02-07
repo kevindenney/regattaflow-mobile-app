@@ -389,9 +389,9 @@ export function HeroPhones() {
 
   const handleExploreVenues = () => {
     if (user && userProfile) {
-      router.push('/(tabs)/venue');
+      router.push('/(tabs)/discuss');
     } else {
-      router.push('/(tabs)/venue');
+      router.push('/(tabs)/discuss');
     }
   };
 

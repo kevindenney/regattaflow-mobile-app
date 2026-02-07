@@ -432,6 +432,12 @@ class CommunityFeedServiceClass {
         racing_area:venue_racing_areas!racing_area_id (
           id,
           area_name
+        ),
+        community:communities!community_id (
+          id,
+          name,
+          slug,
+          community_type
         )
       `)
       .eq('id', postId)

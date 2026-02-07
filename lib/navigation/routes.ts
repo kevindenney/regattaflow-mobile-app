@@ -32,7 +32,7 @@ export type StaticRoute =
   | '/(tabs)/dashboard'
   | '/(tabs)/races'
   | '/(tabs)/schedule'
-  | '/(tabs)/venue'
+  | '/(tabs)/discuss'
   | '/(tabs)/settings'
   | '/(tabs)/more'
   | '/(tabs)/clubs'

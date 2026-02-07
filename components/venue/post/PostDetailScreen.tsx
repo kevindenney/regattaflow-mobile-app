@@ -189,12 +189,20 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
             </View>
           )}
 
-          {/* Type badge */}
-          <View style={[styles.typeBadge, { backgroundColor: typeConfig.bgColor }]}>
-            <Ionicons name={typeConfig.icon as any} size={12} color={typeConfig.color} />
-            <Text style={[styles.typeText, { color: typeConfig.color }]}>
-              {typeConfig.label}
-            </Text>
+          {/* Type badge + community name */}
+          <View style={styles.badgeRow}>
+            <View style={[styles.typeBadge, { backgroundColor: typeConfig.bgColor }]}>
+              <Ionicons name={typeConfig.icon as any} size={12} color={typeConfig.color} />
+              <Text style={[styles.typeText, { color: typeConfig.color }]}>
+                {typeConfig.label}
+              </Text>
+            </View>
+            {post.community?.name && (
+              <View style={styles.communityBadge}>
+                <Ionicons name="people-outline" size={11} color="#6B7280" />
+                <Text style={styles.communityName}>{post.community.name}</Text>
+              </View>
+            )}
           </View>
 
           {/* Title */}
@@ -368,6 +376,7 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
                   targetType: 'comment',
                   targetId: commentId,
                   vote,
+                  postId,
                 });
               }}
               onEditComment={handleEditComment}
@@ -413,6 +422,10 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 80,
+    ...Platform.select({
+      web: { maxWidth: 640, width: '100%', alignSelf: 'center' } as any,
+      default: {},
+    }),
   },
   loadingContainer: {
     flex: 1,
@@ -457,6 +470,12 @@ const styles = StyleSheet.create({
     color: '#059669',
     fontWeight: '600',
   },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -464,7 +483,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: TufteTokens.borderRadius.minimal,
-    alignSelf: 'flex-start',
+  },
+  communityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  communityName: {
+    ...TufteTokens.typography.micro,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   typeText: {
     fontSize: 10,
