@@ -376,7 +376,7 @@ export function useVotePost() {
     mutationFn: ({ targetType, targetId, vote }: {
       targetType: 'discussion' | 'comment';
       targetId: string;
-      vote: 1 | 0;
+      vote: 1 | -1 | 0;
     }) => CommunityFeedService.vote(targetType, targetId, vote),
     onMutate: async ({ targetType, targetId, vote }) => {
       if (targetType !== 'discussion') return;
@@ -388,17 +388,26 @@ export function useVotePost() {
       );
 
       if (previousPost) {
-        const wasUpvoted = previousPost.user_vote === 1;
-        const upvoteDelta = vote === 1
-          ? (wasUpvoted ? -1 : 1)
-          : (wasUpvoted ? -1 : 0);
+        const prevVote = previousPost.user_vote ?? 0;
+        // Calculate deltas based on previous and new vote
+        let upvoteDelta = 0;
+        let downvoteDelta = 0;
+
+        // Remove old vote effect
+        if (prevVote === 1) upvoteDelta -= 1;
+        if (prevVote === -1) downvoteDelta -= 1;
+
+        // Apply new vote effect
+        if (vote === 1) upvoteDelta += 1;
+        if (vote === -1) downvoteDelta += 1;
 
         queryClient.setQueryData<FeedPost>(
           communityFeedKeys.post(targetId),
           {
             ...previousPost,
-            user_vote: vote === 0 ? null : 1,
+            user_vote: vote === 0 ? null : vote,
             upvotes: Math.max(0, previousPost.upvotes + upvoteDelta),
+            downvotes: Math.max(0, (previousPost.downvotes || 0) + downvoteDelta),
           }
         );
       }
@@ -455,6 +464,22 @@ export function useCreateComment() {
       queryClient.invalidateQueries({ queryKey: communityFeedKeys.comments(variables.postId) });
       queryClient.invalidateQueries({ queryKey: communityFeedKeys.post(variables.postId) });
       queryClient.invalidateQueries({ queryKey: communityFeedKeys.feeds() });
+    },
+  });
+}
+
+/**
+ * Update a comment
+ */
+export function useUpdateComment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ commentId, body }: { commentId: string; body: string }) =>
+      CommunityFeedService.updateComment(commentId, body),
+    onSuccess: (_data, _variables) => {
+      // Invalidate all comment queries (we don't know which post)
+      queryClient.invalidateQueries({ queryKey: communityFeedKeys.all });
     },
   });
 }

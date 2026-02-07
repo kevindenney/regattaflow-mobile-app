@@ -18,6 +18,7 @@ import {
   Pressable,
   Platform,
   ActionSheetIOS,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +35,8 @@ import { TabScreenToolbar, ToolbarAction } from '@/components/ui/TabScreenToolba
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { FeedPostCard } from '@/components/venue/feed/FeedPostCard';
+import { PostDetailScreen } from '@/components/venue/post/PostDetailScreen';
+import { WelcomeBanner } from '@/components/venue/WelcomeBanner';
 import { CommunityCard } from '@/components/community/CommunityCard';
 import { CategoryChips } from '@/components/community/CategoryChips';
 import {
@@ -155,6 +158,9 @@ export default function DiscussScreen() {
   const [feedPostType, setFeedPostType] = useState<PostType | undefined>(undefined);
   const filtersActive = feedSort !== 'hot' || feedPostType !== undefined;
 
+  // Modal post detail state
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+
   // Communities state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -225,9 +231,9 @@ export default function DiscussScreen() {
   const handlePostPress = useCallback(
     (post: FeedPost) => {
       queryClient.setQueryData(communityFeedKeys.post(post.id), post);
-      router.push(`/venue/post/${post.id}`);
+      setSelectedPostId(post.id);
     },
-    [router, queryClient],
+    [queryClient],
   );
 
   const handleJoinToggle = useCallback(
@@ -302,12 +308,6 @@ export default function DiscussScreen() {
 
     if (segment === 'feed') {
       actions.push({
-        icon: 'swap-vertical-outline',
-        label: SORT_OPTIONS.find((o) => o.key === feedSort)?.label ?? 'Hot',
-        onPress: openSortPicker,
-        isActive: feedSort !== 'hot',
-      });
-      actions.push({
         icon: 'funnel-outline',
         label: feedPostType ? POST_TYPE_CONFIG[feedPostType].label : 'Filter',
         onPress: openPostTypePicker,
@@ -316,7 +316,7 @@ export default function DiscussScreen() {
     }
 
     return actions;
-  }, [segment, feedSort, feedPostType, router, openSortPicker, openPostTypePicker]);
+  }, [segment, feedPostType, router, openPostTypePicker]);
 
   // ---------------------------------------------------------------------------
   // Render helpers
@@ -386,6 +386,7 @@ export default function DiscussScreen() {
             showsVerticalScrollIndicator={false}
             onScroll={handleToolbarScroll}
             scrollEventThrottle={16}
+            ListHeaderComponent={<WelcomeBanner />}
             onEndReached={() => {
               if (hasNextPage && !isFetchingNextPage) {
                 fetchNextPage();
@@ -537,7 +538,6 @@ export default function DiscussScreen() {
             segments={SEGMENTS}
             selectedValue={segment}
             onValueChange={setSegment}
-            filled
           />
         </View>
         {segment === 'feed' && filtersActive && (
@@ -552,7 +552,44 @@ export default function DiscussScreen() {
             </Pressable>
           </View>
         )}
+        {/* Inline sort pills */}
+        {segment === 'feed' && joinedCommunityIds.length > 0 && (
+          <View style={styles.sortPillRow}>
+            {SORT_OPTIONS.map(opt => {
+              const isActive = feedSort === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  style={[styles.sortPill, isActive && styles.sortPillActive]}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setFeedSort(opt.key);
+                  }}
+                >
+                  <Text style={[styles.sortPillText, isActive && styles.sortPillTextActive]}>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </TabScreenToolbar>
+
+      {/* Post Detail Modal */}
+      <Modal
+        visible={!!selectedPostId}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedPostId(null)}
+      >
+        {selectedPostId && (
+          <PostDetailScreen
+            postId={selectedPostId}
+            onBack={() => setSelectedPostId(null)}
+          />
+        )}
+      </Modal>
     </View>
   );
 }
@@ -597,6 +634,32 @@ const styles = StyleSheet.create({
   activeFilterClearText: {
     ...IOS_TYPOGRAPHY.caption1,
     color: IOS_COLORS.systemBlue,
+    fontWeight: '600',
+  },
+
+  // Sort pills
+  sortPillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.sm,
+  },
+  sortPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
+  },
+  sortPillActive: {
+    backgroundColor: IOS_COLORS.label,
+  },
+  sortPillText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  sortPillTextActive: {
+    color: '#FFFFFF',
     fontWeight: '600',
   },
 

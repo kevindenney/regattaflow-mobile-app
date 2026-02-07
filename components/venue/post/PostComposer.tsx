@@ -22,7 +22,7 @@ import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
-import { useCreatePost } from '@/hooks/useCommunityFeed';
+import { useCreatePost, useUpdatePost } from '@/hooks/useCommunityFeed';
 import { useTopicTags } from '@/hooks/useCommunityFeed';
 import { CatalogRaceService } from '@/services/CatalogRaceService';
 import type { PostType } from '@/types/community-feed';
@@ -36,6 +36,13 @@ interface PostComposerProps {
   racingAreaId?: string | null;
   catalogRaceId?: string | null;
   catalogRaceName?: string | null;
+  /** Pass an existing post to enter edit mode */
+  editingPost?: {
+    id: string;
+    title: string;
+    body?: string | null;
+    post_type: import('@/types/community-feed').PostType;
+  } | null;
   onDismiss: () => void;
   onSuccess?: () => void;
 }
@@ -49,9 +56,11 @@ export function PostComposer({
   racingAreaId,
   catalogRaceId: initialCatalogRaceId,
   catalogRaceName: initialCatalogRaceName,
+  editingPost,
   onDismiss,
   onSuccess,
 }: PostComposerProps) {
+  const isEditing = !!editingPost;
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [postType, setPostType] = useState<PostType>('discussion');
@@ -67,6 +76,16 @@ export function PostComposer({
 
   const { data: topicTags } = useTopicTags();
   const createPost = useCreatePost();
+  const updatePost = useUpdatePost();
+
+  // Populate form when entering edit mode
+  React.useEffect(() => {
+    if (editingPost && visible) {
+      setTitle(editingPost.title || '');
+      setBody(editingPost.body || '');
+      setPostType(editingPost.post_type || 'discussion');
+    }
+  }, [editingPost, visible]);
 
   const resetForm = useCallback(() => {
     setTitle('');
@@ -86,52 +105,63 @@ export function PostComposer({
       return;
     }
 
-    // Validate that we have either a venue or community to post to
-    if (!venueId && !communityId) {
-      showAlert('Error', 'Post must be associated with a venue or community.');
-      return;
-    }
-
     try {
-      const conditionTags = conditionLabel.trim()
-        ? [{
-            label: conditionLabel.trim(),
-            wind_direction_min: null,
-            wind_direction_max: null,
-            wind_speed_min: null,
-            wind_speed_max: null,
-            tide_phase: null,
-            wave_height_min: null,
-            wave_height_max: null,
-            current_speed_min: null,
-            current_speed_max: null,
-            season: null,
-            time_of_day: null,
-          }]
-        : undefined;
+      if (isEditing && editingPost) {
+        // Update existing post
+        await updatePost.mutateAsync({
+          postId: editingPost.id,
+          updates: {
+            title: title.trim(),
+            body: body.trim() || undefined,
+            post_type: postType,
+          },
+        });
+      } else {
+        // Validate that we have either a venue or community to post to
+        if (!venueId && !communityId) {
+          showAlert('Error', 'Post must be associated with a venue or community.');
+          return;
+        }
 
-      await createPost.mutateAsync({
-        venue_id: venueId || undefined,
-        community_id: communityId || undefined,
-        title: title.trim(),
-        body: body.trim() || undefined,
-        post_type: postType,
-        racing_area_id: racingAreaId || undefined,
-        topic_tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
-        condition_tags: conditionTags,
-        catalog_race_id: selectedRaceId || undefined,
-      });
+        const conditionTags = conditionLabel.trim()
+          ? [{
+              label: conditionLabel.trim(),
+              wind_direction_min: null,
+              wind_direction_max: null,
+              wind_speed_min: null,
+              wind_speed_max: null,
+              tide_phase: null,
+              wave_height_min: null,
+              wave_height_max: null,
+              current_speed_min: null,
+              current_speed_max: null,
+              season: null,
+              time_of_day: null,
+            }]
+          : undefined;
+
+        await createPost.mutateAsync({
+          venue_id: venueId || undefined,
+          community_id: communityId || undefined,
+          title: title.trim(),
+          body: body.trim() || undefined,
+          post_type: postType,
+          racing_area_id: racingAreaId || undefined,
+          topic_tag_ids: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+          condition_tags: conditionTags,
+          catalog_race_id: selectedRaceId || undefined,
+        });
+      }
 
       resetForm();
       onSuccess?.();
       onDismiss();
     } catch (error: any) {
-      console.error('[PostComposer] Error creating post:', error);
-      // Show the actual error message (which includes user-friendly membership messages)
-      const errorMessage = error?.message || 'Failed to create post. Please try again.';
-      showAlert('Cannot Create Post', errorMessage);
+      console.error('[PostComposer] Error:', error);
+      const errorMessage = error?.message || `Failed to ${isEditing ? 'update' : 'create'} post. Please try again.`;
+      showAlert(isEditing ? 'Cannot Update Post' : 'Cannot Create Post', errorMessage);
     }
-  }, [title, body, postType, venueId, communityId, racingAreaId, selectedTagIds, conditionLabel, selectedRaceId, createPost, resetForm, onSuccess, onDismiss]);
+  }, [title, body, postType, venueId, communityId, racingAreaId, selectedTagIds, conditionLabel, selectedRaceId, createPost, updatePost, isEditing, editingPost, resetForm, onSuccess, onDismiss]);
 
   const handleDismiss = useCallback(() => {
     if (title.trim() || body.trim()) {
@@ -197,16 +227,16 @@ export function PostComposer({
           <Pressable onPress={handleDismiss}>
             <Text style={styles.cancelButton}>Cancel</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>New Post</Text>
+          <Text style={styles.headerTitle}>{isEditing ? 'Edit Post' : 'New Post'}</Text>
           <Pressable
             onPress={handleSubmit}
-            disabled={!title.trim() || createPost.isPending}
+            disabled={!title.trim() || createPost.isPending || updatePost.isPending}
             style={[styles.submitButton, !title.trim() && styles.submitButtonDisabled]}
           >
-            {createPost.isPending ? (
+            {(createPost.isPending || updatePost.isPending) ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.submitButtonText}>Post</Text>
+              <Text style={styles.submitButtonText}>{isEditing ? 'Save' : 'Post'}</Text>
             )}
           </Pressable>
         </View>

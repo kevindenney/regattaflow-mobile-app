@@ -20,6 +20,7 @@ import { initializeRaceRegistrationMutationHandlers } from '@/services/RaceRegis
 import { initializeBoatMutationHandlers } from '@/services/SailorBoatService';
 import { initializeMutationQueueHandlers } from '@/services/userManualClubsService';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ToastProvider } from '@/components/ui/AppToast';
 import { Stack, router } from 'expo-router';
 import {
   useFonts,
@@ -478,9 +479,11 @@ export default function RootLayout() {
         <GluestackUIProvider mode="light">
           <StripeProvider>
             <AuthProvider>
-              <PushNotificationHandler>
-                <StackWithSplash />
-              </PushNotificationHandler>
+              <ToastProvider>
+                <PushNotificationHandler>
+                  <StackWithSplash />
+                </PushNotificationHandler>
+              </ToastProvider>
             </AuthProvider>
           </StripeProvider>
         </GluestackUIProvider>

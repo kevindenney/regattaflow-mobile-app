@@ -5,7 +5,7 @@
  * Used by the route app/venue/post/[id].tsx
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,15 +20,22 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
+import { triggerHaptic } from '@/lib/haptics';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 import {
   usePostDetail,
   usePostComments,
   useVotePost,
   useAuthorVenueStats,
+  useUpdateComment,
+  useVenueMembership,
 } from '@/hooks/useCommunityFeed';
+import { CommunityFeedService } from '@/services/venue/CommunityFeedService';
+import { useToast } from '@/components/ui/AppToast';
+import { useAuth } from '@/providers/AuthProvider';
 import { CommentList } from '../comments/CommentList';
 import { CommentComposer } from '../comments/CommentComposer';
+import { PostComposer } from './PostComposer';
 import type { ThreadedComment } from '@/types/community-feed';
 
 interface PostDetailScreenProps {
@@ -51,24 +58,62 @@ function timeAgo(dateStr: string): string {
 
 export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { data: post, isLoading: postLoading } = usePostDetail(postId);
   const { data: comments, isLoading: commentsLoading } = usePostComments(postId);
   const voteMutation = useVotePost();
+  const updateCommentMutation = useUpdateComment();
+  const toast = useToast();
 
   const [replyingTo, setReplyingTo] = useState<{ id: string; authorName: string } | null>(null);
+  const [showEditComposer, setShowEditComposer] = useState(false);
+  const [isPinning, setIsPinning] = useState(false);
+
+  const isAuthor = useMemo(() => {
+    return !!user && !!post && post.author_id === user.id;
+  }, [user, post]);
+
+  const { data: membership } = useVenueMembership(post?.venue_id || '');
+  const isModerator = membership?.isModerator || false;
+
+  const handlePinToggle = useCallback(async () => {
+    if (!post || isPinning) return;
+    triggerHaptic('impactMedium');
+    setIsPinning(true);
+    try {
+      await CommunityFeedService.pinPost(post.id, !post.pinned);
+      toast.show(post.pinned ? 'Post unpinned' : 'Post pinned', 'success');
+    } catch {
+      toast.show('Failed to update pin', 'error');
+    } finally {
+      setIsPinning(false);
+    }
+  }, [post, isPinning, toast]);
 
   const { data: authorStats } = useAuthorVenueStats(
     post?.author_id || null,
     post?.venue_id || ''
   );
 
-  const handleVote = useCallback(() => {
+  const handleUpvote = useCallback(() => {
     if (!post) return;
+    triggerHaptic('impactLight');
     const newVote = post.user_vote === 1 ? 0 : 1;
     voteMutation.mutate({
       targetType: 'discussion',
       targetId: post.id,
       vote: newVote as 0 | 1,
+    });
+  }, [post, voteMutation]);
+
+  const handleDownvote = useCallback(() => {
+    if (!post) return;
+    triggerHaptic('impactLight');
+    const newVote = post.user_vote === -1 ? 0 : -1;
+    voteMutation.mutate({
+      targetType: 'discussion',
+      targetId: post.id,
+      vote: newVote as 0 | -1,
     });
   }, [post, voteMutation]);
 
@@ -89,6 +134,10 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
       authorName: comment.author?.full_name || 'Anonymous',
     });
   }, []);
+
+  const handleEditComment = useCallback((commentId: string, newBody: string) => {
+    updateCommentMutation.mutate({ commentId, body: newBody });
+  }, [updateCommentMutation]);
 
   if (postLoading) {
     return (
@@ -164,7 +213,20 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
               </Text>
               <Text style={styles.authorMeta}>
                 {timeAgo(post.created_at)}
+                {post.updated_at && post.created_at &&
+                  new Date(post.updated_at).getTime() - new Date(post.created_at).getTime() > 60000 &&
+                  ' · edited'}
                 {post.view_count > 0 && ` · ${post.view_count} views`}
+              </Text>
+              <Text style={styles.authorDate}>
+                {new Date(post.created_at).toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
               </Text>
             </View>
             {authorStats && authorStats.race_count > 0 && (
@@ -231,19 +293,30 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
 
           {/* Action bar */}
           <View style={styles.actionBar}>
-            <Pressable style={styles.actionButton} onPress={handleVote}>
-              <Ionicons
-                name={post.user_vote === 1 ? 'arrow-up' : 'arrow-up-outline'}
-                size={18}
-                color={post.user_vote === 1 ? '#2563EB' : '#6B7280'}
-              />
+            {/* Voting capsule */}
+            <View style={styles.voteCapsule}>
+              <Pressable style={styles.voteButton} onPress={handleUpvote}>
+                <Ionicons
+                  name={post.user_vote === 1 ? 'arrow-up' : 'arrow-up-outline'}
+                  size={18}
+                  color={post.user_vote === 1 ? '#2563EB' : '#6B7280'}
+                />
+              </Pressable>
               <Text style={[
-                styles.actionText,
-                post.user_vote === 1 && { color: '#2563EB', fontWeight: '600' },
+                styles.voteScore,
+                post.user_vote === 1 && { color: '#2563EB' },
+                post.user_vote === -1 && { color: '#EF4444' },
               ]}>
-                {post.upvotes || 0}
+                {(post.upvotes || 0) - (post.downvotes || 0)}
               </Text>
-            </Pressable>
+              <Pressable style={styles.voteButton} onPress={handleDownvote}>
+                <Ionicons
+                  name={post.user_vote === -1 ? 'arrow-down' : 'arrow-down-outline'}
+                  size={18}
+                  color={post.user_vote === -1 ? '#EF4444' : '#6B7280'}
+                />
+              </Pressable>
+            </View>
 
             <View style={styles.actionButton}>
               <Ionicons name="chatbubble-outline" size={16} color="#6B7280" />
@@ -254,6 +327,26 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
               <Ionicons name="share-outline" size={16} color="#6B7280" />
               <Text style={styles.actionText}>Share</Text>
             </Pressable>
+
+            {isAuthor && (
+              <Pressable style={styles.actionButton} onPress={() => setShowEditComposer(true)}>
+                <Ionicons name="pencil-outline" size={16} color="#6B7280" />
+                <Text style={styles.actionText}>Edit</Text>
+              </Pressable>
+            )}
+
+            {isModerator && (
+              <Pressable style={styles.actionButton} onPress={handlePinToggle} disabled={isPinning}>
+                <Ionicons
+                  name={post.pinned ? 'pin' : 'pin-outline'}
+                  size={16}
+                  color={post.pinned ? '#059669' : '#6B7280'}
+                />
+                <Text style={[styles.actionText, post.pinned && { color: '#059669' }]}>
+                  {post.pinned ? 'Unpin' : 'Pin'}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -268,14 +361,16 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
           ) : (
             <CommentList
               comments={comments || []}
+              currentUserId={user?.id}
               onReply={handleReply}
-              onVote={(commentId, vote) => {
+              onVote={(commentId, vote: 1 | -1 | 0) => {
                 voteMutation.mutate({
                   targetType: 'comment',
                   targetId: commentId,
                   vote,
                 });
               }}
+              onEditComment={handleEditComment}
             />
           )}
         </View>
@@ -288,6 +383,22 @@ export function PostDetailScreen({ postId, onBack }: PostDetailScreenProps) {
         onCancelReply={() => setReplyingTo(null)}
         bottomInset={insets.bottom}
       />
+
+      {/* Edit post modal */}
+      {post && (
+        <PostComposer
+          visible={showEditComposer}
+          venueId={post.venue_id}
+          communityId={post.community_id || undefined}
+          editingPost={{
+            id: post.id,
+            title: post.title,
+            body: post.body,
+            post_type: post.post_type,
+          }}
+          onDismiss={() => setShowEditComposer(false)}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -398,6 +509,11 @@ const styles = StyleSheet.create({
     ...TufteTokens.typography.micro,
     color: '#9CA3AF',
   },
+  authorDate: {
+    fontSize: 10,
+    color: '#C7C7CC',
+    marginTop: 1,
+  },
   statsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -468,6 +584,25 @@ const styles = StyleSheet.create({
     marginTop: TufteTokens.spacing.compact,
     borderTopWidth: TufteTokens.borders.hairline,
     borderTopColor: TufteTokens.borders.colorSubtle,
+  },
+  voteCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  voteButton: {
+    padding: 6,
+  },
+  voteScore: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    minWidth: 20,
+    textAlign: 'center',
   },
   actionButton: {
     flexDirection: 'row',

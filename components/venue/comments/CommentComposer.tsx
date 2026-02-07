@@ -13,11 +13,11 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
 import { useCreateComment } from '@/hooks/useCommunityFeed';
+import { useToast } from '@/components/ui/AppToast';
 
 interface CommentComposerProps {
   postId: string;
@@ -35,6 +35,7 @@ export function CommentComposer({
   const [text, setText] = useState('');
   const inputRef = useRef<TextInput>(null);
   const createComment = useCreateComment();
+  const toast = useToast();
 
   // Focus input when replying to someone
   useEffect(() => {
@@ -54,10 +55,10 @@ export function CommentComposer({
       });
       setText('');
       onCancelReply?.();
+      toast.show('Comment posted', 'success');
     } catch (error: any) {
-      // Show user-friendly error message
-      const errorMessage = error?.message || 'Failed to post comment. Please try again.';
-      Alert.alert('Cannot Post Comment', errorMessage);
+      const errorMessage = error?.message || 'Failed to post comment';
+      toast.show(errorMessage, 'error');
     }
   }, [text, postId, replyingTo, createComment, onCancelReply]);
 

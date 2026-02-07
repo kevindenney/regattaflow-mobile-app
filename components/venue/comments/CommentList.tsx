@@ -11,11 +11,13 @@ import type { ThreadedComment } from '@/types/community-feed';
 
 interface CommentListProps {
   comments: ThreadedComment[];
+  currentUserId?: string | null;
   onReply?: (comment: ThreadedComment) => void;
-  onVote?: (commentId: string, vote: 1 | 0) => void;
+  onVote?: (commentId: string, vote: 1 | -1 | 0) => void;
+  onEditComment?: (commentId: string, newBody: string) => void;
 }
 
-export function CommentList({ comments, onReply, onVote }: CommentListProps) {
+export function CommentList({ comments, currentUserId, onReply, onVote, onEditComment }: CommentListProps) {
   return (
     <View style={styles.container}>
       {comments.map(comment => (
@@ -23,8 +25,10 @@ export function CommentList({ comments, onReply, onVote }: CommentListProps) {
           key={comment.id}
           comment={comment}
           depth={0}
+          currentUserId={currentUserId}
           onReply={onReply}
           onVote={onVote}
+          onEditComment={onEditComment}
         />
       ))}
     </View>

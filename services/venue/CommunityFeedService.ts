@@ -624,9 +624,9 @@ class CommunityFeedServiceClass {
   // ============================================================================
 
   /**
-   * Vote on a post or comment (upvote only model: 1 = upvote, 0 = remove)
+   * Vote on a post or comment (1 = upvote, -1 = downvote, 0 = remove)
    */
-  async vote(targetType: 'discussion' | 'comment', targetId: string, vote: 1 | 0): Promise<void> {
+  async vote(targetType: 'discussion' | 'comment', targetId: string, vote: 1 | -1 | 0): Promise<void> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Must be logged in to vote');
 
@@ -647,7 +647,7 @@ class CommunityFeedServiceClass {
             user_id: user.id,
             target_type: targetType,
             target_id: targetId,
-            vote: 1,
+            vote,
           }, {
             onConflict: 'user_id,target_type,target_id',
           });
@@ -780,6 +780,21 @@ class CommunityFeedServiceClass {
     }
 
     return { ...data, depth: 0, replies: [] };
+  }
+
+  /**
+   * Update a comment's body
+   */
+  async updateComment(commentId: string, body: string): Promise<void> {
+    const { error } = await supabase
+      .from('venue_discussion_comments')
+      .update({ body, updated_at: new Date().toISOString() })
+      .eq('id', commentId);
+
+    if (error) {
+      console.error('[CommunityFeedService] Error updating comment:', error);
+      throw error;
+    }
   }
 
   // ============================================================================

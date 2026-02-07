@@ -86,6 +86,7 @@ export function FeedPostCard({
       style={({ pressed }) => [
         styles.container,
         pressed && styles.containerPressed,
+        post.pinned && styles.containerPinned,
       ]}
       onPress={onPress ?? undefined}
       disabled={!onPress}
@@ -104,7 +105,12 @@ export function FeedPostCard({
             {typeConfig.label}
           </Text>
         </View>
-        <Text style={styles.timestamp}>{timeAgo(post.created_at)}</Text>
+        <Text style={styles.timestamp}>
+          {timeAgo(post.created_at)}
+          {post.updated_at && post.created_at &&
+            new Date(post.updated_at).getTime() - new Date(post.created_at).getTime() > 60000 &&
+            ' · edited'}
+        </Text>
       </View>
 
       {/* Venue provenance line (when showing multiple venues) */}
@@ -146,12 +152,18 @@ export function FeedPostCard({
       {/* Footer: metrics */}
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
-          <Ionicons name="heart-outline" size={15} color="#8E8E93" />
-          <Text style={styles.metricText}>{post.upvotes}</Text>
+          <Ionicons name="arrow-up-outline" size={15} color="#8E8E93" />
+          <Text style={styles.metricText}>{(post.upvotes || 0) - (post.downvotes || 0)}</Text>
           <View style={styles.metricSpacer} />
           <Ionicons name="chatbubble-outline" size={15} color="#8E8E93" />
           <Text style={styles.metricText}>{post.comment_count}</Text>
         </View>
+        {onPress && (
+          <View style={styles.readMore}>
+            <Text style={styles.readMoreText}>Read more</Text>
+            <Ionicons name="chevron-forward" size={12} color="#C7C7CC" />
+          </View>
+        )}
       </View>
     </Pressable>
   );
@@ -167,6 +179,10 @@ const styles = StyleSheet.create({
   },
   containerPressed: {
     backgroundColor: '#F8F8F8',
+  },
+  containerPinned: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9500',
   },
 
   // Author row at top
@@ -256,6 +272,7 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 4,
   },
   footerLeft: {
@@ -270,6 +287,15 @@ const styles = StyleSheet.create({
   },
   metricSpacer: {
     width: 12,
+  },
+  readMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  readMoreText: {
+    fontSize: 12,
+    color: '#C7C7CC',
   },
 });
 
