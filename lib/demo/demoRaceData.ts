@@ -696,7 +696,7 @@ export function getDemoRaces(): DemoRace[] {
  * Check if a race ID belongs to a demo race
  */
 export function isDemoRaceId(raceId: string): boolean {
-  return raceId === 'demo-upcoming' || raceId === 'demo-past';
+  return raceId.startsWith('demo-');
 }
 
 /**

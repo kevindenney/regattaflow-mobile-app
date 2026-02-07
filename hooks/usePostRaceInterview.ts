@@ -103,8 +103,8 @@ export function usePostRaceInterview({
       userId: user?.id,
     });
 
-    if (!selectedRaceId || !user?.id) {
-      logger.debug('[POST_RACE_LOAD] Missing selectedRaceId or userId, clearing session');
+    if (!selectedRaceId || !user?.id || selectedRaceId.startsWith('demo-')) {
+      logger.debug('[POST_RACE_LOAD] Missing selectedRaceId or userId or demo race, clearing session');
       setUserPostRaceSession(null);
       return;
     }

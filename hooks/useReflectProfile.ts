@@ -1229,7 +1229,7 @@ export function useReflectProfile() {
           upload_date,
           regatta_id,
           metadata,
-          regattas(name, venue_name)
+          regattas(name)
         `)
         .eq('user_id', userId)
         .eq('media_type', 'image')
@@ -1250,7 +1250,7 @@ export function useReflectProfile() {
         source: p.metadata?.source || 'upload',
         regattaId: p.regatta_id,
         regattaName: p.regattas?.name,
-        venueName: p.regattas?.venue_name,
+        venueName: undefined,
         tags: p.metadata?.tags || [],
         width: p.metadata?.width,
         height: p.metadata?.height,

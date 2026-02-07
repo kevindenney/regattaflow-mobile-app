@@ -73,7 +73,7 @@ export function useRaceStartOrder({
       // First, try to find a schedule for this race's regatta
       let scheduleId: string | null = null;
 
-      if (regattaId) {
+      if (regattaId && !regattaId.startsWith('demo-')) {
         // Query schedules for the regatta on the race date
         const raceDay = raceDate.split('T')[0];
         const { data: schedules } = await supabase

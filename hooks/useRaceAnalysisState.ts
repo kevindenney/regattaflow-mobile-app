@@ -72,8 +72,8 @@ export function useRaceAnalysisState(
     let isMounted = true;
 
     async function fetchAnalysisState() {
-      // Only fetch for completed races
-      if (!raceId || !userId || !isCompleted) {
+      // Only fetch for completed races with valid (non-demo) IDs
+      if (!raceId || !userId || !isCompleted || raceId.startsWith('demo-')) {
         setState(null);
         return;
       }

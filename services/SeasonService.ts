@@ -529,6 +529,11 @@ class SeasonServiceClass {
    * Get all regattas in a season
    */
   async getSeasonRegattas(seasonId: string): Promise<SeasonRegatta[]> {
+    // Skip demo IDs that aren't valid UUIDs
+    if (seasonId.startsWith('demo-')) {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('season_regattas')
       .select(`

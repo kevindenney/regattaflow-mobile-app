@@ -43,6 +43,10 @@ export function useRaceEnrichment(raceId: string, enabled: boolean) {
   return useQuery({
     queryKey: raceEnrichmentKeys.race(raceId),
     queryFn: async (): Promise<RaceEnrichmentData> => {
+      // Skip demo race IDs that aren't valid UUIDs
+      if (raceId.startsWith('demo-')) {
+        return { prepNotes: null, tuningSettings: null, postRaceNotes: null, lessonsLearned: null };
+      }
       const { data, error } = await supabase
         .from('regattas')
         .select('prep_notes, tuning_settings, post_race_notes, lessons_learned')
