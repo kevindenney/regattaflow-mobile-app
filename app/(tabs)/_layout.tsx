@@ -277,14 +277,14 @@ function TabLayoutInner() {
                 : undefined,
           }}
         />
-        {/* Tab 2: Follow (discover) */}
+        {/* Tab 2: Watch (discover) */}
         <Tabs.Screen
           name="discover"
           options={{
-            title: 'Follow',
+            title: 'Watch',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={focused ? 'heart' : 'heart-outline'}
+                name={focused ? 'eye' : 'eye-outline'}
                 size={size}
                 color={color}
               />
@@ -292,7 +292,7 @@ function TabLayoutInner() {
             tabBarButton: !isTabVisible('discover')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('discover', discoverTab?.title ?? 'Follow', findTab('discover'))
+                ? renderSailorTabButton('discover', discoverTab?.title ?? 'Watch', findTab('discover'))
                 : undefined,
           }}
         />

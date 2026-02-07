@@ -102,14 +102,14 @@ function getInitials(name?: string): string {
 }
 
 function ProfileAvatarButton() {
-  const { userProfile, isGuest } = useAuth();
+  const { user, userProfile, isGuest } = useAuth();
   const scale = useSharedValue(1);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
-  const initials = isGuest ? '?' : getInitials(userProfile?.full_name || userProfile?.email);
+  const initials = isGuest ? '?' : getInitials(userProfile?.full_name || user?.email);
 
   return (
     <AnimatedPressable

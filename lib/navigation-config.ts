@@ -47,7 +47,7 @@ export const getTabsForUserType = (
   if (isGuest) {
     return [
       { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'discover', title: 'Follow', icon: 'heart-outline', iconFocused: 'heart' },
+      { name: 'discover', title: 'Watch', icon: 'eye-outline', iconFocused: 'eye' },
       { name: 'discuss', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
@@ -78,7 +78,7 @@ export const getTabsForUserType = (
   if (userType === 'sailor' || userType === 'coach') {
     const tabs: TabConfig[] = [
       { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'discover', title: 'Follow', icon: 'heart-outline', iconFocused: 'heart' },
+      { name: 'discover', title: 'Watch', icon: 'eye-outline', iconFocused: 'eye' },
       { name: 'discuss', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
@@ -107,7 +107,7 @@ export const getTabsForUserType = (
 // Navigation items by persona (used by NavigationDrawer and WebSidebarNav)
 export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'races', label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
-  { key: 'discover', label: 'Follow', route: '/(tabs)/discover', icon: 'heart-outline' },
+  { key: 'discover', label: 'Watch', route: '/(tabs)/discover', icon: 'eye-outline' },
   { key: 'discuss', label: 'Discuss', route: '/(tabs)/discuss', icon: 'chatbubbles-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
   { key: 'reflect', label: 'Reflect', route: '/(tabs)/reflect', icon: 'stats-chart-outline' },

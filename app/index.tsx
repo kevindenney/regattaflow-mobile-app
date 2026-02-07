@@ -59,24 +59,17 @@ export default function LandingPage() {
         router.replace(destination);
       }
     } else if (ready && !signedIn && !isGuest && !bypassRedirect) {
-      // Platform-specific behavior for non-logged-in users:
-      // - Web: Show landing page (marketing content) - no redirect
-      // - Mobile: Show onboarding first (if not seen), then enter guest mode
-      if (Platform.OS !== 'web') {
-        // Check if user has seen onboarding before auto-entering guest mode
-        OnboardingStateService.hasSeenOnboarding().then((hasSeen) => {
-          if (hasSeen) {
-            // Returning user who has seen onboarding - enter guest mode directly
-            enterGuestMode();
-          } else {
-            // New user - show onboarding flow first
-            setIsRedirecting(true);
-            router.replace('/onboarding');
-          }
-        });
-      }
-      // On web, do nothing - let the landing page render below
-
+      // Non-logged-in users: show onboarding first (if not seen), then enter guest mode → /races
+      OnboardingStateService.hasSeenOnboarding().then((hasSeen) => {
+        if (hasSeen) {
+          // Returning user who has seen onboarding - enter guest mode directly
+          enterGuestMode();
+        } else {
+          // New user - show onboarding flow first
+          setIsRedirecting(true);
+          router.replace('/onboarding');
+        }
+      });
     } else if (ready && !signedIn && !isGuest && showSkeleton) {
       // Session hint was wrong (expired/invalid token) - show landing page
       setShowSkeleton(false);
@@ -84,10 +77,8 @@ export default function LandingPage() {
   }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state, enterGuestMode]);
 
   // Show skeleton while auth is loading, for returning users, or during redirect
-  // This prevents flash of landing page before auto-guest mode kicks in on mobile
-  // On web: show landing page for non-logged-in users (no skeleton)
-  // On mobile: show skeleton briefly while entering guest mode
-  const willAutoEnterGuest = ready && !signedIn && !isGuest && !bypassRedirect && Platform.OS !== 'web';
+  // This prevents flash of landing page before auto-entering guest mode
+  const willAutoEnterGuest = ready && !signedIn && !isGuest && !bypassRedirect;
   if ((!ready || showSkeleton || signedIn || isRedirecting || willAutoEnterGuest) && !bypassRedirect) {
     return <DashboardSkeleton />;
   }

@@ -1,22 +1,31 @@
 /**
  * SailorActivityCard
  *
- * Card component for displaying a sailor's race activity in the Follow feed.
+ * Card component for displaying a sailor's race activity in the Watch feed.
  * Shows race name, date, venue, and activity type (upcoming/result).
+ * Supports tappable indicator pills that expand to show full content
+ * (prep notes, tuning, lessons) via lazy-loaded enrichment data.
  * Supports comments on activity.
  */
 
 import React, { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageCircle } from 'lucide-react-native';
 import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING, IOS_RADIUS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 import { useActivityCommentCount } from '@/hooks/useActivityComments';
+import { useRaceEnrichment } from '@/hooks/useRaceEnrichment';
 import { ActivityCommentSection } from './ActivityCommentSection';
 import type { PublicRacePreview } from '@/services/CrewFinderService';
 import type { ActivityType } from '@/services/ActivityCommentService';
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+type ExpandedSection = 'prep' | 'tuning' | 'lessons' | null;
 
 interface SailorActivityCardProps {
   race: PublicRacePreview;
@@ -25,6 +34,10 @@ interface SailorActivityCardProps {
   showComments?: boolean;
 }
 
+// =============================================================================
+// COMPONENT
+// =============================================================================
+
 export function SailorActivityCard({
   race,
   onSailorPress,
@@ -32,6 +45,7 @@ export function SailorActivityCard({
 }: SailorActivityCardProps) {
   const router = useRouter();
   const [commentsExpanded, setCommentsExpanded] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<ExpandedSection>(null);
 
   // Determine activity type for comments
   const activityType: ActivityType = race.isPast ? 'race_result' : 'race_entry';
@@ -39,9 +53,14 @@ export function SailorActivityCard({
   // Get comment count for badge
   const { count: commentCount } = useActivityCommentCount(activityType, race.id);
 
+  // Lazy enrichment — only fetches when a section is expanded
+  const {
+    data: enrichment,
+    isLoading: enrichmentLoading,
+  } = useRaceEnrichment(race.id, expandedSection !== null);
+
   const handleRacePress = useCallback(() => {
     triggerHaptic('selection');
-    // Navigate to the race detail as read-only
     router.push(`/sailor/${race.userId}/race/${race.id}`);
   }, [router, race.id, race.userId]);
 
@@ -57,6 +76,11 @@ export function SailorActivityCard({
   const handleToggleComments = useCallback(() => {
     triggerHaptic('selection');
     setCommentsExpanded((prev) => !prev);
+  }, []);
+
+  const handleToggleSection = useCallback((section: ExpandedSection) => {
+    triggerHaptic('selection');
+    setExpandedSection((prev) => (prev === section ? null : section));
   }, []);
 
   // Format the date
@@ -75,6 +99,16 @@ export function SailorActivityCard({
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  // Format tuning settings for display
+  const formatTuning = (tuning: Record<string, any> | null): string => {
+    if (!tuning) return 'No tuning data';
+    const entries = Object.entries(tuning);
+    if (entries.length === 0) return 'No tuning data';
+    return entries
+      .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${value}`)
+      .join('\n');
   };
 
   // Activity type label
@@ -105,7 +139,7 @@ export function SailorActivityCard({
                 color={IOS_COLORS.secondaryLabel}
               />
               <Text style={styles.activityLabel}>
-                {activityLabel} • {formatDate(race.startDate)}
+                {activityLabel} · {formatDate(race.startDate)}
               </Text>
             </View>
           </View>
@@ -130,7 +164,7 @@ export function SailorActivityCard({
             </View>
           )}
 
-          {/* Content Indicators */}
+          {/* Content Indicators — tappable pills */}
           <View style={styles.indicatorsRow}>
             {race.boatClass && (
               <View style={styles.indicator}>
@@ -139,22 +173,76 @@ export function SailorActivityCard({
               </View>
             )}
             {race.hasPrepNotes && (
-              <View style={styles.indicator}>
-                <Ionicons name="document-text-outline" size={12} color={IOS_COLORS.systemGreen} />
-                <Text style={styles.indicatorText}>Prep Notes</Text>
-              </View>
+              <Pressable
+                onPress={() => handleToggleSection('prep')}
+                style={[
+                  styles.indicator,
+                  styles.indicatorTappable,
+                  expandedSection === 'prep' && styles.indicatorActive,
+                ]}
+              >
+                <Ionicons
+                  name="document-text-outline"
+                  size={12}
+                  color={expandedSection === 'prep' ? '#FFFFFF' : IOS_COLORS.systemGreen}
+                />
+                <Text
+                  style={[
+                    styles.indicatorText,
+                    expandedSection === 'prep' && styles.indicatorTextActive,
+                  ]}
+                >
+                  Prep Notes
+                </Text>
+              </Pressable>
             )}
             {race.hasTuning && (
-              <View style={styles.indicator}>
-                <Ionicons name="settings-outline" size={12} color={IOS_COLORS.systemOrange} />
-                <Text style={styles.indicatorText}>Tuning</Text>
-              </View>
+              <Pressable
+                onPress={() => handleToggleSection('tuning')}
+                style={[
+                  styles.indicator,
+                  styles.indicatorTappable,
+                  expandedSection === 'tuning' && styles.indicatorActive,
+                ]}
+              >
+                <Ionicons
+                  name="settings-outline"
+                  size={12}
+                  color={expandedSection === 'tuning' ? '#FFFFFF' : IOS_COLORS.systemOrange}
+                />
+                <Text
+                  style={[
+                    styles.indicatorText,
+                    expandedSection === 'tuning' && styles.indicatorTextActive,
+                  ]}
+                >
+                  Tuning
+                </Text>
+              </Pressable>
             )}
             {race.hasLessons && (
-              <View style={styles.indicator}>
-                <Ionicons name="bulb-outline" size={12} color={IOS_COLORS.systemPurple} />
-                <Text style={styles.indicatorText}>Lessons</Text>
-              </View>
+              <Pressable
+                onPress={() => handleToggleSection('lessons')}
+                style={[
+                  styles.indicator,
+                  styles.indicatorTappable,
+                  expandedSection === 'lessons' && styles.indicatorActive,
+                ]}
+              >
+                <Ionicons
+                  name="bulb-outline"
+                  size={12}
+                  color={expandedSection === 'lessons' ? '#FFFFFF' : IOS_COLORS.systemPurple}
+                />
+                <Text
+                  style={[
+                    styles.indicatorText,
+                    expandedSection === 'lessons' && styles.indicatorTextActive,
+                  ]}
+                >
+                  Lessons
+                </Text>
+              </Pressable>
             )}
           </View>
 
@@ -193,6 +281,49 @@ export function SailorActivityCard({
         </View>
       </Pressable>
 
+      {/* Expanded Enrichment Section */}
+      {expandedSection !== null && (
+        <View style={styles.enrichmentContainer}>
+          {enrichmentLoading ? (
+            <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} style={styles.enrichmentLoader} />
+          ) : (
+            <>
+              {expandedSection === 'prep' && (
+                <View style={styles.enrichmentSection}>
+                  <Text style={styles.enrichmentTitle}>Prep Notes</Text>
+                  <Text style={styles.enrichmentContent}>
+                    {enrichment?.prepNotes || 'No prep notes available'}
+                  </Text>
+                </View>
+              )}
+              {expandedSection === 'tuning' && (
+                <View style={styles.enrichmentSection}>
+                  <Text style={styles.enrichmentTitle}>Tuning Settings</Text>
+                  <Text style={styles.enrichmentContent}>
+                    {formatTuning(enrichment?.tuningSettings ?? null)}
+                  </Text>
+                </View>
+              )}
+              {expandedSection === 'lessons' && (
+                <View style={styles.enrichmentSection}>
+                  <Text style={styles.enrichmentTitle}>Lessons Learned</Text>
+                  {enrichment?.lessonsLearned && enrichment.lessonsLearned.length > 0 ? (
+                    enrichment.lessonsLearned.map((lesson, i) => (
+                      <View key={i} style={styles.lessonItem}>
+                        <Text style={styles.lessonBullet}>·</Text>
+                        <Text style={styles.enrichmentContent}>{lesson}</Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text style={styles.enrichmentContent}>No lessons recorded</Text>
+                  )}
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      )}
+
       {/* Comments Section */}
       {showComments && commentsExpanded && (
         <View style={styles.commentsContainer}>
@@ -208,6 +339,10 @@ export function SailorActivityCard({
     </View>
   );
 }
+
+// =============================================================================
+// STYLES
+// =============================================================================
 
 const styles = StyleSheet.create({
   cardContainer: {
@@ -291,9 +426,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: IOS_RADIUS.sm,
   },
+  indicatorTappable: {
+    // Visual cue that pill is interactive
+  },
+  indicatorActive: {
+    backgroundColor: IOS_COLORS.systemBlue,
+  },
   indicatorText: {
     ...IOS_TYPOGRAPHY.caption2,
     color: IOS_COLORS.secondaryLabel,
+  },
+  indicatorTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   chevronContainer: {
     justifyContent: 'center',
@@ -324,6 +469,45 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.systemBlue,
     fontWeight: '500',
   },
+
+  // Enrichment expanded section
+  enrichmentContainer: {
+    paddingHorizontal: IOS_SPACING.md,
+    paddingBottom: IOS_SPACING.md,
+    marginLeft: 72, // Align with race content (56 avatar + 16 padding)
+  },
+  enrichmentLoader: {
+    paddingVertical: IOS_SPACING.md,
+  },
+  enrichmentSection: {
+    backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
+    borderRadius: IOS_RADIUS.md,
+    padding: IOS_SPACING.md,
+  },
+  enrichmentTitle: {
+    ...IOS_TYPOGRAPHY.caption1,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: IOS_SPACING.xs,
+  },
+  enrichmentContent: {
+    ...IOS_TYPOGRAPHY.subhead,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 20,
+    flex: 1,
+  },
+  lessonItem: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  lessonBullet: {
+    ...IOS_TYPOGRAPHY.subhead,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 20,
+  },
+
+  // Comments
   commentsContainer: {
     paddingHorizontal: IOS_SPACING.md,
     paddingBottom: IOS_SPACING.md,

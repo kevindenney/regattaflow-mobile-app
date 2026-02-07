@@ -12,11 +12,13 @@ import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 interface SegmentWithKey {
   key: string;
   label: string;
+  badge?: number;
 }
 
 interface SegmentWithValue<T extends string = string> {
   value: T;
   label: string;
+  badge?: number;
 }
 
 type Segment<T extends string = string> = SegmentWithKey | SegmentWithValue<T>;
@@ -76,14 +78,23 @@ export function IOSSegmentedControl<T extends string = string>({
             ]}
             onPress={() => handleSelect(segmentKey)}
           >
-            <Text
-              style={[
-                styles.segmentText,
-                isSelected && styles.selectedSegmentText,
-              ]}
-            >
-              {segment.label}
-            </Text>
+            <View style={styles.segmentContent}>
+              <Text
+                style={[
+                  styles.segmentText,
+                  isSelected && styles.selectedSegmentText,
+                ]}
+              >
+                {segment.label}
+              </Text>
+              {segment.badge != null && segment.badge > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {segment.badge > 99 ? '99+' : segment.badge}
+                  </Text>
+                </View>
+              )}
+            </View>
           </Pressable>
         );
       })}
@@ -129,6 +140,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 6,
     borderBottomRightRadius: 6,
   },
+  segmentContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   segmentText: {
     fontSize: 13,
     fontWeight: '500',
@@ -136,6 +152,20 @@ const styles = StyleSheet.create({
   },
   selectedSegmentText: {
     color: '#000000',
+  },
+  badge: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
   },
 });
 

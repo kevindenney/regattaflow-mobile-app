@@ -1178,6 +1178,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: IOS_COLORS.orange,
     fontStyle: 'italic',
+    marginTop: 4,
   },
 
   // Analysis

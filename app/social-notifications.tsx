@@ -398,7 +398,7 @@ export default function SocialNotificationsScreen() {
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyTitle}>No Activity Yet</Text>
         <Text style={styles.emptyText}>
-          When sailors follow you or interact with your races, you'll see it here.
+          When sailors follow you, comment on your races, or interact with your content, you'll see it here.
         </Text>
       </View>
     );

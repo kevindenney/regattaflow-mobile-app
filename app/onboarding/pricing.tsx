@@ -44,6 +44,20 @@ export default function PricingScreen() {
             <SafeAreaView style={styles.safeArea}>
                 <ScrollView contentContainerStyle={styles.scrollContent}>
 
+                    <View style={styles.topBar}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => router.back()}
+                        >
+                            <Ionicons name="arrow-back" size={20} color="#64748B" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => router.push('/(auth)/login')}
+                        >
+                            <Text style={styles.signInText}>Already have an account? <Text style={styles.signInLink}>Sign in</Text></Text>
+                        </TouchableOpacity>
+                    </View>
+
                     <View style={styles.header}>
                         <Text style={styles.title}>Choose Your Plan</Text>
                         <Text style={styles.subtitle}>Unlock the full potential of RegattaFlow.</Text>
@@ -172,8 +186,30 @@ const styles = StyleSheet.create({
     scrollContent: {
         padding: 24,
     },
+    topBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    backButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    signInText: {
+        fontSize: 14,
+        color: '#64748B',
+    },
+    signInLink: {
+        color: '#3B82F6',
+        fontWeight: '600',
+    },
     header: {
-        marginTop: 20,
+        marginTop: 12,
         marginBottom: 32,
         alignItems: 'center',
     },
