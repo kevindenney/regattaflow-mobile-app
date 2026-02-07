@@ -95,6 +95,7 @@ import {
   type RegulatoryAcknowledgements
 } from '@/lib/races';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { DemoRaceService } from '@/services/DemoRaceService';
 import { isDemoRaceId } from '@/lib/demo/demoRaceData';
@@ -107,7 +108,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActionSheetIOS, ActivityIndicator, Alert, Animated, Dimensions, LayoutRectangle, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActionSheetIOS, ActivityIndicator, Animated, Dimensions, LayoutRectangle, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const logger = createLogger('RacesScreen');
@@ -1272,32 +1273,24 @@ export default function RacesScreen() {
     const friendlyName = raceName || 'this race';
     const confirmationMessage = `Hide "${friendlyName}" from your timeline? You can rejoin later from the race discovery page.`;
 
-    Alert.alert(
+    showConfirm(
       'Hide from Timeline',
       confirmationMessage,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Hide',
-          onPress: async () => {
-            const result = await withdrawFromRace(user.id, raceId);
-            if (result.success) {
-              // Clear selection if the hidden race was selected
-              if (selectedRaceId === raceId) {
-                setSelectedRaceId(null);
-              }
-              // Refresh the race list
-              refetchRaces?.();
-              Alert.alert('Hidden', `"${friendlyName}" has been removed from your timeline.`);
-            } else {
-              Alert.alert('Error', result.error || 'Failed to hide race');
-            }
-          },
-        },
-      ],
+      async () => {
+        const result = await withdrawFromRace(user.id, raceId);
+        if (result.success) {
+          // Clear selection if the hidden race was selected
+          if (selectedRaceId === raceId) {
+            setSelectedRaceId(null);
+          }
+          // Refresh the race list
+          refetchRaces?.();
+          showAlert('Hidden', `"${friendlyName}" has been removed from your timeline.`);
+        } else {
+          showAlert('Error', result.error || 'Failed to hide race');
+        }
+      },
+      { confirmText: 'Hide' }
     );
   }, [refetchRaces, selectedRaceId, user?.id]);
 
@@ -1367,41 +1360,21 @@ export default function RacesScreen() {
 
         await refetchRaces();
 
-        Alert.alert('Race deleted', `"${friendlyName}" has been removed.`);
+        showAlert('Race deleted', `"${friendlyName}" has been removed.`);
       } catch (error: any) {
         logger.error('Error deleting race:', error);
         const message = error?.message || 'Unable to delete race. Please try again.';
-        Alert.alert('Error', message);
+        showAlert('Error', message);
       } finally {
         setDeletingRaceId(prev => (prev === raceId ? null : prev));
       }
     };
 
-    if (Platform.OS === 'web') {
-      const confirmed =
-        typeof globalThis !== 'undefined' &&
-          typeof (globalThis as any).confirm === 'function'
-          ? (globalThis as any).confirm(confirmationMessage)
-          : false;
-      if (confirmed) {
-        void performDelete();
-      }
-      return;
-    }
-
-    Alert.alert(
+    showConfirm(
       'Delete race?',
       confirmationMessage,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void performDelete();
-          },
-        },
-      ],
+      () => { void performDelete(); },
+      { destructive: true, confirmText: 'Delete' }
     );
   }, [isDeletingRace, logger, refetchRaces, selectedRaceId]);
 
@@ -1433,13 +1406,13 @@ export default function RacesScreen() {
 
     if (!selectedRaceId) {
       logger.warn('[handleSaveRacingArea] No selectedRaceId, aborting');
-      Alert.alert('Error', 'No race selected');
+      showAlert('Error', 'No race selected');
       return;
     }
 
     if (pointsToSave.length < 3) {
       logger.warn('[handleSaveRacingArea] Not enough points:', pointsToSave.length);
-      Alert.alert('Error', `Need at least 3 points to save racing area. Currently have ${pointsToSave.length} points.`);
+      showAlert('Error', `Need at least 3 points to save racing area. Currently have ${pointsToSave.length} points.`);
       return;
     }
 
@@ -1484,7 +1457,7 @@ export default function RacesScreen() {
 
       if (error) {
         logger.error('[handleSaveRacingArea] Supabase error:', error);
-        Alert.alert('Error Saving', `Failed to save racing area: ${error.message}`);
+        showAlert('Error Saving', `Failed to save racing area: ${error.message}`);
         throw error;
       }
 
@@ -1509,7 +1482,7 @@ export default function RacesScreen() {
       const coordsMessage = shouldUpdateVenueCoords
         ? `\n\nVenue coordinates auto-detected from racing area center for tide/weather data.`
         : '';
-      Alert.alert('Success', `Racing area saved!${coordsMessage}`);
+      showAlert('Success', `Racing area saved!${coordsMessage}`);
     } catch (error) {
       logger.error('Error saving racing area:', error);
     }
@@ -2485,7 +2458,7 @@ export default function RacesScreen() {
     ].filter(Boolean) as string[];
 
     if (lines.length === 0) {
-      Alert.alert('Share', 'Nothing to share yet—run a race first!');
+      showAlert('Share', 'Nothing to share yet—run a race first!');
       return;
     }
 
@@ -2508,9 +2481,9 @@ export default function RacesScreen() {
           });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(message);
-          Alert.alert('Copied', 'Race summary copied to your clipboard for easy sharing.');
+          showAlert('Copied', 'Race summary copied to your clipboard for easy sharing.');
         } else {
-          Alert.alert('Race Debrief', message);
+          showAlert('Race Debrief', message);
         }
       } else {
         await Share.share({
@@ -2522,7 +2495,7 @@ export default function RacesScreen() {
       logger.info('[races.tsx] Race analysis shared');
     } catch (error) {
       logger.error('[races.tsx] Failed to share race analysis', error);
-      Alert.alert('Share failed', 'Unable to share race analysis right now. Please try again later.');
+      showAlert('Share failed', 'Unable to share race analysis right now. Please try again later.');
     }
   }, [
     selectedRaceData,
@@ -2824,7 +2797,7 @@ export default function RacesScreen() {
                 },
               );
             } else {
-              Alert.alert('Race Options', undefined, [
+              showAlertWithButtons('Race Options', undefined, [
                 { text: 'Race Courses', onPress: () => router.push('/race-courses') },
                 { text: 'Race Detail', onPress: () => router.push(`/race/${raceId}`) },
                 { text: 'Cancel', style: 'cancel' },

@@ -45,6 +45,7 @@ import { Marginalia } from '@/components/ui/Marginalia';
 import { RaceAnalysisService } from '@/services/RaceAnalysisService';
 import { StructuredDebriefInterview } from '@/components/races/review/StructuredDebriefInterview';
 import { NextRaceFocusSection } from '@/components/races/review/NextRaceFocusSection';
+import { GPSTrackSection } from '@/components/races/review/GPSTrackSection';
 import { RaceContentActions } from '@/components/races/RaceContentActions';
 import {
   POST_RACE_REVIEW_CONFIG,
@@ -72,6 +73,8 @@ interface AfterRaceContentProps {
   userId?: string;
   onOpenPostRaceInterview?: () => void;
   isExpanded?: boolean;
+  /** Incrementing counter to trigger data refetch (e.g., after PostRaceInterview completes) */
+  refetchTrigger?: number;
 }
 
 /**
@@ -143,7 +146,7 @@ function SimpleChecklistItem({
   return (
     <Pressable
       style={styles.checklistItem}
-      onPress={onPress}
+      onPress={onPress || (() => {})}
       disabled={isDisabled || !onPress}
     >
       {/* Square checkbox (22x22, borderRadius 6) matching DaysBeforeContent */}
@@ -188,12 +191,12 @@ function ReviewChecklistItem({
   children?: React.ReactNode;
 }) {
   return (
-    <View style={styles.checklistItemRow}>
-      <Pressable
-        style={styles.checklistHeader}
-        onPress={onPress}
-        disabled={isDisabled || !onPress}
-      >
+    <Pressable
+      style={styles.checklistItemRow}
+      onPress={onPress || (() => {})}
+      disabled={isDisabled || !onPress}
+    >
+      <View style={styles.checklistHeader}>
         {/* Square checkbox (22x22, borderRadius 6) matching DaysBeforeContent */}
         <View style={[
           styles.checkbox,
@@ -209,13 +212,13 @@ function ReviewChecklistItem({
         ]}>
           {label}
         </Text>
-      </Pressable>
+      </View>
       {children && (
         <View style={styles.checklistContent}>
           {children}
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -224,6 +227,7 @@ export function AfterRaceContent({
   userId: propsUserId,
   onOpenPostRaceInterview,
   isExpanded = true,
+  refetchTrigger,
 }: AfterRaceContentProps) {
   // Get current user if userId not provided
   const { user } = useAuth();
@@ -242,6 +246,16 @@ export function AfterRaceContent({
     raceId: race.id,
     userId,
   });
+
+  // Refetch all data when refetchTrigger changes (e.g., after PostRaceInterview completes)
+  useEffect(() => {
+    if (refetchTrigger !== undefined && refetchTrigger > 0) {
+      refetchState();
+      refetchData();
+      refetchDebrief();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetchTrigger]); // Only trigger on refetchTrigger change, not callback changes
 
   // Modal state for interview
   const [showInterviewModal, setShowInterviewModal] = useState(false);
@@ -474,10 +488,13 @@ export function AfterRaceContent({
         <ReviewChecklistItem
           label="Record race result"
           isCompleted={!!hasResult}
-          onPress={!hasResult ? onOpenPostRaceInterview : undefined}
+          onPress={onOpenPostRaceInterview}
         >
           {hasResult ? (
-            <Text style={styles.resultValue}>{resultText}</Text>
+            <View style={styles.resultEditableRow}>
+              <Text style={styles.resultValue}>{resultText}</Text>
+              <Text style={styles.resultEditHint}>Tap to edit</Text>
+            </View>
           ) : (
             <Text style={styles.absenceHint}>Tap to record your finishing position</Text>
           )}
@@ -616,6 +633,17 @@ export function AfterRaceContent({
           )}
         </ReviewChecklistItem>
       </Animated.View>
+
+      {/* ================================================================== */}
+      {/* GPS TRACK - Show recorded track with mini-map */}
+      {/* ================================================================== */}
+      {isExpanded && analysisData?.timerSessionId && (
+        <GPSTrackSection
+          raceId={race.id}
+          userId={userId}
+          timerSessionId={analysisData.timerSessionId}
+        />
+      )}
 
       {/* ================================================================== */}
       {/* TIER 2: ACTIONABLE INSIGHTS */}
@@ -1013,11 +1041,21 @@ const styles = StyleSheet.create({
   },
 
   // Result
+  resultEditableRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
   resultValue: {
     fontSize: 24,
     fontWeight: '700',
     color: IOS_COLORS.label,
     letterSpacing: -0.5,
+  },
+  resultEditHint: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
   },
 
   // Structured Debrief Section

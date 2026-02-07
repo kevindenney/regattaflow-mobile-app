@@ -2,13 +2,12 @@
  * Post Create Route
  *
  * Standalone post creation screen (for deep linking).
- * When venueId is provided, opens PostComposer directly.
- * Otherwise, shows a venue picker with search so the user can choose where to post.
- * Saved venues appear first, then venues grouped by country.
- * Search also matches yacht club names via ClubDiscoveryService.
+ * When communityId/venueId is provided, opens PostComposer directly.
+ * Otherwise, shows a community picker with search so the user can choose where to post.
+ * User's joined communities appear first, then communities grouped by type.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,37 +16,35 @@ import {
   SectionList,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Platform,
-  Linking,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import debounce from 'lodash/debounce';
 import { PostComposer } from '@/components/venue/post/PostComposer';
-import { useSavedVenues } from '@/hooks/useSavedVenues';
-import { useVenueDirectory } from '@/hooks/useVenueDirectory';
-import { ClubDiscoveryService } from '@/services/ClubDiscoveryService';
+import {
+  useUserCommunities,
+  useCommunitySearch,
+  usePopularCommunities,
+} from '@/hooks/useCommunities';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
   IOS_SPACING,
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
-
-type VenueItem = {
-  id: string;
-  name: string;
-  country?: string | null;
-  region?: string | null;
-  venue_type?: string | null;
-  matchedClubName?: string | null;
-};
+import { COMMUNITY_TYPE_CONFIG, type Community } from '@/types/community';
 
 export default function PostCreateRoute() {
-  const { venueId: paramVenueId, racingAreaId, catalogRaceId, catalogRaceName } = useLocalSearchParams<{
-    venueId: string;
+  const {
+    venueId: paramVenueId,
+    communityId: paramCommunityId,
+    racingAreaId,
+    catalogRaceId,
+    catalogRaceName,
+  } = useLocalSearchParams<{
+    venueId?: string;
+    communityId?: string;
     racingAreaId?: string;
     catalogRaceId?: string;
     catalogRaceName?: string;
@@ -55,132 +52,79 @@ export default function PostCreateRoute() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [selectedVenueId, setSelectedVenueId] = useState<string | undefined>(
-    paramVenueId,
+  const [selectedCommunity, setSelectedCommunity] = useState<{
+    id: string;
+    venueId?: string;
+  } | null>(
+    paramCommunityId
+      ? { id: paramCommunityId, venueId: paramVenueId }
+      : paramVenueId
+        ? { id: '', venueId: paramVenueId }
+        : null
   );
   const [searchQuery, setSearchQuery] = useState('');
-  const [clubMatchedVenues, setClubMatchedVenues] = useState<VenueItem[]>([]);
 
-  // Venue data for picker
-  const { savedVenueIds } = useSavedVenues();
-  const { allVenues, isLoading } = useVenueDirectory();
+  // Community data for picker
+  const { data: userCommunities, isLoading: isLoadingUser } = useUserCommunities();
+  const { data: searchResults, isLoading: isSearching } = useCommunitySearch(
+    searchQuery,
+    {},
+    searchQuery.length >= 2
+  );
+  const { data: popularCommunities, isLoading: isLoadingPopular } = usePopularCommunities(20);
 
-  // Debounced club search
-  const debouncedClubSearch = useRef(
-    debounce(async (q: string) => {
-      if (q.length < 2) {
-        setClubMatchedVenues([]);
-        return;
-      }
-      try {
-        const clubs = await ClubDiscoveryService.searchYachtClubs(q, 10);
-        const results: VenueItem[] = [];
-        for (const club of clubs) {
-          if (club.sailing_venues) {
-            results.push({
-              id: club.sailing_venues.id,
-              name: club.sailing_venues.name,
-              country: club.sailing_venues.country ?? null,
-              region: club.sailing_venues.region ?? null,
-              matchedClubName: club.name,
-            });
-          }
-        }
-        setClubMatchedVenues(results);
-      } catch {
-        setClubMatchedVenues([]);
-      }
-    }, 300),
-  ).current;
+  const isSearchMode = searchQuery.trim().length >= 2;
+  const isLoading = isLoadingUser || isLoadingPopular;
 
-  useEffect(() => {
-    debouncedClubSearch(searchQuery.trim());
-    return () => debouncedClubSearch.cancel();
-  }, [searchQuery, debouncedClubSearch]);
-
-  // Build sections: browse mode vs search mode
+  // Build sections for the list
   const sections = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    const isSearching = q.length > 0;
+    const result: { title: string; data: Community[] }[] = [];
 
-    const matchesQuery = (v: VenueItem) => {
-      if (!q) return true;
-      return (
-        v.name.toLowerCase().includes(q) ||
-        (v.country && v.country !== 'Unknown' && v.country.toLowerCase().includes(q)) ||
-        (v.region && v.region !== 'Unknown' && v.region.toLowerCase().includes(q))
-      );
-    };
-
-    const result: { title: string; data: VenueItem[] }[] = [];
-
-    if (isSearching) {
-      // --- Search mode ---
-      const savedMatches = allVenues.filter(
-        (v) => savedVenueIds.has(v.id) && matchesQuery(v),
-      );
-      if (savedMatches.length > 0) {
-        result.push({ title: 'MY VENUES', data: savedMatches });
-      }
-
-      // Direct venue name matches (non-saved)
-      const directMatches = allVenues.filter(
-        (v) => !savedVenueIds.has(v.id) && matchesQuery(v),
-      );
-      const directIdSet = new Set(directMatches.map((v) => v.id));
-      // Also include saved IDs so we don't duplicate
-      const allMatchedIds = new Set([
-        ...directIdSet,
-        ...savedMatches.map((v) => v.id),
-      ]);
-
-      // Add club-matched venues not already in direct results
-      const clubExtras = clubMatchedVenues.filter(
-        (v) => !allMatchedIds.has(v.id),
-      );
-
-      const searchResults: VenueItem[] = [
-        ...directMatches,
-        ...clubExtras,
-      ];
-      if (searchResults.length > 0) {
-        result.push({ title: 'SEARCH RESULTS', data: searchResults });
+    if (isSearchMode && searchResults) {
+      // Search mode - show search results
+      if (searchResults.data.length > 0) {
+        result.push({ title: 'SEARCH RESULTS', data: searchResults.data });
       }
     } else {
-      // --- Browse mode: saved + country-grouped ---
-      const saved = allVenues.filter((v) => savedVenueIds.has(v.id));
-      if (saved.length > 0) {
-        result.push({ title: 'MY VENUES', data: saved });
+      // Browse mode - show joined communities first, then by type
+      const joined = userCommunities?.joined || [];
+      if (joined.length > 0) {
+        result.push({ title: 'YOUR COMMUNITIES', data: joined });
       }
 
-      const others = allVenues.filter((v) => !savedVenueIds.has(v.id));
-      const countryMap = new Map<string, VenueItem[]>();
-      for (const v of others) {
-        const key =
-          v.country && v.country !== 'Unknown' ? v.country : '__other__';
-        if (!countryMap.has(key)) countryMap.set(key, []);
-        countryMap.get(key)!.push(v);
+      // Group popular communities by type
+      const popular = popularCommunities?.data || [];
+      const joinedIds = new Set(joined.map((c) => c.id));
+      const notJoined = popular.filter((c) => !joinedIds.has(c.id));
+
+      // Group by community_type
+      const typeGroups = new Map<string, Community[]>();
+      for (const c of notJoined) {
+        const type = c.community_type;
+        if (!typeGroups.has(type)) typeGroups.set(type, []);
+        typeGroups.get(type)!.push(c);
       }
 
-      // Sort country keys alphabetically, "Other" last
-      const sortedKeys = Array.from(countryMap.keys()).sort((a, b) => {
-        if (a === '__other__') return 1;
-        if (b === '__other__') return -1;
-        return a.localeCompare(b);
+      // Sort types: venues first, then alphabetically
+      const typeOrder = ['venue', 'boat_class', 'race', 'sailmaker', 'gear', 'rules', 'tactics', 'tuning', 'general'];
+      const sortedTypes = Array.from(typeGroups.keys()).sort((a, b) => {
+        const aIdx = typeOrder.indexOf(a);
+        const bIdx = typeOrder.indexOf(b);
+        return (aIdx === -1 ? 999 : aIdx) - (bIdx === -1 ? 999 : bIdx);
       });
 
-      for (const key of sortedKeys) {
-        const venues = countryMap.get(key)!;
-        venues.sort((a, b) => a.name.localeCompare(b.name));
+      for (const type of sortedTypes) {
+        const communities = typeGroups.get(type)!;
+        const config = COMMUNITY_TYPE_CONFIG[type as keyof typeof COMMUNITY_TYPE_CONFIG];
         result.push({
-          title: key === '__other__' ? 'OTHER' : key.toUpperCase(),
-          data: venues,
+          title: config?.label?.toUpperCase() || type.toUpperCase(),
+          data: communities.slice(0, 10), // Limit per type
         });
       }
     }
 
     return result;
-  }, [allVenues, savedVenueIds, searchQuery, clubMatchedVenues]);
+  }, [isSearchMode, searchResults, userCommunities, popularCommunities]);
 
   const handleDismiss = useCallback(() => {
     router.back();
@@ -190,26 +134,25 @@ export default function PostCreateRoute() {
     router.replace('/(tabs)/venue');
   }, [router]);
 
-  const handleSuggestVenue = useCallback(async () => {
-    const url = 'mailto:support@regattaflow.com?subject=Venue%20Suggestion';
-    const canOpen = await Linking.canOpenURL(url);
-    if (canOpen) {
-      Linking.openURL(url);
-    } else {
-      Alert.alert(
-        'No Mail App',
-        'Please email support@regattaflow.com with your venue suggestion.',
-      );
-    }
+  const handleSelectCommunity = useCallback((community: Community) => {
+    // For venue communities, we need to pass the linked_entity_id as venueId
+    const venueId = community.community_type === 'venue' ? community.linked_entity_id : undefined;
+    setSelectedCommunity({ id: community.id, venueId: venueId || undefined });
   }, []);
 
-  // If we have a venue selected, show the composer
-  if (selectedVenueId) {
+  const handleCreateCommunity = useCallback(() => {
+    router.push('/community/create');
+  }, [router]);
+
+  // If we have a community selected, show the composer
+  // Allow posting if we have either a venueId OR a communityId
+  if (selectedCommunity && (selectedCommunity.venueId || selectedCommunity.id)) {
     return (
       <View style={styles.container}>
         <PostComposer
           visible={true}
-          venueId={selectedVenueId}
+          venueId={selectedCommunity.venueId || undefined}
+          communityId={selectedCommunity.id || undefined}
           racingAreaId={racingAreaId}
           catalogRaceId={catalogRaceId}
           catalogRaceName={catalogRaceName}
@@ -222,7 +165,7 @@ export default function PostCreateRoute() {
 
   const hasResults = sections.some((s) => s.data.length > 0);
 
-  // Otherwise show venue picker
+  // Otherwise show community picker
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -230,7 +173,7 @@ export default function PostCreateRoute() {
         <Pressable onPress={handleDismiss} hitSlop={8}>
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Choose Venue</Text>
+        <Text style={styles.headerTitle}>Choose Community</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -244,7 +187,7 @@ export default function PostCreateRoute() {
         />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search venues or clubs..."
+          placeholder="Search communities..."
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -256,90 +199,80 @@ export default function PostCreateRoute() {
         />
       </View>
 
-      {isLoading ? (
+      {isLoading || isSearching ? (
         <View style={styles.loading}>
           <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
         </View>
       ) : !hasResults ? (
         <View style={styles.empty}>
           <Ionicons
-            name="location-outline"
+            name="people-outline"
             size={48}
             color={IOS_COLORS.systemGray3}
           />
           <Text style={styles.emptyTitle}>
-            {searchQuery.trim() ? 'No venues found' : 'No venues available'}
+            {searchQuery.trim() ? 'No communities found' : 'No communities available'}
           </Text>
           <Text style={styles.emptySubtitle}>
             {searchQuery.trim()
-              ? 'Try a different search term'
-              : 'Venues will appear here once added to the platform'}
+              ? 'Try a different search term or create a new community'
+              : 'Join some communities or create your own'}
           </Text>
-          {/* Suggest venue CTA in empty state */}
-          <Pressable style={styles.suggestButton} onPress={handleSuggestVenue}>
+          {/* Create community CTA in empty state */}
+          <Pressable style={styles.createButton} onPress={handleCreateCommunity}>
             <Ionicons
               name="add-circle-outline"
               size={20}
               color={IOS_COLORS.systemBlue}
             />
-            <View>
-              <Text style={styles.suggestTitle}>Can't find your venue?</Text>
-              <Text style={styles.suggestSubtitle}>
-                Suggest it and we'll add it
-              </Text>
-            </View>
+            <Text style={styles.createButtonText}>Create a Community</Text>
           </Pressable>
         </View>
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={(item, index) =>
-            item.matchedClubName
-              ? `${item.id}-club-${index}`
-              : item.id
-          }
+          keyExtractor={(item) => item.id}
           keyboardDismissMode="on-drag"
           stickySectionHeadersEnabled={false}
           renderSectionHeader={({ section: { title } }) => (
             <Text style={styles.sectionTitle}>{title}</Text>
           )}
-          renderItem={({ item }) => (
-            <Pressable
-              style={styles.venueRow}
-              onPress={() => setSelectedVenueId(item.id)}
-            >
-              <View style={styles.venueInfo}>
-                <Text style={styles.venueName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                {item.matchedClubName ? (
-                  <Text style={styles.venueClubMatch} numberOfLines={1}>
-                    via {item.matchedClubName}
+          renderItem={({ item }) => {
+            const typeConfig = COMMUNITY_TYPE_CONFIG[item.community_type as keyof typeof COMMUNITY_TYPE_CONFIG];
+            return (
+              <Pressable
+                style={styles.communityRow}
+                onPress={() => handleSelectCommunity(item)}
+              >
+                <View style={[styles.communityIcon, { backgroundColor: typeConfig?.bgColor || '#F3F4F6' }]}>
+                  <Ionicons
+                    name={(typeConfig?.icon as any) || 'chatbubbles-outline'}
+                    size={20}
+                    color={typeConfig?.color || IOS_COLORS.secondaryLabel}
+                  />
+                </View>
+                <View style={styles.communityInfo}>
+                  <Text style={styles.communityName} numberOfLines={1}>
+                    {item.name}
                   </Text>
-                ) : (
-                  item.country &&
-                  item.country !== 'Unknown' && (
-                    <Text style={styles.venueLocation} numberOfLines={1}>
-                      {[item.region, item.country]
-                        .filter((s) => s && s !== 'Unknown')
-                        .join(', ')}
-                    </Text>
-                  )
-                )}
-              </View>
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color={IOS_COLORS.tertiaryLabel}
-              />
-            </Pressable>
-          )}
+                  <Text style={styles.communityMeta} numberOfLines={1}>
+                    {item.member_count.toLocaleString()} members · {typeConfig?.label || item.community_type}
+                  </Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={IOS_COLORS.tertiaryLabel}
+                />
+              </Pressable>
+            );
+          }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderSectionFooter={() => <View style={styles.sectionFooter} />}
           ListFooterComponent={() => (
             <Pressable
               style={styles.listFooter}
-              onPress={handleSuggestVenue}
+              onPress={handleCreateCommunity}
             >
               <Ionicons
                 name="add-circle-outline"
@@ -347,11 +280,11 @@ export default function PostCreateRoute() {
                 color={IOS_COLORS.systemBlue}
               />
               <View>
-                <Text style={styles.suggestTitle}>
-                  Can't find your venue?
+                <Text style={styles.createTitle}>
+                  Can't find your community?
                 </Text>
-                <Text style={styles.suggestSubtitle}>
-                  Suggest it and we'll add it
+                <Text style={styles.createSubtitle}>
+                  Create a new one
                 </Text>
               </View>
             </Pressable>
@@ -445,33 +378,38 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
   },
-  venueRow: {
+  communityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
     paddingHorizontal: IOS_SPACING.lg,
     paddingVertical: IOS_SPACING.md,
   },
-  venueInfo: {
+  communityIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: IOS_RADIUS.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: IOS_SPACING.md,
+  },
+  communityInfo: {
     flex: 1,
     gap: 2,
   },
-  venueName: {
+  communityName: {
     ...IOS_TYPOGRAPHY.body,
     color: IOS_COLORS.label,
+    fontWeight: '500',
   },
-  venueLocation: {
+  communityMeta: {
     ...IOS_TYPOGRAPHY.footnote,
     color: IOS_COLORS.secondaryLabel,
-  },
-  venueClubMatch: {
-    ...IOS_TYPOGRAPHY.footnote,
-    color: IOS_COLORS.systemBlue,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: IOS_COLORS.separator,
-    marginLeft: IOS_SPACING.lg,
+    marginLeft: IOS_SPACING.lg + 40 + IOS_SPACING.md, // Icon width + margins
   },
   listFooter: {
     flexDirection: 'row',
@@ -480,18 +418,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: IOS_SPACING.lg,
     paddingVertical: IOS_SPACING.xl,
   },
-  suggestButton: {
+  createButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: IOS_SPACING.sm,
     marginTop: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.sm,
+    paddingHorizontal: IOS_SPACING.lg,
+    backgroundColor: IOS_COLORS.systemBlue,
+    borderRadius: IOS_RADIUS.full,
   },
-  suggestTitle: {
+  createButtonText: {
+    ...IOS_TYPOGRAPHY.subhead,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  createTitle: {
     ...IOS_TYPOGRAPHY.subhead,
     color: IOS_COLORS.systemBlue,
     fontWeight: '600',
   },
-  suggestSubtitle: {
+  createSubtitle: {
     ...IOS_TYPOGRAPHY.caption1,
     color: IOS_COLORS.secondaryLabel,
   },

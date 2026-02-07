@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 
 interface SegmentWithKey {
   key: string;
@@ -65,16 +65,16 @@ export function IOSSegmentedControl<T extends string = string>({
         const isLast = index === segments.length - 1;
 
         return (
-          <TouchableOpacity
+          <Pressable
             key={segmentKey}
-            style={[
+            style={({ pressed }) => [
               styles.segment,
               isSelected && styles.selectedSegment,
               isFirst && styles.firstSegment,
               isLast && styles.lastSegment,
+              pressed && styles.pressedSegment,
             ]}
             onPress={() => handleSelect(segmentKey)}
-            activeOpacity={0.7}
           >
             <Text
               style={[
@@ -84,7 +84,7 @@ export function IOSSegmentedControl<T extends string = string>({
             >
               {segment.label}
             </Text>
-          </TouchableOpacity>
+          </Pressable>
         );
       })}
     </View>
@@ -105,6 +105,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 6,
+    ...Platform.select({
+      web: { cursor: 'pointer' } as any,
+      default: {},
+    }),
+  },
+  pressedSegment: {
+    opacity: 0.7,
   },
   selectedSegment: {
     backgroundColor: '#FFFFFF',

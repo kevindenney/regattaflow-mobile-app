@@ -1,0 +1,6 @@
+# Firebase Auth Bridge Configuration
+# Disable JWT verification because this endpoint accepts Firebase tokens,
+# not Supabase JWTs. The function itself validates the Firebase token.
+
+[functions.firebase-auth-bridge]
+verify_jwt = false

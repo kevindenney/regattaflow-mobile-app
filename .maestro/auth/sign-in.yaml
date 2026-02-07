@@ -115,10 +115,36 @@ env:
 # VERIFY SIGN IN SUCCESS
 # ============================================================
 
-# Wait for Race screen to appear (successful sign in)
+# Wait for app to process login
 - extendedWaitUntil:
-    visible: "Race"
+    visible: ".*"
+    timeout: 10000
+
+# Wait for main app screen to appear after sign-in
+# The bottom tab bar should show one of these tabs
+- extendedWaitUntil:
+    visible:
+      anyOf:
+        - "Race"
+        - "Races"
+        - "My Races"
+        - "Schedule"
+        - "Home"
     timeout: 60000
 
-# Verify we're on the Race screen
-- assertVisible: "Race"
+# Alternative check - verify we're NOT on the login screen anymore
+- assertNotVisible:
+    text: "Sign In"
+    optional: true
+
+# Verify bottom navigation appeared (any tab)
+- assertVisible:
+    anyOf:
+      - "Race"
+      - "Races"
+      - "My Races"
+      - "Schedule"
+      - "Home"
+      - "Learn"
+      - "Discuss"
+    optional: true

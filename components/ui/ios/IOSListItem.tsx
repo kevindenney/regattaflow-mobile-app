@@ -80,6 +80,8 @@ interface IOSListItemProps {
   titleStyle?: TextStyle;
   /** Custom subtitle style */
   subtitleStyle?: TextStyle;
+  /** Test ID for E2E testing */
+  testID?: string;
 }
 
 const SWIPE_THRESHOLD = 80;
@@ -111,6 +113,7 @@ export function IOSListItem({
   style,
   titleStyle,
   subtitleStyle,
+  testID,
 }: IOSListItemProps) {
   const translateX = useSharedValue(0);
   const scale = useSharedValue(1);
@@ -270,6 +273,7 @@ export function IOSListItem({
 
   const content = (
     <AnimatedPressable
+      testID={testID}
       style={[styles.row, animatedRowStyle, animatedPressStyle, style]}
       onPress={handlePress}
       onLongPress={handleLongPress}

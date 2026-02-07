@@ -322,7 +322,7 @@ export function RacePrepForm({
             <X size={24} color={IOS_COLORS.systemBlue} />
           </Pressable>
           <View style={styles.headerTitle}>
-            <Text style={styles.headerTitleText}>Race Prep</Text>
+            <Text style={styles.headerTitleText}>Share Your Prep</Text>
             {raceName && (
               <Text style={styles.headerSubtitle} numberOfLines={1}>{raceName}</Text>
             )}
@@ -359,9 +359,9 @@ export function RacePrepForm({
           >
             {/* Prep Notes */}
             <View style={styles.section}>
-              <Text style={styles.label}>Pre-Race Prep Notes</Text>
+              <Text style={styles.label}>Your Race Prep</Text>
               <Text style={styles.hint}>
-                Equipment checks, strategy thoughts, goals for this race
+                Share what you're focusing on - others racing similar conditions will learn from you
               </Text>
               <TextInput
                 style={styles.textArea}

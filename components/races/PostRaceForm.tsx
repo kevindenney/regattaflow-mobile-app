@@ -58,19 +58,19 @@ const VISIBILITY_OPTIONS: { value: ContentVisibility; label: string; description
   {
     value: 'private',
     label: 'Private',
-    description: 'Only you can see this',
+    description: 'Just for your records',
     icon: <EyeOff size={16} color={IOS_COLORS.systemGray} />,
   },
   {
     value: 'fleet',
     label: 'Fleet Only',
-    description: 'Fleet mates can see this',
+    description: 'Visible to fleet members',
     icon: <Users size={16} color={IOS_COLORS.systemBlue} />,
   },
   {
     value: 'public',
     label: 'Public',
-    description: 'Anyone can discover this',
+    description: 'Help anyone sailing your boat class',
     icon: <Eye size={16} color={IOS_COLORS.systemGreen} />,
   },
 ];
@@ -87,7 +87,7 @@ function VisibilitySelector({
 
   return (
     <View style={styles.visibilityContainer}>
-      <Text style={styles.label}>Who can see this?</Text>
+      <Text style={styles.label}>Who can learn from this?</Text>
       <Pressable
         style={styles.visibilityButton}
         onPress={() => setExpanded(!expanded)}
@@ -271,7 +271,7 @@ export function PostRaceForm({
             <X size={24} color={IOS_COLORS.systemBlue} />
           </Pressable>
           <View style={styles.headerTitle}>
-            <Text style={styles.headerTitleText}>Post-Race Analysis</Text>
+            <Text style={styles.headerTitleText}>Share Your Debrief</Text>
             {raceName && (
               <Text style={styles.headerSubtitle} numberOfLines={1}>{raceName}</Text>
             )}
@@ -306,11 +306,17 @@ export function PostRaceForm({
             contentContainerStyle={styles.contentContainer}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Visibility - moved to top for social emphasis */}
+            <VisibilitySelector
+              value={visibility}
+              onChange={setVisibility}
+            />
+
             {/* Post-Race Notes */}
             <View style={styles.section}>
-              <Text style={styles.label}>Post-Race Analysis</Text>
+              <Text style={styles.label}>What Did You Learn?</Text>
               <Text style={styles.hint}>
-                What went well? What would you do differently?
+                Your experience helps others improve
               </Text>
               <TextInput
                 style={styles.textArea}
@@ -330,18 +336,12 @@ export function PostRaceForm({
               onChange={setLessonsLearned}
             />
 
-            {/* Visibility */}
-            <VisibilitySelector
-              value={visibility}
-              onChange={setVisibility}
-            />
-
             {/* Info footer */}
             <View style={styles.infoFooter}>
               <Text style={styles.infoText}>
-                {visibility === 'private' && 'Only you will see this analysis.'}
-                {visibility === 'fleet' && 'Your fleet mates will see your analysis for this race.'}
-                {visibility === 'public' && 'Anyone can discover your post-race insights. This helps you appear in Class Experts.'}
+                {visibility === 'private' && 'This analysis stays in your personal journal.'}
+                {visibility === 'fleet' && 'Your fleet mates can learn from your experience.'}
+                {visibility === 'public' && 'Sailors in your boat class can discover and learn from your insights.'}
               </Text>
             </View>
           </ScrollView>

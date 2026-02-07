@@ -77,8 +77,10 @@ interface CardGridNativeProps extends CardGridProps {
     currentRaceIndex?: number,
     onSelectRace?: (index: number) => void,
     nextRaceIndex?: number,
-    // Scroll handler for toolbar hide/show
-    onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void
+    // Handler for card press (not used on native but needed for parameter parity with web)
+    onCardPress?: () => void,
+    // Refetch trigger for AfterRaceContent
+    refetchTrigger?: number
   ) => React.ReactNode;
 }
 
@@ -107,6 +109,7 @@ function CardGridComponent({
   safeAreaTop = 0,
   toolbarHidden = false,
   onContentScroll,
+  refetchTrigger,
 }: CardGridNativeProps) {
   // Track actual container dimensions
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
@@ -388,8 +391,10 @@ function CardGridComponent({
               jsRaceIndex,
               goToRace,
               nextRaceIndex ?? undefined,
-              // Scroll handler for toolbar hide/show
-              onContentScroll
+              // onCardPress - not used on native (swipe navigation instead)
+              undefined,
+              // refetchTrigger for AfterRaceContent
+              refetchTrigger
             )}
           </CardShell>
         </View>
@@ -409,7 +414,7 @@ function CardGridComponent({
       deletingRaceId,
       onDismissSample,
       races.length,
-      onContentScroll,
+      refetchTrigger,
     ]
   );
 

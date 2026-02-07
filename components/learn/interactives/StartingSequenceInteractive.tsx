@@ -996,7 +996,7 @@ const styles = StyleSheet.create({
     // Water wave pattern effect using gradient-like appearance
     ...(Platform.OS === 'web'
       ? { 
-          background: 'linear-gradient(135deg, #aaccff 0%, #8bb8f0 40%, #7aa5e0 70%, #6b9ad8 100%)',
+          backgroundImage: 'linear-gradient(135deg, #aaccff 0%, #8bb8f0 40%, #7aa5e0 70%, #6b9ad8 100%)',
         }
       : {}),
   },

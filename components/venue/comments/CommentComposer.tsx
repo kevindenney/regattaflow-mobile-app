@@ -13,6 +13,7 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
@@ -53,8 +54,10 @@ export function CommentComposer({
       });
       setText('');
       onCancelReply?.();
-    } catch {
-      // Error handled by mutation
+    } catch (error: any) {
+      // Show user-friendly error message
+      const errorMessage = error?.message || 'Failed to post comment. Please try again.';
+      Alert.alert('Cannot Post Comment', errorMessage);
     }
   }, [text, postId, replyingTo, createComment, onCancelReply]);
 

@@ -314,7 +314,33 @@ export function useDebriefInterview({
       try {
         let currentSessionId = sessionId;
 
-        // Create session if it doesn't exist
+        // ALWAYS fetch fresh session data to avoid creating duplicates
+        // This prevents the bug where race results disappear because we create
+        // a new session instead of updating the existing one with the race result
+        if (!currentSessionId) {
+          logger.debug('[useDebriefInterview] No sessionId in state, fetching fresh session data...');
+
+          const { data: freshSessions, error: fetchError } = await supabase
+            .from('race_timer_sessions')
+            .select('*')
+            .eq('regatta_id', raceId)
+            .eq('sailor_id', userId)
+            .order('end_time', { ascending: false })
+            .limit(1);
+
+          if (fetchError) {
+            logger.error('[useDebriefInterview] Error fetching fresh session:', fetchError);
+            throw fetchError;
+          }
+
+          if (freshSessions && freshSessions.length > 0) {
+            currentSessionId = freshSessions[0].id;
+            setSessionId(currentSessionId);
+            logger.debug('[useDebriefInterview] Found existing session:', currentSessionId);
+          }
+        }
+
+        // Create session only if it truly doesn't exist
         if (!currentSessionId) {
           const nowIso = new Date().toISOString();
           const { data: newSession, error: createError } = await supabase

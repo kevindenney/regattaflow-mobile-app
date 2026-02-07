@@ -16,12 +16,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Image,
     KeyboardAvoidingView,
     Platform,
     Pressable,
-    
     ScrollView,
     StyleSheet,
     Text,
@@ -31,6 +29,7 @@ import {
 } from "react-native";
 
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 interface BoatClass {
   id: string;
   name: string;
@@ -81,7 +80,7 @@ export default function EditBoatScreen() {
       setBoatClasses(data || []);
     } catch (error) {
       console.error('Error loading boat classes:', error);
-      Alert.alert('Error', 'Failed to load boat classes');
+      showAlert('Error', 'Failed to load boat classes');
     } finally {
       setLoadingClasses(false);
     }
@@ -95,7 +94,7 @@ export default function EditBoatScreen() {
       const boatData = await sailorBoatService.getBoat(id);
 
       if (!boatData) {
-        Alert.alert('Error', 'Boat not found', [
+        showAlertWithButtons('Error', 'Boat not found', [
           { text: 'OK', onPress: () => router.back() },
         ]);
         return;
@@ -116,7 +115,7 @@ export default function EditBoatScreen() {
       // TODO: Load photo from Supabase storage
     } catch (error) {
       console.error('Error loading boat:', error);
-      Alert.alert('Error', 'Failed to load boat data');
+      showAlert('Error', 'Failed to load boat data');
     } finally {
       setLoadingData(false);
     }
@@ -126,7 +125,7 @@ export default function EditBoatScreen() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions to upload photos');
+      showAlert('Permission Required', 'Please grant camera roll permissions to upload photos');
       return;
     }
 
@@ -147,12 +146,12 @@ export default function EditBoatScreen() {
 
     // Validation
     if (!name.trim()) {
-      Alert.alert('Required Field', 'Please enter a boat name');
+      showAlert('Required Field', 'Please enter a boat name');
       return;
     }
 
     if (!selectedClassId) {
-      Alert.alert('Required Field', 'Please select a boat class');
+      showAlert('Required Field', 'Please select a boat class');
       return;
     }
 
@@ -177,7 +176,7 @@ export default function EditBoatScreen() {
       // TODO: Upload photo to Supabase storage if photoUri exists and changed
       // For now, we'll skip photo upload as it requires storage bucket setup
 
-      Alert.alert('Success', 'Boat updated successfully', [
+      showAlertWithButtons('Success', 'Boat updated successfully', [
         {
           text: 'OK',
           onPress: () => router.back(),
@@ -185,7 +184,7 @@ export default function EditBoatScreen() {
       ]);
     } catch (error: any) {
       if (error?.queuedForSync && error?.entity?.updates) {
-        Alert.alert('Offline', 'Updates saved locally and will sync when you are back online.', [
+        showAlertWithButtons('Offline', 'Updates saved locally and will sync when you are back online.', [
           {
             text: 'OK',
             onPress: () => router.back(),
@@ -193,7 +192,7 @@ export default function EditBoatScreen() {
         ]);
       } else {
         console.error('Error updating boat:', error);
-        Alert.alert('Error', 'Failed to update boat. Please try again.');
+        showAlert('Error', 'Failed to update boat. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -205,34 +204,28 @@ export default function EditBoatScreen() {
   };
 
   const handleDelete = () => {
-    Alert.alert(
+    showConfirm(
       'Delete Boat',
       'Are you sure you want to delete this boat? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (!id) return;
-              await sailorBoatService.deleteBoat(id);
-              Alert.alert('Success', 'Boat deleted successfully', [
-                { text: 'OK', onPress: () => router.push('/account') },
-              ]);
-            } catch (error: any) {
-              if (error?.queuedForSync) {
-                Alert.alert('Offline', 'Boat deletion will complete once you are back online.', [
-                  { text: 'OK', onPress: () => router.push('/account') },
-                ]);
-              } else {
-                console.error('Error deleting boat:', error);
-                Alert.alert('Error', 'Failed to delete boat');
-              }
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          if (!id) return;
+          await sailorBoatService.deleteBoat(id);
+          showAlertWithButtons('Success', 'Boat deleted successfully', [
+            { text: 'OK', onPress: () => router.push('/account') },
+          ]);
+        } catch (error: any) {
+          if (error?.queuedForSync) {
+            showAlertWithButtons('Offline', 'Boat deletion will complete once you are back online.', [
+              { text: 'OK', onPress: () => router.push('/account') },
+            ]);
+          } else {
+            console.error('Error deleting boat:', error);
+            showAlert('Error', 'Failed to delete boat');
+          }
+        }
+      },
+      { destructive: true, confirmText: 'Delete' }
     );
   };
 

@@ -6,7 +6,8 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState, ReactElement } from 'react';
-import { StyleSheet, View, ViewStyle, Pressable, Dimensions } from 'react-native';
+import { StyleSheet, View, ViewStyle, Pressable, Dimensions, TouchableOpacity } from 'react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 import {
   CARD_WIDTH_RATIO,
@@ -160,10 +161,57 @@ export function CardNavigationPager<T extends RaceData>({
     );
   }
 
+  /**
+   * Navigate to previous card
+   */
+  const goToPrevious = useCallback(() => {
+    if (activeIndex > 0) {
+      scrollToIndex(activeIndex - 1);
+    }
+  }, [activeIndex, scrollToIndex]);
+
+  /**
+   * Navigate to next card
+   */
+  const goToNext = useCallback(() => {
+    if (activeIndex < races.length - 1) {
+      scrollToIndex(activeIndex + 1);
+    }
+  }, [activeIndex, races.length, scrollToIndex]);
+
+  const showLeftArrow = activeIndex > 0;
+  const showRightArrow = activeIndex < races.length - 1;
+
   return (
     <View style={[styles.container, style]} testID={testID}>
       {/* Header content */}
       {headerContent}
+
+      {/* Scroll container wrapper with navigation arrows */}
+      <View style={styles.scrollWrapper}>
+        {/* Left Navigation Arrow */}
+        {showLeftArrow && (
+          <TouchableOpacity
+            onPress={goToPrevious}
+            style={[styles.arrowButton, styles.leftArrow]}
+            accessibilityRole="button"
+            accessibilityLabel="Previous race"
+          >
+            <ChevronLeft size={32} color="#007AFF" />
+          </TouchableOpacity>
+        )}
+
+        {/* Right Navigation Arrow */}
+        {showRightArrow && (
+          <TouchableOpacity
+            onPress={goToNext}
+            style={[styles.arrowButton, styles.rightArrow]}
+            accessibilityRole="button"
+            accessibilityLabel="Next race"
+          >
+            <ChevronRight size={32} color="#007AFF" />
+          </TouchableOpacity>
+        )}
 
       {/* Scroll container with CSS scroll-snap */}
       <div
@@ -218,6 +266,7 @@ export function CardNavigationPager<T extends RaceData>({
           );
         })}
       </div>
+      </View>
 
       {/* Navigation indicators */}
       {showIndicators && (
@@ -244,6 +293,34 @@ const styles = StyleSheet.create({
   emptyContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  scrollWrapper: {
+    position: 'relative',
+    flex: 1,
+  },
+  arrowButton: {
+    position: 'absolute',
+    top: '50%',
+    transform: [{ translateY: -24 }],
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 48,
+    height: 48,
+    zIndex: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    // @ts-ignore - web cursor property
+    cursor: 'pointer',
+  },
+  leftArrow: {
+    left: 16,
+  },
+  rightArrow: {
+    right: 16,
   },
 });
 

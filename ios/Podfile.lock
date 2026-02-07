@@ -11,18 +11,20 @@ PODS:
     - PromisesObjC (~> 2.4)
   - BVLinearGradient (2.8.3):
     - React-Core
-  - EXApplication (7.0.7):
+  - EXApplication (7.0.8):
     - ExpoModulesCore
   - EXAV (16.0.7):
     - ExpoModulesCore
     - ReactCommon/turbomodule/core
-  - EXConstants (18.0.10):
+  - EXConstants (18.0.13):
     - ExpoModulesCore
   - EXImageLoader (6.0.0):
     - ExpoModulesCore
     - React-Core
   - EXJSONUtils (0.15.0)
   - EXManifests (1.0.10):
+    - ExpoModulesCore
+  - EXNotifications (0.32.16):
     - ExpoModulesCore
   - Expo (54.0.21):
     - ExpoModulesCore
@@ -237,6 +239,8 @@ PODS:
   - ExpoClipboard (8.0.7):
     - ExpoModulesCore
   - ExpoCrypto (15.0.7):
+    - ExpoModulesCore
+  - ExpoDevice (8.0.10):
     - ExpoModulesCore
   - ExpoDocumentPicker (14.0.7):
     - ExpoModulesCore
@@ -2659,6 +2663,7 @@ DEPENDENCIES:
   - EXImageLoader (from `../node_modules/expo-image-loader/ios`)
   - EXJSONUtils (from `../node_modules/expo-json-utils/ios`)
   - EXManifests (from `../node_modules/expo-manifests/ios`)
+  - EXNotifications (from `../node_modules/expo-notifications/ios`)
   - Expo (from `../node_modules/expo`)
   - expo-dev-client (from `../node_modules/expo-dev-client/ios`)
   - expo-dev-launcher (from `../node_modules/expo-dev-launcher`)
@@ -2671,6 +2676,7 @@ DEPENDENCIES:
   - ExpoCamera (from `../node_modules/expo-camera/ios`)
   - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
   - ExpoCrypto (from `../node_modules/expo-crypto/ios`)
+  - ExpoDevice (from `../node_modules/expo-device/ios`)
   - ExpoDocumentPicker (from `../node_modules/expo-document-picker/ios`)
   - ExpoFileSystem (from `../node_modules/expo-file-system/ios`)
   - ExpoFont (from `../node_modules/expo-font/ios`)
@@ -2825,6 +2831,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-json-utils/ios"
   EXManifests:
     :path: "../node_modules/expo-manifests/ios"
+  EXNotifications:
+    :path: "../node_modules/expo-notifications/ios"
   Expo:
     :path: "../node_modules/expo"
   expo-dev-client:
@@ -2849,6 +2857,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-clipboard/ios"
   ExpoCrypto:
     :path: "../node_modules/expo-crypto/ios"
+  ExpoDevice:
+    :path: "../node_modules/expo-device/ios"
   ExpoDocumentPicker:
     :path: "../node_modules/expo-document-picker/ios"
   ExpoFileSystem:
@@ -3069,12 +3079,13 @@ SPEC CHECKSUMS:
   AppAuth: 1c1a8afa7e12f2ec3a294d9882dfa5ab7d3cb063
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
   BVLinearGradient: cb006ba232a1f3e4f341bb62c42d1098c284da70
-  EXApplication: 296622817d459f46b6c5fe8691f4aac44d2b79e7
+  EXApplication: 1e98d4b1dccdf30627f92917f4b2c5a53c330e5f
   EXAV: e3fefaca88f14624bca01d9a128562a5f8e738f8
-  EXConstants: fd688cef4e401dcf798a021cfb5d87c890c30ba3
+  EXConstants: fce59a631a06c4151602843667f7cfe35f81e271
   EXImageLoader: 189e3476581efe3ad4d1d3fb4735b7179eb26f05
   EXJSONUtils: 1d3e4590438c3ee593684186007028a14b3686cd
   EXManifests: a8d97683e5c7a3b026ffbd58559c64dc655b747b
+  EXNotifications: 9eec98712cc814ceff916d876cb53859003b0597
   Expo: 27ae59be9be4feab2b1c1ae06550752c524ca558
   expo-dev-client: 425ee077d6754a98cfe3a2e2410d29b440b24c9d
   expo-dev-launcher: a4f4cdef064ab1fb8621e5b8c7c457cd6e9568c3
@@ -3087,6 +3098,7 @@ SPEC CHECKSUMS:
   ExpoCamera: 6a326deb45ba840749652e4c15198317aa78497e
   ExpoClipboard: af650d14765f19c60ce2a1eaf9dfe6445eff7365
   ExpoCrypto: c1fbce112d1b6b79652bbe380b4fd4cc91676595
+  ExpoDevice: 6327c3c200816795708885adf540d26ecab83d1a
   ExpoDocumentPicker: 2200eefc2817f19315fa18f0147e0b80ece86926
   ExpoFileSystem: b79eadbda7b7f285f378f95f959cc9313a1c9c61
   ExpoFont: cf9d90ec1d3b97c4f513211905724c8171f82961

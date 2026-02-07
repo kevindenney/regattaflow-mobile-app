@@ -196,16 +196,6 @@ export function useRaceAnalysisData(
         // Try multiple fields in priority order
         const debriefResponses = sessionData?.debrief_responses as Record<string, unknown> | null;
 
-        // Debug log to see what's in debrief_responses
-        if (debriefResponses) {
-          console.log('[useRaceAnalysisData] debrief_responses keys:', Object.keys(debriefResponses));
-          console.log('[useRaceAnalysisData] finish fields:', {
-            finish_key_learning: debriefResponses.finish_key_learning,
-            finish_key_decision: debriefResponses.finish_key_decision,
-            finish_work_on: debriefResponses.finish_work_on,
-            finish_what_worked: debriefResponses.finish_what_worked,
-          });
-        }
 
         // Try finish phase fields first, then any notes from other phases
         const debriefKeyLearning =

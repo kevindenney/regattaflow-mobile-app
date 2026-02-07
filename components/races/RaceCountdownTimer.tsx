@@ -13,12 +13,13 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Alert, StyleSheet, Vibration } from 'react-native';
-import { Play, Square, Navigation, Timer, RotateCcw, RefreshCw } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, Alert, StyleSheet, Vibration, Modal } from 'react-native';
+import { Play, Square, Navigation, Timer, RotateCcw, RefreshCw, MapPin, Flag, X, ChartBar, FileText, RotateCw } from 'lucide-react-native';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { gpsTracker } from '@/services/GPSTracker';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { useRouter } from 'expo-router';
 import {
   getTimerConfig,
   calculateSyncTime,
@@ -133,6 +134,7 @@ export function RaceCountdownTimer({
   onRaceComplete,
 }: RaceCountdownTimerProps) {
   const { user } = useAuth();
+  const router = useRouter();
 
   // Get race-type-specific timer configuration
   const timerConfig = useMemo(() => getTimerConfig(raceType), [raceType]);
@@ -152,6 +154,19 @@ export function RaceCountdownTimer({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [gpsPointCount, setGpsPointCount] = useState(0);
+
+  // Direct GPS recording state (without countdown)
+  const [isDirectGpsMode, setIsDirectGpsMode] = useState(false);
+  const [startMarkedAt, setStartMarkedAt] = useState<number | null>(null); // Elapsed seconds when start was marked
+
+  // Stop recording summary modal
+  const [showStopModal, setShowStopModal] = useState(false);
+  const [finalStats, setFinalStats] = useState<{
+    duration: number;
+    gpsPoints: number;
+    startMarked: boolean;
+    raceTimeFromMark: number | null;
+  } | null>(null);
 
   // Start sequence state (for fleet/team/match races)
   const [sequenceSecondsRemaining, setSequenceSecondsRemaining] = useState(timerConfig.durationSeconds);
@@ -347,19 +362,81 @@ export function RaceCountdownTimer({
     }
   }, [user, raceId]);
 
-  // Stop race and trigger post-race flow
+  // Start GPS directly (without countdown) - for quick recording
+  const handleStartGPSDirectly = useCallback(async () => {
+    setIsDirectGpsMode(true);
+    setStartMarkedAt(null);
+    await handleStartGPS();
+  }, [handleStartGPS]);
+
+  // Mark the race start (when gun fires) during direct GPS recording
+  const handleMarkStart = useCallback(() => {
+    setStartMarkedAt(elapsedSeconds);
+    // Triple vibration to confirm
+    vibrate([0, 200, 100, 200, 100, 200]);
+  }, [elapsedSeconds, vibrate]);
+
+  // Stop race and show summary modal
   const handleStopRace = useCallback(async () => {
     if (!sessionId) return;
 
     try {
       await gpsTracker.stopTracking();
-      setTimerState('completed');
-      onRaceComplete(sessionId);
+
+      // Calculate final stats
+      const raceTimeFromMark = startMarkedAt !== null
+        ? elapsedSeconds - startMarkedAt
+        : null;
+
+      setFinalStats({
+        duration: elapsedSeconds,
+        gpsPoints: gpsPointCount,
+        startMarked: startMarkedAt !== null,
+        raceTimeFromMark,
+      });
+
+      setShowStopModal(true);
     } catch (error: any) {
       console.error('Error stopping race timer:', error);
       Alert.alert('Error', 'Failed to stop race timer.');
     }
+  }, [sessionId, elapsedSeconds, gpsPointCount, startMarkedAt]);
+
+  // Handle modal actions
+  const handleViewAnalysis = useCallback(() => {
+    setShowStopModal(false);
+    setTimerState('completed');
+    if (sessionId) {
+      // Navigate to the race session analysis page
+      router.push(`/(tabs)/race-session/${sessionId}` as any);
+      onRaceComplete(sessionId);
+    }
+  }, [sessionId, onRaceComplete, router]);
+
+  const handleAddNotes = useCallback(() => {
+    setShowStopModal(false);
+    setTimerState('completed');
+    if (sessionId) {
+      // Pass a flag to indicate notes should be shown
+      onRaceComplete(sessionId);
+    }
   }, [sessionId, onRaceComplete]);
+
+  const handleStartAnother = useCallback(() => {
+    setShowStopModal(false);
+    setTimerState('race-day');
+    setSessionId(null);
+    setElapsedSeconds(0);
+    setGpsPointCount(0);
+    setIsDirectGpsMode(false);
+    setStartMarkedAt(null);
+    setFinalStats(null);
+  }, []);
+
+  const handleDismissModal = useCallback(() => {
+    setShowStopModal(false);
+    setTimerState('completed');
+  }, []);
 
   // Get timer color based on sequence time remaining
   const getSequenceColor = (): string => {
@@ -381,11 +458,107 @@ export function RaceCountdownTimer({
   }
 
   // =========================================================================
+  // RENDER: Stop Recording Summary Modal (can show from any state)
+  // =========================================================================
+  const stopModal = (
+    <Modal
+      visible={showStopModal}
+      transparent
+      animationType="fade"
+      onRequestClose={handleDismissModal}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <View style={styles.modalHeaderIcon}>
+              <Flag color={IOS_COLORS.green} size={24} />
+            </View>
+            <Text style={styles.modalTitle}>Recording Stopped</Text>
+            <TouchableOpacity
+              onPress={handleDismissModal}
+              style={styles.modalCloseButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X color={IOS_COLORS.secondaryLabel} size={20} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Stats */}
+          {finalStats && (
+            <View style={styles.statsContainer}>
+              <View style={styles.statRow}>
+                <Text style={styles.statLabel}>Duration</Text>
+                <Text style={styles.statValue}>{formatElapsedTime(finalStats.duration)}</Text>
+              </View>
+              <View style={styles.statRow}>
+                <Text style={styles.statLabel}>GPS Points</Text>
+                <Text style={styles.statValue}>{finalStats.gpsPoints.toLocaleString()}</Text>
+              </View>
+              {finalStats.startMarked && finalStats.raceTimeFromMark !== null && (
+                <View style={styles.statRow}>
+                  <Text style={styles.statLabel}>Race Time</Text>
+                  <Text style={styles.statValue}>{formatElapsedTime(finalStats.raceTimeFromMark)}</Text>
+                </View>
+              )}
+              <View style={styles.statRow}>
+                <Text style={styles.statLabel}>Track Saved</Text>
+                <Text style={[styles.statValue, { color: IOS_COLORS.green }]}>✓</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Action Buttons */}
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              onPress={handleViewAnalysis}
+              style={styles.modalActionPrimary}
+            >
+              <ChartBar color="white" size={18} />
+              <Text style={styles.modalActionPrimaryText}>View Track Analysis</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleAddNotes}
+              style={styles.modalActionSecondary}
+            >
+              <FileText color={IOS_COLORS.blue} size={18} />
+              <Text style={styles.modalActionSecondaryText}>Add Race Notes</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleStartAnother}
+              style={styles.modalActionSecondary}
+            >
+              <RotateCw color={IOS_COLORS.blue} size={18} />
+              <Text style={styles.modalActionSecondaryText}>Start Another Race</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Done button */}
+          <TouchableOpacity
+            onPress={handleDismissModal}
+            style={styles.modalDoneButton}
+          >
+            <Text style={styles.modalDoneText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // =========================================================================
   // RENDER: Racing state (GPS tracking active)
   // =========================================================================
   if (timerState === 'racing') {
+    const showMarkStartButton = isDirectGpsMode && startMarkedAt === null;
+    const raceElapsed = startMarkedAt !== null ? elapsedSeconds - startMarkedAt : null;
+
     return (
-      <View style={styles.trackingContainer}>
+      <>
+        {stopModal}
+        <View style={styles.trackingContainer}>
+        {/* Main tracking info row */}
         <View style={styles.rowSpaceBetween}>
           <View style={styles.trackingInfo}>
             <View style={styles.rowCenter}>
@@ -411,6 +584,29 @@ export function RaceCountdownTimer({
           </TouchableOpacity>
         </View>
 
+        {/* Mark Start button - shown when GPS started directly without countdown */}
+        {showMarkStartButton && (
+          <TouchableOpacity
+            onPress={handleMarkStart}
+            style={styles.markStartButton}
+            accessibilityLabel="Mark race start"
+            accessibilityHint="Tap when the starting gun fires"
+          >
+            <Flag color="white" size={20} fill="white" />
+            <Text style={styles.markStartText}>MARK START</Text>
+            <Text style={styles.markStartHint}>Tap when gun fires</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Show race time since start was marked */}
+        {startMarkedAt !== null && raceElapsed !== null && (
+          <View style={styles.raceTimeContainer}>
+            <Flag color="white" size={14} />
+            <Text style={styles.raceTimeLabel}>Race time:</Text>
+            <Text style={styles.raceTimeValue}>{formatElapsedTime(raceElapsed)}</Text>
+          </View>
+        )}
+
         {/* Progress bar for distance races */}
         {isDistanceRace && timeLimitHours && (
           <View style={styles.progressContainer}>
@@ -426,7 +622,8 @@ export function RaceCountdownTimer({
             <Text style={styles.progressText}>{Math.round(timeLimitProgress)}%</Text>
           </View>
         )}
-      </View>
+        </View>
+      </>
     );
   }
 
@@ -490,59 +687,78 @@ export function RaceCountdownTimer({
   const isReadyToStart = isRaceDay && hours === 0 && minutes <= 5;
 
   return (
-    <TouchableOpacity
-      onPress={handleStartRace}
-      style={[
-        styles.countdownContainer,
-        isReadyToStart ? styles.bgGreen : isRaceDay ? styles.bgSky : styles.bgGray,
-      ]}
-      accessibilityLabel={`Race countdown: ${days} days, ${hours} hours, ${minutes} minutes`}
-      accessibilityHint="Tap to start race timer"
-    >
-      <View style={styles.rowSpaceBetween}>
-        <View style={styles.flex1}>
-          {isReadyToStart ? (
-            <Text style={styles.readyText}>
-              {usesStartSequence ? 'Start Sequence Ready!' : 'Ready to Race!'}
-            </Text>
-          ) : (
-            <View style={styles.countdownRow}>
-              {days > 0 && (
-                <>
-                  <Text style={styles.countdownNumber}>{days}</Text>
-                  <Text style={styles.countdownUnit}>d</Text>
-                </>
+    <>
+      {stopModal}
+
+      <View style={styles.preRaceContainer}>
+        {/* Main countdown button */}
+        <TouchableOpacity
+          onPress={handleStartRace}
+          style={[
+            styles.countdownContainer,
+            isReadyToStart ? styles.bgGreen : isRaceDay ? styles.bgSky : styles.bgGray,
+          ]}
+          accessibilityLabel={`Race countdown: ${days} days, ${hours} hours, ${minutes} minutes`}
+          accessibilityHint="Tap to start race timer"
+        >
+          <View style={styles.rowSpaceBetween}>
+            <View style={styles.flex1}>
+              {isReadyToStart ? (
+                <Text style={styles.readyText}>
+                  {usesStartSequence ? 'Start Sequence Ready!' : 'Ready to Race!'}
+                </Text>
+              ) : (
+                <View style={styles.countdownRow}>
+                  {days > 0 && (
+                    <>
+                      <Text style={styles.countdownNumber}>{days}</Text>
+                      <Text style={styles.countdownUnit}>d</Text>
+                    </>
+                  )}
+                  <Text style={styles.countdownNumber}>{hours}</Text>
+                  <Text style={styles.countdownUnit}>h</Text>
+                  <Text style={styles.countdownNumber}>{minutes}</Text>
+                  <Text style={styles.countdownUnit}>m</Text>
+                  {isRaceDay && (
+                    <>
+                      <Text style={styles.countdownNumber}>{seconds}</Text>
+                      <Text style={styles.countdownUnit}>s</Text>
+                    </>
+                  )}
+                </View>
               )}
-              <Text style={styles.countdownNumber}>{hours}</Text>
-              <Text style={styles.countdownUnit}>h</Text>
-              <Text style={styles.countdownNumber}>{minutes}</Text>
-              <Text style={styles.countdownUnit}>m</Text>
-              {isRaceDay && (
-                <>
-                  <Text style={styles.countdownNumber}>{seconds}</Text>
-                  <Text style={styles.countdownUnit}>s</Text>
-                </>
+              <Text style={styles.tapHint}>
+                {isReadyToStart
+                  ? usesStartSequence
+                    ? `Tap to start ${timerConfig.label.toLowerCase()}`
+                    : 'Tap to start GPS tracking'
+                  : 'Tap when ready to start'}
+              </Text>
+            </View>
+
+            <View style={[styles.playButton, isReadyToStart ? styles.playButtonReady : styles.playButtonDefault]}>
+              {usesStartSequence ? (
+                <Timer color={isReadyToStart ? IOS_COLORS.green : 'white'} size={18} />
+              ) : (
+                <Play color={isReadyToStart ? IOS_COLORS.green : 'white'} size={18} fill={isReadyToStart ? IOS_COLORS.green : 'transparent'} />
               )}
             </View>
-          )}
-          <Text style={styles.tapHint}>
-            {isReadyToStart
-              ? usesStartSequence
-                ? `Tap to start ${timerConfig.label.toLowerCase()}`
-                : 'Tap to start GPS tracking'
-              : 'Tap when ready to start'}
-          </Text>
-        </View>
+          </View>
+        </TouchableOpacity>
 
-        <View style={[styles.playButton, isReadyToStart ? styles.playButtonReady : styles.playButtonDefault]}>
-          {usesStartSequence ? (
-            <Timer color={isReadyToStart ? IOS_COLORS.green : 'white'} size={18} />
-          ) : (
-            <Play color={isReadyToStart ? IOS_COLORS.green : 'white'} size={18} fill={isReadyToStart ? IOS_COLORS.green : 'transparent'} />
-          )}
-        </View>
+        {/* Record GPS Only option */}
+        <TouchableOpacity
+          onPress={handleStartGPSDirectly}
+          style={styles.gpsOnlyButton}
+          accessibilityLabel="Record GPS only"
+          accessibilityHint="Start GPS tracking without countdown, mark start manually"
+        >
+          <MapPin color={IOS_COLORS.blue} size={16} />
+          <Text style={styles.gpsOnlyText}>Record GPS Only</Text>
+          <Text style={styles.gpsOnlyHint}>(mark start manually)</Text>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </>
   );
 }
 
@@ -731,6 +947,183 @@ const styles = StyleSheet.create({
   },
   flex1: {
     flex: 1,
+  },
+
+  // Pre-race container
+  preRaceContainer: {
+    gap: 8,
+  },
+
+  // Mark Start button (during direct GPS recording)
+  markStartButton: {
+    backgroundColor: IOS_COLORS.orange,
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  markStartText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  markStartHint: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+  },
+
+  // Race time since start marked
+  raceTimeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.2)',
+  },
+  raceTimeLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+  },
+  raceTimeValue: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+
+  // GPS Only button
+  gpsOnlyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.blue + '10',
+    borderWidth: 1,
+    borderColor: IOS_COLORS.blue + '30',
+  },
+  gpsOnlyText: {
+    color: IOS_COLORS.blue,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  gpsOnlyHint: {
+    color: IOS_COLORS.secondaryLabel,
+    fontSize: 12,
+  },
+
+  // Stop recording modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 340,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalHeaderIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: IOS_COLORS.green + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+
+  // Stats
+  statsContainer: {
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  statRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  statLabel: {
+    color: IOS_COLORS.secondaryLabel,
+    fontSize: 14,
+  },
+  statValue: {
+    color: IOS_COLORS.label,
+    fontSize: 14,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Modal actions
+  modalActions: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  modalActionPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 12,
+    padding: 14,
+  },
+  modalActionPrimaryText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalActionSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: IOS_COLORS.blue + '10',
+    borderRadius: 12,
+    padding: 14,
+  },
+  modalActionSecondaryText: {
+    color: IOS_COLORS.blue,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalDoneButton: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  modalDoneText: {
+    color: IOS_COLORS.secondaryLabel,
+    fontSize: 16,
   },
 });
 

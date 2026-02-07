@@ -14,14 +14,15 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
+  ScrollView,
 } from 'react-native';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING, IOS_RADIUS } from '@/lib/design-tokens-ios';
-import { triggerHaptic } from '@/lib/haptics';
 import { useFollowActivityFeed, ActivityItem } from '@/hooks/useFollowActivityFeed';
 import { SailorActivityCard } from './SailorActivityCard';
+import { SuggestedSailorsSection } from '@/components/search/SuggestedSailorsSection';
 
 interface FollowActivityFeedProps {
   /** Extra top padding to clear an absolutely-positioned toolbar */
@@ -31,30 +32,26 @@ interface FollowActivityFeedProps {
 }
 
 /**
- * Empty state shown when user doesn't follow anyone
+ * Empty state shown when user doesn't follow anyone - shows sailor suggestions inline
  */
 function EmptyFollowingState() {
-  const router = useRouter();
-
-  const handleDiscoverSailors = useCallback(() => {
-    triggerHaptic('selection');
-    router.push('/(tabs)/search');
-  }, [router]);
-
   return (
-    <View style={emptyStyles.container}>
-      <View style={emptyStyles.iconCircle}>
-        <Ionicons name="heart-outline" size={48} color={IOS_COLORS.systemGray3} />
+    <ScrollView
+      style={emptyStyles.container}
+      contentContainerStyle={emptyStyles.contentContainer}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={emptyStyles.headerSection}>
+        <View style={emptyStyles.iconCircle}>
+          <Ionicons name="people-outline" size={48} color={IOS_COLORS.systemBlue} />
+        </View>
+        <Text style={emptyStyles.title}>Discover Sailors</Text>
+        <Text style={emptyStyles.subtitle}>
+          Follow sailors to see their race schedules and insights in your feed
+        </Text>
       </View>
-      <Text style={emptyStyles.title}>Follow sailors to see their activity</Text>
-      <Text style={emptyStyles.subtitle}>
-        When you follow sailors, their race schedules and insights will appear here
-      </Text>
-      <Pressable style={emptyStyles.button} onPress={handleDiscoverSailors}>
-        <Ionicons name="search" size={18} color="#FFFFFF" />
-        <Text style={emptyStyles.buttonText}>Discover Sailors</Text>
-      </Pressable>
-    </View>
+      <SuggestedSailorsSection />
+    </ScrollView>
   );
 }
 
@@ -63,12 +60,12 @@ function EmptyFollowingState() {
  */
 function NoActivityState({ followingCount }: { followingCount: number }) {
   return (
-    <View style={emptyStyles.container}>
-      <View style={emptyStyles.iconCircle}>
+    <View style={noActivityStyles.container}>
+      <View style={noActivityStyles.iconCircle}>
         <Ionicons name="boat-outline" size={48} color={IOS_COLORS.systemGray3} />
       </View>
-      <Text style={emptyStyles.title}>No recent activity</Text>
-      <Text style={emptyStyles.subtitle}>
+      <Text style={noActivityStyles.title}>No recent activity</Text>
+      <Text style={noActivityStyles.subtitle}>
         You&apos;re following {followingCount} sailor{followingCount !== 1 ? 's' : ''}.
         Their race activity will appear here.
       </Text>
@@ -76,7 +73,7 @@ function NoActivityState({ followingCount }: { followingCount: number }) {
   );
 }
 
-const emptyStyles = StyleSheet.create({
+const noActivityStyles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
@@ -104,21 +101,42 @@ const emptyStyles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: IOS_SPACING.xl,
   },
-  button: {
-    flexDirection: 'row',
+});
+
+const emptyStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 120,
+  },
+  headerSection: {
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: IOS_COLORS.systemBlue,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: IOS_RADIUS.full,
+    paddingHorizontal: 32,
+    paddingTop: IOS_SPACING.xl,
+    paddingBottom: IOS_SPACING.lg,
   },
-  buttonText: {
-    ...IOS_TYPOGRAPHY.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: IOS_COLORS.systemBlue + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: IOS_SPACING.md,
+  },
+  title: {
+    ...IOS_TYPOGRAPHY.title3,
+    color: IOS_COLORS.label,
+    textAlign: 'center',
+    marginBottom: IOS_SPACING.xs,
+  },
+  subtitle: {
+    ...IOS_TYPOGRAPHY.subhead,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });
 

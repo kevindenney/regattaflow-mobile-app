@@ -22,6 +22,7 @@ export default function EmbedLayout() {
         <Stack.Screen name="notices" />
         <Stack.Screen name="calendar" />
         <Stack.Screen name="standings" />
+        <Stack.Screen name="discuss" />
       </Stack>
     </View>
   );

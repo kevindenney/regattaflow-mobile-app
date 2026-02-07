@@ -15,12 +15,18 @@ import Animated, {
   Easing,
   FadeIn,
 } from 'react-native-reanimated';
-import { ValueScreen } from '@/components/onboarding/ValueScreen';
+import { ValueScreen, useIsDesktop } from '@/components/onboarding/ValueScreen';
 
 function WeatherIllustration() {
+  const isDesktop = useIsDesktop();
   const windArrowRotation = useSharedValue(0);
   const compassNeedle = useSharedValue(0);
   const tidePulse = useSharedValue(1);
+
+  // Responsive sizing
+  const containerWidth = isDesktop ? 420 : 300;
+  const containerHeight = isDesktop ? 440 : 320;
+  const cardWidth = isDesktop ? 320 : 240;
 
   useEffect(() => {
     // Wind direction animation
@@ -67,9 +73,9 @@ function WeatherIllustration() {
   }));
 
   return (
-    <View style={styles.illustrationContainer}>
+    <View style={[styles.illustrationContainer, { width: containerWidth, height: containerHeight }]}>
       {/* Main weather card */}
-      <View style={styles.weatherCard}>
+      <View style={[styles.weatherCard, { width: cardWidth }, isDesktop && styles.weatherCardDesktop]}>
         {/* Header with location */}
         <View style={styles.cardHeader}>
           <Ionicons name="location" size={16} color="rgba(255,255,255,0.8)" />
@@ -78,13 +84,13 @@ function WeatherIllustration() {
 
         {/* Wind section */}
         <View style={styles.windSection}>
-          <Animated.View style={[styles.windArrow, windArrowStyle]}>
-            <Ionicons name="arrow-up" size={40} color="#FFFFFF" />
+          <Animated.View style={[styles.windArrow, windArrowStyle, isDesktop && styles.windArrowDesktop]}>
+            <Ionicons name="arrow-up" size={isDesktop ? 52 : 40} color="#FFFFFF" />
           </Animated.View>
           <View style={styles.windInfo}>
-            <Text style={styles.windSpeed}>12</Text>
-            <Text style={styles.windUnit}>kts</Text>
-            <Text style={styles.windDirection}>SW</Text>
+            <Text style={[styles.windSpeed, isDesktop && styles.windSpeedDesktop]}>12</Text>
+            <Text style={[styles.windUnit, isDesktop && styles.windUnitDesktop]}>kts</Text>
+            <Text style={[styles.windDirection, isDesktop && styles.windDirectionDesktop]}>SW</Text>
           </View>
         </View>
 
@@ -104,28 +110,28 @@ function WeatherIllustration() {
       {/* Floating cards */}
       <Animated.View
         entering={FadeIn.delay(300).duration(400)}
-        style={[styles.floatingCard, styles.compassCard]}
+        style={[styles.floatingCard, styles.compassCard, isDesktop && styles.floatingCardDesktop, isDesktop && styles.compassCardDesktop]}
       >
         <Animated.View style={compassStyle}>
-          <Ionicons name="compass" size={32} color="#FFFFFF" />
+          <Ionicons name="compass" size={isDesktop ? 40 : 32} color="#FFFFFF" />
         </Animated.View>
-        <Text style={styles.floatingCardLabel}>Course</Text>
+        <Text style={[styles.floatingCardLabel, isDesktop && styles.floatingCardLabelDesktop]}>Course</Text>
       </Animated.View>
 
       <Animated.View
         entering={FadeIn.delay(500).duration(400)}
-        style={[styles.floatingCard, styles.tideCard, tideStyle]}
+        style={[styles.floatingCard, styles.tideCard, tideStyle, isDesktop && styles.floatingCardDesktop, isDesktop && styles.tideCardDesktop]}
       >
-        <Ionicons name="trending-up" size={28} color="#22C55E" />
-        <Text style={styles.floatingCardLabel}>Rising</Text>
+        <Ionicons name="trending-up" size={isDesktop ? 36 : 28} color="#22C55E" />
+        <Text style={[styles.floatingCardLabel, isDesktop && styles.floatingCardLabelDesktop]}>Rising</Text>
       </Animated.View>
 
       {/* Forecast timeline */}
-      <View style={styles.forecastTimeline}>
+      <View style={[styles.forecastTimeline, isDesktop && styles.forecastTimelineDesktop]}>
         {['Now', '1hr', '2hr', '3hr'].map((time, index) => (
           <View key={time} style={styles.forecastItem}>
-            <Text style={styles.forecastTime}>{time}</Text>
-            <Text style={styles.forecastWind}>{12 + index * 2}</Text>
+            <Text style={[styles.forecastTime, isDesktop && styles.forecastTimeDesktop]}>{time}</Text>
+            <Text style={[styles.forecastWind, isDesktop && styles.forecastWindDesktop]}>{12 + index * 2}</Text>
           </View>
         ))}
       </View>
@@ -150,17 +156,18 @@ export default function PrepareProScreen() {
 
 const styles = StyleSheet.create({
   illustrationContainer: {
-    width: 300,
-    height: 320,
     position: 'relative',
     alignItems: 'center',
   },
   weatherCard: {
-    width: 240,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 24,
     padding: 20,
     alignItems: 'center',
+  },
+  weatherCardDesktop: {
+    padding: 28,
+    borderRadius: 28,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -187,6 +194,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  windArrowDesktop: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+  },
   windInfo: {
     alignItems: 'flex-start',
   },
@@ -196,16 +208,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 52,
   },
+  windSpeedDesktop: {
+    fontSize: 60,
+    lineHeight: 64,
+  },
   windUnit: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.7)',
     marginTop: -4,
+  },
+  windUnitDesktop: {
+    fontSize: 18,
   },
   windDirection: {
     fontSize: 18,
     fontWeight: '600',
     color: '#FFFFFF',
     marginTop: 4,
+  },
+  windDirectionDesktop: {
+    fontSize: 22,
   },
   conditionBadges: {
     flexDirection: 'row',
@@ -236,19 +258,35 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 8,
   },
+  floatingCardDesktop: {
+    padding: 16,
+    borderRadius: 20,
+  },
   compassCard: {
     top: 40,
     right: 0,
   },
+  compassCardDesktop: {
+    top: 50,
+    right: 10,
+  },
   tideCard: {
     top: 100,
     left: 0,
+  },
+  tideCardDesktop: {
+    top: 130,
+    left: 10,
   },
   floatingCardLabel: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 11,
     marginTop: 4,
     fontWeight: '500',
+  },
+  floatingCardLabelDesktop: {
+    fontSize: 13,
+    marginTop: 6,
   },
   forecastTimeline: {
     flexDirection: 'row',
@@ -258,6 +296,12 @@ const styles = StyleSheet.create({
     gap: 16,
     marginTop: 16,
   },
+  forecastTimelineDesktop: {
+    padding: 16,
+    gap: 24,
+    borderRadius: 16,
+    marginTop: 24,
+  },
   forecastItem: {
     alignItems: 'center',
   },
@@ -266,9 +310,16 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginBottom: 4,
   },
+  forecastTimeDesktop: {
+    fontSize: 13,
+    marginBottom: 6,
+  },
   forecastWind: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  forecastWindDesktop: {
+    fontSize: 20,
   },
 });

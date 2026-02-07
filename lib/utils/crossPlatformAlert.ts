@@ -199,7 +199,7 @@ export function showPrompt(
           },
           {
             text: 'OK',
-            onPress: (value) => resolve(value || null),
+            onPress: (value: string | undefined) => resolve(value || null),
           },
         ],
         'plain-text',

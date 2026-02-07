@@ -11,8 +11,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const FIREBASE_PROJECT_ID = Deno.env.get('FIREBASE_PROJECT_ID') || 'dragon-worlds-app';
-const FIREBASE_API_KEY = Deno.env.get('FIREBASE_API_KEY') || '';
+// Support multiple Firebase projects (RegattaFlow native + DragonWorlds integration)
+const FIREBASE_PROJECTS = [
+  {
+    projectId: Deno.env.get('FIREBASE_PROJECT_ID') || 'regattaflow-app',
+    apiKey: Deno.env.get('FIREBASE_API_KEY') || '',
+  },
+  {
+    // DragonWorlds Firebase project - hardcoded for integration
+    projectId: 'dragonworldshk2027',
+    apiKey: 'AIzaSyDE_R9qmxZ7NNtNsYc045HvkszrB0_bg9s',
+  },
+];
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -99,10 +109,37 @@ async function createAuthUser(email: string, metadata: Record<string, unknown>) 
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.message || 'Failed to create auth user');
+    const errorMsg = error.message || error.msg || error.error || JSON.stringify(error);
+    console.log('[Auth Bridge] Create auth user failed:', errorMsg);
+    throw new Error(errorMsg);
   }
 
   return response.json();
+}
+
+// Ensure auth user exists, create if not (handles "already exists" gracefully)
+async function ensureAuthUser(email: string, metadata: Record<string, unknown>) {
+  try {
+    console.log('[Auth Bridge] Ensuring auth user exists for:', email);
+    const user = await createAuthUser(email, metadata);
+    console.log('[Auth Bridge] Created new auth user:', user.id);
+    return user;
+  } catch (err) {
+    const errorMsg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+    console.log('[Auth Bridge] Create auth user error:', errorMsg);
+    // If user already exists, that's fine - check various error formats
+    if (
+      errorMsg.includes('already been registered') ||
+      errorMsg.includes('already exists') ||
+      errorMsg.includes('duplicate') ||
+      errorMsg.includes('unique constraint') ||
+      errorMsg.includes('email_address')
+    ) {
+      console.log('[Auth Bridge] Auth user already exists for:', email);
+      return { id: null, email }; // Return minimal object, we don't need the ID
+    }
+    throw err;
+  }
 }
 
 // Decode JWT payload
@@ -114,11 +151,22 @@ function decodeJwt(token: string): Record<string, unknown> {
   return JSON.parse(atob(padded));
 }
 
-// Verify Firebase token
+// Verify Firebase token - tries multiple Firebase projects
 async function verifyFirebaseToken(idToken: string) {
-  if (FIREBASE_API_KEY) {
+  // First, decode the token to check which project it's from
+  const payload = decodeJwt(idToken);
+  const tokenProjectId = payload.aud as string;
+
+  console.log('[Auth Bridge] Token project ID:', tokenProjectId);
+
+  // Find matching project config
+  const projectConfig = FIREBASE_PROJECTS.find(p => p.projectId === tokenProjectId);
+
+  // Try API verification with matching project's API key
+  if (projectConfig?.apiKey) {
+    console.log('[Auth Bridge] Verifying with API key for project:', projectConfig.projectId);
     const response = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${projectConfig.apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,31 +174,40 @@ async function verifyFirebaseToken(idToken: string) {
       }
     );
 
-    if (!response.ok) {
-      throw new Error('Token verification failed');
+    if (response.ok) {
+      const data = await response.json();
+      const user = data.users?.[0];
+      if (user) {
+        console.log('[Auth Bridge] API verification successful for:', user.email);
+        return {
+          localId: user.localId,
+          email: user.email,
+          displayName: user.displayName,
+          photoUrl: user.photoUrl,
+        };
+      }
+    } else {
+      console.log('[Auth Bridge] API verification failed, status:', response.status);
     }
-
-    const data = await response.json();
-    const user = data.users?.[0];
-    if (!user) throw new Error('User not found');
-
-    return {
-      localId: user.localId,
-      email: user.email,
-      displayName: user.displayName,
-      photoUrl: user.photoUrl,
-    };
   }
 
-  // Fallback: decode and validate
-  const payload = decodeJwt(idToken);
+  // Fallback: validate JWT claims for any known project
   const now = Math.floor(Date.now() / 1000);
 
-  if (!payload.sub) throw new Error('Invalid token');
+  if (!payload.sub) throw new Error('Invalid token: no subject');
   if (payload.exp && (payload.exp as number) < now) throw new Error('Token expired');
-  if (payload.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) throw new Error('Invalid issuer');
-  if (payload.aud !== FIREBASE_PROJECT_ID) throw new Error('Invalid audience');
 
+  // Check if issuer matches any known project
+  const validProject = FIREBASE_PROJECTS.find(
+    p => payload.iss === `https://securetoken.google.com/${p.projectId}` && payload.aud === p.projectId
+  );
+
+  if (!validProject) {
+    console.error('[Auth Bridge] Token from unknown project. ISS:', payload.iss, 'AUD:', payload.aud);
+    throw new Error(`Invalid issuer: token from unknown Firebase project`);
+  }
+
+  console.log('[Auth Bridge] JWT validation successful for project:', validProject.projectId);
   return {
     localId: payload.sub as string,
     email: payload.email as string,
@@ -211,8 +268,18 @@ serve(async (req) => {
       filter: { firebase_uid: `eq.${firebaseUser.localId}` },
     });
 
+    // authUserId tracks the actual auth.users ID for session/membership operations
+    let authUserId: string | null = null;
+
     if (existingByFirebase?.[0]) {
       userId = existingByFirebase[0].id;
+      // Ensure auth user exists for magic link generation
+      const authUser = await ensureAuthUser(firebaseUser.email.toLowerCase(), {
+        full_name: body.profile?.displayName || firebaseUser.displayName,
+        firebase_uid: firebaseUser.localId,
+        auth_source: 'dragon_worlds',
+      });
+      authUserId = authUser?.id || userId;
     } else {
       // Check by email
       const existingByEmail = await supabaseQuery('users', {
@@ -228,6 +295,13 @@ serve(async (req) => {
           filter: { id: `eq.${userId}` },
           body: { firebase_uid: firebaseUser.localId, auth_source: 'dragon_worlds' },
         });
+        // Ensure auth user exists for magic link generation
+        const authUser = await ensureAuthUser(firebaseUser.email.toLowerCase(), {
+          full_name: body.profile?.displayName || firebaseUser.displayName,
+          firebase_uid: firebaseUser.localId,
+          auth_source: 'dragon_worlds',
+        });
+        authUserId = authUser?.id || userId;
       } else {
         // Create new user
         isNewUser = true;
@@ -260,7 +334,9 @@ serve(async (req) => {
       }
     }
 
-    // Auto-join community
+    // Auto-join community using the auth user ID (from session)
+    // This ensures the membership matches the authenticated session
+    const membershipUserId = authUserId || userId;
     const communitySlug = body.communitySlug || '2027-hk-dragon-worlds';
     const communities = await supabaseQuery('communities', {
       select: 'id',
@@ -268,28 +344,89 @@ serve(async (req) => {
     });
 
     if (communities?.[0]) {
-      await supabaseQuery('community_memberships', {
-        method: 'POST',
-        body: {
-          user_id: userId,
-          community_id: communities[0].id,
-          role: 'member',
-          notifications_enabled: true,
-        },
-        upsert: true,
-      });
+      try {
+        console.log('[Auth Bridge] Auto-joining community with user:', membershipUserId);
+        await supabaseQuery('community_memberships', {
+          method: 'POST',
+          body: {
+            user_id: membershipUserId,
+            community_id: communities[0].id,
+            role: 'member',
+            notifications_enabled: true,
+          },
+          upsert: true,
+        });
+      } catch (err) {
+        // Ignore duplicate membership errors - user is already a member
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        if (!errorMsg.includes('duplicate key') && !errorMsg.includes('23505')) {
+          throw err;
+        }
+        console.log('[Auth Bridge] User already a community member');
+      }
     }
 
-    // Generate bridge token
-    const now = Math.floor(Date.now() / 1000);
-    const exp = now + 300;
-    const accessToken = btoa(JSON.stringify({
-      sub: userId,
-      email: firebaseUser.email,
-      type: 'firebase_bridge',
-      iat: now,
-      exp,
-    }));
+    // Generate real Supabase session using Admin API
+    // Step 1: Generate a magic link for the user
+    const generateLinkResponse = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'magiclink',
+        email: firebaseUser.email.toLowerCase(),
+        options: {
+          data: {
+            firebase_bridge: true,
+            firebase_uid: firebaseUser.localId,
+          },
+        },
+      }),
+    });
+
+    if (!generateLinkResponse.ok) {
+      const errorText = await generateLinkResponse.text();
+      console.error('Failed to generate magic link:', errorText);
+      throw new Error('Failed to generate session link');
+    }
+
+    const linkData = await generateLinkResponse.json();
+    console.log('[Auth Bridge] Generate link response:', JSON.stringify(linkData));
+    const tokenHash = linkData.properties?.hashed_token || linkData.hashed_token;
+
+    if (!tokenHash) {
+      console.error('[Auth Bridge] No hashed_token in response:', JSON.stringify(linkData));
+      throw new Error('Failed to get verification token: ' + JSON.stringify(linkData));
+    }
+
+    // Step 2: Verify the token to get a real session
+    const verifyResponse = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        type: 'magiclink',
+        token_hash: tokenHash,
+      }),
+    });
+
+    if (!verifyResponse.ok) {
+      const errorText = await verifyResponse.text();
+      console.error('Failed to verify token:', errorText);
+      throw new Error('Failed to create session');
+    }
+
+    const sessionData = await verifyResponse.json();
+
+    if (!sessionData.access_token) {
+      console.error('No access_token in verify response:', sessionData);
+      throw new Error('Session creation failed');
+    }
 
     // Get profile
     const profiles = await supabaseQuery('users', {
@@ -297,24 +434,45 @@ serve(async (req) => {
       filter: { id: `eq.${userId}` },
     });
 
-    // Return response in format expected by Dragon Worlds client
+    // Calculate expires_at in milliseconds if it's in seconds
+    let expiresAtMs = sessionData.expires_at;
+    if (expiresAtMs < 10000000000) {
+      // It's in seconds, convert to milliseconds
+      expiresAtMs = expiresAtMs * 1000;
+    }
+
+    // Return response with real Supabase session tokens
+    // Session object includes both snake_case (Supabase standard) and camelCase (Dragon Worlds compatible)
+    // IMPORTANT: userId should be the auth.users ID (sessionData.user.id) for RLS to work
+    // since RLS checks auth.uid() which comes from the JWT
+    const sessionUserId = sessionData.user?.id ?? userId;
+
     return new Response(
       JSON.stringify({
         success: true,
         session: {
-          accessToken,
-          userId,
+          // Snake case (Supabase standard)
+          access_token: sessionData.access_token,
+          refresh_token: sessionData.refresh_token,
+          expires_in: sessionData.expires_in,
+          expires_at: sessionData.expires_at,
+          token_type: sessionData.token_type || 'bearer',
+          user: sessionData.user,
+          // Camel case (Dragon Worlds compatible)
+          accessToken: sessionData.access_token,
+          refreshToken: sessionData.refresh_token,
+          expiresIn: sessionData.expires_in,
+          expiresAt: expiresAtMs, // Dragon Worlds expects milliseconds
+          userId: sessionUserId,
           email: firebaseUser.email,
-          expiresAt: exp * 1000, // Convert to milliseconds for client
-          refreshToken: '',
         },
         // Also include flat fields for backwards compatibility
-        accessToken,
-        refreshToken: '',
-        expiresIn: 300,
-        expiresAt: exp,
+        accessToken: sessionData.access_token,
+        refreshToken: sessionData.refresh_token,
+        expiresIn: sessionData.expires_in,
+        expiresAt: expiresAtMs,
         user: {
-          id: userId,
+          id: sessionUserId,
           email: firebaseUser.email,
           fullName: profiles?.[0]?.full_name,
           isNewUser,

@@ -1,5 +1,7 @@
 /**
- * NotificationBell - Header bell icon with unread badge
+ * NotificationBell - Header bell icon with combined unread badge
+ *
+ * Shows combined unread count from notifications and crew messages.
  */
 
 import React from 'react';
@@ -7,6 +9,7 @@ import { View, Pressable, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 import { useUnreadNotificationCount } from '@/hooks/useNotifications';
+import { useCrewThreadsUnreadCount } from '@/hooks/useCrewThreads';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -24,7 +27,11 @@ export function NotificationBell({
   color = IOS_COLORS.label,
 }: NotificationBellProps) {
   const router = useRouter();
-  const { unreadCount } = useUnreadNotificationCount();
+  const { unreadCount: notificationCount } = useUnreadNotificationCount();
+  const { unreadCount: messagesCount } = useCrewThreadsUnreadCount();
+
+  // Combined unread count
+  const unreadCount = notificationCount + messagesCount;
 
   const handlePress = () => {
     router.push('/social-notifications');

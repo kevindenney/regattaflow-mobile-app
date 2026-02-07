@@ -41,6 +41,20 @@ export const communityFeedKeys = {
     topPeriod?: TopPeriod;
     catalogRaceId?: string;
   }) => [...communityFeedKeys.feeds(), venueId, filters] as const,
+  // Community-based feed (non-venue communities)
+  communityFeed: (communityId: string, filters?: {
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+  }) => [...communityFeedKeys.feeds(), 'community', communityId, filters] as const,
+  // Aggregated feed from joined communities
+  joinedCommunitiesFeed: (communityIds: string[], filters?: {
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+  }) => [...communityFeedKeys.feeds(), 'joined-communities', communityIds, filters] as const,
   raceFeed: (catalogRaceId: string) => [...communityFeedKeys.feeds(), 'race', catalogRaceId] as const,
   aggregatedFeed: (venueIds: string[], filters?: {
     sort?: FeedSortType;
@@ -196,6 +210,89 @@ export function useRaceFeed(catalogRaceId: string | undefined) {
   });
 }
 
+/**
+ * Feed of posts for a specific community (by community_id)
+ * Use this for non-venue communities like boat classes, sailmakers, etc.
+ */
+export function useCommunityPostsFeed(
+  communityId: string | undefined,
+  options: {
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+    enabled?: boolean;
+  } = {}
+) {
+  const {
+    sort = 'hot',
+    postType,
+    tagIds,
+    topPeriod,
+    enabled = true,
+  } = options;
+
+  return useInfiniteQuery({
+    queryKey: communityFeedKeys.communityFeed(communityId || '', { sort, postType, tagIds, topPeriod }),
+    queryFn: async ({ pageParam = 0 }) => {
+      return CommunityFeedService.getCommunityPosts(communityId!, {
+        sort,
+        postType,
+        tagIds,
+        topPeriod,
+        page: pageParam,
+        limit: 20,
+      });
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    enabled: enabled && !!communityId,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
+/**
+ * Aggregated feed from communities the user has joined
+ * Use this for the main "Feed" tab showing posts from all joined communities
+ */
+export function useJoinedCommunitiesFeed(
+  communityIds: string[],
+  options: {
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+    enabled?: boolean;
+  } = {}
+) {
+  const {
+    sort = 'hot',
+    postType,
+    tagIds,
+    topPeriod,
+    enabled = true,
+  } = options;
+
+  return useInfiniteQuery({
+    queryKey: communityFeedKeys.joinedCommunitiesFeed(communityIds, { sort, postType, tagIds, topPeriod }),
+    queryFn: async ({ pageParam = 0 }) => {
+      return CommunityFeedService.getJoinedCommunitiesFeed({
+        communityIds,
+        sort,
+        postType,
+        tagIds,
+        topPeriod,
+        page: pageParam,
+        limit: 20,
+      });
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextPage,
+    enabled: enabled && communityIds.length > 0,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
 // ============================================================================
 // POST DETAIL
 // ============================================================================
@@ -229,8 +326,12 @@ export function useCreatePost() {
   return useMutation({
     mutationFn: (params: CreatePostParams) => CommunityFeedService.createPost(params),
     onSuccess: (_data, variables) => {
+      // Invalidate all feed queries
       queryClient.invalidateQueries({ queryKey: communityFeedKeys.feeds() });
-      queryClient.invalidateQueries({ queryKey: communityFeedKeys.mapPins(variables.venue_id) });
+      // Only invalidate map pins if post has a venue_id
+      if (variables.venue_id) {
+        queryClient.invalidateQueries({ queryKey: communityFeedKeys.mapPins(variables.venue_id) });
+      }
     },
   });
 }

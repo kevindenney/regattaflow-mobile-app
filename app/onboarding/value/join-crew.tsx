@@ -17,13 +17,19 @@ import Animated, {
   FadeIn,
   FadeInUp,
 } from 'react-native-reanimated';
-import { ValueScreen } from '@/components/onboarding/ValueScreen';
+import { ValueScreen, useIsDesktop } from '@/components/onboarding/ValueScreen';
 
 function CommunityIllustration() {
+  const isDesktop = useIsDesktop();
   const avatarPulse1 = useSharedValue(1);
   const avatarPulse2 = useSharedValue(1);
   const avatarPulse3 = useSharedValue(1);
   const notificationSlide = useSharedValue(0);
+
+  // Responsive sizing
+  const containerWidth = isDesktop ? 420 : 300;
+  const containerHeight = isDesktop ? 460 : 340;
+  const cardWidth = isDesktop ? 340 : 260;
 
   useEffect(() => {
     // Staggered avatar pulses
@@ -89,48 +95,48 @@ function CommunityIllustration() {
   }));
 
   return (
-    <View style={styles.illustrationContainer}>
+    <View style={[styles.illustrationContainer, { width: containerWidth, height: containerHeight }]}>
       {/* Main community card */}
-      <View style={styles.communityCard}>
+      <View style={[styles.communityCard, { width: cardWidth }, isDesktop && styles.communityCardDesktop]}>
         {/* Club header */}
         <View style={styles.clubHeader}>
-          <View style={styles.clubLogo}>
-            <Ionicons name="flag" size={24} color="#FFFFFF" />
+          <View style={[styles.clubLogo, isDesktop && styles.clubLogoDesktop]}>
+            <Ionicons name="flag" size={isDesktop ? 28 : 24} color="#FFFFFF" />
           </View>
           <View>
-            <Text style={styles.clubName}>Bay Sailing Club</Text>
-            <Text style={styles.clubMembers}>248 members</Text>
+            <Text style={[styles.clubName, isDesktop && styles.clubNameDesktop]}>Bay Sailing Club</Text>
+            <Text style={[styles.clubMembers, isDesktop && styles.clubMembersDesktop]}>248 members</Text>
           </View>
         </View>
 
         {/* Avatar stack */}
         <View style={styles.avatarStack}>
-          <Animated.View style={[styles.avatar, styles.avatar1, avatar1Style]}>
-            <Ionicons name="person" size={20} color="#FFFFFF" />
+          <Animated.View style={[styles.avatar, styles.avatar1, avatar1Style, isDesktop && styles.avatarDesktop]}>
+            <Ionicons name="person" size={isDesktop ? 24 : 20} color="#FFFFFF" />
           </Animated.View>
-          <Animated.View style={[styles.avatar, styles.avatar2, avatar2Style]}>
-            <Ionicons name="person" size={20} color="#FFFFFF" />
+          <Animated.View style={[styles.avatar, styles.avatar2, avatar2Style, isDesktop && styles.avatarDesktop]}>
+            <Ionicons name="person" size={isDesktop ? 24 : 20} color="#FFFFFF" />
           </Animated.View>
-          <Animated.View style={[styles.avatar, styles.avatar3, avatar3Style]}>
-            <Ionicons name="person" size={20} color="#FFFFFF" />
+          <Animated.View style={[styles.avatar, styles.avatar3, avatar3Style, isDesktop && styles.avatarDesktop]}>
+            <Ionicons name="person" size={isDesktop ? 24 : 20} color="#FFFFFF" />
           </Animated.View>
-          <View style={styles.avatarMore}>
-            <Text style={styles.avatarMoreText}>+245</Text>
+          <View style={[styles.avatarMore, isDesktop && styles.avatarMoreDesktop]}>
+            <Text style={[styles.avatarMoreText, isDesktop && styles.avatarMoreTextDesktop]}>+245</Text>
           </View>
         </View>
 
         {/* Recent activity */}
-        <Text style={styles.activityLabel}>Recent Activity</Text>
+        <Text style={[styles.activityLabel, isDesktop && styles.activityLabelDesktop]}>Recent Activity</Text>
         <View style={styles.activityList}>
           <View style={styles.activityItem}>
             <View style={styles.activityDot} />
-            <Text style={styles.activityText}>
+            <Text style={[styles.activityText, isDesktop && styles.activityTextDesktop]}>
               <Text style={styles.activityName}>Sarah M.</Text> finished 2nd
             </Text>
           </View>
           <View style={styles.activityItem}>
             <View style={styles.activityDot} />
-            <Text style={styles.activityText}>
+            <Text style={[styles.activityText, isDesktop && styles.activityTextDesktop]}>
               <Text style={styles.activityName}>Mike T.</Text> joined fleet
             </Text>
           </View>
@@ -140,33 +146,33 @@ function CommunityIllustration() {
       {/* Floating notification */}
       <Animated.View
         entering={FadeIn.delay(400).duration(400)}
-        style={[styles.notificationCard, notificationStyle]}
+        style={[styles.notificationCard, notificationStyle, isDesktop && styles.notificationCardDesktop]}
       >
-        <View style={styles.notificationIcon}>
-          <Ionicons name="trophy" size={18} color="#FBBF24" />
+        <View style={[styles.notificationIcon, isDesktop && styles.notificationIconDesktop]}>
+          <Ionicons name="trophy" size={isDesktop ? 22 : 18} color="#FBBF24" />
         </View>
         <View style={styles.notificationContent}>
-          <Text style={styles.notificationTitle}>Race Results</Text>
-          <Text style={styles.notificationBody}>Sunday Series posted!</Text>
+          <Text style={[styles.notificationTitle, isDesktop && styles.notificationTitleDesktop]}>Race Results</Text>
+          <Text style={[styles.notificationBody, isDesktop && styles.notificationBodyDesktop]}>Sunday Series posted!</Text>
         </View>
       </Animated.View>
 
       {/* Stats row */}
       <Animated.View
         entering={FadeInUp.delay(600).duration(400)}
-        style={styles.statsRow}
+        style={[styles.statsRow, isDesktop && styles.statsRowDesktop]}
       >
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>50+</Text>
-          <Text style={styles.statText}>Clubs</Text>
+          <Text style={[styles.statNumber, isDesktop && styles.statNumberDesktop]}>50+</Text>
+          <Text style={[styles.statText, isDesktop && styles.statTextDesktop]}>Clubs</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>2.5k</Text>
-          <Text style={styles.statText}>Sailors</Text>
+          <Text style={[styles.statNumber, isDesktop && styles.statNumberDesktop]}>2.5k</Text>
+          <Text style={[styles.statText, isDesktop && styles.statTextDesktop]}>Sailors</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNumber}>300+</Text>
-          <Text style={styles.statText}>Races</Text>
+          <Text style={[styles.statNumber, isDesktop && styles.statNumberDesktop]}>300+</Text>
+          <Text style={[styles.statText, isDesktop && styles.statTextDesktop]}>Races</Text>
         </View>
       </Animated.View>
     </View>
@@ -190,16 +196,17 @@ export default function JoinCrewScreen() {
 
 const styles = StyleSheet.create({
   illustrationContainer: {
-    width: 300,
-    height: 340,
     position: 'relative',
     alignItems: 'center',
   },
   communityCard: {
-    width: 260,
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 24,
     padding: 20,
+  },
+  communityCardDesktop: {
+    padding: 28,
+    borderRadius: 28,
   },
   clubHeader: {
     flexDirection: 'row',
@@ -215,15 +222,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  clubLogoDesktop: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+  },
   clubName: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
+  clubNameDesktop: {
+    fontSize: 22,
+  },
   clubMembers: {
     color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 13,
     marginTop: 2,
+  },
+  clubMembersDesktop: {
+    fontSize: 15,
   },
   avatarStack: {
     flexDirection: 'row',
@@ -237,6 +255,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  avatarDesktop: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   avatar1: {
     backgroundColor: '#60A5FA',
@@ -261,10 +284,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: -12,
   },
+  avatarMoreDesktop: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
   avatarMoreText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+  },
+  avatarMoreTextDesktop: {
+    fontSize: 14,
   },
   activityLabel: {
     color: 'rgba(255, 255, 255, 0.6)',
@@ -273,6 +304,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  activityLabelDesktop: {
+    fontSize: 13,
+    marginBottom: 12,
   },
   activityList: {
     gap: 8,
@@ -291,6 +326,9 @@ const styles = StyleSheet.create({
   activityText: {
     color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 13,
+  },
+  activityTextDesktop: {
+    fontSize: 15,
   },
   activityName: {
     fontWeight: '600',
@@ -312,6 +350,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
   },
+  notificationCardDesktop: {
+    top: 80,
+    right: 0,
+    padding: 14,
+    paddingRight: 20,
+    borderRadius: 16,
+    gap: 12,
+  },
   notificationIcon: {
     width: 36,
     height: 36,
@@ -320,16 +366,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  notificationIconDesktop: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+  },
   notificationContent: {},
   notificationTitle: {
     color: '#1F2937',
     fontSize: 13,
     fontWeight: '600',
   },
+  notificationTitleDesktop: {
+    fontSize: 15,
+  },
   notificationBody: {
     color: '#6B7280',
     fontSize: 12,
     marginTop: 1,
+  },
+  notificationBodyDesktop: {
+    fontSize: 14,
+    marginTop: 2,
   },
   statsRow: {
     flexDirection: 'row',
@@ -339,6 +397,12 @@ const styles = StyleSheet.create({
     gap: 24,
     marginTop: 16,
   },
+  statsRowDesktop: {
+    padding: 20,
+    gap: 32,
+    marginTop: 24,
+    borderRadius: 20,
+  },
   statBox: {
     alignItems: 'center',
   },
@@ -347,9 +411,16 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
   },
+  statNumberDesktop: {
+    fontSize: 26,
+  },
   statText: {
     color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 12,
     marginTop: 2,
+  },
+  statTextDesktop: {
+    fontSize: 14,
+    marginTop: 4,
   },
 });

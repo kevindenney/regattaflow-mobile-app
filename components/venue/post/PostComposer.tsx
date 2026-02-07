@@ -17,8 +17,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { TufteTokens } from '@/constants/designSystem';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
@@ -30,7 +30,9 @@ import type { CatalogRace } from '@/types/catalog-race';
 
 interface PostComposerProps {
   visible: boolean;
-  venueId: string;
+  venueId?: string;       // Optional - for venue-linked posts
+  communityId?: string;   // Optional - for community posts
+  // Note: At least one of venueId or communityId should be provided
   racingAreaId?: string | null;
   catalogRaceId?: string | null;
   catalogRaceName?: string | null;
@@ -43,6 +45,7 @@ const POST_TYPES: PostType[] = ['discussion', 'tip', 'question', 'report', 'safe
 export function PostComposer({
   visible,
   venueId,
+  communityId,
   racingAreaId,
   catalogRaceId: initialCatalogRaceId,
   catalogRaceName: initialCatalogRaceName,
@@ -79,7 +82,13 @@ export function PostComposer({
 
   const handleSubmit = useCallback(async () => {
     if (!title.trim()) {
-      Alert.alert('Title Required', 'Please add a title for your post.');
+      showAlert('Title Required', 'Please add a title for your post.');
+      return;
+    }
+
+    // Validate that we have either a venue or community to post to
+    if (!venueId && !communityId) {
+      showAlert('Error', 'Post must be associated with a venue or community.');
       return;
     }
 
@@ -102,7 +111,8 @@ export function PostComposer({
         : undefined;
 
       await createPost.mutateAsync({
-        venue_id: venueId,
+        venue_id: venueId || undefined,
+        community_id: communityId || undefined,
         title: title.trim(),
         body: body.trim() || undefined,
         post_type: postType,
@@ -115,20 +125,21 @@ export function PostComposer({
       resetForm();
       onSuccess?.();
       onDismiss();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create post. Please try again.');
+    } catch (error: any) {
+      console.error('[PostComposer] Error creating post:', error);
+      // Show the actual error message (which includes user-friendly membership messages)
+      const errorMessage = error?.message || 'Failed to create post. Please try again.';
+      showAlert('Cannot Create Post', errorMessage);
     }
-  }, [title, body, postType, venueId, racingAreaId, selectedTagIds, conditionLabel, selectedRaceId, createPost, resetForm, onSuccess, onDismiss]);
+  }, [title, body, postType, venueId, communityId, racingAreaId, selectedTagIds, conditionLabel, selectedRaceId, createPost, resetForm, onSuccess, onDismiss]);
 
   const handleDismiss = useCallback(() => {
     if (title.trim() || body.trim()) {
-      Alert.alert(
+      showConfirm(
         'Discard Post?',
         'You have unsaved changes. Are you sure you want to discard?',
-        [
-          { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => { resetForm(); onDismiss(); } },
-        ]
+        () => { resetForm(); onDismiss(); },
+        { destructive: true, confirmText: 'Discard', cancelText: 'Keep Editing' }
       );
     } else {
       onDismiss();

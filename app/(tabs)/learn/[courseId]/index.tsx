@@ -90,7 +90,7 @@ export default function CourseDetailScreen() {
             dbCourseId = dbCourse.id; // Use the database UUID
             courseExistsInDb = true;
           } else {
-            console.warn('[CourseDetail] Course not found in database. Course needs to be seeded.');
+            console.log('[CourseDetail] Course not found in database — using catalog-only mode.');
             // Course doesn't exist in database yet - we'll use null to indicate this
             // and skip enrollment operations
             dbCourseId = null;
@@ -100,7 +100,7 @@ export default function CourseDetailScreen() {
           // Check if it's a 406 or other error indicating course doesn't exist
           const isNotFoundError = err?.code === 'PGRST116' || err?.status === 406 || err?.message?.includes('406');
           if (isNotFoundError) {
-            console.warn('[CourseDetail] Course not found in database (404/406). Course needs to be seeded.');
+            console.log('[CourseDetail] Course not found in database (404/406) — using catalog-only mode.');
             dbCourseId = null;
             courseExistsInDb = false;
           } else {

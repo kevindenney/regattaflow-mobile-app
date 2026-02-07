@@ -10,10 +10,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
-  
   ScrollView,
   StyleSheet,
   Text,
@@ -31,6 +29,7 @@ import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryArea } fro
 import { RaceDetailsView, DocumentList, type Document, CourseVisualization, CourseSetupPrompt, CourseSelector } from '@/components/races';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 interface RaceDetails {
   id: string;
@@ -462,21 +461,21 @@ export default function RaceDetailScreen() {
         error = (result as any).error;
       } catch (timeoutError: any) {
         console.error('[RaceDetail] Fetch timeout:', timeoutError);
-        Alert.alert('Error', 'Failed to load race details (timeout). Please try again.');
+        showAlert('Error', 'Failed to load race details (timeout). Please try again.');
         setLoading(false);
         return;
       }
 
       if (error) {
         console.error('[RaceDetail] Error loading race:', error);
-        Alert.alert('Error', `Failed to load race: ${error.message}`);
+        showAlert('Error', `Failed to load race: ${error.message}`);
         setLoading(false);
         return;
       }
 
       if (!regattaData) {
         console.error('[RaceDetail] Race not found in database:', id);
-        Alert.alert('Error', 'Race not found');
+        showAlert('Error', 'Race not found');
         setLoading(false);
         return;
       }
@@ -645,7 +644,7 @@ export default function RaceDetailScreen() {
 
     } catch (error) {
       console.error('Error uploading document:', error);
-      Alert.alert('Upload Failed', 'Could not upload document. Please try again.');
+      showAlert('Upload Failed', 'Could not upload document. Please try again.');
       setUploading(false);
     }
   };
@@ -717,14 +716,7 @@ export default function RaceDetailScreen() {
         .single();
 
       if (saveError) {
-
-        if (Platform.OS === 'web') {
-          window.alert('Save Failed: Document extracted but could not be saved to database.');
-        } else {
-          Alert.alert('Save Failed', 'Document extracted but could not be saved to database.');
-        }
-      } else {
-
+        showAlert('Save Failed', 'Document extracted but could not be saved to database.');
       }
 
       // Update document with extraction and real database ID
@@ -742,56 +734,33 @@ export default function RaceDetailScreen() {
         });
       }
 
-      if (Platform.OS === 'web') {
-        const viewStrategy = window.confirm(
-          `Extraction Complete!\n\nFound ${extraction.marks.length} marks and extracted course layout.\n\nView in Strategy tab for visualization?`
-        );
-        if (viewStrategy) {
-          setActiveTab('strategy');
-        }
-      } else {
-        Alert.alert(
-          'Extraction Complete',
-          `Found ${extraction.marks.length} marks and extracted course layout. View in Strategy tab for visualization.`,
-          [{ text: 'View Strategy', onPress: () => setActiveTab('strategy') }, { text: 'OK' }]
-        );
-      }
+      showAlertWithButtons(
+        'Extraction Complete',
+        `Found ${extraction.marks.length} marks and extracted course layout. View in Strategy tab for visualization.`,
+        [
+          { text: 'View Strategy', onPress: () => setActiveTab('strategy') },
+          { text: 'OK' }
+        ]
+      );
 
     } catch (error) {
-
       setDocuments(prev => prev.map(d =>
         d.id === docId ? { ...d, extractionStatus: 'failed' } : d
       ));
 
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-      if (Platform.OS === 'web') {
-        window.alert(`Extraction Failed: ${errorMessage}`);
-      } else {
-        Alert.alert('Extraction Failed', errorMessage);
-      }
+      showAlert('Extraction Failed', errorMessage);
     } finally {
-
     }
   };
 
   const handleDeleteRace = async () => {
-    if (Platform.OS === 'web') {
-      const confirmed = confirm('Are you sure you want to delete this race? This action cannot be undone.');
-      if (!confirmed) return;
-    } else {
-      Alert.alert(
-        'Delete Race',
-        'Are you sure you want to delete this race? This action cannot be undone.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: () => performDelete() }
-        ]
-      );
-      return;
-    }
-
-    await performDelete();
+    showConfirm(
+      'Delete Race',
+      'Are you sure you want to delete this race? This action cannot be undone.',
+      performDelete,
+      { destructive: true, confirmText: 'Delete' }
+    );
   };
 
   const performDelete = async () => {
@@ -808,27 +777,17 @@ export default function RaceDetailScreen() {
 
       if (error) {
         console.error('Error deleting race:', error);
-        if (Platform.OS === 'web') {
-          alert('Failed to delete race. Please try again.');
-        } else {
-          Alert.alert('Error', 'Failed to delete race. Please try again.');
-        }
+        showAlert('Error', 'Failed to delete race. Please try again.');
         setDeleting(false);
         return;
       }
 
       // Navigate back to races list
-      if (Platform.OS === 'web') {
-        alert('Race deleted successfully');
-      }
+      showAlert('Success', 'Race deleted successfully');
       router.back();
     } catch (error) {
       console.error('Error deleting race:', error);
-      if (Platform.OS === 'web') {
-        alert('An unexpected error occurred.');
-      } else {
-        Alert.alert('Error', 'An unexpected error occurred.');
-      }
+      showAlert('Error', 'An unexpected error occurred.');
       setDeleting(false);
     }
   };
@@ -997,21 +956,18 @@ export default function RaceDetailScreen() {
           .select();
 
         if (updateError) {
-
           console.error('  Error details:', JSON.stringify(updateError, null, 2));
-          Alert.alert('Warning', `Strategy generated but failed to save: ${updateError.message}`);
+          showAlert('Warning', `Strategy generated but failed to save: ${updateError.message}`);
         } else {
-
-          Alert.alert('Success', 'Strategy generated and saved!');
+          showAlert('Success', 'Strategy generated and saved!');
         }
       } catch (saveError) {
-
-        Alert.alert('Warning', 'Strategy generated but failed to save. It may not persist.');
+        showAlert('Warning', 'Strategy generated but failed to save. It may not persist.');
       }
 
     } catch (error) {
       console.error('Error generating strategy:', error);
-      Alert.alert('Strategy Generation Failed', 'Could not generate race strategy. Please try again.');
+      showAlert('Strategy Generation Failed', 'Could not generate race strategy. Please try again.');
     } finally {
       setGeneratingStrategy(false);
     }
@@ -1227,7 +1183,7 @@ export default function RaceDetailScreen() {
             onComplete={(marks) => {
               logger.debug('[RaceDetail] Quick Draw complete, marks:', marks);
               setIsQuickDrawMode(false);
-              Alert.alert('Success', `${marks.length} marks placed successfully!`);
+              showAlert('Success', `${marks.length} marks placed successfully!`);
               // TODO: Save marks to course_marks table (Phase 3)
             }}
             onCancel={() => {
@@ -1723,12 +1679,11 @@ export default function RaceDetailScreen() {
 
     // TODO: Re-extract document content
     logger.debug('Re-extracting document:', documentId);
-    Alert.alert('Re-extraction', 'Document re-extraction will be implemented soon.');
+    showAlert('Re-extraction', 'Document re-extraction will be implemented soon.');
   };
 
   const handleDeleteDocument = async (documentId: string) => {
     try {
-
       // Check if document ID is a UUID (saved to database) or timestamp (local only)
       const isUUID = documentId.includes('-'); // UUIDs have hyphens, timestamps don't
 
@@ -1741,30 +1696,17 @@ export default function RaceDetailScreen() {
           .eq('id', documentId);
 
         if (deleteError) {
-
-          if (Platform.OS === 'web') {
-            window.alert('Delete Failed: Could not delete document from database.');
-          } else {
-            Alert.alert('Delete Failed', 'Could not delete document from database.');
-          }
+          showAlert('Delete Failed', 'Could not delete document from database.');
           return;
         }
-
-      } else {
-        // Document is local only (still processing or failed)
-
       }
+      // else: Document is local only (still processing or failed)
 
       // Remove from local state
       setDocuments(prev => prev.filter(d => d.id !== documentId));
 
     } catch (error) {
-
-      if (Platform.OS === 'web') {
-        window.alert(`Error: An unexpected error occurred while deleting the document.`);
-      } else {
-        Alert.alert('Error', 'An unexpected error occurred while deleting the document.');
-      }
+      showAlert('Error', 'An unexpected error occurred while deleting the document.');
     }
   };
 
@@ -2082,10 +2024,9 @@ export default function RaceDetailScreen() {
               setShowCourseSelector(false);
 
             // Apply course template marks to race
-            Alert.alert(
+            showAlert(
               'Template Applied',
-              `${course.name} template with ${course.marks?.length || 0} marks will be applied to your race.`,
-              [{ text: 'OK' }]
+              `${course.name} template with ${course.marks?.length || 0} marks will be applied to your race.`
             );
 
             // TODO: Save course marks to course_marks table

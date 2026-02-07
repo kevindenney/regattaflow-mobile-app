@@ -116,6 +116,8 @@ export interface UserProfile {
   displayName: string;
   email: string | null;
   avatarUrl: string | null;
+  avatarEmoji?: string | null;
+  avatarColor?: string | null;
   avatarInitials: string;
   bio: string | null;
   location: string | null;
@@ -536,19 +538,20 @@ export function useReflectProfile() {
       const now = new Date();
       const yearStart = new Date(now.getFullYear(), 0, 1);
 
-      // Fetch profile data
+      // Fetch profile data (use maybeSingle to handle missing profiles gracefully)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('id, full_name, email, created_at')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw profileError;
+      // Only throw for actual errors, not missing profile (PGRST116)
+      if (profileError && profileError.code !== 'PGRST116') throw profileError;
 
       // Fetch sailor profile extensions
       const { data: sailorProfile } = await supabase
         .from('sailor_profiles')
-        .select('display_name, avatar_url, bio, location, sailing_since, home_club_id')
+        .select('avatar_emoji, avatar_color, bio, location, home_club_id')
         .eq('user_id', userId)
         .single();
 
@@ -709,16 +712,15 @@ export function useReflectProfile() {
 
       // Fetch boats
       const { data: boatsData } = await supabase
-        .from('boats')
+        .from('sailor_boats')
         .select(`
           id,
           name,
           sail_number,
-          status,
-          is_primary,
-          boat_classes(name)
+          class_id,
+          boat_classes:boat_classes(name)
         `)
-        .eq('user_id', userId);
+        .eq('sailor_id', userId);
 
       // Count races per boat class (from race metadata)
       const boatClassRaces = new Map<string, { count: number; wins: number }>();
@@ -742,13 +744,13 @@ export function useReflectProfile() {
           name: b.name,
           className,
           sailNumber: b.sail_number,
-          isPrimary: b.is_primary || false,
+          isPrimary: false,
           raceCount: classStats.count,
           winCount: classStats.wins,
         };
       });
 
-      const displayName = sailorProfile?.display_name || profileData.full_name || 'Sailor';
+      const displayName = profileData?.full_name || 'Sailor';
 
       // Fetch achievements from database
       const { data: achievementsData } = await supabase
@@ -907,29 +909,40 @@ export function useReflectProfile() {
         }
       });
 
-      // Fetch recent followers
-      const { data: recentFollowers } = await supabase
+      // Fetch recent followers (user_follows FKs point to auth.users, not profiles/sailor_profiles,
+      // so we fetch follows first then look up profile data separately)
+      const { data: recentFollows } = await supabase
         .from('user_follows')
-        .select(`
-          id,
-          created_at,
-          follower_id,
-          profiles!user_follows_follower_id_fkey(full_name),
-          sailor_profiles!user_follows_follower_id_fkey(avatar_url)
-        `)
+        .select('id, created_at, follower_id')
         .eq('following_id', userId)
         .order('created_at', { ascending: false })
         .limit(5);
 
-      (recentFollowers || []).forEach((f: any) => {
+      const followerIds = (recentFollows || []).map((f: any) => f.follower_id).filter(Boolean);
+      let followerProfiles: Record<string, { full_name?: string; avatar_url?: string }> = {};
+      if (followerIds.length > 0) {
+        const [{ data: profilesData }, { data: sailorData }] = await Promise.all([
+          supabase.from('profiles').select('id, full_name').in('id', followerIds),
+          supabase.from('sailor_profiles').select('user_id, avatar_url').in('user_id', followerIds),
+        ]);
+        (profilesData || []).forEach((p: any) => {
+          followerProfiles[p.id] = { ...followerProfiles[p.id], full_name: p.full_name };
+        });
+        (sailorData || []).forEach((s: any) => {
+          followerProfiles[s.user_id] = { ...followerProfiles[s.user_id], avatar_url: s.avatar_url };
+        });
+      }
+
+      (recentFollows || []).forEach((f: any) => {
+        const profile = followerProfiles[f.follower_id];
         recentActivity.push({
           id: `follow-${f.id}`,
           type: 'new_follower',
-          title: `${f.profiles?.full_name || 'Someone'} started following you`,
+          title: `${profile?.full_name || 'Someone'} started following you`,
           timestamp: f.created_at,
           relatedUserId: f.follower_id,
-          relatedUserName: f.profiles?.full_name,
-          relatedUserAvatar: f.sailor_profiles?.avatar_url,
+          relatedUserName: profile?.full_name,
+          relatedUserAvatar: profile?.avatar_url,
         });
       });
 
@@ -1206,7 +1219,7 @@ export function useReflectProfile() {
       // =========================================================================
       // FETCH RACE PHOTOS FROM SAILOR_MEDIA
       // =========================================================================
-      const { data: photosData } = await supabase
+      const { data: photosData, error: photosError } = await supabase
         .from('sailor_media')
         .select(`
           id,
@@ -1222,6 +1235,10 @@ export function useReflectProfile() {
         .eq('media_type', 'image')
         .order('upload_date', { ascending: false })
         .limit(20);
+
+      if (photosError) {
+        console.log('[ReflectProfile] sailor_media query unavailable:', photosError.message);
+      }
 
       const racePhotos: RacePhoto[] = (photosData || []).map((p: any) => ({
         id: p.id,
@@ -1444,13 +1461,15 @@ export function useReflectProfile() {
         profile: {
           userId,
           displayName,
-          email: profileData.email,
-          avatarUrl: sailorProfile?.avatar_url || null,
+          email: profileData?.email || null,
+          avatarUrl: null,
+          avatarEmoji: sailorProfile?.avatar_emoji || null,
+          avatarColor: sailorProfile?.avatar_color || null,
           avatarInitials: getInitials(displayName),
           bio: sailorProfile?.bio || null,
           location: sailorProfile?.location || null,
           homeClub: homeClubName,
-          sailingSince: sailorProfile?.sailing_since || null,
+          sailingSince: null,
           followerCount: followerCount || 0,
           followingCount: followingCount || 0,
         },
@@ -1467,7 +1486,7 @@ export function useReflectProfile() {
           currentStreak: 0, // TODO: Calculate actual streak
           longestStreak: 0,
           totalTimeOnWater: Math.round(totalTimeOnWater),
-          memberSince: profileData.created_at,
+          memberSince: profileData?.created_at || null,
         },
         venuesVisited,
         boats,
@@ -2441,6 +2460,7 @@ export function useReflectProfileMock(): {
           'Jib Lead': 'Hole 3',
           'Backstay': '8/10',
           'Outhaul': 'Medium',
+          'Cunningham': 'Off',
         },
         keyMoments: [
           'Won the pin by 2 boat lengths',

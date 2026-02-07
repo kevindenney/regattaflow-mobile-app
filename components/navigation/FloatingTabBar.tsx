@@ -301,19 +301,21 @@ const styles = StyleSheet.create({
   },
   pillContainer: {
     borderRadius: 32,
-    backgroundColor: 'rgba(235, 235, 240, 0.97)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
       },
       android: {
-        elevation: 8,
+        elevation: 12,
       },
       web: {
-        boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)',
       } as any,
     }),
   },
@@ -321,21 +323,23 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(235, 235, 240, 0.97)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
       },
       android: {
-        elevation: 8,
+        elevation: 12,
       },
       web: {
-        boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)',
       } as any,
     }),
   },

@@ -28,6 +28,7 @@ import {
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 import { CommunityDetailHeader } from '@/components/community/CommunityDetailHeader';
+import { CommunityMembersModal } from '@/components/community/CommunityMembersModal';
 import { FeedPostCard } from '@/components/venue/feed/FeedPostCard';
 import {
   useCommunityBySlug,
@@ -70,6 +71,7 @@ export default function CommunityDetailScreen() {
   // State
   const [feedSort, setFeedSort] = useState<FeedSortType>('hot');
   const [feedPostType, setFeedPostType] = useState<PostType | undefined>(undefined);
+  const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
 
   // Data
   const { data: community, isLoading: isLoadingCommunity, refetch: refetchCommunity } = useCommunityBySlug(slug);
@@ -153,6 +155,11 @@ export default function CommunityDetailScreen() {
   const handleRefresh = useCallback(async () => {
     await Promise.all([refetchCommunity(), refetchFeed()]);
   }, [refetchCommunity, refetchFeed]);
+
+  const handleMembersPress = useCallback(() => {
+    triggerHaptic('selection');
+    setIsMembersModalOpen(true);
+  }, []);
 
   const handlePostPress = useCallback(
     (post: FeedPost) => {
@@ -244,7 +251,18 @@ export default function CommunityDetailScreen() {
             onJoinToggle={handleJoinToggle}
             isJoinPending={isJoinPending}
             isMembershipLoading={isMembershipLoading}
+            onMembersPress={handleMembersPress}
           />
+
+        {/* Section Divider */}
+        <View style={styles.sectionDivider}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Posts</Text>
+            <Text style={styles.postCount}>
+              {posts.length > 0 ? `${posts.length} posts` : ''}
+            </Text>
+          </View>
+        </View>
 
         {/* Filter Bar */}
         <View style={styles.filterBar}>
@@ -265,14 +283,14 @@ export default function CommunityDetailScreen() {
           {canPost && (
             <Pressable onPress={handleCreatePost} style={styles.createButton}>
               <Ionicons name="add" size={18} color="#FFFFFF" />
-              <Text style={styles.createButtonText}>Post</Text>
+              <Text style={styles.createButtonText}>New Post</Text>
             </Pressable>
           )}
         </View>
       </>
       );
     },
-    [community, handleJoinToggle, isJoinPending, isMembershipLoading, feedSort, feedPostType, openSortPicker, openFilterPicker, handleCreatePost, canPost]
+    [community, handleJoinToggle, isJoinPending, isMembershipLoading, handleMembersPress, feedSort, feedPostType, openSortPicker, openFilterPicker, handleCreatePost, canPost, posts.length]
   );
 
   const ListEmpty = useMemo(
@@ -283,15 +301,25 @@ export default function CommunityDetailScreen() {
         </View>
       ) : (
         <View style={styles.emptyContainer}>
-          <Ionicons name="chatbubbles-outline" size={48} color={IOS_COLORS.systemGray3} />
-          <Text style={styles.emptyText}>No posts yet</Text>
+          <View style={styles.emptyIconContainer}>
+            <Ionicons name="chatbubbles-outline" size={48} color={IOS_COLORS.systemBlue} />
+          </View>
+          <Text style={styles.emptyText}>Start the conversation!</Text>
           <Text style={styles.emptySubtext}>
-            Be the first to start a discussion
+            Be the first to share your knowledge, ask a question, or spark a discussion in this community.
           </Text>
-          {canPost && (
+          {canPost ? (
             <Pressable onPress={handleCreatePost} style={styles.emptyButton}>
-              <Text style={styles.emptyButtonText}>Create Post</Text>
+              <Ionicons name="add" size={18} color="#FFFFFF" />
+              <Text style={styles.emptyButtonText}>Create First Post</Text>
             </Pressable>
+          ) : (
+            <View style={styles.emptyJoinHint}>
+              <Ionicons name="information-circle-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+              <Text style={styles.emptyJoinHintText}>
+                Join this community to start posting
+              </Text>
+            </View>
           )}
         </View>
       ),
@@ -342,7 +370,7 @@ export default function CommunityDetailScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: insets.bottom + 20 },
+          { paddingBottom: insets.bottom + 100 }, // Extra padding to clear any banners
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -366,6 +394,15 @@ export default function CommunityDetailScreen() {
           ) : null
         }
       />
+
+      {/* Members Modal */}
+      <CommunityMembersModal
+        isOpen={isMembersModalOpen}
+        onClose={() => setIsMembersModalOpen(false)}
+        communityId={community.id}
+        communityName={community.name}
+        memberCount={community.member_count}
+      />
     </>
   );
 }
@@ -379,6 +416,27 @@ const styles = StyleSheet.create({
   },
   listContent: {
     backgroundColor: IOS_COLORS.systemGroupedBackground,
+  },
+  // Section divider between header and posts
+  sectionDivider: {
+    marginTop: IOS_SPACING.lg,
+    paddingTop: IOS_SPACING.md,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingBottom: IOS_SPACING.sm,
+  },
+  sectionTitle: {
+    ...IOS_TYPOGRAPHY.headline,
+    color: IOS_COLORS.label,
+  },
+  postCount: {
+    ...IOS_TYPOGRAPHY.subhead,
+    color: IOS_COLORS.secondaryLabel,
   },
   filterBar: {
     flexDirection: 'row',
@@ -426,23 +484,40 @@ const styles = StyleSheet.create({
     height: 12,
     backgroundColor: IOS_COLORS.systemGroupedBackground,
   },
+  // Empty state
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 60,
+    paddingHorizontal: IOS_SPACING.xl,
     gap: IOS_SPACING.sm,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: `${IOS_COLORS.systemBlue}15`,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: IOS_SPACING.sm,
   },
   emptyText: {
     ...IOS_TYPOGRAPHY.title3,
     color: IOS_COLORS.label,
+    textAlign: 'center',
   },
   emptySubtext: {
     ...IOS_TYPOGRAPHY.subhead,
     color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   emptyButton: {
-    marginTop: IOS_SPACING.md,
+    marginTop: IOS_SPACING.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: IOS_SPACING.xl,
-    paddingVertical: IOS_SPACING.sm,
+    paddingVertical: IOS_SPACING.sm + 2,
     backgroundColor: IOS_COLORS.systemBlue,
     borderRadius: IOS_RADIUS.full,
   },
@@ -450,6 +525,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  emptyJoinHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: IOS_SPACING.md,
+    paddingHorizontal: IOS_SPACING.md,
+    paddingVertical: IOS_SPACING.sm,
+    backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
+    borderRadius: IOS_RADIUS.md,
+  },
+  emptyJoinHintText: {
+    ...IOS_TYPOGRAPHY.footnote,
+    color: IOS_COLORS.secondaryLabel,
   },
   footerLoader: {
     paddingVertical: 20,

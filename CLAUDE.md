@@ -160,6 +160,23 @@ EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 - Prefer interfaces over types for objects
 - Use explicit return types on exported functions
 
+### Web Compatibility
+
+⚠️ **Alert Usage**: Never use `Alert.alert()` directly - it doesn't work on web!
+
+**Use instead:**
+```typescript
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
+
+// Simple alert
+showAlert('Error', 'Something went wrong');
+
+// Confirmation dialog
+showConfirm('Delete', 'Are you sure?', () => handleDelete(), { destructive: true });
+```
+
+See [docs/WEB_COMPATIBILITY.md](docs/WEB_COMPATIBILITY.md) for complete API reference and migration guide.
+
 ### Styling
 - Use NativeWind/Tailwind classes: `className="flex-1 bg-white"`
 - Design tokens in `lib/design-tokens.ts`

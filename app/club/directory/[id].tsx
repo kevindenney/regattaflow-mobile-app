@@ -8,7 +8,7 @@
  * - Claim the club (if unclaimed)
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -34,7 +34,6 @@ import {
 } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { ClubDiscoveryService, GlobalClubResult } from '@/services/ClubDiscoveryService';
-import { ClaimClubModal } from '@/components/club/ClaimClubModal';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -47,8 +46,6 @@ export default function GlobalClubDetailScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const queryClient = useQueryClient();
-
-  const [showClaimModal, setShowClaimModal] = useState(false);
 
   // Fetch club details
   const { data: club, isLoading, error } = useQuery({
@@ -72,6 +69,10 @@ export default function GlobalClubDetailScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-global-clubs', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['global-club', id] });
+      Alert.alert('Joined!', `You are now a member of ${club?.name}`);
+    },
+    onError: (error: Error) => {
+      Alert.alert('Error', error.message || 'Failed to join club');
     },
   });
 
@@ -82,9 +83,16 @@ export default function GlobalClubDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['user-global-clubs', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['global-club', id] });
     },
+    onError: (error: Error) => {
+      Alert.alert('Error', error.message || 'Failed to leave club');
+    },
   });
 
   const handleToggleMembership = useCallback(() => {
+    if (!user) {
+      Alert.alert('Sign In Required', 'Please sign in to join clubs.');
+      return;
+    }
     if (isMember) {
       Alert.alert(
         'Leave Club',
@@ -101,25 +109,14 @@ export default function GlobalClubDetailScreen() {
     } else {
       joinMutation.mutate();
     }
-  }, [isMember, club?.name, joinMutation, leaveMutation]);
+  }, [user, isMember, club?.name, joinMutation, leaveMutation]);
 
   const handleClaimClub = useCallback(() => {
-    if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to claim this club.');
-      return;
-    }
-    setShowClaimModal(true);
-  }, [user]);
-
-  const handleClaimSuccess = useCallback(
-    (platformClubId: string) => {
-      setShowClaimModal(false);
-      queryClient.invalidateQueries({ queryKey: ['global-club', id] });
-      // Navigate to the new platform club
-      router.replace(`/club/${platformClubId}`);
-    },
-    [queryClient, id, router]
-  );
+    Alert.alert(
+      'Coming Soon',
+      'Club claiming will be available in a future update. Stay tuned!'
+    );
+  }, []);
 
   const handleOpenWebsite = useCallback(() => {
     if (club?.website) {
@@ -152,6 +149,7 @@ export default function GlobalClubDetailScreen() {
     <>
       <Stack.Screen
         options={{
+          headerShown: true,
           title: club.shortName || club.name,
           headerBackTitle: 'Search',
         }}
@@ -309,14 +307,6 @@ export default function GlobalClubDetailScreen() {
           </View>
         )}
       </ScrollView>
-
-      {/* Claim Modal */}
-      <ClaimClubModal
-        visible={showClaimModal}
-        club={club}
-        onClose={() => setShowClaimModal(false)}
-        onSuccess={handleClaimSuccess}
-      />
     </>
   );
 }

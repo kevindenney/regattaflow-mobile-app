@@ -469,10 +469,18 @@ class CommunityServiceClass {
 
   /**
    * Get all communities the current user has joined
+   * @param userId - Optional user ID to fetch communities for (uses Supabase auth if not provided)
    */
-  async getUserCommunities(): Promise<UserCommunitiesResponse> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
+  async getUserCommunities(userId?: string): Promise<UserCommunitiesResponse> {
+    let userIdToUse = userId;
+
+    // If no userId provided, try to get from Supabase auth
+    if (!userIdToUse) {
+      const { data: { user } } = await supabase.auth.getUser();
+      userIdToUse = user?.id;
+    }
+
+    if (!userIdToUse) {
       return { joined: [], moderated: [] };
     }
 
@@ -482,7 +490,7 @@ class CommunityServiceClass {
         *,
         community:communities_with_stats (*)
       `)
-      .eq('user_id', user.id)
+      .eq('user_id', userIdToUse)
       .order('joined_at', { ascending: false });
 
     if (error) {

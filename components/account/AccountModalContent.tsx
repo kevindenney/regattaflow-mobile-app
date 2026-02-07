@@ -11,7 +11,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -26,7 +25,9 @@ import { LanguageSelector } from '@/components/settings/LanguageSelector';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { getCurrentLocale, localeConfig } from '@/lib/i18n';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
+import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { supabase } from '@/services/supabase';
 
@@ -116,37 +117,35 @@ export default function AccountModalContent() {
       await updateUserProfile(updates);
     } catch (error) {
       console.error('[Account] Failed to save profile:', error);
-      Alert.alert('Error', 'Failed to save changes. Please try again.');
+      showAlert('Error', 'Failed to save changes. Please try again.');
       throw error;
     }
   }, [updateUserProfile]);
 
   // Handlers
-  const handleSignOut = useCallback(async () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await signOut();
-          } catch (error) {
-            console.error('[Account] Sign out error:', error);
-            Alert.alert('Error', 'Failed to sign out. Please try again.');
-          }
-        },
+  const handleSignOut = useCallback(() => {
+    showConfirm(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      async () => {
+        try {
+          await signOut();
+        } catch (error) {
+          console.error('[Account] Sign out error:', error);
+          showAlert('Error', 'Failed to sign out. Please try again.');
+        }
       },
-    ]);
+      { destructive: true, confirmText: 'Sign Out' }
+    );
   }, [signOut]);
 
   const handleClaimWorkspace = useCallback(async () => {
     if (claimPassword.length < 6) {
-      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      showAlert('Weak password', 'Password must be at least 6 characters.');
       return;
     }
     if (claimPassword !== claimPasswordConfirm) {
-      Alert.alert('Mismatch', 'Passwords do not match.');
+      showAlert('Mismatch', 'Passwords do not match.');
       return;
     }
 
@@ -171,11 +170,10 @@ export default function AccountModalContent() {
         demo_converted_at: new Date().toISOString(),
       });
 
-      Alert.alert('Workspace claimed', 'Your password is set.', [
-        { text: 'Great!', onPress: () => setClaimVisible(false) },
-      ]);
+      showAlert('Workspace claimed', 'Your password is set.');
+      setClaimVisible(false);
     } catch (error: any) {
-      Alert.alert('Unable to claim workspace', error?.message || 'Please try again.');
+      showAlert('Unable to claim workspace', error?.message || 'Please try again.');
     } finally {
       setClaimLoading(false);
       setClaimPassword('');
@@ -221,6 +219,7 @@ export default function AccountModalContent() {
             Sign in to manage your account, track your races, and sync across devices.
           </Text>
           <TouchableOpacity
+            testID="account-sign-in-button"
             style={{
               backgroundColor: IOS_COLORS.systemBlue,
               paddingVertical: 14,
@@ -238,6 +237,7 @@ export default function AccountModalContent() {
             <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Sign In</Text>
           </TouchableOpacity>
           <TouchableOpacity
+            testID="account-create-account-button"
             style={{
               paddingVertical: 12,
               paddingHorizontal: 32,
@@ -381,13 +381,27 @@ export default function AccountModalContent() {
             trailingAccessory="chevron"
             onPress={() => router.push('/settings/change-password')}
           />
-          <IOSListItem
-            title="Restart Onboarding"
-            leadingIcon="infinite-outline"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
-            trailingAccessory="chevron"
-            onPress={() => router.replace('/onboarding/welcome')}
-          />
+{__DEV__ && (
+            <IOSListItem
+              title="Reset Onboarding"
+              leadingIcon="infinite-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+              trailingAccessory="chevron"
+              onPress={() => {
+                showConfirm(
+                  'Reset Onboarding',
+                  'This will reset onboarding state and show the full onboarding flow. Continue?',
+                  async () => {
+                    await OnboardingStateService.resetOnboardingSeen();
+                    await OnboardingStateService.clearState();
+                    OnboardingStateService.setFlowType(true);
+                    router.replace('/onboarding');
+                  },
+                  { destructive: true, confirmText: 'Reset' }
+                );
+              }}
+            />
+          )}
           {isDemoProfile && (
             <IOSListItem
               title="Claim Workspace"
@@ -441,13 +455,14 @@ export default function AccountModalContent() {
             leadingIcon="help-circle-outline"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.teal}
             trailingAccessory="chevron"
-            onPress={() => Alert.alert('Support', 'Email us at support@regattaflow.com')}
+            onPress={() => showAlert('Support', 'Email us at support@regattaflow.com')}
           />
         </IOSListSection>
 
         {/* ── Sign Out ─────────────────────────────────────────── */}
         <IOSListSection>
           <IOSListItem
+            testID="account-sign-out-button"
             title="Sign Out"
             titleStyle={accountStyles.signOutText}
             trailingAccessory="none"

@@ -8,12 +8,12 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import {
-  Dimensions,
   Platform,
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, {
@@ -22,19 +22,19 @@ import Animated, {
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
-  withDelay,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
-const { width, height } = Dimensions.get('window');
+// Breakpoint for desktop layout
+const DESKTOP_BREAKPOINT = 768;
 
 export interface ValueScreenProps {
   /** Main title text */
   title: string;
   /** Subtitle/description text */
   subtitle: string;
-  /** Icon or illustration component */
+  /** Icon or illustration component - receives isDesktop prop for responsive sizing */
   illustration: React.ReactNode;
   /** Gradient colors for background */
   gradientColors: readonly [string, string, ...string[]];
@@ -56,6 +56,12 @@ export interface ValueScreenProps {
   onSkip?: () => void;
 }
 
+/** Hook to determine if we're on a desktop-sized screen (web only) */
+export function useIsDesktop(): boolean {
+  const { width } = useWindowDimensions();
+  return Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
+}
+
 export function ValueScreen({
   title,
   subtitle,
@@ -71,6 +77,7 @@ export function ValueScreen({
   onSkip,
 }: ValueScreenProps) {
   const router = useRouter();
+  const isDesktop = useIsDesktop();
 
   // Animation values
   const illustrationScale = useSharedValue(0.8);
@@ -105,6 +112,48 @@ export function ValueScreen({
     }
   };
 
+  // Progress dots component (shared between layouts)
+  const ProgressDots = (
+    <View style={[styles.progressContainer, isDesktop && styles.progressContainerDesktop]}>
+      {Array.from({ length: totalSteps }).map((_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.progressDot,
+            index === currentStep && styles.progressDotActive,
+            index < currentStep && styles.progressDotCompleted,
+          ]}
+        />
+      ))}
+    </View>
+  );
+
+  // Actions component (shared between layouts)
+  const Actions = (
+    <Animated.View
+      entering={FadeIn.delay(400).duration(400)}
+      style={[styles.actionsContainer, isDesktop && styles.actionsContainerDesktop]}
+    >
+      <TouchableOpacity
+        style={[styles.ctaButton, isDesktop && styles.ctaButtonDesktop]}
+        onPress={handleContinue}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.ctaText, isDesktop && styles.ctaTextDesktop]}>{ctaText}</Text>
+      </TouchableOpacity>
+
+      {skipText && skipRoute && (
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={handleSkip}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.skipText}>{skipText}</Text>
+        </TouchableOpacity>
+      )}
+    </Animated.View>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -117,66 +166,68 @@ export function ValueScreen({
       />
 
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.content}>
-          {/* Progress Dots */}
-          <View style={styles.progressContainer}>
-            {Array.from({ length: totalSteps }).map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.progressDot,
-                  index === currentStep && styles.progressDotActive,
-                  index < currentStep && styles.progressDotCompleted,
-                ]}
-              />
-            ))}
-          </View>
+        <View style={[styles.content, isDesktop && styles.contentDesktop]}>
+          {/* Progress Dots - top on mobile, bottom on desktop */}
+          {!isDesktop && ProgressDots}
 
-          {/* Illustration */}
-          <Animated.View style={[styles.illustrationContainer, illustrationStyle]}>
-            {illustration}
-          </Animated.View>
+          {isDesktop ? (
+            // Desktop: Two-column layout
+            <View style={styles.desktopLayout}>
+              {/* Left column: Illustration */}
+              <Animated.View style={[styles.illustrationContainerDesktop, illustrationStyle]}>
+                {illustration}
+              </Animated.View>
 
-          {/* Text Content */}
-          <View style={styles.textContainer}>
-            <Animated.Text
-              entering={FadeInDown.delay(200).duration(400).springify()}
-              style={styles.title}
-            >
-              {title}
-            </Animated.Text>
+              {/* Right column: Text + Actions */}
+              <View style={styles.desktopRightColumn}>
+                <View style={styles.textContainerDesktop}>
+                  <Animated.Text
+                    entering={FadeInDown.delay(200).duration(400).springify()}
+                    style={[styles.title, styles.titleDesktop]}
+                  >
+                    {title}
+                  </Animated.Text>
 
-            <Animated.Text
-              entering={FadeInDown.delay(300).duration(400).springify()}
-              style={styles.subtitle}
-            >
-              {subtitle}
-            </Animated.Text>
-          </View>
+                  <Animated.Text
+                    entering={FadeInDown.delay(300).duration(400).springify()}
+                    style={[styles.subtitle, styles.subtitleDesktop]}
+                  >
+                    {subtitle}
+                  </Animated.Text>
+                </View>
 
-          {/* Actions */}
-          <Animated.View
-            entering={FadeIn.delay(400).duration(400)}
-            style={styles.actionsContainer}
-          >
-            <TouchableOpacity
-              style={styles.ctaButton}
-              onPress={handleContinue}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.ctaText}>{ctaText}</Text>
-            </TouchableOpacity>
+                {Actions}
+              </View>
+            </View>
+          ) : (
+            // Mobile: Single-column layout (original)
+            <>
+              <Animated.View style={[styles.illustrationContainer, illustrationStyle]}>
+                {illustration}
+              </Animated.View>
 
-            {skipText && skipRoute && (
-              <TouchableOpacity
-                style={styles.skipButton}
-                onPress={handleSkip}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.skipText}>{skipText}</Text>
-              </TouchableOpacity>
-            )}
-          </Animated.View>
+              <View style={styles.textContainer}>
+                <Animated.Text
+                  entering={FadeInDown.delay(200).duration(400).springify()}
+                  style={styles.title}
+                >
+                  {title}
+                </Animated.Text>
+
+                <Animated.Text
+                  entering={FadeInDown.delay(300).duration(400).springify()}
+                  style={styles.subtitle}
+                >
+                  {subtitle}
+                </Animated.Text>
+              </View>
+
+              {Actions}
+            </>
+          )}
+
+          {/* Progress Dots at bottom for desktop */}
+          {isDesktop && ProgressDots}
         </View>
       </SafeAreaView>
     </View>
@@ -199,12 +250,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: Platform.OS === 'ios' ? 20 : 40,
   },
+  // Desktop: center content with max-width
+  contentDesktop: {
+    maxWidth: 1000,
+    alignSelf: 'center',
+    width: '100%',
+    paddingHorizontal: 48,
+    paddingVertical: 40,
+    justifyContent: 'center',
+  },
   progressContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 20,
     gap: 8,
+  },
+  progressContainerDesktop: {
+    paddingTop: 0,
+    marginTop: 40,
   },
   progressDot: {
     width: 8,
@@ -225,8 +289,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 40,
   },
+  // Desktop: Two-column layout container
+  desktopLayout: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 60,
+    flex: 1,
+  },
+  illustrationContainerDesktop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    maxWidth: 450,
+  },
+  desktopRightColumn: {
+    flex: 1,
+    maxWidth: 450,
+    justifyContent: 'center',
+  },
   textContainer: {
     marginBottom: 32,
+  },
+  textContainerDesktop: {
+    marginBottom: 40,
   },
   title: {
     fontSize: 32,
@@ -236,6 +322,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: -0.5,
   },
+  titleDesktop: {
+    fontSize: 44,
+    textAlign: 'left',
+    marginBottom: 16,
+    letterSpacing: -1,
+  },
   subtitle: {
     fontSize: 17,
     lineHeight: 24,
@@ -243,8 +335,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 16,
   },
+  subtitleDesktop: {
+    fontSize: 20,
+    lineHeight: 30,
+    textAlign: 'left',
+    paddingHorizontal: 0,
+  },
   actionsContainer: {
     gap: 16,
+  },
+  actionsContainerDesktop: {
+    maxWidth: 320,
   },
   ctaButton: {
     backgroundColor: '#FFFFFF',
@@ -257,10 +358,17 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  ctaButtonDesktop: {
+    paddingVertical: 20,
+    borderRadius: 14,
+  },
   ctaText: {
     color: '#0F172A',
     fontSize: 17,
     fontWeight: '700',
+  },
+  ctaTextDesktop: {
+    fontSize: 18,
   },
   skipButton: {
     paddingVertical: 12,

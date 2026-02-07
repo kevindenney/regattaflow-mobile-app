@@ -111,13 +111,25 @@ export const nativeAppleSignIn = async () => {
     throw new Error('Apple Authentication not available');
   }
 
-  // Show native Apple Sign-In UI
-  const credential = await Apple.signInAsync({
-    requestedScopes: [
-      Apple.AppleAuthenticationScope.FULL_NAME,
-      Apple.AppleAuthenticationScope.EMAIL,
-    ],
-  });
+  let credential;
+  try {
+    // Show native Apple Sign-In UI
+    credential = await Apple.signInAsync({
+      requestedScopes: [
+        Apple.AppleAuthenticationScope.FULL_NAME,
+        Apple.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+  } catch (appleError: any) {
+    // Handle expo-apple-authentication specific error codes
+    console.error('[NativeOAuth] Apple signInAsync failed:', appleError?.code, appleError?.message);
+
+    // Preserve the error code for better error handling upstream
+    const enhancedError = new Error(appleError?.message || 'Apple Sign-In failed');
+    (enhancedError as any).code = appleError?.code || 'ERR_UNKNOWN';
+    (enhancedError as any).originalError = appleError;
+    throw enhancedError;
+  }
 
   if (!credential.identityToken) {
     throw new Error('No identity token returned from Apple Sign-In');

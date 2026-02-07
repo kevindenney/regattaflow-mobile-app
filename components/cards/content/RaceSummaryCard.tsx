@@ -614,6 +614,10 @@ export function RaceSummaryCard({
   nextRaceIndex,
   // Scroll handler forwarded from parent for toolbar hide/show
   onContentScroll,
+  // Handler for card press (navigation to this card when clicking partially visible cards)
+  onCardPress,
+  // Refetch trigger for AfterRaceContent
+  refetchTrigger,
 }: CardContentProps) {
   const router = useRouter();
 
@@ -1048,6 +1052,7 @@ export function RaceSummaryCard({
             onOpenPostRaceInterview={onOpenPostRaceInterview}
             onOpenDetailedReview={handleOpenDetailedReview}
             isExpanded={true}
+            refetchTrigger={refetchTrigger}
           />
         );
       default:
@@ -1162,7 +1167,7 @@ export function RaceSummaryCard({
 
   return (
     <>
-        <Pressable onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1 }}>
+        <Pressable onPress={onCardPress || (() => {})} onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1 }}>
           <ScrollView
             style={styles.container}
             contentContainerStyle={styles.scrollContent}
@@ -1227,7 +1232,11 @@ export function RaceSummaryCard({
         </View>
 
         {/* Full race name */}
-        <Text style={styles.raceNameLarge} numberOfLines={2}>{race.name || '[No Race Name]'}</Text>
+        <Text
+          style={styles.raceNameLarge}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >{race.name || '[No Race Name]'}</Text>
 
         {/* Location */}
         <View style={styles.simpleDetailRow}>
@@ -2461,7 +2470,7 @@ const styles = StyleSheet.create({
 
   // ScrollView content container
   scrollContent: {
-    paddingBottom: 80, // Clear floating tab bar (64px) + bottom margin (~17px)
+    paddingBottom: 120, // Clear floating tab bar + safe area insets
   },
 
   // Compact Timeline (inside card footer - Tufte-inspired)
@@ -2816,11 +2825,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   raceNameLarge: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '600',
     color: IOS_COLORS.label,
-    lineHeight: 28,
-    marginBottom: 16,
+    lineHeight: 22,
+    marginBottom: 10,
   },
   simpleDetailRow: {
     flexDirection: 'row',

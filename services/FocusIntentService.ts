@@ -7,7 +7,6 @@
 
 import { supabase } from './supabase';
 import { logger } from '@/lib/utils/logger';
-import { ExcellenceMetricsService } from './ExcellenceMetricsService';
 import type {
   FocusIntent,
   FocusIntentRow,
@@ -235,6 +234,30 @@ export class FocusIntentService {
   }
 
   /**
+   * Dismiss (skip) an active focus intent without evaluation.
+   * Used when the user wants to clear their focus without rating it.
+   */
+  static async dismissIntent(intentId: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('sailor_focus_intents')
+        .update({
+          status: 'skipped',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', intentId);
+
+      if (error) {
+        logger.error('Error dismissing focus intent', { error, intentId });
+        throw error;
+      }
+    } catch (error) {
+      logger.error('Exception in dismissIntent', { error, intentId });
+      throw error;
+    }
+  }
+
+  /**
    * Evaluate a focus intent (rate how the focus went).
    */
   static async evaluateIntent(input: EvaluateFocusIntentInput): Promise<FocusIntent> {
@@ -268,50 +291,55 @@ export class FocusIntentService {
   // ============================================
 
   /**
-   * Generate 2-3 AI-suggested focus areas based on the sailor's weakest phases
-   * and excellence metrics. Uses ExcellenceMetricsService focus recommendations.
+   * Generate 2-3 AI-suggested focus areas based on the race's AI analysis.
+   * Falls back to hardcoded defaults if no AI analysis exists.
    */
-  static async generateSuggestions(sailorId: string, _raceId: string): Promise<FocusSuggestion[]> {
+  static async generateSuggestions(sailorId: string, raceId: string): Promise<FocusSuggestion[]> {
     try {
-      const metrics = await ExcellenceMetricsService.getExcellenceMetrics(sailorId);
+      // Step 1: Get timer_session_id from race_timer_sessions (uses regatta_id to link to races)
+      const { data: timerSession } = await supabase
+        .from('race_timer_sessions')
+        .select('id')
+        .eq('regatta_id', raceId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
 
-      const suggestions: FocusSuggestion[] = [];
+      // Step 2: If timer session exists, get AI analysis recommendations
+      if (timerSession?.id) {
+        const { data: aiAnalysis } = await supabase
+          .from('ai_coach_analysis')
+          .select('recommendations')
+          .eq('timer_session_id', timerSession.id)
+          .maybeSingle();
 
-      // Use existing focus recommendations from excellence metrics
-      const focusRecs = metrics.focusRecommendations || [];
-
-      // Convert FocusRecommendation to FocusSuggestion with actionable text
-      for (const rec of focusRecs.slice(0, 3)) {
-        const actionText = this.generateActionableFocusText(rec.phase, rec.title);
-        suggestions.push({
-          text: actionText,
-          phase: typeof rec.phase === 'string' ? rec.phase : rec.phase,
-          reason: rec.reason,
-          priority: rec.priority,
-        });
+        if (aiAnalysis?.recommendations?.length) {
+          // Convert AI recommendations to FocusSuggestion format
+          return aiAnalysis.recommendations.slice(0, 3).map((rec: string, index: number) => ({
+            text: rec,
+            phase: 'race' as const, // AI recommendations don't have phase info
+            reason: 'Based on AI analysis of your race',
+            priority: index === 0 ? 'high' as const : 'medium' as const,
+          }));
+        }
       }
 
-      // If no recommendations exist, provide generic high-value suggestions
-      if (suggestions.length === 0) {
-        suggestions.push(
-          {
-            text: 'Nail the first 30 seconds off the start line',
-            phase: 'start',
-            reason: 'Starting well consistently leads to better race results.',
-            priority: 'high',
-          },
-          {
-            text: 'Hold the boat flat through every tack',
-            phase: 'upwind',
-            reason: 'Boat handling through tacks is a key differentiator.',
-            priority: 'medium',
-          },
-        );
-      }
-
-      return suggestions.slice(0, 3);
+      // Step 3: Fall back to defaults if no AI analysis
+      return [
+        {
+          text: 'Nail the first 30 seconds off the start line',
+          phase: 'start',
+          reason: 'Starting well consistently leads to better race results.',
+          priority: 'high',
+        },
+        {
+          text: 'Hold the boat flat through every tack',
+          phase: 'upwind',
+          reason: 'Boat handling through tacks is a key differentiator.',
+          priority: 'medium',
+        },
+      ];
     } catch (error) {
-      logger.error('Error generating focus suggestions', { error, sailorId });
+      logger.error('Error generating focus suggestions', { error, sailorId, raceId });
       // Return safe defaults on error
       return [
         {

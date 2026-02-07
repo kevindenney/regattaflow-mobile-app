@@ -1,12 +1,11 @@
 /**
- * Discuss Tab — Feed-First with Segmented Control
+ * Discuss Tab — Reddit-Inspired Communities
  *
- * Aggregated discussion feed from all followed venues.
- * Two segments: "Feed" (discussion posts) and "My Venues" (venue directory).
+ * Two segments: "Feed" (aggregated from joined communities) and "Communities" (discovery).
  * Apple HIG design: iOS Inset Grouped List, system typography & colors.
  */
 
-import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -21,7 +20,6 @@ import {
   ActionSheetIOS,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import debounce from 'lodash/debounce';
@@ -30,36 +28,38 @@ import {
   IOS_TYPOGRAPHY,
   IOS_SPACING,
   IOS_RADIUS,
-  IOS_LIST_INSETS,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 import { TabScreenToolbar, ToolbarAction } from '@/components/ui/TabScreenToolbar';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { FeedPostCard } from '@/components/venue/feed/FeedPostCard';
-import { VenueDirectoryCard } from '@/components/venue/VenueDirectoryCard';
-import { useVenueDirectory } from '@/hooks/useVenueDirectory';
-import { ClubDiscoveryService } from '@/services/ClubDiscoveryService';
-import { useSavedVenues } from '@/hooks/useSavedVenues';
-import { useVenueActivityStats } from '@/hooks/useVenueActivityStats';
-import { communityFeedKeys } from '@/hooks/useCommunityFeed';
+import { CommunityCard } from '@/components/community/CommunityCard';
+import { CategoryChips } from '@/components/community/CategoryChips';
+import {
+  useUserCommunities,
+  useCommunityCategories,
+  useCommunitiesByCategory,
+  usePopularCommunities,
+  useCommunitySearch,
+  useToggleCommunityMembership,
+} from '@/hooks/useCommunities';
+import { communityFeedKeys, useJoinedCommunitiesFeed } from '@/hooks/useCommunityFeed';
 import { useQueryClient } from '@tanstack/react-query';
-import { MOCK_DISCUSSION_FEED } from '@/data/mockDiscussionFeed';
 import { useAuth } from '@/providers/AuthProvider';
 import type { FeedPost, FeedSortType, PostType } from '@/types/community-feed';
+import type { Community } from '@/types/community';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const DISCOVER_LIMIT = 25;
-
-type SegmentValue = 'feed' | 'my-waters';
+type SegmentValue = 'feed' | 'communities';
 
 const SEGMENTS: { value: SegmentValue; label: string }[] = [
   { value: 'feed', label: 'Feed' },
-  { value: 'my-waters', label: 'Venues' },
+  { value: 'communities', label: 'Communities' },
 ];
 
 const SORT_OPTIONS: { key: FeedSortType; label: string }[] = [
@@ -79,10 +79,10 @@ const POST_TYPE_FILTERS: (PostType | 'all')[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Empty State
+// Empty States
 // ---------------------------------------------------------------------------
 
-function FeedEmptyState({ onBrowseVenues }: { onBrowseVenues: () => void }) {
+function FeedEmptyState({ onBrowseCommunities }: { onBrowseCommunities: () => void }) {
   return (
     <View style={emptyStyles.container}>
       <Ionicons
@@ -90,12 +90,12 @@ function FeedEmptyState({ onBrowseVenues }: { onBrowseVenues: () => void }) {
         size={48}
         color={IOS_COLORS.systemGray3}
       />
-      <Text style={emptyStyles.title}>Join your waters</Text>
+      <Text style={emptyStyles.title}>Join communities</Text>
       <Text style={emptyStyles.subtitle}>
-        Follow venues to see discussions from your sailing community
+        Join communities to see discussions from your sailing network
       </Text>
-      <Pressable style={emptyStyles.button} onPress={onBrowseVenues}>
-        <Text style={emptyStyles.buttonText}>Browse Venues</Text>
+      <Pressable style={emptyStyles.button} onPress={onBrowseCommunities}>
+        <Text style={emptyStyles.buttonText}>Browse Communities</Text>
       </Pressable>
     </View>
   );
@@ -155,152 +155,69 @@ export default function DiscussScreen() {
   const [feedPostType, setFeedPostType] = useState<PostType | undefined>(undefined);
   const filtersActive = feedSort !== 'hot' || feedPostType !== undefined;
 
-  // Venue directory state
-  const { allVenues, isLoading, refetch } = useVenueDirectory();
-  const { savedVenueIds, saveVenue, unsaveVenue, refreshSavedVenues } =
-    useSavedVenues();
-  const { stats: activityStats } = useVenueActivityStats();
+  // Communities state
   const [searchQuery, setSearchQuery] = useState('');
-  const [clubMatchedVenues, setClubMatchedVenues] = useState<
-    { id: string; name: string; country?: string; region?: string; matchedClubName: string }[]
-  >([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
-  // Debounced club search for Discover
-  const debouncedClubSearch = useRef(
-    debounce(async (q: string) => {
-      if (q.length < 2) {
-        setClubMatchedVenues([]);
-        return;
-      }
-      try {
-        const clubs = await ClubDiscoveryService.searchYachtClubs(q, 10);
-        const results: typeof clubMatchedVenues = [];
-        for (const club of clubs) {
-          if (club.sailing_venues) {
-            results.push({
-              id: club.sailing_venues.id,
-              name: club.sailing_venues.name,
-              country: club.sailing_venues.country,
-              region: club.sailing_venues.region,
-              matchedClubName: club.name,
-            });
-          }
-        }
-        setClubMatchedVenues(results);
-      } catch {
-        setClubMatchedVenues([]);
-      }
-    }, 300),
-  ).current;
+  // Data hooks
+  const { data: userCommunities, isLoading: isLoadingUserCommunities, refetch: refetchUserCommunities } = useUserCommunities();
+  const { data: categories, isLoading: isLoadingCategories } = useCommunityCategories();
+  const { data: categoryCommunities } = useCommunitiesByCategory(selectedCategoryId || undefined, 15);
+  const { data: popularCommunities, isLoading: isLoadingPopular } = usePopularCommunities(15);
+  const { data: searchResults, isLoading: isSearching } = useCommunitySearch(searchQuery, {}, searchQuery.length >= 2);
+  const { mutate: toggleMembership, isPending: isMembershipPending } = useToggleCommunityMembership();
 
-  useEffect(() => {
-    debouncedClubSearch(searchQuery.trim());
-    return () => debouncedClubSearch.cancel();
-  }, [searchQuery, debouncedClubSearch]);
+  const isFiltering = searchQuery.trim().length >= 2;
 
-  // Refresh saved venues on focus
-  useFocusEffect(
-    useCallback(() => {
-      refreshSavedVenues();
-    }, [refreshSavedVenues]),
+  // ---------------------------------------------------------------------------
+  // Feed data from joined communities
+  // ---------------------------------------------------------------------------
+
+  const joinedCommunityIds = useMemo(
+    () => userCommunities?.joined.map((c) => c.id) || [],
+    [userCommunities?.joined]
   );
 
-  // ---------------------------------------------------------------------------
-  // Feed data (mock for now, will integrate with useAggregatedFeed)
-  // ---------------------------------------------------------------------------
+  const {
+    data: feedData,
+    isLoading: isLoadingFeed,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch: refetchFeed,
+  } = useJoinedCommunitiesFeed(joinedCommunityIds, {
+    sort: feedSort,
+    postType: feedPostType,
+    enabled: segment === 'feed' && joinedCommunityIds.length > 0,
+  });
 
+  // Flatten paginated feed data
   const feedPosts = useMemo(() => {
-    let posts = [...MOCK_DISCUSSION_FEED];
-
-    // Filter by post type
-    if (feedPostType) {
-      posts = posts.filter((p) => p.post_type === feedPostType);
-    }
-
-    // Sort
-    switch (feedSort) {
-      case 'new':
-        posts.sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-        break;
-      case 'top':
-        posts.sort((a, b) => b.upvotes - a.upvotes);
-        break;
-      case 'rising':
-        posts = posts.filter((p) => {
-          const age = Date.now() - new Date(p.created_at).getTime();
-          return age < 48 * 60 * 60 * 1000; // last 48h
-        });
-        posts.sort((a, b) => b.upvotes - a.upvotes);
-        break;
-      case 'hot':
-      default:
-        // Pinned first, then by engagement-weighted recency
-        posts.sort((a, b) => {
-          if (a.pinned && !b.pinned) return -1;
-          if (!a.pinned && b.pinned) return 1;
-          const scoreA =
-            ((a.upvotes || 0) * 2 + (a.comment_count || 0) * 3) /
-            Math.pow(
-              (Date.now() - new Date(a.created_at).getTime()) / 3600000 + 2,
-              1.5,
-            );
-          const scoreB =
-            ((b.upvotes || 0) * 2 + (b.comment_count || 0) * 3) /
-            Math.pow(
-              (Date.now() - new Date(b.created_at).getTime()) / 3600000 + 2,
-              1.5,
-            );
-          return scoreB - scoreA;
-        });
-        break;
-    }
-
-    return posts;
-  }, [feedSort, feedPostType]);
+    if (!feedData?.pages) return [];
+    return feedData.pages.flatMap((page) => page.posts);
+  }, [feedData?.pages]);
 
   // ---------------------------------------------------------------------------
-  // Venue directory data
+  // Communities data
   // ---------------------------------------------------------------------------
 
-  const { myVenues, discoverVenues } = useMemo(() => {
-    const my = allVenues.filter((v) => savedVenueIds.has(v.id));
-    const discover = allVenues.filter((v) => !savedVenueIds.has(v.id));
-    return { myVenues: my, discoverVenues: discover };
-  }, [allVenues, savedVenueIds]);
-
-  const filteredDiscover = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return discoverVenues.slice(0, DISCOVER_LIMIT).map((v) => ({ ...v, matchedClubName: undefined as string | undefined }));
-    const directMatches = allVenues.filter(
-      (v) =>
-        v.name.toLowerCase().includes(q) ||
-        (v.country && v.country !== 'Unknown' && v.country.toLowerCase().includes(q)) ||
-        (v.region && v.region !== 'Unknown' && v.region.toLowerCase().includes(q)),
-    ).map((v) => ({ ...v, matchedClubName: undefined as string | undefined }));
-    const directIds = new Set(directMatches.map((v) => v.id));
-    const clubExtras = clubMatchedVenues
-      .filter((v) => !directIds.has(v.id))
-      .map((v) => ({
-        ...v,
-        venue_type: undefined as string | undefined,
-        matchedClubName: v.matchedClubName as string | undefined,
-      }));
-    return [...directMatches, ...clubExtras];
-  }, [allVenues, discoverVenues, searchQuery, clubMatchedVenues]);
-
-  const totalDiscover = discoverVenues.length;
-  const isFiltering = searchQuery.trim().length > 0;
+  const displayCommunities = useMemo(() => {
+    if (isFiltering && searchResults) {
+      return searchResults.data;
+    }
+    if (selectedCategoryId && categoryCommunities) {
+      return categoryCommunities;
+    }
+    return popularCommunities || [];
+  }, [isFiltering, searchResults, selectedCategoryId, categoryCommunities, popularCommunities]);
 
   // ---------------------------------------------------------------------------
   // Handlers
   // ---------------------------------------------------------------------------
 
-  const handleVenuePress = useCallback(
-    (venueId: string) => {
-      router.push(`/venue/${venueId}`);
+  const handleCommunityPress = useCallback(
+    (community: Community) => {
+      router.push(`/community/${community.slug}`);
     },
     [router],
   );
@@ -314,28 +231,19 @@ export default function DiscussScreen() {
   );
 
   const handleJoinToggle = useCallback(
-    async (venueId: string) => {
-      try {
-        if (savedVenueIds.has(venueId)) {
-          await unsaveVenue(venueId);
-        } else {
-          await saveVenue(venueId);
-        }
-        refreshSavedVenues();
-      } catch {
-        // silent
-      }
+    (community: Community) => {
+      toggleMembership(community.id, community.is_member ?? false);
     },
-    [savedVenueIds, saveVenue, unsaveVenue, refreshSavedVenues],
+    [toggleMembership],
   );
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([refetch(), refreshSavedVenues()]);
-  }, [refetch, refreshSavedVenues]);
+    await Promise.all([refetchUserCommunities(), refetchFeed()]);
+  }, [refetchUserCommunities, refetchFeed]);
 
-  const handleBrowseVenues = useCallback(() => {
+  const handleBrowseCommunities = useCallback(() => {
     triggerHaptic('selection');
-    setSegment('my-waters');
+    setSegment('communities');
   }, []);
 
   const openSortPicker = useCallback(() => {
@@ -380,12 +288,10 @@ export default function DiscussScreen() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Toolbar actions (compose + sort + filter) – only on Feed segment
+  // Toolbar actions
   // ---------------------------------------------------------------------------
 
   const toolbarActions = useMemo<ToolbarAction[] | undefined>(() => {
-    if (segment === 'my-waters') return undefined;
-
     const actions: ToolbarAction[] = [
       {
         icon: 'add-circle-outline',
@@ -422,16 +328,31 @@ export default function DiscussScreen() {
         post={item}
         showVenueName
         onPress={() => handlePostPress(item)}
-        onVenuePress={handleVenuePress}
+        onVenuePress={(venueId) => router.push(`/venue/${venueId}`)}
       />
     ),
-    [handlePostPress, handleVenuePress],
+    [handlePostPress, router],
+  );
+
+  const renderCommunityItem = useCallback(
+    ({ item }: { item: Community }) => (
+      <View style={styles.communityCardWrapper}>
+        <CommunityCard
+          community={item}
+          onPress={() => handleCommunityPress(item)}
+          onJoinToggle={() => handleJoinToggle(item)}
+          isJoinPending={isMembershipPending}
+        />
+      </View>
+    ),
+    [handleCommunityPress, handleJoinToggle, isMembershipPending],
   );
 
   const feedKeyExtractor = useCallback((item: FeedPost) => item.id, []);
+  const communityKeyExtractor = useCallback((item: Community) => item.id, []);
 
-  const feedItemSeparator = useCallback(
-    () => <View style={{ height: 12 }} />,
+  const itemSeparator = useCallback(
+    () => <View style={styles.separator} />,
     [],
   );
 
@@ -441,26 +362,36 @@ export default function DiscussScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Fixed status bar background — prevents content from showing through */}
+      {/* Fixed status bar background */}
       <View style={[styles.statusBarBackground, { height: insets.top }]} />
 
-      {/* Scroll content first — flows behind absolutely-positioned toolbar */}
+      {/* Scroll content */}
       {segment === 'feed' ? (
         /* ================================================================ */
         /* FEED SEGMENT                                                     */
         /* ================================================================ */
-        feedPosts.length === 0 && !feedPostType ? (
-          <FeedEmptyState onBrowseVenues={handleBrowseVenues} />
+        isLoadingUserCommunities || (isLoadingFeed && feedPosts.length === 0) ? (
+          <View style={[styles.loadingContainer, { paddingTop: toolbarHeight }]}>
+            <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
+          </View>
+        ) : joinedCommunityIds.length === 0 ? (
+          <FeedEmptyState onBrowseCommunities={handleBrowseCommunities} />
         ) : (
           <FlatList
             data={feedPosts}
             renderItem={renderFeedItem}
             keyExtractor={feedKeyExtractor}
-            ItemSeparatorComponent={feedItemSeparator}
+            ItemSeparatorComponent={itemSeparator}
             contentContainerStyle={[styles.feedContent, { paddingTop: toolbarHeight }]}
             showsVerticalScrollIndicator={false}
             onScroll={handleToolbarScroll}
             scrollEventThrottle={16}
+            onEndReached={() => {
+              if (hasNextPage && !isFetchingNextPage) {
+                fetchNextPage();
+              }
+            }}
+            onEndReachedThreshold={0.5}
             refreshControl={
               <RefreshControl
                 refreshing={false}
@@ -471,143 +402,128 @@ export default function DiscussScreen() {
             ListEmptyComponent={
               <View style={styles.noResults}>
                 <Text style={styles.noResultsText}>
-                  No posts match this filter
+                  {feedPostType ? 'No posts match this filter' : 'No posts yet in your communities'}
                 </Text>
               </View>
+            }
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <View style={styles.loadingFooter}>
+                  <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
+                </View>
+              ) : null
             }
           />
         )
-      ) : segment === 'my-waters' ? (
+      ) : (
         /* ================================================================ */
-        /* MY WATERS SEGMENT                                                */
+        /* COMMUNITIES SEGMENT                                              */
         /* ================================================================ */
-        isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: toolbarHeight }]}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          onScroll={handleToolbarScroll}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={handleRefresh}
+              tintColor={IOS_COLORS.systemBlue}
+            />
+          }
+        >
+          {/* Category Chips */}
+          <CategoryChips
+            categories={categories || []}
+            selectedCategoryId={selectedCategoryId}
+            onSelectCategory={setSelectedCategoryId}
+            isLoading={isLoadingCategories}
+          />
+
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Ionicons
+              name="search"
+              size={16}
+              color={IOS_COLORS.tertiaryLabel}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search communities..."
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+            />
           </View>
-        ) : (
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[styles.scrollContent, { paddingTop: toolbarHeight }]}
-            showsVerticalScrollIndicator={false}
-            keyboardDismissMode="on-drag"
-            onScroll={handleToolbarScroll}
-            scrollEventThrottle={16}
-            refreshControl={
-              <RefreshControl
-                refreshing={false}
-                onRefresh={handleRefresh}
-                tintColor={IOS_COLORS.systemBlue}
-              />
-            }
-          >
-            {/* My Venues */}
-            {myVenues.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>MY VENUES</Text>
-                <View style={styles.cardList}>
-                  {myVenues.map((venue, index) => (
-                    <View key={venue.id}>
-                      {index > 0 && <View style={styles.separator} />}
-                      <VenueDirectoryCard
-                        id={venue.id}
-                        name={venue.name}
-                        country={venue.country}
-                        region={venue.region}
-                        venueType={venue.venue_type}
-                        isJoined={true}
-                        onPress={() => handleVenuePress(venue.id)}
-                        onJoinToggle={() => handleJoinToggle(venue.id)}
-                        postCount={activityStats.get(venue.id)?.postCount}
-                        lastActiveAt={activityStats.get(venue.id)?.lastActiveAt}
-                      />
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
 
-            {/* Discover Venues */}
+          {/* Your Communities */}
+          {!isFiltering && userCommunities && userCommunities.joined.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>DISCOVER</Text>
-
-              {/* Inline search bar */}
-              <View style={styles.searchContainer}>
-                <Ionicons
-                  name="search"
-                  size={16}
-                  color={IOS_COLORS.tertiaryLabel}
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search venues or clubs..."
-                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  clearButtonMode="while-editing"
-                  returnKeyType="search"
-                />
-              </View>
-
-              {filteredDiscover.length === 0 ? (
-                <View style={styles.emptyRow}>
-                  <Text style={styles.emptyText}>
-                    {isFiltering
-                      ? 'No venues match your search'
-                      : 'No venues available'}
-                  </Text>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.cardList}>
-                    {filteredDiscover.map((venue, index) => (
-                      <View key={venue.id}>
-                        {index > 0 && <View style={styles.separator} />}
-                        <VenueDirectoryCard
-                          id={venue.id}
-                          name={venue.name}
-                          country={venue.country ?? 'Unknown'}
-                          region={venue.region ?? 'Unknown'}
-                          venueType={venue.venue_type ?? 'Unknown'}
-                          isJoined={savedVenueIds.has(venue.id)}
-                          onPress={() => handleVenuePress(venue.id)}
-                          onJoinToggle={() => handleJoinToggle(venue.id)}
-                          postCount={activityStats.get(venue.id)?.postCount}
-                          lastActiveAt={activityStats.get(venue.id)?.lastActiveAt}
-                          matchedClubName={venue.matchedClubName}
-                        />
-                      </View>
-                    ))}
+              <Text style={styles.sectionTitle}>YOUR COMMUNITIES</Text>
+              <View style={styles.cardList}>
+                {userCommunities.joined.map((community, index) => (
+                  <View key={community.id}>
+                    {index > 0 && <View style={styles.listSeparator} />}
+                    <CommunityCard
+                      community={community}
+                      onPress={() => handleCommunityPress(community)}
+                      onJoinToggle={() => handleJoinToggle(community)}
+                      isJoinPending={isMembershipPending}
+                      compact
+                    />
                   </View>
-
-                  {/* Count hint when showing partial list */}
-                  {!isFiltering && totalDiscover > DISCOVER_LIMIT && (
-                    <Text style={styles.countHint}>
-                      Showing {DISCOVER_LIMIT} of {totalDiscover} venues —
-                      search to find more
-                    </Text>
-                  )}
-                </>
-              )}
+                ))}
+              </View>
             </View>
+          )}
 
-            {/* Empty state when no venues at all */}
-            {allVenues.length === 0 && (
+          {/* Discover / Search Results */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {isFiltering
+                ? 'SEARCH RESULTS'
+                : selectedCategoryId
+                ? categories?.find((c) => c.id === selectedCategoryId)?.display_name?.toUpperCase() || 'BROWSE'
+                : 'DISCOVER'}
+            </Text>
+
+            {isLoadingPopular || isSearching ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color={IOS_COLORS.systemGray3} />
+              </View>
+            ) : displayCommunities.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyTitle}>No Venues Available</Text>
-                <Text style={styles.emptySubtitle}>
-                  Venues will appear here once they are added to the platform.
+                <Text style={styles.emptyText}>
+                  {isFiltering ? 'No communities found' : 'No communities available'}
                 </Text>
               </View>
+            ) : (
+              <View style={styles.cardList}>
+                {displayCommunities.map((community, index) => (
+                  <View key={community.id}>
+                    {index > 0 && <View style={styles.listSeparator} />}
+                    <CommunityCard
+                      community={community}
+                      onPress={() => handleCommunityPress(community)}
+                      onJoinToggle={() => handleJoinToggle(community)}
+                      isJoinPending={isMembershipPending}
+                    />
+                  </View>
+                ))}
+              </View>
             )}
-          </ScrollView>
-        )
-      ) : null}
+          </View>
+        </ScrollView>
+      )}
 
-      {/* Toolbar rendered last — absolutely positioned over content */}
+      {/* Toolbar */}
       <TabScreenToolbar
         title="Discuss"
         topInset={insets.top}
@@ -699,7 +615,7 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.tertiaryLabel,
   },
 
-  // My Waters (venue directory)
+  // Communities scroll
   scrollView: {
     flex: 1,
   },
@@ -709,6 +625,10 @@ const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingFooter: {
+    paddingVertical: IOS_SPACING.lg,
     alignItems: 'center',
   },
 
@@ -733,9 +653,15 @@ const styles = StyleSheet.create({
     borderBottomColor: IOS_COLORS.separator,
   },
   separator: {
+    height: 12,
+  },
+  listSeparator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: IOS_COLORS.separator,
-    marginLeft: IOS_SPACING.lg,
+    marginLeft: IOS_SPACING.lg + 44 + IOS_SPACING.md, // icon + margin
+  },
+  communityCardWrapper: {
+    marginBottom: 8,
   },
 
   // Search
@@ -743,7 +669,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: IOS_SPACING.lg,
-    marginBottom: IOS_SPACING.md,
+    marginTop: IOS_SPACING.sm,
+    marginBottom: IOS_SPACING.sm,
     paddingHorizontal: 10,
     height: 36,
     borderRadius: IOS_RADIUS.sm,
@@ -762,41 +689,13 @@ const styles = StyleSheet.create({
     }),
   },
 
-  // Count hint
-  countHint: {
-    fontSize: 12,
-    color: IOS_COLORS.tertiaryLabel,
-    textAlign: 'center',
-    marginTop: IOS_SPACING.md,
-    paddingHorizontal: IOS_SPACING.lg,
-  },
-
   // Empty states
-  emptyRow: {
+  emptyContainer: {
     paddingVertical: 24,
     alignItems: 'center',
   },
   emptyText: {
     fontSize: 15,
     color: IOS_COLORS.tertiaryLabel,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-    marginTop: 60,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 15,
-    color: IOS_COLORS.secondaryLabel,
-    textAlign: 'center',
-    lineHeight: 22,
   },
 });

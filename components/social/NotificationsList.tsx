@@ -1,13 +1,14 @@
 /**
- * NotificationsList - List of social notifications
+ * NotificationsList - iOS-style Notifications List
  *
  * Features:
- * - Notification list with avatars and icons
- * - Follow-back inline actions for new follower notifications
- * - Mark as read/delete actions
+ * - Clean iOS design with subtle unread indicators
+ * - Swipe-to-delete (like iOS Mail)
+ * - Inline follow-back for follower notifications
+ * - Clear visual hierarchy following Apple HIG
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,8 +17,10 @@ import {
   ActivityIndicator,
   StyleSheet,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import {
   UserPlus,
   Heart,
@@ -31,11 +34,14 @@ import { type SocialNotification } from '@/services/NotificationService';
 import { getInitials } from '@/components/account/accountStyles';
 import {
   IOS_COLORS,
-  IOS_TYPOGRAPHY,
   IOS_SPACING,
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
+
+// =============================================================================
+// TYPES
+// =============================================================================
 
 interface NotificationsListProps {
   notifications: SocialNotification[];
@@ -46,60 +52,64 @@ interface NotificationsListProps {
   onRefresh: () => Promise<any>;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
-  /** Map of actor IDs to whether current user is following them */
   followingMap?: Map<string, boolean>;
-  /** Callback to toggle follow status for an actor */
   onToggleFollow?: (actorId: string, currentlyFollowing: boolean) => Promise<void>;
+  /** Optional header component to render above notifications */
+  ListHeaderComponent?: React.ComponentType<any> | React.ReactElement | null;
 }
 
-const NotificationIcon = ({
-  type,
-}: {
-  type: SocialNotification['type'];
-}) => {
-  const iconSize = 16;
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+function getNotificationIcon(type: SocialNotification['type']) {
+  const iconSize = 14;
+  const iconProps = { size: iconSize, strokeWidth: 2.5 };
 
   switch (type) {
     case 'new_follower':
-      return <UserPlus size={iconSize} color={IOS_COLORS.systemBlue} />;
+      return <UserPlus {...iconProps} color={IOS_COLORS.systemBlue} />;
     case 'race_like':
-      return <Heart size={iconSize} color={IOS_COLORS.systemRed} />;
+      return <Heart {...iconProps} color={IOS_COLORS.systemPink} />;
     case 'race_comment':
     case 'race_comment_reply':
-      return <MessageCircle size={iconSize} color={IOS_COLORS.systemGreen} />;
+      return <MessageCircle {...iconProps} color={IOS_COLORS.systemGreen} />;
     case 'followed_user_race':
-      return <Flag size={iconSize} color={IOS_COLORS.systemOrange} />;
+      return <Flag {...iconProps} color={IOS_COLORS.systemOrange} />;
     default:
-      return <Bell size={iconSize} color={IOS_COLORS.systemGray} />;
+      return <Bell {...iconProps} color={IOS_COLORS.systemGray} />;
   }
-};
+}
 
-const getNotificationText = (notification: SocialNotification): string => {
+function getNotificationText(notification: SocialNotification): { primary: string; secondary?: string } {
   const actorName = notification.actorName || 'Someone';
 
   switch (notification.type) {
     case 'new_follower':
-      return `${actorName} started following you`;
+      return { primary: actorName, secondary: 'started following you' };
     case 'race_like':
-      return `${actorName} liked your race${
-        notification.regattaName ? `: ${notification.regattaName}` : ''
-      }`;
+      return {
+        primary: actorName,
+        secondary: `liked your race${notification.regattaName ? ` "${notification.regattaName}"` : ''}`,
+      };
     case 'race_comment':
-      return `${actorName} commented on your race${
-        notification.regattaName ? `: ${notification.regattaName}` : ''
-      }`;
+      return {
+        primary: actorName,
+        secondary: notification.body || 'commented on your race',
+      };
     case 'race_comment_reply':
-      return `${actorName} replied to your comment`;
+      return { primary: actorName, secondary: 'replied to your comment' };
     case 'followed_user_race':
-      return `${actorName} added a new race${
-        notification.regattaName ? `: ${notification.regattaName}` : ''
-      }`;
+      return {
+        primary: actorName,
+        secondary: `added a new race${notification.regattaName ? `: ${notification.regattaName}` : ''}`,
+      };
     default:
-      return 'New notification';
+      return { primary: notification.title, secondary: notification.body };
   }
-};
+}
 
-const formatTime = (dateString: string): string => {
+function formatTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diff = now.getTime() - date.getTime();
@@ -111,8 +121,154 @@ const formatTime = (dateString: string): string => {
   if (minutes < 60) return `${minutes}m`;
   if (hours < 24) return `${hours}h`;
   if (days < 7) return `${days}d`;
-  return date.toLocaleDateString();
-};
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// =============================================================================
+// NOTIFICATION ROW
+// =============================================================================
+
+interface NotificationRowProps {
+  notification: SocialNotification;
+  onPress: () => void;
+  onDelete: () => void;
+  isFollowingBack?: boolean;
+  onToggleFollow?: (e: any) => void;
+  isTogglingFollow?: boolean;
+  isLast: boolean;
+}
+
+function NotificationRow({
+  notification,
+  onPress,
+  onDelete,
+  isFollowingBack,
+  onToggleFollow,
+  isTogglingFollow,
+  isLast,
+}: NotificationRowProps) {
+  const swipeableRef = useRef<Swipeable>(null);
+  const { primary, secondary } = getNotificationText(notification);
+  const isFollowerNotification = notification.type === 'new_follower' && notification.actorId;
+
+  const renderRightActions = (
+    progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>
+  ) => {
+    const scale = dragX.interpolate({
+      inputRange: [-80, 0],
+      outputRange: [1, 0.5],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <Pressable
+        style={styles.deleteAction}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onDelete();
+        }}
+      >
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <Trash2 size={22} color="#FFFFFF" />
+        </Animated.View>
+      </Pressable>
+    );
+  };
+
+  return (
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={40}
+      overshootRight={false}
+    >
+      <Pressable
+        style={({ pressed }) => [
+          styles.row,
+          pressed && styles.rowPressed,
+        ]}
+        onPress={onPress}
+      >
+        {/* Unread indicator */}
+        <View style={styles.unreadColumn}>
+          {!notification.isRead && <View style={styles.unreadDot} />}
+        </View>
+
+        {/* Avatar with icon badge */}
+        <View style={styles.avatarContainer}>
+          <View
+            style={[
+              styles.avatar,
+              { backgroundColor: notification.actorAvatarColor || IOS_COLORS.systemBlue },
+            ]}
+          >
+            {notification.actorAvatarEmoji ? (
+              <Text style={styles.avatarEmoji}>{notification.actorAvatarEmoji}</Text>
+            ) : (
+              <Text style={styles.avatarInitials}>
+                {getInitials(notification.actorName || 'U')}
+              </Text>
+            )}
+          </View>
+          <View style={styles.iconBadge}>
+            {getNotificationIcon(notification.type)}
+          </View>
+        </View>
+
+        {/* Content */}
+        <View style={[styles.content, !isLast && styles.contentBorder]}>
+          <View style={styles.textContainer}>
+            <Text style={styles.primaryText} numberOfLines={1}>
+              {primary}
+              <Text style={styles.secondaryText}> {secondary}</Text>
+            </Text>
+            <Text style={styles.timeText}>{formatTime(notification.createdAt)}</Text>
+          </View>
+
+          {/* Follow button for follower notifications */}
+          {isFollowerNotification && onToggleFollow && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.followButton,
+                isFollowingBack && styles.followButtonFollowing,
+                pressed && styles.followButtonPressed,
+              ]}
+              onPress={onToggleFollow}
+              disabled={isTogglingFollow}
+            >
+              {isTogglingFollow ? (
+                <ActivityIndicator
+                  size="small"
+                  color={isFollowingBack ? IOS_COLORS.label : '#FFFFFF'}
+                />
+              ) : (
+                <View style={styles.followButtonContent}>
+                  <Text
+                    style={[
+                      styles.followButtonText,
+                      isFollowingBack && styles.followButtonTextFollowing,
+                    ]}
+                  >
+                    {isFollowingBack ? 'Following' : 'Follow'}
+                  </Text>
+                  {isFollowingBack && (
+                    <ChevronDown size={10} color={IOS_COLORS.label} />
+                  )}
+                </View>
+              )}
+            </Pressable>
+          )}
+        </View>
+      </Pressable>
+    </Swipeable>
+  );
+}
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
 
 export function NotificationsList({
   notifications,
@@ -125,9 +281,10 @@ export function NotificationsList({
   onDelete,
   followingMap = new Map(),
   onToggleFollow,
+  ListHeaderComponent,
 }: NotificationsListProps) {
   const router = useRouter();
-  const [refreshing, setRefreshing] = React.useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [togglingFollow, setTogglingFollow] = useState<string | null>(null);
 
   const handleRefresh = useCallback(async () => {
@@ -138,7 +295,7 @@ export function NotificationsList({
 
   const handleFollowBack = useCallback(
     async (actorId: string, currentlyFollowing: boolean, e: any) => {
-      e.stopPropagation();
+      e?.stopPropagation?.();
       if (!onToggleFollow || togglingFollow) return;
 
       triggerHaptic('selection');
@@ -158,12 +315,10 @@ export function NotificationsList({
 
   const handlePress = useCallback(
     (notification: SocialNotification) => {
-      // Mark as read
       if (!notification.isRead) {
         onMarkRead(notification.id);
       }
 
-      // Navigate based on type
       switch (notification.type) {
         case 'new_follower':
           if (notification.actorId) {
@@ -175,7 +330,6 @@ export function NotificationsList({
         case 'race_comment_reply':
         case 'followed_user_race':
           if (notification.regattaId) {
-            // Navigate to race detail
             router.push(`/race/${notification.regattaId}`);
           }
           break;
@@ -186,113 +340,47 @@ export function NotificationsList({
 
   const renderNotification = useCallback(
     ({ item, index }: { item: SocialNotification; index: number }) => {
-      // Check if this is a follow notification and if we can show follow-back
-      const isFollowerNotification = item.type === 'new_follower' && item.actorId;
       const isFollowingBack = item.actorId ? followingMap.get(item.actorId) : false;
       const isTogglingThis = togglingFollow === item.actorId;
 
       return (
-        <Pressable
-          style={({ pressed }) => [
-            styles.notificationRow,
-            !item.isRead && styles.notificationUnread,
-            pressed && styles.notificationPressed,
-            index < notifications.length - 1 && styles.notificationBorder,
-          ]}
+        <NotificationRow
+          notification={item}
           onPress={() => handlePress(item)}
-        >
-          <View style={styles.avatarContainer}>
-            <View style={[styles.avatar, { backgroundColor: item.actorAvatarColor || IOS_COLORS.systemBlue }]}>
-              {item.actorAvatarEmoji ? (
-                <Text style={styles.avatarEmoji}>{item.actorAvatarEmoji}</Text>
-              ) : (
-                <Text style={styles.avatarInitials}>
-                  {getInitials(item.actorName || 'U')}
-                </Text>
-              )}
-            </View>
-            <View style={styles.iconBadge}>
-              <NotificationIcon type={item.type} />
-            </View>
-          </View>
-
-          <View style={styles.content}>
-            <Text style={styles.text} numberOfLines={2}>
-              {getNotificationText(item)}
-            </Text>
-            <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
-          </View>
-
-          {/* Follow-back button for new follower notifications */}
-          {isFollowerNotification && onToggleFollow && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.followButton,
-                isFollowingBack && styles.followButtonFollowing,
-                pressed && styles.followButtonPressed,
-              ]}
-              onPress={(e) => handleFollowBack(item.actorId!, isFollowingBack || false, e)}
-              disabled={isTogglingThis}
-            >
-              {isTogglingThis ? (
-                <ActivityIndicator size="small" color={isFollowingBack ? IOS_COLORS.label : '#FFFFFF'} />
-              ) : (
-                <>
-                  <Text
-                    style={[
-                      styles.followButtonText,
-                      isFollowingBack && styles.followButtonTextFollowing,
-                    ]}
-                  >
-                    {isFollowingBack ? 'Following' : 'Follow'}
-                  </Text>
-                  {isFollowingBack && (
-                    <ChevronDown size={12} color={IOS_COLORS.label} style={{ marginLeft: 2 }} />
-                  )}
-                </>
-              )}
-            </Pressable>
-          )}
-
-          {!item.isRead && <View style={styles.unreadDot} />}
-
-          <Pressable
-            style={styles.deleteButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              onDelete(item.id);
-            }}
-            hitSlop={8}
-          >
-            <Trash2 size={16} color={IOS_COLORS.tertiaryLabel} />
-          </Pressable>
-        </Pressable>
+          onDelete={() => onDelete(item.id)}
+          isFollowingBack={isFollowingBack}
+          onToggleFollow={
+            item.type === 'new_follower' && item.actorId && onToggleFollow
+              ? (e) => handleFollowBack(item.actorId!, isFollowingBack || false, e)
+              : undefined
+          }
+          isTogglingFollow={isTogglingThis}
+          isLast={index === notifications.length - 1}
+        />
       );
     },
     [notifications.length, handlePress, onDelete, followingMap, togglingFollow, onToggleFollow, handleFollowBack]
   );
 
-  const keyExtractor = useCallback(
-    (item: SocialNotification) => item.id,
-    []
-  );
+  const keyExtractor = useCallback((item: SocialNotification) => item.id, []);
 
   const ListEmpty = () => {
     if (isLoading) {
       return (
         <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
+          <ActivityIndicator size="large" color={IOS_COLORS.systemGray3} />
         </View>
       );
     }
 
     return (
       <View style={styles.emptyContainer}>
-        <Bell size={48} color={IOS_COLORS.tertiaryLabel} />
+        <View style={styles.emptyIconContainer}>
+          <Bell size={40} color={IOS_COLORS.systemGray3} strokeWidth={1.5} />
+        </View>
         <Text style={styles.emptyTitle}>No Notifications</Text>
         <Text style={styles.emptyText}>
-          When someone follows you or interacts with your races, you'll see it
-          here.
+          When someone follows you or interacts with your races, you'll see it here.
         </Text>
       </View>
     );
@@ -302,148 +390,210 @@ export function NotificationsList({
     if (!isLoadingMore) return null;
     return (
       <View style={styles.footerLoading}>
-        <ActivityIndicator size="small" color={IOS_COLORS.systemGray} />
+        <ActivityIndicator size="small" color={IOS_COLORS.systemGray3} />
       </View>
     );
   };
 
   return (
-    <FlatList
-      data={notifications}
-      renderItem={renderNotification}
-      keyExtractor={keyExtractor}
-      ListEmptyComponent={ListEmpty}
-      ListFooterComponent={ListFooter}
-      onEndReached={onLoadMore}
-      onEndReachedThreshold={0.5}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-      }
-      contentContainerStyle={styles.listContent}
-      showsVerticalScrollIndicator={true}
-    />
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <FlatList
+        data={notifications}
+        renderItem={renderNotification}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmpty}
+        ListFooterComponent={ListFooter}
+        onEndReached={hasMore ? onLoadMore : undefined}
+        onEndReachedThreshold={0.5}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={IOS_COLORS.systemGray3}
+          />
+        }
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      />
+    </GestureHandlerRootView>
   );
 }
 
+// =============================================================================
+// STYLES
+// =============================================================================
+
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   listContent: {
     flexGrow: 1,
   },
-  notificationRow: {
+
+  // Row
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: IOS_SPACING.lg,
-    paddingVertical: IOS_SPACING.md,
+    alignItems: 'flex-start',
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
   },
-  notificationUnread: {
-    backgroundColor: IOS_COLORS.systemBlue + '10',
+  rowPressed: {
+    backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
   },
-  notificationPressed: {
-    backgroundColor: IOS_COLORS.tertiarySystemFill,
+
+  // Unread indicator
+  unreadColumn: {
+    width: 20,
+    alignItems: 'center',
+    paddingTop: IOS_SPACING.md + 14,
   },
-  notificationBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: IOS_COLORS.separator,
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: IOS_COLORS.systemBlue,
   },
+
+  // Avatar
   avatarContainer: {
     position: 'relative',
+    paddingVertical: IOS_SPACING.md,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarEmoji: {
-    fontSize: 20,
+    fontSize: 18,
   },
   avatarInitials: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
   },
   iconBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: IOS_SPACING.md - 4,
+    right: -6,
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
-    borderRadius: IOS_RADIUS.full,
-    padding: 4,
-    borderWidth: 2,
-    borderColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
+
+  // Content
   content: {
     flex: 1,
-    marginLeft: IOS_SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: IOS_SPACING.sm,
+    paddingRight: IOS_SPACING.md,
+    paddingVertical: IOS_SPACING.md,
+    minHeight: 64,
+  },
+  contentBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  textContainer: {
+    flex: 1,
     marginRight: IOS_SPACING.sm,
   },
-  text: {
-    ...IOS_TYPOGRAPHY.subheadline,
+  primaryText: {
+    fontSize: 15,
+    fontWeight: '600',
     color: IOS_COLORS.label,
     lineHeight: 20,
   },
-  time: {
-    ...IOS_TYPOGRAPHY.caption1,
+  secondaryText: {
+    fontWeight: '400',
+    color: IOS_COLORS.label,
+  },
+  timeText: {
+    fontSize: 13,
     color: IOS_COLORS.secondaryLabel,
     marginTop: 2,
   },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: IOS_COLORS.systemBlue,
-    marginRight: IOS_SPACING.sm,
-  },
-  deleteButton: {
-    padding: IOS_SPACING.xs,
-  },
+
+  // Follow button
   followButton: {
-    paddingHorizontal: IOS_SPACING.md,
-    paddingVertical: IOS_SPACING.xs + 2,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     backgroundColor: IOS_COLORS.systemBlue,
-    borderRadius: IOS_RADIUS.md,
-    marginRight: IOS_SPACING.sm,
-    flexDirection: 'row',
+    borderRadius: IOS_RADIUS.lg,
+    minWidth: 72,
     alignItems: 'center',
-    minWidth: 70,
     justifyContent: 'center',
   },
   followButtonFollowing: {
-    backgroundColor: IOS_COLORS.systemGray6,
-    borderWidth: 1,
-    borderColor: IOS_COLORS.systemGray4,
+    backgroundColor: IOS_COLORS.tertiarySystemFill,
   },
   followButtonPressed: {
     opacity: 0.8,
   },
+  followButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   followButtonText: {
-    ...IOS_TYPOGRAPHY.caption1,
+    fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
   },
   followButtonTextFollowing: {
     color: IOS_COLORS.label,
   },
+
+  // Delete action
+  deleteAction: {
+    backgroundColor: IOS_COLORS.systemRed,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+  },
+
+  // Empty state
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: IOS_SPACING.xxl,
-    marginTop: IOS_SPACING.xxxxl,
+    marginTop: 60,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: IOS_COLORS.systemGray6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: IOS_SPACING.lg,
   },
   emptyTitle: {
-    ...IOS_TYPOGRAPHY.headline,
+    fontSize: 20,
+    fontWeight: '600',
     color: IOS_COLORS.label,
-    marginTop: IOS_SPACING.md,
-    marginBottom: IOS_SPACING.sm,
+    marginBottom: IOS_SPACING.xs,
   },
   emptyText: {
-    ...IOS_TYPOGRAPHY.body,
+    fontSize: 15,
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
+    lineHeight: 20,
   },
+
+  // Footer
   footerLoading: {
     paddingVertical: IOS_SPACING.lg,
     alignItems: 'center',

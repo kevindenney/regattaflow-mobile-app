@@ -170,8 +170,8 @@ export function useUserCommunities() {
 
   return useQuery({
     queryKey: communityKeys.userCommunities(),
-    queryFn: () => CommunityService.getUserCommunities(),
-    enabled: !!user,
+    queryFn: () => CommunityService.getUserCommunities(user?.id),
+    enabled: !!user?.id,
     staleTime: 1000 * 60 * 2,
   });
 }

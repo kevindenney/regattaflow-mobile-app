@@ -38,6 +38,7 @@ export const POST_TYPE_CONFIG: Record<PostType, {
 export interface FeedPost {
   id: string;
   venue_id: string;
+  community_id?: string | null;
   author_id: string | null;
   title: string;
   body: string | null;
@@ -74,6 +75,12 @@ export interface FeedPost {
     name: string;
     country?: string;
     region?: string;
+  };
+  community?: {
+    id: string;
+    name: string;
+    slug: string;
+    community_type: string;
   };
   catalog_race_id?: string | null;
   catalog_race?: {
@@ -164,7 +171,9 @@ export interface MembershipStatus {
 // ============================================================================
 
 export interface CreatePostParams {
-  venue_id: string;
+  venue_id?: string;      // Optional - for location-tagged posts
+  community_id?: string;  // Optional - for community posts
+  // Note: At least one of venue_id or community_id must be provided
   title: string;
   body?: string;
   post_type: PostType;

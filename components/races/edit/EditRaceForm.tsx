@@ -18,10 +18,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   KeyboardAvoidingView,
-  
   Modal,
   TextInput,
 } from "react-native";
@@ -84,6 +82,7 @@ import { IOS_COLORS } from '@/components/cards/constants';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 const logger = createLogger('EditRaceForm');
 
@@ -399,7 +398,7 @@ export function EditRaceForm({
 
         if (raceEventError || !raceEvent) {
           logger.error('[EditRaceForm] Error loading race:', regattaError);
-          Alert.alert('Error', 'Failed to load race data');
+          showAlert('Error', 'Failed to load race data');
           return;
         }
 
@@ -437,7 +436,7 @@ export function EditRaceForm({
       }
 
       if (!race) {
-        Alert.alert('Error', 'Race not found');
+        showAlert('Error', 'Race not found');
         return;
       }
 
@@ -558,7 +557,7 @@ export function EditRaceForm({
       logger.debug('[EditRaceForm] Loaded race successfully');
     } catch (err) {
       logger.error('[EditRaceForm] Unexpected error:', err);
-      Alert.alert('Error', 'An unexpected error occurred');
+      showAlert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
     }
@@ -720,34 +719,34 @@ export function EditRaceForm({
 
   const handleSave = async () => {
     if (!user) {
-      Alert.alert('Error', 'You must be logged in to save changes');
+      showAlert('Error', 'You must be logged in to save changes');
       return;
     }
 
     if (!formData.name.trim()) {
-      Alert.alert('Validation Error', 'Race name is required');
+      showAlert('Validation Error', 'Race name is required');
       return;
     }
 
     if (!formData.date) {
-      Alert.alert('Validation Error', 'Race date is required');
+      showAlert('Validation Error', 'Race date is required');
       return;
     }
 
     // Match Racing validation
     if (formData.raceType === 'match' && !formData.opponentName.trim()) {
-      Alert.alert('Validation Error', 'Opponent name is required for match racing');
+      showAlert('Validation Error', 'Opponent name is required for match racing');
       return;
     }
 
     // Team Racing validation
     if (formData.raceType === 'team') {
       if (!formData.yourTeamName.trim()) {
-        Alert.alert('Validation Error', 'Your team name is required for team racing');
+        showAlert('Validation Error', 'Your team name is required for team racing');
         return;
       }
       if (!formData.opponentTeamName.trim()) {
-        Alert.alert('Validation Error', 'Opponent team name is required for team racing');
+        showAlert('Validation Error', 'Opponent team name is required for team racing');
         return;
       }
     }
@@ -935,7 +934,7 @@ export function EditRaceForm({
 
       if (error) {
         logger.error('[EditRaceForm] Save error:', error);
-        Alert.alert('Error', `Failed to save changes: ${error.message}`);
+        showAlert('Error', `Failed to save changes: ${error.message}`);
         return;
       }
 
@@ -949,7 +948,7 @@ export function EditRaceForm({
       onSave?.(raceId);
     } catch (err) {
       logger.error('[EditRaceForm] Unexpected save error:', err);
-      Alert.alert('Error', 'An unexpected error occurred');
+      showAlert('Error', 'An unexpected error occurred');
     } finally {
       setSaving(false);
     }
@@ -960,44 +959,38 @@ export function EditRaceForm({
   // ==========================================================================
 
   const handleDelete = () => {
-    Alert.alert(
+    showConfirm(
       'Delete Race',
       `Are you sure you want to delete "${formData.name}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setSaving(true);
+      async () => {
+        try {
+          setSaving(true);
 
-              logger.debug('[EditRaceForm] Deleting from', sourceTable);
-              const { error } = await supabase
-                .from(sourceTable)
-                .delete()
-                .eq('id', raceId);
+          logger.debug('[EditRaceForm] Deleting from', sourceTable);
+          const { error } = await supabase
+            .from(sourceTable)
+            .delete()
+            .eq('id', raceId);
 
-              if (error) {
-                logger.error('[EditRaceForm] Delete error:', error);
-                Alert.alert('Error', 'Failed to delete race');
-                return;
-              }
+          if (error) {
+            logger.error('[EditRaceForm] Delete error:', error);
+            showAlert('Error', 'Failed to delete race');
+            return;
+          }
 
-              if (Platform.OS !== 'web') {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              }
+          if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
 
-              onDelete?.(raceId);
-            } catch (err) {
-              logger.error('[EditRaceForm] Unexpected delete error:', err);
-              Alert.alert('Error', 'An unexpected error occurred');
-            } finally {
-              setSaving(false);
-            }
-          },
-        },
-      ]
+          onDelete?.(raceId);
+        } catch (err) {
+          logger.error('[EditRaceForm] Unexpected delete error:', err);
+          showAlert('Error', 'An unexpected error occurred');
+        } finally {
+          setSaving(false);
+        }
+      },
+      { destructive: true, confirmText: 'Delete' }
     );
   };
 
@@ -1007,17 +1000,11 @@ export function EditRaceForm({
 
   const handleCancel = () => {
     if (hasChanges) {
-      Alert.alert(
+      showConfirm(
         'Discard Changes?',
         'You have unsaved changes. Are you sure you want to leave?',
-        [
-          { text: 'Keep Editing', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => onCancel?.(),
-          },
-        ]
+        () => onCancel?.(),
+        { destructive: true, confirmText: 'Discard', cancelText: 'Keep Editing' }
       );
     } else {
       onCancel?.();

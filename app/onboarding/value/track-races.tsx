@@ -4,7 +4,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -14,12 +14,17 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { useEffect } from 'react';
-import { ValueScreen } from '@/components/onboarding/ValueScreen';
+import { ValueScreen, useIsDesktop } from '@/components/onboarding/ValueScreen';
 
 function SailingIllustration() {
+  const isDesktop = useIsDesktop();
   const boatX = useSharedValue(0);
   const waveOffset = useSharedValue(0);
+
+  // Responsive sizing
+  const size = isDesktop ? 400 : 280;
+  const boatIconSize = isDesktop ? 64 : 48;
+  const statIconSize = isDesktop ? 24 : 20;
 
   useEffect(() => {
     // Gentle boat rocking motion
@@ -53,7 +58,7 @@ function SailingIllustration() {
   }));
 
   return (
-    <View style={styles.illustrationContainer}>
+    <View style={[styles.illustrationContainer, { width: size, height: size }]}>
       {/* Stylized map/course background */}
       <View style={styles.mapBackground}>
         {/* Course marks */}
@@ -78,7 +83,7 @@ function SailingIllustration() {
 
         {/* Animated boat */}
         <Animated.View style={[styles.boatContainer, boatStyle]}>
-          <Ionicons name="boat" size={48} color="#FFFFFF" />
+          <Ionicons name="boat" size={boatIconSize} color="#FFFFFF" />
         </Animated.View>
       </View>
 
@@ -89,23 +94,23 @@ function SailingIllustration() {
       </View>
 
       {/* Stats overlay */}
-      <View style={styles.statsOverlay}>
+      <View style={[styles.statsOverlay, isDesktop && styles.statsOverlayDesktop]}>
         <View style={styles.statItem}>
-          <Ionicons name="trophy" size={20} color="#FBBF24" />
-          <Animated.Text style={styles.statValue}>12</Animated.Text>
-          <Animated.Text style={styles.statLabel}>Races</Animated.Text>
+          <Ionicons name="trophy" size={statIconSize} color="#FBBF24" />
+          <Animated.Text style={[styles.statValue, isDesktop && styles.statValueDesktop]}>12</Animated.Text>
+          <Animated.Text style={[styles.statLabel, isDesktop && styles.statLabelDesktop]}>Races</Animated.Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Ionicons name="medal" size={20} color="#F472B6" />
-          <Animated.Text style={styles.statValue}>3rd</Animated.Text>
-          <Animated.Text style={styles.statLabel}>Best</Animated.Text>
+          <Ionicons name="medal" size={statIconSize} color="#F472B6" />
+          <Animated.Text style={[styles.statValue, isDesktop && styles.statValueDesktop]}>3rd</Animated.Text>
+          <Animated.Text style={[styles.statLabel, isDesktop && styles.statLabelDesktop]}>Best</Animated.Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Ionicons name="speedometer" size={20} color="#34D399" />
-          <Animated.Text style={styles.statValue}>8.2</Animated.Text>
-          <Animated.Text style={styles.statLabel}>Avg Kts</Animated.Text>
+          <Ionicons name="speedometer" size={statIconSize} color="#34D399" />
+          <Animated.Text style={[styles.statValue, isDesktop && styles.statValueDesktop]}>8.2</Animated.Text>
+          <Animated.Text style={[styles.statLabel, isDesktop && styles.statLabelDesktop]}>Avg Kts</Animated.Text>
         </View>
       </View>
     </View>
@@ -129,8 +134,6 @@ export default function TrackRacesScreen() {
 
 const styles = StyleSheet.create({
   illustrationContainer: {
-    width: 280,
-    height: 280,
     position: 'relative',
   },
   mapBackground: {
@@ -214,6 +217,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginHorizontal: 10,
   },
+  statsOverlayDesktop: {
+    bottom: -50,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
   statItem: {
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -229,9 +238,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 4,
   },
+  statValueDesktop: {
+    fontSize: 22,
+  },
   statLabel: {
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 2,
+  },
+  statLabelDesktop: {
+    fontSize: 13,
   },
 });

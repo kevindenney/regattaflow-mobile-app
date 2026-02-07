@@ -339,13 +339,16 @@ ${shiftAnalysis.pattern === 'stable'
     setIsGeneratingStrategy(false);
   }, [currentForecast, shiftAnalysis, thermalAssessment]);
 
-  // Navigate to learn module
+  // Navigate to specific wind shifts lesson
   const handleLearnMore = useCallback(() => {
     onCancel();
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn',
-        params: { courseSlug: 'decoding-race-day-wind' },
+        pathname: '/(tabs)/learn/[courseId]/player',
+        params: {
+          courseId: 'launch-phase-strategy',
+          lessonId: 'lesson-14-1-1',
+        },
       });
     }, 150);
   }, [router, onCancel]);

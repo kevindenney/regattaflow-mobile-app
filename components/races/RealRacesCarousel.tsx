@@ -29,7 +29,7 @@ import type { RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import type { PracticeSession } from '@/types/practice';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Dimensions, Platform, ScrollView, View } from 'react-native';
+import { Dimensions, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 // Layout constants
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -569,20 +569,38 @@ export function RealRacesCarousel({
   // Timeline Layout Mode - uses RaceTimelineLayout with DetailCardPager
   // Now supports both races and practice sessions in a combined timeline
   if (useTimelineLayout) {
+    const canGoLeft = selectedRaceIndex > 0;
+    const canGoRight = selectedRaceIndex < timelineItems.length - 1;
+
+    const handleNavLeft = () => {
+      if (canGoLeft) {
+        handleTimelineItemChange(selectedRaceIndex - 1);
+      }
+    };
+
+    const handleNavRight = () => {
+      if (canGoRight) {
+        handleTimelineItemChange(selectedRaceIndex + 1);
+      }
+    };
+
     return (
-      <RaceTimelineLayout
-        races={timelineItems}
-        selectedRaceIndex={selectedRaceIndex}
-        onRaceChange={handleTimelineItemChange}
-        renderRaceCard={(item, index) => renderTimelineItem(item as TimelineItem, index)}
-        renderDetailCard={renderDetailCard}
-        detailCards={detailCards as any}
-        onDetailCardChange={handleDetailCardChange}
-        useCardPagerMode={true}
-        enableHaptics={Platform.OS !== 'web'}
-        cardWidth={MOBILE_CARD_WIDTH}
-        nextRaceIndex={nextRaceIndex}
-      />
+      <View style={timelineNavStyles.container}>
+        <RaceTimelineLayout
+          races={timelineItems}
+          selectedRaceIndex={selectedRaceIndex}
+          onRaceChange={handleTimelineItemChange}
+          renderRaceCard={(item, index) => renderTimelineItem(item as TimelineItem, index)}
+          renderDetailCard={renderDetailCard}
+          detailCards={detailCards as any}
+          onDetailCardChange={handleDetailCardChange}
+          useCardPagerMode={true}
+          enableHaptics={Platform.OS !== 'web'}
+          cardWidth={MOBILE_CARD_WIDTH}
+          nextRaceIndex={nextRaceIndex}
+        />
+
+      </View>
     );
   }
 
@@ -667,5 +685,12 @@ export function RealRacesCarousel({
     </>
   );
 }
+
+// Styles for timeline layout container
+const timelineNavStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});
 
 export default RealRacesCarousel;

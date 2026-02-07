@@ -4,6 +4,15 @@ import { NetworkStatusBanner } from '@/components/ui/network';
 import { PushNotificationHandler } from '@/components/notifications/PushNotificationHandler';
 import '@/global.css';
 import { initializeImageCache } from '@/lib/imageConfig';
+import {
+  extractSessionTokensFromUrl,
+  setSessionFromBridgeTokens,
+  exchangeBridgeTokenForSession,
+  cleanAuthTokensFromUrl,
+  notifyAuthSuccess,
+  notifyAuthFailure,
+} from '@/lib/auth/firebaseBridge';
+import { supabase } from '@/services/supabase';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import StripeProvider from '@/providers/StripeProvider';
 import { initializeCrewMutationHandlers } from '@/services/crewManagementService';
@@ -11,14 +20,14 @@ import { initializeRaceRegistrationMutationHandlers } from '@/services/RaceRegis
 import { initializeBoatMutationHandlers } from '@/services/SailorBoatService';
 import { initializeMutationQueueHandlers } from '@/services/userManualClubsService';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import {
   useFonts,
   Manrope_400Regular,
   Manrope_600SemiBold,
   Manrope_700Bold,
 } from '@expo-google-fonts/manrope';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { LogBox, Platform } from 'react-native';
 
 // Suppress known warnings for native modules not available in Expo Go
@@ -193,6 +202,112 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
   }
 }
 
+/**
+ * FirebaseBridgeHandler - Handles Firebase auth bridge tokens for WebView embedding
+ *
+ * When Dragon Worlds app embeds RegattaFlow in a WebView, it passes auth tokens
+ * in the URL. This component:
+ * 1. Detects session tokens (new) or bridge token (legacy) in the URL
+ * 2. Establishes a Supabase session with the tokens
+ * 3. Cleans the URL and notifies the parent app
+ */
+function FirebaseBridgeHandler() {
+  const bridgeProcessedRef = useRef(false);
+
+  useEffect(() => {
+    // Only run on web platform
+    if (Platform.OS !== 'web' || typeof window === 'undefined') {
+      return;
+    }
+
+    // Prevent duplicate processing
+    if (bridgeProcessedRef.current) {
+      return;
+    }
+
+    const handleBridgeToken = async () => {
+      const currentUrl = window.location.href;
+      const tokens = extractSessionTokensFromUrl(currentUrl);
+
+      if (!tokens) {
+        return; // No tokens present
+      }
+
+      bridgeProcessedRef.current = true;
+      console.log('[FirebaseBridge] Processing auth tokens from URL, type:', tokens.type);
+
+      try {
+        let success = false;
+
+        if (tokens.type === 'session' && tokens.accessToken && tokens.refreshToken) {
+          // New format: Real Supabase session tokens
+          console.log('[FirebaseBridge] Using real session tokens');
+          success = await setSessionFromBridgeTokens(tokens.accessToken, tokens.refreshToken);
+        } else if (tokens.bridgeToken) {
+          // Legacy format: Bridge token that needs to be exchanged
+          console.log('[FirebaseBridge] Using legacy bridge token');
+          success = await exchangeBridgeTokenForSession(tokens.bridgeToken);
+        }
+
+        if (success) {
+          console.log('[FirebaseBridge] Session established successfully');
+
+          // Clean the URL by removing the tokens
+          const cleanUrl = cleanAuthTokensFromUrl(currentUrl);
+          window.history.replaceState(null, '', cleanUrl);
+
+          // Verify the session is actually working by checking getUser()
+          const maxAttempts = 10;
+          let attempts = 0;
+          const verifySession = async (): Promise<boolean> => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              console.log('[FirebaseBridge] Session verified, user:', user.id);
+              return true;
+            }
+            return false;
+          };
+
+          // Poll until session is verified or max attempts reached
+          const waitForSession = async () => {
+            while (attempts < maxAttempts) {
+              attempts++;
+              const verified = await verifySession();
+              if (verified) {
+                // Notify parent app (Dragon Worlds WebView) of success
+                notifyAuthSuccess('session-established');
+
+                // Navigate to the community/discuss page
+                console.log('[FirebaseBridge] Navigating to community page');
+                router.replace('/community/2027-hk-dragon-worlds');
+                return;
+              }
+              // Wait 200ms before next attempt
+              await new Promise((resolve) => setTimeout(resolve, 200));
+            }
+
+            // Session verification failed after max attempts
+            console.error('[FirebaseBridge] Session verification failed after', maxAttempts, 'attempts');
+            notifyAuthFailure('Session verification timeout');
+          };
+
+          waitForSession();
+        } else {
+          console.error('[FirebaseBridge] Failed to establish session');
+          notifyAuthFailure('Session exchange failed');
+        }
+      } catch (error) {
+        console.error('[FirebaseBridge] Error processing auth tokens:', error);
+        notifyAuthFailure(error instanceof Error ? error.message : 'Unknown error');
+      }
+    };
+
+    handleBridgeToken();
+  }, []);
+
+  return null; // This component doesn't render anything
+}
+
 function StackWithSplash() {
   const {state} = useAuth()
 
@@ -200,6 +315,7 @@ function StackWithSplash() {
   // This allows the landing page to render immediately
   return (
     <>
+      <FirebaseBridgeHandler />
       <NetworkStatusBanner />
       <Stack screenOptions={{headerShown: false}}>
         <Stack.Screen name="account" options={{ presentation: 'modal', headerShown: false }} />

@@ -58,6 +58,27 @@ export interface CreateCommunityAreaParams {
   venueId?: string | null;
 }
 
+export interface CreateCommunityVenueParams {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+export interface SailingVenue {
+  id: string;
+  name: string;
+  country: string;
+  region: string;
+  venue_type: string;
+  coordinates_lat: number;
+  coordinates_lng: number;
+  time_zone?: string;
+  source: 'official' | 'community' | 'imported';
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UnknownAreaDetection {
   latitude: number;
   longitude: number;
@@ -175,6 +196,110 @@ class CommunityVenueCreationServiceClass {
         longitude: lng,
         shouldPromptCreation: false,
         pendingAreasNearby: [],
+      };
+    }
+  }
+
+  /**
+   * Create a new community sailing venue
+   * Used when users search for a venue that doesn't exist
+   */
+  async createCommunityVenue(params: CreateCommunityVenueParams): Promise<SailingVenue> {
+    const { name, lat, lng } = params;
+
+    // Get current user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User must be authenticated to create venues');
+    }
+
+    // Generate a URL-safe ID from the venue name
+    const { data: slugData, error: slugError } = await supabase
+      .rpc('generate_venue_slug', { venue_name: name });
+
+    if (slugError) {
+      logger.error('Error generating venue slug:', slugError);
+      throw new Error(`Failed to generate venue ID: ${slugError.message}`);
+    }
+
+    const venueId = slugData || name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    // Reverse geocode to get country/region
+    const { country, region, timezone } = await this.reverseGeocode(lat, lng);
+
+    // Create the venue
+    const { data, error } = await supabase
+      .from('sailing_venues')
+      .insert({
+        id: venueId,
+        name,
+        coordinates_lat: lat,
+        coordinates_lng: lng,
+        country,
+        region,
+        venue_type: 'local', // Community venues start as local
+        time_zone: timezone,
+        source: 'community',
+        created_by: user.id,
+        data_quality: 'community',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Error creating community venue:', error);
+      throw new Error(`Failed to create venue: ${error.message}`);
+    }
+
+    logger.info('Created community venue:', { id: data.id, name });
+    return data as SailingVenue;
+  }
+
+  /**
+   * Reverse geocode coordinates to get country/region/timezone
+   */
+  private async reverseGeocode(lat: number, lng: number): Promise<{
+    country: string;
+    region: string;
+    timezone: string;
+  }> {
+    try {
+      // Use Nominatim (OpenStreetMap) for reverse geocoding - free and no API key needed
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`,
+        {
+          headers: {
+            'User-Agent': 'RegattaFlow/1.0 (https://regattaflow.com)',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Geocoding failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const address = data.address || {};
+
+      // Extract country
+      const country = address.country || 'Unknown';
+
+      // Extract region (state/province/county)
+      const region = address.state || address.county || address.region || 'Unknown';
+
+      // Estimate timezone from longitude (rough approximation)
+      const timezoneOffset = Math.round(lng / 15);
+      const timezone = `Etc/GMT${timezoneOffset >= 0 ? '-' : '+'}${Math.abs(timezoneOffset)}`;
+
+      return { country, region, timezone };
+    } catch (error) {
+      logger.warn('Reverse geocoding failed, using defaults:', error);
+      return {
+        country: 'Unknown',
+        region: 'Unknown',
+        timezone: 'UTC',
       };
     }
   }

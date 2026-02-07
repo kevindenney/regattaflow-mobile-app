@@ -21,6 +21,7 @@ import type {
   FeedSortType,
   PostType,
   TopPeriod,
+  VenueRole,
 } from '@/types/community-feed';
 
 class CommunityFeedServiceClass {
@@ -50,7 +51,7 @@ class CommunityFeedServiceClass {
       .from('venue_discussions')
       .select(`
         *,
-        author:profiles!author_id (
+        author:users!author_id (
           id,
           full_name,
           avatar_url
@@ -210,7 +211,7 @@ class CommunityFeedServiceClass {
       .from('venue_discussions')
       .select(`
         *,
-        author:profiles!author_id (
+        author:users!author_id (
           id,
           full_name,
           avatar_url
@@ -353,7 +354,7 @@ class CommunityFeedServiceClass {
       .from('venue_discussions')
       .select(`
         *,
-        author:profiles!author_id (
+        author:users!author_id (
           id,
           full_name,
           avatar_url
@@ -423,7 +424,7 @@ class CommunityFeedServiceClass {
       .from('venue_discussions')
       .select(`
         *,
-        author:profiles!author_id (
+        author:users!author_id (
           id,
           full_name,
           avatar_url
@@ -499,13 +500,19 @@ class CommunityFeedServiceClass {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Must be logged in to create a post');
 
+    // Validate that at least one of venue_id or community_id is provided
+    if (!params.venue_id && !params.community_id) {
+      throw new Error('Post must be associated with either a venue or a community');
+    }
+
     const { topic_tag_ids, condition_tags, catalog_race_id, ...postData } = params;
 
     // Create the discussion
     const { data, error } = await supabase
       .from('venue_discussions')
       .insert({
-        venue_id: postData.venue_id,
+        venue_id: postData.venue_id || null,
+        community_id: postData.community_id || null,
         author_id: user.id,
         title: postData.title,
         body: postData.body || null,
@@ -524,6 +531,24 @@ class CommunityFeedServiceClass {
 
     if (error) {
       console.error('[CommunityFeedService] Error creating post:', error);
+
+      // Check for common constraint/permission errors and provide user-friendly messages
+      const errorMessage = error.message?.toLowerCase() || '';
+      const errorCode = error.code?.toLowerCase() || '';
+
+      // RLS policy violation or constraint error - usually means not a member
+      if (
+        errorCode === '42501' || // insufficient_privilege
+        errorCode === '23503' || // foreign_key_violation
+        errorCode === '23514' || // check_violation
+        errorMessage.includes('policy') ||
+        errorMessage.includes('permission') ||
+        errorMessage.includes('violates') ||
+        errorMessage.includes('constraint')
+      ) {
+        throw new Error('You must join this community before you can post. Tap the "Join" button to become a member.');
+      }
+
       throw error;
     }
 
@@ -605,24 +630,50 @@ class CommunityFeedServiceClass {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Must be logged in to vote');
 
-    if (vote === 0) {
-      await supabase
-        .from('venue_discussion_votes')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('target_type', targetType)
-        .eq('target_id', targetId);
-    } else {
-      await supabase
-        .from('venue_discussion_votes')
-        .upsert({
-          user_id: user.id,
-          target_type: targetType,
-          target_id: targetId,
-          vote: 1,
-        }, {
-          onConflict: 'user_id,target_type,target_id',
-        });
+    try {
+      if (vote === 0) {
+        const { error } = await supabase
+          .from('venue_discussion_votes')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('target_type', targetType)
+          .eq('target_id', targetId);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('venue_discussion_votes')
+          .upsert({
+            user_id: user.id,
+            target_type: targetType,
+            target_id: targetId,
+            vote: 1,
+          }, {
+            onConflict: 'user_id,target_type,target_id',
+          });
+
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error('[CommunityFeedService] Error voting:', error);
+
+      const errorMessage = error.message?.toLowerCase() || '';
+      const errorCode = error.code?.toLowerCase() || '';
+
+      // RLS policy violation or constraint error
+      if (
+        errorCode === '42501' ||
+        errorCode === '23503' ||
+        errorCode === '23514' ||
+        errorMessage.includes('policy') ||
+        errorMessage.includes('permission') ||
+        errorMessage.includes('violates') ||
+        errorMessage.includes('constraint')
+      ) {
+        throw new Error('You must join this community before you can vote. Tap the "Join" button to become a member.');
+      }
+
+      throw error;
     }
   }
 
@@ -638,7 +689,7 @@ class CommunityFeedServiceClass {
       .from('venue_discussion_comments')
       .select(`
         *,
-        author:profiles!author_id (
+        author:users!author_id (
           id,
           full_name,
           avatar_url
@@ -692,7 +743,7 @@ class CommunityFeedServiceClass {
       })
       .select(`
         *,
-        author:profiles!author_id (
+        author:users!author_id (
           id,
           full_name,
           avatar_url
@@ -702,6 +753,29 @@ class CommunityFeedServiceClass {
 
     if (error) {
       console.error('[CommunityFeedService] Error creating comment:', error);
+
+      // Check for common constraint/permission errors and provide user-friendly messages
+      const errorMessage = error.message?.toLowerCase() || '';
+      const errorCode = error.code?.toLowerCase() || '';
+
+      // RLS policy violation or constraint error - usually means not a member
+      if (
+        errorCode === '42501' || // insufficient_privilege
+        errorCode === '23503' || // foreign_key_violation
+        errorCode === '23514' || // check_violation
+        errorMessage.includes('policy') ||
+        errorMessage.includes('permission') ||
+        errorMessage.includes('violates') ||
+        errorMessage.includes('constraint')
+      ) {
+        throw new Error('You must join this community before you can comment. Tap the "Join" button to become a member.');
+      }
+
+      // Generic database error
+      if (errorMessage.includes('database')) {
+        throw new Error('Unable to post your comment. Please make sure you have joined this community first.');
+      }
+
       throw error;
     }
 
@@ -862,7 +936,7 @@ class CommunityFeedServiceClass {
         id, title, post_type, upvotes, comment_count,
         location_lat, location_lng, location_label,
         created_at, pinned,
-        author:profiles!author_id (id, full_name)
+        author:users!author_id (id, full_name)
       `)
       .eq('venue_id', venueId)
       .eq('is_public', true)
@@ -894,6 +968,301 @@ class CommunityFeedServiceClass {
   // ============================================================================
 
   /**
+   * Get posts for a specific community (by community_id)
+   * This supports non-venue communities like boat classes, sailmakers, etc.
+   */
+  async getCommunityPosts(
+    communityId: string,
+    options: {
+      sort?: FeedSortType;
+      postType?: PostType;
+      tagIds?: string[];
+      topPeriod?: TopPeriod;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{ data: FeedPost[]; count: number; nextPage: number | null }> {
+    const {
+      sort = 'hot',
+      postType,
+      tagIds,
+      topPeriod = 'all',
+      page = 0,
+      limit = 20,
+    } = options;
+
+    const offset = page * limit;
+
+    let query = supabase
+      .from('venue_discussions')
+      .select(`
+        *,
+        author:users!author_id (
+          id,
+          full_name,
+          avatar_url
+        )
+      `, { count: 'exact' })
+      .eq('community_id', communityId)
+      .eq('is_public', true);
+
+    if (postType) {
+      query = query.eq('post_type', postType);
+    }
+
+    if (sort === 'rising') {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('created_at', oneDayAgo);
+    } else if (sort === 'top' && topPeriod !== 'all') {
+      const periodMs: Record<TopPeriod, number> = {
+        today: 24 * 60 * 60 * 1000,
+        week: 7 * 24 * 60 * 60 * 1000,
+        month: 30 * 24 * 60 * 60 * 1000,
+        all: 0,
+      };
+      const since = new Date(Date.now() - periodMs[topPeriod]).toISOString();
+      query = query.gte('created_at', since);
+    }
+
+    switch (sort) {
+      case 'new':
+        query = query.order('created_at', { ascending: false });
+        break;
+      case 'top':
+        query = query.order('upvotes', { ascending: false });
+        break;
+      case 'rising':
+      case 'hot':
+      default:
+        query = query
+          .order('pinned', { ascending: false })
+          .order('last_activity_at', { ascending: false });
+        break;
+    }
+
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('[CommunityFeedService] Error fetching community posts:', error);
+      throw error;
+    }
+
+    let posts: FeedPost[] = (data || []).map((d: any) => ({
+      ...d,
+      post_type: d.post_type || 'discussion',
+      view_count: d.view_count || 0,
+      is_resolved: d.is_resolved || false,
+      accepted_answer_id: d.accepted_answer_id || null,
+      location_lat: d.location_lat || null,
+      location_lng: d.location_lng || null,
+      location_label: d.location_label || null,
+    }));
+
+    if (sort === 'hot' || sort === 'rising') {
+      posts = posts.map(p => ({
+        ...p,
+        hot_score: this.computeHotScore(p),
+      }));
+      posts.sort((a, b) => (b.hot_score || 0) - (a.hot_score || 0));
+    }
+
+    // Get user votes
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && posts.length > 0) {
+      const postIds = posts.map(p => p.id);
+      const { data: votes } = await supabase
+        .from('venue_discussion_votes')
+        .select('target_id, vote')
+        .eq('user_id', user.id)
+        .eq('target_type', 'discussion')
+        .in('target_id', postIds);
+
+      const voteMap = new Map(votes?.map(v => [v.target_id, v.vote]) || []);
+      posts = posts.map(p => ({ ...p, user_vote: voteMap.get(p.id) || null }));
+    }
+
+    // Load topic tags
+    if (posts.length > 0) {
+      posts = await this.attachTopicTags(posts);
+    }
+
+    // Filter by tag IDs (client-side)
+    if (tagIds && tagIds.length > 0) {
+      posts = posts.filter(p =>
+        p.topic_tags?.some(t => tagIds.includes(t.id))
+      );
+    }
+
+    const totalCount = count || 0;
+    const hasMore = offset + limit < totalCount;
+
+    return {
+      data: posts,
+      count: totalCount,
+      nextPage: hasMore ? page + 1 : null,
+    };
+  }
+
+  /**
+   * Get aggregated feed from communities the user has joined
+   */
+  async getJoinedCommunitiesFeed(params: {
+    communityIds: string[];
+    sort?: FeedSortType;
+    postType?: PostType;
+    tagIds?: string[];
+    topPeriod?: TopPeriod;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: FeedPost[]; count: number; nextPage: number | null }> {
+    const {
+      communityIds,
+      sort = 'hot',
+      postType,
+      tagIds,
+      topPeriod = 'all',
+      page = 0,
+      limit = 20,
+    } = params;
+
+    if (communityIds.length === 0) {
+      return { data: [], count: 0, nextPage: null };
+    }
+
+    const offset = page * limit;
+
+    let query = supabase
+      .from('venue_discussions')
+      .select(`
+        *,
+        author:users!author_id (
+          id,
+          full_name,
+          avatar_url
+        )
+      `, { count: 'exact' })
+      .in('community_id', communityIds)
+      .eq('is_public', true);
+
+    if (postType) {
+      query = query.eq('post_type', postType);
+    }
+
+    if (sort === 'rising') {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('created_at', oneDayAgo);
+    } else if (sort === 'top' && topPeriod !== 'all') {
+      const periodMs: Record<TopPeriod, number> = {
+        today: 24 * 60 * 60 * 1000,
+        week: 7 * 24 * 60 * 60 * 1000,
+        month: 30 * 24 * 60 * 60 * 1000,
+        all: 0,
+      };
+      const since = new Date(Date.now() - periodMs[topPeriod]).toISOString();
+      query = query.gte('created_at', since);
+    }
+
+    switch (sort) {
+      case 'new':
+        query = query.order('created_at', { ascending: false });
+        break;
+      case 'top':
+        query = query.order('upvotes', { ascending: false });
+        break;
+      case 'rising':
+      case 'hot':
+      default:
+        query = query
+          .order('pinned', { ascending: false })
+          .order('last_activity_at', { ascending: false });
+        break;
+    }
+
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      console.error('[CommunityFeedService] Error fetching joined communities feed:', error);
+      throw error;
+    }
+
+    let posts: FeedPost[] = (data || []).map((d: any) => ({
+      ...d,
+      post_type: d.post_type || 'discussion',
+      view_count: d.view_count || 0,
+      is_resolved: d.is_resolved || false,
+      accepted_answer_id: d.accepted_answer_id || null,
+      location_lat: d.location_lat || null,
+      location_lng: d.location_lng || null,
+      location_label: d.location_label || null,
+    }));
+
+    // Join community info
+    const uniqueCommunityIds = [...new Set(posts.map(p => p.community_id).filter(Boolean))];
+    if (uniqueCommunityIds.length > 0) {
+      const { data: communities } = await supabase
+        .from('communities')
+        .select('id, name, slug, community_type')
+        .in('id', uniqueCommunityIds);
+
+      if (communities) {
+        const communityMap = new Map(communities.map(c => [c.id, c]));
+        posts = posts.map(p => ({
+          ...p,
+          community: p.community_id ? communityMap.get(p.community_id) : undefined,
+        }));
+      }
+    }
+
+    if (sort === 'hot' || sort === 'rising') {
+      posts = posts.map(p => ({
+        ...p,
+        hot_score: this.computeHotScore(p),
+      }));
+      posts.sort((a, b) => (b.hot_score || 0) - (a.hot_score || 0));
+    }
+
+    // Get user votes
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && posts.length > 0) {
+      const postIds = posts.map(p => p.id);
+      const { data: votes } = await supabase
+        .from('venue_discussion_votes')
+        .select('target_id, vote')
+        .eq('user_id', user.id)
+        .eq('target_type', 'discussion')
+        .in('target_id', postIds);
+
+      const voteMap = new Map(votes?.map(v => [v.target_id, v.vote]) || []);
+      posts = posts.map(p => ({ ...p, user_vote: voteMap.get(p.id) || null }));
+    }
+
+    // Load topic tags
+    if (posts.length > 0) {
+      posts = await this.attachTopicTags(posts);
+    }
+
+    // Filter by tag IDs (client-side)
+    if (tagIds && tagIds.length > 0) {
+      posts = posts.filter(p =>
+        p.topic_tags?.some(t => tagIds.includes(t.id))
+      );
+    }
+
+    const totalCount = count || 0;
+    const hasMore = offset + limit < totalCount;
+
+    return {
+      data: posts,
+      count: totalCount,
+      nextPage: hasMore ? page + 1 : null,
+    };
+  }
+
+  /**
    * Get posts tagged with a specific catalog race
    */
   async getPostsByRace(
@@ -907,7 +1276,7 @@ class CommunityFeedServiceClass {
       .from('venue_discussions')
       .select(`
         *,
-        author:profiles!author_id (
+        author:users!author_id (
           id,
           full_name,
           avatar_url

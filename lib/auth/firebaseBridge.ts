@@ -26,8 +26,23 @@ export interface FirebaseBridgeRequest {
   communitySlug?: string;
 }
 
+export interface FirebaseBridgeSession {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  expires_at: number;
+  token_type: string;
+  user?: {
+    id: string;
+    email: string;
+    [key: string]: unknown;
+  };
+}
+
 export interface FirebaseBridgeResponse {
   success: boolean;
+  session?: FirebaseBridgeSession;
+  // Flat fields for backwards compatibility
   accessToken?: string;
   refreshToken?: string;
   expiresIn?: number;
@@ -62,6 +77,8 @@ export const DRAGON_WORLDS_COMMUNITY_SLUG = '2027-hk-dragon-worlds';
 // URL parameter names for WebView token passing
 export const AUTH_TOKEN_PARAM = 'auth_token';
 export const BRIDGE_TOKEN_PARAM = 'bridge_token';
+export const ACCESS_TOKEN_PARAM = 'rf_access_token';
+export const REFRESH_TOKEN_PARAM = 'rf_refresh_token';
 
 // ============================================================================
 // API FUNCTIONS
@@ -120,18 +137,86 @@ export async function exchangeFirebaseToken(
 }
 
 /**
- * Exchange the short-lived bridge token for a full Supabase session
+ * Set a Supabase session from the bridge response tokens
  *
- * @param bridgeToken - The bridge token received from exchangeFirebaseToken
+ * @param accessToken - The Supabase access token
+ * @param refreshToken - The Supabase refresh token
  * @returns True if session was established successfully
  */
-export async function exchangeBridgeTokenForSession(bridgeToken: string): Promise<boolean> {
+export async function setSessionFromBridgeTokens(
+  accessToken: string,
+  refreshToken: string
+): Promise<boolean> {
   try {
-    // Decode the bridge token to get user info
-    const payload = decodeBridgeToken(bridgeToken);
+    console.log('[FirebaseBridge] Setting Supabase session from bridge tokens');
 
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      console.error('[FirebaseBridge] Failed to set session:', error);
+      return false;
+    }
+
+    if (!data.session) {
+      console.error('[FirebaseBridge] No session returned after setSession');
+      return false;
+    }
+
+    console.log('[FirebaseBridge] Session established successfully for user:', data.session.user?.id);
+    return true;
+  } catch (error) {
+    console.error('[FirebaseBridge] Failed to set session:', error);
+    return false;
+  }
+}
+
+/**
+ * Exchange the bridge token for a full Supabase session
+ * Supports both old-style base64 tokens and new-style session data
+ *
+ * @param bridgeTokenOrData - Either a legacy bridge token string or JSON-stringified session data
+ * @returns True if session was established successfully
+ */
+export async function exchangeBridgeTokenForSession(bridgeTokenOrData: string): Promise<boolean> {
+  try {
+    // First, try to parse as JSON (new format with real tokens)
+    try {
+      const parsed = JSON.parse(bridgeTokenOrData);
+      if (parsed.access_token && parsed.refresh_token) {
+        return await setSessionFromBridgeTokens(parsed.access_token, parsed.refresh_token);
+      }
+    } catch {
+      // Not JSON, try legacy format
+    }
+
+    // Check if it looks like a JWT (contains dots and is long)
+    if (bridgeTokenOrData.includes('.') && bridgeTokenOrData.length > 100) {
+      // This might be an access_token passed directly
+      // Try to decode it to see if it's a valid JWT
+      const parts = bridgeTokenOrData.split('.');
+      if (parts.length === 3) {
+        console.log('[FirebaseBridge] Detected JWT-style token, attempting to set session');
+        // For JWT tokens passed alone, we need to also have a refresh token
+        // Check if there's a refresh token in session storage
+        const refreshToken = Platform.OS === 'web' && typeof sessionStorage !== 'undefined'
+          ? sessionStorage.getItem('firebase_bridge_refresh_token')
+          : null;
+
+        if (refreshToken) {
+          return await setSessionFromBridgeTokens(bridgeTokenOrData, refreshToken);
+        }
+
+        console.warn('[FirebaseBridge] JWT token provided but no refresh token available');
+      }
+    }
+
+    // Try legacy base64-encoded JSON format
+    const payload = decodeBridgeToken(bridgeTokenOrData);
     if (!payload) {
-      console.error('[FirebaseBridge] Invalid bridge token');
+      console.error('[FirebaseBridge] Invalid bridge token format');
       return false;
     }
 
@@ -142,16 +227,9 @@ export async function exchangeBridgeTokenForSession(bridgeToken: string): Promis
       return false;
     }
 
-    // Use the bridge token to authenticate
-    // The Edge Function creates a magic link, we need to verify we have a valid session
-    // For now, we'll use the verifyOtp flow with the token
-
-    // Actually, for WebView embedding, we'll pass the token directly
-    // and let the app handle session creation via the AuthProvider
-
-    // Store the bridge token temporarily for the AuthProvider to use
+    // Legacy: Store the bridge token temporarily for the AuthProvider to use
     if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem('firebase_bridge_token', bridgeToken);
+      sessionStorage.setItem('firebase_bridge_token', bridgeTokenOrData);
       sessionStorage.setItem('firebase_bridge_user_id', payload.sub);
       sessionStorage.setItem('firebase_bridge_email', payload.email);
     }
@@ -189,33 +267,80 @@ export function decodeBridgeToken(token: string): BridgeTokenPayload | null {
 // URL HANDLING FOR WEBVIEW
 // ============================================================================
 
+export interface ExtractedTokens {
+  type: 'session' | 'bridge' | 'legacy';
+  accessToken?: string;
+  refreshToken?: string;
+  bridgeToken?: string;
+}
+
 /**
- * Extract auth token from URL parameters
+ * Extract auth tokens from URL parameters
  * Used when Dragon app embeds RegattaFlow in a WebView
+ * Supports both new session tokens and legacy bridge tokens
  *
  * @param url - The URL to parse
- * @returns The auth token if present, null otherwise
+ * @returns Extracted tokens object or null if none found
  */
-export function extractAuthTokenFromUrl(url: string): string | null {
+export function extractSessionTokensFromUrl(url: string): ExtractedTokens | null {
   try {
     const urlObj = new URL(url);
 
-    // Check for bridge token (preferred)
-    const bridgeToken = urlObj.searchParams.get(BRIDGE_TOKEN_PARAM);
-    if (bridgeToken) {
-      return bridgeToken;
+    // Check for new session tokens (preferred)
+    const accessToken = urlObj.searchParams.get(ACCESS_TOKEN_PARAM);
+    const refreshToken = urlObj.searchParams.get(REFRESH_TOKEN_PARAM);
+
+    if (accessToken && refreshToken) {
+      return {
+        type: 'session',
+        accessToken,
+        refreshToken,
+      };
     }
 
-    // Check for auth token (legacy)
-    const authToken = urlObj.searchParams.get(AUTH_TOKEN_PARAM);
-    if (authToken) {
-      return authToken;
-    }
-
-    // Check hash parameters (for OAuth-style flows)
+    // Check hash parameters for session tokens (OAuth-style)
     if (urlObj.hash) {
       const hashParams = new URLSearchParams(urlObj.hash.substring(1));
-      return hashParams.get(BRIDGE_TOKEN_PARAM) || hashParams.get(AUTH_TOKEN_PARAM);
+      const hashAccessToken = hashParams.get(ACCESS_TOKEN_PARAM);
+      const hashRefreshToken = hashParams.get(REFRESH_TOKEN_PARAM);
+
+      if (hashAccessToken && hashRefreshToken) {
+        return {
+          type: 'session',
+          accessToken: hashAccessToken,
+          refreshToken: hashRefreshToken,
+        };
+      }
+    }
+
+    // Check for bridge token (legacy)
+    const bridgeToken = urlObj.searchParams.get(BRIDGE_TOKEN_PARAM);
+    if (bridgeToken) {
+      return {
+        type: 'bridge',
+        bridgeToken,
+      };
+    }
+
+    // Check for auth token (oldest legacy)
+    const authToken = urlObj.searchParams.get(AUTH_TOKEN_PARAM);
+    if (authToken) {
+      return {
+        type: 'legacy',
+        bridgeToken: authToken,
+      };
+    }
+
+    // Check hash for legacy tokens
+    if (urlObj.hash) {
+      const hashParams = new URLSearchParams(urlObj.hash.substring(1));
+      const hashBridgeToken = hashParams.get(BRIDGE_TOKEN_PARAM) || hashParams.get(AUTH_TOKEN_PARAM);
+      if (hashBridgeToken) {
+        return {
+          type: 'bridge',
+          bridgeToken: hashBridgeToken,
+        };
+      }
     }
 
     return null;
@@ -225,7 +350,48 @@ export function extractAuthTokenFromUrl(url: string): string | null {
 }
 
 /**
- * Build URL with auth token for WebView embedding
+ * Extract auth token from URL parameters (legacy compatibility)
+ * Used when Dragon app embeds RegattaFlow in a WebView
+ *
+ * @param url - The URL to parse
+ * @returns The auth token if present, null otherwise
+ */
+export function extractAuthTokenFromUrl(url: string): string | null {
+  const tokens = extractSessionTokensFromUrl(url);
+  if (!tokens) return null;
+
+  if (tokens.type === 'session' && tokens.accessToken && tokens.refreshToken) {
+    // Return as JSON for the new format
+    return JSON.stringify({
+      access_token: tokens.accessToken,
+      refresh_token: tokens.refreshToken,
+    });
+  }
+
+  return tokens.bridgeToken || null;
+}
+
+/**
+ * Build URL with session tokens for WebView embedding
+ *
+ * @param baseUrl - The RegattaFlow URL to embed
+ * @param accessToken - The Supabase access token
+ * @param refreshToken - The Supabase refresh token
+ * @returns URL with auth token parameters
+ */
+export function buildAuthenticatedUrlWithSession(
+  baseUrl: string,
+  accessToken: string,
+  refreshToken: string
+): string {
+  const url = new URL(baseUrl);
+  url.searchParams.set(ACCESS_TOKEN_PARAM, accessToken);
+  url.searchParams.set(REFRESH_TOKEN_PARAM, refreshToken);
+  return url.toString();
+}
+
+/**
+ * Build URL with auth token for WebView embedding (legacy)
  *
  * @param baseUrl - The RegattaFlow URL to embed
  * @param bridgeToken - The bridge token from exchangeFirebaseToken
@@ -248,6 +414,8 @@ export function cleanAuthTokensFromUrl(url: string): string {
     const urlObj = new URL(url);
     urlObj.searchParams.delete(BRIDGE_TOKEN_PARAM);
     urlObj.searchParams.delete(AUTH_TOKEN_PARAM);
+    urlObj.searchParams.delete(ACCESS_TOKEN_PARAM);
+    urlObj.searchParams.delete(REFRESH_TOKEN_PARAM);
     return urlObj.toString();
   } catch {
     return url;

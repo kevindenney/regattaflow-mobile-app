@@ -34,6 +34,8 @@ interface CommunityDetailHeaderProps {
   isJoinPending?: boolean;
   /** True when membership status is being determined (e.g., after auth bridge) */
   isMembershipLoading?: boolean;
+  /** Called when user taps the members count */
+  onMembersPress?: () => void;
 }
 
 function formatMemberCount(count: number): string {
@@ -66,6 +68,7 @@ export function CommunityDetailHeader({
   onJoinToggle,
   isJoinPending = false,
   isMembershipLoading = false,
+  onMembersPress,
 }: CommunityDetailHeaderProps) {
   const typeConfig = COMMUNITY_TYPE_CONFIG[community.community_type] || COMMUNITY_TYPE_CONFIG.general;
   const isJoined = community.is_member ?? false;
@@ -134,10 +137,14 @@ export function CommunityDetailHeader({
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
-          <View style={styles.stat}>
+          <Pressable
+            style={({ pressed }) => [styles.stat, pressed && onMembersPress && styles.statPressed]}
+            onPress={onMembersPress}
+            disabled={!onMembersPress}
+          >
             <Text style={styles.statValue}>{formatMemberCount(community.member_count)}</Text>
             <Text style={styles.statLabel}>Members</Text>
-          </View>
+          </Pressable>
           <View style={styles.statDivider} />
           <View style={styles.stat}>
             <Text style={styles.statValue}>{formatMemberCount(community.post_count)}</Text>
@@ -162,9 +169,11 @@ export function CommunityDetailHeader({
           )}
         </View>
 
-        {/* Description */}
+        {/* Description - show 3 lines with expand option */}
         {community.description && (
-          <Text style={styles.description}>{community.description}</Text>
+          <Text style={styles.description} numberOfLines={3}>
+            {community.description}
+          </Text>
         )}
 
         {/* Join Button */}
@@ -274,6 +283,9 @@ const styles = StyleSheet.create({
   },
   stat: {
     alignItems: 'flex-start',
+  },
+  statPressed: {
+    opacity: 0.6,
   },
   statValue: {
     fontSize: 16,

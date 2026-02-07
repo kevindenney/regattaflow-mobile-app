@@ -64,8 +64,8 @@ export interface UsePostRaceInterviewReturn {
   userPostRaceSession: RaceTimerSession | null;
   /** Whether user post-race session is loading */
   loadingUserPostRaceSession: boolean;
-  /** Handler to manually open post-race interview */
-  handleOpenPostRaceInterviewManually: () => Promise<void>;
+  /** Handler to manually open post-race interview - accepts optional raceId/raceData to avoid stale closure issues */
+  handleOpenPostRaceInterviewManually: (overrideRaceId?: string, overrideRaceData?: SelectedRaceDataForInterview) => Promise<void>;
   /** Handler called when a race is completed (triggers interview) */
   handleRaceComplete: (sessionId: string, raceName: string, raceId?: string) => Promise<void>;
   /** Handler called when interview is completed */
@@ -98,7 +98,13 @@ export function usePostRaceInterview({
 
   // Load user's most recent race timer session for the selected race
   const loadUserPostRaceSession = useCallback(async () => {
+    logger.debug('[POST_RACE_LOAD] loadUserPostRaceSession called', {
+      selectedRaceId,
+      userId: user?.id,
+    });
+
     if (!selectedRaceId || !user?.id) {
+      logger.debug('[POST_RACE_LOAD] Missing selectedRaceId or userId, clearing session');
       setUserPostRaceSession(null);
       return;
     }
@@ -113,6 +119,18 @@ export function usePostRaceInterview({
         .order('end_time', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(1);
+
+      logger.debug('[POST_RACE_LOAD] Query result', {
+        error: error ? { message: error.message, code: error.code } : null,
+        rowCount: data?.length ?? 0,
+        sessionData: data?.[0] ? {
+          id: data[0].id,
+          self_reported_position: data[0].self_reported_position,
+          self_reported_fleet_size: data[0].self_reported_fleet_size,
+          key_moment: data[0].key_moment,
+          notes: data[0].notes?.substring(0, 50),
+        } : null,
+      });
 
       if (error) {
         logger.warn('[usePostRaceInterview] Unable to load user race session', {
@@ -138,31 +156,75 @@ export function usePostRaceInterview({
   }, [loadUserPostRaceSession]);
 
   // Handler to manually open post-race interview (creates session if needed)
-  const handleOpenPostRaceInterviewManually = useCallback(async () => {
+  // Accepts optional overrideRaceId/overrideRaceData to avoid stale closure issues when called from setTimeout
+  const handleOpenPostRaceInterviewManually = useCallback(async (
+    overrideRaceId?: string,
+    overrideRaceData?: SelectedRaceDataForInterview
+  ) => {
+    // Use overrides if provided (fixes stale closure issues when called from setTimeout)
+    const effectiveRaceId = overrideRaceId || selectedRaceId;
+    const effectiveRaceData = overrideRaceData || selectedRaceData;
+
+    logger.debug('[POST_RACE_OPEN] handleOpenPostRaceInterviewManually called', {
+      userId: user?.id,
+      selectedRaceId,
+      effectiveRaceId,
+      hasSelectedRaceData: !!selectedRaceData,
+      hasEffectiveRaceData: !!effectiveRaceData,
+      usedOverride: !!overrideRaceId,
+      existingSessionId: userPostRaceSession?.id,
+    });
+
     if (!user?.id) {
       Alert.alert('Post-Race Interview', 'You need to be signed in to add post-race notes.');
       return;
     }
 
-    if (!selectedRaceId || !selectedRaceData) {
+    if (!effectiveRaceId || !effectiveRaceData) {
       Alert.alert('Post-Race Interview', 'Select a race first to add your post-race interview.');
       return;
     }
 
     setLoadingUserPostRaceSession(true);
     try {
-      let session = userPostRaceSession;
+      // ALWAYS fetch fresh session data to avoid creating duplicates
+      // This is critical because another component (StructuredDebriefInterview) may have
+      // created a session since we last loaded, and we want to use that same session
+      logger.debug('[POST_RACE_OPEN] Fetching fresh session data to avoid duplicates');
+      const { data: freshSessions, error: fetchError } = await supabase
+        .from('race_timer_sessions')
+        .select('*')
+        .eq('regatta_id', effectiveRaceId)
+        .eq('sailor_id', user.id)
+        .order('end_time', { ascending: false })
+        .limit(1);
+
+      let session: RaceTimerSession | null = null;
+
+      if (fetchError) {
+        logger.warn('[POST_RACE_OPEN] Error fetching fresh session, falling back to state', fetchError);
+        session = userPostRaceSession;
+      } else {
+        session = freshSessions && freshSessions.length > 0 ? (freshSessions[0] as RaceTimerSession) : null;
+        logger.debug('[POST_RACE_OPEN] Fresh session lookup result', {
+          foundSession: !!session,
+          sessionId: session?.id,
+          hasDebriefResponses: !!(session as any)?.debrief_responses,
+          hasSelfReportedPosition: !!(session as any)?.self_reported_position,
+        });
+      }
 
       // Create a new session if one doesn't exist
       if (!session) {
+        logger.debug('[POST_RACE_OPEN] No existing session, creating new one');
         const nowIso = new Date().toISOString();
-        const startTime = selectedRaceData.start_date || nowIso;
+        const startTime = effectiveRaceData.start_date || nowIso;
 
         const { data: createdSession, error } = await supabase
           .from('race_timer_sessions')
           .insert({
             sailor_id: user.id,
-            regatta_id: selectedRaceId,
+            regatta_id: effectiveRaceId,
             start_time: startTime,
             end_time: nowIso,
             duration_seconds: 0,
@@ -171,20 +233,26 @@ export function usePostRaceInterview({
           .single();
 
         if (error) {
+          logger.error('[POST_RACE_OPEN] Failed to create session', error);
           throw error;
         }
 
+        logger.debug('[POST_RACE_OPEN] Created new session', { sessionId: createdSession?.id });
         session = createdSession as RaceTimerSession;
+        // Update state session so subsequent calls use this session
         setUserPostRaceSession(createdSession as RaceTimerSession);
+      } else {
+        logger.debug('[POST_RACE_OPEN] Using existing session', { sessionId: session.id });
       }
 
       if (!session?.id) {
         throw new Error('Missing race timer session');
       }
 
+      logger.debug('[POST_RACE_OPEN] Setting completedSessionId', { sessionId: session.id });
       setCompletedSessionId(session.id);
-      setCompletedRaceName(selectedRaceData.name ?? 'Race');
-      setCompletedRaceId(selectedRaceId);
+      setCompletedRaceName(effectiveRaceData.name ?? 'Race');
+      setCompletedRaceId(effectiveRaceId);
       setShowPostRaceInterview(true);
     } catch (error: any) {
       logger.error('[usePostRaceInterview] Failed to open post-race interview manually', error);

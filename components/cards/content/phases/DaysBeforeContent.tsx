@@ -34,6 +34,7 @@ import {
   FileText,
   Pencil,
   Sliders,
+  X,
 } from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
@@ -71,7 +72,7 @@ import { IOSInsetGroupedSection } from '@/components/ui/ios';
 import type { RaceType } from '@/types/raceEvents';
 import { getLearningLinks, getLearningBrief, getItemCategory, getLessonLink, getLearningForItem } from '@/data/learningLinks';
 import { useUserSettings } from '@/hooks/useUserSettings';
-import { useFocusIntentForRace } from '@/hooks/useFocusIntent';
+import { useFocusIntentForRace, useDismissFocusIntent } from '@/hooks/useFocusIntent';
 
 // Team collaboration components
 import {
@@ -232,8 +233,8 @@ function ChecklistItem({
         {hasLearningLink && (
           <Pressable
             style={styles.learnBadge}
-            onPress={onLearnPress}
-            onLongPress={onShowTooltip}
+            onPress={onLearnPress || (() => {})}
+            onLongPress={onShowTooltip || (() => {})}
             delayLongPress={300}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel={tooltipText}
@@ -475,6 +476,7 @@ export function DaysBeforeContent({
 
   // Focus intent for this race (set from a previous race's review)
   const { focusIntent } = useFocusIntentForRace(race.id);
+  const { dismiss: dismissFocusIntent, isPending: isDismissingFocus } = useDismissFocusIntent();
 
   // State for team invite modal
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -1093,6 +1095,14 @@ export function DaysBeforeContent({
           <View style={styles.focusIntentHeader}>
             <Target size={14} color={IOS_COLORS.teal} />
             <Text style={styles.focusIntentLabel}>Your Focus</Text>
+            <Pressable
+              style={styles.focusIntentDismiss}
+              onPress={() => dismissFocusIntent(focusIntent.id)}
+              disabled={isDismissingFocus}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <X size={14} color={IOS_COLORS.gray} />
+            </Pressable>
           </View>
           <Text style={styles.focusIntentText} numberOfLines={2}>
             "{focusIntent.focusText}"
@@ -1990,11 +2000,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   focusIntentLabel: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '600',
     color: IOS_COLORS.teal,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  focusIntentDismiss: {
+    padding: 4,
+    borderRadius: 10,
+    backgroundColor: `${IOS_COLORS.gray}15`,
   },
   focusIntentText: {
     fontSize: 15,

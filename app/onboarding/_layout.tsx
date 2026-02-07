@@ -13,25 +13,19 @@ export default function OnboardingLayout() {
             {/* === NEW STRAVA-INSPIRED FLOW === */}
 
             {/* Phase 1: Value Showcase (Pre-Signup) */}
-            <Stack.Screen name="value/track-races" />
-            <Stack.Screen name="value/prepare-pro" />
-            <Stack.Screen name="value/join-crew" />
+            <Stack.Screen name="value" />
 
             {/* Phase 2: Auth */}
             <Stack.Screen name="auth-choice-new" />
 
             {/* Phase 3: Quick Profile */}
-            <Stack.Screen name="profile/name-photo" />
+            <Stack.Screen name="profile" />
 
             {/* Phase 4: Personalization */}
-            <Stack.Screen name="personalize/boat-picker" />
-            <Stack.Screen name="personalize/location-permission" />
-            <Stack.Screen name="personalize/club-nearby" />
-            <Stack.Screen name="personalize/find-sailors" />
+            <Stack.Screen name="personalize" />
 
             {/* Phase 5: First Activity */}
-            <Stack.Screen name="first-activity/race-calendar" />
-            <Stack.Screen name="first-activity/add-race" />
+            <Stack.Screen name="first-activity" />
 
             {/* === LEGACY FLOW (kept for gradual migration) === */}
 

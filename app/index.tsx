@@ -9,6 +9,7 @@ import { ScrollFix } from '@/components/landing/ScrollFix';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { useAuth } from '@/providers/AuthProvider';
+import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { hasPersistedSessionHint, hasPersistedSessionHintAsync } from '@/services/supabase';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -60,9 +61,19 @@ export default function LandingPage() {
     } else if (ready && !signedIn && !isGuest && !bypassRedirect) {
       // Platform-specific behavior for non-logged-in users:
       // - Web: Show landing page (marketing content) - no redirect
-      // - Mobile: Enter guest mode for browsing without login
+      // - Mobile: Show onboarding first (if not seen), then enter guest mode
       if (Platform.OS !== 'web') {
-        enterGuestMode();
+        // Check if user has seen onboarding before auto-entering guest mode
+        OnboardingStateService.hasSeenOnboarding().then((hasSeen) => {
+          if (hasSeen) {
+            // Returning user who has seen onboarding - enter guest mode directly
+            enterGuestMode();
+          } else {
+            // New user - show onboarding flow first
+            setIsRedirecting(true);
+            router.replace('/onboarding');
+          }
+        });
       }
       // On web, do nothing - let the landing page render below
 

@@ -16,7 +16,8 @@ import React, {
   useEffect,
   useState,
 } from 'react';
-import { StyleSheet, View, ScrollView, Pressable } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 import {
   CardGridProps,
@@ -58,7 +59,11 @@ interface CardGridWebProps extends CardGridProps {
     timelineRaces?: Array<{ id: string; date: string; raceType?: 'fleet' | 'distance' | 'match' | 'team'; seriesName?: string; name?: string }>,
     currentRaceIndex?: number,
     onSelectRace?: (index: number) => void,
-    nextRaceIndex?: number
+    nextRaceIndex?: number,
+    // Handler for card press (navigation to this card when clicking partially visible cards)
+    onCardPress?: () => void,
+    // Refetch trigger for AfterRaceContent
+    refetchTrigger?: number
   ) => React.ReactNode;
 }
 
@@ -81,6 +86,7 @@ function CardGridComponent({
   onOpenPostRaceInterview,
   nextRaceIndex,
   topInset,
+  refetchTrigger,
 }: CardGridWebProps & { nextRaceIndex?: number | null; topInset?: number }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
@@ -96,6 +102,11 @@ function CardGridComponent({
     calculateCardDimensions(containerWidth, typeof window !== 'undefined' ? window.innerHeight : 667)
   );
   const [currentRaceIndex, setCurrentRaceIndex] = useState(initialRaceIndex);
+  const [isHovering, setIsHovering] = useState(false);
+
+  // Calculate arrow visibility
+  const showLeftArrow = currentRaceIndex > 0;
+  const showRightArrow = currentRaceIndex < races.length - 1;
 
   // Observe container width changes (e.g. shelf open/close)
   useEffect(() => {
@@ -252,7 +263,7 @@ function CardGridComponent({
       };
 
       return (
-        <Pressable
+        <View
           key={race.id}
           style={[
             styles.card,
@@ -264,7 +275,6 @@ function CardGridComponent({
               transform: [{ scale: isActive ? 1 : 0.95 }],
             },
           ]}
-          onPress={handleCardPress}
         >
           {renderCardContent(
             race,
@@ -286,9 +296,13 @@ function CardGridComponent({
             timeAxisRaces,
             currentRaceIndex,
             goToRace,
-            nextRaceIndex ?? undefined
+            nextRaceIndex ?? undefined,
+            // Card press handler for navigation (clicking partially visible cards)
+            handleCardPress,
+            // Refetch trigger for AfterRaceContent
+            refetchTrigger
           )}
-        </Pressable>
+        </View>
       );
     },
     [
@@ -304,6 +318,7 @@ function CardGridComponent({
       onRaceComplete,
       onOpenPostRaceInterview,
       races.length,
+      refetchTrigger,
     ]
   );
 
@@ -320,7 +335,14 @@ function CardGridComponent({
   }
 
   return (
-    <View ref={containerRef} style={[styles.container, style]} testID={testID}>
+    <View
+      ref={containerRef}
+      style={[styles.container, style]}
+      testID={testID}
+      // @ts-ignore - web-only mouse handlers
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+    >
       <ScrollView
         ref={horizontalScrollRef}
         horizontal
@@ -346,6 +368,29 @@ function CardGridComponent({
           return renderCard(race, raceIndex);
         })}
       </ScrollView>
+
+      {/* Navigation Arrows - appear on hover */}
+      {isHovering && showLeftArrow && (
+        <TouchableOpacity
+          style={[styles.navArrow, styles.navArrowLeft]}
+          onPress={() => goToRace(currentRaceIndex - 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Previous race"
+        >
+          <ChevronLeft size={32} color={IOS_COLORS.blue} />
+        </TouchableOpacity>
+      )}
+      {isHovering && showRightArrow && (
+        <TouchableOpacity
+          style={[styles.navArrow, styles.navArrowRight]}
+          onPress={() => goToRace(currentRaceIndex + 1)}
+          accessibilityRole="button"
+          accessibilityLabel="Next race"
+        >
+          <ChevronRight size={32} color={IOS_COLORS.blue} />
+        </TouchableOpacity>
+      )}
+
       {/* TimelineTimeAxis moved inside RaceSummaryCard footer for compactness */}
     </View>
   );
@@ -386,6 +431,29 @@ const styles = StyleSheet.create({
     // @ts-ignore - Web-only property
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
     transition: 'transform 0.2s ease, opacity 0.2s ease',
+  },
+  navArrow: {
+    position: 'absolute',
+    top: '50%',
+    // @ts-ignore - web-only
+    transform: 'translateY(-50%)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // @ts-ignore - web-only
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+    // @ts-ignore - web-only
+    cursor: 'pointer',
+    zIndex: 10,
+  },
+  navArrowLeft: {
+    left: 16,
+  },
+  navArrowRight: {
+    right: 16,
   },
 });
 

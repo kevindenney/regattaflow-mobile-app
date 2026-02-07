@@ -329,6 +329,8 @@ export interface CardGridProps {
   toolbarHidden?: boolean;
   /** Scroll handler forwarded to card content for toolbar hide/show */
   onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void;
+  /** Incrementing counter to trigger data refetch in AfterRaceContent */
+  refetchTrigger?: number;
 }
 
 /**
@@ -385,6 +387,10 @@ export interface CardContentProps {
   nextRaceIndex?: number;
   /** Scroll handler forwarded from parent for toolbar hide/show */
   onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void;
+  /** Handler for card press (navigation to this card when clicking partially visible cards) */
+  onCardPress?: () => void;
+  /** Incrementing counter to trigger data refetch (e.g., after PostRaceInterview completes) */
+  refetchTrigger?: number;
 }
 
 // =============================================================================

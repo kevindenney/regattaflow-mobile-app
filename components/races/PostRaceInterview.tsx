@@ -114,6 +114,7 @@ export function PostRaceInterview({
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [hasMorningIntentions, setHasMorningIntentions] = useState<boolean | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Check if there are morning intentions for this race
   useEffect(() => {
@@ -147,6 +148,105 @@ export function PostRaceInterview({
     checkMorningIntentions();
   }, [visible, raceId]);
 
+  // Load existing session data when editing (pre-fill form)
+  useEffect(() => {
+    if (!visible || !sessionId) {
+      return;
+    }
+
+    async function loadExistingData() {
+      try {
+        logger.debug('[POST_RACE_EDIT] Loading existing session data', { sessionId });
+        const { data, error } = await supabase
+          .from('race_timer_sessions')
+          .select('self_reported_position, self_reported_fleet_size, key_moment, notes, race_count, race_results')
+          .eq('id', sessionId)
+          .single();
+
+        if (error) {
+          logger.warn('[POST_RACE_EDIT] Error loading session data:', error);
+          return;
+        }
+
+        if (!data) {
+          logger.debug('[POST_RACE_EDIT] No existing data found');
+          return;
+        }
+
+        logger.debug('[POST_RACE_EDIT] Found existing data', {
+          position: data.self_reported_position,
+          fleetSize: data.self_reported_fleet_size,
+          hasNotes: !!data.notes,
+          raceCount: data.race_count,
+        });
+
+        // Parse existing data to pre-fill form
+        const raceCount = data.race_count || 1;
+        let raceResults: RaceResultEntry[] = createInitialRaceResults(raceCount);
+
+        // If we have per-race results, use them
+        if (data.race_results && Array.isArray(data.race_results)) {
+          raceResults = data.race_results.map((r: any, i: number) => ({
+            raceNumber: r.race_number || i + 1,
+            position: r.position?.toString() || '',
+            fleetSize: r.fleet_size?.toString() || '',
+            keyMoment: r.key_moment || '',
+          }));
+          // Ensure we have enough entries
+          while (raceResults.length < raceCount) {
+            raceResults.push({
+              raceNumber: raceResults.length + 1,
+              position: '',
+              fleetSize: '',
+              keyMoment: '',
+            });
+          }
+        } else if (data.self_reported_position || data.key_moment) {
+          // Fall back to single-race data
+          raceResults[0] = {
+            raceNumber: 1,
+            position: data.self_reported_position?.toString() || '',
+            fleetSize: data.self_reported_fleet_size?.toString() || '',
+            keyMoment: data.key_moment || '',
+          };
+        }
+
+        // Parse notes to extract narrative and start end (if stored in combined format)
+        let narrative = '';
+        let startEnd: 'pin' | 'middle' | 'boat' | null = null;
+        let notes = '';
+
+        if (data.notes) {
+          const noteLines = data.notes.split('\n\n');
+          for (const line of noteLines) {
+            if (line.startsWith('Start: ')) {
+              const startValue = line.replace('Start: ', '').replace(' end', '').toLowerCase();
+              if (startValue === 'pin' || startValue === 'middle' || startValue === 'boat') {
+                startEnd = startValue;
+              }
+            } else if (!narrative) {
+              narrative = line;
+            } else {
+              notes = notes ? notes + '\n\n' + line : line;
+            }
+          }
+        }
+
+        setEntry({
+          raceCount,
+          raceResults,
+          narrative,
+          startEnd,
+          notes,
+        });
+      } catch (err) {
+        logger.error('[POST_RACE_EDIT] Unexpected error loading session data:', err);
+      }
+    }
+
+    loadExistingData();
+  }, [visible, sessionId]);
+
   const resetForm = () => {
     setEntry({
       raceCount: 1,
@@ -178,6 +278,9 @@ export function PostRaceInterview({
 
   // Update a specific race's result
   const updateRaceResult = (raceIndex: number, field: keyof RaceResultEntry, value: string) => {
+    // Clear validation error when user edits
+    if (validationError) setValidationError(null);
+
     setEntry(prev => {
       const newResults = [...prev.raceResults];
       if (newResults[raceIndex]) {
@@ -224,6 +327,34 @@ export function PostRaceInterview({
   };
 
   const handleSubmit = async () => {
+    // DEBUG: Log sessionId at start
+    logger.debug('[POST_RACE_SAVE] handleSubmit called', {
+      sessionId,
+      sessionIdType: typeof sessionId,
+      sessionIdLength: sessionId?.length,
+      hasSessionId: !!sessionId,
+    });
+
+    // Validate: if position is entered, fleet size is required
+    for (const race of entry.raceResults) {
+      if (race.position && !race.fleetSize) {
+        logger.debug('[POST_RACE_SAVE] Validation failed: missing fleet size');
+        setValidationError(`Enter fleet size for race ${entry.raceCount > 1 ? race.raceNumber : ''} result`);
+        return;
+      }
+      // Also validate position <= fleet size
+      if (race.position && race.fleetSize) {
+        const pos = parseInt(race.position, 10);
+        const fleet = parseInt(race.fleetSize, 10);
+        if (pos > fleet) {
+          logger.debug('[POST_RACE_SAVE] Validation failed: position > fleet size');
+          setValidationError(`Position can't be greater than fleet size`);
+          return;
+        }
+      }
+    }
+
+    setValidationError(null);
     setIsSubmitting(true);
 
     try {
@@ -252,20 +383,47 @@ export function PostRaceInterview({
       // Primary key moment: first non-empty key moment
       const primaryKeyMoment = entry.raceResults.find(r => r.keyMoment?.trim())?.keyMoment || null;
 
+      // DEBUG: Log what we're about to save
+      const updatePayload = {
+        notes: fullNotes || null,
+        key_moment: primaryKeyMoment,
+        self_reported_position: position,
+        self_reported_fleet_size: fleetSize,
+        race_count: entry.raceCount,
+        race_results: raceResultsJson.length > 0 ? raceResultsJson : null,
+      };
+      logger.debug('[POST_RACE_SAVE] About to update race_timer_sessions', {
+        sessionId,
+        updatePayload,
+      });
+
       // Save to database
-      const { error } = await supabase
+      const { error, data, count } = await supabase
         .from('race_timer_sessions')
-        .update({
-          notes: fullNotes || null,
-          key_moment: primaryKeyMoment,
-          self_reported_position: position,
-          self_reported_fleet_size: fleetSize,
-          race_count: entry.raceCount,
-          race_results: raceResultsJson.length > 0 ? raceResultsJson : null,
-        })
-        .eq('id', sessionId);
+        .update(updatePayload)
+        .eq('id', sessionId)
+        .select();
+
+      // DEBUG: Log result
+      logger.debug('[POST_RACE_SAVE] Supabase update result', {
+        error: error ? { message: error.message, code: error.code, details: error.details } : null,
+        dataReturned: data,
+        rowCount: data?.length ?? 0,
+      });
 
       if (error) throw error;
+
+      // DEBUG: Verify the save by re-reading
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('race_timer_sessions')
+        .select('id, self_reported_position, self_reported_fleet_size, key_moment, notes')
+        .eq('id', sessionId)
+        .single();
+
+      logger.debug('[POST_RACE_SAVE] Verification read', {
+        verifyData,
+        verifyError: verifyError ? { message: verifyError.message } : null,
+      });
 
       // Trigger adaptive learning extraction in background (don't await)
       if (user?.id && raceId && (entry.narrative.trim() || entry.raceResults.some(r => r.keyMoment?.trim()))) {
@@ -478,25 +636,22 @@ export function PostRaceInterview({
         />
       </View>
 
-      {/* Start End */}
+      {/* Start End - iOS Segmented Control Style */}
       <View style={styles.fieldGroup}>
         <Text style={styles.fieldLabel}>Start</Text>
-        <View style={styles.radioGroup}>
+        <View style={styles.segmentedControl}>
           {(['pin', 'middle', 'boat'] as const).map((option) => (
             <TouchableOpacity
               key={option}
-              style={styles.radioOption}
+              style={[
+                styles.segmentedOption,
+                entry.startEnd === option && styles.segmentedOptionSelected
+              ]}
               onPress={() => setEntry({ ...entry, startEnd: entry.startEnd === option ? null : option })}
             >
-              <View style={[
-                styles.radioCircle,
-                entry.startEnd === option && styles.radioCircleSelected
-              ]}>
-                {entry.startEnd === option && <View style={styles.radioInner} />}
-              </View>
               <Text style={[
-                styles.radioLabel,
-                entry.startEnd === option && styles.radioLabelSelected
+                styles.segmentedLabel,
+                entry.startEnd === option && styles.segmentedLabelSelected
               ]}>
                 {option.charAt(0).toUpperCase() + option.slice(1)}
               </Text>
@@ -519,6 +674,11 @@ export function PostRaceInterview({
           textAlignVertical="top"
         />
       </View>
+
+      {/* Validation Error */}
+      {validationError && (
+        <Text style={styles.validationError}>{validationError}</Text>
+      )}
 
       {/* Done Button */}
       <TouchableOpacity
@@ -652,8 +812,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 16 : 12,
-    paddingBottom: 8,
+    paddingTop: Platform.OS === 'ios' ? 12 : 8,
+    paddingBottom: 4,
   },
   headerSpacer: {
     width: 24,
@@ -665,15 +825,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
   },
   header: {
-    marginBottom: 32,
-    marginTop: 8,
+    marginBottom: 20,
+    marginTop: 4,
   },
   raceName: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: IOS_COLORS.label,
     letterSpacing: -0.5,
@@ -686,7 +846,7 @@ const styles = StyleSheet.create({
   raceCountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   raceCountButtons: {
     flexDirection: 'row',
@@ -694,9 +854,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   raceCountButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: IOS_COLORS.separator,
     justifyContent: 'center',
@@ -707,7 +867,7 @@ const styles = StyleSheet.create({
     borderColor: IOS_COLORS.label,
   },
   raceCountButtonText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
     color: IOS_COLORS.secondaryLabel,
   },
@@ -715,7 +875,7 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.systemBackground,
   },
   raceResultSection: {
-    marginBottom: 8,
+    marginBottom: 4,
   },
   raceNumberLabel: {
     fontSize: 13,
@@ -728,12 +888,12 @@ const styles = StyleSheet.create({
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   fieldLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: IOS_COLORS.secondaryLabel,
-    width: 80,
+    width: 70,
   },
   resultInputs: {
     flexDirection: 'row',
@@ -744,11 +904,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '500',
     color: IOS_COLORS.label,
-    borderBottomWidth: 1,
-    borderBottomColor: IOS_COLORS.separator,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    minWidth: 50,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 56,
   },
   resultSeparator: {
     fontSize: 15,
@@ -756,66 +916,65 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
   },
   fieldGroup: {
-    marginBottom: 24,
+    marginBottom: 14,
   },
   textInput: {
-    fontSize: 17,
+    fontSize: 16,
     color: IOS_COLORS.label,
-    borderBottomWidth: 1,
-    borderBottomColor: IOS_COLORS.separator,
-    paddingVertical: 8,
-    marginTop: 8,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 6,
   },
   textArea: {
-    fontSize: 17,
+    fontSize: 16,
     color: IOS_COLORS.label,
-    borderBottomWidth: 1,
-    borderBottomColor: IOS_COLORS.separator,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 6,
+    minHeight: 56,
+  },
+  // iOS Segmented Control (replaces radio buttons)
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderRadius: 8,
+    padding: 2,
+    marginTop: 6,
+  },
+  segmentedOption: {
+    flex: 1,
     paddingVertical: 8,
-    marginTop: 8,
-    minHeight: 60,
-  },
-  radioGroup: {
-    flexDirection: 'row',
-    marginTop: 12,
-    gap: 24,
-  },
-  radioOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: IOS_COLORS.gray3,
-    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 6,
     alignItems: 'center',
   },
-  radioCircleSelected: {
-    borderColor: IOS_COLORS.blue,
+  segmentedOptionSelected: {
+    backgroundColor: IOS_COLORS.systemBackground,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: IOS_COLORS.blue,
-  },
-  radioLabel: {
-    fontSize: 15,
+  segmentedLabel: {
+    fontSize: 13,
+    fontWeight: '500',
     color: IOS_COLORS.secondaryLabel,
   },
-  radioLabelSelected: {
+  segmentedLabelSelected: {
     color: IOS_COLORS.label,
+    fontWeight: '600',
   },
   doneButton: {
-    backgroundColor: IOS_COLORS.label,
+    backgroundColor: IOS_COLORS.blue,
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 20,
   },
   doneButtonDisabled: {
     opacity: 0.5,
@@ -827,7 +986,7 @@ const styles = StyleSheet.create({
   },
   skipButton: {
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   skipButtonText: {
     fontSize: 15,
@@ -838,6 +997,13 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray2,
     textAlign: 'center',
     marginTop: 8,
+  },
+  validationError: {
+    fontSize: 14,
+    color: '#FF3B30',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: -16,
   },
   analyzingContainer: {
     flex: 1,

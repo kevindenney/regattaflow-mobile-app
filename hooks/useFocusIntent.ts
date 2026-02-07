@@ -229,6 +229,40 @@ export function useSetFocusIntent() {
 }
 
 /**
+ * Hook for dismissing (skipping) a focus intent without evaluation (mutation)
+ */
+export function useDismissFocusIntent() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const sailorId = user?.id;
+
+  const mutation = useMutation({
+    mutationFn: async (intentId: string) => {
+      return FocusIntentService.dismissIntent(intentId);
+    },
+    onSuccess: () => {
+      if (!sailorId) return;
+
+      // Invalidate active intent (it's now skipped)
+      queryClient.invalidateQueries({
+        queryKey: FOCUS_INTENT_KEYS.active(sailorId),
+      });
+
+      // Invalidate all focus intent queries to refresh
+      queryClient.invalidateQueries({
+        queryKey: FOCUS_INTENT_KEYS.all,
+      });
+    },
+  });
+
+  return {
+    dismiss: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    error: mutation.error,
+  };
+}
+
+/**
  * Hook for evaluating a focus intent (mutation)
  */
 export function useEvaluateFocusIntent() {

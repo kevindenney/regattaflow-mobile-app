@@ -73,9 +73,10 @@ export function useAllBoatClasses(
       logger.info('[useAllBoatClasses] Fetching boat classes...');
 
       // Fetch boat classes
+      // Note: 'type' is stored in JSONB metadata field, not as a direct column
       const { data: classData, error: classError } = await supabase
         .from('boat_classes')
-        .select('id, name, type, description')
+        .select('id, name, metadata, description')
         .order('name', { ascending: true })
         .limit(limit * 2); // Fetch more initially to account for filtering
 
@@ -125,10 +126,11 @@ export function useAllBoatClasses(
       });
 
       // Build result with counts
+      // Extract 'type' from metadata JSONB field
       const classesWithCounts: BrowseBoatClass[] = classData.map((c) => ({
         id: c.id,
         name: c.name,
-        type: c.type,
+        type: (c.metadata as Record<string, unknown> | null)?.type as string | undefined,
         description: c.description,
         fleetCount: fleetCountMap.get(c.id) || 0,
         sailorCount: sailorCountMap.get(c.id) || 0,

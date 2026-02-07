@@ -91,7 +91,7 @@ export default function LessonPlayerScreen() {
               dbCourseId = dbCourse.id; // Use the database UUID
               courseExistsInDb = true;
             } else {
-              console.warn('[LessonPlayer] Course not found in database. Course needs to be seeded.');
+              console.log('[LessonPlayer] Course not found in database — using catalog-only mode.');
               dbCourseId = null;
               courseExistsInDb = false;
             }
@@ -99,7 +99,7 @@ export default function LessonPlayerScreen() {
             // Check if it's a 406 or other error indicating course doesn't exist
             const isNotFoundError = err?.code === 'PGRST116' || err?.status === 406 || err?.message?.includes('406');
             if (isNotFoundError) {
-              console.warn('[LessonPlayer] Course not found in database (404/406). Course needs to be seeded.');
+              console.log('[LessonPlayer] Course not found in database (404/406) — using catalog-only mode.');
               dbCourseId = null;
               courseExistsInDb = false;
             } else {
@@ -219,7 +219,7 @@ export default function LessonPlayerScreen() {
         const isValidCourseIdUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(enrollmentCourseId);
         
         if (!isValidCourseIdUUID) {
-          console.warn('[LessonPlayer] Course ID is not a valid UUID, trying to find by slug...');
+          console.log('[LessonPlayer] Course ID is not a valid UUID, trying to find by slug...');
           // Try to find the course in database by slug
           const courseSlug = courseData.slug || courseId;
           try {
@@ -233,7 +233,7 @@ export default function LessonPlayerScreen() {
             if (dbCourse?.id) {
               enrollmentCourseId = dbCourse.id;
             } else {
-              console.warn('[LessonPlayer] Course not found in database, cannot check enrollment');
+              console.log('[LessonPlayer] Course not found in database, cannot check enrollment');
             }
           } catch (err) {
             console.warn('[LessonPlayer] Error looking up course:', err);
