@@ -23,11 +23,12 @@ import {
   Map,
 } from 'lucide-react-native';
 import React, { useCallback, useMemo, useState, Component, ErrorInfo } from 'react';
-import { ActionSheetIOS, Alert, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { ActionSheetIOS, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, runOnJS } from 'react-native-reanimated';
 import { IOSSegmentedControl } from '@/components/ui/ios';
+import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { triggerHaptic } from '@/lib/haptics';
 import { useRouter } from 'expo-router';
 
@@ -948,8 +949,8 @@ export function RaceSummaryCard({
         }
       );
     } else {
-      // Android: Use Alert with buttons
-      Alert.alert(
+      // Android/Web: Use cross-platform alert
+      showAlertWithButtons(
         'Race Options',
         undefined,
         [
@@ -959,8 +960,7 @@ export function RaceSummaryCard({
             style: item.variant === 'destructive' ? ('destructive' as const) : ('default' as const),
           })),
           { text: 'Cancel', style: 'cancel' as const },
-        ],
-        { cancelable: true }
+        ]
       );
     }
   }, [canManage, menuItems]);

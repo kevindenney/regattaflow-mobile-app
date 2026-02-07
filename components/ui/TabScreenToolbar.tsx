@@ -298,7 +298,7 @@ export function TabScreenToolbar({
         {subtitle ? (
           <Pressable
             style={styles.subtitleContainer}
-            onPress={onSubtitlePress}
+            onPress={onSubtitlePress ? () => onSubtitlePress() : undefined}
             disabled={!onSubtitlePress}
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
           >

@@ -14,7 +14,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View, Pressable, TouchableOpacity, Modal, Alert } from 'react-native';
+import { StyleSheet, Text, View, Pressable, TouchableOpacity, Modal } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { router } from 'expo-router';
 import {
   Wrench,
@@ -586,7 +587,7 @@ export function DaysBeforeContent({
   // Fetch sails for the boat and show picker or inspection
   const handleSailsAction = useCallback(async () => {
     if (!userBoat) {
-      Alert.alert(
+      showAlertWithButtons(
         'Add a Boat First',
         'To inspect your sails, you need to add a boat to your profile.',
         [
@@ -603,7 +604,7 @@ export function DaysBeforeContent({
       setBoatSails(sails);
 
       if (sails.length === 0) {
-        Alert.alert(
+        showAlertWithButtons(
           'No Sails Found',
           'Add sails to your boat to start inspecting them.',
           [
@@ -621,7 +622,7 @@ export function DaysBeforeContent({
       }
     } catch (error) {
       console.error('[DaysBeforeContent] Failed to fetch sails:', error);
-      Alert.alert('Error', 'Failed to load your sails. Please try again.');
+      showAlert('Error', 'Failed to load your sails. Please try again.');
     } finally {
       setLoadingSails(false);
     }

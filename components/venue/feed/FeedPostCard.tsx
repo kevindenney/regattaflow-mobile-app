@@ -87,7 +87,8 @@ export function FeedPostCard({
         styles.container,
         pressed && styles.containerPressed,
       ]}
-      onPress={onPress}
+      onPress={onPress ?? undefined}
+      disabled={!onPress}
       accessibilityRole="button"
     >
       {/* Author line with avatar, name, badge, and timestamp */}

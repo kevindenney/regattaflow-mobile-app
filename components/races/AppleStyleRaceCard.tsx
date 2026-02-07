@@ -241,7 +241,8 @@ export function AppleStyleRaceCard({
         pressed && styles.cardPressed,
         isPast && styles.cardPast,
       ]}
-      onPress={onPress}
+      onPress={onPress ?? undefined}
+      disabled={!onPress}
       accessible
       accessibilityRole="button"
       accessibilityLabel={`${name} race at ${venue}`}

@@ -208,7 +208,8 @@ export function AppleRaceCard({
         { width: cardWidth, ...(propCardHeight ? { height: propCardHeight } : {}) },
         pressed && styles.cardPressed,
       ]}
-      onPress={onPress}
+      onPress={onPress ?? undefined}
+      disabled={!onPress}
       accessible
       accessibilityRole="button"
       accessibilityLabel={`${name} race at ${venue}`}
