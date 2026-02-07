@@ -109,7 +109,7 @@ function ProfileAvatarButton() {
     transform: [{ scale: scale.value }],
   }));
 
-  const initials = isGuest ? '?' : getInitials(userProfile?.full_name);
+  const initials = isGuest ? '?' : getInitials(userProfile?.full_name || userProfile?.email);
 
   return (
     <AnimatedPressable
