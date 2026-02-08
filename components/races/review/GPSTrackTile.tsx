@@ -27,6 +27,7 @@ import { Navigation, Route, Check, Clock, Gauge, MapPin } from 'lucide-react-nat
 import { triggerHaptic } from '@/lib/haptics';
 import { IOS_ANIMATIONS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 import { supabase } from '@/services/supabase';
+import { LocationPreviewMap } from './LocationPreviewMap';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -70,6 +71,11 @@ export interface GPSTrackTileProps {
   raceId: string;
   userId?: string;
   timerSessionId?: string;
+  /** Race location coordinates (shown on map when no track data) */
+  raceLatitude?: number;
+  raceLongitude?: number;
+  /** Venue display name */
+  raceVenue?: string;
   onPress: () => void;
 }
 
@@ -151,10 +157,16 @@ export function GPSTrackTile({
   raceId,
   userId,
   timerSessionId,
+  raceLatitude,
+  raceLongitude,
+  raceVenue,
   onPress,
 }: GPSTrackTileProps) {
   const [trackData, setTrackData] = useState<TrackData | null>(null);
   const [loading, setLoading] = useState(!!timerSessionId);
+
+  // Location state — use props first, then fetch from DB as fallback
+  const [dbLocation, setDbLocation] = useState<{ lat: number; lng: number; venue?: string } | null>(null);
 
   // Fetch track data
   useEffect(() => {
@@ -187,6 +199,99 @@ export function GPSTrackTile({
     fetchTrack();
     return () => { cancelled = true; };
   }, [timerSessionId]);
+
+  // Fetch race location from regattas table when not provided via props
+  useEffect(() => {
+    if (typeof raceLatitude === 'number' && typeof raceLongitude === 'number') return;
+    if (!raceId) return;
+
+    let cancelled = false;
+
+    async function fetchLocation() {
+      try {
+        const { data } = await supabase
+          .from('regattas')
+          .select('latitude, longitude, metadata')
+          .eq('id', raceId)
+          .single();
+
+        if (cancelled || !data) return;
+
+        const meta = data.metadata as Record<string, any> | undefined;
+        const venue = meta?.venue_name || meta?.venue;
+
+        // 1. Try top-level columns (Supabase may return DECIMAL as string)
+        const lat = parseFloat(String(data.latitude));
+        const lng = parseFloat(String(data.longitude));
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          setDbLocation({ lat, lng, venue });
+          return;
+        }
+
+        // 2. Try metadata coordinate fields
+        if (meta) {
+          if (meta.venue_lat && meta.venue_lng) {
+            setDbLocation({ lat: Number(meta.venue_lat), lng: Number(meta.venue_lng), venue });
+            return;
+          }
+          if (meta.venue_coordinates?.lat && meta.venue_coordinates?.lng) {
+            setDbLocation({ lat: Number(meta.venue_coordinates.lat), lng: Number(meta.venue_coordinates.lng), venue });
+            return;
+          }
+          if (meta.racing_area_coordinates?.lat && meta.racing_area_coordinates?.lng) {
+            setDbLocation({ lat: Number(meta.racing_area_coordinates.lat), lng: Number(meta.racing_area_coordinates.lng), venue });
+            return;
+          }
+          if (meta.start_coordinates?.lat && meta.start_coordinates?.lng) {
+            setDbLocation({ lat: Number(meta.start_coordinates.lat), lng: Number(meta.start_coordinates.lng), venue });
+            return;
+          }
+
+          // 3. Lookup via sailing_venues table using venue_id
+          if (meta.venue_id) {
+            const { data: venueData } = await supabase
+              .from('sailing_venues')
+              .select('coordinates_lat, coordinates_lng, name')
+              .eq('id', meta.venue_id)
+              .single();
+
+            if (!cancelled && venueData?.coordinates_lat && venueData?.coordinates_lng) {
+              setDbLocation({
+                lat: Number(venueData.coordinates_lat),
+                lng: Number(venueData.coordinates_lng),
+                venue: venue || venueData.name,
+              });
+              return;
+            }
+          }
+
+          // 4. Fallback: search sailing_venues by name when venue_name exists but no venue_id
+          if (venue && !meta.venue_id) {
+            const { data: venueRows } = await supabase
+              .from('sailing_venues')
+              .select('coordinates_lat, coordinates_lng, name')
+              .ilike('name', `%${venue}%`)
+              .limit(1);
+
+            const match = venueRows?.[0];
+            if (!cancelled && match?.coordinates_lat && match?.coordinates_lng) {
+              setDbLocation({
+                lat: Number(match.coordinates_lat),
+                lng: Number(match.coordinates_lng),
+                venue: venue || match.name,
+              });
+              return;
+            }
+          }
+        }
+      } catch {
+        // silently fail
+      }
+    }
+
+    fetchLocation();
+    return () => { cancelled = true; };
+  }, [raceId, raceLatitude, raceLongitude]);
 
   // Stats
   const stats = useMemo(() => {
@@ -238,8 +343,14 @@ export function GPSTrackTile({
     onPress();
   };
 
-  // Don't render if there's no timer session at all
-  if (!timerSessionId) return null;
+  // Resolved location: props take priority, then DB fetch
+  const resolvedLat = typeof raceLatitude === 'number' ? raceLatitude : dbLocation?.lat;
+  const resolvedLng = typeof raceLongitude === 'number' ? raceLongitude : dbLocation?.lng;
+  const resolvedVenue = raceVenue || dbLocation?.venue;
+  const hasRaceLocation = typeof resolvedLat === 'number' && typeof resolvedLng === 'number';
+
+  // Don't render if there's no timer session AND no race location
+  if (!timerSessionId && !hasRaceLocation) return null;
 
   return (
     <AnimatedPressable
@@ -299,6 +410,21 @@ export function GPSTrackTile({
               fill="#FF3B30"
             />
           </Svg>
+        ) : hasRaceLocation ? (
+          <View style={styles.locationMapContainer}>
+            <LocationPreviewMap
+              latitude={resolvedLat!}
+              longitude={resolvedLng!}
+              width={mapWidth}
+              height={MAP_HEIGHT}
+            />
+            <View style={styles.noTrackOverlay}>
+              <View style={styles.noTrackBadge}>
+                <Route size={12} color={COLORS.gray} />
+                <Text style={styles.noTrackBadgeText}>No track data</Text>
+              </View>
+            </View>
+          </View>
         ) : (
           <View style={styles.emptyMap}>
             <Route size={32} color={COLORS.gray3} />
@@ -324,6 +450,11 @@ export function GPSTrackTile({
             <MapPin size={12} color={COLORS.orange} />
             <Text style={styles.statValue}>{stats.distance.toFixed(2)} nm</Text>
           </View>
+        </View>
+      ) : !loading && hasRaceLocation && resolvedVenue ? (
+        <View style={styles.statsRow}>
+          <MapPin size={12} color={COLORS.teal} />
+          <Text style={styles.statsPlaceholder} numberOfLines={1}>{resolvedVenue}</Text>
         </View>
       ) : !loading ? (
         <View style={styles.statsRow}>
@@ -400,6 +531,46 @@ const styles = StyleSheet.create({
   emptyMapText: {
     fontSize: 13,
     fontWeight: '500',
+    color: COLORS.gray,
+  },
+  locationMapContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  noTrackOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  noTrackBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.1)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+      },
+    }),
+  },
+  noTrackBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
     color: COLORS.gray,
   },
   statsRow: {
