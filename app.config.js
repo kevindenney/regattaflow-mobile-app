@@ -22,16 +22,15 @@ module.exports = {
     splash: {
       image: './assets/images/splash-icon.png',
       resizeMode: 'contain',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#0a1832',
     },
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.regattaflow.app',
       buildNumber: '2',
       usesAppleSignIn: true,
-      config: {
-        googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY,
-      },
+      // googleMapsApiKey removed from config — handled by withGoogleMaps plugin
+      // to avoid Expo's built-in autolinking which generates a broken podspec reference
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         NSLocationWhenInUseUsageDescription:

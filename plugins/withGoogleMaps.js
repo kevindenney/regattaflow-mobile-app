@@ -29,8 +29,9 @@ const withGoogleMaps = (config) => {
 
         // Remove the auto-generated react-native-maps block that uses wrong podspec name
         // This block is added by Expo autolinking but references non-existent 'react-native-google-maps'
+        // Match the block with optional trailing content on the begin/end lines (e.g. sync hashes, comments)
         podfileContent = podfileContent.replace(
-          /# @generated begin react-native-maps[\s\S]*?# @generated end react-native-maps\n?/g,
+          /# @generated begin react-native-maps[^\n]*\n[\s\S]*?# @generated end react-native-maps[^\n]*\n?/g,
           ''
         );
 

@@ -18,7 +18,7 @@ const rootDir = join(__dirname, '..');
 // Configuration
 const OUTPUT_SIZE = 1024; // Output image size (square)
 const LOGO_SIZE = 400;    // Logo size on splash screen
-const BG_COLOR = '#ffffff';
+const BG_COLOR = '#0a1832';
 
 async function generateSplash() {
   console.log('Generating splash screen...');
