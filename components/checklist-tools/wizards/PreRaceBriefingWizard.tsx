@@ -12,10 +12,11 @@
  * - Scoring: Formula, handicaps, prizes
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
+  TextInput,
   ScrollView,
   Pressable,
   StyleSheet,
@@ -46,11 +47,28 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronRight,
+  Wind,
+  Sailboat,
+  Triangle,
+  Award,
+  Plus,
+  Trash2,
+  Hash,
+  Anchor,
+  Phone,
+  MessageCircle,
 } from 'lucide-react-native';
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
 import { supabase } from '@/services/supabase';
 import { DemoRaceService } from '@/services/DemoRaceService';
+import { useRacePreparation } from '@/hooks/useRacePreparation';
+import type { BriefingSchedule, BriefingComms } from '@/types/raceIntentions';
 import CourseMapView from '@/components/courses/CourseMapView';
+import {
+  courseTemplateService,
+  type CourseTemplate,
+  type CourseMark as TemplateCourseMark,
+} from '@/services/CourseTemplateService';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -89,6 +107,11 @@ interface PreRaceBriefingWizardProps extends ChecklistToolProps {
 }
 
 interface ExtractedRaceData {
+  // Document Links
+  notice_of_race_url?: string;
+  sailing_instructions_url?: string;
+  supplementary_si_url?: string;
+  entry_form_url?: string;
   // Schedule
   schedule?: Array<{
     date: string;
@@ -98,6 +121,16 @@ interface ExtractedRaceData {
     mandatory?: boolean;
   }>;
   entry_deadline?: string;
+  // Schedule - editable fields
+  number_of_races?: number;
+  number_of_classes?: number;
+  start_order?: string[];
+  my_class_start_number?: number;
+  class_flag?: string;
+  social_events?: Array<{ time: string; event: string; location?: string }>;
+  awards_ceremony?: { time: string; location?: string; details?: string };
+  meet_at_dock_time?: string;
+  depart_dock_time?: string;
   // Course
   start_area_name?: string;
   start_area_description?: string;
@@ -215,6 +248,7 @@ interface CourseMark {
     latitude: number;
     longitude: number;
   };
+  color?: string;
 }
 
 function convertToMarks(raceData: ExtractedRaceData): CourseMark[] {
@@ -328,7 +362,11 @@ async function fetchRaceData(regattaId: string): Promise<ExtractedRaceData | nul
         contact_email,
         class_rules,
         prizes_description,
-        route_waypoints
+        route_waypoints,
+        notice_of_race_url,
+        sailing_instructions_url,
+        supplementary_si_url,
+        entry_form_url
       `)
       .eq('id', regattaId)
       .single();
@@ -396,6 +434,172 @@ function EmptySection({ message }: { message: string }) {
   );
 }
 
+// Document links card - shows NOR/SI links when available, and allows adding new ones
+function DocumentLinksCard({
+  raceData,
+  message,
+  onSaveUrl,
+}: {
+  raceData: ExtractedRaceData | null;
+  message: string;
+  onSaveUrl?: (field: 'notice_of_race_url' | 'sailing_instructions_url', url: string) => void;
+}) {
+  const [norInput, setNorInput] = useState('');
+  const [siInput, setSiInput] = useState('');
+  const [savingField, setSavingField] = useState<string | null>(null);
+
+  const hasNor = !!raceData?.notice_of_race_url;
+  const hasSi = !!raceData?.sailing_instructions_url;
+  const hasSupSi = !!raceData?.supplementary_si_url;
+  const hasEntryForm = !!raceData?.entry_form_url;
+  const hasEventSite = !!raceData?.event_website;
+  const hasAnyLink = hasNor || hasSi || hasSupSi || hasEntryForm || hasEventSite;
+
+  const handleSave = async (field: 'notice_of_race_url' | 'sailing_instructions_url', url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed || !onSaveUrl) return;
+    // Basic URL validation
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return;
+    setSavingField(field);
+    try {
+      await onSaveUrl(field, trimmed);
+      if (field === 'notice_of_race_url') setNorInput('');
+      else setSiInput('');
+    } finally {
+      setSavingField(null);
+    }
+  };
+
+  return (
+    <View style={styles.emptySection}>
+      <FileText size={40} color={IOS_COLORS.gray3} style={{ marginBottom: 12 }} />
+      <Text style={styles.emptySectionText}>{message}</Text>
+
+      {/* Existing document links */}
+      {hasAnyLink && (
+        <View style={styles.docLinksContainer}>
+          {hasNor && (
+            <Pressable
+              style={styles.docLinkButton}
+              onPress={() => Linking.openURL(raceData!.notice_of_race_url!)}
+            >
+              <FileText size={16} color={IOS_COLORS.blue} />
+              <Text style={styles.docLinkText}>Notice of Race</Text>
+              <ExternalLink size={14} color={IOS_COLORS.blue} />
+            </Pressable>
+          )}
+          {hasSi && (
+            <Pressable
+              style={styles.docLinkButton}
+              onPress={() => Linking.openURL(raceData!.sailing_instructions_url!)}
+            >
+              <FileText size={16} color={IOS_COLORS.purple} />
+              <Text style={styles.docLinkText}>Sailing Instructions</Text>
+              <ExternalLink size={14} color={IOS_COLORS.blue} />
+            </Pressable>
+          )}
+          {hasSupSi && (
+            <Pressable
+              style={styles.docLinkButton}
+              onPress={() => Linking.openURL(raceData!.supplementary_si_url!)}
+            >
+              <FileText size={16} color={IOS_COLORS.orange} />
+              <Text style={styles.docLinkText}>Supplementary SI</Text>
+              <ExternalLink size={14} color={IOS_COLORS.blue} />
+            </Pressable>
+          )}
+          {hasEntryForm && (
+            <Pressable
+              style={styles.docLinkButton}
+              onPress={() => Linking.openURL(raceData!.entry_form_url!)}
+            >
+              <FileText size={16} color={IOS_COLORS.green} />
+              <Text style={styles.docLinkText}>Entry Form</Text>
+              <ExternalLink size={14} color={IOS_COLORS.blue} />
+            </Pressable>
+          )}
+          {hasEventSite && (
+            <Pressable
+              style={styles.docLinkButton}
+              onPress={() => Linking.openURL(raceData!.event_website!)}
+            >
+              <ExternalLink size={16} color={IOS_COLORS.blue} />
+              <Text style={styles.docLinkText}>Event Website</Text>
+              <ExternalLink size={14} color={IOS_COLORS.blue} />
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* URL input fields for missing documents */}
+      {onSaveUrl && (!hasNor || !hasSi) && (
+        <View style={styles.docLinksContainer}>
+          {!hasNor && (
+            <View style={styles.urlInputRow}>
+              <TextInput
+                style={styles.urlInput}
+                value={norInput}
+                onChangeText={setNorInput}
+                placeholder="Paste NOR link (https://...)"
+                placeholderTextColor={IOS_COLORS.gray}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="go"
+                onSubmitEditing={() => handleSave('notice_of_race_url', norInput)}
+              />
+              <Pressable
+                style={[
+                  styles.urlSaveButton,
+                  (!norInput.trim() || savingField === 'notice_of_race_url') && styles.urlSaveButtonDisabled,
+                ]}
+                onPress={() => handleSave('notice_of_race_url', norInput)}
+                disabled={!norInput.trim() || savingField === 'notice_of_race_url'}
+              >
+                {savingField === 'notice_of_race_url' ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.urlSaveButtonText}>Link NOR</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+          {!hasSi && (
+            <View style={styles.urlInputRow}>
+              <TextInput
+                style={styles.urlInput}
+                value={siInput}
+                onChangeText={setSiInput}
+                placeholder="Paste SI link (https://...)"
+                placeholderTextColor={IOS_COLORS.gray}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                returnKeyType="go"
+                onSubmitEditing={() => handleSave('sailing_instructions_url', siInput)}
+              />
+              <Pressable
+                style={[
+                  styles.urlSaveButton,
+                  (!siInput.trim() || savingField === 'sailing_instructions_url') && styles.urlSaveButtonDisabled,
+                ]}
+                onPress={() => handleSave('sailing_instructions_url', siInput)}
+                disabled={!siInput.trim() || savingField === 'sailing_instructions_url'}
+              >
+                {savingField === 'sailing_instructions_url' ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.urlSaveButtonText}>Link SI</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // Section header
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -420,6 +624,33 @@ export function PreRaceBriefingWizard({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  // Course layout state
+  const [selectedCourseType, setSelectedCourseType] = useState<'windward_leeward' | 'triangle' | 'olympic' | null>(null);
+  const [windDirection, setWindDirection] = useState<number>(225); // Default SW
+  const [courseTemplates, setCourseTemplates] = useState<CourseTemplate[]>([]);
+
+  // Race preparation hook for persisting schedule & comms data
+  const {
+    intentions,
+    updateIntentions,
+    isLoading: isPreparationLoading,
+  } = useRacePreparation({ regattaId });
+
+  // Schedule editable state
+  const [scheduleData, setScheduleData] = useState({
+    numberOfRaces: 0,
+    numberOfClasses: 0,
+    startOrder: [] as string[],
+    myClassStartNumber: undefined as number | undefined,
+    classFlag: '',
+    socialEvents: [] as Array<{ time: string; event: string; location?: string }>,
+    meetAtDockTime: '',
+    departDockTime: '',
+  });
+
+  // Comms editable state
+  const [commsData, setCommsData] = useState<BriefingComms>({});
+
   // Fetch race data on mount
   useEffect(() => {
     if (!regattaId) {
@@ -442,6 +673,101 @@ export function PreRaceBriefingWizard({
 
     loadData();
   }, [regattaId]);
+
+  // Sync schedule data from intentions first, then raceData as fallback
+  useEffect(() => {
+    const saved = intentions?.briefingSchedule;
+    if (saved) {
+      setScheduleData({
+        numberOfRaces: saved.numberOfRaces ?? 0,
+        numberOfClasses: saved.numberOfClasses ?? 0,
+        startOrder: saved.startOrder ?? [],
+        myClassStartNumber: saved.myClassStartNumber,
+        classFlag: saved.classFlag ?? '',
+        socialEvents: saved.socialEvents ?? [],
+        meetAtDockTime: saved.meetAtDockTime ?? '',
+        departDockTime: saved.departDockTime ?? '',
+      });
+    } else if (raceData) {
+      setScheduleData({
+        numberOfRaces: raceData.number_of_races ?? 0,
+        numberOfClasses: raceData.number_of_classes ?? 0,
+        startOrder: raceData.start_order ?? [],
+        myClassStartNumber: raceData.my_class_start_number,
+        classFlag: raceData.class_flag ?? '',
+        socialEvents: raceData.social_events ?? [],
+        meetAtDockTime: raceData.meet_at_dock_time ?? '',
+        departDockTime: raceData.depart_dock_time ?? '',
+      });
+    }
+  }, [raceData, intentions?.briefingSchedule]);
+
+  // Sync comms data from intentions
+  useEffect(() => {
+    const saved = intentions?.briefingComms;
+    if (saved) {
+      setCommsData(saved);
+    }
+  }, [intentions?.briefingComms]);
+
+  // Generate course templates when race data + wind direction available
+  useEffect(() => {
+    if (!raceData) return;
+
+    const center = getCenterCoordinate(raceData);
+    if (!center) return;
+
+    const racingArea = {
+      north: center.latitude + 0.01,
+      south: center.latitude - 0.01,
+      east: center.longitude + 0.01,
+      west: center.longitude - 0.01,
+      center: { lat: center.latitude, lng: center.longitude },
+    };
+
+    const windForecast = {
+      direction: windDirection,
+      speed: 12,
+      time: raceDate || new Date().toISOString(),
+      source: 'Manual',
+    };
+
+    courseTemplateService
+      .generateTemplates(racingArea, windForecast, 'Dragon', windForecast.time)
+      .then(setCourseTemplates)
+      .catch(() => {});
+  }, [raceData, windDirection, raceDate]);
+
+  // Convert selected course template marks to CourseMapView format
+  const courseLayoutMarks = useMemo((): CourseMark[] => {
+    if (!selectedCourseType || courseTemplates.length === 0) return [];
+
+    const template = courseTemplates.find((t) => t.type === selectedCourseType);
+    if (!template) return [];
+
+    return template.marks.map((m, idx) => {
+      let markType: CourseMark['type'] = 'mark';
+      if (m.type === 'start_pin' || m.type === 'start_boat') markType = 'start';
+      else if (m.type === 'finish') markType = 'finish';
+      else if (m.type === 'gate') markType = 'gate';
+
+      return {
+        id: `layout-${idx}`,
+        name: m.name,
+        type: markType,
+        coordinates: { latitude: m.latitude, longitude: m.longitude },
+        color: m.color,
+      };
+    });
+  }, [selectedCourseType, courseTemplates]);
+
+  // Helper to convert degrees to cardinal direction
+  const degreesToCardinal = useCallback((degrees: number): string => {
+    const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+      'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const index = Math.round(((degrees % 360) + 360) % 360 / 22.5) % 16;
+    return directions[index];
+  }, []);
 
   // Mark section as reviewed
   const markSectionReviewed = useCallback((sectionId: string) => {
@@ -482,88 +808,490 @@ export function PreRaceBriefingWizard({
   // Check if section has data
   const sectionHasData = useCallback(
     (tabId: TabId): boolean => {
-      if (!raceData) return false;
-
       switch (tabId) {
         case 'schedule':
           return !!(
-            raceData.schedule?.length ||
-            raceData.entry_deadline ||
-            raceData.start_date
+            raceData?.schedule?.length ||
+            raceData?.entry_deadline ||
+            raceData?.start_date ||
+            scheduleData.numberOfRaces ||
+            scheduleData.numberOfClasses ||
+            scheduleData.startOrder.length ||
+            scheduleData.socialEvents.length ||
+            scheduleData.meetAtDockTime ||
+            scheduleData.departDockTime
           );
         case 'course':
           return !!(
-            raceData.start_area_name ||
-            raceData.prohibited_areas?.length ||
-            raceData.route_waypoints?.length ||
-            raceData.tide_gates?.length
+            raceData?.start_area_name ||
+            raceData?.prohibited_areas?.length ||
+            raceData?.route_waypoints?.length ||
+            raceData?.tide_gates?.length
           );
         case 'requirements':
           return !!(
-            raceData.entry_fees?.length ||
-            raceData.minimum_crew ||
-            raceData.crew_requirements ||
-            raceData.safety_requirements
+            raceData?.entry_fees?.length ||
+            raceData?.minimum_crew ||
+            raceData?.crew_requirements ||
+            raceData?.safety_requirements
           );
         case 'comms':
           return !!(
-            raceData.vhf_channels?.length ||
-            raceData.vhf_channel ||
-            raceData.organizing_authority ||
-            raceData.contact_email
+            raceData?.vhf_channels?.length ||
+            raceData?.vhf_channel ||
+            raceData?.organizing_authority ||
+            raceData?.contact_email ||
+            commsData.safetyChannel ||
+            commsData.roPhone ||
+            commsData.whatsAppGroup ||
+            commsData.backupChannel
           );
         case 'scoring':
           return !!(
-            raceData.scoring_formula ||
-            raceData.handicap_systems?.length ||
-            raceData.prizes_description
+            raceData?.scoring_formula ||
+            raceData?.handicap_systems?.length ||
+            raceData?.prizes_description
           );
         default:
           return false;
       }
     },
-    [raceData]
+    [raceData, scheduleData]
   );
+
+  // Save a document URL to the regattas table and update local state
+  const handleSaveDocUrl = useCallback(async (
+    field: 'notice_of_race_url' | 'sailing_instructions_url',
+    url: string,
+  ) => {
+    if (!regattaId || DemoRaceService.isDemoRace(regattaId)) return;
+    const { error: updateError } = await supabase
+      .from('regattas')
+      .update({ [field]: url })
+      .eq('id', regattaId);
+
+    if (updateError) {
+      console.error('[PreRaceBriefingWizard] Failed to save document URL:', updateError);
+      return;
+    }
+    // Update local state so the link appears immediately
+    setRaceData(prev => prev ? { ...prev, [field]: url } : prev);
+  }, [regattaId]);
+
+  // Debounced save for schedule and comms data
+  const scheduleSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commsSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persistSchedule = useCallback((data: typeof scheduleData) => {
+    if (scheduleSaveTimerRef.current) clearTimeout(scheduleSaveTimerRef.current);
+    scheduleSaveTimerRef.current = setTimeout(() => {
+      const briefingSchedule: BriefingSchedule = {
+        meetAtDockTime: data.meetAtDockTime || undefined,
+        departDockTime: data.departDockTime || undefined,
+        numberOfRaces: data.numberOfRaces || undefined,
+        numberOfClasses: data.numberOfClasses || undefined,
+        startOrder: data.startOrder.length > 0 ? data.startOrder : undefined,
+        myClassStartNumber: data.myClassStartNumber,
+        classFlag: data.classFlag || undefined,
+        socialEvents: data.socialEvents.length > 0 ? data.socialEvents : undefined,
+      };
+      updateIntentions({ briefingSchedule });
+    }, 800);
+  }, [updateIntentions]);
+
+  const persistComms = useCallback((data: BriefingComms) => {
+    if (commsSaveTimerRef.current) clearTimeout(commsSaveTimerRef.current);
+    commsSaveTimerRef.current = setTimeout(() => {
+      updateIntentions({ briefingComms: data });
+    }, 800);
+  }, [updateIntentions]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (scheduleSaveTimerRef.current) clearTimeout(scheduleSaveTimerRef.current);
+      if (commsSaveTimerRef.current) clearTimeout(commsSaveTimerRef.current);
+    };
+  }, []);
+
+  // Schedule helpers
+  const updateScheduleField = useCallback(<K extends keyof typeof scheduleData>(
+    field: K,
+    value: (typeof scheduleData)[K]
+  ) => {
+    setScheduleData(prev => {
+      const next = { ...prev, [field]: value };
+      persistSchedule(next);
+      return next;
+    });
+  }, [persistSchedule]);
+
+  const addStartOrderItem = useCallback(() => {
+    setScheduleData(prev => {
+      const next = { ...prev, startOrder: [...prev.startOrder, ''] };
+      persistSchedule(next);
+      return next;
+    });
+  }, [persistSchedule]);
+
+  const removeStartOrderItem = useCallback((index: number) => {
+    setScheduleData(prev => {
+      const next = {
+        ...prev,
+        startOrder: prev.startOrder.filter((_, i) => i !== index),
+        myClassStartNumber:
+          prev.myClassStartNumber !== undefined && prev.myClassStartNumber > index + 1
+            ? prev.myClassStartNumber - 1
+            : prev.myClassStartNumber === index + 1
+              ? undefined
+              : prev.myClassStartNumber,
+      };
+      persistSchedule(next);
+      return next;
+    });
+  }, [persistSchedule]);
+
+  const updateStartOrderItem = useCallback((index: number, value: string) => {
+    setScheduleData(prev => {
+      const next = {
+        ...prev,
+        startOrder: prev.startOrder.map((item, i) => (i === index ? value : item)),
+      };
+      persistSchedule(next);
+      return next;
+    });
+  }, [persistSchedule]);
+
+  const addSocialEvent = useCallback(() => {
+    setScheduleData(prev => {
+      const next = {
+        ...prev,
+        socialEvents: [...prev.socialEvents, { time: '', event: '' }],
+      };
+      persistSchedule(next);
+      return next;
+    });
+  }, [persistSchedule]);
+
+  const removeSocialEvent = useCallback((index: number) => {
+    setScheduleData(prev => {
+      const next = {
+        ...prev,
+        socialEvents: prev.socialEvents.filter((_, i) => i !== index),
+      };
+      persistSchedule(next);
+      return next;
+    });
+  }, [persistSchedule]);
+
+  const updateSocialEvent = useCallback((index: number, field: 'time' | 'event' | 'location', value: string) => {
+    setScheduleData(prev => {
+      const next = {
+        ...prev,
+        socialEvents: prev.socialEvents.map((item, i) =>
+          i === index ? { ...item, [field]: value } : item
+        ),
+      };
+      persistSchedule(next);
+      return next;
+    });
+  }, [persistSchedule]);
+
+  // Comms helpers
+  const updateCommsField = useCallback(<K extends keyof BriefingComms>(
+    field: K,
+    value: BriefingComms[K]
+  ) => {
+    setCommsData(prev => {
+      const next = { ...prev, [field]: value };
+      persistComms(next);
+      return next;
+    });
+  }, [persistComms]);
 
   // Render Schedule tab
   const renderScheduleTab = () => {
-    if (!raceData) return <EmptySection message="No schedule data available" />;
-
-    const hasKeyDates = raceData.start_date || raceData.entry_deadline || raceData.time_limit_hours;
+    const hasAnyData = raceData || scheduleData.numberOfRaces || scheduleData.meetAtDockTime;
 
     return (
       <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentContainer} showsVerticalScrollIndicator={false}>
-        {/* Key Dates Card */}
-        {hasKeyDates && (
-          <DataCard>
-            {raceData.start_date && (
-              <DataField
-                icon={<Calendar size={16} color={IOS_COLORS.blue} />}
-                label="Race Date"
-                value={formatDate(raceData.start_date)}
-              />
-            )}
-            {raceData.entry_deadline && (
-              <DataField
-                icon={<Clock size={16} color={IOS_COLORS.orange} />}
-                label="Entry Deadline"
-                value={formatDate(raceData.entry_deadline)}
-              />
-            )}
-            {raceData.time_limit_hours && (
-              <DataField
-                icon={<Clock size={16} color={IOS_COLORS.red} />}
-                label="Time Limit"
-                value={`${raceData.time_limit_hours} hours`}
-              />
-            )}
-          </DataCard>
-        )}
+        {/* Race Day Timeline */}
+        <SectionHeader title="Race Day Timeline" />
+        <DataCard>
+          {raceData?.start_date && (
+            <DataField
+              icon={<Calendar size={16} color={IOS_COLORS.blue} />}
+              label="Race Date"
+              value={formatDate(raceData.start_date)}
+            />
+          )}
 
-        {/* Schedule Events */}
-        {raceData.schedule && raceData.schedule.length > 0 && (
+          {/* Meet at Dock - editable */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Anchor size={16} color={IOS_COLORS.green} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Meet at Dock</Text>
+              <TextInput
+                style={[
+                  styles.timeInput,
+                  !scheduleData.meetAtDockTime && styles.timeInputEmpty,
+                ]}
+                value={scheduleData.meetAtDockTime}
+                onChangeText={(v) => updateScheduleField('meetAtDockTime', v)}
+                placeholder="e.g. 08:30"
+                placeholderTextColor={IOS_COLORS.gray}
+                keyboardType="numbers-and-punctuation"
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {/* Depart to Race Area - editable */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Navigation size={16} color={IOS_COLORS.blue} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Depart to Race Area</Text>
+              <TextInput
+                style={[
+                  styles.timeInput,
+                  !scheduleData.departDockTime && styles.timeInputEmpty,
+                ]}
+                value={scheduleData.departDockTime}
+                onChangeText={(v) => updateScheduleField('departDockTime', v)}
+                placeholder="e.g. 09:00"
+                placeholderTextColor={IOS_COLORS.gray}
+                keyboardType="numbers-and-punctuation"
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {raceData?.entry_deadline && (
+            <DataField
+              icon={<Clock size={16} color={IOS_COLORS.orange} />}
+              label="Entry Deadline"
+              value={formatDate(raceData.entry_deadline)}
+            />
+          )}
+        </DataCard>
+
+        {/* Racing Format */}
+        <SectionHeader title="Racing Format" />
+        <DataCard>
+          {/* Number of Races */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Flag size={16} color={IOS_COLORS.purple} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Number of Races</Text>
+              <TextInput
+                style={[
+                  styles.numberInput,
+                  !scheduleData.numberOfRaces && styles.numberInputEmpty,
+                ]}
+                value={scheduleData.numberOfRaces ? String(scheduleData.numberOfRaces) : ''}
+                onChangeText={(v) => {
+                  const n = parseInt(v, 10);
+                  updateScheduleField('numberOfRaces', isNaN(n) ? 0 : n);
+                }}
+                placeholder="0"
+                placeholderTextColor={IOS_COLORS.gray}
+                keyboardType="number-pad"
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {/* Number of Classes */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Hash size={16} color={IOS_COLORS.blue} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Number of Classes</Text>
+              <TextInput
+                style={[
+                  styles.numberInput,
+                  !scheduleData.numberOfClasses && styles.numberInputEmpty,
+                ]}
+                value={scheduleData.numberOfClasses ? String(scheduleData.numberOfClasses) : ''}
+                onChangeText={(v) => {
+                  const n = parseInt(v, 10);
+                  updateScheduleField('numberOfClasses', isNaN(n) ? 0 : n);
+                }}
+                placeholder="0"
+                placeholderTextColor={IOS_COLORS.gray}
+                keyboardType="number-pad"
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {raceData?.time_limit_hours && (
+            <DataField
+              icon={<Clock size={16} color={IOS_COLORS.red} />}
+              label="Time Limit"
+              value={`${raceData.time_limit_hours} hours`}
+            />
+          )}
+        </DataCard>
+
+        {/* Your Start */}
+        <SectionHeader title="Your Start" />
+        <DataCard>
+          {/* Start Order List */}
+          <View style={styles.editableListSection}>
+            <View style={styles.editableListHeader}>
+              <Text style={styles.editableListTitle}>Start Order</Text>
+              <Pressable style={styles.addButton} onPress={addStartOrderItem}>
+                <Plus size={16} color={IOS_COLORS.blue} />
+                <Text style={styles.addButtonText}>Add Class</Text>
+              </Pressable>
+            </View>
+            {scheduleData.startOrder.length === 0 && (
+              <Text style={styles.editableListPlaceholder}>
+                Tap "Add Class" to list start order
+              </Text>
+            )}
+            {scheduleData.startOrder.map((className, idx) => (
+              <View key={idx} style={styles.listItemRow}>
+                <Text style={styles.listItemNumber}>{idx + 1}.</Text>
+                <TextInput
+                  style={styles.listItemInput}
+                  value={className}
+                  onChangeText={(v) => updateStartOrderItem(idx, v)}
+                  placeholder="Class name"
+                  placeholderTextColor={IOS_COLORS.gray}
+                  returnKeyType="done"
+                />
+                {scheduleData.myClassStartNumber === idx + 1 && (
+                  <View style={styles.myStartBadge}>
+                    <Text style={styles.myStartBadgeText}>YOU</Text>
+                  </View>
+                )}
+                <Pressable
+                  style={styles.listItemDelete}
+                  onPress={() => removeStartOrderItem(idx)}
+                >
+                  <Trash2 size={16} color={IOS_COLORS.red} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+
+          {/* Your Class Start Number */}
+          {scheduleData.startOrder.length > 0 && (
+            <View style={styles.editableRow}>
+              <View style={styles.dataFieldIcon}>
+                <Sailboat size={16} color={IOS_COLORS.green} />
+              </View>
+              <View style={styles.editableRowContent}>
+                <Text style={styles.dataFieldLabel}>Your Start (Number)</Text>
+                <TextInput
+                  style={[
+                    styles.numberInput,
+                    !scheduleData.myClassStartNumber && styles.numberInputEmpty,
+                  ]}
+                  value={
+                    scheduleData.myClassStartNumber
+                      ? String(scheduleData.myClassStartNumber)
+                      : ''
+                  }
+                  onChangeText={(v) => {
+                    const n = parseInt(v, 10);
+                    updateScheduleField(
+                      'myClassStartNumber',
+                      isNaN(n) || n < 1 ? undefined : n
+                    );
+                  }}
+                  placeholder="e.g. 3"
+                  placeholderTextColor={IOS_COLORS.gray}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                />
+              </View>
+            </View>
+          )}
+
+          {/* Class Flag */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Flag size={16} color={IOS_COLORS.orange} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Class Flag</Text>
+              <TextInput
+                style={[
+                  styles.inlineInput,
+                  !scheduleData.classFlag && styles.inlineInputEmpty,
+                ]}
+                value={scheduleData.classFlag}
+                onChangeText={(v) => updateScheduleField('classFlag', v)}
+                placeholder="e.g. Blue flag with white stripe"
+                placeholderTextColor={IOS_COLORS.gray}
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+        </DataCard>
+
+        {/* Social & Awards */}
+        <SectionHeader title="Social & Awards" />
+        <DataCard>
+          <View style={styles.editableListSection}>
+            <View style={styles.editableListHeader}>
+              <Text style={styles.editableListTitle}>Events</Text>
+              <Pressable style={styles.addButton} onPress={addSocialEvent}>
+                <Plus size={16} color={IOS_COLORS.blue} />
+                <Text style={styles.addButtonText}>Add Event</Text>
+              </Pressable>
+            </View>
+            {scheduleData.socialEvents.length === 0 && (
+              <Text style={styles.editableListPlaceholder}>
+                Add social events, awards ceremony, prizegiving
+              </Text>
+            )}
+            {scheduleData.socialEvents.map((socialEvent, idx) => (
+              <View key={idx} style={styles.socialEventRow}>
+                <View style={styles.socialEventFields}>
+                  <TextInput
+                    style={styles.socialEventTimeInput}
+                    value={socialEvent.time}
+                    onChangeText={(v) => updateSocialEvent(idx, 'time', v)}
+                    placeholder="Time"
+                    placeholderTextColor={IOS_COLORS.gray}
+                    keyboardType="numbers-and-punctuation"
+                    returnKeyType="next"
+                  />
+                  <TextInput
+                    style={styles.socialEventNameInput}
+                    value={socialEvent.event}
+                    onChangeText={(v) => updateSocialEvent(idx, 'event', v)}
+                    placeholder="Event name"
+                    placeholderTextColor={IOS_COLORS.gray}
+                    returnKeyType="done"
+                  />
+                </View>
+                <Pressable
+                  style={styles.listItemDelete}
+                  onPress={() => removeSocialEvent(idx)}
+                >
+                  <Trash2 size={16} color={IOS_COLORS.red} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        </DataCard>
+
+        {/* Original Schedule Events (read-only, from extracted data) */}
+        {raceData?.schedule && raceData.schedule.length > 0 && (
           <>
-            <SectionHeader title="Event Schedule" />
+            <SectionHeader title="Extracted Schedule" />
             <DataCard>
               {raceData.schedule.map((event, idx) => (
                 <DataField
@@ -576,13 +1304,43 @@ export function PreRaceBriefingWizard({
             </DataCard>
           </>
         )}
-
-        {!sectionHasData('schedule') && (
-          <EmptySection message="No schedule data extracted. Upload NOR/SI to see schedule details." />
-        )}
       </ScrollView>
     );
   };
+
+  // Course type options for the picker
+  const COURSE_TYPE_OPTIONS = [
+    {
+      type: 'windward_leeward' as const,
+      label: 'W/L',
+      name: 'Windward / Leeward',
+      icon: Sailboat,
+    },
+    {
+      type: 'triangle' as const,
+      label: 'TRI',
+      name: 'Triangle',
+      icon: Triangle,
+    },
+    {
+      type: 'olympic' as const,
+      label: 'OLY',
+      name: 'Olympic / Trapezoid',
+      icon: Award,
+    },
+  ];
+
+  // Wind direction presets
+  const WIND_PRESETS = [
+    { label: 'N', degrees: 0 },
+    { label: 'NE', degrees: 45 },
+    { label: 'E', degrees: 90 },
+    { label: 'SE', degrees: 135 },
+    { label: 'S', degrees: 180 },
+    { label: 'SW', degrees: 225 },
+    { label: 'W', degrees: 270 },
+    { label: 'NW', degrees: 315 },
+  ];
 
   // Render Course tab
   const renderCourseTab = () => {
@@ -591,22 +1349,104 @@ export function PreRaceBriefingWizard({
     const hasStartInfo = raceData.start_area_name || raceData.start_area_description || raceData.total_distance_nm;
 
     // Convert race data to map format
-    const courseMarks = convertToMarks(raceData);
+    const extractedMarks = convertToMarks(raceData);
     const centerCoordinate = getCenterCoordinate(raceData);
-    const hasMapData = courseMarks.length > 0;
+
+    // Use layout marks if a course type is selected, otherwise extracted marks
+    const displayMarks = courseLayoutMarks.length > 0 ? courseLayoutMarks : extractedMarks;
+    const hasMapData = displayMarks.length > 0 || centerCoordinate !== undefined;
 
     return (
       <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentContainer} showsVerticalScrollIndicator={false}>
-        {/* Course Map */}
+        {/* Course Map - always shown when we have coordinates */}
         {hasMapData && (
-          <View style={styles.courseMapContainer}>
+          <View style={styles.courseMapContainerLarge}>
             <CourseMapView
-              courseMarks={courseMarks}
+              courseMarks={displayMarks}
               centerCoordinate={centerCoordinate}
               compact={true}
             />
           </View>
         )}
+
+        {/* Course Layout Selector */}
+        <SectionHeader title="Lay a Course" />
+        <DataCard>
+          {/* Wind Direction Picker */}
+          <View style={styles.windDirectionSection}>
+            <View style={styles.windDirectionHeader}>
+              <Wind size={16} color={IOS_COLORS.blue} />
+              <Text style={styles.windDirectionLabel}>Wind Direction</Text>
+              <Text style={styles.windDirectionValue}>
+                {Math.round(windDirection)}° {degreesToCardinal(windDirection)}
+              </Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.windPresetsRow}
+            >
+              {WIND_PRESETS.map((preset) => {
+                const isActive = Math.abs(windDirection - preset.degrees) < 10;
+                return (
+                  <Pressable
+                    key={preset.label}
+                    style={[styles.windPresetChip, isActive && styles.windPresetChipActive]}
+                    onPress={() => setWindDirection(preset.degrees)}
+                  >
+                    <Text style={[styles.windPresetText, isActive && styles.windPresetTextActive]}>
+                      {preset.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Course Type Picker */}
+          <View style={styles.courseTypeSection}>
+            <Text style={styles.courseTypeSectionLabel}>Course Type</Text>
+            <View style={styles.courseTypeRow}>
+              {COURSE_TYPE_OPTIONS.map((option) => {
+                const isActive = selectedCourseType === option.type;
+                const IconComponent = option.icon;
+                return (
+                  <Pressable
+                    key={option.type}
+                    style={[styles.courseTypeCard, isActive && styles.courseTypeCardActive]}
+                    onPress={() => setSelectedCourseType(isActive ? null : option.type)}
+                  >
+                    <IconComponent
+                      size={20}
+                      color={isActive ? '#FFFFFF' : IOS_COLORS.blue}
+                    />
+                    <Text style={[styles.courseTypeLabel, isActive && styles.courseTypeLabelActive]}>
+                      {option.label}
+                    </Text>
+                    <Text
+                      style={[styles.courseTypeName, isActive && styles.courseTypeNameActive]}
+                      numberOfLines={1}
+                    >
+                      {option.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Selected course template info */}
+          {selectedCourseType && courseTemplates.length > 0 && (() => {
+            const template = courseTemplates.find((t) => t.type === selectedCourseType);
+            if (!template) return null;
+            return (
+              <View style={styles.courseTemplateInfo}>
+                <Text style={styles.courseTemplateDescription}>{template.description}</Text>
+                <Text style={styles.courseTemplateMarks}>{template.marks.length} marks</Text>
+              </View>
+            );
+          })()}
+        </DataCard>
 
         {/* Start & Distance Card */}
         {hasStartInfo && (
@@ -703,8 +1543,8 @@ export function PreRaceBriefingWizard({
           </>
         )}
 
-        {!sectionHasData('course') && (
-          <EmptySection message="No course data extracted. Upload NOR/SI to see course details." />
+        {!sectionHasData('course') && !selectedCourseType && (
+          <DocumentLinksCard raceData={raceData} message="No course data extracted. Link NOR/SI to see course details, or select a course type above." onSaveUrl={handleSaveDocUrl} />
         )}
       </ScrollView>
     );
@@ -800,7 +1640,7 @@ export function PreRaceBriefingWizard({
         )}
 
         {!sectionHasData('requirements') && (
-          <EmptySection message="No requirements data extracted. Upload NOR/SI to see entry requirements." />
+          <DocumentLinksCard raceData={raceData} message="No requirements data extracted. Link NOR/SI to see entry requirements." onSaveUrl={handleSaveDocUrl} />
         )}
       </ScrollView>
     );
@@ -808,19 +1648,17 @@ export function PreRaceBriefingWizard({
 
   // Render Comms tab
   const renderCommsTab = () => {
-    if (!raceData) return <EmptySection message="No communications data available" />;
-
-    const hasVhf = raceData.vhf_channels?.length || raceData.vhf_channel;
-    const hasContacts = raceData.organizing_authority || raceData.contact_email || raceData.event_website;
+    const hasVhf = raceData?.vhf_channels?.length || raceData?.vhf_channel;
+    const hasContacts = raceData?.organizing_authority || raceData?.contact_email || raceData?.event_website;
 
     return (
       <ScrollView style={styles.tabContent} contentContainerStyle={styles.tabContentContainer} showsVerticalScrollIndicator={false}>
-        {/* VHF Channels */}
+        {/* VHF Channels - from extracted race data */}
         {hasVhf && (
           <>
             <SectionHeader title="VHF Channels" />
             <DataCard>
-              {raceData.vhf_channels?.map((ch, idx) => (
+              {raceData?.vhf_channels?.map((ch, idx) => (
                 <DataField
                   key={idx}
                   icon={<Radio size={16} color={IOS_COLORS.green} />}
@@ -828,7 +1666,7 @@ export function PreRaceBriefingWizard({
                   value={ch.purpose || 'Race communications'}
                 />
               ))}
-              {!raceData.vhf_channels?.length && raceData.vhf_channel && (
+              {!raceData?.vhf_channels?.length && raceData?.vhf_channel && (
                 <DataField
                   icon={<Radio size={16} color={IOS_COLORS.green} />}
                   label="Race Channel"
@@ -839,19 +1677,130 @@ export function PreRaceBriefingWizard({
           </>
         )}
 
-        {/* Contact Info Card */}
+        {/* Your Comms Notes - editable fields */}
+        <SectionHeader title="Your Comms Notes" />
+        <DataCard>
+          {/* Safety / Rescue Channel */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Shield size={16} color={IOS_COLORS.red} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Safety / Rescue Channel</Text>
+              <TextInput
+                style={[
+                  styles.inlineInput,
+                  !commsData.safetyChannel && styles.inlineInputEmpty,
+                ]}
+                value={commsData.safetyChannel ?? ''}
+                onChangeText={(v) => updateCommsField('safetyChannel', v)}
+                placeholder="e.g. Ch 16 or Ch 69"
+                placeholderTextColor={IOS_COLORS.gray}
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {/* Backup VHF Channel */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Radio size={16} color={IOS_COLORS.orange} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Backup VHF Channel</Text>
+              <TextInput
+                style={[
+                  styles.inlineInput,
+                  !commsData.backupChannel && styles.inlineInputEmpty,
+                ]}
+                value={commsData.backupChannel ?? ''}
+                onChangeText={(v) => updateCommsField('backupChannel', v)}
+                placeholder="e.g. Ch 72"
+                placeholderTextColor={IOS_COLORS.gray}
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {/* Race Officer Phone */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <Phone size={16} color={IOS_COLORS.blue} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Race Officer Phone</Text>
+              <TextInput
+                style={[
+                  styles.inlineInput,
+                  !commsData.roPhone && styles.inlineInputEmpty,
+                ]}
+                value={commsData.roPhone ?? ''}
+                onChangeText={(v) => updateCommsField('roPhone', v)}
+                placeholder="Phone number"
+                placeholderTextColor={IOS_COLORS.gray}
+                keyboardType="phone-pad"
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {/* WhatsApp Group */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <MessageCircle size={16} color={IOS_COLORS.green} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>WhatsApp / Group Chat</Text>
+              <TextInput
+                style={[
+                  styles.inlineInput,
+                  !commsData.whatsAppGroup && styles.inlineInputEmpty,
+                ]}
+                value={commsData.whatsAppGroup ?? ''}
+                onChangeText={(v) => updateCommsField('whatsAppGroup', v)}
+                placeholder="Group name or invite link"
+                placeholderTextColor={IOS_COLORS.gray}
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+
+          {/* Notes */}
+          <View style={styles.editableRow}>
+            <View style={styles.dataFieldIcon}>
+              <FileText size={16} color={IOS_COLORS.gray} />
+            </View>
+            <View style={styles.editableRowContent}>
+              <Text style={styles.dataFieldLabel}>Comms Notes</Text>
+              <TextInput
+                style={[
+                  styles.inlineInput,
+                  !commsData.notes && styles.inlineInputEmpty,
+                ]}
+                value={commsData.notes ?? ''}
+                onChangeText={(v) => updateCommsField('notes', v)}
+                placeholder="Other comms info..."
+                placeholderTextColor={IOS_COLORS.gray}
+                multiline
+                returnKeyType="done"
+              />
+            </View>
+          </View>
+        </DataCard>
+
+        {/* Contact Info Card - from extracted race data */}
         {hasContacts && (
           <>
             <SectionHeader title="Contact Information" />
             <DataCard>
-              {raceData.organizing_authority && (
+              {raceData?.organizing_authority && (
                 <DataField
                   icon={<Users size={16} color={IOS_COLORS.blue} />}
                   label="Organizing Authority"
                   value={raceData.organizing_authority}
                 />
               )}
-              {raceData.contact_email && (
+              {raceData?.contact_email && (
                 <DataField
                   icon={<FileText size={16} color={IOS_COLORS.purple} />}
                   label="Contact Email"
@@ -859,7 +1808,7 @@ export function PreRaceBriefingWizard({
                   url={`mailto:${raceData.contact_email}`}
                 />
               )}
-              {raceData.event_website && (
+              {raceData?.event_website && (
                 <DataField
                   icon={<ExternalLink size={16} color={IOS_COLORS.blue} />}
                   label="Event Website"
@@ -872,7 +1821,7 @@ export function PreRaceBriefingWizard({
         )}
 
         {/* Retirement */}
-        {raceData.retirement_notification && (
+        {raceData?.retirement_notification && (
           <>
             <SectionHeader title="Retirement Notification" />
             <DataCard>
@@ -883,10 +1832,6 @@ export function PreRaceBriefingWizard({
               />
             </DataCard>
           </>
-        )}
-
-        {!sectionHasData('comms') && (
-          <EmptySection message="No communications data extracted. Upload NOR/SI to see contact details." />
         )}
       </ScrollView>
     );
@@ -956,7 +1901,7 @@ export function PreRaceBriefingWizard({
         )}
 
         {!sectionHasData('scoring') && (
-          <EmptySection message="No scoring data extracted. Upload NOR/SI to see scoring details." />
+          <DocumentLinksCard raceData={raceData} message="No scoring data extracted. Link NOR/SI to see scoring details." onSaveUrl={handleSaveDocUrl} />
         )}
       </ScrollView>
     );
@@ -1274,6 +2219,131 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: IOS_COLORS.secondaryBackground,
   },
+  courseMapContainerLarge: {
+    height: 300,
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: IOS_COLORS.secondaryBackground,
+  },
+  windDirectionSection: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  windDirectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  windDirectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginLeft: 8,
+    flex: 1,
+  },
+  windDirectionValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  windPresetsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  windPresetChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+  },
+  windPresetChipActive: {
+    backgroundColor: IOS_COLORS.blue,
+    borderColor: IOS_COLORS.blue,
+  },
+  windPresetText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  windPresetTextActive: {
+    color: '#FFFFFF',
+  },
+  courseTypeSection: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+  },
+  courseTypeSectionLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  courseTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  courseTypeCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1.5,
+    borderColor: IOS_COLORS.separator,
+  },
+  courseTypeCardActive: {
+    backgroundColor: IOS_COLORS.blue,
+    borderColor: IOS_COLORS.blue,
+  },
+  courseTypeLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: IOS_COLORS.blue,
+    marginTop: 6,
+    letterSpacing: 0.5,
+  },
+  courseTypeLabelActive: {
+    color: '#FFFFFF',
+  },
+  courseTypeName: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 2,
+  },
+  courseTypeNameActive: {
+    color: 'rgba(255,255,255,0.8)',
+  },
+  courseTemplateInfo: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  courseTemplateDescription: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    flex: 1,
+  },
+  courseTemplateMarks: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+    marginLeft: 8,
+  },
   emptySection: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1287,6 +2357,61 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.gray,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  docLinksContainer: {
+    marginTop: 16,
+    width: '100%',
+    gap: 8,
+  },
+  docLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.blue + '0D',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.blue + '25',
+  },
+  docLinkText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+    marginLeft: 10,
+  },
+  urlInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  urlInput: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+  },
+  urlSaveButton: {
+    backgroundColor: IOS_COLORS.blue,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 72,
+  },
+  urlSaveButtonDisabled: {
+    opacity: 0.4,
+  },
+  urlSaveButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   footer: {
     backgroundColor: IOS_COLORS.secondaryBackground,
@@ -1349,6 +2474,182 @@ const styles = StyleSheet.create({
   },
   completeButtonTextDisabled: {
     color: IOS_COLORS.gray,
+  },
+  // Schedule editable styles
+  editableRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  editableRowContent: {
+    flex: 1,
+  },
+  timeInput: {
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    minWidth: 100,
+    maxWidth: 140,
+  },
+  timeInputEmpty: {
+    borderColor: IOS_COLORS.blue + '40',
+    borderStyle: 'dashed' as const,
+  },
+  numberInput: {
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    minWidth: 60,
+    maxWidth: 80,
+    textAlign: 'center',
+  },
+  numberInputEmpty: {
+    borderColor: IOS_COLORS.blue + '40',
+    borderStyle: 'dashed' as const,
+  },
+  inlineInput: {
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    marginTop: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+  },
+  inlineInputEmpty: {
+    borderColor: IOS_COLORS.blue + '40',
+    borderStyle: 'dashed' as const,
+  },
+  editableListSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  editableListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  editableListTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  editableListPlaceholder: {
+    fontSize: 14,
+    color: IOS_COLORS.gray,
+    paddingVertical: 12,
+    textAlign: 'center',
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.blue + '12',
+  },
+  addButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+    marginLeft: 4,
+  },
+  listItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  listItemNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    width: 24,
+  },
+  listItemInput: {
+    flex: 1,
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    marginRight: 8,
+  },
+  listItemDelete: {
+    padding: 6,
+  },
+  myStartBadge: {
+    backgroundColor: IOS_COLORS.green,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginRight: 6,
+  },
+  myStartBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  socialEventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.separator,
+  },
+  socialEventFields: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  socialEventTimeInput: {
+    width: 70,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    textAlign: 'center',
+  },
+  socialEventNameInput: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.background,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    marginRight: 8,
   },
 });
 

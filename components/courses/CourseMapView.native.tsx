@@ -142,24 +142,28 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
     ));
   };
 
-  const getMarkColor = (type: CourseMark['type']) => {
-    switch (type) {
+  const getMarkColor = (mark: CourseMark) => {
+    // Use per-mark color if provided
+    if (mark.color) return mark.color;
+    switch (mark.type) {
       case 'start': return '#10B981'; // Green
-      case 'mark': return '#F59E0B'; // Orange
-      case 'finish': return '#EF4444'; // Red
-      case 'gate': return '#8B5CF6'; // Purple
+      case 'mark': return '#FF8C00'; // Orange (racing buoy)
+      case 'finish': return '#FFFFFF'; // White
+      case 'gate': return '#FF8C00'; // Orange (gate marks)
       default: return '#2563EB'; // Blue
     }
   };
 
-  const getMarkIcon = (type: CourseMark['type']) => {
-    switch (type) {
-      case 'start': return '🟢';
-      case 'mark': return '⚓';
-      case 'finish': return '🏁';
-      case 'gate': return '⛳';
-      default: return '📍';
-    }
+  const getMarkIcon = (mark: CourseMark) => {
+    const nameLower = mark.name.toLowerCase();
+    if (nameLower.includes('committee')) return '⛵';
+    if (nameLower.includes('pin')) return '🟠';
+    if (nameLower.includes('windward')) return '🟠';
+    if (mark.type === 'gate') return '🟠';
+    if (mark.type === 'finish') return '⚪';
+    if (mark.type === 'start') return '🚩';
+    if (mark.type === 'mark') return '🟠';
+    return '📍';
   };
 
   // Create course line from marks
@@ -279,7 +283,7 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
             <View className="bg-white rounded-t-3xl p-4">
               <View className="flex-row justify-between items-center mb-3">
                 <View className="flex-row items-center">
-                  <Text className="text-3xl mr-2">{getMarkIcon(selectedMark.type)}</Text>
+                  <Text className="text-3xl mr-2">{getMarkIcon(selectedMark)}</Text>
                   <View>
                     <Text className="text-lg font-bold">{selectedMark.name}</Text>
                     <Text className="text-gray-600 capitalize">{selectedMark.type}</Text>
@@ -312,8 +316,137 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
     );
   };
 
-  // Compact mode: always show informational UI (map is too small to be useful)
+  // Compact mode: show actual map if available, otherwise informational UI
   if (compact) {
+    if (mapsAvailable && MapView) {
+      // Calculate region that fits all course marks
+      const compactRegion = (() => {
+        if (courseMarks.length >= 2) {
+          let minLat = Infinity, maxLat = -Infinity;
+          let minLng = Infinity, maxLng = -Infinity;
+          courseMarks.forEach((m) => {
+            minLat = Math.min(minLat, m.coordinates.latitude);
+            maxLat = Math.max(maxLat, m.coordinates.latitude);
+            minLng = Math.min(minLng, m.coordinates.longitude);
+            maxLng = Math.max(maxLng, m.coordinates.longitude);
+          });
+          const latDelta = Math.max((maxLat - minLat) * 1.5, 0.005);
+          const lngDelta = Math.max((maxLng - minLng) * 1.5, 0.005);
+          return {
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLng + maxLng) / 2,
+            latitudeDelta: latDelta,
+            longitudeDelta: lngDelta,
+          };
+        }
+        return {
+          latitude: centerCoordinate.latitude,
+          longitude: centerCoordinate.longitude,
+          latitudeDelta: 0.03,
+          longitudeDelta: 0.03,
+        };
+      })();
+
+      return (
+        <View style={{ width: '100%', height: '100%' }}>
+          <MapView
+            ref={mapRef}
+            provider={PROVIDER_DEFAULT}
+            style={{ flex: 1 }}
+            mapType="satellite"
+            initialRegion={compactRegion}
+            scrollEnabled={true}
+            zoomEnabled={true}
+            rotateEnabled={false}
+            pitchEnabled={false}
+          >
+            {courseMarks.map((mark) => (
+              <Marker
+                key={mark.id}
+                coordinate={mark.coordinates}
+                title={mark.name}
+                pinColor={getMarkColor(mark)}
+              >
+                <View style={{ alignItems: 'center' }}>
+                  <View
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 14,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: getMarkColor(mark),
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.3,
+                      shadowRadius: 2,
+                    }}
+                  >
+                    <Text style={{ fontSize: 14 }}>{getMarkIcon(mark)}</Text>
+                  </View>
+                </View>
+              </Marker>
+            ))}
+            {/* Start line: between start-type marks */}
+            {(() => {
+              const startMarks = courseMarks.filter(m => m.type === 'start');
+              if (startMarks.length >= 2) {
+                const midLat = (startMarks[0].coordinates.latitude + startMarks[1].coordinates.latitude) / 2;
+                const midLng = (startMarks[0].coordinates.longitude + startMarks[1].coordinates.longitude) / 2;
+                return (
+                  <>
+                    <Polyline
+                      coordinates={startMarks.map(m => m.coordinates)}
+                      strokeColor="#FFFFFF"
+                      strokeWidth={2}
+                    />
+                    <Marker
+                      coordinate={{ latitude: midLat, longitude: midLng }}
+                      anchor={{ x: 0.5, y: 0.5 }}
+                    >
+                      <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '700' }}>START</Text>
+                      </View>
+                    </Marker>
+                  </>
+                );
+              }
+              return null;
+            })()}
+            {/* Finish line: between finish mark and nearest start mark (committee boat) */}
+            {(() => {
+              const finishMark = courseMarks.find(m => m.type === 'finish');
+              const committeeMark = courseMarks.find(m => m.type === 'start' && m.name.toLowerCase().includes('committee'));
+              const startMarks = courseMarks.filter(m => m.type === 'start');
+              const anchorMark = committeeMark || (startMarks.length > 1 ? startMarks[1] : startMarks[0]);
+              if (finishMark && anchorMark) {
+                const midLat = (finishMark.coordinates.latitude + anchorMark.coordinates.latitude) / 2;
+                const midLng = (finishMark.coordinates.longitude + anchorMark.coordinates.longitude) / 2;
+                return (
+                  <>
+                    <Polyline
+                      coordinates={[anchorMark.coordinates, finishMark.coordinates]}
+                      strokeColor="#FFFFFF"
+                      strokeWidth={2}
+                    />
+                    <Marker
+                      coordinate={{ latitude: midLat, longitude: midLng }}
+                      anchor={{ x: 0.5, y: 0.5 }}
+                    >
+                      <View style={{ backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '700' }}>FINISH</Text>
+                      </View>
+                    </Marker>
+                  </>
+                );
+              }
+              return null;
+            })()}
+          </MapView>
+        </View>
+      );
+    }
+
     return (
       <View style={{
         width: '100%',
@@ -334,11 +467,9 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
             {courseMarks[0].coordinates.latitude.toFixed(4)}, {courseMarks[0].coordinates.longitude.toFixed(4)}
           </Text>
         )}
-        {(!mapsAvailable || !MapView) && (
-          <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>
-            Full map requires development build
-          </Text>
-        )}
+        <Text style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>
+          Full map requires development build
+        </Text>
       </View>
     );
   }
@@ -395,15 +526,15 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
             coordinate={mark.coordinates}
             title={mark.name}
             description={mark.type}
-            pinColor={getMarkColor(mark.type)}
+            pinColor={getMarkColor(mark)}
             onPress={() => setSelectedMark(mark)}
           >
             <View className="items-center">
               <View
                 className="w-10 h-10 rounded-full items-center justify-center shadow-lg"
-                style={{ backgroundColor: getMarkColor(mark.type) }}
+                style={{ backgroundColor: getMarkColor(mark) }}
               >
-                <Text className="text-xl">{getMarkIcon(mark.type)}</Text>
+                <Text className="text-xl">{getMarkIcon(mark)}</Text>
               </View>
               <Text className="text-xs font-bold mt-1 bg-white px-2 py-0.5 rounded shadow">
                 {mark.name}

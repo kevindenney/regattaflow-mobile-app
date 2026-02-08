@@ -181,39 +181,50 @@ export class CourseTemplateService {
     const windDirection = wind.direction;
     const marks: CourseMark[] = [];
 
-    // Calculate mark positions oriented to wind
-    // Start line: perpendicular to wind, at southern end
-    const startLineBearing = (windDirection + 90) % 360;
+    // Standard windward-leeward course layout:
+    // Wind blows FROM windDirection, so upwind bearing = windDirection,
+    // downwind bearing = windDirection + 180
+    //
+    // Start line perpendicular to wind:
+    //   Port end (pin buoy, orange) - starboard end (committee boat)
+    // Windward mark (orange) upwind
+    // Leeward gate: two marks parallel to start line, slightly upwind of start
+    // Finish mark (white) on start line, opposite side of committee boat
 
-    // Start Pin (port end)
+    const startLineBearing = (windDirection + 90) % 360; // perpendicular to wind
+    const startLineHalfLength = 0.05; // ~100m half-width
+
+    // Pin Buoy (port end of start line) - orange inflatable
+    const pinPosition = this.calculateMarkPosition(
+      racingArea.center,
+      (startLineBearing + 180) % 360, // port side
+      startLineHalfLength,
+      windDirection
+    );
     marks.push({
-      name: 'Start Pin',
+      name: 'Pin',
       type: 'start_pin',
-      ...this.calculateMarkPosition(
-        racingArea.center,
-        startLineBearing - 180,
-        0.05,
-        windDirection
-      ),
-      color: 'Orange',
+      ...pinPosition,
+      color: '#FF8C00', // Orange
       sequence_order: 1,
     });
 
-    // Start Boat (starboard end)
+    // Committee Boat (starboard end of start line)
+    const committeePosition = this.calculateMarkPosition(
+      racingArea.center,
+      startLineBearing, // starboard side
+      startLineHalfLength,
+      windDirection
+    );
     marks.push({
-      name: 'Start Boat',
+      name: 'Committee Boat',
       type: 'start_boat',
-      ...this.calculateMarkPosition(
-        racingArea.center,
-        startLineBearing,
-        0.05,
-        windDirection
-      ),
-      color: 'Blue',
+      ...committeePosition,
+      color: '#1E3A5F', // Dark navy
       sequence_order: 2,
     });
 
-    // Windward Mark
+    // Windward Mark - orange, upwind from center
     marks.push({
       name: 'Windward Mark',
       type: 'windward',
@@ -223,49 +234,59 @@ export class CourseTemplateService {
         requirements.minWindwardDistance,
         windDirection
       ),
-      color: 'Yellow',
+      color: '#FF8C00', // Orange
       sequence_order: 3,
     });
 
-    // Leeward Gate (Port)
+    // Leeward Gate - two orange marks parallel to start line,
+    // positioned slightly upwind of the start line (offset ~0.02 NM upwind)
+    const gateCenter = this.calculateMarkPosition(
+      racingArea.center,
+      windDirection, // slightly upwind of start center
+      0.02,
+      windDirection
+    );
+    const gateHalfWidth = 0.03; // ~60m half-width
+
+    // Leeward Gate Port
     marks.push({
-      name: 'Leeward Gate Port',
+      name: 'Gate Port',
       type: 'gate',
       ...this.calculateMarkPosition(
-        racingArea.center,
-        windDirection + 180 - 10,
-        requirements.minLeewardDistance,
+        { lat: gateCenter.latitude, lng: gateCenter.longitude },
+        (startLineBearing + 180) % 360,
+        gateHalfWidth,
         windDirection
       ),
-      color: 'Red',
+      color: '#FF8C00', // Orange
       sequence_order: 4,
     });
 
-    // Leeward Gate (Starboard)
+    // Leeward Gate Starboard
     marks.push({
-      name: 'Leeward Gate Starboard',
+      name: 'Gate Starboard',
       type: 'gate',
       ...this.calculateMarkPosition(
-        racingArea.center,
-        windDirection + 180 + 10,
-        requirements.minLeewardDistance,
+        { lat: gateCenter.latitude, lng: gateCenter.longitude },
+        startLineBearing,
+        gateHalfWidth,
         windDirection
       ),
-      color: 'Red',
+      color: '#FF8C00', // Orange
       sequence_order: 5,
     });
 
-    // Finish
+    // Finish Mark - white, on the starboard side beyond the committee boat
     marks.push({
       name: 'Finish',
       type: 'finish',
       ...this.calculateMarkPosition(
         racingArea.center,
-        windDirection,
-        0.1,
+        startLineBearing, // starboard side, past committee boat
+        startLineHalfLength + 0.02, // slightly beyond committee boat
         windDirection
       ),
-      color: 'Blue',
+      color: '#FFFFFF', // White
       sequence_order: 6,
     });
 
@@ -509,23 +530,24 @@ export class CourseTemplateService {
     distanceNM: number,
     windDirection: number
   ): { latitude: number; longitude: number } {
-    // Convert nautical miles to degrees
-    const R = 60; // 1 degree latitude ≈ 60 nautical miles
+    // Haversine "destination point" formula
+    // Angular distance in radians = distance / Earth's radius (same units)
+    const R = 3440.065; // Earth's radius in nautical miles
     const lat1 = (center.lat * Math.PI) / 180;
     const lon1 = (center.lng * Math.PI) / 180;
     const brng = (bearing * Math.PI) / 180;
-    const distDeg = distanceNM / R;
+    const distRad = distanceNM / R;
 
     const lat2 = Math.asin(
-      Math.sin(lat1) * Math.cos(distDeg) +
-        Math.cos(lat1) * Math.sin(distDeg) * Math.cos(brng)
+      Math.sin(lat1) * Math.cos(distRad) +
+        Math.cos(lat1) * Math.sin(distRad) * Math.cos(brng)
     );
 
     const lon2 =
       lon1 +
       Math.atan2(
-        Math.sin(brng) * Math.sin(distDeg) * Math.cos(lat1),
-        Math.cos(distDeg) - Math.sin(lat1) * Math.sin(lat2)
+        Math.sin(brng) * Math.sin(distRad) * Math.cos(lat1),
+        Math.cos(distRad) - Math.sin(lat1) * Math.sin(lat2)
       );
 
     return {

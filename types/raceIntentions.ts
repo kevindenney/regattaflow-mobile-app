@@ -190,6 +190,44 @@ export interface PreStartSpecification {
 }
 
 /**
+ * Briefing Schedule - user-entered schedule data from Pre-Race Briefing wizard
+ */
+export interface BriefingSchedule {
+  /** Time to meet at the dock */
+  meetAtDockTime?: string;
+  /** Time to depart to race area */
+  departDockTime?: string;
+  /** Number of races planned */
+  numberOfRaces?: number;
+  /** Number of classes racing */
+  numberOfClasses?: number;
+  /** Class start order list */
+  startOrder?: string[];
+  /** Which start number is the user's class */
+  myClassStartNumber?: number;
+  /** Class flag description */
+  classFlag?: string;
+  /** Social events list */
+  socialEvents?: Array<{ time: string; event: string; location?: string }>;
+}
+
+/**
+ * Briefing Comms - user-entered communications data from Pre-Race Briefing wizard
+ */
+export interface BriefingComms {
+  /** Safety/rescue VHF channel */
+  safetyChannel?: string;
+  /** Race Officer phone number */
+  roPhone?: string;
+  /** WhatsApp group link or name */
+  whatsAppGroup?: string;
+  /** Additional VHF backup channel */
+  backupChannel?: string;
+  /** General comms notes */
+  notes?: string;
+}
+
+/**
  * Complete race intentions structure
  * Stored in sailor_race_preparation.user_intentions JSONB column
  */
@@ -223,6 +261,12 @@ export interface RaceIntentions {
 
   /** Pre-Start Specifications - HOW user will accomplish pre-start checks (keyed by item ID) */
   preStartSpecifications?: Record<string, PreStartSpecification>;
+
+  /** Briefing Schedule - user-entered schedule data from Pre-Race Briefing wizard */
+  briefingSchedule?: BriefingSchedule;
+
+  /** Briefing Comms - user-entered communications data from Pre-Race Briefing wizard */
+  briefingComms?: BriefingComms;
 
   /** Last update timestamp */
   updatedAt: string;
