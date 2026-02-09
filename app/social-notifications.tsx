@@ -14,6 +14,8 @@ import {
   SectionList,
   RefreshControl,
   ActivityIndicator,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRouter } from 'expo-router';
@@ -25,10 +27,13 @@ import { MessagesPreviewList } from '@/components/activity/MessagesPreviewList';
 import { NotificationRow } from '@/components/social/NotificationRow';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useCrewThreads } from '@/hooks/useCrewThreads';
+import { useSailorSuggestions } from '@/hooks/useSailorSuggestions';
 import { useAuth } from '@/providers/AuthProvider';
 import { CrewFinderService } from '@/services/CrewFinderService';
 import { supabase } from '@/services/supabase';
 import { type SocialNotification } from '@/services/NotificationService';
+import { getInitials } from '@/components/account/accountStyles';
+import { triggerHaptic } from '@/lib/haptics';
 import {
   IOS_COLORS,
   IOS_SPACING,
@@ -117,6 +122,29 @@ function groupNotificationsByTime(notifications: SocialNotification[]): Notifica
 // MAIN COMPONENT
 // =============================================================================
 
+// =============================================================================
+// AVATAR COLORS
+// =============================================================================
+
+const AVATAR_COLORS = [
+  IOS_COLORS.systemBlue,
+  IOS_COLORS.systemGreen,
+  IOS_COLORS.systemOrange,
+  IOS_COLORS.systemRed,
+  IOS_COLORS.systemPurple,
+  IOS_COLORS.systemPink,
+  IOS_COLORS.systemTeal,
+  IOS_COLORS.systemIndigo,
+] as const;
+
+function getAvatarColor(userId: string): string {
+  return AVATAR_COLORS[userId.charCodeAt(0) % AVATAR_COLORS.length];
+}
+
+// =============================================================================
+// MAIN COMPONENT
+// =============================================================================
+
 export default function SocialNotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -134,6 +162,20 @@ export default function SocialNotificationsScreen() {
     markAllAsRead,
     deleteNotification,
   } = useNotifications();
+
+  // Sailor suggestions
+  const {
+    suggestions,
+    followedIds,
+    toggleFollow: toggleSuggestionFollow,
+  } = useSailorSuggestions();
+
+  // Filter to unfollowed suggestions only, limit to 5
+  const unfollowedSuggestions = useMemo(() => {
+    return suggestions
+      .filter((s) => !followedIds.has(s.userId))
+      .slice(0, 5);
+  }, [suggestions, followedIds]);
 
   const [refreshing, setRefreshing] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(false);
@@ -251,6 +293,28 @@ export default function SocialNotificationsScreen() {
     [toggleFollowMutation]
   );
 
+  // Handle suggestion follow
+  const handleSuggestionFollow = useCallback(
+    async (userId: string) => {
+      triggerHaptic('selection');
+      await toggleSuggestionFollow(userId);
+    },
+    [toggleSuggestionFollow]
+  );
+
+  // Navigate to sailor profile
+  const handleSailorPress = useCallback(
+    (userId: string) => {
+      router.push(`/sailor/${userId}`);
+    },
+    [router]
+  );
+
+  // Navigate to Follow tab
+  const handleSeeAllSuggestions = useCallback(() => {
+    router.push('/(tabs)/follow');
+  }, [router]);
+
   const handleBack = useCallback(() => {
     router.back();
   }, [router]);
@@ -331,7 +395,7 @@ export default function SocialNotificationsScreen() {
     []
   );
 
-  // List header with large title and messages
+  // List header with large title, messages, and suggestions
   const ListHeader = useCallback(
     () => (
       <View style={styles.listHeader}>
@@ -374,15 +438,73 @@ export default function SocialNotificationsScreen() {
           </View>
         )}
 
-        {/* Notifications section label */}
-        {sections.length > 0 && threads.length > 0 && (
-          <View style={styles.notificationsSectionLabel}>
-            <Text style={styles.notificationsSectionTitle}>Notifications</Text>
+        {/* Suggestions Section */}
+        {unfollowedSuggestions.length > 0 && (
+          <View style={styles.suggestionsSection}>
+            <Pressable
+              style={styles.suggestionsSectionHeader}
+              onPress={handleSeeAllSuggestions}
+            >
+              <Text style={styles.suggestionsTitle}>Suggestions for you</Text>
+              <View style={styles.seeAllRow}>
+                <Text style={styles.seeAllText}>See All</Text>
+                <ChevronRight size={16} color={IOS_COLORS.tertiaryLabel} />
+              </View>
+            </Pressable>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestionsScrollContent}
+            >
+              {unfollowedSuggestions.map((sailor) => {
+                const showEmoji = sailor.avatarEmoji && sailor.avatarEmoji !== '\u26F5';
+                const avatarBg = showEmoji
+                  ? sailor.avatarColor || IOS_COLORS.systemGray5
+                  : getAvatarColor(sailor.userId);
+                const initials = getInitials(sailor.fullName);
+
+                return (
+                  <View key={sailor.userId} style={styles.suggestionCard}>
+                    <Pressable
+                      onPress={() => handleSailorPress(sailor.userId)}
+                      style={({ pressed }) => [
+                        styles.suggestionCardInner,
+                        pressed && styles.suggestionCardPressed,
+                      ]}
+                    >
+                      <View style={[styles.suggestionAvatar, { backgroundColor: avatarBg }]}>
+                        {showEmoji ? (
+                          <Text style={styles.suggestionAvatarEmoji}>{sailor.avatarEmoji}</Text>
+                        ) : (
+                          <Text style={styles.suggestionAvatarInitials}>{initials}</Text>
+                        )}
+                      </View>
+                      <Text style={styles.suggestionName} numberOfLines={1}>
+                        {sailor.fullName.split(' ')[0]}
+                      </Text>
+                      {sailor.similarityReason && (
+                        <Text style={styles.suggestionReason} numberOfLines={1}>
+                          {sailor.similarityReason}
+                        </Text>
+                      )}
+                    </Pressable>
+                    <TouchableOpacity
+                      style={styles.suggestionFollowButton}
+                      onPress={() => handleSuggestionFollow(sailor.userId)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.suggestionFollowText}>Follow</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
           </View>
         )}
+
       </View>
     ),
-    [threads, totalUnreadMessages, unreadCount, markAllAsRead, handleSeeAllMessages, sections.length]
+    [threads, totalUnreadMessages, unreadCount, markAllAsRead, handleSeeAllMessages, sections.length, unfollowedSuggestions, handleSailorPress, handleSuggestionFollow, handleSeeAllSuggestions]
   );
 
   // Empty state
@@ -561,16 +683,80 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.tertiaryLabel,
   },
 
-  // Notifications section label
-  notificationsSectionLabel: {
-    paddingTop: IOS_SPACING.sm,
-    paddingBottom: IOS_SPACING.xs,
+  // Suggestions Section
+  suggestionsSection: {
+    marginBottom: IOS_SPACING.xl,
   },
-  notificationsSectionTitle: {
+  suggestionsSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: IOS_SPACING.sm,
+  },
+  suggestionsTitle: {
     fontSize: 20,
     fontWeight: '600',
     color: IOS_COLORS.label,
     letterSpacing: -0.4,
+  },
+  suggestionsScrollContent: {
+    paddingRight: IOS_SPACING.lg,
+    gap: IOS_SPACING.sm,
+  },
+  suggestionCard: {
+    width: 130,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderRadius: IOS_RADIUS.md,
+    padding: IOS_SPACING.md,
+    alignItems: 'center',
+  },
+  suggestionCardInner: {
+    alignItems: 'center',
+    width: '100%',
+  },
+  suggestionCardPressed: {
+    opacity: 0.7,
+  },
+  suggestionAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: IOS_SPACING.sm,
+  },
+  suggestionAvatarEmoji: {
+    fontSize: 26,
+  },
+  suggestionAvatarInitials: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  suggestionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  suggestionReason: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    marginBottom: IOS_SPACING.sm,
+  },
+  suggestionFollowButton: {
+    backgroundColor: IOS_COLORS.systemBlue,
+    borderRadius: IOS_RADIUS.full,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.xs,
+    marginTop: IOS_SPACING.xs,
+  },
+  suggestionFollowText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 
   // Notification row wrapper for rounded corners
@@ -605,7 +791,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   sectionBadge: {
-    backgroundColor: IOS_COLORS.systemGray5,
+    backgroundColor: IOS_COLORS.systemBlue,
     borderRadius: 8,
     minWidth: 20,
     height: 20,
@@ -616,7 +802,7 @@ const styles = StyleSheet.create({
   sectionBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: IOS_COLORS.secondaryLabel,
+    color: '#FFFFFF',
   },
 
   // Empty state
