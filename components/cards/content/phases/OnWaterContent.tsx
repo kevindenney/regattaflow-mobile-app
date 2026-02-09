@@ -46,9 +46,24 @@ import {
 } from 'lucide-react-native';
 
 import { CardRaceData, getTimeUntilRace } from '../../types';
+import { TileGrid } from '../TileGrid';
+import { useAcceptedSuggestions } from '@/hooks/useAcceptedSuggestions';
+import { AcceptedSuggestionBannerList } from '@/components/races/suggestions/AcceptedSuggestionBanner';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
 import type { ChecklistCompletion } from '@/types/checklists';
 import type { PreStartSpecification } from '@/types/raceIntentions';
+import { CheckCircle2 } from 'lucide-react-native';
+import {
+  PreDepSailsTile,
+  PreDepRigTile,
+  RaceCommitteeTile,
+  StartLineTile,
+  CourseReconTile,
+  CrewRolesTile,
+  FinalCheckTile,
+  RacePlanStartTile,
+  RacePlanUpwindTile,
+} from '@/components/races/prep/OnWaterTiles';
 import { EnhancedPreStartItem } from '@/components/races/EnhancedPreStartItem';
 import {
   derivePreDepartureItems,
@@ -1146,6 +1161,9 @@ export function OnWaterContent({
   // Start sequence timer state
   const [showStartSequence, setShowStartSequence] = useState(false);
 
+  // Accepted follower suggestions for inline banners
+  const { forCategory: acceptedForCategory, dismissSuggestion } = useAcceptedSuggestions(race.id);
+
   // Race preparation data (for strategy surface and checklist persistence)
   const { intentions, updateIntentions } = useRacePreparation({
     regattaId: race.id,
@@ -1392,136 +1410,153 @@ export function OnWaterContent({
         </View>
       )}
 
-      {/* Pre-Departure Section (expanded only) - Equipment/setup from prep phase */}
+      {/* ================================================================ */}
+      {/* SECTION: PRE-DEPARTURE (from prep)                              */}
+      {/* ================================================================ */}
       {isExpanded && (
-        <View style={styles.preDepartureSection}>
-          <View style={styles.preStartHeader}>
-            <Wrench size={16} color={IOS_COLORS.orange} />
-            <Text style={styles.preStartHeaderLabel}>PRE-DEPARTURE</Text>
-            {preDepartureItems.length > 0 && (
-              <Text style={styles.preStartHeaderCount}>
-                {preDepartureItems.filter(item => checklistCompletions?.[`predep_${item.id}`]).length}/{preDepartureItems.length}
-              </Text>
-            )}
+        <View style={styles.tileSectionContainer}>
+          <View style={styles.tileSectionHeader}>
+            <View style={styles.tileSectionTitleRow}>
+              <Text style={styles.tileSectionTitle}>Pre-Departure</Text>
+              {preDepartureItems.length > 0 &&
+                preDepartureItems.every(item => !!checklistCompletions?.[`predep_${item.id}`]) && (
+                <CheckCircle2 size={16} color={IOS_COLORS.green} />
+              )}
+            </View>
+            <Text style={styles.tileSectionSubtitle}>Equipment setup from prep phase</Text>
           </View>
-          {preDepartureItems.length > 0 ? (
-            <View style={styles.preDepartureItemsList}>
-              {preDepartureItems.map((item) => {
-                const completionKey = `predep_${item.id}`;
-                const isCompleted = !!checklistCompletions?.[completionKey];
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    style={styles.preDepartureItem}
-                    onPress={() => handleToggleChecklistItem(completionKey)}
-                  >
-                    <View style={[styles.preStartCheckbox, isCompleted && styles.preStartCheckboxDone]}>
-                      {isCompleted && <Text style={styles.preStartCheckmark}>✓</Text>}
-                    </View>
-                    <View style={styles.preDepartureContent}>
-                      <Text
-                        style={[
-                          styles.preDepartureLabel,
-                          isCompleted && styles.preStartItemLabelDone,
-                        ]}
-                      >
-                        {item.label}
-                      </Text>
-                      {item.detail && (
-                        <Text style={styles.preDepartureDetail}>{item.detail}</Text>
-                      )}
-                    </View>
-                    <View style={[styles.preDepartureTypeBadge, item.type === 'sail' ? styles.sailBadge : styles.rigBadge]}>
-                      <Text style={styles.preDepartureTypeBadgeText}>
-                        {item.type === 'sail' ? 'Sail' : 'Rig'}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyPreDepartureContainer}>
-              <Wrench size={20} color={IOS_COLORS.gray} />
-              <Text style={styles.emptyPreDepartureText}>
-                No equipment decisions from prep phase
-              </Text>
-            </View>
-          )}
+          <TileGrid>
+            <PreDepSailsTile
+              isComplete={preDepartureItems
+                .filter(i => i.type === 'sail')
+                .every(i => !!checklistCompletions?.[`predep_${i.id}`])}
+              onPress={() => {
+                const sailItems = preDepartureItems.filter(i => i.type === 'sail');
+                const nextUnchecked = sailItems.find(i => !checklistCompletions?.[`predep_${i.id}`]);
+                if (nextUnchecked) handleToggleChecklistItem(`predep_${nextUnchecked.id}`);
+              }}
+              selectedSails={
+                preDepartureItems
+                  .filter(i => i.type === 'sail')
+                  .map(i => i.label) || undefined
+              }
+            />
+            <PreDepRigTile
+              isComplete={preDepartureItems
+                .filter(i => i.type === 'rig')
+                .every(i => !!checklistCompletions?.[`predep_${i.id}`])}
+              onPress={() => {
+                const rigItems = preDepartureItems.filter(i => i.type === 'rig');
+                const nextUnchecked = rigItems.find(i => !checklistCompletions?.[`predep_${i.id}`]);
+                if (nextUnchecked) handleToggleChecklistItem(`predep_${nextUnchecked.id}`);
+              }}
+              tuningSummary={
+                preDepartureItems
+                  .filter(i => i.type === 'rig')
+                  .map(i => i.detail)
+                  .filter(Boolean)
+                  .join(', ') || undefined
+              }
+            />
+          </TileGrid>
         </View>
       )}
 
-      {/* Pre-Start Checklist (expanded only) - Enhanced with HOW specifications */}
+      {/* ================================================================ */}
+      {/* SECTION: PRE-START CHECKS                                       */}
+      {/* ================================================================ */}
       {isExpanded && (
-        <View style={styles.preStartSection}>
-          {/* Section header */}
-          <View style={styles.preStartHeader}>
-            <Compass size={16} color={IOS_COLORS.blue} />
-            <Text style={styles.preStartHeaderLabel}>PRE-START CHECKS</Text>
-            <Text style={styles.preStartHeaderCount}>
-              {PRE_START_CHECK_ITEMS.filter(item => checklistCompletions?.[item.id]).length}/{PRE_START_CHECK_ITEMS.length}
-            </Text>
+        <View style={styles.tileSectionContainer}>
+          <View style={styles.tileSectionHeader}>
+            <View style={styles.tileSectionTitleRow}>
+              <Text style={styles.tileSectionTitle}>Pre-Start Checks</Text>
+              {PRE_START_CHECK_ITEMS.every(item => !!checklistCompletions?.[item.id]) && (
+                <CheckCircle2 size={16} color={IOS_COLORS.green} />
+              )}
+            </View>
+            <Text style={styles.tileSectionSubtitle}>On-water observations before the gun</Text>
           </View>
-          {/* Enhanced checklist items with specification inputs */}
-          <View style={styles.enhancedPreStartItemsList}>
-            {PRE_START_CHECK_ITEMS.map((item) => (
-              <EnhancedPreStartItem
-                key={item.id}
-                itemId={item.id}
-                label={item.label}
-                isCompleted={!!checklistCompletions?.[item.id]}
-                specification={intentions?.preStartSpecifications?.[item.id]}
-                onToggle={handleToggleChecklistItem}
-                onUpdateSpecification={handleUpdateSpecification}
-              />
-            ))}
-          </View>
+          <TileGrid>
+            <RaceCommitteeTile
+              isComplete={
+                !!checklistCompletions?.['prestart_checkin']
+              }
+              onPress={() => handleToggleChecklistItem('prestart_checkin')}
+              checkedIn={!!checklistCompletions?.['prestart_checkin']}
+              courseCode={intentions?.preStartSpecifications?.['prestart_checkin']?.specification}
+            />
+            <StartLineTile
+              isComplete={
+                !!checklistCompletions?.['prestart_sailed_line'] &&
+                !!checklistCompletions?.['prestart_favored_end']
+              }
+              onPress={() => {
+                if (!checklistCompletions?.['prestart_sailed_line']) handleToggleChecklistItem('prestart_sailed_line');
+                else if (!checklistCompletions?.['prestart_favored_end']) handleToggleChecklistItem('prestart_favored_end');
+              }}
+              favoredEnd={intentions?.preStartSpecifications?.['prestart_favored_end']?.specification}
+              lineTime={intentions?.preStartSpecifications?.['prestart_sailed_line']?.specification}
+            />
+            <CourseReconTile
+              isComplete={
+                !!checklistCompletions?.['prestart_miniature_course'] &&
+                !!checklistCompletions?.['prestart_laylines'] &&
+                !!checklistCompletions?.['prestart_wind_patterns'] &&
+                !!checklistCompletions?.['prestart_current']
+              }
+              onPress={() => {
+                const reconItems = ['prestart_miniature_course', 'prestart_laylines', 'prestart_wind_patterns', 'prestart_current'];
+                const nextUnchecked = reconItems.find(id => !checklistCompletions?.[id]);
+                if (nextUnchecked) handleToggleChecklistItem(nextUnchecked);
+              }}
+              progress={{
+                current: ['prestart_miniature_course', 'prestart_laylines', 'prestart_wind_patterns', 'prestart_current']
+                  .filter(id => !!checklistCompletions?.[id]).length,
+                total: 4,
+              }}
+            />
+            <CrewRolesTile
+              isComplete={!!checklistCompletions?.['prestart_crew_roles']}
+              onPress={() => handleToggleChecklistItem('prestart_crew_roles')}
+            />
+            <FinalCheckTile
+              isComplete={!!checklistCompletions?.['prestart_boat_check']}
+              onPress={() => handleToggleChecklistItem('prestart_boat_check')}
+            />
+          </TileGrid>
+          <AcceptedSuggestionBannerList
+            suggestions={acceptedForCategory('tactics')}
+            onDismiss={dismissSuggestion}
+          />
         </View>
       )}
 
-      {/* Racing Strategy Section (expanded only) - Grouped strategy from prep phase */}
-      {isExpanded && (
-        <View style={styles.racingStrategySection}>
-          <View style={styles.preStartHeader}>
-            <Target size={16} color={IOS_COLORS.green} />
-            <Text style={styles.preStartHeaderLabel}>RACING STRATEGY</Text>
+      {/* ================================================================ */}
+      {/* SECTION: YOUR RACE PLAN (read-only reference)                   */}
+      {/* ================================================================ */}
+      {isExpanded && (hasStartStrategy || hasFirstBeatStrategy) && (
+        <View style={styles.tileSectionContainer}>
+          <View style={styles.tileSectionHeader}>
+            <View style={styles.tileSectionTitleRow}>
+              <Text style={styles.tileSectionTitle}>Your Race Plan</Text>
+              {hasStartStrategy && hasFirstBeatStrategy && (
+                <CheckCircle2 size={16} color={IOS_COLORS.green} />
+              )}
+            </View>
+            <Text style={styles.tileSectionSubtitle}>Strategy from prep phase</Text>
           </View>
-          {nonEmptyCategories.length > 0 ? (
-            <View style={styles.racingStrategyCategoriesList}>
-              {nonEmptyCategories.map((category) => {
-                const config = CATEGORY_DISPLAY_CONFIG[category];
-                const items = groupedStrategy[category];
-
-                return (
-                  <View key={category} style={styles.racingStrategyCategory}>
-                    {/* Category header with colored accent */}
-                    <View style={[styles.racingStrategyCategoryHeader, { borderLeftColor: config.color }]}>
-                      <Text style={[styles.racingStrategyCategoryLabel, { color: config.color }]}>
-                        {config.label}
-                      </Text>
-                    </View>
-                    {/* Strategy items within category */}
-                    <View style={styles.racingStrategyItemsList}>
-                      {items.map((strategyItem) => (
-                        <View key={strategyItem.id} style={styles.racingStrategyItem}>
-                          <Text style={styles.racingStrategyItemLabel}>{strategyItem.label}</Text>
-                          <Text style={styles.racingStrategyItemValue}>{strategyItem.value}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.emptyRacingStrategyContainer}>
-              <Target size={20} color={IOS_COLORS.gray} />
-              <Text style={styles.emptyRacingStrategyText}>
-                No strategy decisions from prep phase
-              </Text>
-            </View>
-          )}
+          <TileGrid>
+            <RacePlanStartTile
+              isComplete={hasStartStrategy}
+              onPress={() => {}}
+              summary={startStrategySummary || undefined}
+            />
+            <RacePlanUpwindTile
+              isComplete={hasFirstBeatStrategy}
+              onPress={() => {}}
+              summary={firstBeatSummary || undefined}
+            />
+          </TileGrid>
         </View>
       )}
 
@@ -1533,6 +1568,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     gap: 16,
+  },
+  // Tile sections
+  tileSectionContainer: {
+    gap: 12,
+  },
+  tileSectionHeader: {
+    gap: 2,
+    paddingBottom: 4,
+  },
+  tileSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tileSectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#3C3C43',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  tileSectionSubtitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    lineHeight: 18,
+  },
+  tileRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
 
   // Intention Banner

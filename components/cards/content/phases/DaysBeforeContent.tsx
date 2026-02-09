@@ -40,6 +40,8 @@ import {
 
 import { CardRaceData } from '../../types';
 import { TileGrid } from '../TileGrid';
+import { useAcceptedSuggestions } from '@/hooks/useAcceptedSuggestions';
+import { AcceptedSuggestionBannerList } from '@/components/races/suggestions/AcceptedSuggestionBanner';
 import { useRaceChecklist, ChecklistItemWithState } from '@/hooks/useRaceChecklist';
 import { useTeamRaceEntry, useTeamChecklist } from '@/hooks';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
@@ -563,6 +565,9 @@ export function DaysBeforeContent({
 
   // User settings for quick tips/learning visibility
   const { settings: userSettings } = useUserSettings();
+
+  // Accepted follower suggestions for inline banners
+  const { forCategory: acceptedForCategory, dismissSuggestion } = useAcceptedSuggestions(race.id);
 
   // Focus intent for this race (set from a previous race's review)
   const { focusIntent } = useFocusIntentForRace(race.id);
@@ -1363,6 +1368,10 @@ export function DaysBeforeContent({
             tideLabel={weatherSparklines?.tideLabel || raceTideLabel}
           />
         </TileGrid>
+        <AcceptedSuggestionBannerList
+          suggestions={acceptedForCategory('weather')}
+          onDismiss={dismissSuggestion}
+        />
       </TileSection>
 
       {/* ================================================================ */}
@@ -1411,6 +1420,10 @@ export function DaysBeforeContent({
             onPress={() => handleTilePress('safety', 'safety_gear')}
           />
         </TileGrid>
+        <AcceptedSuggestionBannerList
+          suggestions={[...acceptedForCategory('rig_tuning'), ...acceptedForCategory('equipment')]}
+          onDismiss={dismissSuggestion}
+        />
       </TileSection>
 
       {/* ================================================================ */}
@@ -1448,6 +1461,10 @@ export function DaysBeforeContent({
             foodNotes={completions['food']?.notes}
           />
         </TileGrid>
+        <AcceptedSuggestionBannerList
+          suggestions={acceptedForCategory('crew')}
+          onDismiss={dismissSuggestion}
+        />
       </TileSection>
 
       {/* ================================================================ */}
@@ -1490,6 +1507,10 @@ export function DaysBeforeContent({
             strategy={intentions?.strategyNotes?.['tide.favoredSide']}
           />
         </TileGrid>
+        <AcceptedSuggestionBannerList
+          suggestions={acceptedForCategory('strategy')}
+          onDismiss={dismissSuggestion}
+        />
       </TileSection>
 
       {/* ================================================================ */}
