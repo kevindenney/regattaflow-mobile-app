@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Animated,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import {
@@ -186,20 +187,27 @@ export function NotificationRow({
       >
         {/* Avatar with type icon overlay */}
         <View style={styles.avatarWrapper}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: notification.actorAvatarColor || IOS_COLORS.systemGray4 },
-            ]}
-          >
-            {notification.actorAvatarEmoji ? (
-              <Text style={styles.avatarEmoji}>{notification.actorAvatarEmoji}</Text>
-            ) : (
-              <Text style={styles.avatarInitials}>
-                {getInitials(notification.actorName || 'U')}
-              </Text>
-            )}
-          </View>
+          {notification.actorAvatarUrl ? (
+            <Image
+              source={{ uri: notification.actorAvatarUrl }}
+              style={styles.avatarImage}
+            />
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: notification.actorAvatarColor || IOS_COLORS.systemGray4 },
+              ]}
+            >
+              {notification.actorAvatarEmoji ? (
+                <Text style={styles.avatarEmoji}>{notification.actorAvatarEmoji}</Text>
+              ) : (
+                <Text style={styles.avatarInitials}>
+                  {getInitials(notification.actorName || 'U')}
+                </Text>
+              )}
+            </View>
+          )}
           {/* Icon badge - positioned on avatar */}
           <View style={[styles.iconBadge, { backgroundColor: getIconBgColor(notification.type) }]}>
             {getNotificationIcon(notification.type)}
@@ -284,6 +292,11 @@ const styles = StyleSheet.create({
     borderRadius: AVATAR_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarImage: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
   },
   avatarEmoji: {
     fontSize: 18,

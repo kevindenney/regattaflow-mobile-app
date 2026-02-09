@@ -34,6 +34,7 @@ export interface FollowerPost {
   updatedAt: string;
   // Joined fields
   userName?: string;
+  avatarUrl?: string;
   avatarEmoji?: string;
   avatarColor?: string;
   linkedRaceName?: string;
@@ -142,6 +143,7 @@ class FollowerPostServiceClass {
       return {
         ...this.transformRow(row),
         userName: profile?.fullName || 'Unknown Sailor',
+        avatarUrl: profile?.avatarUrl,
         avatarEmoji: profile?.avatarEmoji,
         avatarColor: profile?.avatarColor,
         linkedRaceName: row.linked_race_id ? raceNames.get(row.linked_race_id) : undefined,
@@ -186,18 +188,18 @@ class FollowerPostServiceClass {
 
   private async fetchProfiles(
     userIds: string[]
-  ): Promise<Map<string, { fullName: string; avatarEmoji?: string; avatarColor?: string }>> {
-    const map = new Map<string, { fullName: string; avatarEmoji?: string; avatarColor?: string }>();
+  ): Promise<Map<string, { fullName: string; avatarUrl?: string; avatarEmoji?: string; avatarColor?: string }>> {
+    const map = new Map<string, { fullName: string; avatarUrl?: string; avatarEmoji?: string; avatarColor?: string }>();
 
     if (userIds.length === 0) return map;
 
-    // Fetch from profiles table
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, full_name')
+    // Fetch from users table (includes avatar_url)
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, full_name, avatar_url')
       .in('id', userIds);
 
-    // Fetch from sailor_profiles for avatar data
+    // Fetch from sailor_profiles for avatar emoji/color
     const { data: sailorProfiles } = await supabase
       .from('sailor_profiles')
       .select('user_id, avatar_emoji, avatar_color')
@@ -207,10 +209,11 @@ class FollowerPostServiceClass {
       (sailorProfiles || []).map((sp: any) => [sp.user_id, sp])
     );
 
-    for (const profile of profiles || []) {
-      const sailor = sailorMap.get(profile.id);
-      map.set(profile.id, {
-        fullName: profile.full_name || 'Unknown Sailor',
+    for (const user of users || []) {
+      const sailor = sailorMap.get(user.id);
+      map.set(user.id, {
+        fullName: user.full_name || 'Unknown Sailor',
+        avatarUrl: user.avatar_url,
         avatarEmoji: sailor?.avatar_emoji,
         avatarColor: sailor?.avatar_color,
       });

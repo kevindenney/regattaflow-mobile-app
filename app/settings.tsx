@@ -1,11 +1,10 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Platform, Image } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import {
   ArrowLeft,
   ChevronRight,
   Bell,
-  Globe,
   Moon,
   User,
   Key,
@@ -185,14 +184,21 @@ export default function SettingsScreen() {
             Profile
           </Text>
           <View className="flex-row items-center">
-            <View className="w-16 h-16 bg-blue-500 rounded-full items-center justify-center">
-              <Text className="text-white text-2xl font-bold">
-                {profile?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
-              </Text>
-            </View>
+            {profile?.avatar_url ? (
+              <Image
+                source={{ uri: profile.avatar_url }}
+                className="w-16 h-16 rounded-full"
+              />
+            ) : (
+              <View className="w-16 h-16 bg-blue-500 rounded-full items-center justify-center">
+                <Text className="text-white text-2xl font-bold">
+                  {profile?.full_name?.charAt(0)?.toUpperCase() || profile?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || 'U'}
+                </Text>
+              </View>
+            )}
             <View className="flex-1 ml-4">
               <Text className="text-lg font-bold text-gray-800">
-                {profile?.name || 'User'}
+                {profile?.full_name || profile?.name || 'User'}
               </Text>
               <Text className="text-gray-500 text-sm">{user?.email}</Text>
               <Text className="text-blue-500 text-sm capitalize">
@@ -237,12 +243,6 @@ export default function SettingsScreen() {
             title="Notifications"
             subtitle="Configure your notification preferences"
             onPress={() => router.push('/settings/notifications')}
-          />
-          <SettingsItem
-            icon={Globe}
-            title="Language"
-            subtitle="English"
-            onPress={() => router.push('/settings/language')}
           />
           <TouchableOpacity
             className="flex-row items-center px-4 py-4 border-b border-gray-100 active:bg-gray-50"

@@ -1,7 +1,7 @@
 /**
  * Edit Profile Screen
  *
- * Form to edit user profile information.
+ * Form to edit user profile information including profile photo.
  * Uses StyleSheet for consistent styling across the app.
  */
 
@@ -12,18 +12,21 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Save } from 'lucide-react-native';
+import { ArrowLeft, Save, Camera } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/providers/AuthProvider';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { TUFTE_BACKGROUND } from '@/components/cards';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { supabase } from '@/services/supabase';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -31,38 +34,124 @@ export default function EditProfileScreen() {
   const { user, userProfile, updateUserProfile } = useAuth();
   const [saving, setSaving] = React.useState(false);
   const [fullName, setFullName] = React.useState('');
+  const [photoUri, setPhotoUri] = React.useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = React.useState(false);
 
   // Initialize from userProfile
   React.useEffect(() => {
     if (userProfile) {
       setFullName(userProfile.full_name || '');
+      setPhotoUri(userProfile.avatar_url || null);
     }
   }, [userProfile]);
+
+  const handlePickPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setPhotoUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      showAlert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const uploadAvatar = async (uri: string): Promise<string | null> => {
+    if (!user?.id) return null;
+
+    try {
+      setUploadingPhoto(true);
+
+      // Get file extension from URI
+      const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${user.id}/avatar.${ext}`;
+
+      // Fetch the image as a blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      // Convert blob to array buffer for Supabase upload
+      const arrayBuffer = await new Response(blob).arrayBuffer();
+
+      // Upload to Supabase storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, arrayBuffer, {
+          contentType: blob.type || `image/${ext}`,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      // Add cache-busting query param
+      return `${publicUrl}?t=${Date.now()}`;
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      throw error;
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2) || '?';
+  };
 
   const handleSave = async () => {
     if (!user) return;
 
     if (!fullName.trim()) {
-      Alert.alert('Error', 'Name is required');
+      showAlert('Error', 'Name is required');
       return;
     }
 
     setSaving(true);
 
     try {
-      await updateUserProfile({
+      const updates: { full_name: string; avatar_url?: string } = {
         full_name: fullName.trim(),
-      });
+      };
 
-      Alert.alert('Success', 'Profile updated successfully', [
-        {
-          text: 'OK',
-          onPress: () => router.back()
+      // Upload photo if it changed (local file URI vs remote URL)
+      // Check for file://, blob:, or data: URIs which indicate a new local image
+      const isLocalImage = photoUri && (
+        photoUri.startsWith('file://') ||
+        photoUri.startsWith('blob:') ||
+        photoUri.startsWith('data:')
+      );
+      if (isLocalImage) {
+        const uploadedUrl = await uploadAvatar(photoUri);
+        if (uploadedUrl) {
+          updates.avatar_url = uploadedUrl;
         }
-      ]);
+      }
+
+      await updateUserProfile(updates);
+
+      showAlert('Success', 'Profile updated successfully');
+      router.back();
     } catch (error) {
       console.error('Error saving profile:', error);
-      Alert.alert('Error', 'Failed to save profile. Please try again.');
+      showAlert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -108,6 +197,32 @@ export default function EditProfileScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Profile Photo */}
+        <View style={styles.photoSection}>
+          <TouchableOpacity
+            style={styles.photoContainer}
+            onPress={handlePickPhoto}
+            disabled={saving || uploadingPhoto}
+            activeOpacity={0.8}
+          >
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={styles.photo} />
+            ) : (
+              <View style={styles.photoPlaceholder}>
+                <Text style={styles.initials}>{getInitials(fullName || user?.email || '')}</Text>
+              </View>
+            )}
+            <View style={styles.editBadge}>
+              {uploadingPhoto ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Camera size={14} color="#FFFFFF" />
+              )}
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.photoHint}>Tap to change photo</Text>
+        </View>
+
         {/* Basic Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Basic Information</Text>
@@ -150,6 +265,52 @@ const styles = StyleSheet.create({
   centered: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  photoSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    backgroundColor: '#FFFFFF',
+    marginTop: 16,
+  },
+  photoContainer: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  photo: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  photoPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  initials: {
+    fontSize: 36,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  editBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  photoHint: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: 4,
   },
   header: {
     backgroundColor: '#FFFFFF',

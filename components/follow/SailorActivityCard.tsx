@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageCircle, Lightbulb } from 'lucide-react-native';
@@ -255,14 +255,18 @@ export function SailorActivityCard({
       <Pressable onPress={handleRacePress} style={styles.card}>
         {/* Sailor Header */}
         <Pressable onPress={handleSailorPress} style={styles.sailorRow}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: race.avatarColor || IOS_COLORS.systemGray5 },
-            ]}
-          >
-            <Text style={styles.avatarEmoji}>{race.avatarEmoji || '⛵'}</Text>
-          </View>
+          {race.avatarUrl ? (
+            <Image source={{ uri: race.avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: race.avatarColor || IOS_COLORS.systemGray5 },
+              ]}
+            >
+              <Text style={styles.avatarEmoji}>{race.avatarEmoji || '⛵'}</Text>
+            </View>
+          )}
           <View style={styles.sailorInfo}>
             <Text style={styles.sailorName} numberOfLines={1}>
               {race.userName}
@@ -641,6 +645,11 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
   },
   avatarEmoji: {
     fontSize: 22,

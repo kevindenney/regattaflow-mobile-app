@@ -37,6 +37,7 @@ export interface SocialNotification {
   // Related entities
   actorId?: string;
   actorName?: string;
+  actorAvatarUrl?: string;
   actorAvatarEmoji?: string;
   actorAvatarColor?: string;
   regattaId?: string;
@@ -54,8 +55,10 @@ export interface NotificationPreferences {
   raceLikes: boolean;
   raceComments: boolean;
   achievements: boolean;
-  quietHoursStart?: string; // HH:MM format
-  quietHoursEnd?: string;
+  directMessages: boolean;
+  groupMessages: boolean;
+  quietHoursStart?: string | null; // HH:MM format
+  quietHoursEnd?: string | null;
 }
 
 export interface NotificationStats {
@@ -123,13 +126,14 @@ class NotificationServiceClass {
     ];
     let actorMap = new Map<
       string,
-      { name: string; avatarEmoji?: string; avatarColor?: string }
+      { name: string; avatarUrl?: string; avatarEmoji?: string; avatarColor?: string }
     >();
 
     if (actorIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name')
+      // Fetch from users table (includes avatar_url)
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, full_name, avatar_url')
         .in('id', actorIds);
 
       const { data: sailorProfiles } = await supabase
@@ -137,16 +141,17 @@ class NotificationServiceClass {
         .select('user_id, avatar_emoji, avatar_color')
         .in('user_id', actorIds);
 
-      const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      const usersMap = new Map((users || []).map((u: any) => [u.id, u]));
       const sailorProfilesMap = new Map(
         (sailorProfiles || []).map((sp: any) => [sp.user_id, sp])
       );
 
       actorIds.forEach((id) => {
         const sailorProfile = sailorProfilesMap.get(id);
-        const profile = profilesMap.get(id);
+        const user = usersMap.get(id);
         actorMap.set(id, {
-          name: profile?.full_name || 'Sailor',
+          name: user?.full_name || 'Sailor',
+          avatarUrl: user?.avatar_url,
           avatarEmoji: sailorProfile?.avatar_emoji,
           avatarColor: sailorProfile?.avatar_color,
         });
@@ -180,6 +185,7 @@ class NotificationServiceClass {
         createdAt: n.created_at,
         actorId: n.actor_id,
         actorName: actor?.name,
+        actorAvatarUrl: actor?.avatarUrl,
         actorAvatarEmoji: actor?.avatarEmoji,
         actorAvatarColor: actor?.avatarColor,
         regattaId: n.regatta_id,
@@ -345,6 +351,8 @@ class NotificationServiceClass {
         raceLikes: true,
         raceComments: true,
         achievements: true,
+        directMessages: true,
+        groupMessages: true,
       };
     }
 
@@ -356,8 +364,10 @@ class NotificationServiceClass {
       raceLikes: data.race_likes ?? true,
       raceComments: data.race_comments ?? true,
       achievements: data.achievements ?? true,
-      quietHoursStart: data.quiet_hours_start,
-      quietHoursEnd: data.quiet_hours_end,
+      directMessages: data.direct_messages ?? true,
+      groupMessages: data.group_messages ?? true,
+      quietHoursStart: data.quiet_hours_start ?? null,
+      quietHoursEnd: data.quiet_hours_end ?? null,
     };
   }
 
@@ -390,6 +400,12 @@ class NotificationServiceClass {
     }
     if (preferences.achievements !== undefined) {
       updates.achievements = preferences.achievements;
+    }
+    if (preferences.directMessages !== undefined) {
+      updates.direct_messages = preferences.directMessages;
+    }
+    if (preferences.groupMessages !== undefined) {
+      updates.group_messages = preferences.groupMessages;
     }
     if (preferences.quietHoursStart !== undefined) {
       updates.quiet_hours_start = preferences.quietHoursStart;

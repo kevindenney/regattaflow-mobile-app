@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
+  Image,
   type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
@@ -110,10 +111,11 @@ function ProfileAvatarButton() {
   }));
 
   const initials = isGuest ? '?' : getInitials(userProfile?.full_name || user?.email);
+  const avatarUrl = userProfile?.avatar_url;
 
   return (
     <AnimatedPressable
-      style={[styles.profileAvatar, animStyle]}
+      style={[styles.profileAvatar, avatarUrl && styles.profileAvatarWithImage, animStyle]}
       accessibilityLabel="Account"
       accessibilityRole="button"
       onPress={() => {
@@ -129,6 +131,8 @@ function ProfileAvatarButton() {
     >
       {isGuest ? (
         <Ionicons name="person-circle-outline" size={PROFILE_AVATAR_SIZE} color={IOS_COLORS.secondaryLabel} />
+      ) : avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={styles.profileAvatarImage} />
       ) : (
         <Text style={styles.profileAvatarText}>{initials}</Text>
       )}
@@ -453,6 +457,15 @@ const styles = StyleSheet.create({
     backgroundColor: IOS_COLORS.systemBlue,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileAvatarWithImage: {
+    backgroundColor: 'transparent',
+  },
+  profileAvatarImage: {
+    width: PROFILE_AVATAR_SIZE,
+    height: PROFILE_AVATAR_SIZE,
+    borderRadius: PROFILE_AVATAR_SIZE / 2,
   },
   profileAvatarText: {
     color: '#FFFFFF',

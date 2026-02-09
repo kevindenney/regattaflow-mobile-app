@@ -2,8 +2,9 @@
  * ProfileCard
  *
  * Apple ID-style profile card rendered inside an IOSListSection.
- * Shows avatar initials, name, email, home club/venue, and a chevron.
+ * Shows avatar image (or initials fallback), name, email, home club/venue, and a chevron.
  * Supports inline editing — tap the card row to start editing fields.
+ * Supports photo picking — tap the avatar to change profile picture.
  */
 
 import React, { useState, useRef, useCallback } from 'react';
@@ -15,21 +16,28 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { accountStyles, getInitials, formatMemberSince } from './accountStyles';
 import { IOSListSection } from '@/components/ui/ios/IOSListSection';
+import { supabase } from '@/services/supabase';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface ProfileUpdates {
   full_name?: string;
   home_club?: string;
   home_venue?: string;
+  avatar_url?: string;
 }
 
 interface ProfileCardProps {
   name: string;
   email?: string;
+  avatarUrl?: string;
+  userId?: string;
   homeClub?: string;
   homeVenue?: string;
   memberSince?: string | Date | null;
@@ -39,6 +47,8 @@ interface ProfileCardProps {
 export function TufteProfileHeader({
   name,
   email,
+  avatarUrl,
+  userId,
   homeClub,
   homeVenue,
   memberSince,
@@ -46,6 +56,78 @@ export function TufteProfileHeader({
 }: ProfileCardProps) {
   const initials = getInitials(name);
   const memberSinceText = formatMemberSince(memberSince);
+  const [localAvatarUrl, setLocalAvatarUrl] = useState(avatarUrl);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Update local avatar when prop changes
+  React.useEffect(() => {
+    setLocalAvatarUrl(avatarUrl);
+  }, [avatarUrl]);
+
+  const handlePickPhoto = useCallback(async () => {
+    if (!userId || !onSave) return;
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        setLocalAvatarUrl(uri); // Show preview immediately
+        setUploadingAvatar(true);
+
+        try {
+          // Get file extension from URI
+          const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
+          const fileName = `${userId}/avatar.${ext}`;
+
+          // Fetch the image as a blob
+          const response = await fetch(uri);
+          const blob = await response.blob();
+
+          // Convert blob to array buffer for Supabase upload
+          const arrayBuffer = await new Response(blob).arrayBuffer();
+
+          // Upload to Supabase storage
+          const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, arrayBuffer, {
+              contentType: blob.type || `image/${ext}`,
+              upsert: true,
+            });
+
+          if (uploadError) {
+            console.error('Upload error:', uploadError);
+            throw uploadError;
+          }
+
+          // Get public URL
+          const { data: { publicUrl } } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+
+          // Add cache-busting query param
+          const finalUrl = `${publicUrl}?t=${Date.now()}`;
+          setLocalAvatarUrl(finalUrl);
+
+          // Save to profile
+          await onSave({ avatar_url: finalUrl });
+        } catch (error) {
+          console.error('Error uploading avatar:', error);
+          setLocalAvatarUrl(avatarUrl); // Revert on error
+          showAlert('Error', 'Failed to upload photo. Please try again.');
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+    } catch (error) {
+      showAlert('Error', 'Failed to pick image. Please try again.');
+    }
+  }, [userId, onSave, avatarUrl]);
 
   // Inline editing state
   const [editingField, setEditingField] = useState<'name' | 'club' | 'venue' | null>(null);
@@ -132,19 +214,39 @@ export function TufteProfileHeader({
 
   return (
     <IOSListSection footer={memberSinceText || undefined}>
-      <TouchableOpacity
-        style={accountStyles.profileCardRow}
-        onPress={handleCardPress}
-        activeOpacity={0.6}
-        disabled={!!editingField}
-      >
-        {/* Avatar */}
-        <View style={accountStyles.profileAvatar}>
-          <Text style={accountStyles.profileAvatarText}>{initials}</Text>
-        </View>
+      <View style={accountStyles.profileCardRow}>
+        {/* Avatar with tap to change photo */}
+        <TouchableOpacity
+          style={localStyles.avatarContainer}
+          onPress={handlePickPhoto}
+          disabled={!onSave || uploadingAvatar}
+          activeOpacity={0.7}
+        >
+          {localAvatarUrl ? (
+            <Image source={{ uri: localAvatarUrl }} style={accountStyles.profileAvatar} />
+          ) : (
+            <View style={accountStyles.profileAvatar}>
+              <Text style={accountStyles.profileAvatarText}>{initials}</Text>
+            </View>
+          )}
+          {onSave && (
+            <View style={localStyles.cameraBadge}>
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="camera" size={12} color="#FFFFFF" />
+              )}
+            </View>
+          )}
+        </TouchableOpacity>
 
-        {/* Text content */}
-        <View style={accountStyles.profileTextContainer}>
+        {/* Text content - tappable for editing */}
+        <TouchableOpacity
+          style={accountStyles.profileTextContainer}
+          onPress={handleCardPress}
+          activeOpacity={0.6}
+          disabled={!!editingField}
+        >
           {editingField === 'name' ? (
             renderEditField('name', 'Your Name')
           ) : (
@@ -167,18 +269,34 @@ export function TufteProfileHeader({
           {/* Inline edit fields for club/venue when editing */}
           {editingField === 'club' && renderEditField('club', 'Home Club')}
           {editingField === 'venue' && renderEditField('venue', 'Home Venue')}
-        </View>
+        </TouchableOpacity>
 
         {/* Trailing chevron */}
         {!editingField && (
           <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.tertiaryLabel} />
         )}
-      </TouchableOpacity>
+      </View>
     </IOSListSection>
   );
 }
 
 const localStyles = StyleSheet.create({
+  avatarContainer: {
+    position: 'relative',
+  },
+  cameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   editContainer: {
     flexDirection: 'row',
     alignItems: 'center',

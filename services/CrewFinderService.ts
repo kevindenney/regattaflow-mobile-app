@@ -538,6 +538,26 @@ class CrewFinderServiceClass {
         profilesMap = Object.fromEntries(profiles.map((p) => [p.id, p]));
       }
 
+      // Fill gaps from 'users' table for OAuth users missing from 'profiles'
+      const missingIds = memberUserIds.filter((id) => !profilesMap[id]);
+      if (missingIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name, email')
+          .in('id', missingIds);
+        (usersData || []).forEach((u: any) => { profilesMap[u.id] = u; });
+
+        // Final fallback: user_profiles view (reads from auth.users)
+        const stillMissing = missingIds.filter((id) => !profilesMap[id]);
+        if (stillMissing.length > 0) {
+          const { data: viewData } = await supabase
+            .from('user_profiles')
+            .select('id, full_name, email')
+            .in('id', stillMissing);
+          (viewData || []).forEach((u: any) => { profilesMap[u.id] = u; });
+        }
+      }
+
       // Fetch sailor_profiles separately (no FK relationship)
       const { data: sailorProfiles } = await supabase
         .from('sailor_profiles')
@@ -559,15 +579,17 @@ class CrewFinderServiceClass {
       const sailorProfile = sailorProfilesMap[m.user_id];
       const profile = profilesMap[m.user_id];
 
-      // Only include users who have a valid profile with a name
-      if (!profile?.full_name) continue;
+      // Derive display name with email prefix fallback
+      const displayName = profile?.full_name?.trim()
+        || (profile?.email ? profile.email.split('@')[0] : '');
+      if (!displayName) continue;
 
       seenUsers.add(m.user_id);
       const fleetName = fleetNameMap.get(m.fleet_id) || 'Fleet';
 
       members.push({
         userId: m.user_id,
-        fullName: profile.full_name,
+        fullName: displayName,
         avatarEmoji: sailorProfile?.avatar_emoji,
         avatarColor: sailorProfile?.avatar_color,
         sailingExperience: sailorProfile?.experience_level,
@@ -672,8 +694,10 @@ class CrewFinderServiceClass {
 
             if (profiles) {
               for (const profile of profiles) {
-                // Skip current user and profiles without names
-                if (profile.id === userId || !profile.full_name) continue;
+                if (profile.id === userId) continue;
+                const displayName = profile.full_name?.trim()
+                  || (profile.email ? profile.email.split('@')[0] : '');
+                if (!displayName) continue;
 
                 const existing = suggestionsMap.get(profile.id);
                 const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
@@ -684,7 +708,7 @@ class CrewFinderServiceClass {
                 } else {
                   suggestionsMap.set(profile.id, {
                     userId: profile.id,
-                    fullName: profile.full_name,
+                    fullName: displayName,
                     avatarEmoji: (profile.sailor_profiles as any)?.avatar_emoji,
                     avatarColor: (profile.sailor_profiles as any)?.avatar_color,
                     sailingExperience: (profile.sailor_profiles as any)?.experience_level,
@@ -842,8 +866,10 @@ class CrewFinderServiceClass {
 
             if (profiles) {
               for (const profile of profiles) {
-                // Skip current user and profiles without names
-                if (profile.id === userId || !profile.full_name) continue;
+                if (profile.id === userId) continue;
+                const displayName = profile.full_name?.trim()
+                  || (profile.email ? profile.email.split('@')[0] : '');
+                if (!displayName) continue;
 
                 const existing = suggestionsMap.get(profile.id);
                 const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
@@ -854,7 +880,7 @@ class CrewFinderServiceClass {
                 } else {
                   suggestionsMap.set(profile.id, {
                     userId: profile.id,
-                    fullName: profile.full_name,
+                    fullName: displayName,
                     avatarEmoji: (profile.sailor_profiles as any)?.avatar_emoji,
                     avatarColor: (profile.sailor_profiles as any)?.avatar_color,
                     sailingExperience: (profile.sailor_profiles as any)?.experience_level,
@@ -1197,6 +1223,94 @@ class CrewFinderServiceClass {
     return count || 0;
   }
 
+  /**
+   * Get follow options (favorite, notifications, muted) for a follow relationship
+   */
+  async getFollowOptions(
+    followerId: string,
+    followingId: string
+  ): Promise<{ isFavorite: boolean; notificationsEnabled: boolean; isMuted: boolean }> {
+    const { data, error } = await supabase
+      .from('user_follows')
+      .select('is_favorite, notifications_enabled, is_muted')
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { isFavorite: false, notificationsEnabled: false, isMuted: false };
+    }
+
+    return {
+      isFavorite: data.is_favorite ?? false,
+      notificationsEnabled: data.notifications_enabled ?? false,
+      isMuted: data.is_muted ?? false,
+    };
+  }
+
+  /**
+   * Toggle favorite status for a follow relationship
+   */
+  async toggleFavorite(followerId: string, followingId: string): Promise<boolean> {
+    const current = await this.getFollowOptions(followerId, followingId);
+    const newValue = !current.isFavorite;
+
+    const { error } = await supabase
+      .from('user_follows')
+      .update({ is_favorite: newValue })
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId);
+
+    if (error) {
+      logger.error('Failed to toggle favorite:', error);
+      throw error;
+    }
+
+    return newValue;
+  }
+
+  /**
+   * Toggle notifications for a follow relationship
+   */
+  async toggleNotifications(followerId: string, followingId: string): Promise<boolean> {
+    const current = await this.getFollowOptions(followerId, followingId);
+    const newValue = !current.notificationsEnabled;
+
+    const { error } = await supabase
+      .from('user_follows')
+      .update({ notifications_enabled: newValue })
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId);
+
+    if (error) {
+      logger.error('Failed to toggle notifications:', error);
+      throw error;
+    }
+
+    return newValue;
+  }
+
+  /**
+   * Toggle mute for a follow relationship
+   */
+  async toggleMute(followerId: string, followingId: string): Promise<boolean> {
+    const current = await this.getFollowOptions(followerId, followingId);
+    const newValue = !current.isMuted;
+
+    const { error } = await supabase
+      .from('user_follows')
+      .update({ is_muted: newValue })
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId);
+
+    if (error) {
+      logger.error('Failed to toggle mute:', error);
+      throw error;
+    }
+
+    return newValue;
+  }
+
   // ===========================================================================
   // SOCIAL SAILING / TIMELINE METHODS
   // ===========================================================================
@@ -1487,17 +1601,41 @@ class CrewFinderServiceClass {
       return this.getActiveSailors(userId, limit, followingSet);
     }
 
+    // Try 'profiles' first, then fill missing entries from 'users' table,
+    // then 'user_profiles' view (reads auth.users directly) as final fallback.
+    // OAuth sign-ups may only exist in auth.users if handle_new_user trigger failed.
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name, email')
       .in('id', scoredUserIds);
+
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+    // Find scored users missing from profiles and look them up in users table
+    const missingFromProfiles = scoredUserIds.filter((id) => !profilesMap.has(id));
+    if (missingFromProfiles.length > 0) {
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, full_name, email')
+        .in('id', missingFromProfiles);
+      (usersData || []).forEach((u: any) => profilesMap.set(u.id, u));
+
+      // Final fallback: user_profiles view (reads from auth.users)
+      const stillMissing = missingFromProfiles.filter((id) => !profilesMap.has(id));
+      if (stillMissing.length > 0) {
+        const { data: viewData } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, email')
+          .in('id', stillMissing);
+        (viewData || []).forEach((u: any) => profilesMap.set(u.id, u));
+      }
+    }
 
     const { data: sailorProfiles } = await supabase
       .from('sailor_profiles')
       .select('user_id, avatar_emoji, avatar_color, experience_level')
       .in('user_id', scoredUserIds);
 
-    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
     const sailorProfilesMap = new Map((sailorProfiles || []).map((sp: any) => [sp.user_id, sp]));
 
     // Build result array with full profile data
@@ -1506,11 +1644,14 @@ class CrewFinderServiceClass {
       const profile = profilesMap.get(userId);
       const sailorProfile = sailorProfilesMap.get(userId);
 
-      if (!profile?.full_name) continue; // Skip users without names
+      // Derive a display name: prefer full_name, fall back to email prefix
+      const displayName = profile?.full_name?.trim()
+        || (profile?.email ? profile.email.split('@')[0] : '');
+      if (!displayName) continue; // Skip only if we truly have nothing
 
       result.push({
         userId,
-        fullName: profile.full_name,
+        fullName: displayName,
         avatarEmoji: sailorProfile?.avatar_emoji,
         avatarColor: sailorProfile?.avatar_color,
         sailingExperience: sailorProfile?.experience_level,
@@ -1527,6 +1668,14 @@ class CrewFinderServiceClass {
       }
       return a.fullName.localeCompare(b.fullName);
     });
+
+    // If we have fewer results than the limit, backfill with other users
+    if (result.length < limit) {
+      const existingIds = new Set(result.map((r) => r.userId));
+      existingIds.add(userId); // Exclude self
+      const backfill = await this.getRecentUsers(existingIds, limit - result.length, followingSet);
+      result.push(...backfill);
+    }
 
     return result.slice(0, limit);
   }
@@ -1752,13 +1901,21 @@ class CrewFinderServiceClass {
     // Get unique user IDs from races (created_by is the owner column)
     const userIds = [...new Set(races.map((r: any) => r.created_by).filter(Boolean))];
 
-    // Fetch user profiles
+    // Fetch user profiles (for full_name)
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name')
       .in('id', userIds);
 
     const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+    // Fetch users for avatar_url
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, avatar_url')
+      .in('id', userIds);
+
+    const usersMap = new Map((users || []).map((u: any) => [u.id, u]));
 
     // Fetch sailor profiles for avatars
     const { data: sailorProfiles } = await supabase
@@ -1777,6 +1934,7 @@ class CrewFinderServiceClass {
     // Transform races to PublicRacePreview
     const publicRaces: PublicRacePreview[] = races.map((race: any) => {
       const profile = profilesMap.get(race.created_by);
+      const userRecord = usersMap.get(race.created_by);
       const sailorProfile = sailorProfilesMap.get(race.created_by);
       const startDate = new Date(race.start_date);
       const daysUntil = Math.ceil(
@@ -1787,9 +1945,11 @@ class CrewFinderServiceClass {
         id: race.id,
         name: race.name,
         startDate: race.start_date,
+        createdAt: race.created_at,
         venue: race.venue,
         userId: race.created_by,
         userName: profile?.full_name || 'Unknown Sailor',
+        avatarUrl: userRecord?.avatar_url,
         avatarEmoji: sailorProfile?.avatar_emoji,
         avatarColor: sailorProfile?.avatar_color,
         boatClass: race.boat_class,
@@ -1863,7 +2023,7 @@ class CrewFinderServiceClass {
       .select('*', { count: 'exact' })
       .in('created_by', sharingFollowingIds)
       .gte('start_date', thirtyDaysAgo.toISOString())
-      .order('start_date', { ascending: false })
+      .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (racesError) {
@@ -1878,13 +2038,21 @@ class CrewFinderServiceClass {
     // Get unique user IDs from races (created_by is the owner column)
     const userIds = [...new Set(races.map((r: any) => r.created_by).filter(Boolean))];
 
-    // Fetch user profiles
+    // Fetch user profiles (for full_name)
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name')
       .in('id', userIds);
 
     const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+    // Fetch users for avatar_url
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, avatar_url')
+      .in('id', userIds);
+
+    const usersMap = new Map((users || []).map((u: any) => [u.id, u]));
 
     // Fetch sailor profiles for avatars
     const { data: sailorProfiles } = await supabase
@@ -1903,6 +2071,7 @@ class CrewFinderServiceClass {
     // Transform races
     const publicRaces: PublicRacePreview[] = races.map((race: any) => {
       const profile = profilesMap.get(race.created_by);
+      const userRecord = usersMap.get(race.created_by);
       const sailorProfile = sailorProfilesMap.get(race.created_by);
       const startDate = new Date(race.start_date);
       const daysUntil = Math.ceil(
@@ -1913,9 +2082,11 @@ class CrewFinderServiceClass {
         id: race.id,
         name: race.name,
         startDate: race.start_date,
+        createdAt: race.created_at,
         venue: race.venue,
         userId: race.created_by,
         userName: profile?.full_name || 'Unknown Sailor',
+        avatarUrl: userRecord?.avatar_url,
         avatarEmoji: sailorProfile?.avatar_emoji,
         avatarColor: sailorProfile?.avatar_color,
         boatClass: race.boat_class,
@@ -1926,6 +2097,20 @@ class CrewFinderServiceClass {
         isPast: daysUntil < 0,
         daysUntil,
         isFollowing: true, // All these races are from followed users
+        // Rich data — conditions & location
+        expectedWindSpeedMin: race.expected_wind_speed_min ?? null,
+        expectedWindSpeedMax: race.expected_wind_speed_max ?? null,
+        expectedWindDirection: race.expected_wind_direction ?? null,
+        expectedConditions: race.expected_conditions ?? null,
+        latitude: race.latitude ?? null,
+        longitude: race.longitude ?? null,
+        // Race details
+        raceType: race.race_type ?? null,
+        organizingAuthority: race.organizing_authority ?? null,
+        scoringFormula: race.scoring_formula ?? null,
+        // Content counts
+        hasSchedule: !!race.schedule && Array.isArray(race.schedule) && race.schedule.length > 0,
+        hasCoursePlan: !!race.prohibited_areas || !!race.start_area_name || !!race.tide_gates,
       };
     });
 
@@ -1983,18 +2168,37 @@ class CrewFinderServiceClass {
       .slice(0, limit)
       .map(([userId]) => userId);
 
-    // Get profiles
+    // Get profiles — try 'profiles' first, fill gaps from 'users', then 'user_profiles' view
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id, full_name, email')
       .in('id', sortedUserIds);
+
+    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+    const missingFromProfiles = sortedUserIds.filter((id) => !profilesMap.has(id));
+    if (missingFromProfiles.length > 0) {
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, full_name, email')
+        .in('id', missingFromProfiles);
+      (usersData || []).forEach((u: any) => profilesMap.set(u.id, u));
+
+      // Final fallback: user_profiles view (reads from auth.users)
+      const stillMissing = missingFromProfiles.filter((id) => !profilesMap.has(id));
+      if (stillMissing.length > 0) {
+        const { data: viewData } = await supabase
+          .from('user_profiles')
+          .select('id, full_name, email')
+          .in('id', stillMissing);
+        (viewData || []).forEach((u: any) => profilesMap.set(u.id, u));
+      }
+    }
 
     const { data: sailorProfiles } = await supabase
       .from('sailor_profiles')
       .select('user_id, avatar_emoji, avatar_color, experience_level')
       .in('user_id', sortedUserIds);
 
-    const profilesMap = new Map((profiles || []).map((p: any) => [p.id, p]));
     const sailorProfilesMap = new Map((sailorProfiles || []).map((sp: any) => [sp.user_id, sp]));
 
     // Build result array
@@ -2004,11 +2208,14 @@ class CrewFinderServiceClass {
       const sailorProfile = sailorProfilesMap.get(activeUserId);
       const raceCount = raceCountMap.get(activeUserId) || 0;
 
-      if (!profile?.full_name) continue;
+      // Derive a display name: prefer full_name, fall back to email prefix
+      const displayName = profile?.full_name?.trim()
+        || (profile?.email ? profile.email.split('@')[0] : '');
+      if (!displayName) continue;
 
       result.push({
         userId: activeUserId,
-        fullName: profile.full_name,
+        fullName: displayName,
         avatarEmoji: sailorProfile?.avatar_emoji,
         avatarColor: sailorProfile?.avatar_color,
         sailingExperience: sailorProfile?.experience_level,
@@ -2022,8 +2229,121 @@ class CrewFinderServiceClass {
     // Sort by race count (highest first)
     result.sort((a, b) => b.similarityScore - a.similarityScore);
 
+    // If we have fewer results than the limit, backfill with recent users
+    if (result.length < limit) {
+      const existingIds = new Set(result.map((r) => r.userId));
+      existingIds.add(userId); // Exclude self
+      const backfill = await this.getRecentUsers(existingIds, limit - result.length, followingSet);
+      result.push(...backfill);
+    }
+
     logger.info('[CrewFinderService] getActiveSailors returning', { count: result.length });
     return result.slice(0, limit);
+  }
+
+  /**
+   * Get recent users as a broad fallback for suggestions.
+   * Includes any user with a profile, regardless of race/club/fleet membership.
+   * Queries 'users' table first, then falls back to 'user_profiles' view
+   * (which reads from auth.users) to catch OAuth users whose handle_new_user
+   * trigger may have failed.
+   */
+  private async getRecentUsers(
+    excludeIds: Set<string>,
+    limit: number,
+    followingSet: Set<string>
+  ): Promise<SimilarSailor[]> {
+    if (limit <= 0) return [];
+
+    logger.info('[CrewFinderService] getRecentUsers called', { excludeCount: excludeIds.size, limit });
+
+    // Query from 'users' table (where auth flow creates rows)
+    const fetchLimit = limit + excludeIds.size + 20;
+    const { data: recentProfiles, error } = await supabase
+      .from('users')
+      .select('id, full_name, email')
+      .limit(fetchLimit);
+
+    if (error) {
+      logger.error('[CrewFinderService] getRecentUsers users table query error:', error);
+    }
+
+    // Merge into a map keyed by id
+    const allUsersMap = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+    (recentProfiles || []).forEach((p: any) => allUsersMap.set(p.id, p));
+
+    logger.info('[CrewFinderService] getRecentUsers fetched from users table:', {
+      fetchedCount: allUsersMap.size,
+      names: (recentProfiles || []).map((p: any) => p.full_name || p.email).slice(0, 10),
+    });
+
+    // Also query user_profiles view (reads from auth.users directly).
+    // This catches OAuth users whose handle_new_user trigger may have failed
+    // and who therefore only exist in auth.users but not in public.users.
+    try {
+      const { data: viewProfiles, error: viewError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name, email')
+        .limit(fetchLimit);
+
+      if (viewError) {
+        logger.warn('[CrewFinderService] getRecentUsers user_profiles view query error:', viewError);
+      } else if (viewProfiles && viewProfiles.length > 0) {
+        let newFromView = 0;
+        viewProfiles.forEach((p: any) => {
+          if (!allUsersMap.has(p.id)) {
+            allUsersMap.set(p.id, p);
+            newFromView++;
+          }
+        });
+        if (newFromView > 0) {
+          logger.info('[CrewFinderService] getRecentUsers found', newFromView, 'additional users from user_profiles view');
+        }
+      }
+    } catch (viewErr) {
+      logger.warn('[CrewFinderService] getRecentUsers user_profiles view fallback failed:', viewErr);
+    }
+
+    if (allUsersMap.size === 0) {
+      logger.warn('[CrewFinderService] getRecentUsers returned 0 rows from all sources');
+      return [];
+    }
+
+    // Filter out excluded users
+    const filtered = Array.from(allUsersMap.values()).filter((p) => !excludeIds.has(p.id));
+
+    // Get sailor profiles for avatar data
+    const filteredIds = filtered.slice(0, limit).map((p) => p.id);
+    if (filteredIds.length === 0) return [];
+
+    const { data: sailorProfiles } = await supabase
+      .from('sailor_profiles')
+      .select('user_id, avatar_emoji, avatar_color, experience_level')
+      .in('user_id', filteredIds);
+
+    const sailorProfilesMap = new Map((sailorProfiles || []).map((sp: any) => [sp.user_id, sp]));
+
+    const result: SimilarSailor[] = [];
+    for (const profile of filtered.slice(0, limit)) {
+      const displayName = profile.full_name?.trim()
+        || (profile.email ? profile.email.split('@')[0] : '');
+      if (!displayName) continue;
+
+      const sailorProfile = sailorProfilesMap.get(profile.id);
+      result.push({
+        userId: profile.id,
+        fullName: displayName,
+        avatarEmoji: sailorProfile?.avatar_emoji,
+        avatarColor: sailorProfile?.avatar_color,
+        sailingExperience: sailorProfile?.experience_level,
+        similarityScore: 0,
+        similarityReasons: ['On RegattaFlow'],
+        isFollowing: followingSet.has(profile.id),
+      });
+    }
+
+    logger.info('[CrewFinderService] getRecentUsers returning', { count: result.length });
+    return result;
   }
 }
 
@@ -2043,9 +2363,11 @@ export interface PublicRacePreview {
   id: string;
   name: string;
   startDate: string;
+  createdAt: string;
   venue?: string;
   userId: string;
   userName: string;
+  avatarUrl?: string;
   avatarEmoji?: string;
   avatarColor?: string;
   boatClass?: string;
@@ -2059,6 +2381,20 @@ export interface PublicRacePreview {
   daysUntil: number;
   // Follow status
   isFollowing: boolean;
+  // Rich data — conditions & location
+  expectedWindSpeedMin?: number | null;
+  expectedWindSpeedMax?: number | null;
+  expectedWindDirection?: string | null;
+  expectedConditions?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  // Race details
+  raceType?: string | null;
+  organizingAuthority?: string | null;
+  scoringFormula?: string | null;
+  // Content counts for richer preview
+  hasSchedule: boolean;
+  hasCoursePlan: boolean;
 }
 
 /**

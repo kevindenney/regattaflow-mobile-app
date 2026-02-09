@@ -19,7 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TeamSeatManager } from '@/components/subscription/TeamSeatManager';
 import { useUserSettings, UNIT_SHORT_LABELS } from '@/hooks/useUserSettings';
@@ -48,12 +48,14 @@ interface ProfileUpdates {
   full_name?: string;
   home_club?: string;
   home_venue?: string;
+  avatar_url?: string;
 }
 
 export default function AccountModalContent() {
   const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities } = useAuth();
   // User settings (tips, learning links, units)
   const { settings: userSettings, updateSetting } = useUserSettings();
+  const insets = useSafeAreaInsets();
 
   // State
   const [claimVisible, setClaimVisible] = useState(false);
@@ -255,8 +257,8 @@ export default function AccountModalContent() {
   // Early return for unauthenticated - show sign-in options
   if (!user) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.modalHeader}>
+      <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
+        <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 8) }]}>
           <View style={styles.dragHandle} />
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }} />
@@ -313,9 +315,9 @@ export default function AccountModalContent() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom', 'left', 'right']}>
       {/* Modal Header: drag handle + Done button */}
-      <View style={styles.modalHeader}>
+      <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, 8) }]}>
         <View style={styles.dragHandle} />
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }} />
@@ -333,6 +335,8 @@ export default function AccountModalContent() {
         <TufteProfileHeader
           name={userProfile?.full_name || 'User'}
           email={user?.email}
+          avatarUrl={userProfile?.avatar_url}
+          userId={user?.id}
           homeClub={userProfile?.home_club}
           homeVenue={userProfile?.home_venue}
           memberSince={userProfile?.created_at}

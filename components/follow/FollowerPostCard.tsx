@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageCircle, Heart, Trash2 } from 'lucide-react-native';
@@ -87,14 +87,18 @@ export function FollowerPostCard({ post, onSailorPress, onDelete }: FollowerPost
       <View style={styles.card}>
         {/* Author Header */}
         <Pressable onPress={handleSailorPress} style={styles.authorRow}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: post.avatarColor || IOS_COLORS.systemGray5 },
-            ]}
-          >
-            <Text style={styles.avatarEmoji}>{post.avatarEmoji || '⛵'}</Text>
-          </View>
+          {post.avatarUrl ? (
+            <Image source={{ uri: post.avatarUrl }} style={styles.avatarImage} />
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: post.avatarColor || IOS_COLORS.systemGray5 },
+              ]}
+            >
+              <Text style={styles.avatarEmoji}>{post.avatarEmoji || '⛵'}</Text>
+            </View>
+          )}
           <View style={styles.authorInfo}>
             <Text style={styles.authorName} numberOfLines={1}>
               {post.userName || 'Sailor'}
@@ -185,6 +189,12 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: IOS_SPACING.sm,
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     marginRight: IOS_SPACING.sm,
   },
   avatarEmoji: {
