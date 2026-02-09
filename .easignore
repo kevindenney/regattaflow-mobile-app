@@ -1,1 +1,6 @@
 android/
+node_modules/
+.expo/
+dist/
+*.log
+.git/
