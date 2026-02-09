@@ -25,6 +25,7 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   CardGridProps,
@@ -44,7 +45,8 @@ import {
   IOS_COLORS,
 } from './constants';
 import { CardShell } from './CardShell';
-import { NowBar } from './NowBar';
+import { CardGridTimeline } from './CardGridTimeline';
+import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { TimeAxisRace } from '@/components/races/TimelineTimeAxis';
 import { CardWidthContext } from './CardWidthContext';
 
@@ -114,6 +116,10 @@ function CardGridComponent({
   refetchTrigger,
   nowBarWeather,
 }: CardGridNativeProps) {
+  // Bottom inset to clear the floating tab bar
+  const insets = useSafeAreaInsets();
+  const timelineBottomInset = FLOATING_TAB_BAR_HEIGHT + Math.max(Math.round(insets.bottom / 2), 8);
+
   // Track actual container dimensions
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
 
@@ -448,23 +454,6 @@ function CardGridComponent({
     );
   }
 
-  // Now bar: show between last past card and first future card
-  const nowBarConfig = useMemo(() => {
-    if (
-      nextRaceIndex == null ||
-      nextRaceIndex <= 0 ||
-      nextRaceIndex >= races.length ||
-      races.length <= 1
-    ) {
-      return null;
-    }
-    // Position in the gap between card[nextRaceIndex-1] and card[nextRaceIndex]
-    const left =
-      nextRaceIndex * (dimensions.cardWidth + HORIZONTAL_CARD_GAP) -
-      HORIZONTAL_CARD_GAP / 2;
-    return { left, height: dimensions.cardHeight };
-  }, [nextRaceIndex, races.length, dimensions.cardWidth, dimensions.cardHeight]);
-
   // Calculate total grid size (horizontal only)
   const totalGridWidth = races.length * (dimensions.cardWidth + HORIZONTAL_CARD_GAP);
 
@@ -488,18 +477,18 @@ function CardGridComponent({
             collapsable={false}
           >
             {renderCards}
-            {nowBarConfig && (
-              <NowBar
-                height={nowBarConfig.height}
-                left={nowBarConfig.left}
-                weather={nowBarWeather}
-              />
-            )}
           </Animated.View>
         </GestureDetector>
       </Animated.View>
 
-      {/* TimelineTimeAxis moved inside RaceSummaryCard footer for compactness */}
+      {/* Bottom pill timeline indicator */}
+      <CardGridTimeline
+        totalRaces={races.length}
+        activeIndex={jsRaceIndex}
+        nextRaceIndex={nextRaceIndex ?? null}
+        onSelectRace={goToRace}
+        bottomInset={timelineBottomInset}
+      />
     </GestureHandlerRootView>
   );
 }

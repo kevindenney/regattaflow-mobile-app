@@ -33,7 +33,7 @@ import {
   IOS_COLORS,
 } from './constants';
 import { CardWidthContext } from './CardWidthContext';
-import { NowBar } from './NowBar';
+import { CardGridTimeline } from './CardGridTimeline';
 import { TimeAxisRace } from '@/components/races/TimelineTimeAxis';
 
 // =============================================================================
@@ -69,9 +69,6 @@ interface CardGridWebProps extends CardGridProps {
     refetchTrigger?: number
   ) => React.ReactNode;
 }
-
-// Approximate rendered width of the NowBar pill (matches NowBar.tsx minWidth + padding)
-const NOW_BAR_RENDERED_WIDTH = 56;
 
 // =============================================================================
 // CARD GRID COMPONENT
@@ -183,31 +180,14 @@ function CardGridComponent({
   }, [races]);
 
   // ==========================================================================
-  // SNAP OFFSETS (account for NowBar width between cards)
+  // SNAP OFFSETS
   // ==========================================================================
-
-  // Whether the NowBar is visible at all
-  const hasNowBar =
-    nextRaceIndex != null &&
-    nextRaceIndex > 0 &&
-    nextRaceIndex < races.length &&
-    races.length > 1;
 
   // Pre-compute the scroll offset for each card index
   const snapOffsets = useMemo(() => {
     const cardStep = dimensions.cardWidth + HORIZONTAL_CARD_GAP;
-    // NowBar adds its own width + one extra gap to the layout
-    const nowBarExtra = hasNowBar ? NOW_BAR_RENDERED_WIDTH + HORIZONTAL_CARD_GAP : 0;
-
-    return races.map((_, i) => {
-      let offset = i * cardStep;
-      // Cards at or after the NowBar position are shifted by the NowBar's width
-      if (hasNowBar && nextRaceIndex != null && i >= nextRaceIndex) {
-        offset += nowBarExtra;
-      }
-      return offset;
-    });
-  }, [races, dimensions.cardWidth, hasNowBar, nextRaceIndex]);
+    return races.map((_, i) => i * cardStep);
+  }, [races, dimensions.cardWidth]);
 
   // ==========================================================================
   // NAVIGATION
@@ -421,20 +401,8 @@ function CardGridComponent({
           if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
             (window as any).__PERIOD_DEBUG__.log('CardGrid.web.renderCard', raceIndex, { raceId: race.id, raceName: race.name, raceIndex });
           }
-          const showNowBar =
-            nextRaceIndex != null &&
-            nextRaceIndex > 0 &&
-            nextRaceIndex < races.length &&
-            races.length > 1 &&
-            raceIndex === nextRaceIndex;
           return (
             <React.Fragment key={race.id}>
-              {showNowBar && (
-                <NowBar
-                  height={cardHeight}
-                  weather={nowBarWeather}
-                />
-              )}
               {renderCard(race, raceIndex)}
             </React.Fragment>
           );
@@ -463,7 +431,13 @@ function CardGridComponent({
         </TouchableOpacity>
       )}
 
-      {/* TimelineTimeAxis moved inside RaceSummaryCard footer for compactness */}
+      {/* Bottom pill timeline indicator */}
+      <CardGridTimeline
+        totalRaces={races.length}
+        activeIndex={currentRaceIndex}
+        nextRaceIndex={nextRaceIndex ?? null}
+        onSelectRace={goToRace}
+      />
     </View>
   );
 }

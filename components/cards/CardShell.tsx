@@ -31,11 +31,16 @@ import {
 // =============================================================================
 
 /**
- * Past race cards use white background (same as all cards).
- * Status is communicated through badges and content styling, not background color.
- * This ensures proper contrast against the systemGroupedBackground (#F2F2F7).
+ * Past race cards use white background (same as active cards) for clear contrast
+ * against the #F2F2F7 page background. A subtle opacity reduction distinguishes
+ * them from current/future cards.
  */
-const PAST_CARD_BG = IOS_COLORS.systemBackground;
+const PAST_CARD_BG = '#FFFFFF';
+const PAST_CARD_OPACITY = 0.85;
+
+/** Subtle green left-border accent for the next upcoming race */
+const NEXT_RACE_BORDER_WIDTH = 3;
+const NEXT_RACE_BORDER_COLOR = IOS_COLORS.green; // #34C759
 
 export function CardShell({
   position,
@@ -109,6 +114,7 @@ export function CardShell({
       height: dimensions.cardHeight,
       borderRadius: dimensions.borderRadius,
       backgroundColor: isPast ? PAST_CARD_BG : IOS_COLORS.systemBackground,
+      ...(isPast ? { opacity: PAST_CARD_OPACITY } : {}),
     }),
     [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius, isPast]
   );
@@ -166,6 +172,10 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: IOS_COLORS.gray,
     letterSpacing: -0.2,
+  },
+  nextRaceBorder: {
+    borderLeftWidth: NEXT_RACE_BORDER_WIDTH,
+    borderLeftColor: NEXT_RACE_BORDER_COLOR,
   },
 });
 
