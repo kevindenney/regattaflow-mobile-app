@@ -2,9 +2,9 @@
  * SailorActivityCard
  *
  * Card component for displaying a sailor's race activity in the Watch feed.
- * Shows race name, date, venue, and activity type (upcoming/result).
+ * Shows race name, date, venue, conditions, results, and activity type.
  * Supports tappable indicator pills that expand to show full content
- * (prep notes, tuning, lessons) via lazy-loaded enrichment data.
+ * (prep notes, tuning, lessons, debrief) via lazy-loaded enrichment data.
  * Supports comments on activity.
  */
 
@@ -12,12 +12,14 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { MessageCircle } from 'lucide-react-native';
+import { MessageCircle, Lightbulb } from 'lucide-react-native';
 import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING, IOS_RADIUS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 import { useActivityCommentCount } from '@/hooks/useActivityComments';
 import { useRaceEnrichment } from '@/hooks/useRaceEnrichment';
+import { useAuth } from '@/providers/AuthProvider';
 import { ActivityCommentSection } from './ActivityCommentSection';
+import { SuggestionSubmitSheet } from '@/components/races/suggestions/SuggestionSubmitSheet';
 import type { PublicRacePreview } from '@/services/CrewFinderService';
 import type { ActivityType } from '@/services/ActivityCommentService';
 
@@ -25,13 +27,135 @@ import type { ActivityType } from '@/services/ActivityCommentService';
 // TYPES
 // =============================================================================
 
-type ExpandedSection = 'prep' | 'tuning' | 'lessons' | null;
+type ExpandedSection = 'prep' | 'tuning' | 'lessons' | 'debrief' | 'results' | null;
 
 interface SailorActivityCardProps {
   race: PublicRacePreview;
   onSailorPress?: (userId: string) => void;
   /** Show comments section */
   showComments?: boolean;
+}
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+function getOrdinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function formatWindInfo(race: PublicRacePreview): string | null {
+  const { expectedWindSpeedMin, expectedWindSpeedMax, expectedWindDirection } = race;
+  if (!expectedWindSpeedMin && !expectedWindSpeedMax) return null;
+
+  const parts: string[] = [];
+  if (expectedWindSpeedMin && expectedWindSpeedMax) {
+    parts.push(`${expectedWindSpeedMin}-${expectedWindSpeedMax} kts`);
+  } else if (expectedWindSpeedMax) {
+    parts.push(`${expectedWindSpeedMax} kts`);
+  } else if (expectedWindSpeedMin) {
+    parts.push(`${expectedWindSpeedMin}+ kts`);
+  }
+  if (expectedWindDirection) {
+    parts.push(expectedWindDirection);
+  }
+  return parts.join(' ');
+}
+
+const RACE_TYPE_LABELS: Record<string, string> = {
+  fleet: 'Fleet',
+  distance: 'Distance',
+  match: 'Match',
+  team: 'Team',
+};
+
+const PHASE_LABELS: Record<string, string> = {
+  start: 'Start',
+  upwind: 'Upwind',
+  downwind: 'Downwind',
+  mark_rounding: 'Marks',
+  tactics: 'Tactics',
+  boat_handling: 'Handling',
+  boat_speed: 'Speed',
+};
+
+// =============================================================================
+// SUB-COMPONENTS
+// =============================================================================
+
+/** Compact result badge for past races */
+function ResultBadge({ position, fleetSize }: { position: number; fleetSize: number }) {
+  const ratio = position / fleetSize;
+  const badgeColor =
+    position <= 3 ? IOS_COLORS.systemGreen :
+    ratio <= 0.5 ? IOS_COLORS.systemBlue :
+    IOS_COLORS.systemOrange;
+
+  return (
+    <View style={[resultStyles.badge, { backgroundColor: badgeColor + '18' }]}>
+      <Text style={[resultStyles.position, { color: badgeColor }]}>
+        {getOrdinal(position)}
+      </Text>
+      <Text style={[resultStyles.fleetSize, { color: badgeColor }]}>
+        /{fleetSize}
+      </Text>
+    </View>
+  );
+}
+
+/** Compact wind/conditions row */
+function ConditionsRow({ race }: { race: PublicRacePreview }) {
+  const windInfo = formatWindInfo(race);
+  if (!windInfo && !race.expectedConditions) return null;
+
+  return (
+    <View style={conditionsStyles.row}>
+      {windInfo && (
+        <View style={conditionsStyles.chip}>
+          <Ionicons name="flag-outline" size={11} color={IOS_COLORS.systemTeal} />
+          <Text style={conditionsStyles.text}>{windInfo}</Text>
+        </View>
+      )}
+      {race.expectedConditions && !windInfo && (
+        <View style={conditionsStyles.chip}>
+          <Ionicons name="partly-sunny-outline" size={11} color={IOS_COLORS.systemTeal} />
+          <Text style={conditionsStyles.text} numberOfLines={1}>
+            {race.expectedConditions}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** Mini phase rating bars for debrief enrichment */
+function PhaseRatingBars({ ratings }: { ratings: Record<string, number> }) {
+  const entries = Object.entries(ratings).filter(([key]) => PHASE_LABELS[key]);
+  if (entries.length === 0) return null;
+
+  return (
+    <View style={phaseStyles.container}>
+      {entries.map(([key, value]) => {
+        const pct = Math.min(Math.max((value / 5) * 100, 0), 100);
+        const color =
+          value >= 4 ? IOS_COLORS.systemGreen :
+          value >= 3 ? IOS_COLORS.systemBlue :
+          value >= 2 ? IOS_COLORS.systemOrange :
+          IOS_COLORS.systemRed;
+        return (
+          <View key={key} style={phaseStyles.row}>
+            <Text style={phaseStyles.label}>{PHASE_LABELS[key] || key}</Text>
+            <View style={phaseStyles.barTrack}>
+              <View style={[phaseStyles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
+            </View>
+            <Text style={[phaseStyles.value, { color }]}>{value}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 // =============================================================================
@@ -44,8 +168,13 @@ export function SailorActivityCard({
   showComments = true,
 }: SailorActivityCardProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [expandedSection, setExpandedSection] = useState<ExpandedSection>(null);
+  const [showSuggestSheet, setShowSuggestSheet] = useState(false);
+
+  // Only show suggest button on other people's races
+  const isOwnRace = user?.id === race.userId;
 
   // Determine activity type for comments
   const activityType: ActivityType = race.isPast ? 'race_result' : 'race_entry';
@@ -61,7 +190,7 @@ export function SailorActivityCard({
 
   const handleRacePress = useCallback(() => {
     triggerHaptic('selection');
-    router.push(`/sailor/${race.userId}/race/${race.id}`);
+    router.push(`/sailor-journey/${race.userId}/${race.id}`);
   }, [router, race.id, race.userId]);
 
   const handleSailorPress = useCallback(() => {
@@ -76,6 +205,11 @@ export function SailorActivityCard({
   const handleToggleComments = useCallback(() => {
     triggerHaptic('selection');
     setCommentsExpanded((prev) => !prev);
+  }, []);
+
+  const handleSuggest = useCallback(() => {
+    triggerHaptic('selection');
+    setShowSuggestSheet(true);
   }, []);
 
   const handleToggleSection = useCallback((section: ExpandedSection) => {
@@ -112,8 +246,9 @@ export function SailorActivityCard({
   };
 
   // Activity type label
-  const activityLabel = race.isPast ? 'Raced at' : 'Racing at';
+  const activityLabel = race.isPast ? 'Raced' : 'Racing';
   const activityIcon = race.isPast ? 'checkmark-circle' : 'time-outline';
+  const raceTypeLabel = race.raceType ? RACE_TYPE_LABELS[race.raceType] : null;
 
   return (
     <View style={styles.cardContainer}>
@@ -147,22 +282,39 @@ export function SailorActivityCard({
 
         {/* Race Info */}
         <View style={styles.raceContent}>
-          <Text style={styles.raceName} numberOfLines={2}>
-            {race.name}
-          </Text>
+          {/* Title row with optional result badge */}
+          <View style={styles.titleRow}>
+            <Text style={styles.raceName} numberOfLines={2}>
+              {race.name}
+            </Text>
+            {race.isPast && enrichment?.position && enrichment?.fleetSize && (
+              <ResultBadge position={enrichment.position} fleetSize={enrichment.fleetSize} />
+            )}
+          </View>
 
-          {race.venue && (
-            <View style={styles.venueRow}>
-              <Ionicons
-                name="location-outline"
-                size={14}
-                color={IOS_COLORS.tertiaryLabel}
-              />
-              <Text style={styles.venueText} numberOfLines={1}>
-                {race.venue}
-              </Text>
-            </View>
-          )}
+          {/* Venue + Race Type */}
+          <View style={styles.metaRow}>
+            {race.venue && (
+              <View style={styles.venueRow}>
+                <Ionicons
+                  name="location-outline"
+                  size={13}
+                  color={IOS_COLORS.tertiaryLabel}
+                />
+                <Text style={styles.venueText} numberOfLines={1}>
+                  {race.venue}
+                </Text>
+              </View>
+            )}
+            {raceTypeLabel && (
+              <View style={styles.raceTypeChip}>
+                <Text style={styles.raceTypeText}>{raceTypeLabel}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Conditions row */}
+          <ConditionsRow race={race} />
 
           {/* Content Indicators — tappable pills */}
           <View style={styles.indicatorsRow}>
@@ -244,6 +396,54 @@ export function SailorActivityCard({
                 </Text>
               </Pressable>
             )}
+            {race.hasPostRaceNotes && (
+              <Pressable
+                onPress={() => handleToggleSection('debrief')}
+                style={[
+                  styles.indicator,
+                  styles.indicatorTappable,
+                  expandedSection === 'debrief' && styles.indicatorActive,
+                ]}
+              >
+                <Ionicons
+                  name="chatbox-ellipses-outline"
+                  size={12}
+                  color={expandedSection === 'debrief' ? '#FFFFFF' : IOS_COLORS.systemCyan}
+                />
+                <Text
+                  style={[
+                    styles.indicatorText,
+                    expandedSection === 'debrief' && styles.indicatorTextActive,
+                  ]}
+                >
+                  Debrief
+                </Text>
+              </Pressable>
+            )}
+            {race.isPast && (
+              <Pressable
+                onPress={() => handleToggleSection('results')}
+                style={[
+                  styles.indicator,
+                  styles.indicatorTappable,
+                  expandedSection === 'results' && styles.indicatorActive,
+                ]}
+              >
+                <Ionicons
+                  name="trophy-outline"
+                  size={12}
+                  color={expandedSection === 'results' ? '#FFFFFF' : IOS_COLORS.systemYellow}
+                />
+                <Text
+                  style={[
+                    styles.indicatorText,
+                    expandedSection === 'results' && styles.indicatorTextActive,
+                  ]}
+                >
+                  Results
+                </Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Action Row */}
@@ -271,6 +471,18 @@ export function SailorActivityCard({
                   {commentCount > 0 ? commentCount : 'Comment'}
                 </Text>
               </Pressable>
+              {!isOwnRace && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.commentButton,
+                    pressed && styles.commentButtonPressed,
+                  ]}
+                  onPress={handleSuggest}
+                >
+                  <Lightbulb size={16} color={IOS_COLORS.secondaryLabel} />
+                  <Text style={styles.commentButtonText}>Suggest</Text>
+                </Pressable>
+              )}
             </View>
           )}
         </View>
@@ -319,6 +531,61 @@ export function SailorActivityCard({
                   )}
                 </View>
               )}
+              {expandedSection === 'debrief' && (
+                <View style={styles.enrichmentSection}>
+                  <Text style={styles.enrichmentTitle}>Post-Race Debrief</Text>
+                  <Text style={styles.enrichmentContent}>
+                    {enrichment?.postRaceNotes || 'No debrief notes available'}
+                  </Text>
+                  {enrichment?.phaseRatings && (
+                    <View style={{ marginTop: IOS_SPACING.sm }}>
+                      <Text style={[styles.enrichmentTitle, { marginBottom: 6 }]}>
+                        Performance Ratings
+                      </Text>
+                      <PhaseRatingBars ratings={enrichment.phaseRatings} />
+                    </View>
+                  )}
+                </View>
+              )}
+              {expandedSection === 'results' && (
+                <View style={styles.enrichmentSection}>
+                  <Text style={styles.enrichmentTitle}>Race Results</Text>
+                  {enrichment?.position && enrichment?.fleetSize ? (
+                    <View>
+                      <View style={resultExpandedStyles.mainResult}>
+                        <Text style={resultExpandedStyles.positionText}>
+                          {getOrdinal(enrichment.position)}
+                        </Text>
+                        <Text style={resultExpandedStyles.ofText}>
+                          of {enrichment.fleetSize} boats
+                        </Text>
+                      </View>
+                      {/* Multi-race results */}
+                      {enrichment.raceResults && enrichment.raceResults.length > 1 && (
+                        <View style={resultExpandedStyles.multiRaceContainer}>
+                          {enrichment.raceResults.map((r, i) => (
+                            <View key={i} style={resultExpandedStyles.raceRow}>
+                              <Text style={resultExpandedStyles.raceLabel}>
+                                R{r.race_number}
+                              </Text>
+                              <Text style={resultExpandedStyles.racePosition}>
+                                {getOrdinal(r.position)}/{r.fleet_size}
+                              </Text>
+                              {r.key_moment && (
+                                <Text style={resultExpandedStyles.keyMoment} numberOfLines={1}>
+                                  {r.key_moment}
+                                </Text>
+                              )}
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    <Text style={styles.enrichmentContent}>No results recorded yet</Text>
+                  )}
+                </View>
+              )}
             </>
           )}
         </View>
@@ -336,6 +603,14 @@ export function SailorActivityCard({
           />
         </View>
       )}
+
+      {/* Suggestion Submit Sheet */}
+      <SuggestionSubmitSheet
+        isOpen={showSuggestSheet}
+        onClose={() => setShowSuggestSheet(false)}
+        raceId={race.id}
+        raceOwnerId={race.userId}
+      />
     </View>
   );
 }
@@ -348,7 +623,6 @@ const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
     borderRadius: IOS_RADIUS.lg,
-    overflow: 'hidden',
   },
   card: {
     padding: IOS_SPACING.md,
@@ -395,27 +669,50 @@ const styles = StyleSheet.create({
   raceContent: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: IOS_SPACING.sm,
+    marginBottom: IOS_SPACING.xs,
+  },
   raceName: {
     ...IOS_TYPOGRAPHY.body,
     fontWeight: '600',
     color: IOS_COLORS.label,
-    marginBottom: IOS_SPACING.xs,
+    flex: 1,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.sm,
+    marginBottom: IOS_SPACING.sm,
   },
   venueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: IOS_SPACING.sm,
+    gap: 3,
+    flex: 1,
   },
   venueText: {
-    ...IOS_TYPOGRAPHY.subhead,
+    ...IOS_TYPOGRAPHY.caption1,
     color: IOS_COLORS.secondaryLabel,
     flex: 1,
+  },
+  raceTypeChip: {
+    backgroundColor: IOS_COLORS.systemIndigo + '15',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  raceTypeText: {
+    ...IOS_TYPOGRAPHY.caption2,
+    color: IOS_COLORS.systemIndigo,
+    fontWeight: '600',
   },
   indicatorsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: IOS_SPACING.sm,
+    gap: 6,
   },
   indicator: {
     flexDirection: 'row',
@@ -509,9 +806,129 @@ const styles = StyleSheet.create({
 
   // Comments
   commentsContainer: {
-    paddingHorizontal: IOS_SPACING.md,
+    paddingLeft: IOS_SPACING.lg,
+    paddingRight: IOS_SPACING.md,
     paddingBottom: IOS_SPACING.md,
-    marginLeft: 72, // Align with race content (56 avatar + 16 padding)
+  },
+});
+
+const resultStyles = StyleSheet.create({
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: IOS_RADIUS.sm,
+  },
+  position: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  fleetSize: {
+    fontSize: 12,
+    fontWeight: '500',
+    opacity: 0.7,
+  },
+});
+
+const conditionsStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: IOS_SPACING.sm,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: IOS_COLORS.systemTeal + '12',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  text: {
+    ...IOS_TYPOGRAPHY.caption2,
+    color: IOS_COLORS.systemTeal,
+    fontWeight: '500',
+  },
+});
+
+const phaseStyles = StyleSheet.create({
+  container: {
+    gap: 5,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  label: {
+    ...IOS_TYPOGRAPHY.caption2,
+    color: IOS_COLORS.secondaryLabel,
+    width: 52,
+  },
+  barTrack: {
+    flex: 1,
+    height: 4,
+    backgroundColor: IOS_COLORS.systemGray5,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: 4,
+    borderRadius: 2,
+  },
+  value: {
+    ...IOS_TYPOGRAPHY.caption2,
+    fontWeight: '600',
+    width: 16,
+    textAlign: 'right',
+  },
+});
+
+const resultExpandedStyles = StyleSheet.create({
+  mainResult: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    marginBottom: 4,
+  },
+  positionText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+  },
+  ofText: {
+    ...IOS_TYPOGRAPHY.subhead,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  multiRaceContainer: {
+    marginTop: IOS_SPACING.sm,
+    gap: 4,
+  },
+  raceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  raceLabel: {
+    ...IOS_TYPOGRAPHY.caption2,
+    fontWeight: '600',
+    color: IOS_COLORS.tertiaryLabel,
+    width: 24,
+  },
+  racePosition: {
+    ...IOS_TYPOGRAPHY.caption1,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    width: 40,
+  },
+  keyMoment: {
+    ...IOS_TYPOGRAPHY.caption2,
+    color: IOS_COLORS.secondaryLabel,
+    flex: 1,
+    fontStyle: 'italic',
   },
 });
 

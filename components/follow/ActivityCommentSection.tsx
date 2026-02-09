@@ -11,19 +11,17 @@ import {
   TextInput,
   Pressable,
   StyleSheet,
-  FlatList,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Send, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { useActivityComments } from '@/hooks/useActivityComments';
 import type { ActivityType, ActivityComment } from '@/services/ActivityCommentService';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
   IOS_SPACING,
-  IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
 
 // =============================================================================
@@ -101,10 +99,7 @@ function CommentRow({
 
   const handleLongPress = () => {
     if (!isOwn || !onDelete) return;
-    Alert.alert('Delete Comment', 'Are you sure you want to delete this comment?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: onDelete },
-    ]);
+    showConfirm('Delete Comment', 'Are you sure you want to delete this comment?', onDelete, { destructive: true });
   };
 
   return (
@@ -142,10 +137,7 @@ function CommentRow({
             pressed && styles.deleteButtonPressed,
           ]}
           onPress={() =>
-            Alert.alert('Delete Comment', 'Are you sure?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete', style: 'destructive', onPress: onDelete },
-            ])
+            showConfirm('Delete Comment', 'Are you sure?', onDelete!, { destructive: true })
           }
         >
           <Trash2 size={14} color={IOS_COLORS.systemRed} />
@@ -168,6 +160,7 @@ export function ActivityCommentSection({
 }: ActivityCommentSectionProps) {
   const { user } = useAuth();
   const [inputText, setInputText] = useState('');
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const {
     comments,
@@ -185,12 +178,14 @@ export function ActivityCommentSection({
     const text = inputText.trim();
     if (!text || isAdding) return;
 
+    setSendError(null);
     setInputText('');
     try {
       await addComment(text, targetUserId);
-    } catch {
+    } catch (err: any) {
       setInputText(text);
-      Alert.alert('Error', 'Could not post comment. Please try again.');
+      const message = err?.message || 'Could not post comment';
+      setSendError(message);
     }
   }, [inputText, isAdding, addComment, targetUserId]);
 
@@ -199,7 +194,7 @@ export function ActivityCommentSection({
       try {
         await deleteComment(commentId);
       } catch {
-        Alert.alert('Error', 'Could not delete comment');
+        showAlert('Error', 'Could not delete comment');
       }
     },
     [deleteComment]
@@ -246,7 +241,10 @@ export function ActivityCommentSection({
         <TextInput
           style={styles.composerInput}
           value={inputText}
-          onChangeText={setInputText}
+          onChangeText={(text) => {
+            setInputText(text);
+            if (sendError) setSendError(null);
+          }}
           placeholder="Add a comment..."
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           maxLength={500}
@@ -255,10 +253,9 @@ export function ActivityCommentSection({
           onSubmitEditing={handleSend}
         />
         <Pressable
-          style={({ pressed }) => [
+          style={[
             styles.sendButton,
-            !canSend && styles.sendButtonDisabled,
-            pressed && canSend && styles.sendButtonPressed,
+            { backgroundColor: canSend ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray5 },
           ]}
           onPress={handleSend}
           disabled={!canSend}
@@ -266,6 +263,9 @@ export function ActivityCommentSection({
           <Send size={16} color={canSend ? '#FFFFFF' : IOS_COLORS.systemGray3} />
         </Pressable>
       </View>
+      {sendError && (
+        <Text style={styles.sendErrorText}>{sendError}</Text>
+      )}
     </View>
   );
 }
@@ -358,30 +358,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: IOS_SPACING.sm,
-    gap: IOS_SPACING.xs,
   },
   composerInput: {
     flex: 1,
-    height: 32,
-    borderRadius: 16,
+    height: 36,
+    borderRadius: 18,
     paddingHorizontal: IOS_SPACING.md,
     backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
-    ...IOS_TYPOGRAPHY.subhead,
+    fontSize: 15,
     color: IOS_COLORS.label,
+    marginRight: IOS_SPACING.sm,
   },
   sendButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: IOS_COLORS.systemBlue,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: IOS_COLORS.systemGray5,
+    flexShrink: 0,
   },
   sendButtonPressed: {
     opacity: 0.8,
+  },
+  sendErrorText: {
+    ...IOS_TYPOGRAPHY.caption1,
+    color: IOS_COLORS.systemRed,
+    marginTop: 4,
+    paddingHorizontal: 4,
   },
 });
 
