@@ -8,8 +8,8 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { UserPlus, UserCheck } from 'lucide-react-native';
+import { View, Text, Pressable, TouchableOpacity, StyleSheet } from 'react-native';
+
 import { getInitials } from '@/components/account/accountStyles';
 import {
   IOS_COLORS,
@@ -50,7 +50,6 @@ interface SailorSuggestionCardProps {
   isFollowing: boolean;
   onPress: () => void;
   onToggleFollow: () => void;
-  showSeparator?: boolean;
 }
 
 export function SailorSuggestionCard({
@@ -58,7 +57,6 @@ export function SailorSuggestionCard({
   isFollowing,
   onPress,
   onToggleFollow,
-  showSeparator = true,
 }: SailorSuggestionCardProps) {
   const showEmoji =
     sailor.avatarEmoji && sailor.avatarEmoji !== '\u26F5';
@@ -87,91 +85,81 @@ export function SailorSuggestionCard({
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      style={({ pressed }) => [pressed && styles.pressed]}
       onPress={onPress}
     >
-      {/* Avatar */}
-      <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-        {showEmoji ? (
-          <Text style={styles.avatarEmoji}>{sailor.avatarEmoji}</Text>
-        ) : (
-          <Text style={styles.avatarInitials}>{initials}</Text>
-        )}
-      </View>
+      <View style={styles.row}>
+        {/* Avatar */}
+        <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+          {showEmoji ? (
+            <Text style={styles.avatarEmoji}>{sailor.avatarEmoji}</Text>
+          ) : (
+            <Text style={styles.avatarInitials}>{initials}</Text>
+          )}
+        </View>
 
-      {/* Content */}
-      <View style={styles.content}>
-        <Text style={styles.name} numberOfLines={1}>
-          {sailor.fullName}
-        </Text>
-        {subtitle && (
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {subtitle}
+        {/* Content */}
+        <View style={styles.content}>
+          <Text style={styles.name} numberOfLines={1}>
+            {sailor.fullName}
           </Text>
-        )}
+          {subtitle && (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          )}
+        </View>
+
+        {/* Follow Button */}
+        <TouchableOpacity
+          style={[
+            styles.followButton,
+            isFollowing ? styles.followingButton : styles.notFollowingButton,
+          ]}
+          onPress={onToggleFollow}
+          activeOpacity={0.7}
+          hitSlop={8}
+        >
+          <Text style={isFollowing ? styles.followingText : styles.followText}>
+            {isFollowing ? 'Following' : 'Follow'}
+          </Text>
+        </TouchableOpacity>
       </View>
-
-      {/* Follow Button */}
-      <Pressable
-        style={({ pressed }) => [
-          styles.followButton,
-          isFollowing ? styles.followingButton : styles.notFollowingButton,
-          pressed && styles.followButtonPressed,
-        ]}
-        onPress={(e) => {
-          e.stopPropagation();
-          onToggleFollow();
-        }}
-        hitSlop={8}
-      >
-        {isFollowing ? (
-          <>
-            <UserCheck size={14} color={IOS_COLORS.secondaryLabel} />
-            <Text style={styles.followingText}>Following</Text>
-          </>
-        ) : (
-          <>
-            <UserPlus size={14} color={IOS_COLORS.systemBlue} />
-            <Text style={styles.followText}>Follow</Text>
-          </>
-        )}
-      </Pressable>
-
-      {/* Separator */}
-      {showSeparator && <View style={styles.separator} />}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: IOS_SPACING.lg,
-    paddingVertical: IOS_SPACING.md,
+    paddingVertical: IOS_SPACING.lg,
     minHeight: IOS_TOUCH.listItemHeight,
   },
   pressed: {
     backgroundColor: IOS_COLORS.quaternarySystemFill,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: IOS_SPACING.md,
+    flexShrink: 0,
   },
   avatarEmoji: {
-    fontSize: 20,
+    fontSize: 22,
   },
   avatarInitials: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     color: '#FFFFFF',
   },
   content: {
     flex: 1,
+    minWidth: 0,
     marginRight: IOS_SPACING.md,
   },
   name: {
@@ -187,10 +175,12 @@ const styles = StyleSheet.create({
   followButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: IOS_SPACING.md,
-    paddingVertical: IOS_SPACING.xs + 2,
-    borderRadius: IOS_RADIUS.sm,
-    gap: 4,
+    justifyContent: 'center',
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.sm,
+    borderRadius: IOS_RADIUS.full,
+    minWidth: 90,
+    flexShrink: 0,
   },
   notFollowingButton: {
     backgroundColor: IOS_COLORS.systemBlue,
@@ -198,25 +188,14 @@ const styles = StyleSheet.create({
   followingButton: {
     backgroundColor: IOS_COLORS.tertiarySystemFill,
   },
-  followButtonPressed: {
-    opacity: 0.7,
-  },
   followText: {
-    ...IOS_TYPOGRAPHY.footnote,
+    ...IOS_TYPOGRAPHY.subhead,
     fontWeight: '600',
     color: '#FFFFFF',
   },
   followingText: {
-    ...IOS_TYPOGRAPHY.footnote,
+    ...IOS_TYPOGRAPHY.subhead,
     fontWeight: '600',
     color: IOS_COLORS.secondaryLabel,
-  },
-  separator: {
-    position: 'absolute',
-    left: IOS_SPACING.lg + 44 + IOS_SPACING.md,
-    right: 0,
-    bottom: 0,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: IOS_COLORS.separator,
   },
 });

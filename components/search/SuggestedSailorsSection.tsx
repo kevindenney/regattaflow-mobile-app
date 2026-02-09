@@ -11,11 +11,9 @@ import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
-  FlatList,
   Pressable,
   ActivityIndicator,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSailorSuggestions } from '@/hooks/useSailorSuggestions';
@@ -30,6 +28,7 @@ import {
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface SuggestedSailorsSectionProps {
   searchQuery?: string;
@@ -66,7 +65,7 @@ export function SuggestedSailorsSection({
       );
 
       if (errors > 0) {
-        Alert.alert(
+        showAlert(
           'Partial Success',
           `Followed ${followed} sailors. ${errors} failed.`
         );
@@ -78,7 +77,7 @@ export function SuggestedSailorsSection({
       await refresh();
     } catch (error) {
       console.error('Error following all:', error);
-      Alert.alert('Error', 'Failed to follow sailors. Please try again.');
+      showAlert('Error', 'Failed to follow sailors. Please try again.');
     } finally {
       setFollowingAll(false);
     }
@@ -126,9 +125,14 @@ export function SuggestedSailorsSection({
     <View style={styles.container}>
       {/* Header with Follow All */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {unfollowedSuggestions.length} SAILORS TO FOLLOW
-        </Text>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>
+            {unfollowedSuggestions.length} Sailors to Follow
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            People in your fleet and club
+          </Text>
+        </View>
         {unfollowedSuggestions.length > 0 && (
           <Pressable
             onPress={handleFollowAll}
@@ -139,7 +143,7 @@ export function SuggestedSailorsSection({
             ]}
           >
             {followingAll ? (
-              <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.followAllText}>Follow All</Text>
             )}
@@ -156,7 +160,7 @@ export function SuggestedSailorsSection({
             isFollowing={followedIds.has(sailor.userId)}
             onPress={() => handleSailorPress(sailor.userId)}
             onToggleFollow={() => handleToggleFollow(sailor.userId)}
-            showSeparator={index < suggestions.length - 1}
+
           />
         ))}
       </View>
@@ -191,28 +195,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: IOS_SPACING.lg,
-    paddingVertical: IOS_SPACING.md,
+    paddingTop: IOS_SPACING.xl,
+    paddingBottom: IOS_SPACING.md,
+  },
+  headerTextContainer: {
+    flex: 1,
+    marginRight: IOS_SPACING.md,
   },
   headerTitle: {
+    ...IOS_TYPOGRAPHY.headline,
+    color: IOS_COLORS.label,
+  },
+  headerSubtitle: {
     ...IOS_TYPOGRAPHY.footnote,
     color: IOS_COLORS.secondaryLabel,
-    letterSpacing: 0.5,
+    marginTop: 2,
   },
   followAllButton: {
-    paddingHorizontal: IOS_SPACING.md,
-    paddingVertical: IOS_SPACING.xs,
-    borderRadius: IOS_RADIUS.sm,
-    backgroundColor: IOS_COLORS.systemBlue + '15',
-    minWidth: 80,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.sm,
+    borderRadius: IOS_RADIUS.full,
+    backgroundColor: IOS_COLORS.systemBlue,
+    minWidth: 90,
     alignItems: 'center',
+    flexShrink: 0,
   },
   followAllButtonPressed: {
     opacity: 0.7,
   },
   followAllText: {
-    ...IOS_TYPOGRAPHY.footnote,
+    ...IOS_TYPOGRAPHY.subhead,
     fontWeight: '600',
-    color: IOS_COLORS.systemBlue,
+    color: '#FFFFFF',
   },
   listContainer: {
     marginHorizontal: IOS_LIST_INSETS.insetGrouped.marginHorizontal,
