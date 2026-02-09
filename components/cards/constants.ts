@@ -302,6 +302,37 @@ export function getScreenDimensions() {
 }
 
 /**
+ * Calculate web-specific card width based on container width
+ * Returns wider cards on larger screens for better use of space
+ * Mobile-first: small screens use standard 86% ratio
+ *
+ * Tile-based sizing (155px tiles + 12px gaps + 32px card padding):
+ * - 2 tiles: 322 + 32 = 354px minimum
+ * - 3 tiles: 489 + 32 = 521px minimum
+ * - 4 tiles: 656 + 32 = 688px minimum
+ */
+export function calculateWebCardWidth(containerWidth: number): number {
+  // Mobile: use standard ratio (will get 2 tiles)
+  if (containerWidth < 600) {
+    return Math.round(containerWidth * CARD_WIDTH_RATIO);
+  }
+  // Small tablet / large phone: 3 tiles width
+  if (containerWidth < 800) {
+    return Math.max(521, Math.round(containerWidth * 0.85));
+  }
+  // Tablet: 4 tiles width or 80% of container
+  if (containerWidth < 1024) {
+    return Math.max(688, Math.min(800, Math.round(containerWidth * 0.8)));
+  }
+  // Desktop: 4 tiles width or 70% of container, max 900px
+  if (containerWidth < 1440) {
+    return Math.max(688, Math.min(900, Math.round(containerWidth * 0.7)));
+  }
+  // Large desktop: max 900px (comfortable for 4+ tiles)
+  return 900;
+}
+
+/**
  * Calculate card dimensions based on screen size
  */
 export function calculateCardDimensions(

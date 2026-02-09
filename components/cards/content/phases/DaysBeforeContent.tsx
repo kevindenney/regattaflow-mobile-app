@@ -39,6 +39,7 @@ import {
 } from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
+import { TileGrid } from '../TileGrid';
 import { useRaceChecklist, ChecklistItemWithState } from '@/hooks/useRaceChecklist';
 import { useTeamRaceEntry, useTeamChecklist } from '@/hooks';
 import { useRacePreparation } from '@/hooks/useRacePreparation';
@@ -66,7 +67,9 @@ import {
 } from '@/components/checklist-tools/wizards';
 import { ElectronicsChecklist } from '@/components/checklist-tools/checklists/ElectronicsChecklist';
 import { InteractiveChecklist } from '@/components/checklist-tools/InteractiveChecklist';
-import { PositionAssignmentPanel, MeetingPointPicker } from '@/components/checklist-tools/crew';
+import { PositionAssignmentPanel, MeetingPointPicker, CrewManagementWizard } from '@/components/checklist-tools/crew';
+import { LogisticsPlannerWizard } from '@/components/checklist-tools/logistics/LogisticsPlannerWizard';
+import { crewManagementService } from '@/services/crewManagementService';
 import { hasTool } from '@/lib/checklists/toolRegistry';
 import { CATEGORY_CONFIG, ChecklistCategory } from '@/types/checklists';
 import { IOSInsetGroupedSection } from '@/components/ui/ios';
@@ -110,6 +113,32 @@ import {
   hasPhaseData,
 } from '@/lib/historical/transformIntentions';
 import { getItemsGroupedByCategory, getCategoriesForPhase } from '@/lib/checklists/checklistConfig';
+import { CheckCircle2 } from 'lucide-react-native';
+import {
+  BriefingTile,
+  WeatherTile,
+  SailsTile,
+  RigTile,
+  ElectronicsTile,
+  SafetyTile,
+  CrewTile,
+  LogisticsTile,
+  WindStrategyTile,
+  StartStrategyTile,
+  UpwindTile,
+  TideStrategyTile,
+  TacticsTile,
+  NavigationTile,
+  WatchScheduleTile,
+  OffshoreSafetyTile,
+  WeatherRoutingTile,
+  OpponentTile,
+  PreStartTacticsTile,
+  RulesTile,
+  TeamSetupTile,
+  ComboPlaysTile,
+  TeamCommsTile,
+} from '@/components/races/prep/PrepTabTiles';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -462,6 +491,66 @@ function RetrospectiveChecklistSection({
   );
 }
 
+/**
+ * TileSection - Section wrapper for tile groups, matching AfterRaceContent pattern
+ */
+function TileSection({
+  title,
+  subtitle,
+  isComplete,
+  visible = true,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  isComplete: boolean;
+  visible?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!visible) return null;
+  return (
+    <View style={tileSectionStyles.section}>
+      <View style={tileSectionStyles.sectionHeader}>
+        <View style={tileSectionStyles.sectionTitleRow}>
+          <Text style={tileSectionStyles.sectionTitle}>{title}</Text>
+          {isComplete && (
+            <CheckCircle2 size={16} color="#34C759" />
+          )}
+        </View>
+        <Text style={tileSectionStyles.sectionSubtitle}>{subtitle}</Text>
+      </View>
+      {children}
+    </View>
+  );
+}
+
+const tileSectionStyles = StyleSheet.create({
+  section: {
+    gap: 12,
+  },
+  sectionHeader: {
+    gap: 2,
+    paddingBottom: 4,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#3C3C43',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    lineHeight: 18,
+  },
+});
+
 export function DaysBeforeContent({
   race,
   isExpanded = true,
@@ -486,6 +575,7 @@ export function DaysBeforeContent({
   const [showSailInspection, setShowSailInspection] = useState(false);
   const [showSailPicker, setShowSailPicker] = useState(false);
   const [userBoat, setUserBoat] = useState<SailorBoat | null>(null);
+  const [crewNames, setCrewNames] = useState<string[]>([]);
   const [boatSails, setBoatSails] = useState<SailWithHealth[]>([]);
   const [selectedSail, setSelectedSail] = useState<SailWithHealth | null>(null);
   const [loadingSails, setLoadingSails] = useState(false);
@@ -556,6 +646,20 @@ export function DaysBeforeContent({
     fetchUserBoat();
   }, [user?.id]);
 
+  // Fetch crew member names for the tile display
+  useEffect(() => {
+    const fetchCrew = async () => {
+      if (!user?.id) return;
+      try {
+        const crew = await crewManagementService.getAllCrew(user.id);
+        setCrewNames(crew.filter((c) => c.status === 'active').map((c) => c.name));
+      } catch {
+        // Silently fail - tile will just show progress
+      }
+    };
+    fetchCrew();
+  }, [user?.id]);
+
   // Check if this is a demo race (no carryover for demo races)
   const isDemo = race.isDemo === true;
 
@@ -567,6 +671,9 @@ export function DaysBeforeContent({
     totalCount,
     progress,
     toggleItem,
+    completeItem,
+    uncompleteItem,
+    completions,
     isInitialLoading,
     hasData,
   } = useRaceChecklist({
@@ -913,47 +1020,122 @@ export function DaysBeforeContent({
     fetchPositionedCourse();
   }, [race.id]);
 
-  // Categories to show based on expansion state
-  // Order: DOCUMENTS first, then WEATHER, EQUIPMENT, SAFETY, CREW
-  const visibleCategories = useMemo(() => {
-    // Define the preferred order for categories
-    const categoryOrder: ChecklistCategory[] = [
-      'documents',
-      'weather',
-      'equipment',
-      'safety',
-      'crew',
-      'logistics',
-      'navigation',
-      'tactics',
-      'team_coordination',
-      'rules',
-    ];
+  // ========================================================================
+  // TILE PREVIEW DATA
+  // ========================================================================
 
-    // Sort categories by the defined order
-    const sortedCategories = [...categories].sort((a, b) => {
-      const aIndex = categoryOrder.indexOf(a);
-      const bIndex = categoryOrder.indexOf(b);
-      // If not in the order list, put at the end
-      const aOrder = aIndex === -1 ? 999 : aIndex;
-      const bOrder = bIndex === -1 ? 999 : bIndex;
-      return aOrder - bOrder;
-    });
-
-    if (isExpanded) {
-      return sortedCategories;
+  // Briefing: collect document names from checklist items
+  const briefingDocNames = useMemo(() => {
+    const docItemMap: Record<string, string> = {
+      'review_nor': 'NOR',
+      'nor_review': 'NOR',
+      'review_si': 'SI',
+      'si_review': 'SI',
+      'amendments_check': 'Amendments',
+      'pre_race_briefing': 'Race Briefing',
+    };
+    const allItems = Object.values(itemsByCategory).flat();
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (const [id, label] of Object.entries(docItemMap)) {
+      if (allItems.some(i => i.id === id) && !seen.has(label)) {
+        seen.add(label);
+        names.push(label);
+      }
     }
-    // In collapsed state, show main categories only
-    const mainCategories: ChecklistCategory[] = [
-      'documents',
-      'equipment',
-      'safety',
-      'crew',
-      'team_coordination',
-      'tactics',
-    ];
-    return sortedCategories.filter((cat) => mainCategories.includes(cat));
-  }, [categories, isExpanded]);
+    return names;
+  }, [itemsByCategory]);
+
+  // Weather: extract sparkline data from latest forecast snapshot
+  const weatherSparklines = useMemo(() => {
+    const snapshots = intentions?.forecastCheck?.snapshots;
+    if (!snapshots || snapshots.length === 0) return null;
+    const latest = snapshots[snapshots.length - 1];
+    const windData = latest.windForecast?.map(d => d.value) || [];
+    const tideData = latest.tideForecast?.map(d => d.value) || [];
+    // Build tide label from high/low tide times
+    let tideLabel: string | undefined;
+    if (latest.highTide) {
+      tideLabel = `HW ${latest.highTide.time}`;
+    } else if (latest.lowTide) {
+      tideLabel = `LW ${latest.lowTide.time}`;
+    }
+    return {
+      windSparkline: windData.length >= 3 ? windData : undefined,
+      tideSparkline: tideData.length >= 3 ? tideData : undefined,
+      tideLabel,
+    };
+  }, [intentions?.forecastCheck?.snapshots]);
+
+  // Weather: build tide label from race.tide if no snapshot data
+  const raceTideLabel = useMemo(() => {
+    if (weatherSparklines?.tideLabel) return undefined; // snapshot has label
+    const tide = race.tide;
+    if (!tide) return undefined;
+    const stateLabels: Record<string, string> = {
+      flooding: '↑ Flooding',
+      ebbing: '↓ Ebbing',
+      slack: '→ Slack',
+      high: 'High water',
+      low: 'Low water',
+    };
+    return stateLabels[tide.state] || tide.state;
+  }, [race.tide, weatherSparklines?.tideLabel]);
+
+  // Sails: get sail names from sailSelection intention
+  const sailSelectionPreview = useMemo(() => {
+    const sel = intentions?.sailSelection;
+    if (!sel) return undefined;
+    if (sel.mainsailName || sel.jibName || sel.spinnakerName) {
+      return { mainsailName: sel.mainsailName, jibName: sel.jibName, spinnakerName: sel.spinnakerName };
+    }
+    return undefined;
+  }, [intentions?.sailSelection]);
+
+  // Rig: compute adjusted settings from rig intentions
+  const rigPreview = useMemo(() => {
+    const settings = intentions?.rigIntentions?.settings;
+    if (!settings) return { adjustedCount: 0, adjustedSettings: [] as string[] };
+    const adjusted = Object.entries(settings)
+      .filter(([_, s]) => s.status === 'adjusted')
+      .map(([key]) => key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+    return { adjustedCount: adjusted.length, adjustedSettings: adjusted };
+  }, [intentions?.rigIntentions?.settings]);
+
+  // ========================================================================
+  // TILE HELPERS
+  // ========================================================================
+
+  // Check if a specific checklist item is complete
+  const isItemComplete = useCallback((itemId: string): boolean => {
+    const allItems = Object.values(itemsByCategory).flat();
+    const item = allItems.find((i) => i.id === itemId);
+    return item?.isCompleted ?? false;
+  }, [itemsByCategory]);
+
+  // Check if any of the given item IDs exist in the checklist
+  const hasAnyItem = useCallback((itemIds: string[]): boolean => {
+    const allItems = Object.values(itemsByCategory).flat();
+    return itemIds.some((id) => allItems.some((i) => i.id === id));
+  }, [itemsByCategory]);
+
+  // Find a specific item
+  const findItem = useCallback((itemId: string): ChecklistItemWithState | undefined => {
+    const allItems = Object.values(itemsByCategory).flat();
+    return allItems.find((i) => i.id === itemId);
+  }, [itemsByCategory]);
+
+  // Handle tile press - launch the associated wizard/tool
+  const handleTilePress = useCallback((checklistItemId: string, toolId: string | undefined) => {
+    const allItems = Object.values(itemsByCategory).flat();
+    const item = allItems.find((i) => i.id === checklistItemId);
+    if (item && hasTool(item)) {
+      setActiveTool(item);
+    } else if (item) {
+      // No tool - just toggle the item
+      toggleItem(checklistItemId);
+    }
+  }, [itemsByCategory, toggleItem]);
 
   // ==========================================================================
   // RENDER
@@ -1151,25 +1333,279 @@ export function DaysBeforeContent({
         </View>
       )}
 
-      {/* Category Sections - Flat headers with simple checklist items */}
-      {visibleCategories.map((category) => {
-        const items = itemsByCategory[category];
-        if (!items || items.length === 0) return null;
-
-        return (
-          <CategorySection
-            key={category}
-            category={category}
-            items={items}
-            onToggle={toggleItem}
-            onItemAction={handleItemAction}
-            onLearnPress={handleLearnPress}
-            onShowTooltip={handleShowTooltip}
-            actionItems={actionItems}
-            showLearning={userSettings.showQuickTips}
+      {/* ================================================================ */}
+      {/* SECTION: RACE INTEL                                             */}
+      {/* ================================================================ */}
+      <TileSection
+        title="Race Intel"
+        subtitle="Documents and weather forecast"
+        isComplete={
+          isItemComplete('pre_race_briefing') &&
+          isItemComplete('check_weather_forecast')
+        }
+        visible={hasAnyItem(['pre_race_briefing', 'check_weather_forecast', 'review_nor', 'review_si'])}
+      >
+        <TileGrid>
+          <BriefingTile
+            isComplete={isItemComplete('pre_race_briefing') || (isItemComplete('review_nor') && isItemComplete('review_si'))}
+            onPress={() => handleTilePress('pre_race_briefing', 'pre_race_briefing')}
+            documentNames={briefingDocNames}
+            raceName={race.name}
           />
-        );
-      })}
+          <WeatherTile
+            isComplete={isItemComplete('check_weather_forecast')}
+            onPress={() => handleTilePress('check_weather_forecast', 'forecast_check')}
+            windDirection={intentions?.strategyNotes?.['wind.direction']}
+            windSpeed={intentions?.strategyNotes?.['wind.speed']}
+            raceWind={race.wind}
+            windSparkline={weatherSparklines?.windSparkline}
+            tideSparkline={weatherSparklines?.tideSparkline}
+            tideLabel={weatherSparklines?.tideLabel || raceTideLabel}
+          />
+        </TileGrid>
+      </TileSection>
+
+      {/* ================================================================ */}
+      {/* SECTION: EQUIPMENT                                              */}
+      {/* ================================================================ */}
+      <TileSection
+        title="Equipment"
+        subtitle="Sails, rigging, electronics, and safety"
+        isComplete={
+          isItemComplete('sails') &&
+          isItemComplete('select_sails') &&
+          isItemComplete('lines') &&
+          isItemComplete('tune_rig') &&
+          isItemComplete('battery') &&
+          isItemComplete('safety')
+        }
+        visible={hasAnyItem(['sails', 'select_sails', 'lines', 'tune_rig', 'battery', 'safety'])}
+      >
+        <TileGrid>
+          <SailsTile
+            isComplete={isItemComplete('sails') && isItemComplete('select_sails')}
+            onPress={() => {
+              if (findItem('sails')) handleSailsAction();
+              else handleTilePress('select_sails', 'sail_selection_wizard');
+            }}
+            sailSelection={sailSelectionPreview}
+            boatClass={race.boatClass}
+          />
+          <RigTile
+            isComplete={isItemComplete('lines') && isItemComplete('tune_rig')}
+            onPress={() => handleTilePress('tune_rig', 'rig_tuning_wizard')}
+            tuningSummary={
+              intentions?.rigIntentions?.overallNotes
+                ? intentions.rigIntentions.overallNotes.substring(0, 30)
+                : undefined
+            }
+            adjustedCount={rigPreview.adjustedCount}
+            adjustedSettings={rigPreview.adjustedSettings}
+          />
+          <ElectronicsTile
+            isComplete={isItemComplete('battery')}
+            onPress={() => handleTilePress('battery', 'electronics_checklist')}
+          />
+          <SafetyTile
+            isComplete={isItemComplete('safety')}
+            onPress={() => handleTilePress('safety', 'safety_gear')}
+          />
+        </TileGrid>
+      </TileSection>
+
+      {/* ================================================================ */}
+      {/* SECTION: CREW & LOGISTICS                                       */}
+      {/* ================================================================ */}
+      <TileSection
+        title="Crew & Logistics"
+        subtitle="Team coordination and travel"
+        isComplete={
+          isItemComplete('confirm_crew') &&
+          isItemComplete('transport')
+        }
+        visible={hasAnyItem(['confirm_crew', 'assign_positions', 'meeting_point', 'transport', 'accommodation', 'food'])}
+      >
+        <TileGrid>
+          <CrewTile
+            isComplete={isItemComplete('confirm_crew') && isItemComplete('assign_positions') && isItemComplete('meeting_point')}
+            onPress={() => handleTilePress('confirm_crew', 'crew_management')}
+            progress={{
+              current: [isItemComplete('confirm_crew'), isItemComplete('assign_positions'), isItemComplete('meeting_point')].filter(Boolean).length,
+              total: 3,
+            }}
+            crewNames={crewNames}
+            isConfirmed={isItemComplete('confirm_crew')}
+          />
+          <LogisticsTile
+            isComplete={isItemComplete('transport') && isItemComplete('accommodation') && isItemComplete('food')}
+            onPress={() => handleTilePress('transport', 'logistics_planner')}
+            progress={{
+              current: [isItemComplete('transport'), isItemComplete('accommodation'), isItemComplete('food')].filter(Boolean).length,
+              total: 3,
+            }}
+            transportNotes={completions['transport']?.notes}
+            accommodationNotes={completions['accommodation']?.notes}
+            foodNotes={completions['food']?.notes}
+          />
+        </TileGrid>
+      </TileSection>
+
+      {/* ================================================================ */}
+      {/* SECTION: STRATEGY                                               */}
+      {/* ================================================================ */}
+      <TileSection
+        title="Strategy"
+        subtitle="Wind, start, upwind approach, and tide"
+        isComplete={
+          isItemComplete('strategy_wind_forecast') &&
+          isItemComplete('strategy_start_plan') &&
+          isItemComplete('strategy_upwind_approach') &&
+          isItemComplete('strategy_current_tide')
+        }
+        visible={hasAnyItem(['strategy_wind_forecast', 'strategy_start_plan', 'strategy_upwind_approach', 'strategy_current_tide'])}
+      >
+        <TileGrid>
+          <WindStrategyTile
+            isComplete={isItemComplete('strategy_wind_forecast')}
+            onPress={() => handleTilePress('strategy_wind_forecast', 'wind_shift_strategy')}
+            direction={intentions?.strategyNotes?.['wind.direction']}
+            shiftPattern={intentions?.strategyNotes?.['upwind.shiftStrategy']}
+          />
+          <StartStrategyTile
+            isComplete={isItemComplete('strategy_start_plan')}
+            onPress={() => handleTilePress('strategy_start_plan', 'start_planner')}
+            favoredEnd={intentions?.strategyNotes?.['start.favoredEnd']}
+            approach={intentions?.strategyNotes?.['start.timingApproach']}
+          />
+          <UpwindTile
+            isComplete={isItemComplete('strategy_upwind_approach')}
+            onPress={() => handleTilePress('strategy_upwind_approach', 'first_beat_strategy')}
+            favoredSide={intentions?.strategyNotes?.['upwind.favoredTack']}
+            shiftExpectation={intentions?.strategyNotes?.['upwind.shiftStrategy']}
+          />
+          <TideStrategyTile
+            isComplete={isItemComplete('strategy_current_tide')}
+            onPress={() => handleTilePress('strategy_current_tide', 'tide_strategy')}
+            tideState={intentions?.strategyNotes?.['tide.flow']}
+            strategy={intentions?.strategyNotes?.['tide.favoredSide']}
+          />
+        </TileGrid>
+      </TileSection>
+
+      {/* ================================================================ */}
+      {/* SECTION: TACTICS (conditional)                                   */}
+      {/* ================================================================ */}
+      {hasAnyItem(['review_tactics']) && (
+        <TileSection
+          title="Tactics"
+          subtitle="Crew tactical briefing"
+          isComplete={isItemComplete('review_tactics')}
+        >
+          <TileGrid>
+            <TacticsTile
+              isComplete={isItemComplete('review_tactics')}
+              onPress={() => handleTilePress('review_tactics', 'tactics_review_wizard')}
+            />
+          </TileGrid>
+        </TileSection>
+      )}
+
+      {/* ================================================================ */}
+      {/* RACE-TYPE SPECIFIC TILES                                        */}
+      {/* ================================================================ */}
+
+      {/* Distance Racing */}
+      {raceType === 'distance' && (
+        <TileSection
+          title="Distance Racing"
+          subtitle="Navigation, watches, and offshore prep"
+          isComplete={
+            isItemComplete('review_chart') &&
+            isItemComplete('watch_schedule') &&
+            isItemComplete('offshore_safety') &&
+            isItemComplete('weather_routing')
+          }
+        >
+          <TileGrid>
+            <NavigationTile
+              isComplete={isItemComplete('review_chart')}
+              onPress={() => handleTilePress('review_chart', 'course_map')}
+            />
+            <WatchScheduleTile
+              isComplete={isItemComplete('watch_schedule')}
+              onPress={() => handleTilePress('watch_schedule', 'watch_schedule')}
+            />
+            <OffshoreSafetyTile
+              isComplete={isItemComplete('offshore_safety')}
+              onPress={() => {
+                if (!isItemComplete('offshore_safety')) toggleItem('offshore_safety');
+              }}
+            />
+            <WeatherRoutingTile
+              isComplete={isItemComplete('weather_routing')}
+              onPress={() => {
+                if (!isItemComplete('weather_routing')) toggleItem('weather_routing');
+              }}
+            />
+          </TileGrid>
+        </TileSection>
+      )}
+
+      {/* Match Racing */}
+      {raceType === 'match' && (
+        <TileSection
+          title="Match Racing"
+          subtitle="Opponent analysis and rules review"
+          isComplete={
+            isItemComplete('opponent_review') &&
+            isItemComplete('prestart_tactics') &&
+            isItemComplete('rules_review_18')
+          }
+        >
+          <TileGrid>
+            <OpponentTile
+              isComplete={isItemComplete('opponent_review')}
+              onPress={() => handleTilePress('opponent_review', 'opponent_review')}
+            />
+            <PreStartTacticsTile
+              isComplete={isItemComplete('prestart_tactics')}
+              onPress={() => handleTilePress('prestart_tactics', 'prestart_tactics')}
+            />
+            <RulesTile
+              isComplete={isItemComplete('rules_review_18') && isItemComplete('rules_review_31')}
+              onPress={() => handleTilePress('rules_review_18', 'rules_review')}
+            />
+          </TileGrid>
+        </TileSection>
+      )}
+
+      {/* Team Racing */}
+      {raceType === 'team' && !isTeamRace && (
+        <TileSection
+          title="Team Racing"
+          subtitle="Team coordination and combo plays"
+          isComplete={
+            isItemComplete('team_boat_assignments') &&
+            isItemComplete('combo_plays') &&
+            isItemComplete('comm_signals')
+          }
+        >
+          <TileGrid>
+            <TeamSetupTile
+              isComplete={isItemComplete('team_boat_assignments')}
+              onPress={() => handleTilePress('team_boat_assignments', 'team_assignments')}
+            />
+            <ComboPlaysTile
+              isComplete={isItemComplete('combo_plays')}
+              onPress={() => handleTilePress('combo_plays', 'combo_plays')}
+            />
+            <TeamCommsTile
+              isComplete={isItemComplete('comm_signals')}
+              onPress={() => handleTilePress('comm_signals', undefined)}
+            />
+          </TileGrid>
+        </TileSection>
+      )}
 
 
       {/* Sail Picker Modal */}
@@ -1576,6 +2012,7 @@ export function DaysBeforeContent({
             item={activeTool}
             raceEventId={race.id}
             boatId={userBoat?.id}
+            classId={userBoat?.class_id}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -1596,6 +2033,67 @@ export function DaysBeforeContent({
             boatId={userBoat?.id}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
+          />
+        </Modal>
+      )}
+
+      {/* Crew Management Wizard Modal */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'crew_management' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <CrewManagementWizard
+            item={activeTool}
+            raceEventId={race.id}
+            boatId={userBoat?.id}
+            classId={userBoat?.class_id}
+            onComplete={async () => {
+              // Mark all crew items complete
+              if (!isItemComplete('confirm_crew')) toggleItem('confirm_crew');
+              if (!isItemComplete('assign_positions')) toggleItem('assign_positions');
+              if (!isItemComplete('meeting_point')) toggleItem('meeting_point');
+              // Refresh crew names for tile display
+              try {
+                const crew = await crewManagementService.getAllCrew(user!.id);
+                setCrewNames(crew.filter((c) => c.status === 'active').map((c) => c.name));
+              } catch { /* ignore */ }
+              setActiveTool(null);
+            }}
+            onCancel={handleToolCancel}
+          />
+        </Modal>
+      )}
+
+      {/* Logistics Planner Wizard Modal */}
+      {activeTool?.toolType === 'full_wizard' && activeTool.toolId === 'logistics_planner' && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={handleToolCancel}
+        >
+          <LogisticsPlannerWizard
+            item={activeTool}
+            raceEventId={race.id}
+            boatId={userBoat?.id}
+            onComplete={() => setActiveTool(null)}
+            onCancel={handleToolCancel}
+            onToggleItem={toggleItem}
+            onCompleteItem={completeItem}
+            onUncompleteItem={uncompleteItem}
+            completedItems={{
+              transport: isItemComplete('transport'),
+              accommodation: isItemComplete('accommodation'),
+              food: isItemComplete('food'),
+            }}
+            existingNotes={{
+              transport: completions['transport']?.notes ?? '',
+              accommodation: completions['accommodation']?.notes ?? '',
+              food: completions['food']?.notes ?? '',
+            }}
           />
         </Modal>
       )}
@@ -1969,7 +2467,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Section - Flat header pattern
+  // Tile Row (2-up grid)
+  tileRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+
+  // Section - Flat header pattern (kept for backwards compat)
   section: {
     gap: 10,
   },

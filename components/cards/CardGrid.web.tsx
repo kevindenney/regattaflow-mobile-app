@@ -27,10 +27,13 @@ import {
 } from './types';
 import {
   calculateCardDimensions,
+  calculateWebCardWidth,
   HORIZONTAL_CARD_GAP,
   CARD_BORDER_RADIUS,
   IOS_COLORS,
 } from './constants';
+import { CardWidthContext } from './CardWidthContext';
+import { NowBar } from './NowBar';
 import { TimeAxisRace } from '@/components/races/TimelineTimeAxis';
 
 // =============================================================================
@@ -87,6 +90,7 @@ function CardGridComponent({
   nextRaceIndex,
   topInset,
   refetchTrigger,
+  nowBarWeather,
 }: CardGridWebProps & { nextRaceIndex?: number | null; topInset?: number }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
@@ -129,17 +133,30 @@ function CardGridComponent({
 
   // Recalculate card dimensions when container width or window height changes
   useEffect(() => {
-    setDimensions(
-      calculateCardDimensions(containerWidth, window.innerHeight)
-    );
+    const baseDimensions = calculateCardDimensions(containerWidth, window.innerHeight);
+    // Override cardWidth with web-specific calculation for wider cards on larger screens
+    const webCardWidth = calculateWebCardWidth(containerWidth);
+    setDimensions({
+      ...baseDimensions,
+      cardWidth: webCardWidth,
+      // Recalculate horizontal snap interval with new width
+      horizontalSnapInterval: webCardWidth + HORIZONTAL_CARD_GAP,
+      // Recalculate padding to center the wider card
+      contentPaddingLeft: Math.round((containerWidth - webCardWidth) / 2),
+    });
   }, [containerWidth]);
 
   // Update dimensions on window resize (for height changes)
   useEffect(() => {
     const handleResize = () => {
-      setDimensions(
-        calculateCardDimensions(containerWidth, window.innerHeight)
-      );
+      const baseDimensions = calculateCardDimensions(containerWidth, window.innerHeight);
+      const webCardWidth = calculateWebCardWidth(containerWidth);
+      setDimensions({
+        ...baseDimensions,
+        cardWidth: webCardWidth,
+        horizontalSnapInterval: webCardWidth + HORIZONTAL_CARD_GAP,
+        contentPaddingLeft: Math.round((containerWidth - webCardWidth) / 2),
+      });
     };
 
     window.addEventListener('resize', handleResize);
@@ -264,7 +281,6 @@ function CardGridComponent({
 
       return (
         <View
-          key={race.id}
           style={[
             styles.card,
             {
@@ -276,7 +292,8 @@ function CardGridComponent({
             },
           ]}
         >
-          {renderCardContent(
+          <CardWidthContext.Provider value={{ cardWidth: dimensions.cardWidth }}>
+            {renderCardContent(
             race,
             'race_summary',
             isActive,
@@ -302,6 +319,7 @@ function CardGridComponent({
             // Refetch trigger for AfterRaceContent
             refetchTrigger
           )}
+          </CardWidthContext.Provider>
         </View>
       );
     },
@@ -365,7 +383,25 @@ function CardGridComponent({
           if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
             (window as any).__PERIOD_DEBUG__.log('CardGrid.web.renderCard', raceIndex, { raceId: race.id, raceName: race.name, raceIndex });
           }
-          return renderCard(race, raceIndex);
+          const showNowBar =
+            nextRaceIndex != null &&
+            nextRaceIndex > 0 &&
+            nextRaceIndex < races.length &&
+            races.length > 1 &&
+            raceIndex === nextRaceIndex;
+          return (
+            <React.Fragment key={race.id}>
+              {showNowBar && (
+                <View style={[styles.nowBarWrapper, { height: cardHeight }]}>
+                  <NowBar
+                    height={cardHeight}
+                    weather={nowBarWeather}
+                  />
+                </View>
+              )}
+              {renderCard(race, raceIndex)}
+            </React.Fragment>
+          );
         })}
       </ScrollView>
 
@@ -454,6 +490,17 @@ const styles = StyleSheet.create({
   },
   navArrowRight: {
     right: 16,
+  },
+  nowBarWrapper: {
+    position: 'relative',
+    width: 0,
+    // @ts-ignore - web-only
+    overflow: 'visible',
+    alignItems: 'center',
+    // Offset to center the bar in the gap (gap is applied by flex)
+    marginLeft: -HORIZONTAL_CARD_GAP / 2,
+    marginRight: -HORIZONTAL_CARD_GAP / 2,
+    zIndex: 20,
   },
 });
 
