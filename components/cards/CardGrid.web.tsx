@@ -234,8 +234,25 @@ function CardGridComponent({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentRaceIndex, goToRace]);
 
+  // Scroll to initial race on mount (e.g., next upcoming race)
+  const hasInitialScrolled = useRef(false);
+  useEffect(() => {
+    if (hasInitialScrolled.current) return;
+    if (initialRaceIndex > 0 && initialRaceIndex < races.length && snapOffsets.length > 0) {
+      hasInitialScrolled.current = true;
+      // Use requestAnimationFrame to ensure ScrollView is laid out before scrolling
+      requestAnimationFrame(() => {
+        horizontalScrollRef.current?.scrollTo({
+          x: snapOffsets[initialRaceIndex] ?? 0,
+          animated: false,
+        });
+      });
+    }
+  }, [initialRaceIndex, races.length, snapOffsets]);
+
   // Respond to initialRaceIndex changes from parent (e.g., "upcoming" button)
   useEffect(() => {
+    if (!hasInitialScrolled.current) return;
     if (initialRaceIndex !== currentRaceIndex && initialRaceIndex >= 0 && initialRaceIndex < races.length) {
       goToRace(initialRaceIndex);
     }
