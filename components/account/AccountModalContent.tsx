@@ -1,14 +1,14 @@
 /**
  * AccountModalContent
  *
- * Apple HIG-style account screen presented as a modal.
+ * Apple HIG-style unified account & settings screen presented as a modal.
  * Uses inset grouped IOSListSections with IOSListItems.
+ * Merges functionality from both Account and Settings screens.
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -21,13 +21,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { LanguageSelector } from '@/components/settings/LanguageSelector';
-import { useUserSettings } from '@/hooks/useUserSettings';
+import { TeamSeatManager } from '@/components/subscription/TeamSeatManager';
+import { useUserSettings, UNIT_SHORT_LABELS } from '@/hooks/useUserSettings';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
-import { getCurrentLocale, localeConfig } from '@/lib/i18n';
 import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
-import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { supabase } from '@/services/supabase';
 
@@ -54,13 +52,10 @@ interface ProfileUpdates {
 
 export default function AccountModalContent() {
   const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities } = useAuth();
-  const { t } = useTranslation(['settings', 'common']);
-
-  // User settings (tips, learning links)
+  // User settings (tips, learning links, units)
   const { settings: userSettings, updateSetting } = useUserSettings();
 
   // State
-  const [languageVisible, setLanguageVisible] = useState(false);
   const [claimVisible, setClaimVisible] = useState(false);
   const [claimPassword, setClaimPassword] = useState('');
   const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
@@ -68,10 +63,12 @@ export default function AccountModalContent() {
   const [boats, setBoats] = useState<UserBoat[]>([]);
   const [boatsLoading, setBoatsLoading] = useState(true);
 
-  // Derived state
-  const currentLocale = getCurrentLocale();
-  const currentLanguageName = localeConfig[currentLocale]?.nativeName || 'English';
+  // Settings-related state
+  const [teamManagerVisible, setTeamManagerVisible] = useState(false);
+  const [allowFollowerSharing, setAllowFollowerSharing] = useState(true);
+  const [sharingSettingLoading, setSharingSettingLoading] = useState(false);
 
+  // Derived state
   const isDemoProfile = useMemo(
     () => isDemoSession || (userProfile?.onboarding_step ?? '').toString().startsWith('demo'),
     [isDemoSession, userProfile?.onboarding_step]
@@ -82,11 +79,37 @@ export default function AccountModalContent() {
     return tier.charAt(0).toUpperCase() + tier.slice(1);
   }, [userProfile?.subscription_tier]);
 
+  // Check if user has a team subscription
+  const isTeamSubscriber = userProfile?.subscription_tier === 'team';
+
   // Load boats on mount
-  React.useEffect(() => {
+  useEffect(() => {
     if (user?.id) {
       loadBoats();
     }
+  }, [user?.id]);
+
+  // Load follower sharing setting on mount
+  useEffect(() => {
+    async function loadFollowerSharingSetting() {
+      if (!user?.id) return;
+
+      try {
+        const { data } = await supabase
+          .from('sailor_profiles')
+          .select('allow_follower_sharing')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (data) {
+          setAllowFollowerSharing(data.allow_follower_sharing ?? true);
+        }
+      } catch (error) {
+        console.error('[Account] Error loading follower sharing setting:', error);
+      }
+    }
+
+    loadFollowerSharingSetting();
   }, [user?.id]);
 
   const loadBoats = useCallback(async () => {
@@ -189,6 +212,41 @@ export default function AccountModalContent() {
     }
   }, []);
 
+  // Save follower sharing setting
+  const handleFollowerSharingChange = useCallback(async (value: boolean) => {
+    setAllowFollowerSharing(value);
+    setSharingSettingLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('sailor_profiles')
+        .update({ allow_follower_sharing: value })
+        .eq('user_id', user?.id);
+
+      if (error) {
+        console.error('[Account] Error saving follower sharing setting:', error);
+        setAllowFollowerSharing(!value);
+        showAlert('Error', 'Failed to save privacy setting. Please try again.');
+      }
+    } catch (error) {
+      console.error('[Account] Exception saving follower sharing setting:', error);
+      setAllowFollowerSharing(!value);
+    } finally {
+      setSharingSettingLoading(false);
+    }
+  }, [user?.id]);
+
+  const handleDeleteAccount = useCallback(() => {
+    showConfirm(
+      'Delete Account',
+      'This will permanently delete your account and all associated data. This action cannot be undone.',
+      async () => {
+        router.push('/settings/delete-account');
+      },
+      { destructive: true, confirmText: 'Continue' }
+    );
+  }, []);
+
   // ── Trailing value component helper ──────────────────────────────
   const trailingValue = (text: string) => (
     <Text style={accountStyles.trailingValueText}>{text}</Text>
@@ -255,7 +313,7 @@ export default function AccountModalContent() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container}>
       {/* Modal Header: drag handle + Done button */}
       <View style={styles.modalHeader}>
         <View style={styles.dragHandle} />
@@ -349,19 +407,11 @@ export default function AccountModalContent() {
         {/* ── General ──────────────────────────────────────────── */}
         <IOSListSection header="General">
           <IOSListItem
-            title={t('settings:preferences.language')}
-            leadingIcon="globe-outline"
+            title="Units"
+            leadingIcon="speedometer-outline"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
-            trailingComponent={trailingValue(currentLanguageName)}
-            onPress={() => setLanguageVisible(true)}
-          />
-          <IOSListItem
-            title="Quick Tips"
-            leadingIcon="bulb-outline"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.yellow}
-            trailingAccessory="switch"
-            switchValue={userSettings.showQuickTips}
-            onSwitchChange={(value) => updateSetting('showQuickTips', value)}
+            trailingComponent={trailingValue(UNIT_SHORT_LABELS[userSettings.units])}
+            onPress={() => router.push('/settings/units')}
           />
           <IOSListItem
             title="Notifications"
@@ -372,6 +422,41 @@ export default function AccountModalContent() {
           />
         </IOSListSection>
 
+        {/* ── My Learning (sailors only) ─────────────────────── */}
+        {userProfile?.user_type === 'sailor' && (
+          <IOSListSection header="My Learning">
+            <IOSListItem
+              title="Race Learning Insights"
+              leadingIcon="analytics-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.green}
+              trailingAccessory="chevron"
+              onPress={() => router.push('/my-learning')}
+            />
+            <IOSListItem
+              title="Connected Devices"
+              leadingIcon="bluetooth-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+              trailingAccessory="chevron"
+              onPress={() => router.push('/settings/connected-devices')}
+            />
+          </IOSListSection>
+        )}
+
+        {/* ── Privacy (sailors only) ─────────────────────────── */}
+        {userProfile?.user_type === 'sailor' && (
+          <IOSListSection header="Privacy">
+            <IOSListItem
+              title="Share race prep with followers"
+              leadingIcon="eye-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
+              trailingAccessory="switch"
+              switchValue={allowFollowerSharing}
+              onSwitchChange={handleFollowerSharingChange}
+              disabled={sharingSettingLoading}
+            />
+          </IOSListSection>
+        )}
+
         {/* ── Security ─────────────────────────────────────────── */}
         <IOSListSection header="Security">
           <IOSListItem
@@ -381,25 +466,13 @@ export default function AccountModalContent() {
             trailingAccessory="chevron"
             onPress={() => router.push('/settings/change-password')}
           />
-{__DEV__ && (
+          {isTeamSubscriber && (
             <IOSListItem
-              title="Reset Onboarding"
-              leadingIcon="infinite-outline"
+              title="Manage Team"
+              leadingIcon="people-outline"
               leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
               trailingAccessory="chevron"
-              onPress={() => {
-                showConfirm(
-                  'Reset Onboarding',
-                  'This will reset onboarding state and show the full onboarding flow. Continue?',
-                  async () => {
-                    await OnboardingStateService.resetOnboardingSeen();
-                    await OnboardingStateService.clearState();
-                    OnboardingStateService.setFlowType(true);
-                    router.replace('/onboarding');
-                  },
-                  { destructive: true, confirmText: 'Reset' }
-                );
-              }}
+              onPress={() => setTeamManagerVisible(true)}
             />
           )}
           {isDemoProfile && (
@@ -430,8 +503,9 @@ export default function AccountModalContent() {
                 title="Become a Coach"
                 leadingIcon="school-outline"
                 leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
-                trailingAccessory="chevron"
-                onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+                trailingAccessory="none"
+                trailingComponent={trailingValue('Coming Soon')}
+                onPress={() => showAlert('Coming Soon', 'Coach features are coming in a future update!')}
               />
             )}
             {capabilities?.hasCoaching && (
@@ -448,8 +522,8 @@ export default function AccountModalContent() {
           </IOSListSection>
         ) : null}
 
-        {/* ── About ────────────────────────────────────────────── */}
-        <IOSListSection header="About">
+        {/* ── Support ─────────────────────────────────────────── */}
+        <IOSListSection header="Support">
           <IOSListItem
             title="Help & Support"
             leadingIcon="help-circle-outline"
@@ -457,16 +531,38 @@ export default function AccountModalContent() {
             trailingAccessory="chevron"
             onPress={() => showAlert('Support', 'Email us at support@regattaflow.com')}
           />
+          <IOSListItem
+            title="Privacy Policy"
+            leadingIcon="document-text-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
+            trailingAccessory="chevron"
+            onPress={() => showAlert('Coming Soon', 'Privacy policy link will be available soon!')}
+          />
+          <IOSListItem
+            title="Terms of Service"
+            leadingIcon="shield-checkmark-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
+            trailingAccessory="chevron"
+            onPress={() => showAlert('Coming Soon', 'Terms of service link will be available soon!')}
+          />
         </IOSListSection>
 
-        {/* ── Sign Out ─────────────────────────────────────────── */}
-        <IOSListSection>
+        {/* ── Account ──────────────────────────────────────────── */}
+        <IOSListSection header="Account">
           <IOSListItem
             testID="account-sign-out-button"
             title="Sign Out"
             titleStyle={accountStyles.signOutText}
             trailingAccessory="none"
             onPress={handleSignOut}
+          />
+          <IOSListItem
+            title="Delete Account"
+            leadingIcon="trash-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.red}
+            titleStyle={accountStyles.signOutText}
+            trailingAccessory="chevron"
+            onPress={handleDeleteAccount}
           />
         </IOSListSection>
 
@@ -477,8 +573,15 @@ export default function AccountModalContent() {
         </View>
       </ScrollView>
 
-      {/* Language Selector Modal */}
-      <LanguageSelector visible={languageVisible} onClose={() => setLanguageVisible(false)} />
+      {/* Team Manager Modal */}
+      <Modal
+        visible={teamManagerVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setTeamManagerVisible(false)}
+      >
+        <TeamSeatManager onClose={() => setTeamManagerVisible(false)} />
+      </Modal>
 
       {/* Claim Workspace Modal */}
       <Modal

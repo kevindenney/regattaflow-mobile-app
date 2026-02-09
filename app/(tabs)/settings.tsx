@@ -1,21 +1,23 @@
+/**
+ * Settings Screen
+ *
+ * For non-club users, redirects to the unified Account modal at /account.
+ * Club users see the full settings screen for club administration.
+ */
+
 import { ClubAiAssistant } from '@/components/ai/ClubAiAssistant';
-import { LanguageSelector } from '@/components/settings/LanguageSelector';
 import { TeamSeatManager } from '@/components/subscription/TeamSeatManager';
-import { useUserSettings } from '@/hooks/useUserSettings';
-import { getCurrentLocale, localeConfig } from '@/lib/i18n';
+import { useUserSettings, UNIT_SHORT_LABELS } from '@/hooks/useUserSettings';
 import { useAuth } from '@/providers/AuthProvider';
-import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
 import { supabase } from '@/services/supabase';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import { useMemo, useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -26,16 +28,20 @@ import {
 } from "react-native";
 
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 export default function SettingsScreen() {
   const { user, userProfile, clubProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
-  const { t } = useTranslation(['settings', 'common']);
+
+  // Redirect non-club users to the unified Account modal
+  // Club users continue to see the full settings screen for club administration
+  if (userProfile?.user_type !== 'club') {
+    return <Redirect href="/account" />;
+  }
   const { settings: userSettings, updateSetting } = useUserSettings();
   const [claimVisible, setClaimVisible] = useState(false);
   const [claimPassword, setClaimPassword] = useState('');
   const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
   const [claimLoading, setClaimLoading] = useState(false);
-  const [languageVisible, setLanguageVisible] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
   const [resetSampleLoading, setResetSampleLoading] = useState(false);
   const [teamManagerVisible, setTeamManagerVisible] = useState(false);
   const [allowFollowerSharing, setAllowFollowerSharing] = useState(true);
@@ -91,10 +97,6 @@ export default function SettingsScreen() {
 
   // Check if user has a team subscription
   const isTeamSubscriber = userProfile?.subscription_tier === 'team';
-
-  // Get current language display name
-  const currentLocale = getCurrentLocale();
-  const currentLanguageName = localeConfig[currentLocale]?.nativeName || 'English';
 
   const isDemoProfile = useMemo(
     () =>
@@ -211,37 +213,33 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleResetOnboarding = async () => {
-    showConfirm(
-      'Reset Onboarding',
-      'This will reset onboarding state and show the full onboarding flow. Continue?',
-      async () => {
-        await OnboardingStateService.resetOnboardingSeen();
-        await OnboardingStateService.clearState();
-        // Force new flow and navigate - index will route to value/track-races
-        OnboardingStateService.setFlowType(true);
-        router.replace('/onboarding');
-      },
-      { destructive: true, confirmText: 'Reset' }
-    );
-  };
+  // Strava-style section header component
+  const SectionHeader = ({ title }: { title: string }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>{title.toUpperCase()}</Text>
+    </View>
+  );
 
   const SettingItem = ({
     icon,
     title,
     subtitle,
+    rightValue,
     onPress,
     showArrow = true,
-    danger = false
+    danger = false,
+    loading = false,
   }: {
     icon: keyof typeof Ionicons.glyphMap;
     title: string;
     subtitle?: string;
+    rightValue?: string;
     onPress?: () => void;
     showArrow?: boolean;
     danger?: boolean;
+    loading?: boolean;
   }) => (
-    <TouchableOpacity style={styles.settingItem} onPress={onPress}>
+    <TouchableOpacity style={styles.settingItem} onPress={onPress} disabled={loading}>
       <View style={styles.settingLeft}>
         <View style={[styles.settingIcon, danger && styles.dangerIcon]}>
           <Ionicons name={icon} size={20} color={danger ? '#EF4444' : '#3B82F6'} />
@@ -251,9 +249,11 @@ export default function SettingsScreen() {
           {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
         </View>
       </View>
-      {showArrow && (
-        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-      )}
+      <View style={styles.settingRight}>
+        {loading && <ActivityIndicator size="small" color="#3B82F6" style={{ marginRight: 8 }} />}
+        {rightValue && !loading && <Text style={styles.rightValue}>{rightValue}</Text>}
+        {showArrow && <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />}
+      </View>
     </TouchableOpacity>
   );
 
@@ -266,85 +266,98 @@ export default function SettingsScreen() {
           <Text style={styles.headerSubtitle}>Manage your account and preferences</Text>
         </View>
 
-        {/* Profile Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile</Text>
-          <View style={styles.profileCard}>
-            <View style={styles.profileAvatar}>
-              <Ionicons name="person" size={32} color="#FFFFFF" />
-            </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{userProfile?.full_name || 'User'}</Text>
-              <Text style={styles.profileEmail}>{user?.email}</Text>
-              <Text style={styles.profileType}>
-                {userProfile?.user_type?.charAt(0).toUpperCase() + userProfile?.user_type?.slice(1) || 'Sailor'}
-              </Text>
-            </View>
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <View style={styles.profileAvatar}>
+            <Ionicons name="person" size={32} color="#FFFFFF" />
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{userProfile?.full_name || 'User'}</Text>
+            <Text style={styles.profileEmail}>{user?.email}</Text>
+            <Text style={styles.profileType}>
+              {userProfile?.user_type?.charAt(0).toUpperCase() + userProfile?.user_type?.slice(1) || 'Sailor'}
+            </Text>
           </View>
         </View>
 
-        {/* Account Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.settingsGroup}>
-            {!userProfile?.onboarding_completed && userProfile?.user_type === 'sailor' && (
-              <SettingItem
-                icon="checkmark-circle-outline"
-                title="Complete Onboarding"
-                subtitle="Finish setting up your sailing profile"
-                onPress={() => router.push('/(auth)/sailor-onboarding-comprehensive')}
-              />
-            )}
-            {isDemoProfile && (
-              <SettingItem
-                icon="flag-outline"
-                title="Claim Workspace"
-                subtitle="Set a password and keep your data"
-                onPress={() => setClaimVisible(true)}
-              />
-            )}
-            <SettingItem
-              icon="person-outline"
-              title="Edit Profile"
-              subtitle="Update your personal information"
-              onPress={() => router.push('/settings/edit-profile')}
-            />
-            <SettingItem
-              icon="key-outline"
-              title="Change Password"
-              subtitle="Update your password"
-              onPress={() => router.push('/settings/change-password')}
-            />
-            <SettingItem
-              icon="card-outline"
-              title="Subscription"
-              subtitle={`Current plan: ${userProfile?.subscription_tier?.charAt(0).toUpperCase() + userProfile?.subscription_tier?.slice(1) || 'Free'}`}
-              onPress={() => router.push('/subscription')}
-            />
-            {isTeamSubscriber && (
-              <SettingItem
-                icon="people-outline"
-                title="Manage Team"
-                subtitle="Invite members and manage your team"
-                onPress={() => setTeamManagerVisible(true)}
-              />
-            )}
-            {userProfile?.user_type === 'sailor' && (
-              <SettingItem
-                icon="refresh-outline"
-                title="Reset Sample Data"
-                subtitle="Recreate sample races for exploring the app"
-                onPress={handleResetSampleData}
-              />
-            )}
+        {/* Account Section */}
+        <SectionHeader title="Account" />
+
+        {/* Prominent Subscription Card */}
+        <TouchableOpacity style={styles.subscriptionCard} onPress={() => router.push('/subscription')}>
+          <View style={styles.subscriptionIcon}>
+            <Ionicons name="boat" size={24} color="#FFFFFF" />
           </View>
+          <View style={styles.subscriptionInfo}>
+            <Text style={styles.subscriptionTitle}>Your RegattaFlow Subscription</Text>
+            <Text style={styles.subscriptionSubtitle}>Explore and manage your subscription</Text>
+          </View>
+          <View style={styles.subscriptionBadge}>
+            <Text style={styles.subscriptionBadgeText}>
+              {userProfile?.subscription_tier?.charAt(0).toUpperCase() + userProfile?.subscription_tier?.slice(1) || 'Free'}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+        </TouchableOpacity>
+
+        <View style={styles.settingsGroupNoPadding}>
+          {!userProfile?.onboarding_completed && userProfile?.user_type === 'sailor' && (
+            <SettingItem
+              icon="checkmark-circle-outline"
+              title="Complete Onboarding"
+              subtitle="Finish setting up your sailing profile"
+              onPress={() => router.push('/(auth)/sailor-onboarding-comprehensive')}
+            />
+          )}
+          {isDemoProfile && (
+            <SettingItem
+              icon="flag-outline"
+              title="Claim Workspace"
+              subtitle="Set a password and keep your data"
+              onPress={() => setClaimVisible(true)}
+            />
+          )}
+          <SettingItem
+            icon="person-outline"
+            title="Edit Profile"
+            subtitle="Update your personal information"
+            onPress={() => router.push('/settings/edit-profile')}
+          />
+          <SettingItem
+            icon="key-outline"
+            title="Change Password"
+            subtitle="Update your password"
+            onPress={() => router.push('/settings/change-password')}
+          />
+          {isTeamSubscriber && (
+            <SettingItem
+              icon="people-outline"
+              title="Manage Team"
+              subtitle="Invite members and manage your team"
+              onPress={() => setTeamManagerVisible(true)}
+            />
+          )}
+          <SettingItem
+            icon="bluetooth-outline"
+            title="Connected Devices"
+            subtitle="GPS, sensors, and wearable integrations"
+            onPress={() => router.push('/settings/connected-devices')}
+          />
+          {userProfile?.user_type === 'sailor' && (
+            <SettingItem
+              icon="refresh-outline"
+              title="Reset Sample Data"
+              subtitle="Recreate sample races for exploring the app"
+              onPress={handleResetSampleData}
+            />
+          )}
         </View>
 
         {/* My Learning */}
         {userProfile?.user_type === 'sailor' && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Learning</Text>
-            <View style={styles.settingsGroup}>
+          <>
+            <SectionHeader title="My Learning" />
+            <View style={styles.settingsGroupNoPadding}>
               <SettingItem
                 icon="analytics-outline"
                 title="Race Learning Insights"
@@ -352,76 +365,32 @@ export default function SettingsScreen() {
                 onPress={() => router.push('/my-learning')}
               />
             </View>
-          </View>
+          </>
         )}
 
-        {/* App Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Settings</Text>
-          <View style={styles.settingsGroup}>
-            <SettingItem
-              icon="notifications-outline"
-              title="Notifications"
-              subtitle="Configure your notification preferences"
-              onPress={() => router.push('/settings/notifications')}
-            />
-            <SettingItem
-              icon="language-outline"
-              title={t('settings:preferences.language')}
-              subtitle={currentLanguageName}
-              onPress={() => setLanguageVisible(true)}
-            />
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={styles.settingIcon}>
-                  <Ionicons name="moon-outline" size={20} color="#3B82F6" />
-                </View>
-                <View style={styles.settingText}>
-                  <Text style={styles.settingTitle}>Dark Mode</Text>
-                  <Text style={styles.settingSubtitle}>{darkMode ? 'Enabled' : 'Disabled'}</Text>
-                </View>
-              </View>
-              <Switch
-                value={darkMode}
-                onValueChange={setDarkMode}
-                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Learning & Tips */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Learning & Tips</Text>
-          <View style={styles.settingsGroup}>
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <View style={styles.settingIcon}>
-                  <Ionicons name="bulb-outline" size={20} color="#3B82F6" />
-                </View>
-                <View style={styles.settingText}>
-                  <Text style={styles.settingTitle}>Show Quick Tips</Text>
-                  <Text style={styles.settingSubtitle}>
-                    Display learning tips and links on checklist items
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={userSettings.showQuickTips}
-                onValueChange={(value) => updateSetting('showQuickTips', value)}
-                trackColor={{ false: '#D1D5DB', true: '#3B82F6' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-          </View>
+        {/* Preferences Section */}
+        <SectionHeader title="Preferences" />
+        <View style={styles.settingsGroupNoPadding}>
+          <SettingItem
+            icon="speedometer-outline"
+            title="Units of Measurement"
+            subtitle="Distance and speed display format"
+            rightValue={UNIT_SHORT_LABELS[userSettings.units]}
+            onPress={() => router.push('/settings/units')}
+          />
+          <SettingItem
+            icon="notifications-outline"
+            title="Notifications"
+            subtitle="Configure your notification preferences"
+            onPress={() => router.push('/settings/notifications')}
+          />
         </View>
 
         {/* Privacy & Sharing */}
         {userProfile?.user_type === 'sailor' && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Privacy & Sharing</Text>
-            <View style={styles.settingsGroup}>
+          <>
+            <SectionHeader title="Privacy & Sharing" />
+            <View style={styles.settingsGroupNoPadding}>
               <View style={styles.settingItem}>
                 <View style={styles.settingLeft}>
                   <View style={styles.settingIcon}>
@@ -445,13 +414,13 @@ export default function SettingsScreen() {
                 />
               </View>
             </View>
-          </View>
+          </>
         )}
 
         {/* Claude Assistant */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Claude Assistant</Text>
-          <Text style={styles.sectionHelper}>
+        <SectionHeader title="Claude Assistant" />
+        <View style={styles.aiSection}>
+          <Text style={styles.aiSectionHelper}>
             Ask Claude to draft communications, plan events, or answer member questions using your club data.
           </Text>
           <ClubAiAssistant
@@ -462,51 +431,39 @@ export default function SettingsScreen() {
         </View>
 
         {/* Support */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Support</Text>
-          <View style={styles.settingsGroup}>
-            <SettingItem
-              icon="help-circle-outline"
-              title="Help & Support"
-              subtitle="Get help and contact support"
-              onPress={() => showAlert('Support', 'Email us at support@regattaflow.com')}
-            />
-            <SettingItem
-              icon="document-text-outline"
-              title="Privacy Policy"
-              subtitle="Read our privacy policy"
-              onPress={() => showAlert('Coming Soon', 'Privacy policy link will be available soon!')}
-            />
-            <SettingItem
-              icon="shield-checkmark-outline"
-              title="Terms of Service"
-              subtitle="Read our terms of service"
-              onPress={() => showAlert('Coming Soon', 'Terms of service link will be available soon!')}
-            />
-          </View>
+        <SectionHeader title="Support" />
+        <View style={styles.settingsGroupNoPadding}>
+          <SettingItem
+            icon="help-circle-outline"
+            title="Help & Support"
+            subtitle="Get help and contact support"
+            onPress={() => showAlert('Support', 'Email us at support@regattaflow.com')}
+          />
+          <SettingItem
+            icon="document-text-outline"
+            title="Privacy Policy"
+            subtitle="Read our privacy policy"
+            onPress={() => showAlert('Coming Soon', 'Privacy policy link will be available soon!')}
+          />
+          <SettingItem
+            icon="shield-checkmark-outline"
+            title="Terms of Service"
+            subtitle="Read our terms of service"
+            onPress={() => showAlert('Coming Soon', 'Terms of service link will be available soon!')}
+          />
         </View>
 
-        {/* Danger Zone */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account Actions</Text>
-          <View style={styles.settingsGroup}>
-{__DEV__ && (
-              <SettingItem
-                icon="infinite-outline"
-                title="Reset Onboarding"
-                subtitle="Reset state and view full onboarding flow"
-                onPress={handleResetOnboarding}
-              />
-            )}
-            <SettingItem
-              icon="log-out-outline"
-              title="Sign Out"
-              subtitle="Sign out of your account"
-              onPress={handleSignOut}
-              showArrow={false}
-              danger={true}
-            />
-          </View>
+        {/* Account Actions */}
+        <SectionHeader title="Account Actions" />
+        <View style={styles.settingsGroupNoPadding}>
+          <SettingItem
+            icon="log-out-outline"
+            title="Sign Out"
+            subtitle="Sign out of your account"
+            onPress={handleSignOut}
+            showArrow={false}
+            danger={true}
+          />
         </View>
 
         {/* App Info */}
@@ -515,12 +472,6 @@ export default function SettingsScreen() {
           <Text style={styles.appInfoText}>© 2024 RegattaFlow Inc.</Text>
         </View>
       </ScrollView>
-
-      {/* Language Selector Modal */}
-      <LanguageSelector
-        visible={languageVisible}
-        onClose={() => setLanguageVisible(false)}
-      />
 
       {/* Team Manager Modal */}
       <Modal
@@ -629,6 +580,18 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingHorizontal: 16,
   },
+  sectionHeader: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
@@ -636,10 +599,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 4,
   },
-  sectionHelper: {
+  aiSection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  aiSectionHelper: {
     fontSize: 13,
     color: '#6B7280',
-    paddingHorizontal: 4,
     marginBottom: 12,
     lineHeight: 18,
   },
@@ -649,6 +615,8 @@ const styles = StyleSheet.create({
   profileCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
+    marginHorizontal: 16,
+    marginTop: 16,
     padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
@@ -688,6 +656,51 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     boxShadow: '0px 1px',
     elevation: 1,
+  },
+  settingsGroupNoPadding: {
+    backgroundColor: '#FFFFFF',
+  },
+  subscriptionCard: {
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    gap: 12,
+  },
+  subscriptionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subscriptionInfo: {
+    flex: 1,
+  },
+  subscriptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  subscriptionSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  subscriptionBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  subscriptionBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2563EB',
   },
   settingItem: {
     flexDirection: 'row',
@@ -729,6 +742,15 @@ const styles = StyleSheet.create({
   },
   settingSubtitle: {
     fontSize: 14,
+    color: '#6B7280',
+  },
+  settingRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rightValue: {
+    fontSize: 15,
     color: '#6B7280',
   },
   appInfo: {
