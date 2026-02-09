@@ -1,6 +1,14 @@
 android/
+ios/
 node_modules/
 .expo/
 dist/
+logs/
 *.log
 .git/
+.chrome-devtools/
+mcp-server/
+mcp-vercel/
+.vercel/
+bugreport*.txt
+bugreport*.zip
