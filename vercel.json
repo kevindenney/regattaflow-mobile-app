@@ -2,7 +2,7 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "framework": null,
-  "installCommand": "npm install",
+  "installCommand": "npm ci --prefer-offline",
   "cleanUrls": true,
   "trailingSlash": false,
   "headers": [
