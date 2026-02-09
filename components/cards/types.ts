@@ -331,6 +331,15 @@ export interface CardGridProps {
   onContentScroll?: (event: import('react-native').NativeSyntheticEvent<import('react-native').NativeScrollEvent>) => void;
   /** Incrementing counter to trigger data refetch in AfterRaceContent */
   refetchTrigger?: number;
+  /** Current weather for the NowBar display */
+  nowBarWeather?: {
+    windDirection: string;
+    windSpeed: number;
+    waveHeight?: number;
+    tideState?: string;
+    /** Where the weather data comes from: venue name or "Current location" */
+    locationLabel?: string;
+  } | null;
 }
 
 /**

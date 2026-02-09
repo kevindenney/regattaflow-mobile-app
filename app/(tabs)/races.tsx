@@ -45,8 +45,6 @@ import { SeasonHeader } from '@/components/seasons/SeasonHeader';
 import { SeasonPickerModal } from '@/components/seasons/SeasonPickerModal';
 import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
-import { OnboardingTour, TourStep } from '@/components/onboarding/OnboardingTour';
-import { useOnboardingTour } from '@/hooks/useOnboardingTour';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { MOCK_RACES } from '@/constants/mockData';
@@ -86,6 +84,7 @@ import { useVenueCenter } from '@/hooks/useVenueCenter';
 import { useVenueCoordinates } from '@/hooks/useVenueCoordinates';
 import { useVenueDetection } from '@/hooks/useVenueDetection';
 import { useVenueInsights } from '@/hooks/useVenueInsights';
+import { useVenueLiveWeather } from '@/hooks/useVenueLiveWeather';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import {
@@ -99,7 +98,7 @@ import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossP
 import { useAuth } from '@/providers/AuthProvider';
 import { DemoRaceService } from '@/services/DemoRaceService';
 import { isDemoRaceId } from '@/lib/demo/demoRaceData';
-import { createSailorSampleData } from '@/services/onboarding/SailorSampleDataService';
+// createSailorSampleData removed — new users see client-side demo race instead
 import type { RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { supabase } from '@/services/supabase';
 import { TacticalZoneGenerator } from '@/services/TacticalZoneGenerator';
@@ -146,6 +145,7 @@ export default function RacesScreen() {
   // Season state and hooks
   const [showSeasonSettings, setShowSeasonSettings] = useState(false);
   const [showSeasonPicker, setShowSeasonPicker] = useState(false);
+
   // filterSeasonId: null = "All Races", undefined = use current season, string = specific season
   const [filterSeasonId, setFilterSeasonId] = useState<string | null | undefined>(undefined);
   const { data: currentSeason, isLoading: loadingCurrentSeason, refetch: refetchCurrentSeason } = useCurrentSeason();
@@ -211,8 +211,7 @@ export default function RacesScreen() {
   const raceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal race cards ScrollView
   const demoRaceCardsScrollViewRef = useRef<ScrollView>(null); // Horizontal demo race cards ScrollView
   const hasAutoCenteredNextRace = useRef(false);
-  const hasTriedSampleCreation = useRef(false);
-  const [creatingSampleData, setCreatingSampleData] = useState(false);
+  // hasTriedSampleCreation and creatingSampleData removed — no longer auto-seeding
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
   // Mobile detection - only actual native mobile platforms (not web at any size)
@@ -340,138 +339,8 @@ export default function RacesScreen() {
   // const TIPS_DISMISSED_KEY = 'regattaflow_tips_dismissed';
   // const [tipsDismissed, setTipsDismissed] = useState(false);
 
-  // Onboarding Tour - simple AsyncStorage-based state
-  const { hasSeenTour, markTourComplete, resetTour } = useOnboardingTour('sailor');
-
-  // Tour visibility state - show tour for first-time users
-  const [tourVisible, setTourVisible] = useState(false);
-  const [tourStepIndex, setTourStepIndex] = useState(0);
-
-  // Tour target layouts for spotlight effect
-  const [headerLayout, setHeaderLayout] = useState<LayoutRectangle | null>(null);
-  const [cardGridLayout, setCardGridLayout] = useState<LayoutRectangle | null>(null);
+  // Add button layout for floating header
   const [addButtonLayout, setAddButtonLayout] = useState<LayoutRectangle | null>(null);
-  const headerRef = useRef<View>(null);
-  const cardGridRef = useRef<View>(null);
-
-  // Measure tour target elements using platform-appropriate method
-  const measureTourTargets = useCallback(() => {
-    // On web, use getBoundingClientRect for accurate measurements
-    if (Platform.OS === 'web') {
-      const headerNode = headerRef.current as unknown as { getBoundingClientRect?: () => DOMRect };
-      const cardGridNode = cardGridRef.current as unknown as { getBoundingClientRect?: () => DOMRect };
-
-      if (headerNode?.getBoundingClientRect) {
-        const rect = headerNode.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          setHeaderLayout({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
-        }
-      }
-      if (cardGridNode?.getBoundingClientRect) {
-        const rect = cardGridNode.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          setCardGridLayout({ x: rect.left, y: rect.top, width: rect.width, height: rect.height });
-        }
-      }
-    } else {
-      // On native, use measureInWindow
-      headerRef.current?.measureInWindow((x, y, width, height) => {
-        if (width > 0 && height > 0) {
-          setHeaderLayout({ x, y, width, height });
-        }
-      });
-      cardGridRef.current?.measureInWindow((x, y, width, height) => {
-        if (width > 0 && height > 0) {
-          setCardGridLayout({ x, y, width, height });
-        }
-      });
-    }
-  }, []);
-
-  // Show tour if user hasn't seen it
-  useEffect(() => {
-    if (hasSeenTour === false) {
-      // Delay to let screen render and elements to be measurable
-      const timer = setTimeout(() => {
-        measureTourTargets();
-        setTourVisible(true);
-      }, 1200);
-      return () => clearTimeout(timer);
-    }
-  }, [hasSeenTour, measureTourTargets]);
-
-  // Re-measure when tour step changes (for animation)
-  useEffect(() => {
-    if (tourVisible) {
-      measureTourTargets();
-    }
-  }, [tourStepIndex, tourVisible, measureTourTargets]);
-
-  // Tour step definitions with dynamic layouts - 5 steps total
-  const tourSteps: TourStep[] = useMemo(() => [
-    {
-      id: 'timeline',
-      title: 'Your Race Timeline',
-      description: 'Swipe through your upcoming races. Each card shows countdown, weather, and prep status.',
-      targetLayout: cardGridLayout,
-      position: 'top',
-      spotlightPadding: 12,
-      spotlightBorderRadius: 16,
-    },
-    {
-      id: 'add-race',
-      title: 'Add New Races',
-      description: 'Tap + to add a race. Upload a Notice of Race and AI extracts all the details for you.',
-      targetLayout: addButtonLayout,
-      position: 'bottom',
-      spotlightPadding: 12,
-      spotlightBorderRadius: 24,
-    },
-    {
-      id: 'race-cards',
-      title: 'Prepare & Compete',
-      description: 'Each race has prep checklists, strategy tools, and post-race analysis. Tap any card to explore.',
-      targetLayout: cardGridLayout,
-      position: 'bottom',
-      spotlightPadding: 16,
-      spotlightBorderRadius: 20,
-    },
-    {
-      id: 'explore-tabs',
-      title: 'Explore the App',
-      description: 'Use the tabs below to discover more: Learn for courses and tutorials, Discuss for venue insights, and Connect to find other sailors.',
-      position: 'center',
-    },
-    {
-      id: 'get-started',
-      title: 'Ready to Sail!',
-      description: "You're all set. Start by adding your first race or exploring a demo race.",
-      position: 'center',
-    },
-  ], [cardGridLayout, addButtonLayout]);
-
-  // Dynamic layout map - layouts resolved at render time by OnboardingTour
-  const stepLayouts = useMemo(() => ({
-    'timeline': cardGridLayout,
-    'add-race': addButtonLayout,
-    'race-cards': cardGridLayout,
-  }), [cardGridLayout, addButtonLayout]);
-
-  const handleDismissTour = useCallback(() => {
-    setTourVisible(false);
-    markTourComplete(); // Mark tour as completed in storage
-  }, [markTourComplete]);
-
-  const handleTourNext = useCallback(() => {
-    const nextIndex = tourStepIndex + 1;
-
-    if (nextIndex >= tourSteps.length) {
-      handleDismissTour();
-      return;
-    }
-
-    setTourStepIndex(nextIndex);
-  }, [tourStepIndex, tourSteps, handleDismissTour]);
 
   // Clear any stuck loading states on mount
 
@@ -771,42 +640,9 @@ export default function RacesScreen() {
   // Track if we're showing the demo race (no real races)
   const isShowingDemoRace = safeRecentRaces.length === 0;
 
-  // Auto-create sample data for existing users with no races
-  useEffect(() => {
-    const autoCreateSampleData = async () => {
-      // Only for sailors with no races who haven't tried yet
-      if (
-        isShowingDemoRace &&
-        user?.id &&
-        userType === 'sailor' &&
-        !creatingSampleData &&
-        !hasTriedSampleCreation.current &&
-        !liveRacesLoading // Wait for initial load to complete
-      ) {
-        hasTriedSampleCreation.current = true;
-        setCreatingSampleData(true);
-        logger.info('Auto-creating sample data for existing user with no races');
-        try {
-          await createSailorSampleData({
-            userId: user.id,
-            userName: userProfile?.full_name || 'Sailor',
-          });
-          // Refresh race list and season to show newly created data
-          await Promise.all([
-            refetchRaces(),
-            refetchCurrentSeason(),
-          ]);
-          logger.info('Sample data created successfully');
-        } catch (err: any) {
-          // Silent fail - user can add races manually
-          logger.warn('Auto sample data creation failed:', err?.message);
-        } finally {
-          setCreatingSampleData(false);
-        }
-      }
-    };
-    autoCreateSampleData();
-  }, [isShowingDemoRace, user?.id, userType, liveRacesLoading, userProfile?.full_name, refetchRaces, refetchCurrentSeason, creatingSampleData]);
+  // Note: Auto-seeding of sample data was removed in favor of the client-side
+  // demo race card. New users see an empty-state prompt with a single demo race
+  // they can explore, rather than having fake data inserted into their account.
 
   // Fetch user results for past races
   const { results: userRaceResults } = useUserRaceResults(user?.id, pastRaceIds);
@@ -1989,6 +1825,85 @@ export default function RacesScreen() {
     },
   });
 
+  // NowBar weather: fetch live weather for the next upcoming race's venue,
+  // falling back to browser/device geolocation when no venue coordinates exist.
+  const nextRaceVenueCoords = useMemo(() => {
+    if (!safeNextRace) return null;
+    const coords = (safeNextRace as any).venueCoordinates;
+    if (coords?.lat && coords?.lng) return coords as { lat: number; lng: number };
+    // Fallback to metadata
+    const meta = (safeNextRace as any).metadata;
+    if (meta?.venue_lat && meta?.venue_lng) {
+      return { lat: parseFloat(meta.venue_lat), lng: parseFloat(meta.venue_lng) };
+    }
+    return null;
+  }, [safeNextRace]);
+
+  // Device geolocation fallback when no venue coordinates
+  const [deviceCoords, setDeviceCoords] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    // Only request geolocation if we have no venue coords
+    if (nextRaceVenueCoords) {
+      setDeviceCoords(null);
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      // Web: use navigator.geolocation
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setDeviceCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+          },
+          () => setDeviceCoords(null),
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
+        );
+      }
+    } else {
+      // Native: use expo-location (check permission without prompting)
+      (async () => {
+        try {
+          const Location = await import('expo-location');
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status !== 'granted') return;
+          const loc = await Location.getLastKnownPositionAsync();
+          if (loc) {
+            setDeviceCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
+          }
+        } catch {
+          // Silently fail
+        }
+      })();
+    }
+  }, [nextRaceVenueCoords]);
+
+  const nowBarCoordsSource = nextRaceVenueCoords ? 'venue' : (deviceCoords ? 'location' : null);
+  const nowBarCoords = nextRaceVenueCoords || deviceCoords;
+
+  const { weather: nowBarLiveWeather } = useVenueLiveWeather(
+    nowBarCoords?.lat,
+    nowBarCoords?.lng,
+  );
+
+  const nowBarWeather = useMemo(() => {
+    if (!nowBarLiveWeather) return null;
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const compassDir = dirs[Math.round(nowBarLiveWeather.windDirection / 45) % 8];
+
+    // Capitalize tide state for display
+    const tideState = nowBarLiveWeather.tidalState
+      ? nowBarLiveWeather.tidalState.charAt(0).toUpperCase() + nowBarLiveWeather.tidalState.slice(1)
+      : undefined;
+
+    return {
+      windDirection: compassDir,
+      windSpeed: nowBarLiveWeather.windSpeed,
+      waveHeight: nowBarLiveWeather.waveHeight,
+      tideState,
+      locationLabel: nowBarCoordsSource === 'location' ? 'Current location' : undefined,
+    };
+  }, [nowBarLiveWeather, nowBarCoordsSource]);
+
   // Race documents hook (handles fetching, uploading, and deleting)
   const {
     documents: raceDocuments,
@@ -2764,15 +2679,7 @@ export default function RacesScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: TUFTE_BACKGROUND }}>
       {/* Main Content first — flows behind absolutely-positioned toolbar */}
-      {/* Show loading state when creating sample data for new users */}
-      {creatingSampleData ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: TUFTE_BACKGROUND }}>
-          <ActivityIndicator size="large" color="#2563EB" />
-          <Text style={{ marginTop: 16, fontSize: 16, color: '#64748B', textAlign: 'center' }}>
-            Setting up your first race...
-          </Text>
-        </View>
-      ) : FEATURE_FLAGS.USE_RACE_LIST_VIEW ? (
+      {FEATURE_FLAGS.USE_RACE_LIST_VIEW ? (
         // Grouped vertical list view — progressive disclosure design
         <RaceListSection
           races={cardGridRaces}
@@ -2808,10 +2715,8 @@ export default function RacesScreen() {
           refreshing={refreshing}
         />
       ) : FEATURE_FLAGS.USE_CARD_GRID_NAVIGATION ? (
-        // New CardGrid 2D navigation system - wrapped for tour spotlight
+        // New CardGrid 2D navigation system
         <View
-          ref={cardGridRef}
-          collapsable={false}
           style={{ flex: 1 }}
         >
           {/* Timeline header when viewing another user */}
@@ -2891,6 +2796,7 @@ export default function RacesScreen() {
             }}
             onDismissSample={isViewingOtherTimeline ? undefined : handleDismissSampleRace}
             refetchTrigger={refetchTrigger}
+            nowBarWeather={nowBarWeather}
           />
         </View>
       ) : (
@@ -3291,8 +3197,6 @@ export default function RacesScreen() {
 
       {/* Floating Header rendered last — absolutely positioned over content */}
       <View
-        ref={headerRef}
-        collapsable={false}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 }}
         pointerEvents="box-none"
       >
@@ -3306,7 +3210,6 @@ export default function RacesScreen() {
           onNewSeason={() => setShowSeasonSettings(true)}
           onBrowseCatalog={() => router.push('/catalog-race')}
           onAddButtonLayout={setAddButtonLayout}
-          measureTrigger={tourVisible}
           totalRaces={enrichedRaces?.length || 0}
           upcomingRaces={upcomingRacesCount}
           currentRaceIndex={selectedRaceId ? (enrichedRaces?.findIndex((r: any) => r.id === selectedRaceId) ?? -1) + 1 : undefined}
@@ -3441,16 +3344,6 @@ export default function RacesScreen() {
         visible={showSignupPrompt}
         onClose={() => setShowSignupPrompt(false)}
         feature="multiple_races"
-      />
-
-      {/* Onboarding Tour - shown for first-time users */}
-      <OnboardingTour
-        visible={tourVisible}
-        steps={tourSteps}
-        currentStepIndex={tourStepIndex}
-        onNext={handleTourNext}
-        onDismiss={handleDismissTour}
-        stepLayouts={stepLayouts}
       />
 
       {/* </PlanModeLayout> - temporarily removed */}

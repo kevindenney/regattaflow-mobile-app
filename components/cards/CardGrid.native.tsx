@@ -44,7 +44,9 @@ import {
   IOS_COLORS,
 } from './constants';
 import { CardShell } from './CardShell';
+import { NowBar } from './NowBar';
 import { TimeAxisRace } from '@/components/races/TimelineTimeAxis';
+import { CardWidthContext } from './CardWidthContext';
 
 // =============================================================================
 // CONSTANTS
@@ -110,6 +112,7 @@ function CardGridComponent({
   toolbarHidden = false,
   onContentScroll,
   refetchTrigger,
+  nowBarWeather,
 }: CardGridNativeProps) {
   // Track actual container dimensions
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(null);
@@ -370,32 +373,34 @@ function CardGridComponent({
             testID={`card-${race.id}`}
             isDeleting={deletingRaceId === race.id}
           >
-            {renderCardContent(
-              race,
-              'race_summary',
-              isActive,
-              false, // isExpanded - native grid doesn't support expand/collapse
-              () => {}, // onToggleExpand - no-op for native
-              canManage,
-              handleEdit,
-              handleDelete,
-              handleUploadDocument,
-              handleRaceComplete,
-              handleOpenPostRaceInterview,
-              userId,
-              handleDismiss,
-              raceIndex,
-              races.length,
-              // Timeline navigation props (for compact axis inside card)
-              timeAxisRaces,
-              jsRaceIndex,
-              goToRace,
-              nextRaceIndex ?? undefined,
-              // onCardPress - not used on native (swipe navigation instead)
-              undefined,
-              // refetchTrigger for AfterRaceContent
-              refetchTrigger
-            )}
+            <CardWidthContext.Provider value={{ cardWidth: dimensions.cardWidth }}>
+              {renderCardContent(
+                race,
+                'race_summary',
+                isActive,
+                false, // isExpanded - native grid doesn't support expand/collapse
+                () => {}, // onToggleExpand - no-op for native
+                canManage,
+                handleEdit,
+                handleDelete,
+                handleUploadDocument,
+                handleRaceComplete,
+                handleOpenPostRaceInterview,
+                userId,
+                handleDismiss,
+                raceIndex,
+                races.length,
+                // Timeline navigation props (for compact axis inside card)
+                timeAxisRaces,
+                jsRaceIndex,
+                goToRace,
+                nextRaceIndex ?? undefined,
+                // onCardPress - not used on native (swipe navigation instead)
+                undefined,
+                // refetchTrigger for AfterRaceContent
+                refetchTrigger
+              )}
+            </CardWidthContext.Provider>
           </CardShell>
         </View>
       );
@@ -443,6 +448,23 @@ function CardGridComponent({
     );
   }
 
+  // Now bar: show between last past card and first future card
+  const nowBarConfig = useMemo(() => {
+    if (
+      nextRaceIndex == null ||
+      nextRaceIndex <= 0 ||
+      nextRaceIndex >= races.length ||
+      races.length <= 1
+    ) {
+      return null;
+    }
+    // Position in the gap between card[nextRaceIndex-1] and card[nextRaceIndex]
+    const left =
+      nextRaceIndex * (dimensions.cardWidth + HORIZONTAL_CARD_GAP) -
+      HORIZONTAL_CARD_GAP / 2;
+    return { left, height: dimensions.cardHeight };
+  }, [nextRaceIndex, races.length, dimensions.cardWidth, dimensions.cardHeight]);
+
   // Calculate total grid size (horizontal only)
   const totalGridWidth = races.length * (dimensions.cardWidth + HORIZONTAL_CARD_GAP);
 
@@ -466,6 +488,13 @@ function CardGridComponent({
             collapsable={false}
           >
             {renderCards}
+            {nowBarConfig && (
+              <NowBar
+                height={nowBarConfig.height}
+                left={nowBarConfig.left}
+                weather={nowBarWeather}
+              />
+            )}
           </Animated.View>
         </GestureDetector>
       </Animated.View>

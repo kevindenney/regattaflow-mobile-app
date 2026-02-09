@@ -70,6 +70,9 @@ interface CardGridWebProps extends CardGridProps {
   ) => React.ReactNode;
 }
 
+// Approximate rendered width of the NowBar pill (matches NowBar.tsx minWidth + padding)
+const NOW_BAR_RENDERED_WIDTH = 56;
+
 // =============================================================================
 // CARD GRID COMPONENT
 // =============================================================================
@@ -180,13 +183,40 @@ function CardGridComponent({
   }, [races]);
 
   // ==========================================================================
+  // SNAP OFFSETS (account for NowBar width between cards)
+  // ==========================================================================
+
+  // Whether the NowBar is visible at all
+  const hasNowBar =
+    nextRaceIndex != null &&
+    nextRaceIndex > 0 &&
+    nextRaceIndex < races.length &&
+    races.length > 1;
+
+  // Pre-compute the scroll offset for each card index
+  const snapOffsets = useMemo(() => {
+    const cardStep = dimensions.cardWidth + HORIZONTAL_CARD_GAP;
+    // NowBar adds its own width + one extra gap to the layout
+    const nowBarExtra = hasNowBar ? NOW_BAR_RENDERED_WIDTH + HORIZONTAL_CARD_GAP : 0;
+
+    return races.map((_, i) => {
+      let offset = i * cardStep;
+      // Cards at or after the NowBar position are shifted by the NowBar's width
+      if (hasNowBar && nextRaceIndex != null && i >= nextRaceIndex) {
+        offset += nowBarExtra;
+      }
+      return offset;
+    });
+  }, [races, dimensions.cardWidth, hasNowBar, nextRaceIndex]);
+
+  // ==========================================================================
   // NAVIGATION
   // ==========================================================================
 
   const goToRace = useCallback(
     (index: number, animated = true) => {
       const clampedIndex = Math.max(0, Math.min(index, races.length - 1));
-      const offset = clampedIndex * (dimensions.cardWidth + HORIZONTAL_CARD_GAP);
+      const offset = snapOffsets[clampedIndex] ?? 0;
 
       horizontalScrollRef.current?.scrollTo({
         x: offset,
@@ -199,7 +229,7 @@ function CardGridComponent({
         onRaceChange(clampedIndex, races[clampedIndex]);
       }
     },
-    [races, dimensions.cardWidth, onRaceChange]
+    [races, snapOffsets, onRaceChange]
   );
 
   // ==========================================================================
@@ -238,8 +268,16 @@ function CardGridComponent({
   const handleHorizontalScroll = useCallback(
     (event: any) => {
       const offsetX = event.nativeEvent.contentOffset.x;
-      const snapInterval = dimensions.cardWidth + HORIZONTAL_CARD_GAP;
-      const newIndex = Math.round(offsetX / snapInterval);
+      // Find the closest snap offset to determine current race index
+      let newIndex = 0;
+      let minDist = Infinity;
+      for (let i = 0; i < snapOffsets.length; i++) {
+        const dist = Math.abs(offsetX - snapOffsets[i]);
+        if (dist < minDist) {
+          minDist = dist;
+          newIndex = i;
+        }
+      }
 
       if (newIndex !== currentRaceIndex && newIndex >= 0 && newIndex < races.length) {
         setCurrentRaceIndex(newIndex);
@@ -249,7 +287,7 @@ function CardGridComponent({
         }
       }
     },
-    [dimensions.cardWidth, currentRaceIndex, races, onRaceChange]
+    [snapOffsets, currentRaceIndex, races, onRaceChange]
   );
 
   // ==========================================================================
@@ -373,7 +411,7 @@ function CardGridComponent({
           },
         ]}
         showsHorizontalScrollIndicator={false}
-        snapToInterval={dimensions.cardWidth + HORIZONTAL_CARD_GAP}
+        snapToOffsets={snapOffsets}
         decelerationRate="fast"
         onScroll={handleHorizontalScroll}
         scrollEventThrottle={16}
@@ -392,12 +430,10 @@ function CardGridComponent({
           return (
             <React.Fragment key={race.id}>
               {showNowBar && (
-                <View style={[styles.nowBarWrapper, { height: cardHeight }]}>
-                  <NowBar
-                    height={cardHeight}
-                    weather={nowBarWeather}
-                  />
-                </View>
+                <NowBar
+                  height={cardHeight}
+                  weather={nowBarWeather}
+                />
               )}
               {renderCard(race, raceIndex)}
             </React.Fragment>
@@ -490,17 +526,6 @@ const styles = StyleSheet.create({
   },
   navArrowRight: {
     right: 16,
-  },
-  nowBarWrapper: {
-    position: 'relative',
-    width: 0,
-    // @ts-ignore - web-only
-    overflow: 'visible',
-    alignItems: 'center',
-    // Offset to center the bar in the gap (gap is applied by flex)
-    marginLeft: -HORIZONTAL_CARD_GAP / 2,
-    marginRight: -HORIZONTAL_CARD_GAP / 2,
-    zIndex: 20,
   },
 });
 
