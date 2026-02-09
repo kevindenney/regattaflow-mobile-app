@@ -44,7 +44,6 @@ interface NotificationRowProps {
   onToggleFollow?: () => void;
   isTogglingFollow?: boolean;
   isLast?: boolean;
-  showSwipeHint?: boolean;
 }
 
 // =============================================================================
@@ -137,7 +136,6 @@ export function NotificationRow({
   onToggleFollow,
   isTogglingFollow,
   isLast,
-  showSwipeHint,
 }: NotificationRowProps) {
   const swipeableRef = useRef<Swipeable>(null);
   const isUnread = !notification.isRead;
@@ -186,11 +184,6 @@ export function NotificationRow({
         ]}
         onPress={onPress}
       >
-        {/* Swipe hint indicator (subtle red edge) */}
-        {showSwipeHint && (
-          <View style={styles.swipeHint} />
-        )}
-
         {/* Avatar with type icon overlay */}
         <View style={styles.avatarWrapper}>
           <View
@@ -241,7 +234,7 @@ export function NotificationRow({
               {isTogglingFollow ? (
                 <ActivityIndicator
                   size="small"
-                  color={isFollowingBack ? IOS_COLORS.label : '#FFFFFF'}
+                  color={isFollowingBack ? IOS_COLORS.secondaryLabel : IOS_COLORS.systemBlue}
                 />
               ) : (
                 <Text
@@ -277,17 +270,6 @@ const styles = StyleSheet.create({
   },
   rowPressed: {
     backgroundColor: IOS_COLORS.tertiarySystemGroupedBackground,
-  },
-
-  // Swipe hint
-  swipeHint: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: IOS_COLORS.systemRed,
-    opacity: 0.6,
   },
 
   // Avatar wrapper - provides positioning context for badge
@@ -362,30 +344,28 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 
-  // Follow button
+  // Follow button - Instagram-style text-only
   followButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    backgroundColor: IOS_COLORS.systemBlue,
-    borderRadius: IOS_RADIUS.lg,
-    minWidth: 80,
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingVertical: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: IOS_SPACING.sm,
+    marginLeft: IOS_SPACING.xs,
   },
   followButtonFollowing: {
-    backgroundColor: IOS_COLORS.tertiarySystemFill,
+    // No background change for text-only style
   },
   followButtonPressed: {
-    opacity: 0.8,
+    opacity: 0.6,
   },
   followButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: IOS_COLORS.systemBlue,
   },
   followButtonTextFollowing: {
-    color: IOS_COLORS.label,
+    color: IOS_COLORS.secondaryLabel,
+    fontWeight: '400',
   },
 
   // Delete action

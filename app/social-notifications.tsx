@@ -17,7 +17,6 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
@@ -39,12 +38,6 @@ import {
   IOS_SPACING,
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-const SWIPE_HINT_KEY = 'activity_swipe_hint_shown';
 
 // =============================================================================
 // TYPES
@@ -178,44 +171,6 @@ export default function SocialNotificationsScreen() {
   }, [suggestions, followedIds]);
 
   const [refreshing, setRefreshing] = useState(false);
-  const [showSwipeHint, setShowSwipeHint] = useState(false);
-  const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
-
-  // Check if swipe hint should be shown
-  useEffect(() => {
-    const checkSwipeHint = async () => {
-      try {
-        const hasShown = await AsyncStorage.getItem(SWIPE_HINT_KEY);
-        if (!hasShown) {
-          setShowSwipeHint(true);
-        }
-      } catch {
-        // Ignore errors
-      }
-    };
-    checkSwipeHint();
-  }, []);
-
-  // Find first unread notification for swipe hint
-  useEffect(() => {
-    if (showSwipeHint && notifications.length > 0) {
-      const firstUnread = notifications.find((n) => !n.isRead);
-      setFirstUnreadId(firstUnread?.id || null);
-    }
-  }, [showSwipeHint, notifications]);
-
-  // Dismiss swipe hint after first swipe
-  const handleFirstSwipe = useCallback(async () => {
-    if (showSwipeHint) {
-      setShowSwipeHint(false);
-      setFirstUnreadId(null);
-      try {
-        await AsyncStorage.setItem(SWIPE_HINT_KEY, 'true');
-      } catch {
-        // Ignore errors
-      }
-    }
-  }, [showSwipeHint]);
 
   // Group notifications by time
   const sections = useMemo(
@@ -338,7 +293,6 @@ export default function SocialNotificationsScreen() {
       const isFollowingBack = item.actorId ? followingMap.get(item.actorId) : false;
       const isFirst = index === 0;
       const isLast = index === section.data.length - 1;
-      const shouldShowSwipeHint = showSwipeHint && item.id === firstUnreadId;
 
       return (
         <View
@@ -360,7 +314,6 @@ export default function SocialNotificationsScreen() {
               }
             }}
             onDelete={() => {
-              handleFirstSwipe();
               deleteNotification(item.id);
             }}
             isFollowingBack={isFollowingBack}
@@ -370,12 +323,11 @@ export default function SocialNotificationsScreen() {
                 : undefined
             }
             isLast={isLast}
-            showSwipeHint={shouldShowSwipeHint}
           />
         </View>
       );
     },
-    [followingMap, markAsRead, deleteNotification, handleToggleFollow, handleFirstSwipe, router, showSwipeHint, firstUnreadId]
+    [followingMap, markAsRead, deleteNotification, handleToggleFollow, router]
   );
 
   // Section header with unread count
