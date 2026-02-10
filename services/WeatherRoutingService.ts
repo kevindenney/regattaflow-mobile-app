@@ -741,46 +741,13 @@ export class WeatherRoutingService {
   }
 
   private async fetchStormGlassForecast(
-    location: GeoLocation,
-    startTime: Date,
-    hours: number,
-    modelName: WeatherModelName
+    _location: GeoLocation,
+    _startTime: Date,
+    _hours: number,
+    _modelName: WeatherModelName
   ): Promise<ModelForecast | null> {
-    if (!this.stormGlassService) return null;
-
-    try {
-      const forecasts = await this.stormGlassService.getMarineWeather(
-        location,
-        hours
-      );
-
-      if (!forecasts || forecasts.length === 0) return null;
-
-      const hourlyData: HourlyModelData[] = forecasts.map((f) => ({
-        time: new Date(f.timestamp),
-        windSpeed: f.wind.speed,
-        windDirection: f.wind.direction,
-        gusts: f.wind.gusts,
-        waveHeight: f.waves?.height,
-        waveDirection: f.waves?.direction,
-        wavePeriod: f.waves?.period,
-        cloudCover: f.cloudCover,
-        pressure: f.pressure?.sealevel ?? 1013.25,
-      }));
-
-      return {
-        modelName,
-        modelDisplayName: this.getModelDisplayName(modelName),
-        source: 'stormglass',
-        forecastTime: new Date(),
-        modelRunTime: new Date(),
-        confidence: 85,
-        hourlyData,
-      };
-    } catch (err) {
-      console.error(`[WeatherRoutingService] StormGlass ${modelName} error:`, err);
-      return null;
-    }
+    // Storm Glass API disabled - quota exceeded. Using OpenMeteo (free) instead.
+    return null;
   }
 
   // ===========================================================================

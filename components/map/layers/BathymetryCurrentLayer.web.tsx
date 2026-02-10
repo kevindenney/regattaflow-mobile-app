@@ -1,13 +1,18 @@
 /**
  * BathymetryCurrentLayer - Web Implementation
  *
- * MapLibre layer showing depth-modulated tidal currents.
- * Visualizes how current strength varies with underwater depth:
- * - Deeper channels → stronger currents (larger, darker arrows)
- * - Shallow areas → weaker currents (smaller, lighter arrows)
- * - Optional depth contour lines as background reference
+ * MapLibre layer showing real bathymetry from Open Topo Data GEBCO
+ * and depth-modulated tidal currents.
  *
- * Uses native MapLibre circle + line layers for reliable rendering.
+ * Features:
+ * - Real bathymetry visualization (darker blue = deeper)
+ * - Coastal shallow water depths (0-50m) - perfect for sailing
+ * - Depth-modulated current arrows (stronger in deeper channels)
+ * - ~450m resolution globally
+ *
+ * Data sources:
+ * - Primary: Open Topo Data GEBCO (https://www.opentopodata.org/) - free, global coverage
+ * - Visual fallback: GEBCO WMS tiles (when API not available)
  */
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -16,6 +21,7 @@ import {
   BathymetricCurrentService,
   DepthModulatedCurrentGrid,
 } from '@/services/current/BathymetricCurrentService';
+import { BathymetryService } from '@/services/weather/BathymetryService';
 import type { TideExtreme } from '@/services/tides/TidalCurrentEstimator';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -28,13 +34,13 @@ export interface BathymetryCurrentLayerProps {
   /** Center of the racing area */
   center: { lat: number; lng: number };
 
-  /** Radius in kilometers (default 2km) */
+  /** Radius in kilometers (default 5km for 10km x 10km coverage) */
   radiusKm?: number;
 
   /** Target time for current calculation */
   targetTime: Date;
 
-  /** Show depth contour lines */
+  /** Show depth visualization */
   showContours?: boolean;
 
   /** Show current arrows */
@@ -88,20 +94,48 @@ function calculateArrowEndpoint(
   return [endLng, endLat];
 }
 
-/**
- * Depth contour configuration
- */
-const DEPTH_CONTOURS = [
-  { depth: 5, color: '#90CAF9', width: 1, label: '5m' },
-  { depth: 10, color: '#64B5F6', width: 1.5, label: '10m' },
-  { depth: 20, color: '#42A5F5', width: 2, label: '20m' },
-  { depth: 50, color: '#1E88E5', width: 2, label: '50m' },
-];
-
 const LAYER_PREFIX = 'bathymetry-current';
 const ARROWS_SOURCE_ID = `${LAYER_PREFIX}-arrows-source`;
 const ARROWS_LINE_LAYER_ID = `${LAYER_PREFIX}-arrows-line`;
-const ARROWS_HEAD_LAYER_ID = `${LAYER_PREFIX}-arrows-head`;
+
+/**
+ * Safely check if a MapLibre map instance is still valid and not destroyed
+ * Returns false if the map is null, undefined, or has been destroyed
+ */
+function isMapValid(map: MapLibreMap | null | undefined): map is MapLibreMap {
+  if (!map) return false;
+  try {
+    // getStyle() returns null if the map is destroyed
+    return map.getStyle() !== null;
+  } catch {
+    return false;
+  }
+}
+
+// Stormglass bathymetry layer IDs
+const DEPTH_SOURCE_ID = `${LAYER_PREFIX}-depth-source`;
+const DEPTH_LABELS_LAYER_ID = `${LAYER_PREFIX}-depth-labels`;
+
+// OpenSeaMap nautical overlay (buoys, beacons, landmarks)
+const SEAMARK_SOURCE_ID = `${LAYER_PREFIX}-seamark-source`;
+const SEAMARK_LAYER_ID = `${LAYER_PREFIX}-seamark-layer`;
+const OPENSEAMAP_TILES_URL = 'https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png';
+
+// GEBCO bathymetry fallback (when Stormglass quota exceeded)
+const GEBCO_SOURCE_ID = `${LAYER_PREFIX}-gebco-source`;
+const GEBCO_LAYER_ID = `${LAYER_PREFIX}-gebco-layer`;
+const GEBCO_WMS_URL = 'https://www.gebco.net/data_and_products/gebco_web_services/web_map_service/mapserv?' +
+  'request=GetMap&service=WMS&version=1.3.0&layers=GEBCO_LATEST&' +
+  'crs=EPSG:3857&bbox={bbox-epsg-3857}&width=256&height=256&format=image/png';
+
+// Elevation grid type
+interface ElevationGrid {
+  points: Array<{ lat: number; lng: number; elevation: number; depth: number }>;
+  bounds: { north: number; south: number; east: number; west: number };
+  center: { latitude: number; longitude: number };
+  minDepth: number;
+  maxDepth: number;
+}
 
 /**
  * BathymetryCurrentLayer Component
@@ -109,7 +143,7 @@ const ARROWS_HEAD_LAYER_ID = `${LAYER_PREFIX}-arrows-head`;
 export function BathymetryCurrentLayer({
   map,
   center,
-  radiusKm = 2,
+  radiusKm = 5,
   targetTime,
   showContours = true,
   showArrows = true,
@@ -119,17 +153,24 @@ export function BathymetryCurrentLayer({
   gridSpacingM = 250,
 }: BathymetryCurrentLayerProps): React.ReactElement | null {
   const [grid, setGrid] = useState<DepthModulatedCurrentGrid | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [elevationGrid, setElevationGrid] = useState<ElevationGrid | null>(null);
+  const [isLoadingDepth, setIsLoadingDepth] = useState(false);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const serviceRef = useRef<BathymetricCurrentService | null>(null);
+  const bathymetryRef = useRef<BathymetryService | null>(null);
 
-  // Initialize service
+  // Initialize services
   useEffect(() => {
     if (!serviceRef.current) {
       serviceRef.current = BathymetricCurrentService.getInstance();
     }
+    if (!bathymetryRef.current) {
+      bathymetryRef.current = BathymetryService.getInstance();
+      console.log('[BathymetryCurrentLayer] Bathymetry service initialized');
+    }
   }, []);
 
-  // Fetch current grid data
+  // Fetch current grid data (for current arrows)
   useEffect(() => {
     if (!visible || !center || !serviceRef.current) {
       setGrid(null);
@@ -139,7 +180,6 @@ export function BathymetryCurrentLayer({
     let cancelled = false;
 
     const fetchGrid = async () => {
-      setIsLoading(true);
       try {
         const result = await serviceRef.current!.generateCurrentGrid(
           center,
@@ -150,19 +190,15 @@ export function BathymetryCurrentLayer({
         );
         if (!cancelled) {
           setGrid(result);
-          logger.debug('[BathymetryCurrentLayer] Grid loaded', {
+          logger.debug('[BathymetryCurrentLayer] Current grid loaded', {
             pointCount: result.points.length,
             speedRange: [result.minSpeed, result.maxSpeed],
           });
         }
       } catch (error) {
-        logger.error('[BathymetryCurrentLayer] Failed to load grid', error);
+        logger.error('[BathymetryCurrentLayer] Failed to load current grid', error);
         if (!cancelled) {
           setGrid(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
         }
       }
     };
@@ -174,12 +210,257 @@ export function BathymetryCurrentLayer({
     };
   }, [visible, center?.lat, center?.lng, radiusKm, targetTime.getTime(), gridSpacingM]);
 
-  // Add/update arrow layers (lines with arrow heads)
+  // Fetch elevation grid data (for depth visualization)
+  useEffect(() => {
+    console.log('[BathymetryCurrentLayer] Depth effect triggered:', {
+      visible,
+      showContours,
+      hasCenter: !!center,
+      hasBathymetry: !!bathymetryRef.current,
+    });
+
+    if (!visible || !showContours || !center || !bathymetryRef.current) {
+      setElevationGrid(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchElevation = async () => {
+      setIsLoadingDepth(true);
+      console.log('[BathymetryCurrentLayer] Fetching elevation grid for:', center, 'radius:', radiusKm);
+      try {
+        // Use 10x10 grid = 100 points for good coverage
+        const result = await bathymetryRef.current!.getElevationGrid(
+          { latitude: center.lat, longitude: center.lng },
+          radiusKm,
+          10 // 10x10 grid = 100 points
+        );
+        if (!cancelled) {
+          // Log detailed result for debugging
+          const waterPoints = result.points.filter(p => p.depth > 0);
+          console.log('[BathymetryCurrentLayer] Elevation grid loaded:', {
+            totalPoints: result.points.length,
+            waterPoints: waterPoints.length,
+            depthRange: [result.minDepth, result.maxDepth],
+            sampleDepths: result.points.slice(0, 5).map(p => p.depth),
+          });
+
+          // Check if all points returned 0 depth (no water data for this location)
+          if (waterPoints.length === 0 && result.points.length > 0) {
+            console.warn('[BathymetryCurrentLayer] All depth values are 0 - location may be on land or API issue, using GEBCO fallback');
+            setQuotaExceeded(true);
+            setElevationGrid(null);
+          } else {
+            setQuotaExceeded(false);
+            setElevationGrid(result);
+          }
+        }
+      } catch (error) {
+        console.error('[BathymetryCurrentLayer] Failed to load elevation grid:', error);
+        if (!cancelled) {
+          setQuotaExceeded(true);
+          setElevationGrid(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDepth(false);
+        }
+      }
+    };
+
+    fetchElevation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, showContours, center?.lat, center?.lng, radiusKm]);
+
+  // Add OpenSeaMap nautical overlay (buoys, beacons, lighthouses, etc.)
+  // This is always visible when the layer is visible, independent of depth toggle
+  useEffect(() => {
+    if (!map || !visible) {
+      // Clean up seamark layer
+      if (isMapValid(map)) {
+        if (map.getLayer(SEAMARK_LAYER_ID)) map.removeLayer(SEAMARK_LAYER_ID);
+        if (map.getSource(SEAMARK_SOURCE_ID)) map.removeSource(SEAMARK_SOURCE_ID);
+      }
+      return;
+    }
+
+    // Remove existing if present
+    if (map.getLayer(SEAMARK_LAYER_ID)) map.removeLayer(SEAMARK_LAYER_ID);
+    if (map.getSource(SEAMARK_SOURCE_ID)) map.removeSource(SEAMARK_SOURCE_ID);
+
+    // Add OpenSeaMap seamark tiles as raster source
+    map.addSource(SEAMARK_SOURCE_ID, {
+      type: 'raster',
+      tiles: [OPENSEAMAP_TILES_URL],
+      tileSize: 256,
+      attribution: '© <a href="https://www.openseamap.org">OpenSeaMap</a>',
+    });
+
+    // Add seamark layer on top
+    map.addLayer({
+      id: SEAMARK_LAYER_ID,
+      type: 'raster',
+      source: SEAMARK_SOURCE_ID,
+      paint: {
+        'raster-opacity': 0.9,
+      },
+    });
+
+    logger.debug('[BathymetryCurrentLayer] OpenSeaMap seamark overlay added');
+
+    return () => {
+      if (!isMapValid(map)) return;
+      if (map.getLayer(SEAMARK_LAYER_ID)) map.removeLayer(SEAMARK_LAYER_ID);
+      if (map.getSource(SEAMARK_SOURCE_ID)) map.removeSource(SEAMARK_SOURCE_ID);
+    };
+  }, [map, visible]); // Independent of showContours - nautical overlay always visible
+
+  // Add GEBCO bathymetry raster as fallback when data not available
+  useEffect(() => {
+    if (!map || !visible || !showContours) {
+      // Clean up GEBCO layer
+      if (isMapValid(map)) {
+        if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+        if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+      }
+      return;
+    }
+
+    // Only show GEBCO when data not available
+    if (!quotaExceeded) {
+      // Clean up GEBCO layer if data is fine
+      if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+      if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+      return;
+    }
+
+    console.log('[BathymetryCurrentLayer] Adding GEBCO bathymetry fallback layer');
+
+    // Remove existing if present
+    if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+    if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+
+    // Add GEBCO WMS as raster source
+    map.addSource(GEBCO_SOURCE_ID, {
+      type: 'raster',
+      tiles: [GEBCO_WMS_URL],
+      tileSize: 256,
+      attribution: '© <a href="https://www.gebco.net">GEBCO</a>',
+    });
+
+    // Add GEBCO layer (below seamarks)
+    // Find seamark layer to insert before it
+    const beforeLayer = map.getLayer(SEAMARK_LAYER_ID) ? SEAMARK_LAYER_ID : undefined;
+
+    map.addLayer({
+      id: GEBCO_LAYER_ID,
+      type: 'raster',
+      source: GEBCO_SOURCE_ID,
+      paint: {
+        'raster-opacity': 0.5,
+      },
+    }, beforeLayer);
+
+    console.log('[BathymetryCurrentLayer] GEBCO bathymetry fallback layer added');
+
+    return () => {
+      if (!isMapValid(map)) return;
+      if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
+      if (map.getSource(GEBCO_SOURCE_ID)) map.removeSource(GEBCO_SOURCE_ID);
+    };
+  }, [map, visible, showContours, quotaExceeded]);
+
+  // Add/update depth labels (numbers only, no circles)
+  useEffect(() => {
+    if (!map || !visible || !showContours || !elevationGrid) {
+      // Clean up depth layers
+      if (isMapValid(map)) {
+        if (map.getLayer(DEPTH_LABELS_LAYER_ID)) map.removeLayer(DEPTH_LABELS_LAYER_ID);
+        if (map.getSource(DEPTH_SOURCE_ID)) map.removeSource(DEPTH_SOURCE_ID);
+      }
+      return;
+    }
+
+    // Create GeoJSON features for depth points (numbers only)
+    const features: GeoJSON.Feature[] = elevationGrid.points
+      .filter(p => p.depth > 0) // Only show water (depth > 0)
+      .map((point) => ({
+        type: 'Feature' as const,
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [point.lng, point.lat],
+        },
+        properties: {
+          depth: point.depth,
+          // Show depth as integer, like nautical charts
+          label: `${Math.round(point.depth)}`,
+        },
+      }));
+
+    const geojson: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features,
+    };
+
+    // Remove existing layers/source
+    if (map.getLayer(DEPTH_LABELS_LAYER_ID)) map.removeLayer(DEPTH_LABELS_LAYER_ID);
+    if (map.getSource(DEPTH_SOURCE_ID)) map.removeSource(DEPTH_SOURCE_ID);
+
+    // Add source
+    map.addSource(DEPTH_SOURCE_ID, {
+      type: 'geojson',
+      data: geojson,
+    });
+
+    // Add depth labels only (no circles) - like nautical chart soundings
+    map.addLayer({
+      id: DEPTH_LABELS_LAYER_ID,
+      type: 'symbol',
+      source: DEPTH_SOURCE_ID,
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-size': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          10, 9,   // Small at low zoom
+          12, 11,
+          14, 13,  // Larger at high zoom
+        ],
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+        'text-allow-overlap': false,
+        'text-padding': 2,
+      },
+      paint: {
+        // Blue color like nautical chart depth soundings
+        'text-color': '#1565C0',
+        'text-halo-color': 'rgba(255, 255, 255, 0.95)',
+        'text-halo-width': 1.5,
+        'text-opacity': opacity,
+      },
+    });
+
+    logger.debug('[BathymetryCurrentLayer] Depth labels added', {
+      featureCount: features.length,
+      depthRange: [elevationGrid.minDepth, elevationGrid.maxDepth],
+    });
+
+    return () => {
+      if (!isMapValid(map)) return;
+      if (map.getLayer(DEPTH_LABELS_LAYER_ID)) map.removeLayer(DEPTH_LABELS_LAYER_ID);
+      if (map.getSource(DEPTH_SOURCE_ID)) map.removeSource(DEPTH_SOURCE_ID);
+    };
+  }, [map, visible, showContours, elevationGrid, opacity]);
+
+  // Add/update current arrow layers (simple lines showing current direction)
   useEffect(() => {
     if (!map || !visible || !showArrows || !grid) {
       // Clean up
-      if (map) {
-        if (map.getLayer(ARROWS_HEAD_LAYER_ID)) map.removeLayer(ARROWS_HEAD_LAYER_ID);
+      if (isMapValid(map)) {
         if (map.getLayer(ARROWS_LINE_LAYER_ID)) map.removeLayer(ARROWS_LINE_LAYER_ID);
         if (map.getSource(ARROWS_SOURCE_ID)) map.removeSource(ARROWS_SOURCE_ID);
       }
@@ -220,7 +501,6 @@ export function BathymetryCurrentLayer({
     };
 
     // Remove existing layers/source
-    if (map.getLayer(ARROWS_HEAD_LAYER_ID)) map.removeLayer(ARROWS_HEAD_LAYER_ID);
     if (map.getLayer(ARROWS_LINE_LAYER_ID)) map.removeLayer(ARROWS_LINE_LAYER_ID);
     if (map.getSource(ARROWS_SOURCE_ID)) map.removeSource(ARROWS_SOURCE_ID);
 
@@ -230,7 +510,7 @@ export function BathymetryCurrentLayer({
       data: geojson,
     });
 
-    // Add line layer for arrow shafts
+    // Add line layer for current arrows (simple lines, no circle heads)
     map.addLayer({
       id: ARROWS_LINE_LAYER_ID,
       type: 'line',
@@ -242,180 +522,21 @@ export function BathymetryCurrentLayer({
       paint: {
         'line-color': ['get', 'color'],
         'line-width': ['get', 'width'],
-        'line-opacity': opacity,
-      },
-    });
-
-    // Add circle layer for arrow heads (at the end of lines)
-    // Create separate source for arrow head points
-    const headFeatures: GeoJSON.Feature[] = grid.points
-      .filter(p => p.modulatedSpeed > 0.1)
-      .map((point) => {
-        const arrowLength = 0.1 + Math.min(point.modulatedSpeed, 2) * 0.15;
-        const endPoint = calculateArrowEndpoint(point.lng, point.lat, point.direction, arrowLength);
-
-        return {
-          type: 'Feature' as const,
-          geometry: {
-            type: 'Point' as const,
-            coordinates: endPoint,
-          },
-          properties: {
-            speed: point.modulatedSpeed,
-            color: getColorForSpeed(point.modulatedSpeed),
-            radius: 3 + Math.min(point.modulatedSpeed, 2) * 2,
-          },
-        };
-      });
-
-    const headSourceId = `${ARROWS_SOURCE_ID}-heads`;
-    if (map.getSource(headSourceId)) map.removeSource(headSourceId);
-
-    map.addSource(headSourceId, {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: headFeatures,
-      },
-    });
-
-    map.addLayer({
-      id: ARROWS_HEAD_LAYER_ID,
-      type: 'circle',
-      source: headSourceId,
-      paint: {
-        'circle-color': ['get', 'color'],
-        'circle-radius': ['get', 'radius'],
-        'circle-opacity': opacity,
-        'circle-stroke-color': 'rgba(255,255,255,0.5)',
-        'circle-stroke-width': 1,
+        'line-opacity': opacity * 0.7, // Slightly transparent to reduce clutter
       },
     });
 
     logger.debug('[BathymetryCurrentLayer] Arrow layers added', { featureCount: features.length });
 
     return () => {
-      if (map.getLayer(ARROWS_HEAD_LAYER_ID)) map.removeLayer(ARROWS_HEAD_LAYER_ID);
+      if (!isMapValid(map)) return;
       if (map.getLayer(ARROWS_LINE_LAYER_ID)) map.removeLayer(ARROWS_LINE_LAYER_ID);
-      if (map.getSource(`${ARROWS_SOURCE_ID}-heads`)) map.removeSource(`${ARROWS_SOURCE_ID}-heads`);
       if (map.getSource(ARROWS_SOURCE_ID)) map.removeSource(ARROWS_SOURCE_ID);
     };
   }, [map, visible, showArrows, grid, opacity]);
 
-  // Add depth contour lines
-  useEffect(() => {
-    if (!map || !visible || !showContours || !grid) {
-      // Clean up contour layers
-      DEPTH_CONTOURS.forEach((_, i) => {
-        const layerId = `${LAYER_PREFIX}-contour-${i}`;
-        const sourceId = `${LAYER_PREFIX}-contour-source-${i}`;
-        if (map?.getLayer(layerId)) map.removeLayer(layerId);
-        if (map?.getSource(sourceId)) map.removeSource(sourceId);
-      });
-      return;
-    }
-
-    // Generate contour lines from grid data
-    const contourFeatures = generateContourFeatures(grid, DEPTH_CONTOURS);
-
-    // Add each contour level as a separate layer
-    contourFeatures.forEach((features, i) => {
-      const contourConfig = DEPTH_CONTOURS[i];
-      const layerId = `${LAYER_PREFIX}-contour-${i}`;
-      const sourceId = `${LAYER_PREFIX}-contour-source-${i}`;
-
-      // Remove existing if present
-      if (map.getLayer(layerId)) map.removeLayer(layerId);
-      if (map.getSource(sourceId)) map.removeSource(sourceId);
-
-      if (features.length > 0) {
-        map.addSource(sourceId, {
-          type: 'geojson',
-          data: {
-            type: 'FeatureCollection',
-            features,
-          },
-        });
-
-        map.addLayer({
-          id: layerId,
-          type: 'line',
-          source: sourceId,
-          paint: {
-            'line-color': contourConfig.color,
-            'line-width': contourConfig.width,
-            'line-opacity': opacity * 0.4,
-            'line-dasharray': [4, 2],
-          },
-        });
-      }
-    });
-
-    return () => {
-      DEPTH_CONTOURS.forEach((_, i) => {
-        const layerId = `${LAYER_PREFIX}-contour-${i}`;
-        const sourceId = `${LAYER_PREFIX}-contour-source-${i}`;
-        if (map.getLayer(layerId)) map.removeLayer(layerId);
-        if (map.getSource(sourceId)) map.removeSource(sourceId);
-      });
-    };
-  }, [map, visible, showContours, grid, opacity]);
-
   // This component doesn't render anything directly - it adds layers to the map
   return null;
-}
-
-/**
- * Generate GeoJSON contour line features from grid data
- */
-function generateContourFeatures(
-  grid: DepthModulatedCurrentGrid,
-  contourLevels: typeof DEPTH_CONTOURS
-): GeoJSON.Feature[][] {
-  const results: GeoJSON.Feature[][] = contourLevels.map(() => []);
-
-  const { points, center } = grid;
-
-  contourLevels.forEach((contour, levelIndex) => {
-    const contourPoints: { lat: number; lng: number }[] = [];
-
-    // Find points near the contour depth
-    const tolerance = 3; // meters
-    points.forEach((point) => {
-      const depth = Math.abs(point.depth);
-      if (Math.abs(depth - contour.depth) < tolerance) {
-        contourPoints.push({ lat: point.lat, lng: point.lng });
-      }
-    });
-
-    // If we have contour points, create a simplified contour line
-    if (contourPoints.length >= 3) {
-      // Sort points by angle from center for a rough contour ordering
-      const sortedPoints = contourPoints.sort((a, b) => {
-        const angleA = Math.atan2(a.lat - center.lat, a.lng - center.lng);
-        const angleB = Math.atan2(b.lat - center.lat, b.lng - center.lng);
-        return angleA - angleB;
-      });
-
-      // Create a line feature
-      const coordinates = sortedPoints.map((p) => [p.lng, p.lat]);
-      // Close the loop if points wrap around
-      if (coordinates.length > 2) {
-        coordinates.push(coordinates[0]);
-      }
-
-      results[levelIndex].push({
-        type: 'Feature',
-        properties: { depth: contour.depth, label: contour.label },
-        geometry: {
-          type: 'LineString',
-          coordinates,
-        },
-      });
-    }
-  });
-
-  return results;
 }
 
 export default BathymetryCurrentLayer;

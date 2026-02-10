@@ -33,7 +33,6 @@ import type {
   StartLinePosition,
 } from '@/types/courses';
 import { BathymetryCurrentLayer } from '@/components/map/layers/BathymetryCurrentLayer.web';
-import { CurrentLegend } from '@/components/map/layers/CurrentLegend';
 
 const isWeb = Platform.OS === 'web';
 
@@ -639,12 +638,12 @@ function ConditionsDisplay({
         <View style={conditionsStyles.labelRow}>
           <Navigation2
             size={14}
-            color="#22d3ee"
+            color="#22c55e"
             style={{ transform: [{ rotate: `${windDirection}deg` }] }}
           />
           <Text style={conditionsStyles.label}>Wind</Text>
           {windSpeed !== undefined && (
-            <Text style={conditionsStyles.speedBadge}>{Math.round(windSpeed)} kts</Text>
+            <Text style={[conditionsStyles.speedBadge, { backgroundColor: '#22c55e15', color: '#22c55e' }]}>{Math.round(windSpeed)} kts</Text>
           )}
         </View>
         <View style={conditionsStyles.row}>
@@ -675,7 +674,7 @@ function ConditionsDisplay({
         {windForecastValues.length > 2 && (
           <View style={conditionsStyles.sparklineRow}>
             <Text style={conditionsStyles.sparklineLabel}>Forecast</Text>
-            <Sparkline data={windForecastValues} color="#22d3ee" width={80} height={20} />
+            <Sparkline data={windForecastValues} color="#22c55e" width={80} height={20} />
           </View>
         )}
       </View>
@@ -683,23 +682,23 @@ function ConditionsDisplay({
       {/* Current Section - Always show, with placeholder if no data */}
       <View style={conditionsStyles.section}>
         <View style={conditionsStyles.labelRow}>
-          <Waves size={14} color="#a855f7" />
+          <Waves size={14} color="#0EA5E9" />
           <Text style={conditionsStyles.label}>Current</Text>
           {currentSpeed !== undefined && (
-            <Text style={[conditionsStyles.speedBadge, { backgroundColor: '#a855f715', color: '#a855f7' }]}>
+            <Text style={[conditionsStyles.speedBadge, { backgroundColor: '#0EA5E915', color: '#0EA5E9' }]}>
               {currentSpeed.toFixed(1)} kts
             </Text>
           )}
         </View>
         <View style={conditionsStyles.currentValueRow}>
           {currentDirection !== undefined ? (
-            <View style={conditionsStyles.currentValue}>
+            <View style={[conditionsStyles.currentValue, { backgroundColor: '#0EA5E910' }]}>
               <Navigation2
                 size={12}
-                color="#a855f7"
+                color="#0EA5E9"
                 style={{ transform: [{ rotate: `${currentDirection}deg` }] }}
               />
-              <Text style={conditionsStyles.currentText}>
+              <Text style={[conditionsStyles.currentText, { color: '#0EA5E9' }]}>
                 {Math.round(currentDirection)}° {currentCardinal}
               </Text>
             </View>
@@ -712,7 +711,7 @@ function ConditionsDisplay({
         {currentForecastValues.length > 2 && (
           <View style={conditionsStyles.sparklineRow}>
             <Text style={conditionsStyles.sparklineLabel}>Forecast</Text>
-            <Sparkline data={currentForecastValues} color="#a855f7" width={80} height={20} />
+            <Sparkline data={currentForecastValues} color="#0EA5E9" width={80} height={20} />
           </View>
         )}
       </View>
@@ -741,8 +740,8 @@ const conditionsStyles = StyleSheet.create({
   speedBadge: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#22d3ee',
-    backgroundColor: '#22d3ee15',
+    color: '#22c55e',
+    backgroundColor: '#22c55e15',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -795,7 +794,7 @@ const conditionsStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#a855f710',
+    backgroundColor: '#0EA5E910',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -803,7 +802,7 @@ const conditionsStyles = StyleSheet.create({
   currentText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#a855f7',
+    color: '#0EA5E9',
   },
   noDataBadge: {
     backgroundColor: COLORS.gray6,
@@ -1011,6 +1010,10 @@ export function CoursePositionEditor({
 
   // Depth-modulated current visualization
   const [showDepthCurrent, setShowDepthCurrent] = useState(false);
+
+  // Toggle for scattered wind/current arrows on map
+  const [showWindArrows, setShowWindArrows] = useState(true);
+  const [showCurrentArrowsOnMap, setShowCurrentArrowsOnMap] = useState(true);
 
   // Calculate or recalculate course
   const calculateCourse = useCallback(() => {
@@ -1328,12 +1331,19 @@ export function CoursePositionEditor({
       const maplibregl = await import('maplibre-gl');
       const map = mapRef.current;
 
+      // Guard against race condition where map becomes null after async import
+      if (!map) return;
+
       // Clear existing markers
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current.clear();
 
-      // Add start line
-      if (startLine) {
+      // Add start line (with coordinate validation to prevent NaN errors)
+      const hasValidStartLine = startLine &&
+        !isNaN(startLine.pin.lat) && !isNaN(startLine.pin.lng) &&
+        !isNaN(startLine.committee.lat) && !isNaN(startLine.committee.lng);
+
+      if (hasValidStartLine) {
         // Remove existing start line layer if it exists
         if (map.getLayer('start-line-layer')) {
           map.removeLayer('start-line-layer');
@@ -1370,8 +1380,8 @@ export function CoursePositionEditor({
         // Add Pin marker
         const pinEl = document.createElement('div');
         pinEl.style.cssText = `
-          width: 28px;
-          height: 28px;
+          width: 36px;
+          height: 36px;
           background: ${COLORS.orange};
           border: 3px solid white;
           border-radius: 50%;
@@ -1380,8 +1390,8 @@ export function CoursePositionEditor({
           justify-content: center;
           color: white;
           font-weight: bold;
-          font-size: 11px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          font-size: 14px;
+          box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.4);
         `;
         pinEl.textContent = 'P';
         const pinMarker = new maplibregl.default.Marker({ element: pinEl })
@@ -1392,8 +1402,8 @@ export function CoursePositionEditor({
         // Add Committee Boat marker
         const cbEl = document.createElement('div');
         cbEl.style.cssText = `
-          width: 28px;
-          height: 28px;
+          width: 36px;
+          height: 36px;
           background: ${COLORS.blue};
           border: 3px solid white;
           border-radius: 50%;
@@ -1402,8 +1412,8 @@ export function CoursePositionEditor({
           justify-content: center;
           color: white;
           font-weight: bold;
-          font-size: 10px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          font-size: 12px;
+          box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.4);
         `;
         cbEl.textContent = 'CB';
         const cbMarker = new maplibregl.default.Marker({ element: cbEl })
@@ -1415,18 +1425,18 @@ export function CoursePositionEditor({
         const finishPos = CoursePositioningService.calculateFinishMark(startLine, windDirection);
         const finishEl = document.createElement('div');
         finishEl.style.cssText = `
-          width: 24px;
-          height: 24px;
+          width: 32px;
+          height: 32px;
           background: #ffffff;
-          border: 2px solid #333;
+          border: 3px solid #333;
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
           color: #333;
           font-weight: bold;
-          font-size: 10px;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          font-size: 12px;
+          box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.4);
         `;
         finishEl.textContent = 'F';
         const finishMarker = new maplibregl.default.Marker({ element: finishEl })
@@ -1445,11 +1455,16 @@ export function CoursePositionEditor({
           map.removeSource('course-line');
         }
 
-        const sortedMarks = [...marks].sort(
-          (a, b) => (a.sequenceOrder ?? 0) - (b.sequenceOrder ?? 0)
-        );
+        // Filter and sort marks with valid coordinates
+        const sortedMarks = [...marks]
+          .filter(m => !isNaN(m.longitude) && !isNaN(m.latitude))
+          .sort((a, b) => (a.sequenceOrder ?? 0) - (b.sequenceOrder ?? 0));
 
-        map.addSource('course-line', {
+        // Only add course line if we have at least 2 valid points
+        if (sortedMarks.length < 2) {
+          console.warn('[CoursePositionEditor] Not enough valid marks for course line');
+        } else {
+          map.addSource('course-line', {
           type: 'geojson',
           data: {
             type: 'Feature',
@@ -1467,16 +1482,22 @@ export function CoursePositionEditor({
           source: 'course-line',
           paint: {
             'line-color': '#f97316',
-            'line-width': 2,
-            'line-dasharray': [4, 2],
+            'line-width': 3,
+            'line-dasharray': [6, 3],
+            'line-opacity': 0.9,
           },
         });
+        }
       }
 
-      // Add mark markers (draggable)
-      marks.forEach((mark) => {
+      // Add mark markers (draggable) - filter out marks with invalid coordinates
+      const validMarks = marks.filter(m =>
+        !isNaN(m.longitude) && !isNaN(m.latitude) &&
+        m.longitude !== undefined && m.latitude !== undefined
+      );
+      validMarks.forEach((mark) => {
         const color = MARK_COLORS[mark.type] || '#64748b';
-        const size = 24;
+        const size = 32;
 
         const el = document.createElement('div');
         el.style.cssText = `
@@ -1490,10 +1511,10 @@ export function CoursePositionEditor({
           justify-content: center;
           color: white;
           font-weight: bold;
-          font-size: 11px;
+          font-size: 13px;
           cursor: grab;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-          ${mark.isUserAdjusted ? 'box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.4), 0 2px 6px rgba(0,0,0,0.3);' : ''}
+          box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.4);
+          ${mark.isUserAdjusted ? 'box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.5), 0 4px 12px rgba(0,0,0,0.4);' : ''}
         `;
 
         const label =
@@ -1533,11 +1554,11 @@ export function CoursePositionEditor({
       });
 
       // Fit bounds to show all marks
-      if (marks.length > 0 && startLine) {
+      if (validMarks.length > 0 && hasValidStartLine) {
         const bounds = new maplibregl.default.LngLatBounds();
-        marks.forEach((m) => bounds.extend([m.longitude, m.latitude]));
-        bounds.extend([startLine.pin.lng, startLine.pin.lat]);
-        bounds.extend([startLine.committee.lng, startLine.committee.lat]);
+        validMarks.forEach((m) => bounds.extend([m.longitude, m.latitude]));
+        bounds.extend([startLine!.pin.lng, startLine!.pin.lat]);
+        bounds.extend([startLine!.committee.lng, startLine!.committee.lat]);
 
         map.fitBounds(bounds, {
           padding: 50,
@@ -1599,13 +1620,22 @@ export function CoursePositionEditor({
       onRequestClose={onCancel}
     >
       <View style={styles.container}>
-        {/* Header */}
+        {/* Header - Apple Modal Style */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onCancel} style={styles.closeButton}>
-            <X size={24} color={COLORS.gray} />
+          <TouchableOpacity onPress={onCancel} style={styles.headerButton}>
+            <Text style={styles.headerButtonText}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Position Course</Text>
-          <View style={{ width: 40 }} />
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={!marks.length || !startLine}
+            style={styles.headerButton}
+          >
+            <Text style={[
+              styles.headerButtonTextSave,
+              (!marks.length || !startLine) && styles.headerButtonDisabled
+            ]}>Save</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Map */}
@@ -1638,7 +1668,7 @@ export function CoursePositionEditor({
                     width: 56,
                     height: 56,
                     background: 'rgba(15, 23, 42, 0.9)',
-                    border: '2px solid rgba(255, 255, 255, 0.3)',
+                    border: '2px solid rgba(34, 197, 94, 0.5)',
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
@@ -1652,8 +1682,8 @@ export function CoursePositionEditor({
                     viewBox="0 0 32 32"
                     style={{ transform: `rotate(${(windDirection + 180) % 360}deg)` }}
                   >
-                    <path d="M16 4 L16 24" stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" />
-                    <path d="M16 4 L10 12 M16 4 L22 12" stroke="#22d3ee" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M16 4 L16 24" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" />
+                    <path d="M16 4 L10 12 M16 4 L22 12" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
                 <div
@@ -1663,7 +1693,7 @@ export function CoursePositionEditor({
                     borderRadius: 6,
                     fontSize: 11,
                     fontWeight: 600,
-                    color: '#22d3ee',
+                    color: '#22c55e',
                   }}
                 >
                   Wind
@@ -1689,7 +1719,7 @@ export function CoursePositionEditor({
                     width: 56,
                     height: 56,
                     background: 'rgba(15, 23, 42, 0.9)',
-                    border: `2px solid ${currentDirection !== undefined ? 'rgba(168, 85, 247, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`,
+                    border: `2px solid ${currentDirection !== undefined ? 'rgba(14, 165, 233, 0.5)' : 'rgba(255, 255, 255, 0.2)'}`,
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
@@ -1701,12 +1731,16 @@ export function CoursePositionEditor({
                   {currentDirection !== undefined ? (
                     <svg
                       width="36"
-                      height="36"
-                      viewBox="0 0 32 32"
+                      height="24"
+                      viewBox="0 0 28 20"
+                      fill="none"
                       style={{ transform: `rotate(${currentDirection}deg)` }}
                     >
-                      <path d="M16 4 L16 24" stroke="#a855f7" strokeWidth="3" strokeLinecap="round" />
-                      <path d="M16 4 L10 12 M16 4 L22 12" stroke="#a855f7" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      {/* Wavy arrow matching scattered current arrows */}
+                      <path d="M4 10 Q7 6, 10 10 Q13 14, 16 10 Q19 6, 22 10"
+                            stroke="#0EA5E9" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+                      <path d="M22 10 L18 6 M22 10 L18 14"
+                            stroke="#0EA5E9" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   ) : (
                     <svg width="24" height="24" viewBox="0 0 24 24">
@@ -1735,7 +1769,7 @@ export function CoursePositionEditor({
                     borderRadius: 6,
                     fontSize: 11,
                     fontWeight: 600,
-                    color: currentDirection !== undefined ? '#a855f7' : '#6b7280',
+                    color: currentDirection !== undefined ? '#0EA5E9' : '#6b7280',
                   }}
                 >
                   {currentDirection !== undefined
@@ -1745,77 +1779,203 @@ export function CoursePositionEditor({
                 </div>
               </div>
 
-              {/* Depth Current Toggle - Below current direction */}
+              {/* Consolidated MAP LAYERS Toggle Panel */}
               <div
                 style={{
                   position: 'absolute',
-                  top: 90,
+                  top: 115,
                   right: 16,
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 8,
-                  background: 'rgba(15, 23, 42, 0.9)',
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  background: 'rgba(15, 23, 42, 0.95)',
+                  borderRadius: 10,
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
                   zIndex: 100,
+                  overflow: 'hidden',
+                  minWidth: 160,
                 }}
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M2 12c1.5-1.5 3-2 4.5-2s3 .5 4.5 2 3 2 4.5 2 3-.5 4.5-2"
-                    stroke="#0EA5E9"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M2 17c1.5-1.5 3-2 4.5-2s3 .5 4.5 2 3 2 4.5 2 3-.5 4.5-2"
-                    stroke="#0EA5E9"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span
+                {/* Header */}
+                <div
                   style={{
-                    fontSize: 11,
-                    fontWeight: 500,
-                    color: showDepthCurrent ? '#0EA5E9' : '#94A3B8',
+                    padding: '8px 12px',
+                    borderBottom: '1px solid rgba(255,255,255,0.1)',
                   }}
                 >
-                  Depth Current
-                </span>
-                <input
-                  type="checkbox"
-                  checked={showDepthCurrent}
-                  onChange={(e) => setShowDepthCurrent(e.target.checked)}
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#94A3B8', letterSpacing: 0.5 }}>
+                    MAP LAYERS
+                  </span>
+                </div>
+
+                {/* Wind Toggle Row */}
+                <div
                   style={{
-                    width: 36,
-                    height: 20,
-                    accentColor: '#0EA5E9',
-                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    borderBottom: '1px solid rgba(255,255,255,0.05)',
                   }}
-                />
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ transform: 'rotate(180deg)' }}>
+                      <path d="M12 4 L12 18" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round"/>
+                      <path d="M12 4 L7 10 M12 4 L17 10" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: showWindArrows ? '#22c55e' : '#94A3B8' }}>
+                      Wind
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showWindArrows}
+                    onChange={(e) => setShowWindArrows(e.target.checked)}
+                    style={{ width: 36, height: 20, accentColor: '#22c55e', cursor: 'pointer' }}
+                  />
+                </div>
+
+                {/* Current Toggle Row */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg width="16" height="10" viewBox="0 0 28 20" fill="none">
+                      <path d="M4 10 Q7 6, 10 10 Q13 14, 16 10 Q19 6, 22 10"
+                            stroke="#0EA5E9" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                      <path d="M22 10 L18 6 M22 10 L18 14"
+                            stroke="#0EA5E9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: showCurrentArrowsOnMap ? '#0EA5E9' : '#94A3B8' }}>
+                      Current
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showCurrentArrowsOnMap}
+                    onChange={(e) => setShowCurrentArrowsOnMap(e.target.checked)}
+                    style={{ width: 36, height: 20, accentColor: '#0EA5E9', cursor: 'pointer' }}
+                  />
+                </div>
+
+                {/* Depth Toggle Row */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M2 12c1.5-1.5 3-2 4.5-2s3 .5 4.5 2 3 2 4.5 2 3-.5 4.5-2"
+                        stroke="#64B5F6"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                      <path
+                        d="M2 17c1.5-1.5 3-2 4.5-2s3 .5 4.5 2 3 2 4.5 2 3-.5 4.5-2"
+                        stroke="#64B5F6"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: showDepthCurrent ? '#64B5F6' : '#94A3B8' }}>
+                      Depth
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showDepthCurrent}
+                    onChange={(e) => setShowDepthCurrent(e.target.checked)}
+                    style={{ width: 36, height: 20, accentColor: '#64B5F6', cursor: 'pointer' }}
+                  />
+                </div>
               </div>
 
-              {/* Depth-modulated current visualization layer */}
+              {/* Scattered Wind Arrows across the map - reduced count and opacity for subtlety */}
+              {showWindArrows && (() => {
+                // Wind direction is where wind comes FROM, arrows point opposite (+180)
+                const arrowDir = (windDirection + 180) % 360;
+                const positions = [
+                  { x: 18, y: 25 }, { x: 48, y: 22 }, { x: 78, y: 28 },
+                  { x: 28, y: 45 }, { x: 58, y: 42 }, { x: 88, y: 48 },
+                  { x: 15, y: 62 }, { x: 45, y: 58 }, { x: 75, y: 65 },
+                  { x: 25, y: 78 }, { x: 55, y: 75 }, { x: 85, y: 80 },
+                ];
+                return positions.map((pos, i) => (
+                  <div
+                    key={`wind-${i}`}
+                    style={{
+                      position: 'absolute',
+                      left: `${pos.x}%`,
+                      top: `${pos.y}%`,
+                      transform: `translate(-50%, -50%) rotate(${arrowDir}deg)`,
+                      pointerEvents: 'none',
+                      zIndex: 5,
+                      opacity: 0.6,
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 4 L12 18" stroke="#22c55e" strokeWidth="2" strokeLinecap="round"/>
+                      <path d="M12 4 L7 10 M12 4 L17 10" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                ));
+              })()}
+
+              {/* Scattered Current/Tide Arrows across the map - reduced count and opacity */}
+              {showCurrentArrowsOnMap && currentDirection !== undefined && (() => {
+                const arrowDir = currentDirection;
+                const positions = [
+                  { x: 22, y: 30 }, { x: 52, y: 28 }, { x: 82, y: 32 },
+                  { x: 32, y: 48 }, { x: 62, y: 45 }, { x: 92, y: 50 },
+                  { x: 20, y: 65 }, { x: 50, y: 62 }, { x: 80, y: 68 },
+                  { x: 30, y: 82 }, { x: 60, y: 78 }, { x: 90, y: 84 },
+                ];
+                return positions.map((pos, i) => (
+                  <div
+                    key={`current-${i}`}
+                    style={{
+                      position: 'absolute',
+                      left: `${pos.x}%`,
+                      top: `${pos.y}%`,
+                      transform: `translate(-50%, -50%) rotate(${arrowDir}deg)`,
+                      pointerEvents: 'none',
+                      zIndex: 5,
+                      opacity: 0.6,
+                    }}
+                  >
+                    <svg width="18" height="12" viewBox="0 0 28 20" fill="none">
+                      <path d="M4 10 Q7 6, 10 10 Q13 14, 16 10 Q19 6, 22 10"
+                            stroke="#0EA5E9" strokeWidth="2" strokeLinecap="round" fill="none"/>
+                      <path d="M22 10 L18 6 M22 10 L18 14"
+                            stroke="#0EA5E9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                ));
+              })()}
+
+              {/* Depth visualization layer (depth numbers + nautical overlay) */}
               {mapReady && showDepthCurrent && initialLocation && (
-                <>
-                  <BathymetryCurrentLayer
-                    map={mapRef.current}
-                    center={initialLocation}
-                    radiusKm={2}
-                    targetTime={new Date()}
-                    showContours={true}
-                    showArrows={true}
-                    opacity={0.75}
-                    visible={showDepthCurrent}
-                  />
-                  <CurrentLegend
-                    visible={showDepthCurrent}
-                    position="bottom-left"
-                  />
-                </>
+                <BathymetryCurrentLayer
+                  map={mapRef.current}
+                  center={initialLocation}
+                  radiusKm={5}
+                  targetTime={new Date()}
+                  showContours={true}
+                  showArrows={false}
+                  opacity={0.85}
+                  visible={showDepthCurrent}
+                />
               )}
             </>
           ) : (
@@ -1937,22 +2097,6 @@ export function CoursePositionEditor({
           </View>
         )}
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.saveButton,
-              (!marks.length || !startLine) && styles.saveButtonDisabled,
-            ]}
-            onPress={handleSave}
-            disabled={!marks.length || !startLine}
-          >
-            <Text style={styles.saveButtonText}>Save Course</Text>
-          </TouchableOpacity>
-        </View>
       </View>
     </Modal>
   );
@@ -1980,6 +2124,22 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 8,
+  },
+  headerButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  headerButtonText: {
+    fontSize: 17,
+    color: COLORS.blue,
+  },
+  headerButtonTextSave: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: COLORS.blue,
+  },
+  headerButtonDisabled: {
+    color: COLORS.gray3,
   },
   mapContainer: {
     flex: 1,

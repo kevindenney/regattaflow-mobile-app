@@ -280,22 +280,9 @@ export class WeatherAggregationService {
     };
   }
 
-  private async fetchStormGlass(lat: number, lng: number, time: Date): Promise<WeatherForecast | null> {
-    if (!this.stormGlassService) {
-      return null;
-    }
-
-    try {
-      const targetConditions = await this.stormGlassService.getWeatherAtTime({ latitude: lat, longitude: lng }, time);
-      if (!targetConditions) {
-        return null;
-      }
-
-      return this.transformStormGlassForecast(targetConditions);
-    } catch (error) {
-      console.warn('[WeatherAggregationService] Storm Glass provider failed', error);
-      return null;
-    }
+  private async fetchStormGlass(_lat: number, _lng: number, _time: Date): Promise<WeatherForecast | null> {
+    // Storm Glass API disabled - quota exceeded. Using OpenMeteo (free) instead.
+    return null;
   }
 
   private transformStormGlassForecast(weather: AdvancedWeatherConditions): WeatherForecast {

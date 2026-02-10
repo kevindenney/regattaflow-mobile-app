@@ -455,42 +455,11 @@ export class RegionalWeatherService {
           };
         }
       } catch (error) {
-        this.logger.warn('[RegionalWeatherService] OpenMeteo API call failed, trying Storm Glass:', error);
+        this.logger.warn('[RegionalWeatherService] OpenMeteo API call failed, using simulated data:', error);
       }
     }
 
-    // SECONDARY: Try Storm Glass if OpenMeteo fails and we have API key
-    if (this.stormGlassService && location) {
-      try {
-        const weatherData = await this.stormGlassService.getWeatherAtTime(location, timestamp);
-
-        if (weatherData) {
-          return {
-            timestamp,
-            windSpeed: Math.round(weatherData.wind.speed),
-            windDirection: Math.round(weatherData.wind.direction),
-            windGusts: Math.round(weatherData.wind.gusts || weatherData.wind.speed * 1.3),
-            waveHeight: weatherData.waves?.height || 0.5,
-            wavePeriod: weatherData.waves?.period || 5,
-            waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
-            currentSpeed: weatherData.tide?.speed || 0,
-            currentDirection: weatherData.waves?.direction || weatherData.wind.direction,
-            airTemperature: weatherData.temperature || 20,
-            waterTemperature: weatherData.temperatureProfile?.water ?? (weatherData.temperature || 20) - 2,
-            visibility: (weatherData.visibility.horizontal ?? 10000) / 1000,
-            barometricPressure: weatherData.pressure.sealevel,
-            humidity: weatherData.humidity ?? weatherData.humidityProfile?.relative ?? 60,
-            precipitation: weatherData.precipitation ?? weatherData.precipitationProfile?.rate ?? 0,
-            cloudCover: weatherData.cloudCover ?? weatherData.cloudLayerProfile?.total ?? 50,
-            weatherCondition: this.mapWeatherCondition(weatherData),
-            confidence: weatherData.forecast?.confidence || model.reliability
-          };
-        }
-      } catch (error) {
-        this.logger.warn('[RegionalWeatherService] Storm Glass API call failed, using simulated data:', error);
-      }
-    }
-
+    // Storm Glass API disabled - quota exceeded
     // Fallback: Use simulated data based on venue's typical conditions
     const conditions = venue.sailingConditions;
     const typical = conditions?.typicalConditions;
@@ -652,35 +621,13 @@ export class RegionalWeatherService {
   }
 
   /**
-   * Load Storm Glass forecasts (SECONDARY - requires API key)
+   * Load Storm Glass forecasts (DISABLED - quota exceeded, using OpenMeteo only)
+   * Storm Glass API quota is exceeded. OpenMeteo provides equivalent data for free.
    */
-  private async loadStormGlassForecasts(venue: SailingVenue, hoursAhead: number): Promise<AdvancedWeatherConditions[]> {
-    if (!this.stormGlassService) {
-      return [];
-    }
-
-    const location = this.resolveVenueLocation(venue);
-    if (!location) {
-      return [];
-    }
-
-    const hours = Math.min(Math.max(hoursAhead, 6), 240);
-
-    try {
-      return await this.stormGlassService.getMarineWeather({
-        latitude: location.latitude,
-        longitude: location.longitude,
-      }, hours);
-    } catch (error: any) {
-      // Check if it's a quota/payment error (402)
-      const isQuotaError = error.message?.includes('quota') || error.message?.includes('402');
-      if (isQuotaError) {
-        this.logger.warn('Storm Glass API quota exceeded');
-      } else {
-        this.logger.warn('Storm Glass marine forecast fetch failed:', error);
-      }
-      return []; // Return empty, let OpenMeteo handle it
-    }
+  private async loadStormGlassForecasts(_venue: SailingVenue, _hoursAhead: number): Promise<AdvancedWeatherConditions[]> {
+    // Storm Glass API disabled - using OpenMeteo (free) as the only weather source
+    // This avoids 402 Payment Required errors and unnecessary API calls
+    return [];
   }
 
   private resolveVenueLocation(venue: SailingVenue): { latitude: number; longitude: number } | null {
