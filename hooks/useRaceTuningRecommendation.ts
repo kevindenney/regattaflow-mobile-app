@@ -283,20 +283,19 @@ export function useAllWindRangeSections(options: UseAllWindRangesOptions): UseAl
         boatId,
       });
 
-      // Determine current wind range based on conditions
-      const currentRange = raceTuningService.determineWindRange(averageWindSpeed);
-
-      setData({
+      // Set tuning data; currentRange is calculated separately via its own effect
+      // to avoid race conditions when weather data loads after tuning data
+      setData(prev => ({
         ...result,
-        currentRange,
-      });
+        currentRange: prev.currentRange, // Preserve current range from separate effect
+      }));
     } catch (err) {
       logger.debug('Failed to fetch all wind ranges:', (err as Error)?.message);
       setError(err as Error);
     } finally {
       setLoading(false);
     }
-  }, [enabled, classId, className, boatId, averageWindSpeed]);
+  }, [enabled, classId, className, boatId]);
 
   useEffect(() => {
     if (lastFetchKeyRef.current === fetchKey && hasFetchedRef.current) {
@@ -318,6 +317,23 @@ export function useAllWindRangeSections(options: UseAllWindRangesOptions): UseAl
       cancelled = true;
     };
   }, [fetchKey, fetchData]);
+
+  // Separate effect to reactively update currentRange when averageWindSpeed changes
+  // This fixes a race condition where weather data loads after tuning data,
+  // causing currentRange to remain null even when wind speed is available
+  useEffect(() => {
+    const currentRange = raceTuningService.determineWindRange(averageWindSpeed);
+    setData(prev => {
+      // Only update if currentRange has actually changed
+      if (prev.currentRange === currentRange) {
+        return prev;
+      }
+      return {
+        ...prev,
+        currentRange,
+      };
+    });
+  }, [averageWindSpeed]);
 
   return {
     data,
