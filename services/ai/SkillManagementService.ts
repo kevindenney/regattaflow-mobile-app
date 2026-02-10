@@ -17,6 +17,7 @@ import { Platform } from 'react-native';
 import { BOAT_TUNING_SKILL_CONTENT } from '@/skills/tuning-guides/boatTuningSkill';
 import { RACE_LEARNING_SKILL_CONTENT } from '@/skills/race-learning-analyst/skillContent';
 import { LEARNING_EVENT_EXTRACTOR_SKILL_CONTENT } from '@/skills/learning-event-extractor/skillContent';
+import { TEAM_RACING_SKILL_CONTENT } from '@/skills/team-racing-analyst/skillContent';
 import { createLogger } from '@/lib/utils/logger';
 
 // Race Phase Types
@@ -446,6 +447,11 @@ Return JSON:
 
 ## Source
 RegattaFlow Coach's *The Yachtsman's Guide to Racing Tactics*, Chapter 13. Includes Buddy Friedrichs 1968 Olympics, Harry Sindle technique, and Sleuth vs Whirlwind scenario.`
+  },
+  'team-racing-analyst': {
+    description: 'Expert team racing tactician encoding World Sailing Call Book 2025-2028 scenarios, combination scoring, and RRS Appendix D',
+    aliases: ['team-racing', 'team-race-analyst', 'team-racing-strategy'],
+    content: TEAM_RACING_SKILL_CONTENT
   }
 };
 
@@ -478,10 +484,13 @@ export const SKILL_REGISTRY = {
 
   // Long distance / offshore racing skill
   'long-distance-racing-analyst': 'skill_01SKz4JZUgvufuxgkSMkVqXe',
+
+  // Team racing skill
+  'team-racing-analyst': 'skill_builtin_team_racing_analyst',
 } as const;
 
 // Race Type Detection - determines if a race should use distance racing skill
-export type RaceType = 'fleet' | 'distance';
+export type RaceType = 'fleet' | 'distance' | 'team';
 
 export function detectRaceType(raceContext: {
   courseLengthNm?: number;
@@ -491,11 +500,22 @@ export function detectRaceType(raceContext: {
   raceName?: string;
 }): RaceType {
   // Explicit type takes precedence
+  if (raceContext.raceType === 'team') return 'team';
   if (raceContext.raceType === 'distance') return 'distance';
   if (raceContext.raceType === 'fleet') return 'fleet';
 
-  // Check race name for keywords
+  // Check race name for team racing keywords (check before distance)
   const name = (raceContext.raceName || '').toLowerCase();
+  const teamKeywords = ['team racing', 'team race', '3v3', '4v4', '3 v 3', '4 v 4'];
+  if (teamKeywords.some(kw => name.includes(kw))) {
+    return 'team';
+  }
+  // Standalone "team" only if it appears as a distinct word (avoid "steam", "teammate", etc.)
+  if (/\bteam\b/.test(name) && !name.includes('teammate')) {
+    return 'team';
+  }
+
+  // Check race name for distance keywords
   const distanceKeywords = ['offshore', 'passage', 'ocean', 'distance', 'around', 'transpac', 'fastnet', 'sydney hobart', 'rolex', 'middle sea', 'giraglia'];
   if (distanceKeywords.some(kw => name.includes(kw))) {
     return 'distance';
@@ -523,6 +543,7 @@ export function detectRaceType(raceContext: {
 export const RACE_TYPE_TO_SKILL: Record<RaceType, keyof typeof SKILL_REGISTRY> = {
   'fleet': 'race-strategy-analyst',
   'distance': 'long-distance-racing-analyst',
+  'team': 'team-racing-analyst',
 };
 
 // Race Phase to Skill Mapping

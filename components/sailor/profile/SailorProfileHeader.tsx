@@ -43,6 +43,9 @@ interface SailorProfileHeaderProps {
   onFollowersPress: () => void;
   onFollowingPress: () => void;
   onToggleFollow: () => void;
+  onToggleFavorite?: () => void;
+  onToggleNotifications?: () => void;
+  onToggleMute?: () => void;
   isToggling: boolean;
   onBack: () => void;
 }
@@ -52,6 +55,9 @@ export function SailorProfileHeader({
   onFollowersPress,
   onFollowingPress,
   onToggleFollow,
+  onToggleFavorite,
+  onToggleNotifications,
+  onToggleMute,
   isToggling,
   onBack,
 }: SailorProfileHeaderProps) {
@@ -160,6 +166,12 @@ export function SailorProfileHeader({
               onUnfollow={onToggleFollow}
               userName={profile.displayName}
               isLoading={isToggling}
+              isFavorite={profile.isFavorite}
+              notificationsEnabled={profile.notificationsEnabled}
+              isMuted={profile.isMuted}
+              onToggleFavorite={onToggleFavorite}
+              onToggleNotifications={onToggleNotifications}
+              onToggleMute={onToggleMute}
             />
           </View>
         )}

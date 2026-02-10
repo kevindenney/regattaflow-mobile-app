@@ -12,16 +12,36 @@ const logger = createLogger('useUserSettings');
 
 const STORAGE_KEY = 'user_settings';
 
+/** Unit system for distance and speed measurements */
+export type UnitSystem = 'nautical' | 'metric' | 'imperial';
+
+/** Display labels for unit systems */
+export const UNIT_LABELS: Record<UnitSystem, string> = {
+  nautical: 'Nautical (nm, kts)',
+  metric: 'Metric (km, km/h)',
+  imperial: 'Imperial (mi, mph)',
+};
+
+/** Short display labels for inline display */
+export const UNIT_SHORT_LABELS: Record<UnitSystem, string> = {
+  nautical: 'Nautical',
+  metric: 'Metric',
+  imperial: 'Imperial',
+};
+
 export interface UserSettings {
   /** Show quick tips on checklist items */
   showQuickTips: boolean;
   /** Show learning links to academy content */
   showLearningLinks: boolean;
+  /** Unit system for distance and speed measurements */
+  units: UnitSystem;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
   showQuickTips: true,
   showLearningLinks: true,
+  units: 'nautical',
 };
 
 export interface UseUserSettingsReturn {

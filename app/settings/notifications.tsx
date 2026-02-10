@@ -1,260 +1,654 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   ScrollView,
+  StyleSheet,
+  ActivityIndicator,
+  Platform,
+  Modal,
   TouchableOpacity,
-  Switch,
-  Alert,
-  ActivityIndicator
+  TextInput,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Bell, Calendar, Users, Trophy, MessageCircle } from 'lucide-react-native';
+import { Stack } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import {
+  NotificationService,
+  NotificationPreferences,
+} from '@/services/NotificationService';
+import { IOSListSection } from '@/components/ui/ios/IOSListSection';
+import { IOSListItem } from '@/components/ui/ios/IOSListItem';
+import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING } from '@/lib/design-tokens-ios';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { createLogger } from '@/lib/utils/logger';
 
-interface NotificationPreferences {
+// Only import DateTimePicker on native platforms
+let DateTimePicker: any = null;
+if (Platform.OS !== 'web') {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+}
+
+const logger = createLogger('NotificationsScreen');
+
+// =============================================================================
+// ICON BACKGROUND COLORS (Apple Settings style)
+// =============================================================================
+
+const ICON_BACKGROUNDS = {
+  red: IOS_COLORS.systemRed,
+  blue: IOS_COLORS.systemBlue,
+  orange: IOS_COLORS.systemOrange,
+  yellow: '#FFCC00',
+  green: IOS_COLORS.systemGreen,
+  teal: IOS_COLORS.systemTeal,
+  purple: IOS_COLORS.systemPurple,
+  gray: IOS_COLORS.systemGray,
+} as const;
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+/** Settings stored in user_preferences JSONB */
+interface UserPrefNotifications {
   race_reminders: boolean;
   weather_alerts: boolean;
-  crew_messages: boolean;
   race_results: boolean;
-  coaching_updates: boolean;
   fleet_activity: boolean;
+  coaching_updates: boolean;
   venue_intelligence: boolean;
-  email_notifications: boolean;
-  push_notifications: boolean;
 }
 
-interface NotificationSettingProps {
-  icon: React.ComponentType<{ size: number; color: string }>;
-  title: string;
-  description: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
+const DEFAULT_USER_PREFS: UserPrefNotifications = {
+  race_reminders: true,
+  weather_alerts: true,
+  race_results: true,
+  fleet_activity: true,
+  coaching_updates: true,
+  venue_intelligence: true,
+};
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+/** Format "HH:MM" (24h) to "h:mm AM/PM" */
+function formatTime(time: string | null | undefined): string {
+  if (!time) return '';
+  const [h, m] = time.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-const NotificationSetting: React.FC<NotificationSettingProps> = ({
-  icon: Icon,
-  title,
-  description,
-  value,
-  onValueChange
-}) => (
-  <View className="flex-row items-center px-4 py-4 border-b border-gray-100">
-    <View className="w-10 h-10 bg-blue-50 rounded-full items-center justify-center">
-      <Icon size={20} color="#2563EB" />
-    </View>
-    <View className="flex-1 ml-3">
-      <Text className="text-gray-800 font-medium">{title}</Text>
-      <Text className="text-gray-500 text-sm mt-0.5">{description}</Text>
-    </View>
-    <Switch
-      value={value}
-      onValueChange={onValueChange}
-      trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
-      thumbColor="#FFFFFF"
-    />
-  </View>
-);
+/** Parse "HH:MM" into a Date (today) for DateTimePicker */
+function parseTimeToDate(time: string | null | undefined): Date {
+  const d = new Date();
+  if (time) {
+    const [h, m] = time.split(':').map(Number);
+    d.setHours(h, m, 0, 0);
+  }
+  return d;
+}
 
-export default function NotificationsScreen() {
-  const router = useRouter();
+/** Format a Date to "HH:MM" */
+function dateToTimeString(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+// =============================================================================
+// SCREEN
+// =============================================================================
+
+export default function NotificationsScreen(): React.ReactElement {
   const { user } = useAuth();
-  const [loading, setLoading] = React.useState(true);
-  const [saving, setSaving] = React.useState(false);
-  const [preferences, setPreferences] = React.useState<NotificationPreferences>({
-    race_reminders: true,
-    weather_alerts: true,
-    crew_messages: true,
-    race_results: true,
-    coaching_updates: true,
-    fleet_activity: true,
-    venue_intelligence: true,
-    email_notifications: true,
-    push_notifications: true
-  });
 
-  React.useEffect(() => {
-    loadPreferences();
-  }, [user]);
+  // Source A: user_preferences JSONB
+  const [userPrefs, setUserPrefs] = useState<UserPrefNotifications>(DEFAULT_USER_PREFS);
+  // Source B: notification_preferences table
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
 
-  const loadPreferences = async () => {
+  const [loading, setLoading] = useState(true);
+
+  // Time picker state
+  const [activeTimePicker, setActiveTimePicker] = useState<'start' | 'end' | null>(null);
+  const [webTimeInput, setWebTimeInput] = useState('');
+
+  // Refs for reverting on error
+  const prevUserPrefs = useRef<UserPrefNotifications>(DEFAULT_USER_PREFS);
+  const prevNotifPrefs = useRef<NotificationPreferences | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // LOAD
+  // ---------------------------------------------------------------------------
+
+  const loadData = useCallback(async () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('notification_preferences')
-        .eq('user_id', user.id)
-        .single();
+      const [userPrefResult, notifPrefResult] = await Promise.all([
+        supabase
+          .from('user_preferences')
+          .select('notification_preferences')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        NotificationService.getPreferences(user.id),
+      ]);
 
-      if (error && error.code !== 'PGRST116') throw error;
-
-      if (data?.notification_preferences) {
-        setPreferences({
-          ...preferences,
-          ...data.notification_preferences
-        });
+      if (userPrefResult.error && userPrefResult.error.code !== 'PGRST116') {
+        logger.warn('Error loading user_preferences', { error: userPrefResult.error });
       }
-    } catch (error) {
-      console.error('Error loading preferences:', error);
+
+      const up = {
+        ...DEFAULT_USER_PREFS,
+        ...(userPrefResult.data?.notification_preferences ?? {}),
+      };
+      setUserPrefs(up);
+      prevUserPrefs.current = up;
+
+      setNotifPrefs(notifPrefResult);
+      prevNotifPrefs.current = notifPrefResult;
+    } catch (err) {
+      logger.error('Failed to load notification settings', { error: err });
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  const updatePreference = async (key: keyof NotificationPreferences, value: boolean) => {
-    const newPreferences = { ...preferences, [key]: value };
-    setPreferences(newPreferences);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-    // Save to database
-    setSaving(true);
-    try {
-      const { error } = await supabase
-        .from('user_preferences')
-        .upsert({
-          user_id: user?.id,
-          notification_preferences: newPreferences,
-          updated_at: new Date().toISOString()
-        });
+  // ---------------------------------------------------------------------------
+  // SAVE: user_preferences JSONB
+  // ---------------------------------------------------------------------------
 
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error saving preferences:', error);
-      // Revert on error
-      setPreferences(preferences);
-      Alert.alert('Error', 'Failed to save preference');
-    } finally {
-      setSaving(false);
+  const updateUserPref = useCallback(
+    async (key: keyof UserPrefNotifications, value: boolean) => {
+      if (!user) return;
+
+      const updated = { ...userPrefs, [key]: value };
+      setUserPrefs(updated); // optimistic
+
+      try {
+        const { error } = await supabase
+          .from('user_preferences')
+          .upsert({
+            user_id: user.id,
+            notification_preferences: updated,
+            updated_at: new Date().toISOString(),
+          });
+
+        if (error) throw error;
+        prevUserPrefs.current = updated;
+      } catch (err) {
+        logger.error('Failed to save user preference', { key, error: err });
+        setUserPrefs(prevUserPrefs.current);
+        showAlert('Error', 'Failed to save preference. Please try again.');
+      }
+    },
+    [user, userPrefs],
+  );
+
+  // ---------------------------------------------------------------------------
+  // SAVE: notification_preferences table
+  // ---------------------------------------------------------------------------
+
+  const updateNotifPref = useCallback(
+    async (patch: Partial<NotificationPreferences>) => {
+      if (!user || !notifPrefs) return;
+
+      const updated = { ...notifPrefs, ...patch };
+      setNotifPrefs(updated); // optimistic
+
+      try {
+        await NotificationService.updatePreferences(user.id, patch);
+        prevNotifPrefs.current = updated;
+      } catch (err) {
+        logger.error('Failed to save notification preference', { error: err });
+        setNotifPrefs(prevNotifPrefs.current);
+        showAlert('Error', 'Failed to save preference. Please try again.');
+      }
+    },
+    [user, notifPrefs],
+  );
+
+  // ---------------------------------------------------------------------------
+  // QUIET HOURS
+  // ---------------------------------------------------------------------------
+
+  const quietHoursEnabled = !!(notifPrefs?.quietHoursStart && notifPrefs?.quietHoursEnd);
+
+  const toggleQuietHours = useCallback(
+    async (enabled: boolean) => {
+      if (enabled) {
+        await updateNotifPref({ quietHoursStart: '22:00', quietHoursEnd: '07:00' });
+      } else {
+        await updateNotifPref({ quietHoursStart: null, quietHoursEnd: null });
+      }
+    },
+    [updateNotifPref],
+  );
+
+  const handleNativeTimeChange = useCallback(
+    (_event: any, selectedDate?: Date) => {
+      if (Platform.OS === 'android') {
+        setActiveTimePicker(null);
+      }
+      if (!selectedDate || !activeTimePicker) return;
+
+      const timeStr = dateToTimeString(selectedDate);
+      if (activeTimePicker === 'start') {
+        updateNotifPref({ quietHoursStart: timeStr });
+      } else {
+        updateNotifPref({ quietHoursEnd: timeStr });
+      }
+
+      if (Platform.OS === 'ios') {
+        setActiveTimePicker(null);
+      }
+    },
+    [activeTimePicker, updateNotifPref],
+  );
+
+  const confirmWebTime = useCallback(() => {
+    if (!webTimeInput || !activeTimePicker) return;
+
+    // Validate HH:MM format
+    const match = webTimeInput.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) {
+      showAlert('Invalid Time', 'Please enter time in HH:MM format (e.g. 22:00).');
+      return;
     }
-  };
+    const h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    if (h < 0 || h > 23 || m < 0 || m > 59) {
+      showAlert('Invalid Time', 'Hours must be 0-23 and minutes 0-59.');
+      return;
+    }
 
-  if (loading) {
+    const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    if (activeTimePicker === 'start') {
+      updateNotifPref({ quietHoursStart: timeStr });
+    } else {
+      updateNotifPref({ quietHoursEnd: timeStr });
+    }
+    setWebTimeInput('');
+    setActiveTimePicker(null);
+  }, [activeTimePicker, webTimeInput, updateNotifPref]);
+
+  // ---------------------------------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------------------------------
+
+  if (loading || !notifPrefs) {
     return (
-      <View className="flex-1 bg-gray-50 items-center justify-center">
-        <ActivityIndicator size="large" color="#2563EB" />
-      </View>
+      <>
+        <Stack.Screen options={{ title: 'Notifications', headerBackTitle: 'Settings' }} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
+        </View>
+      </>
     );
   }
 
   return (
-    <View className="flex-1 bg-gray-50">
-      {/* Header */}
-      <View className="bg-white px-4 pt-12 pb-4 border-b border-gray-200">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1">
-            <TouchableOpacity onPress={() => router.back()} className="mr-4">
-              <ArrowLeft size={24} color="#1F2937" />
-            </TouchableOpacity>
-            <Text className="text-xl font-bold text-gray-800">Notifications</Text>
-          </View>
-          {saving && <ActivityIndicator size="small" color="#2563EB" />}
-        </View>
-      </View>
+    <>
+      <Stack.Screen options={{ title: 'Notifications', headerBackTitle: 'Settings' }} />
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* Master Controls */}
-        <View className="bg-white mt-4">
-          <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">
-            Master Controls
-          </Text>
-          <NotificationSetting
-            icon={Bell}
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+      >
+        {/* ── DELIVERY CHANNELS ── */}
+        <IOSListSection
+          header="DELIVERY CHANNELS"
+          footer="Choose how you'd like to receive notifications."
+        >
+          <IOSListItem
             title="Push Notifications"
-            description="Enable push notifications on this device"
-            value={preferences.push_notifications}
-            onValueChange={(value) => updatePreference('push_notifications', value)}
+            leadingIcon="notifications"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.red}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.pushEnabled}
+            onSwitchChange={(v) => updateNotifPref({ pushEnabled: v })}
           />
-          <NotificationSetting
-            icon={MessageCircle}
+          <IOSListItem
             title="Email Notifications"
-            description="Receive notifications via email"
-            value={preferences.email_notifications}
-            onValueChange={(value) => updatePreference('email_notifications', value)}
+            leadingIcon="mail"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.emailEnabled}
+            onSwitchChange={(v) => updateNotifPref({ emailEnabled: v })}
           />
-        </View>
+        </IOSListSection>
 
-        {/* Racing & Events */}
-        <View className="bg-white mt-4">
-          <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">
-            Racing & Events
-          </Text>
-          <NotificationSetting
-            icon={Calendar}
+        {/* ── RACING & WEATHER ── */}
+        <IOSListSection
+          header="RACING & WEATHER"
+          footer="Stay informed about upcoming races and conditions on the water."
+        >
+          <IOSListItem
             title="Race Reminders"
-            description="Reminders before scheduled races"
-            value={preferences.race_reminders}
-            onValueChange={(value) => updatePreference('race_reminders', value)}
+            leadingIcon="alarm"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
+            trailingAccessory="switch"
+            switchValue={userPrefs.race_reminders}
+            onSwitchChange={(v) => updateUserPref('race_reminders', v)}
           />
-          <NotificationSetting
-            icon={Trophy}
+          <IOSListItem
             title="Race Results"
-            description="Updates when race results are posted"
-            value={preferences.race_results}
-            onValueChange={(value) => updatePreference('race_results', value)}
+            leadingIcon="trophy"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.yellow}
+            trailingAccessory="switch"
+            switchValue={userPrefs.race_results}
+            onSwitchChange={(v) => updateUserPref('race_results', v)}
           />
-          <NotificationSetting
-            icon={Bell}
+          <IOSListItem
             title="Weather Alerts"
-            description="Important weather updates for races"
-            value={preferences.weather_alerts}
-            onValueChange={(value) => updatePreference('weather_alerts', value)}
+            leadingIcon="thunderstorm"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.teal}
+            trailingAccessory="switch"
+            switchValue={userPrefs.weather_alerts}
+            onSwitchChange={(v) => updateUserPref('weather_alerts', v)}
           />
-        </View>
+        </IOSListSection>
 
-        {/* Social & Community */}
-        <View className="bg-white mt-4">
-          <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">
-            Social & Community
-          </Text>
-          <NotificationSetting
-            icon={Users}
-            title="Crew Messages"
-            description="Messages from your crew members"
-            value={preferences.crew_messages}
-            onValueChange={(value) => updatePreference('crew_messages', value)}
+        {/* ── SOCIAL ── */}
+        <IOSListSection
+          header="SOCIAL"
+          footer="Activity from sailors you follow and your race posts."
+        >
+          <IOSListItem
+            title="New Followers"
+            leadingIcon="person-add"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.newFollower}
+            onSwitchChange={(v) => updateNotifPref({ newFollower: v })}
           />
-          <NotificationSetting
-            icon={Users}
+          <IOSListItem
+            title="Race Activity"
+            leadingIcon="boat"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.green}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.followedUserRace}
+            onSwitchChange={(v) => updateNotifPref({ followedUserRace: v })}
+          />
+          <IOSListItem
+            title="Likes"
+            leadingIcon="heart"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.red}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.raceLikes}
+            onSwitchChange={(v) => updateNotifPref({ raceLikes: v })}
+          />
+          <IOSListItem
+            title="Comments"
+            leadingIcon="chatbubble"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.raceComments}
+            onSwitchChange={(v) => updateNotifPref({ raceComments: v })}
+          />
+          <IOSListItem
+            title="Achievements"
+            leadingIcon="ribbon"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.achievements}
+            onSwitchChange={(v) => updateNotifPref({ achievements: v })}
+          />
+        </IOSListSection>
+
+        {/* ── MESSAGES ── */}
+        <IOSListSection
+          header="MESSAGES"
+          footer="Crew threads and direct messages."
+        >
+          <IOSListItem
+            title="Direct Messages"
+            leadingIcon="chatbubbles"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.green}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.directMessages}
+            onSwitchChange={(v) => updateNotifPref({ directMessages: v })}
+          />
+          <IOSListItem
+            title="Crew & Group Messages"
+            leadingIcon="people"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.teal}
+            trailingAccessory="switch"
+            switchValue={notifPrefs.groupMessages}
+            onSwitchChange={(v) => updateNotifPref({ groupMessages: v })}
+          />
+          <IOSListItem
             title="Fleet Activity"
-            description="Updates from your sailing fleets"
-            value={preferences.fleet_activity}
-            onValueChange={(value) => updatePreference('fleet_activity', value)}
+            leadingIcon="flag"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
+            trailingAccessory="switch"
+            switchValue={userPrefs.fleet_activity}
+            onSwitchChange={(v) => updateUserPref('fleet_activity', v)}
           />
-        </View>
+        </IOSListSection>
 
-        {/* Professional Services */}
-        <View className="bg-white mt-4">
-          <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3">
-            Professional Services
-          </Text>
-          <NotificationSetting
-            icon={Bell}
+        {/* ── COACHING & LEARNING ── */}
+        <IOSListSection
+          header="COACHING & LEARNING"
+          footer="Updates from coaches and AI-powered insights."
+        >
+          <IOSListItem
             title="Coaching Updates"
-            description="Updates from your coaches and sessions"
-            value={preferences.coaching_updates}
-            onValueChange={(value) => updatePreference('coaching_updates', value)}
+            leadingIcon="school"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+            trailingAccessory="switch"
+            switchValue={userPrefs.coaching_updates}
+            onSwitchChange={(v) => updateUserPref('coaching_updates', v)}
           />
-          <NotificationSetting
-            icon={Bell}
+          <IOSListItem
             title="Venue Intelligence"
-            description="AI insights about sailing venues"
-            value={preferences.venue_intelligence}
-            onValueChange={(value) => updatePreference('venue_intelligence', value)}
+            leadingIcon="analytics"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingAccessory="switch"
+            switchValue={userPrefs.venue_intelligence}
+            onSwitchChange={(v) => updateUserPref('venue_intelligence', v)}
           />
-        </View>
+        </IOSListSection>
 
-        {/* Info */}
-        <View className="bg-blue-50 mx-4 mt-4 p-4 rounded-lg border border-blue-200">
-          <Text className="text-blue-900 font-semibold mb-1">
-            About Notifications
-          </Text>
-          <Text className="text-blue-700 text-sm">
-            You can customize which notifications you receive. Changes are saved automatically.
-            Some critical safety notifications may still be sent even if you disable certain categories.
-          </Text>
-        </View>
+        {/* ── QUIET HOURS ── */}
+        <IOSListSection
+          header="QUIET HOURS"
+          footer="Silence notifications during these hours. Critical safety alerts will still come through."
+        >
+          <IOSListItem
+            title="Enable Quiet Hours"
+            leadingIcon="moon"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+            trailingAccessory="switch"
+            switchValue={quietHoursEnabled}
+            onSwitchChange={toggleQuietHours}
+          />
+          {quietHoursEnabled && (
+            <>
+              <IOSListItem
+                title="Start Time"
+                leadingIcon="time"
+                leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
+                trailingAccessory="none"
+                trailingComponent={
+                  <Text style={styles.timeValueText}>
+                    {formatTime(notifPrefs.quietHoursStart)}
+                  </Text>
+                }
+                onPress={() => {
+                  setWebTimeInput(notifPrefs.quietHoursStart || '22:00');
+                  setActiveTimePicker('start');
+                }}
+              />
+              <IOSListItem
+                title="End Time"
+                leadingIcon="time"
+                leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
+                trailingAccessory="none"
+                trailingComponent={
+                  <Text style={styles.timeValueText}>
+                    {formatTime(notifPrefs.quietHoursEnd)}
+                  </Text>
+                }
+                onPress={() => {
+                  setWebTimeInput(notifPrefs.quietHoursEnd || '07:00');
+                  setActiveTimePicker('end');
+                }}
+              />
+            </>
+          )}
+        </IOSListSection>
       </ScrollView>
-    </View>
+
+      {/* ── Native Time Picker ── */}
+      {activeTimePicker && Platform.OS !== 'web' && DateTimePicker && (
+        <DateTimePicker
+          value={parseTimeToDate(
+            activeTimePicker === 'start'
+              ? notifPrefs.quietHoursStart
+              : notifPrefs.quietHoursEnd,
+          )}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleNativeTimeChange}
+        />
+      )}
+
+      {/* ── Web Time Picker Modal ── */}
+      {activeTimePicker && Platform.OS === 'web' && (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActiveTimePicker(null)}
+        >
+          <TouchableOpacity
+            style={styles.webPickerOverlay}
+            activeOpacity={1}
+            onPress={() => setActiveTimePicker(null)}
+          >
+            <View
+              style={styles.webPickerContainer}
+              onStartShouldSetResponder={() => true}
+            >
+              <Text style={styles.webPickerTitle}>
+                {activeTimePicker === 'start' ? 'Start Time' : 'End Time'}
+              </Text>
+              <TextInput
+                style={styles.webPickerInput}
+                value={webTimeInput}
+                onChangeText={setWebTimeInput}
+                placeholder="HH:MM (24h format)"
+                autoFocus
+                onSubmitEditing={confirmWebTime}
+              />
+              <View style={styles.webPickerButtons}>
+                <TouchableOpacity
+                  style={styles.webPickerCancelButton}
+                  onPress={() => {
+                    setWebTimeInput('');
+                    setActiveTimePicker(null);
+                  }}
+                >
+                  <Text style={styles.webPickerCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.webPickerConfirmButton}
+                  onPress={confirmWebTime}
+                >
+                  <Text style={styles.webPickerConfirmText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
+    </>
   );
 }
+
+// =============================================================================
+// STYLES
+// =============================================================================
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+  },
+  contentContainer: {
+    paddingBottom: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeValueText: {
+    ...IOS_TYPOGRAPHY.body,
+    color: IOS_COLORS.systemBlue,
+  },
+  // Web time picker modal
+  webPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webPickerContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: IOS_SPACING.xl,
+    width: 300,
+  },
+  webPickerTitle: {
+    ...IOS_TYPOGRAPHY.headline,
+    marginBottom: IOS_SPACING.md,
+    textAlign: 'center',
+  },
+  webPickerInput: {
+    ...IOS_TYPOGRAPHY.body,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.systemGray4,
+    borderRadius: 8,
+    padding: IOS_SPACING.md,
+    textAlign: 'center',
+    marginBottom: IOS_SPACING.lg,
+  },
+  webPickerButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  webPickerCancelButton: {
+    flex: 1,
+    paddingVertical: IOS_SPACING.md,
+    marginRight: IOS_SPACING.sm,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.systemGray6,
+    alignItems: 'center',
+  },
+  webPickerCancelText: {
+    ...IOS_TYPOGRAPHY.body,
+    color: IOS_COLORS.systemRed,
+  },
+  webPickerConfirmButton: {
+    flex: 1,
+    paddingVertical: IOS_SPACING.md,
+    marginLeft: IOS_SPACING.sm,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+  },
+  webPickerConfirmText: {
+    ...IOS_TYPOGRAPHY.body,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+});

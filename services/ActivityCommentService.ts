@@ -96,6 +96,23 @@ export class ActivityCommentService {
               color: null,
             });
           });
+
+          // Last resort: users table for any still missing
+          const stillMissing = missingIds.filter((id) => !profileMap.has(id));
+          if (stillMissing.length > 0) {
+            const { data: users } = await supabase
+              .from('users')
+              .select('id, full_name')
+              .in('id', stillMissing);
+
+            (users || []).forEach((u: any) => {
+              profileMap.set(u.id, {
+                name: u.full_name,
+                emoji: null,
+                color: null,
+              });
+            });
+          }
         }
       }
 
@@ -206,12 +223,28 @@ export class ActivityCommentService {
 
       if (error) throw error;
 
-      // Get profile for return
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_emoji, avatar_color')
-        .eq('id', user.id)
+      // Get profile for return — sailor_profiles has avatar info and display_name
+      const { data: sailorProfile } = await supabase
+        .from('sailor_profiles')
+        .select('display_name, avatar_emoji, avatar_color')
+        .eq('user_id', user.id)
         .maybeSingle();
+
+      // Fallback to profiles table for name if sailor_profiles missing
+      let authorName = sailorProfile?.display_name || null;
+      if (!authorName) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .maybeSingle();
+        authorName = profile?.full_name || null;
+      }
+
+      // Last resort: use email prefix from auth user
+      if (!authorName) {
+        authorName = user.email?.split('@')[0] || null;
+      }
 
       return {
         id: data.id,
@@ -222,13 +255,13 @@ export class ActivityCommentService {
         content: data.content,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
-        authorName: profile?.full_name || null,
-        authorAvatarEmoji: profile?.avatar_emoji || null,
-        authorAvatarColor: profile?.avatar_color || null,
+        authorName,
+        authorAvatarEmoji: sailorProfile?.avatar_emoji || null,
+        authorAvatarColor: sailorProfile?.avatar_color || null,
       };
     } catch (error) {
       logger.error('createComment failed:', error);
-      return null;
+      throw error;
     }
   }
 

@@ -24,7 +24,6 @@ import type {
   UpdatePostParams,
   MapBounds,
 } from '@/types/community-feed';
-import { MOCK_DISCUSSION_FEED } from '@/data/mockDiscussionFeed';
 
 // ============================================================================
 // QUERY KEYS
@@ -301,15 +300,11 @@ export function useJoinedCommunitiesFeed(
  * Fetch a single post with all joined data
  */
 export function usePostDetail(postId: string, enabled = true) {
-  const isMock = postId.startsWith('mock-');
   return useQuery({
     queryKey: communityFeedKeys.post(postId),
-    queryFn: () =>
-      isMock
-        ? MOCK_DISCUSSION_FEED.find((p) => p.id === postId) ?? null
-        : CommunityFeedService.getPostById(postId),
+    queryFn: () => CommunityFeedService.getPostById(postId),
     enabled: enabled && !!postId,
-    staleTime: isMock ? Infinity : 1000 * 60,
+    staleTime: 1000 * 60,
   });
 }
 
@@ -443,12 +438,11 @@ export function useVotePost() {
  * Fetch threaded comments for a post
  */
 export function usePostComments(postId: string, enabled = true) {
-  const isMock = postId.startsWith('mock-');
   return useQuery({
     queryKey: communityFeedKeys.comments(postId),
-    queryFn: () => (isMock ? [] : CommunityFeedService.getComments(postId)),
+    queryFn: () => CommunityFeedService.getComments(postId),
     enabled: enabled && !!postId,
-    staleTime: isMock ? Infinity : 1000 * 30,
+    staleTime: 1000 * 30,
   });
 }
 
@@ -545,12 +539,10 @@ export function useMapPinnedPosts(venueId: string, bounds?: MapBounds) {
  * Get author's racing stats at a venue
  */
 export function useAuthorVenueStats(authorId: string | null, venueId: string) {
-  // Mock posts use non-UUID IDs (e.g. "user-jchen", "venue-rhkyc")
-  const isRealId = /^[0-9a-f]{8}-/.test(authorId ?? '');
   return useQuery({
     queryKey: communityFeedKeys.authorStats(authorId || '', venueId),
     queryFn: () => CommunityFeedService.getAuthorVenueStats(authorId!, venueId),
-    enabled: !!authorId && !!venueId && isRealId,
+    enabled: !!authorId && !!venueId,
     staleTime: 1000 * 60 * 10, // 10 minutes
   });
 }

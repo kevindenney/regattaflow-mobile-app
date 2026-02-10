@@ -40,6 +40,7 @@ const SKILLS_TO_UPLOAD = [
   'mark-rounding-execution',
   'downwind-speed-and-position',
   'long-distance-racing-analyst',
+  'team-racing-analyst',
   // 'finishing-line-tactics', // Skip if problematic
 ];
 

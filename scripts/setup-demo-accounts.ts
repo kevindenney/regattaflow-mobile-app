@@ -8,7 +8,11 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-const DEMO_PASSWORD = 'Demo123!'; // Simple password for demo accounts
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+if (!DEMO_PASSWORD) {
+  console.error('❌ DEMO_PASSWORD environment variable is required');
+  process.exit(1);
+}
 
 const demoAccounts = [
   {
@@ -107,9 +111,9 @@ async function setupDemoAccounts() {
 
   console.log('✨ Demo account setup complete!\n');
   console.log('📝 Add these to your .env.local file:\n');
-  console.log(`EXPO_PUBLIC_DEMO_SAILOR_PASSWORD=${DEMO_PASSWORD}`);
-  console.log(`EXPO_PUBLIC_DEMO_CLUB_PASSWORD=${DEMO_PASSWORD}`);
-  console.log(`EXPO_PUBLIC_DEMO_COACH_PASSWORD=${DEMO_PASSWORD}`);
+  console.log(`EXPO_PUBLIC_DEMO_SAILOR_PASSWORD=<set in env>`);
+  console.log(`EXPO_PUBLIC_DEMO_CLUB_PASSWORD=<set in env>`);
+  console.log(`EXPO_PUBLIC_DEMO_COACH_PASSWORD=<set in env>`);
 }
 
 setupDemoAccounts().catch(console.error);

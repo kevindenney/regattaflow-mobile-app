@@ -26,6 +26,7 @@ import type { RaceType } from './RaceTypeSelector';
 import { ExpandedContentZone } from './ExpandedContentZone';
 import { getCurrentPhaseForRace, CardRaceData } from '@/components/cards/types';
 import { RaceCardActionBar } from './RaceCardActionBar';
+import { ParticipantCountBadge } from './RaceParticipantsView';
 import { RaceCollaborator } from '@/types/raceCollaboration';
 
 // Results data for completed races
@@ -437,6 +438,16 @@ export function RaceCard({
         <Ionicons name="calendar-outline" size={16} color={IOS_COLORS.secondaryLabel} />
         <Text style={styles.simpleDetailText}>{formatFullDate(date, startTime)}</Text>
       </View>
+
+      {/* Participant count badge - shows when others are prepping for same race */}
+      {participantCount !== undefined && participantCount > 0 && (
+        <View style={styles.participantBadgeRow}>
+          <ParticipantCountBadge
+            count={participantCount}
+            onPress={onParticipantsPress}
+          />
+        </View>
+      )}
 
       {/* Bottom Action Bar - context-aware actions */}
       {!isExpanded && (
@@ -1654,5 +1665,10 @@ const styles = StyleSheet.create({
   simpleDetailText: {
     fontSize: 15,
     color: IOS_COLORS.secondaryLabel,
+  },
+  participantBadgeRow: {
+    marginTop: 10,
+    marginBottom: 4,
+    alignItems: 'flex-start',
   },
 });

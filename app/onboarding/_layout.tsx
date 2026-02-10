@@ -21,6 +21,9 @@ export default function OnboardingLayout() {
             {/* Phase 3: Quick Profile */}
             <Stack.Screen name="profile" />
 
+            {/* Phase 3b: Trial Activation (after profile, before main app) */}
+            <Stack.Screen name="trial-activation" />
+
             {/* Phase 4: Personalization */}
             <Stack.Screen name="personalize" />
 

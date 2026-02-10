@@ -31,11 +31,11 @@ function degreesToCardinal(degrees: number | undefined): string {
 }
 
 /**
- * Format timestamp to HH:MM string (using UTC to match how race times are stored)
+ * Format timestamp to HH:MM string in local time for display
  */
 function formatTime(timestamp: string | Date): string {
   const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
-  return `${date.getUTCHours().toString().padStart(2, '0')}:${date.getUTCMinutes().toString().padStart(2, '0')}`;
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
 /** Hourly data point for HourlyForecastTable */

@@ -216,7 +216,7 @@ Upload via `upload-all-skills.mjs`.
 
 ## Testing Demo Users
 
-See `DEMO_USERS_QUICK_REF.md` for test account credentials.
+Demo/test accounts require `DEMO_PASSWORD` env var (not committed to source).
 
 ## Key Files to Know
 

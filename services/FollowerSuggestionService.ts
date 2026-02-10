@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isDemoRaceId } from '@/lib/demo/demoRaceData';
 
 const logger = createLogger('FollowerSuggestionService');
 
@@ -138,6 +139,12 @@ export class FollowerSuggestionService {
   static async createSuggestion(
     input: CreateFollowerSuggestionInput
   ): Promise<FollowerSuggestion | null> {
+    // Cannot create suggestions on demo races
+    if (isDemoRaceId(input.raceId)) {
+      logger.warn('Cannot create suggestions on demo races');
+      return null;
+    }
+
     try {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) {
@@ -177,6 +184,11 @@ export class FollowerSuggestionService {
    * Includes suggester profile info via join.
    */
   static async getSuggestionsForRace(raceId: string): Promise<FollowerSuggestion[]> {
+    // Demo races don't have database entries - return empty array
+    if (isDemoRaceId(raceId)) {
+      return [];
+    }
+
     try {
       const { data, error } = await supabase
         .from('race_suggestions')
@@ -200,6 +212,11 @@ export class FollowerSuggestionService {
    * Get count of pending suggestions for a race.
    */
   static async getPendingSuggestionCount(raceId: string): Promise<number> {
+    // Demo races don't have database entries
+    if (isDemoRaceId(raceId)) {
+      return 0;
+    }
+
     try {
       const { count, error } = await supabase
         .from('race_suggestions')
@@ -267,6 +284,11 @@ export class FollowerSuggestionService {
    * Get suggestions I've sent on a particular race.
    */
   static async getMySentSuggestions(raceId: string): Promise<FollowerSuggestion[]> {
+    // Demo races don't have database entries
+    if (isDemoRaceId(raceId)) {
+      return [];
+    }
+
     try {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) return [];

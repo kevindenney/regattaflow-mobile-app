@@ -52,6 +52,7 @@ interface SearchUser {
   fullName: string;
   avatarEmoji: string | null;
   avatarColor: string | null;
+  source?: 'recent' | 'following';
 }
 
 // =============================================================================
@@ -142,6 +143,23 @@ export function ContactPicker({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(initialSelected));
   const [isCreatingDirect, setIsCreatingDirect] = useState(false);
 
+  // Suggestions state
+  const [suggestions, setSuggestions] = useState<SearchUser[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
+
+  // Load suggestions on mount
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      setIsLoadingSuggestions(true);
+      const result = await CrewThreadService.getSuggestedContacts(10);
+      if (!result.error) {
+        setSuggestions(result.users);
+      }
+      setIsLoadingSuggestions(false);
+    };
+    loadSuggestions();
+  }, []);
+
   // Focus input on mount
   useEffect(() => {
     setTimeout(() => {
@@ -220,19 +238,35 @@ export function ContactPicker({
   }, [selectedIds, onNext]);
 
   const renderUser = useCallback(
-    ({ item, index }: { item: SearchUser; index: number }) => (
+    ({ item, index }: { item: SearchUser; index: number }, listLength: number) => (
       <UserRow
         user={item}
         isSelected={selectedIds.has(item.id)}
         onPress={() => handleUserPress(item)}
-        isLast={index === searchResults.length - 1}
+        isLast={index === listLength - 1}
         mode={mode}
       />
     ),
-    [selectedIds, searchResults.length, handleUserPress, mode]
+    [selectedIds, handleUserPress, mode]
+  );
+
+  const renderSearchResult = useCallback(
+    ({ item, index }: { item: SearchUser; index: number }) =>
+      renderUser({ item, index }, searchResults.length),
+    [renderUser, searchResults.length]
+  );
+
+  const renderSuggestion = useCallback(
+    ({ item, index }: { item: SearchUser; index: number }) =>
+      renderUser({ item, index }, suggestions.length),
+    [renderUser, suggestions.length]
   );
 
   const selectedUsers = searchResults.filter((u) => selectedIds.has(u.id));
+
+  // Split suggestions into recent and following for section headers
+  const recentSuggestions = suggestions.filter(u => u.source === 'recent');
+  const followingSuggestions = suggestions.filter(u => u.source === 'following');
 
   return (
     <View style={styles.container}>
@@ -332,12 +366,35 @@ export function ContactPicker({
           </Text>
         </View>
       ) : searchQuery.trim() === '' ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Search for sailors</Text>
-          <Text style={styles.emptySubtext}>
-            Type a name to find people to message
-          </Text>
-        </View>
+        // Show suggestions when not searching
+        isLoadingSuggestions ? (
+          <ContactListSkeleton count={4} />
+        ) : suggestions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Search for sailors</Text>
+            <Text style={styles.emptySubtext}>
+              Type a name to find people to message
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={suggestions}
+            renderItem={renderSuggestion}
+            keyExtractor={(item) => item.id}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            ListHeaderComponent={
+              <View style={styles.suggestionsHeader}>
+                {recentSuggestions.length > 0 && (
+                  <Text style={styles.sectionLabel}>Recent</Text>
+                )}
+              </View>
+            }
+            stickyHeaderIndices={[]}
+          />
+        )
       ) : searchResults.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No sailors found</Text>
@@ -346,7 +403,7 @@ export function ContactPicker({
       ) : (
         <FlatList
           data={searchResults}
-          renderItem={renderUser}
+          renderItem={renderSearchResult}
           keyExtractor={(item) => item.id}
           style={styles.list}
           contentContainerStyle={styles.listContent}
@@ -564,6 +621,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: StyleSheet.hairlineWidth,
     backgroundColor: IOS_COLORS.separator,
+  },
+
+  // Suggestions
+  suggestionsHeader: {
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingTop: IOS_SPACING.sm,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: IOS_SPACING.xs,
   },
 });
 

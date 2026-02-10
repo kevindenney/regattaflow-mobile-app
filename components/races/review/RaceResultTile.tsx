@@ -337,15 +337,13 @@ export function RaceResultTile({
   );
 }
 
-const TILE_SIZE = 155;
-
 const styles = StyleSheet.create({
   tileWrapper: {
+    flex: 1,
     gap: 8,
   },
   tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
+    flex: 1,
     backgroundColor: COLORS.background,
     borderRadius: 16,
     borderWidth: 1,

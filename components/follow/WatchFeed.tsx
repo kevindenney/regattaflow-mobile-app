@@ -35,13 +35,29 @@ import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 interface WatchFeedProps {
   toolbarOffset?: number;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** When true, show a simple empty message instead of SuggestedSailorsSection */
+  hideEmptySuggestions?: boolean;
 }
 
 // =============================================================================
 // EMPTY STATES
 // =============================================================================
 
-function EmptyFollowingState() {
+function EmptyFollowingState({ hideEmptySuggestions }: { hideEmptySuggestions?: boolean }) {
+  if (hideEmptySuggestions) {
+    return (
+      <View style={emptyStyles.headerSection}>
+        <View style={emptyStyles.iconCircle}>
+          <Ionicons name="boat-outline" size={48} color={IOS_COLORS.systemGray3} />
+        </View>
+        <Text style={emptyStyles.title}>No activity yet</Text>
+        <Text style={emptyStyles.subtitle}>
+          Follow sailors from the Following tab to see their activity here
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       style={emptyStyles.container}
@@ -81,7 +97,7 @@ function NoActivityState({ followingCount }: { followingCount: number }) {
 // MAIN COMPONENT
 // =============================================================================
 
-export function WatchFeed({ toolbarOffset = 0, onScroll }: WatchFeedProps) {
+export function WatchFeed({ toolbarOffset = 0, onScroll, hideEmptySuggestions }: WatchFeedProps) {
   const router = useRouter();
   const {
     items,
@@ -187,15 +203,15 @@ export function WatchFeed({ toolbarOffset = 0, onScroll }: WatchFeedProps) {
   // Empty states
   if (!hasFollowing) {
     return (
-      <View style={{ paddingTop: toolbarOffset }}>
-        <EmptyFollowingState />
+      <View style={{ flex: 1, paddingTop: toolbarOffset }}>
+        <EmptyFollowingState hideEmptySuggestions={hideEmptySuggestions} />
       </View>
     );
   }
 
   if (items.length === 0) {
     return (
-      <View style={{ paddingTop: toolbarOffset }}>
+      <View style={{ flex: 1, paddingTop: toolbarOffset }}>
         <NoActivityState followingCount={followingCount} />
       </View>
     );

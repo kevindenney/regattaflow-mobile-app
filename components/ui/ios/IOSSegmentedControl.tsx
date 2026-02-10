@@ -42,7 +42,6 @@ export function IOSSegmentedControl<T extends string = string>({
   onValueChange,
   style,
 }: IOSSegmentedControlProps<T>) {
-  // Support both API styles
   const getSegmentKey = (segment: Segment<T>): string => {
     if ('key' in segment) return segment.key;
     if ('value' in segment) return segment.value;
@@ -60,30 +59,25 @@ export function IOSSegmentedControl<T extends string = string>({
 
   return (
     <View style={[styles.container, style]}>
-      {segments.map((segment, index) => {
+      {segments.map((segment) => {
         const segmentKey = getSegmentKey(segment);
         const isSelected = segmentKey === currentSelectedKey;
-        const isFirst = index === 0;
-        const isLast = index === segments.length - 1;
 
         return (
-          <Pressable
+          <View
             key={segmentKey}
-            style={({ pressed }) => [
-              styles.segment,
-              isSelected && styles.selectedSegment,
-              isFirst && styles.firstSegment,
-              isLast && styles.lastSegment,
-              pressed && styles.pressedSegment,
-            ]}
-            onPress={() => handleSelect(segmentKey)}
+            style={[styles.segment, isSelected ? styles.selectedSegment : null]}
           >
-            <View style={styles.segmentContent}>
+            <Pressable
+              style={styles.segmentTouchable}
+              onPress={() => handleSelect(segmentKey)}
+            >
               <Text
                 style={[
                   styles.segmentText,
-                  isSelected && styles.selectedSegmentText,
+                  isSelected ? styles.selectedSegmentText : null,
                 ]}
+                numberOfLines={1}
               >
                 {segment.label}
               </Text>
@@ -94,8 +88,8 @@ export function IOSSegmentedControl<T extends string = string>({
                   </Text>
                 </View>
               )}
-            </View>
-          </Pressable>
+            </Pressable>
+          </View>
         );
       })}
     </View>
@@ -105,52 +99,48 @@ export function IOSSegmentedControl<T extends string = string>({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(118, 118, 128, 0.12)',
-    borderRadius: 8,
+    backgroundColor: '#E8E8ED',
+    borderRadius: 9,
     padding: 2,
+    height: 36,
   },
   segment: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 6,
-    ...Platform.select({
-      web: { cursor: 'pointer' } as any,
-      default: {},
-    }),
-  },
-  pressedSegment: {
-    opacity: 0.7,
+    borderRadius: 7,
+    overflow: 'hidden',
   },
   selectedSegment: {
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.12,
     shadowRadius: 2,
     elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+      } as any,
+      default: {},
+    }),
   },
-  firstSegment: {
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
-  },
-  lastSegment: {
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
-  },
-  segmentContent: {
+  segmentTouchable: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
+    ...Platform.select({
+      web: { cursor: 'pointer' } as any,
+      default: {},
+    }),
   },
   segmentText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#8E8E93',
+    color: '#636366',
   },
   selectedSegmentText: {
+    fontWeight: '600',
     color: '#000000',
   },
   badge: {

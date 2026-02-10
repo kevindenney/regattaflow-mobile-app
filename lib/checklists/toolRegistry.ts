@@ -271,6 +271,20 @@ export const TOOL_REGISTRY: Record<string, Omit<ToolRegistration, 'component'> &
     displayName: 'Meeting Point',
     icon: 'MapPin',
   },
+  crew_management: {
+    id: 'crew_management',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/crew/CrewManagementWizard',
+    displayName: 'Manage Crew',
+    icon: 'Users',
+  },
+  logistics_planner: {
+    id: 'logistics_planner',
+    type: 'full_wizard',
+    componentPath: '@/components/checklist-tools/logistics/LogisticsPlannerWizard',
+    displayName: 'Plan Logistics',
+    icon: 'Car',
+  },
 
   // Quick Tips Panels
   crew_confirmation: {

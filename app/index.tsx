@@ -7,9 +7,8 @@ import { HeroPhones } from '@/components/landing/HeroPhones';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { ScrollFix } from '@/components/landing/ScrollFix';
 import { DashboardSkeleton } from '@/components/ui/loading';
-import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
+import { getLastTabRoute } from '@/lib/utils/userTypeRouting';
 import { useAuth } from '@/providers/AuthProvider';
-import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { hasPersistedSessionHint, hasPersistedSessionHintAsync } from '@/services/supabase';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -53,23 +52,14 @@ export default function LandingPage() {
       if (userProfile || (!loading && ready)) {
         setIsRedirecting(true);
 
-        // Check if onboarding is needed
-        const destination = getDashboardRoute(userProfile?.user_type ?? null);
+        // Use last-visited tab on web, or role-based default
+        const destination = getLastTabRoute(userProfile?.user_type ?? null);
 
         router.replace(destination);
       }
     } else if (ready && !signedIn && !isGuest && !bypassRedirect) {
-      // Non-logged-in users: show onboarding first (if not seen), then enter guest mode → /races
-      OnboardingStateService.hasSeenOnboarding().then((hasSeen) => {
-        if (hasSeen) {
-          // Returning user who has seen onboarding - enter guest mode directly
-          enterGuestMode();
-        } else {
-          // New user - show onboarding flow first
-          setIsRedirecting(true);
-          router.replace('/onboarding');
-        }
-      });
+      // Instagram-like flow: new visitors go straight to the tool in guest mode
+      enterGuestMode();
     } else if (ready && !signedIn && !isGuest && showSkeleton) {
       // Session hint was wrong (expired/invalid token) - show landing page
       setShowSkeleton(false);

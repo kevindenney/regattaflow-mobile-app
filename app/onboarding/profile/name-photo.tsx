@@ -9,7 +9,6 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState, useEffect } from 'react';
 import {
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -22,9 +21,12 @@ import {
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-import { OnboardingProgressDots } from '@/components/onboarding/OnboardingProgressDots';
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { useAuth } from '@/providers/AuthProvider';
+import { ReverseTrialService } from '@/lib/subscriptions/reverseTrialService';
+import { supabase } from '@/services/supabase';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { extractOAuthDisplayName } from '@/lib/utils/oauthName';
 
 export default function NamePhotoScreen() {
   const router = useRouter();
@@ -34,10 +36,11 @@ export default function NamePhotoScreen() {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Pre-fill from auth provider if available
+  // Pre-fill from auth provider if available (handles Google, Apple, etc.)
   useEffect(() => {
-    if (user?.user_metadata?.full_name) {
-      setName(user.user_metadata.full_name);
+    const displayName = extractOAuthDisplayName(user?.user_metadata);
+    if (displayName) {
+      setName(displayName);
     }
     if (user?.user_metadata?.avatar_url) {
       setPhotoUri(user.user_metadata.avatar_url);
@@ -57,13 +60,13 @@ export default function NamePhotoScreen() {
         setPhotoUri(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('Error', 'Failed to pick image. Please try again.');
     }
   };
 
   const handleContinue = async () => {
     if (!name.trim()) {
-      Alert.alert('Name Required', 'Please enter your name to continue.');
+      showAlert('Name Required', 'Please enter your name to continue.');
       return;
     }
 
@@ -77,10 +80,27 @@ export default function NamePhotoScreen() {
       );
       await OnboardingStateService.completeStep('profile-setup');
 
-      // Navigate to boat picker
-      router.push('/onboarding/personalize/boat-picker');
+      // Mark onboarding as completed in DB
+      if (user?.id) {
+        await supabase
+          .from('users')
+          .update({
+            onboarding_completed: true,
+            full_name: name.trim(),
+          })
+          .eq('id', user.id);
+
+        // Start reverse trial (14-day Pro access)
+        const alreadyHadTrial = await ReverseTrialService.hasHadTrial(user.id);
+        if (!alreadyHadTrial) {
+          await ReverseTrialService.startTrial(user.id);
+        }
+      }
+
+      // Show trial activation screen before entering the app
+      router.replace('/onboarding/trial-activation');
     } catch (error) {
-      Alert.alert('Error', 'Failed to save profile. Please try again.');
+      showAlert('Error', 'Failed to save profile. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -106,13 +126,6 @@ export default function NamePhotoScreen() {
             <TouchableOpacity style={styles.backButton} onPress={handleBack}>
               <Ionicons name="chevron-back" size={24} color="#0F172A" />
             </TouchableOpacity>
-            <OnboardingProgressDots
-              currentStep={4}
-              totalSteps={11}
-              activeColor="#3B82F6"
-              inactiveColor="#E2E8F0"
-              completedColor="#93C5FD"
-            />
             <View style={styles.headerSpacer} />
           </View>
 

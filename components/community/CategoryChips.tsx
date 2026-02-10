@@ -9,6 +9,7 @@ import React from 'react';
 import {
   View,
   Text,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -44,13 +45,8 @@ export function CategoryChips({
     );
   }
 
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.container}
-      style={styles.scroll}
-    >
+  const chips = (
+    <>
       {/* All chip */}
       <Pressable
         onPress={() => {
@@ -114,6 +110,22 @@ export function CategoryChips({
           </Pressable>
         );
       })}
+    </>
+  );
+
+  // On web, wrap chips to multiple rows; on native, horizontal scroll
+  if (Platform.OS === 'web') {
+    return <View style={styles.containerWrap}>{chips}</View>;
+  }
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.container}
+      style={styles.scroll}
+    >
+      {chips}
     </ScrollView>
   );
 }
@@ -209,6 +221,13 @@ const styles = StyleSheet.create({
   },
   container: {
     flexDirection: 'row',
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.sm,
+    gap: 8,
+  },
+  containerWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: IOS_SPACING.lg,
     paddingVertical: IOS_SPACING.sm,
     gap: 8,

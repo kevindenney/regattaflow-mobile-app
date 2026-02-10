@@ -56,6 +56,18 @@ import { DecodingWindInteractive } from './interactives/DecodingWindInteractive'
 import { PerfectStartInteractive } from './interactives/PerfectStartInteractive';
 import { FirstBeatInteractive } from './interactives/FirstBeatInteractive';
 import { RacingInCurrentInteractive } from './interactives/RacingInCurrentInteractive';
+// Team racing interactives
+import { TeamRacingScoringInteractive } from './interactives/TeamRacingScoringInteractive';
+import { TeamRacingCallsInteractive } from './interactives/TeamRacingCallsInteractive';
+import { TeamRacingTacticsInteractive } from './interactives/TeamRacingTacticsInteractive';
+import { TeamRacingUmpireSignalsInteractive } from './interactives/TeamRacingUmpireSignalsInteractive';
+import { TeamRacingOverviewInteractive } from './interactives/TeamRacingOverviewInteractive';
+import { TeamRacingComparisonInteractive } from './interactives/TeamRacingComparisonInteractive';
+import { TeamRacingCourseInteractive } from './interactives/TeamRacingCourseInteractive';
+import { TeamRacingReadTheRaceInteractive } from './interactives/TeamRacingReadTheRaceInteractive';
+import { TeamRacingCommsInteractive } from './interactives/TeamRacingCommsInteractive';
+import { TeamRacingCoveringInteractive } from './interactives/TeamRacingCoveringInteractive';
+import { TeamRacingStartInteractive } from './interactives/TeamRacingStartInteractive';
 
 // Component registry
 const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
@@ -101,6 +113,18 @@ const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType<any>> = {
   'PerfectStartInteractive': PerfectStartInteractive,
   'FirstBeatInteractive': FirstBeatInteractive,
   'RacingInCurrentInteractive': RacingInCurrentInteractive,
+  // Team racing interactives
+  'TeamRacingScoringInteractive': TeamRacingScoringInteractive,
+  'TeamRacingCallsInteractive': TeamRacingCallsInteractive,
+  'TeamRacingTacticsInteractive': TeamRacingTacticsInteractive,
+  'TeamRacingUmpireSignalsInteractive': TeamRacingUmpireSignalsInteractive,
+  'TeamRacingOverviewInteractive': TeamRacingOverviewInteractive,
+  'TeamRacingComparisonInteractive': TeamRacingComparisonInteractive,
+  'TeamRacingCourseInteractive': TeamRacingCourseInteractive,
+  'TeamRacingReadTheRaceInteractive': TeamRacingReadTheRaceInteractive,
+  'TeamRacingCommsInteractive': TeamRacingCommsInteractive,
+  'TeamRacingCoveringInteractive': TeamRacingCoveringInteractive,
+  'TeamRacingStartInteractive': TeamRacingStartInteractive,
 };
 
 export function InteractivePlayer({ componentName, onComplete }: InteractivePlayerProps) {

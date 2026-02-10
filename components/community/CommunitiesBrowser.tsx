@@ -46,7 +46,6 @@ interface CommunitiesBrowserProps {
   toolbarOffset: number;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   searchQuery: string;
-  onCreateCommunity: () => void;
 }
 
 type TypeFilter = 'all' | CommunityType;
@@ -138,7 +137,6 @@ export function CommunitiesBrowser({
   toolbarOffset,
   onScroll,
   searchQuery,
-  onCreateCommunity,
 }: CommunitiesBrowserProps) {
   const router = useRouter();
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');

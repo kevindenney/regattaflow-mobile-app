@@ -101,8 +101,8 @@ maestro test .maestro/ --device "emulator-5554"
 
 | User | Email | Password | Type |
 |------|-------|----------|------|
-| Demo Sailor | demo-sailor@regattaflow.app | Demo123! | Sailor |
-| Demo Club | demo-club@regattaflow.io | Demo123! | Club |
+| Demo Sailor | demo-sailor@regattaflow.app | Set via `DEMO_PASSWORD` env var | Sailor |
+| Demo Club | demo-club@regattaflow.io | Set via `DEMO_PASSWORD` env var | Club |
 
 ## Writing Tests
 

@@ -7,6 +7,12 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+if (!DEMO_PASSWORD) {
+  console.error('❌ DEMO_PASSWORD environment variable is required');
+  process.exit(1);
+}
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -25,7 +31,7 @@ async function main() {
   // Sign in to get the actual user ID
   const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({
     email: 'demo-sailor@regattaflow.app',
-    password: 'Demo123!'
+    password: DEMO_PASSWORD
   });
 
   if (signInError) {

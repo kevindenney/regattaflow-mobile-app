@@ -36,7 +36,11 @@ const supabase = createClient(supabaseUrl, serviceKey, {
 
 // Constants
 const RHKYC_CLUB_ID = '15621949-7086-418a-8245-0f932e6edd70'; // UUID for clubs table
-const DEMO_PASSWORD = 'Demo123!';
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+if (!DEMO_PASSWORD) {
+  console.error('❌ DEMO_PASSWORD environment variable is required');
+  process.exit(1);
+}
 
 const log = {
   info: (msg, ...args) => console.log(`🐉 ${msg}`, ...args),
@@ -789,13 +793,14 @@ async function main() {
     console.log('╚════════════════════════════════════════════════════════════════╝');
     console.log('\n');
     
-    console.log('📧 Demo User Credentials:');
+    console.log('📧 Demo User Accounts:');
     console.log('─'.repeat(60));
-    console.log(`  Demo Sailor (Competitor)    demo-sailor@regattaflow.io    ${DEMO_PASSWORD}`);
-    console.log(`  Sarah Chen (Fleet Captain)  sarah.chen@sailing.com         sailing123`);
-    console.log(`  Demo Club (Race Committee)  demo-club@regattaflow.io      ${DEMO_PASSWORD}`);
-    console.log(`  Coach Anderson              coach.anderson@sailing.com     sailing123`);
+    console.log(`  Demo Sailor (Competitor)    demo-sailor@regattaflow.io`);
+    console.log(`  Sarah Chen (Fleet Captain)  sarah.chen@sailing.com`);
+    console.log(`  Demo Club (Race Committee)  demo-club@regattaflow.io`);
+    console.log(`  Coach Anderson              coach.anderson@sailing.com`);
     console.log('─'.repeat(60));
+    console.log('  Password: set via DEMO_PASSWORD env var');
     console.log('\n');
     
     console.log('🚀 What\'s Next:');

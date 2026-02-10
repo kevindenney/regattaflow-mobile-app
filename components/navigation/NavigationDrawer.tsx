@@ -41,7 +41,7 @@ const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
 interface NavigationDrawerProps {
   visible: boolean;
   onClose: () => void;
-  // Layout callbacks for onboarding tour spotlight
+  // Layout callbacks for spotlight effects
   onLearnItemLayout?: (layout: LayoutRectangle) => void;
   onVenueItemLayout?: (layout: LayoutRectangle) => void;
   onCoachingItemLayout?: (layout: LayoutRectangle) => void;
@@ -55,12 +55,12 @@ interface NavigationDrawerContentProps {
   onVenueItemLayout?: (layout: LayoutRectangle) => void;
   onCoachingItemLayout?: (layout: LayoutRectangle) => void;
   onPricingItemLayout?: (layout: LayoutRectangle) => void;
-  /** Ref to measure layout relative to (for iOS coordinate system fix in OnboardingTour) */
+  /** Ref to measure layout relative to (for iOS coordinate system fix) */
   measureRelativeTo?: React.RefObject<View>;
 }
 
 /**
- * Non-Modal drawer content for use inside OnboardingTour Modal.
+ * Non-Modal drawer content.
  * Renders the drawer panel with backdrop, without wrapping in a Modal.
  */
 export function NavigationDrawerContent({

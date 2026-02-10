@@ -8,6 +8,7 @@ import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { type TabConfig, getTabsForUserType } from '@/lib/navigation-config';
 import { triggerHaptic } from '@/lib/haptics';
 import { createLogger } from '@/lib/utils/logger';
+import { saveLastTab } from '@/lib/utils/lastTab';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,6 +61,13 @@ function TabLayoutInner() {
       router.replace('/(tabs)/events');
     }
   }, [userType, hasRedirected, personaLoading, router]);
+
+  // Persist the current tab for "remember last tab" on web
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      saveLastTab(pathname);
+    }
+  }, [pathname]);
 
   const isTabVisible = (name: string) => tabs.some(t => t.name === name);
   const findTab = (name: string) => tabs.find(tab => tab.name === name);
@@ -182,8 +190,8 @@ function TabLayoutInner() {
   const learnTab = findTab('learn');
   const reflectTab = findTab('reflect');
   const coursesTab = findTab('courses');
-  const venueTab = findTab('discuss');
-  const discoverTab = findTab('discover');
+  const followTab = findTab('follow');
+  const communityTab = findTab('community');
   const strategyTab = findTab('strategy');
   const mapTab = findTab('map');
   const clientsTab = findTab('clients');
@@ -277,42 +285,56 @@ function TabLayoutInner() {
                 : undefined,
           }}
         />
-        {/* Tab 2: Watch (discover) */}
+        {/* Tab 2: Follow (activity feed from followed sailors) */}
         <Tabs.Screen
-          name="discover"
+          name="follow"
           options={{
-            title: 'Watch',
+            title: followTab?.title ?? 'Follow',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={focused ? 'eye' : 'eye-outline'}
+                name={getIconName(followTab, focused, followTab?.iconFocused ?? 'people', followTab?.icon ?? 'people-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('discover')
+            tabBarButton: !isTabVisible('follow')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('discover', discoverTab?.title ?? 'Watch', findTab('discover'))
+                ? renderSailorTabButton('follow', followTab?.title ?? 'Follow', followTab)
                 : undefined,
           }}
         />
-        {/* Tab 3: Discuss */}
+        {/* Tab 3: Discuss (social hub — Discuss | Messages) */}
         <Tabs.Screen
-          name="discuss"
+          name="community"
           options={{
-            title: venueTab?.title ?? 'Discuss',
+            title: communityTab?.title ?? 'Discuss',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(venueTab, focused, venueTab?.iconFocused ?? 'chatbubbles', venueTab?.icon ?? 'chatbubbles-outline') as any}
+                name={getIconName(communityTab, focused, communityTab?.iconFocused ?? 'people', communityTab?.icon ?? 'people-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('discuss')
+            tabBarButton: !isTabVisible('community')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('discuss', venueTab?.title ?? 'Discuss', venueTab)
+                ? renderSailorTabButton('community', communityTab?.title ?? 'Discuss', communityTab)
                 : undefined,
+          }}
+        />
+        {/* Hidden: Legacy discover route (redirects to community) */}
+        <Tabs.Screen
+          name="discover"
+          options={{
+            href: null,
+          }}
+        />
+        {/* Hidden: Legacy discuss route (redirects to community) */}
+        <Tabs.Screen
+          name="discuss"
+          options={{
+            href: null,
           }}
         />
         {/* Tab 4: Learn */}

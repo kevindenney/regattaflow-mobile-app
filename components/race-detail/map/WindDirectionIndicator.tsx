@@ -55,12 +55,16 @@ export const WindDirectionIndicator: React.FC<WindDirectionIndicatorProps> = ({
   position = 'top-right',
   size = 80,
 }) => {
-  const windColor = getWindColor(speed);
-  const compassDirection = formatDirection(direction);
-  const windDescription = getWindDescription(speed);
+  // Guard against NaN/undefined values
+  const safeDirection = Number.isFinite(direction) ? direction : 0;
+  const safeSpeed = Number.isFinite(speed) ? speed : 0;
+
+  const windColor = getWindColor(safeSpeed);
+  const compassDirection = formatDirection(safeDirection);
+  const windDescription = getWindDescription(safeSpeed);
 
   // Calculate arrow rotation (arrow points in direction wind is GOING, so add 180)
-  const arrowRotation = (direction + 180) % 360;
+  const arrowRotation = (safeDirection + 180) % 360;
 
   const positionStyle = {
     'top-left': { top: 16, left: 16 },
@@ -132,7 +136,7 @@ export const WindDirectionIndicator: React.FC<WindDirectionIndicatorProps> = ({
           </Text>
         )}
         <Text style={styles.directionText}>
-          {compassDirection} ({Math.round(direction)})
+          ({compassDirection})
         </Text>
         <Text style={styles.descriptionText}>
           {windDescription}

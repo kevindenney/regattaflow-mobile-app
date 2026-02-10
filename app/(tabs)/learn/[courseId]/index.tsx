@@ -6,10 +6,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Platform,
-  
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +25,7 @@ import CourseCatalogService, { type Course as CatalogCourse } from '@/services/C
 import { useAuth } from '@/providers/AuthProvider';
 import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 export default function CourseDetailScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
@@ -385,111 +384,96 @@ export default function CourseDetailScreen() {
     // Check if user is authenticated - redirect to sign-in if not
     if (!user?.id) {
       if (Platform.OS === 'web') {
-        // On web, navigate to login page
         router.push('/login');
       } else {
-        // On native, show alert then navigate
-        Alert.alert(
+        showConfirm(
           'Sign In Required',
           'Please sign in to enroll in this course.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Sign In', onPress: () => router.push('/login') }
-          ]
+          () => router.push('/login'),
+          { confirmText: 'Sign In' }
         );
       }
       return;
     }
 
     if (!courseId || !course?.id) {
-      Alert.alert('Error', 'Course information is missing. Please try refreshing the page.');
+      showAlert('Error', 'Course information is missing. Please try refreshing the page.');
       return;
     }
-    
+
     // Use course.id (UUID) instead of courseId (might be slug)
     let actualCourseId = course.id;
-    
+
     // Check if course is catalog-only (not in database)
     // Even if marked as catalog-only, try to find it in database (maybe previous lookup timed out)
     if ((course as any)._catalogOnly) {
-      
-          // Try to find the course in database by slug (maybe previous lookup timed out)
-          const courseSlug = course.slug || courseId;
-          try {
-            const dbCourse = await Promise.race([
-              LearningService.getCourseBySlugForEnrollment(courseSlug),
-              new Promise<LearningCourse | null>((resolve) => 
-                setTimeout(() => resolve(null), 10000)
-              )
-            ]) as LearningCourse | null;
-        
+      const courseSlug = course.slug || courseId;
+      try {
+        const dbCourse = await Promise.race([
+          LearningService.getCourseBySlugForEnrollment(courseSlug),
+          new Promise<LearningCourse | null>((resolve) =>
+            setTimeout(() => resolve(null), 10000)
+          )
+        ]) as LearningCourse | null;
+
         if (dbCourse?.id) {
           actualCourseId = dbCourse.id;
-          // Update course state to remove catalog-only flag
           setCourse({ ...course, id: dbCourse.id, _catalogOnly: false } as any);
         } else {
-          // Course not found, but check if user is already enrolled (enrollment might exist even if course lookup fails)
-          const isAlreadyEnrolled = await Promise.race([
-            LearningService.isEnrolledBySlug(user.id, courseSlug),
-            new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
-          ]);
-          
-          if (isAlreadyEnrolled) {
-            setEnrolled(true);
-            await loadLessonProgress();
-            Alert.alert('Success', 'You are already enrolled in this course!');
-            return;
+          // Course not in DB — try to auto-create it from catalog data
+          const catalogCourse = CourseCatalogService.getCourseBySlug(courseSlug);
+          if (catalogCourse) {
+            try {
+              const createdId = await LearningService.ensureCourseInDatabase(catalogCourse);
+              if (createdId) {
+                actualCourseId = createdId;
+                setCourse({ ...course, id: createdId, _catalogOnly: false } as any);
+              } else {
+                showAlert('Course Not Available', 'Unable to set up this course. Please try again later.');
+                return;
+              }
+            } catch (createErr) {
+              console.error('[CourseDetail] Failed to create course in DB:', createErr);
+              showAlert('Error', 'Unable to set up this course. Please try again later.');
+              return;
+            }
           } else {
-            Alert.alert(
-              'Course Not Available', 
-              'This course has not been set up in the database yet. Please contact support or try again later.'
-            );
+            showAlert('Course Not Available', 'This course could not be found. Please try again later.');
             return;
           }
         }
       } catch (err) {
         console.error('[CourseDetail] Error looking up course in database:', err);
-        Alert.alert(
-          'Error', 
-          'Unable to verify course. Please try again later.'
-        );
+        showAlert('Error', 'Unable to verify course. Please try again later.');
         return;
       }
     }
-    
+
     // Validate that we have a UUID (not a catalog string ID)
     const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actualCourseId);
     if (!isValidUUID) {
-      
-      // Last resort: try to find course by slug
       const courseSlug = course.slug || courseId;
       try {
         const dbCourse = await Promise.race([
           LearningService.getCourseBySlug(courseSlug),
-          new Promise<LearningCourse | null>((resolve) => 
+          new Promise<LearningCourse | null>((resolve) =>
             setTimeout(() => resolve(null), 10000)
           )
         ]) as LearningCourse | null;
-        
+
         if (dbCourse?.id) {
           actualCourseId = dbCourse.id;
         } else {
-          Alert.alert(
-            'Course Not Available', 
-            'This course has not been set up in the database yet. Please contact support or try again later.'
-          );
+          showAlert('Course Not Available', 'This course has not been set up in the database yet. Please try again later.');
           return;
         }
       } catch (err) {
         console.error('[CourseDetail] Error looking up course:', err);
-        Alert.alert(
-          'Error', 
-          'Unable to verify course. Please try again later.'
-        );
+        showAlert('Error', 'Unable to verify course. Please try again later.');
         return;
       }
     }
-    
+
     try {
       setPurchasing(true);
 
@@ -499,44 +483,40 @@ export default function CourseDetailScreen() {
         if (success) {
           setEnrolled(true);
           await loadLessonProgress();
-          Alert.alert('Success!', 'You now have access to this course with your Pro subscription.');
+          showAlert('Success!', 'You now have access to this course with your Pro subscription.');
         } else {
-          Alert.alert('Error', 'Failed to enroll. Please try again.');
+          showAlert('Error', 'Failed to enroll. Please try again.');
         }
         return;
       }
 
       // Check if course requires payment
       if (course?.price_cents && course.price_cents > 0) {
-        // Initiate Stripe checkout
         const result = await coursePaymentService.purchaseCourse(
           user.id,
           actualCourseId
         );
 
         if (result.error) {
-          Alert.alert('Error', result.error);
+          showAlert('Error', result.error);
           return;
         }
 
         if (result.free) {
-          // Free course enrollment succeeded
           setEnrolled(true);
-          Alert.alert('Success', 'You are now enrolled in this course!');
+          showAlert('Success', 'You are now enrolled in this course!');
           return;
         }
 
         if (result.url) {
-          // Redirect to Stripe checkout
           if (Platform.OS === 'web') {
             window.location.href = result.url;
           } else {
-            // On native, open in browser
             const supported = await Linking.canOpenURL(result.url);
             if (supported) {
               await Linking.openURL(result.url);
             } else {
-              Alert.alert('Error', 'Unable to open checkout page');
+              showAlert('Error', 'Unable to open checkout page');
             }
           }
         }
@@ -545,11 +525,11 @@ export default function CourseDetailScreen() {
         await LearningService.enrollInCourse(user.id, actualCourseId);
         setEnrolled(true);
         await loadLessonProgress();
-        Alert.alert('Success', 'You are now enrolled in this free course!');
+        showAlert('Success', 'You are now enrolled in this free course!');
       }
     } catch (err) {
       console.error('[CourseDetail] Failed to enroll:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to process enrollment. Please try again.');
+      showAlert('Error', err instanceof Error ? err.message : 'Failed to process enrollment. Please try again.');
     } finally {
       setPurchasing(false);
     }
@@ -569,7 +549,7 @@ export default function CourseDetailScreen() {
             setEnrolled(true);
             // Clean URL
             window.history.replaceState({}, '', window.location.pathname);
-            Alert.alert('Success', 'Your purchase is complete! You now have access to this course.');
+            showAlert('Success', 'Your purchase is complete! You now have access to this course.');
           }
         } else if (purchaseStatus === 'cancelled') {
           // Clean URL

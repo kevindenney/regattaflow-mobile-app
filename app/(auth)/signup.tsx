@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { roleHome } from '@/lib/gates';
 import { useAuth } from '../../providers/AuthProvider';
-// Sample data is created in profile-setup.tsx or races.tsx fallback
 import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 // Helper to get user-friendly error messages for signup
 const getSignupErrorMessage = (error: any): string => {
@@ -39,24 +38,26 @@ export default function SignUp() {
   const [persona] = useState<PersonaRole>('sailor');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // Apple Sign In is available on web and iOS, not Android
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(Platform.OS === 'web');
 
   const isLoading = loading || authLoading;
 
   useEffect(() => {
-    // Check Apple Sign In availability on iOS
     if (Platform.OS === 'ios') {
       isAppleSignInAvailable().then(setAppleSignInAvailable);
     }
   }, []);
+
+  const getButtonText = () => {
+    if (isLoading) return 'Creating account...';
+    return 'Create Account';
+  };
 
   const handleSignUp = async () => {
     setErrorMessage(null);
     const trimmedEmail = email.trim();
     const trimmedUsername = username.trim();
 
-    // Validate email
     if (!trimmedEmail) {
       setErrorMessage('Please enter your email address.');
       return;
@@ -68,18 +69,16 @@ export default function SignUp() {
       return;
     }
 
-    // Validate username
     if (!trimmedUsername) {
-      setErrorMessage('Please choose a username to continue.');
+      setErrorMessage('Please enter your full name.');
       return;
     }
 
     if (trimmedUsername.length < 3) {
-      setErrorMessage('Username must be at least 3 characters long.');
+      setErrorMessage('Name must be at least 3 characters long.');
       return;
     }
 
-    // Validate password
     if (password.length < 6) {
       setErrorMessage('Password must be at least 6 characters long.');
       return;
@@ -89,25 +88,19 @@ export default function SignUp() {
     try {
       const result = await signUp(trimmedEmail, trimmedUsername, password, persona);
 
-      // Route to appropriate onboarding based on persona
-      // Sailors skip onboarding and go directly to the main app
-      // Sample data will be created by races.tsx fallback if needed
       if (persona === 'sailor') {
-        router.replace('/(tabs)/races');
+        // All new users go through name-only onboarding, then get 14-day Pro trial
+        router.replace('/onboarding/profile/name-photo');
       } else if (persona === 'coach') {
         router.replace('/(auth)/coach-onboarding-welcome');
       } else if (persona === 'club') {
         router.replace('/(auth)/club-onboarding-chat');
-      } else {
-        router.replace(roleHome(persona));
       }
     } catch (error: any) {
       console.error('[Signup] Account creation error:', error);
       const friendlyMessage = getSignupErrorMessage(error);
       setErrorMessage(friendlyMessage);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Signup error', friendlyMessage);
-      }
+      showAlert('Signup error', friendlyMessage);
     } finally {
       setLoading(false);
     }
@@ -116,32 +109,24 @@ export default function SignUp() {
   const handleGoogleSignUp = async () => {
     setErrorMessage(null);
     try {
-      // Pass the selected persona to Google sign-in
       await signInWithGoogle(persona);
-      // After Google auth, user will be redirected to callback which handles routing
     } catch (error: any) {
       console.error('[Signup] Google sign-up error:', error);
       const friendlyMessage = getSignupErrorMessage(error);
       setErrorMessage(friendlyMessage);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Google sign-up failed', friendlyMessage);
-      }
+      showAlert('Google sign-up failed', friendlyMessage);
     }
   };
 
   const handleAppleSignUp = async () => {
     setErrorMessage(null);
     try {
-      // Pass the selected persona to Apple sign-in
       await signInWithApple(persona);
-      // After Apple auth, user will be redirected to callback which handles routing
     } catch (error: any) {
       console.error('[Signup] Apple sign-up error:', error);
       const friendlyMessage = getSignupErrorMessage(error);
       setErrorMessage(friendlyMessage);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Apple sign-up failed', friendlyMessage);
-      }
+      showAlert('Apple sign-up failed', friendlyMessage);
     }
   };
 
@@ -168,122 +153,121 @@ export default function SignUp() {
           </View>
 
           <Text style={styles.title}>Create your account</Text>
-        <Text style={styles.subtitle}>Start your sailing journey with RegattaFlow</Text>
+          <Text style={styles.subtitle}>Start with 14 days of full Pro access — no card required</Text>
 
-        {/* Error Message Banner */}
-        {errorMessage && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{errorMessage}</Text>
-            <TouchableOpacity onPress={() => setErrorMessage(null)} style={styles.errorDismiss}>
-              <Text style={styles.errorDismissText}>✕</Text>
+          {/* Error Message Banner */}
+          {errorMessage && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+              <TouchableOpacity onPress={() => setErrorMessage(null)} style={styles.errorDismiss}>
+                <Text style={styles.errorDismissText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Social Sign-up Options (above form) */}
+          <View style={styles.socialContainer}>
+            <TouchableOpacity
+              style={[styles.socialButton, styles.googleButton, isLoading && styles.buttonDisabled]}
+              onPress={handleGoogleSignUp}
+              disabled={isLoading}
+            >
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.socialButtonText}>Continue with Google</Text>
             </TouchableOpacity>
+
+            {appleSignInAvailable && (
+              Platform.OS === 'ios' ? (
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                  cornerRadius={10}
+                  style={[styles.appleNativeButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleAppleSignUp}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={[styles.socialButton, styles.appleButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleAppleSignUp}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.appleIcon}>{'\uF8FF'}</Text>
+                  <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
+                </TouchableOpacity>
+              )
+            )}
           </View>
-        )}
 
-        {/* Form Fields */}
-        <Text style={styles.sectionLabel}>Full Name *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Your name"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="words"
-          autoCorrect={false}
-          textContentType="name"
-          editable={!isLoading}
-        />
+          {/* Divider */}
+          <View style={styles.dividerContainer}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>or sign up with email</Text>
+            <View style={styles.divider} />
+          </View>
 
-        <Text style={styles.sectionLabel}>Email *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="your.email@example.com"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          editable={!isLoading}
-        />
+          {/* Form Fields */}
+          <Text style={styles.sectionLabel}>Full Name *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Your name"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="words"
+            autoCorrect={false}
+            textContentType="name"
+            editable={!isLoading}
+          />
 
-        <Text style={styles.sectionLabel}>Password *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Minimum 6 characters"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          textContentType="newPassword"
-          editable={!isLoading}
-        />
+          <Text style={styles.sectionLabel}>Email *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="your.email@example.com"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            editable={!isLoading}
+          />
 
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
-          onPress={handleSignUp}
-          disabled={isLoading}
-        >
-          <Text style={styles.primaryButtonText}>
-            {isLoading ? 'Creating account…' : 'Create Account'}
-          </Text>
-        </TouchableOpacity>
+          <Text style={styles.sectionLabel}>Password *</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Minimum 6 characters"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            textContentType="newPassword"
+            editable={!isLoading}
+          />
 
-        {/* Divider */}
-        <View style={styles.dividerContainer}>
-          <View style={styles.divider} />
-          <Text style={styles.dividerText}>or continue with</Text>
-          <View style={styles.divider} />
-        </View>
-
-        {/* Social Sign-up Options */}
-        <View style={styles.socialContainer}>
+          {/* Submit Button */}
           <TouchableOpacity
-            style={[styles.socialButton, styles.googleButton, isLoading && styles.buttonDisabled]}
-            onPress={handleGoogleSignUp}
+            style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
+            onPress={handleSignUp}
             disabled={isLoading}
           >
-            <Text style={styles.googleIcon}>G</Text>
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
+            <Text style={styles.primaryButtonText}>
+              {getButtonText()}
+            </Text>
           </TouchableOpacity>
 
-          {/* Apple Sign-in - iOS native button or web fallback, hidden on Android */}
-          {appleSignInAvailable && (
-            Platform.OS === 'ios' ? (
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
-                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                cornerRadius={10}
-                style={[styles.appleNativeButton, isLoading && styles.buttonDisabled]}
-                onPress={handleAppleSignUp}
-              />
-            ) : (
-              <TouchableOpacity
-                style={[styles.socialButton, styles.appleButton, isLoading && styles.buttonDisabled]}
-                onPress={handleAppleSignUp}
-                disabled={isLoading}
-              >
-                <Text style={styles.appleIcon}></Text>
-                <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
-              </TouchableOpacity>
-            )
-          )}
-        </View>
+          {/* Terms */}
+          <Text style={styles.termsText}>
+            By signing up, you agree to our{' '}
+            <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
+            <Text style={styles.termsLink}>Privacy Policy</Text>
+          </Text>
 
-        {/* Terms */}
-        <Text style={styles.termsText}>
-          By signing up, you agree to our{' '}
-          <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
-          <Text style={styles.termsLink}>Privacy Policy</Text>
-        </Text>
-
-        {/* Login Link */}
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => router.push('/(auth)/login')}
-          disabled={isLoading}
-        >
-          <Text style={styles.linkText}>Already have an account? Sign in</Text>
-        </TouchableOpacity>
+          {/* Login Link */}
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => router.push('/(auth)/login')}
+            disabled={isLoading}
+          >
+            <Text style={styles.linkText}>Already have an account? Sign in</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -297,10 +281,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 48,
+    paddingVertical: 36,
   },
   content: {
     width: '100%',
@@ -322,23 +305,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9',
   },
   title: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '700',
     color: '#0F172A',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
     fontSize: 15,
     color: '#475569',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     lineHeight: 22,
   },
-  
+
   // Social Buttons
   socialContainer: {
-    marginBottom: 16,
+    marginBottom: 4,
   },
   socialButton: {
     flexDirection: 'row',
@@ -381,13 +364,13 @@ const styles = StyleSheet.create({
   appleButtonText: {
     color: '#FFFFFF',
   },
-  
+
   // Divider
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
+    marginTop: 12,
+    marginBottom: 16,
   },
   divider: {
     flex: 1,
@@ -399,7 +382,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#94A3B8',
   },
-  
+
   // Form
   sectionLabel: {
     fontSize: 14,
@@ -416,7 +399,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontSize: 16,
   },
-  
+
   // Buttons
   primaryButton: {
     backgroundColor: '#2563EB',
@@ -433,20 +416,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+
   // Terms
   termsText: {
     fontSize: 12,
     color: '#64748B',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 12,
     lineHeight: 18,
   },
   termsLink: {
     color: '#2563EB',
     fontWeight: '500',
   },
-  
+
   // Link
   linkButton: {
     marginTop: 20,
@@ -457,7 +440,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  
+
   // Error Banner
   errorBanner: {
     backgroundColor: '#FEF2F2',

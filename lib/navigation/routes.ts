@@ -47,7 +47,6 @@ export type StaticRoute =
   | '/settings/edit-profile'
   | '/settings/change-password'
   | '/settings/notifications'
-  | '/settings/language'
   | '/settings/delete-account'
   | '/boats'
   | '/coaches'

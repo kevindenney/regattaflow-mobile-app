@@ -25,4 +25,4 @@ timeouts:
 env:
   BASE_URL: "http://localhost:8081"
   DEMO_USER_EMAIL: "demo-sailor@regattaflow.app"
-  DEMO_USER_PASSWORD: "Demo123!"
+  DEMO_USER_PASSWORD: ${DEMO_PASSWORD}

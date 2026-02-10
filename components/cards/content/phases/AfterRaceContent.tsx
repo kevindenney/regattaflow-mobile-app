@@ -17,9 +17,10 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, Animated, Platform, UIManager, Modal, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Sparkles, X } from 'lucide-react-native';
+import { Sparkles, X, CheckCircle2 } from 'lucide-react-native';
 
 import { CardRaceData } from '../../types';
+import { TileGrid } from '../TileGrid';
 import { useRaceAnalysisState } from '@/hooks/useRaceAnalysisState';
 import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
 import { useEquipmentFlow } from '@/hooks/useEquipmentFlow';
@@ -44,6 +45,7 @@ import { PerformanceReviewTile } from '@/components/races/review/PerformanceRevi
 import { LearningCaptureTile } from '@/components/races/review/LearningCaptureTile';
 import { CoachFeedbackTile } from '@/components/races/review/CoachFeedbackTile';
 import { RaceSummaryTile } from '@/components/races/review/RaceSummaryTile';
+import { EducationalChecklistSheet } from '@/components/races/review/EducationalChecklistSheet';
 import {
   POST_RACE_REVIEW_CONFIG,
   LEARNING_CAPTURE_CONFIG,
@@ -99,6 +101,22 @@ export function AfterRaceContent({
   const userId = propsUserId || user?.id;
   const router = useRouter();
 
+  // Extract race location coordinates (available via useEnrichedRaces → venueCoordinates)
+  const raceCoordinates = useMemo(() => {
+    const vc = race.venueCoordinates as { lat: number; lng: number } | undefined;
+    if (vc && typeof vc.lat === 'number' && typeof vc.lng === 'number') return vc;
+    // Fallback: top-level latitude/longitude columns on regattas table
+    const lat = race.latitude as number | undefined;
+    const lng = race.longitude as number | undefined;
+    if (typeof lat === 'number' && typeof lng === 'number') return { lat, lng };
+    // Fallback: check metadata sources
+    const meta = race.metadata as Record<string, any> | undefined;
+    if (meta?.venue_lat && meta?.venue_lng) return { lat: meta.venue_lat, lng: meta.venue_lng };
+    if (meta?.venue_coordinates?.lat && meta?.venue_coordinates?.lng) return meta.venue_coordinates;
+    if (meta?.start_coordinates?.lat && meta?.start_coordinates?.lng) return meta.start_coordinates;
+    return null;
+  }, [race.venueCoordinates, race.metadata, race.latitude, race.longitude]);
+
   // Analysis state and data
   const { state: analysisState, refetch: refetchState } = useRaceAnalysisState(race.id, race.date, userId);
   const { analysisData, refetch: refetchData } = useRaceAnalysisData(race.id, userId);
@@ -137,6 +155,10 @@ export function AfterRaceContent({
 
   // Share insights modal
   const [showShareModal, setShowShareModal] = useState(false);
+
+  // Educational checklist sheets
+  const [showPerformanceSheet, setShowPerformanceSheet] = useState(false);
+  const [showLearningSheet, setShowLearningSheet] = useState(false);
 
   // Content status for share tile (loaded from Supabase)
   const [contentStatus, setContentStatus] = useState({ hasPrepNotes: false, hasPostRaceNotes: false });
@@ -179,7 +201,6 @@ export function AfterRaceContent({
 
   // Track when AI analysis is newly generated (for visual highlight)
   const [isAIAnalysisNew, setIsAIAnalysisNew] = useState(false);
-  const aiAnalysisHighlightAnim = useRef(new Animated.Value(0)).current;
 
   // Toast notification for AI analysis completion
   const [showAIToast, setShowAIToast] = useState(false);
@@ -208,24 +229,10 @@ export function AfterRaceContent({
       }),
     ]).start(() => setShowAIToast(false));
 
-    // Trigger highlight animation (pulse effect)
+    // Mark as new for tile badge
     setIsAIAnalysisNew(true);
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(aiAnalysisHighlightAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-        Animated.timing(aiAnalysisHighlightAnim, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-      ]),
-      { iterations: 3 }
-    ).start(() => setIsAIAnalysisNew(false));
-  }, [aiToastOpacity, aiAnalysisHighlightAnim]);
+    setTimeout(() => setIsAIAnalysisNew(false), 6000);
+  }, [aiToastOpacity]);
 
   // Trigger AI analysis generation
   const triggerAnalysis = useCallback(async () => {
@@ -318,6 +325,15 @@ export function AfterRaceContent({
     items: LEARNING_CAPTURE_CONFIG.items,
   });
 
+  // Compute next uncompleted item labels for tiles
+  const nextPerformanceItem = useMemo(() => {
+    return POST_RACE_REVIEW_CONFIG.items.find(item => !isPerformanceItemCompleted(item.id));
+  }, [isPerformanceItemCompleted]);
+
+  const nextLearningItem = useMemo(() => {
+    return LEARNING_CAPTURE_CONFIG.items.find(item => !isLearningItemCompleted(item.id));
+  }, [isLearningItemCompleted]);
+
   // ==========================================================================
   // RENDER
   // ==========================================================================
@@ -330,188 +346,237 @@ export function AfterRaceContent({
   const equipmentIssueCount = currentRaceIssues.length + carryoverIssues.length;
   const canGenerateAI = hasResult && debriefComplete;
 
+  // Section completion states
+  const debriefSectionComplete = debriefComplete;
+  const reviewSectionComplete = !!hasAIAnalysis;
+  const focusSectionComplete = hasFocusSet;
+
   return (
     <View style={styles.container}>
-      {/* Section 1 & 2: Race Result + Debrief tiles side by side */}
-      <View style={styles.tileRow}>
-        <RaceResultTile
-          position={analysisData?.selfReportedPosition}
-          fleetSize={analysisData?.selfReportedFleetSize}
-          raceCount={analysisData?.raceCount}
-          userId={userId}
-          raceId={race.id}
-          onPress={() => setShowResultSheet(true)}
-        />
-        <DebriefTile
-          answeredCount={debriefProgress.answeredCount}
-          totalQuestions={debriefProgress.total}
-          isComplete={debriefComplete}
-          onPress={() => setShowInterviewModal(true)}
-        />
-      </View>
-      {/* Coach annotation for result - below the tile row */}
-      {coachAnnotations.find(a => a.field === 'result') && (
-        <Marginalia
-          author="Coach"
-          comment={coachAnnotations.find(a => a.field === 'result')!.comment}
-          isNew={!coachAnnotations.find(a => a.field === 'result')!.isRead}
-          variant="compact"
-        />
-      )}
 
-      {/* Row 2: AI Analysis + Equipment tiles */}
-      <View style={styles.tileRow}>
-        <AIAnalysisTile
-          hasAnalysis={!!hasAIAnalysis}
-          canGenerate={canGenerateAI}
-          isGenerating={isGeneratingAnalysis}
-          hasError={!!analysisError}
-          insightText={analysisData?.focusNextRace}
-          isNew={isAIAnalysisNew}
-          onPress={
-            hasAIAnalysis
-              ? () => {} // already generated — tile is informational
-              : analysisError
-                ? triggerAnalysis
-                : canGenerateAI && !isGeneratingAnalysis
-                  ? triggerAnalysis
-                  : () => {}
-          }
-        />
-        <EquipmentTile
-          issueCount={equipmentIssueCount}
-          issues={[...currentRaceIssues, ...carryoverIssues]}
-          hasPendingNote={false}
-          onPress={() => setShowEquipmentSheet(true)}
-        />
-      </View>
-
-      {/* AI Analysis insights card - shown below tiles when analysis complete */}
-      {hasAIAnalysis && (
-        <Animated.View style={[
-          isAIAnalysisNew && styles.aiAnalysisHighlight,
-          {
-            borderColor: aiAnalysisHighlightAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: ['transparent', IOS_COLORS.purple],
-            }),
-          },
-        ]}>
-          <View style={[styles.analysisCard, isAIAnalysisNew && styles.analysisCardHighlight]}>
-            {analysisData?.focusNextRace && (
-              <View style={styles.analysisItem}>
-                <Text style={styles.analysisLabel}>Focus for next race</Text>
-                <Text style={styles.analysisValue} numberOfLines={2}>
-                  {analysisData.focusNextRace}
-                </Text>
-              </View>
-            )}
-            {analysisData?.strengthIdentified && (
-              <View style={styles.analysisItem}>
-                <Text style={styles.analysisLabel}>Strength</Text>
-                <Text style={styles.analysisValue} numberOfLines={2}>
-                  {analysisData.strengthIdentified}
-                </Text>
-              </View>
+      {/* ================================================================ */}
+      {/* SECTION 1: LOG YOUR RACE                                        */}
+      {/* ================================================================ */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>Log Your Race</Text>
+            {hasResult && (
+              <CheckCircle2 size={16} color={IOS_COLORS.green} />
             )}
           </View>
-        </Animated.View>
-      )}
-
-      {/* GPS Track - Large 2x2 tile */}
-      {isExpanded && analysisData?.timerSessionId && (
-        <GPSTrackTile
-          raceId={race.id}
-          userId={userId}
-          timerSessionId={analysisData.timerSessionId}
-          onPress={() => {
-            if (analysisData.timerSessionId) {
-              router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
-            }
-          }}
-        />
-      )}
-
-      {/* Row 3: Next Race Focus + Share Insights tiles */}
-      {isExpanded && (
-        <View style={styles.tileRow}>
-          <NextRaceFocusTile
-            hasFocusSet={hasFocusSet}
-            hasPreviousFocus={hasPreviousFocus}
-            hasEvaluated={false}
-            focusText={intentFromThisRace?.focusText}
-            aiSuggestedFocus={analysisData?.focusNextRace}
-            previousFocusText={activeIntent?.focusText}
-            onPress={() => setShowFocusModal(true)}
+          <Text style={styles.sectionSubtitle}>Record results and equipment status</Text>
+        </View>
+        <TileGrid>
+          <RaceResultTile
+            position={analysisData?.selfReportedPosition}
+            fleetSize={analysisData?.selfReportedFleetSize}
+            raceCount={analysisData?.raceCount}
+            userId={userId}
+            raceId={race.id}
+            onPress={() => setShowResultSheet(true)}
           />
-          <ShareInsightsTile
-            hasPrepNotes={contentStatus.hasPrepNotes}
-            hasPostRaceNotes={contentStatus.hasPostRaceNotes}
+          <EquipmentTile
+            issueCount={equipmentIssueCount}
+            issues={[...currentRaceIssues, ...carryoverIssues]}
+            hasPendingNote={false}
+            onPress={() => setShowEquipmentSheet(true)}
+          />
+        </TileGrid>
+        {coachAnnotations.find(a => a.field === 'result') && (
+          <Marginalia
+            author="Coach"
+            comment={coachAnnotations.find(a => a.field === 'result')!.comment}
+            isNew={!coachAnnotations.find(a => a.field === 'result')!.isRead}
+            variant="compact"
+          />
+        )}
+      </View>
+
+      {/* ================================================================ */}
+      {/* SECTION 2: DEBRIEF                                              */}
+      {/* ================================================================ */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>Debrief</Text>
+            {debriefSectionComplete && (
+              <CheckCircle2 size={16} color={IOS_COLORS.green} />
+            )}
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            {debriefComplete
+              ? 'Debrief complete'
+              : `Reflect on what happened — ${debriefProgress.answeredCount}/${debriefProgress.total} answered`}
+          </Text>
+        </View>
+        <TileGrid>
+          <DebriefTile
+            answeredCount={debriefProgress.answeredCount}
+            totalQuestions={debriefProgress.total}
+            isComplete={debriefComplete}
+            onPress={() => setShowInterviewModal(true)}
+          />
+          {/* Performance + Learning guide tiles (pre-debrief aids) */}
+          {!debriefComplete ? (
+            <PerformanceReviewTile
+              completedCount={performanceCompletedCount}
+              totalCount={performanceTotalCount}
+              isComplete={performanceCompletedCount === performanceTotalCount && performanceTotalCount > 0}
+              nextItemLabel={nextPerformanceItem?.label}
+              onPress={() => setShowPerformanceSheet(true)}
+            />
+          ) : (
+            <LearningCaptureTile
+              completedCount={learningCompletedCount}
+              totalCount={learningTotalCount}
+              isComplete={learningCompletedCount === learningTotalCount && learningTotalCount > 0}
+              nextItemLabel={nextLearningItem?.label}
+              onPress={() => setShowLearningSheet(true)}
+            />
+          )}
+        </TileGrid>
+        {/* GPS Track as debrief visual aid — tile self-manages visibility via internal DB lookup */}
+        {isExpanded && (
+          <GPSTrackTile
+            raceId={race.id}
+            userId={userId}
+            timerSessionId={analysisData?.timerSessionId}
+            raceLatitude={raceCoordinates?.lat}
+            raceLongitude={raceCoordinates?.lng}
+            raceVenue={race.venue}
+            onPress={() => {
+              if (analysisData?.timerSessionId) {
+                router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
+              }
+            }}
+          />
+        )}
+      </View>
+
+      {/* ================================================================ */}
+      {/* SECTION 3: RACE REVIEW                                          */}
+      {/* ================================================================ */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>Race Review</Text>
+            {reviewSectionComplete && (
+              <CheckCircle2 size={16} color={IOS_COLORS.green} />
+            )}
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            {hasAIAnalysis
+              ? 'AI insights and race summary'
+              : canGenerateAI
+                ? 'Generating AI analysis...'
+                : 'Complete debrief to unlock AI analysis'}
+          </Text>
+        </View>
+        {/* AI Analysis tile — full width when complete, small when locked */}
+        {hasAIAnalysis ? (
+          <AIAnalysisTile
+            hasAnalysis={true}
+            canGenerate={canGenerateAI}
+            isGenerating={false}
+            hasError={false}
+            insightText={analysisData?.focusNextRace}
+            strengthText={analysisData?.strengthIdentified}
+            isNew={isAIAnalysisNew}
+            onPress={() => {
+              if (analysisData?.timerSessionId) {
+                router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
+              }
+            }}
+          />
+        ) : (
+          <TileGrid>
+            <AIAnalysisTile
+              hasAnalysis={false}
+              canGenerate={canGenerateAI}
+              isGenerating={isGeneratingAnalysis}
+              hasError={!!analysisError}
+              insightText={analysisData?.focusNextRace}
+              isNew={isAIAnalysisNew}
+              onPress={
+                analysisError
+                  ? triggerAnalysis
+                  : canGenerateAI && !isGeneratingAnalysis
+                    ? triggerAnalysis
+                    : () => {}
+              }
+            />
+          </TileGrid>
+        )}
+        {/* Race Summary tile */}
+        {isExpanded && (
+          <RaceSummaryTile
+            raceDate={race.date}
+            resultText={resultText || undefined}
+            hasResult={!!hasResult}
+            wind={race.wind}
+            tide={race.tide}
             keyLearning={analysisData?.keyLearning}
-            strengthIdentified={analysisData?.strengthIdentified}
             debriefComplete={debriefComplete}
-            onPress={() => setShowShareModal(true)}
-          />
-        </View>
-      )}
-
-      {/* Row 4: Performance Review + Learning Capture tiles (hidden when debrief complete) */}
-      {isExpanded && !debriefComplete && (
-        <View style={styles.tileRow}>
-          <PerformanceReviewTile
-            completedCount={performanceCompletedCount}
-            totalCount={performanceTotalCount}
-            isComplete={performanceCompletedCount === performanceTotalCount && performanceTotalCount > 0}
+            hasAIAnalysis={!!hasAIAnalysis}
             onPress={() => {
-              // Toggle all performance items or navigate to checklist
-              POST_RACE_REVIEW_CONFIG.items.forEach((item) => {
-                if (!isPerformanceItemCompleted(item.id)) {
-                  togglePerformanceItem(item.id);
-                }
-              });
+              if (analysisData?.timerSessionId) {
+                router.push(`/(tabs)/race-session/${analysisData.timerSessionId}` as any);
+              }
             }}
           />
-          <LearningCaptureTile
-            completedCount={learningCompletedCount}
-            totalCount={learningTotalCount}
-            isComplete={learningCompletedCount === learningTotalCount && learningTotalCount > 0}
-            onPress={() => {
-              // Toggle all learning items or navigate to checklist
-              LEARNING_CAPTURE_CONFIG.items.forEach((item) => {
-                if (!isLearningItemCompleted(item.id)) {
-                  toggleLearningItem(item.id);
-                }
-              });
-            }}
-          />
-        </View>
-      )}
+        )}
+        {/* Coach Feedback */}
+        {coachAnnotations.find(a => a.field === 'general') && (
+          <TileGrid>
+            <CoachFeedbackTile
+              hasFeedback={true}
+              isNew={!coachAnnotations.find(a => a.field === 'general')!.isRead}
+              feedbackPreview={coachAnnotations.find(a => a.field === 'general')!.comment}
+              onPress={() => {}}
+            />
+          </TileGrid>
+        )}
+      </View>
 
-      {/* Row 5: Coach Feedback tile (paired with nothing — single tile row) */}
-      {coachAnnotations.find(a => a.field === 'general') && (
-        <View style={styles.tileRow}>
-          <CoachFeedbackTile
-            hasFeedback={true}
-            isNew={!coachAnnotations.find(a => a.field === 'general')!.isRead}
-            feedbackPreview={coachAnnotations.find(a => a.field === 'general')!.comment}
-            onPress={() => {}}
-          />
-        </View>
-      )}
-
-      {/* Race Summary - Large 2x2 tile */}
+      {/* ================================================================ */}
+      {/* SECTION 4: NEXT RACE FOCUS                                      */}
+      {/* ================================================================ */}
       {isExpanded && (
-        <RaceSummaryTile
-          raceDate={race.date}
-          resultText={resultText || undefined}
-          hasResult={!!hasResult}
-          wind={race.wind}
-          tide={race.tide}
-          keyLearning={analysisData?.keyLearning}
-          debriefComplete={debriefComplete}
-          hasAIAnalysis={!!hasAIAnalysis}
-          onPress={() => {}}
-        />
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Next Race Focus</Text>
+              {focusSectionComplete && (
+                <CheckCircle2 size={16} color={IOS_COLORS.green} />
+              )}
+            </View>
+            <Text style={styles.sectionSubtitle}>
+              {hasFocusSet
+                ? 'Focus set — ready for next race'
+                : 'Set your intent for deliberate improvement'}
+            </Text>
+          </View>
+          <TileGrid>
+            <NextRaceFocusTile
+              hasFocusSet={hasFocusSet}
+              hasPreviousFocus={hasPreviousFocus}
+              hasEvaluated={false}
+              focusText={intentFromThisRace?.focusText}
+              aiSuggestedFocus={analysisData?.focusNextRace}
+              previousFocusText={activeIntent?.focusText}
+              onPress={() => setShowFocusModal(true)}
+            />
+            <ShareInsightsTile
+              hasPrepNotes={contentStatus.hasPrepNotes}
+              hasPostRaceNotes={contentStatus.hasPostRaceNotes}
+              keyLearning={analysisData?.keyLearning}
+              strengthIdentified={analysisData?.strengthIdentified}
+              debriefComplete={debriefComplete}
+              onPress={() => setShowShareModal(true)}
+            />
+          </TileGrid>
+        </View>
       )}
 
       {/* Equipment Issues Sheet */}
@@ -643,6 +708,34 @@ export function AfterRaceContent({
         </View>
       </Modal>
 
+      {/* Performance Review Checklist Sheet */}
+      <EducationalChecklistSheet
+        isOpen={showPerformanceSheet}
+        onClose={() => setShowPerformanceSheet(false)}
+        title="Performance Review"
+        subtitle="Review each aspect of your race to identify areas for improvement. Tap items to expand and learn more."
+        accentColor="#007AFF"
+        items={POST_RACE_REVIEW_CONFIG.items}
+        isItemCompleted={isPerformanceItemCompleted}
+        toggleItem={togglePerformanceItem}
+        completedCount={performanceCompletedCount}
+        totalCount={performanceTotalCount}
+      />
+
+      {/* Learning Capture Checklist Sheet */}
+      <EducationalChecklistSheet
+        isOpen={showLearningSheet}
+        onClose={() => setShowLearningSheet(false)}
+        title="Learning & Improvement"
+        subtitle="Capture your key learnings while they're fresh. Tap items to expand and see guidance."
+        accentColor="#AF52DE"
+        items={LEARNING_CAPTURE_CONFIG.items}
+        isItemCompleted={isLearningItemCompleted}
+        toggleItem={toggleLearningItem}
+        completedCount={learningCompletedCount}
+        totalCount={learningTotalCount}
+      />
+
       {/* Toast notification for AI Analysis completion */}
       {showAIToast && (
         <Animated.View style={[styles.aiToast, { opacity: aiToastOpacity }]}>
@@ -659,47 +752,36 @@ export function AfterRaceContent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: 16,
+    gap: 24,
+  },
+  // Section grouping
+  section: {
+    gap: 12,
+  },
+  sectionHeader: {
+    gap: 2,
+    paddingBottom: 4,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    color: IOS_COLORS.gray,
+    lineHeight: 18,
   },
   tileRow: {
     flexDirection: 'row',
     gap: 12,
-  },
-
-  // Analysis card (AI insights below tiles)
-  analysisCard: {
-    backgroundColor: `${IOS_COLORS.purple}10`,
-    borderRadius: 12,
-    padding: 14,
-    borderLeftWidth: 3,
-    borderLeftColor: IOS_COLORS.purple,
-    gap: 12,
-  },
-  analysisCardHighlight: {
-    backgroundColor: `${IOS_COLORS.purple}20`,
-    borderLeftWidth: 4,
-  },
-  analysisItem: {
-    gap: 4,
-  },
-  analysisLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: IOS_COLORS.purple,
-    textTransform: 'uppercase',
-  },
-  analysisValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: IOS_COLORS.label,
-    lineHeight: 20,
-  },
-  aiAnalysisHighlight: {
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 12,
-    marginHorizontal: -12,
-    paddingHorizontal: 12,
   },
 
   // Focus modal

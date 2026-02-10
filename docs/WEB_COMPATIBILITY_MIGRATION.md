@@ -183,7 +183,6 @@ Features used rarely or primarily by developers.
 
 | File | Alerts | Impact | Status |
 |------|--------|--------|--------|
-| `app/(auth)/dev-login.tsx` | 5 | Dev login | ⬜ Pending |
 | `components/developer/DeveloperDocumentUploader.tsx` | 4 | Dev upload | ⬜ Pending |
 
 **Tier 5 Total: ~56 alerts across 9 files**

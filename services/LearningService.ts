@@ -17,6 +17,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import type { Course as CatalogCourse } from './CourseCatalogService';
 
 const logger = createLogger('LearningService');
 
@@ -648,6 +649,109 @@ export class LearningService {
   // ==========================================
   // ENROLLMENTS
   // ==========================================
+
+  /**
+   * Ensure a catalog-only course exists in the database.
+   * Creates the course, modules, and lessons from the JSON catalog if not already present.
+   * Returns the course UUID on success, or null on failure.
+   */
+  static async ensureCourseInDatabase(catalogCourse: CatalogCourse): Promise<string | null> {
+    try {
+      // Check if it already exists by slug
+      const { data: existing } = await supabase
+        .from('learning_courses')
+        .select('id')
+        .eq('slug', catalogCourse.slug)
+        .maybeSingle();
+
+      if (existing?.id) {
+        logger.info(`Course "${catalogCourse.slug}" already exists in DB: ${existing.id}`);
+        return existing.id;
+      }
+
+      // Map catalog level to DB level
+      const level = (catalogCourse.level || 'beginner').toLowerCase() as 'beginner' | 'intermediate' | 'advanced';
+
+      // Insert the course
+      const { data: courseRow, error: courseError } = await supabase
+        .from('learning_courses')
+        .insert({
+          slug: catalogCourse.slug,
+          title: catalogCourse.title,
+          description: catalogCourse.description || null,
+          long_description: catalogCourse.longDescription || null,
+          level,
+          duration_minutes: catalogCourse.duration?.totalMinutes || 0,
+          price_cents: catalogCourse.price?.cents ?? 0,
+          is_published: true,
+          is_featured: false,
+          order_index: parseInt(catalogCourse.id.replace('course-', ''), 10) || 99,
+          requires_subscription: (catalogCourse.price?.tier || 'free') !== 'free',
+          min_subscription_tier: catalogCourse.price?.tier || 'free',
+          instructor_name: catalogCourse.instructor?.name || null,
+          instructor_bio: catalogCourse.instructor?.bio || null,
+          learning_objectives: catalogCourse.whatYouLearn || [],
+        })
+        .select('id')
+        .single();
+
+      if (courseError || !courseRow?.id) {
+        logger.error('Failed to insert course:', courseError);
+        return null;
+      }
+
+      const courseId = courseRow.id;
+      logger.info(`Created course "${catalogCourse.slug}" with id ${courseId}`);
+
+      // Insert modules and lessons
+      if (catalogCourse.modules && catalogCourse.modules.length > 0) {
+        for (const mod of catalogCourse.modules) {
+          const { data: moduleRow, error: modError } = await supabase
+            .from('learning_modules')
+            .insert({
+              course_id: courseId,
+              title: mod.title,
+              order_index: mod.orderIndex,
+              duration_minutes: mod.durationMinutes || 0,
+            })
+            .select('id')
+            .single();
+
+          if (modError || !moduleRow?.id) {
+            logger.error(`Failed to insert module "${mod.title}":`, modError);
+            continue;
+          }
+
+          // Insert lessons for this module
+          if (mod.lessons && mod.lessons.length > 0) {
+            const lessonRows = mod.lessons.map(lesson => ({
+              module_id: moduleRow.id,
+              title: lesson.title,
+              description: lesson.description || null,
+              lesson_type: lesson.lessonType || 'text',
+              interactive_component: lesson.interactiveComponent || null,
+              order_index: lesson.orderIndex,
+              duration_seconds: lesson.durationSeconds || 0,
+              is_free_preview: lesson.isFreePreview || false,
+            }));
+
+            const { error: lessonsError } = await supabase
+              .from('learning_lessons')
+              .insert(lessonRows);
+
+            if (lessonsError) {
+              logger.error(`Failed to insert lessons for module "${mod.title}":`, lessonsError);
+            }
+          }
+        }
+      }
+
+      return courseId;
+    } catch (error) {
+      logger.error('ensureCourseInDatabase error:', error);
+      return null;
+    }
+  }
 
   /**
    * Enroll a user in a course

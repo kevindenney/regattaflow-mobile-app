@@ -1,9 +1,9 @@
 /**
  * AIAnalysisTile - Apple Weather-inspired AI analysis widget
  *
- * Compact 155x155 pressable tile matching the RaceResultTile pattern.
- * Shows AI analysis state: locked (prerequisites not met), ready to generate,
- * generating (spinner), complete (shows key insight).
+ * Two sizes:
+ * - Small (155x155): shown when analysis is not yet available (locked, ready, generating, error)
+ * - Large (322x322): shown when analysis is complete, displaying key insights inline
  *
  * Follows IOSWidgetCard animation (Reanimated scale 0.96 spring, haptics)
  * and IOSConditionsWidgets visual style.
@@ -16,7 +16,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { Brain, Check, Lock, Sparkles } from 'lucide-react-native';
+import { Brain, Check, Lock, Sparkles, Target, Zap } from 'lucide-react-native';
 import { triggerHaptic } from '@/lib/haptics';
 import { IOS_ANIMATIONS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 
@@ -30,6 +30,7 @@ const COLORS = {
   gray: '#8E8E93',
   gray3: '#C7C7CC',
   gray5: '#E5E5EA',
+  gray6: '#F2F2F7',
   label: '#000000',
   secondaryLabel: '#3C3C43',
   background: '#FFFFFF',
@@ -46,6 +47,8 @@ export interface AIAnalysisTileProps {
   hasError: boolean;
   /** Primary insight text to show when complete */
   insightText?: string;
+  /** Strength identified from AI analysis */
+  strengthText?: string;
   /** Whether the analysis was just newly generated */
   isNew?: boolean;
   /** Callback when tile is pressed */
@@ -58,6 +61,7 @@ export function AIAnalysisTile({
   isGenerating,
   hasError,
   insightText,
+  strengthText,
   isNew,
   onPress,
 }: AIAnalysisTileProps) {
@@ -67,6 +71,7 @@ export function AIAnalysisTile({
   }));
 
   const isDisabled = !hasAnalysis && !canGenerate;
+  const isLarge = hasAnalysis;
 
   const handlePressIn = () => {
     if (!isDisabled) {
@@ -84,7 +89,7 @@ export function AIAnalysisTile({
   };
 
   const getHint = () => {
-    if (hasAnalysis) return 'View insights';
+    if (hasAnalysis) return 'View full insights';
     if (hasError) return 'Tap to retry';
     if (isGenerating) return 'Analyzing...';
     if (canGenerate) return 'Generate';
@@ -98,11 +103,84 @@ export function AIAnalysisTile({
     return 'AI analysis locked. Complete debrief first';
   };
 
+  // Large format: analysis complete with insights
+  if (isLarge) {
+    return (
+      <AnimatedPressable
+        style={[
+          styles.largeTile,
+          animatedStyle,
+          Platform.OS !== 'web' && IOS_SHADOWS.card,
+        ]}
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        accessibilityRole="button"
+        accessibilityLabel={getAccessibilityLabel()}
+      >
+        {/* Completion badge */}
+        <View style={styles.completeBadge}>
+          <Check size={10} color="#FFFFFF" strokeWidth={3} />
+        </View>
+
+        {/* Header row */}
+        <View style={styles.header}>
+          <Brain size={12} color={COLORS.purple} />
+          <Text style={styles.headerLabel}>AI ANALYSIS</Text>
+          {isNew && (
+            <View style={styles.newBadge}>
+              <Sparkles size={8} color="#FFFFFF" />
+            </View>
+          )}
+        </View>
+
+        {/* Insights content area */}
+        <View style={styles.largeBody}>
+          {insightText ? (
+            <View style={styles.insightCard}>
+              <View style={styles.insightCardHeader}>
+                <Target size={14} color={COLORS.purple} />
+                <Text style={styles.insightCardLabel}>FOCUS FOR NEXT RACE</Text>
+              </View>
+              <Text style={styles.insightCardText} numberOfLines={3}>
+                {insightText}
+              </Text>
+            </View>
+          ) : null}
+
+          {strengthText ? (
+            <View style={styles.strengthCard}>
+              <View style={styles.insightCardHeader}>
+                <Zap size={14} color={COLORS.green} />
+                <Text style={[styles.insightCardLabel, { color: COLORS.green }]}>STRENGTH</Text>
+              </View>
+              <Text style={styles.strengthCardText} numberOfLines={3}>
+                {strengthText}
+              </Text>
+            </View>
+          ) : null}
+
+          {!insightText && !strengthText && (
+            <View style={styles.largeCompleteState}>
+              <Check size={32} color={COLORS.green} />
+              <Text style={styles.completeText}>Analysis complete</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Footer */}
+        <Text style={styles.hint} numberOfLines={1}>
+          {getHint()}
+        </Text>
+      </AnimatedPressable>
+    );
+  }
+
+  // Small format: not yet complete
   return (
     <AnimatedPressable
       style={[
         styles.tile,
-        hasAnalysis && styles.tileComplete,
         animatedStyle,
         Platform.OS !== 'web' && IOS_SHADOWS.card,
         isDisabled && styles.tileDisabled,
@@ -114,42 +192,17 @@ export function AIAnalysisTile({
       accessibilityRole="button"
       accessibilityLabel={getAccessibilityLabel()}
     >
-      {/* Completion badge */}
-      {hasAnalysis && (
-        <View style={styles.completeBadge}>
-          <Check size={10} color="#FFFFFF" strokeWidth={3} />
-        </View>
-      )}
-
       {/* Header row */}
       <View style={styles.header}>
         <Brain size={12} color={isDisabled ? COLORS.gray3 : COLORS.purple} />
         <Text style={[styles.headerLabel, isDisabled && styles.headerLabelDisabled]}>
           AI ANALYSIS
         </Text>
-        {isNew && (
-          <View style={styles.newBadge}>
-            <Sparkles size={8} color="#FFFFFF" />
-          </View>
-        )}
       </View>
 
       {/* Central content area */}
       <View style={styles.body}>
-        {hasAnalysis ? (
-          <>
-            <View style={styles.completeIcon}>
-              <Check size={24} color={COLORS.green} />
-            </View>
-            {insightText ? (
-              <Text style={styles.insightText} numberOfLines={2}>
-                {insightText}
-              </Text>
-            ) : (
-              <Text style={styles.completeText}>Generated</Text>
-            )}
-          </>
-        ) : isGenerating ? (
+        {isGenerating ? (
           <>
             <ActivityIndicator size="small" color={COLORS.purple} />
             <Text style={styles.generatingText}>Analyzing</Text>
@@ -183,12 +236,10 @@ export function AIAnalysisTile({
   );
 }
 
-const TILE_SIZE = 155;
-
 const styles = StyleSheet.create({
+  // Small tile (not yet complete)
   tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
+    flex: 1,
     backgroundColor: COLORS.background,
     borderRadius: 16,
     borderWidth: 1,
@@ -202,9 +253,22 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  tileComplete: {
-    borderColor: `${COLORS.green}60`,
-    backgroundColor: `${COLORS.green}06`,
+  // Large tile (analysis complete) - spans 2x2 grid cells
+  largeTile: {
+    flex: 1,
+    aspectRatio: 1,
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: `${COLORS.purple}30`,
+    padding: 12,
+    justifyContent: 'space-between',
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.06)',
+      },
+      default: {},
+    }),
   },
   completeBadge: {
     position: 'absolute',
@@ -244,27 +308,73 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Small tile body
   body: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
   },
-  // Complete state
-  completeIcon: {
-    marginBottom: 2,
+  // Large tile body
+  largeBody: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 8,
   },
+  largeCompleteState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  // Insight card within large tile
+  insightCard: {
+    backgroundColor: `${COLORS.purple}10`,
+    borderRadius: 12,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.purple,
+    gap: 6,
+  },
+  insightCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  insightCardLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.purple,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  insightCardText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.label,
+    lineHeight: 20,
+  },
+  // Strength card within large tile
+  strengthCard: {
+    backgroundColor: `${COLORS.green}10`,
+    borderRadius: 12,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.green,
+    gap: 6,
+  },
+  strengthCardText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.label,
+    lineHeight: 20,
+  },
+  // Complete state
   completeText: {
     fontSize: 13,
     fontWeight: '500',
     color: COLORS.secondaryLabel,
-  },
-  insightText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: COLORS.secondaryLabel,
-    textAlign: 'center',
-    lineHeight: 15,
   },
   // Generating state
   generatingText: {

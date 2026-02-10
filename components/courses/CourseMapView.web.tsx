@@ -35,7 +35,7 @@ const MARK_COLORS: Record<CourseMark['type'], string> = {
   mark: '#2563eb',
 };
 
-const MAP_STYLE = 'https://demotiles.maplibre.org/style.json';
+const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
 
 const CourseMapView: React.FC<CourseMapViewProps> = ({
   courseMarks = [],

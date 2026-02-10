@@ -18,6 +18,8 @@ export function useSailorFullProfile(userId: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const profileQueryKey = ['sailor-full-profile', userId];
+
   // Fetch full profile data
   const {
     data: profile,
@@ -25,7 +27,7 @@ export function useSailorFullProfile(userId: string) {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['sailor-full-profile', userId],
+    queryKey: profileQueryKey,
     queryFn: () => SailorProfileService.getFullProfile(userId, user?.id),
     enabled: !!userId,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -38,7 +40,7 @@ export function useSailorFullProfile(userId: string) {
       await CrewFinderService.followUser(user.id, userId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sailor-full-profile', userId] });
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
       queryClient.invalidateQueries({ queryKey: ['following', user?.id] });
     },
   });
@@ -50,8 +52,89 @@ export function useSailorFullProfile(userId: string) {
       await CrewFinderService.unfollowUser(user.id, userId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sailor-full-profile', userId] });
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
       queryClient.invalidateQueries({ queryKey: ['following', user?.id] });
+    },
+  });
+
+  // Toggle favorite mutation
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error('Not authenticated');
+      return CrewFinderService.toggleFavorite(user.id, userId);
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: profileQueryKey });
+      const previous = queryClient.getQueryData<FullSailorProfile>(profileQueryKey);
+      if (previous) {
+        queryClient.setQueryData<FullSailorProfile>(profileQueryKey, {
+          ...previous,
+          isFavorite: !previous.isFavorite,
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(profileQueryKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
+    },
+  });
+
+  // Toggle notifications mutation
+  const toggleNotificationsMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error('Not authenticated');
+      return CrewFinderService.toggleNotifications(user.id, userId);
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: profileQueryKey });
+      const previous = queryClient.getQueryData<FullSailorProfile>(profileQueryKey);
+      if (previous) {
+        queryClient.setQueryData<FullSailorProfile>(profileQueryKey, {
+          ...previous,
+          notificationsEnabled: !previous.notificationsEnabled,
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(profileQueryKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
+    },
+  });
+
+  // Toggle mute mutation
+  const toggleMuteMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error('Not authenticated');
+      return CrewFinderService.toggleMute(user.id, userId);
+    },
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: profileQueryKey });
+      const previous = queryClient.getQueryData<FullSailorProfile>(profileQueryKey);
+      if (previous) {
+        queryClient.setQueryData<FullSailorProfile>(profileQueryKey, {
+          ...previous,
+          isMuted: !previous.isMuted,
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(profileQueryKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: profileQueryKey });
     },
   });
 
@@ -66,6 +149,18 @@ export function useSailorFullProfile(userId: string) {
     }
   }, [profile, followMutation, unfollowMutation]);
 
+  const toggleFavorite = useCallback(() => {
+    toggleFavoriteMutation.mutate();
+  }, [toggleFavoriteMutation]);
+
+  const toggleNotifications = useCallback(() => {
+    toggleNotificationsMutation.mutate();
+  }, [toggleNotificationsMutation]);
+
+  const toggleMute = useCallback(() => {
+    toggleMuteMutation.mutate();
+  }, [toggleMuteMutation]);
+
   // Check if viewing own profile
   const isOwnProfile = user?.id === userId;
 
@@ -75,7 +170,13 @@ export function useSailorFullProfile(userId: string) {
     error,
     refetch,
     toggleFollow,
+    toggleFavorite,
+    toggleNotifications,
+    toggleMute,
     isFollowing: profile?.isFollowing ?? false,
+    isFavorite: profile?.isFavorite ?? false,
+    notificationsEnabled: profile?.notificationsEnabled ?? false,
+    isMuted: profile?.isMuted ?? false,
     isOwnProfile,
     isToggling: followMutation.isPending || unfollowMutation.isPending,
   };

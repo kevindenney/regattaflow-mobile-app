@@ -180,7 +180,7 @@ export function usePublicSailorRaceJourney(
         // Fetch sailor profile
         (async () => {
           const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
+            .from('users')
             .select('id, full_name')
             .eq('id', sailorId)
             .single();
@@ -192,7 +192,7 @@ export function usePublicSailorRaceJourney(
             .from('sailor_profiles')
             .select('avatar_emoji, avatar_color')
             .eq('user_id', sailorId)
-            .single();
+            .maybeSingle();
 
           return {
             ...profileData,

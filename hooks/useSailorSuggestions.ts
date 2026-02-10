@@ -87,6 +87,8 @@ export function useSailorSuggestions(
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ['following', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['discovery-feed'] });
+      queryClient.invalidateQueries({ queryKey: ['sailor-suggestions', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['watch-feed'] });
     },
   });
 
@@ -106,6 +108,8 @@ export function useSailorSuggestions(
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ['following', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['discovery-feed'] });
+      queryClient.invalidateQueries({ queryKey: ['sailor-suggestions', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['watch-feed'] });
     },
   });
 

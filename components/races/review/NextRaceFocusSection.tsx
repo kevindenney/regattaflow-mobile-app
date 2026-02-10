@@ -143,7 +143,7 @@ export function NextRaceFocusSection({
   // Derived state
   const hasPreviousFocus = activeIntent && activeIntent.status === 'active' && activeIntent.sourceRaceId !== raceId;
   const alreadySetFromThisRace = !!intentFromThisRace;
-  const isLoading = isLoadingActive || isLoadingFromRace;
+  const isLoading = (isLoadingActive || isLoadingFromRace) && !activeIntent && !intentFromThisRace;
 
   // Evaluate the previous focus
   const handleEvaluate = useCallback(async (rating: number) => {
@@ -231,29 +231,19 @@ export function NextRaceFocusSection({
   const focusItemsTotal =
     (hasPreviousFocus ? 1 : 0) + 1; // Always count "set focus" as 1
 
-  if (isLoading) {
-    return (
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Target size={16} color={IOS_COLORS.teal} />
-          <Text style={styles.sectionLabel}>NEXT RACE FOCUS</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={IOS_COLORS.teal} />
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.section}>
       {/* Section Header */}
       <View style={styles.sectionHeader}>
         <Target size={16} color={IOS_COLORS.teal} />
         <Text style={styles.sectionLabel}>NEXT RACE FOCUS</Text>
-        <Text style={styles.sectionCount}>
-          {focusItemsCompleted}/{focusItemsTotal}
-        </Text>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={IOS_COLORS.teal} />
+        ) : (
+          <Text style={styles.sectionCount}>
+            {focusItemsCompleted}/{focusItemsTotal}
+          </Text>
+        )}
       </View>
 
       {/* Sub-section 1: Previous Focus Evaluation */}

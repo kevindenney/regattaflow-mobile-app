@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { CrewFinderService } from '@/services/CrewFinderService';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('SailorProfileService');
@@ -114,6 +115,10 @@ export interface FullSailorProfile extends SailorProfile {
   followingCount: number;
   isFollowing: boolean;
   isOwnProfile: boolean;
+  // Follow options (only meaningful when isFollowing === true)
+  isFavorite: boolean;
+  notificationsEnabled: boolean;
+  isMuted: boolean;
 }
 
 export interface FollowCounts {
@@ -136,7 +141,7 @@ class SailorProfileServiceClass {
     logger.info('Getting full profile', { targetUserId, currentUserId });
 
     // Fetch all data in parallel for performance
-    const [profile, stats, achievements, boats, counts, isFollowing] =
+    const [profile, stats, achievements, boats, counts, isFollowing, followOptions] =
       await Promise.all([
         this.getProfile(targetUserId),
         this.getStats(targetUserId),
@@ -146,6 +151,9 @@ class SailorProfileServiceClass {
         currentUserId && currentUserId !== targetUserId
           ? this.checkIsFollowing(currentUserId, targetUserId)
           : Promise.resolve(false),
+        currentUserId && currentUserId !== targetUserId
+          ? CrewFinderService.getFollowOptions(currentUserId, targetUserId)
+          : Promise.resolve({ isFavorite: false, notificationsEnabled: false, isMuted: false }),
       ]);
 
     if (!profile) {
@@ -169,6 +177,9 @@ class SailorProfileServiceClass {
       followingCount: counts.following,
       isFollowing,
       isOwnProfile: currentUserId === targetUserId,
+      isFavorite: followOptions.isFavorite,
+      notificationsEnabled: followOptions.notificationsEnabled,
+      isMuted: followOptions.isMuted,
     };
   }
 
@@ -176,9 +187,9 @@ class SailorProfileServiceClass {
    * Get basic profile data
    */
   async getProfile(userId: string): Promise<SailorProfile | null> {
-    // Fetch from profiles table
+    // Fetch from users table (OAuth users only exist in 'users', not 'profiles')
     const { data: profile, error: profileError } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id, full_name, email')
       .eq('id', userId)
       .single();
@@ -537,7 +548,7 @@ class SailorProfileServiceClass {
 
     // Fetch profiles
     const { data: profiles } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id, full_name')
       .in('id', followerIds);
 
@@ -624,7 +635,7 @@ class SailorProfileServiceClass {
 
     // Fetch profiles
     const { data: profiles } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id, full_name')
       .in('id', followingIds);
 

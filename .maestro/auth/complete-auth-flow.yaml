@@ -11,7 +11,7 @@ tags:
   - e2e
 env:
   TEST_EMAIL: "demo-sailor@regattaflow.app"
-  TEST_PASSWORD: "Demo123!"
+  TEST_PASSWORD: ${DEMO_PASSWORD}
 ---
 
 # ============================================================

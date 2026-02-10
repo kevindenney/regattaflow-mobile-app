@@ -21,8 +21,14 @@ dotenv.config({ path: join(__dirname, '..', '.env') });
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error('❌ Missing Supabase credentials in .env');
+  process.exit(1);
+}
+if (!DEMO_PASSWORD) {
+  console.error('❌ DEMO_PASSWORD environment variable is required');
   process.exit(1);
 }
 
@@ -40,7 +46,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 const MOCK_USERS = [
   {
     email: 'sarah.chen@sailing.com',
-    password: 'sailing123',
+    password: DEMO_PASSWORD,
     full_name: 'Sarah Chen',
     user_type: 'sailor',
     profile: {
@@ -52,7 +58,7 @@ const MOCK_USERS = [
   },
   {
     email: 'mike.thompson@racing.com',
-    password: 'sailing123',
+    password: DEMO_PASSWORD,
     full_name: 'Mike Thompson',
     user_type: 'sailor',
     profile: {
@@ -64,7 +70,7 @@ const MOCK_USERS = [
   },
   {
     email: 'emma.wilson@yacht.club',
-    password: 'sailing123',
+    password: DEMO_PASSWORD,
     full_name: 'Emma Wilson',
     user_type: 'sailor',
     profile: {
@@ -76,7 +82,7 @@ const MOCK_USERS = [
   },
   {
     email: 'james.rodriguez@fleet.com',
-    password: 'sailing123',
+    password: DEMO_PASSWORD,
     full_name: 'James Rodriguez',
     user_type: 'sailor',
     profile: {
@@ -88,7 +94,7 @@ const MOCK_USERS = [
   },
   {
     email: 'coach.anderson@sailing.com',
-    password: 'sailing123',
+    password: DEMO_PASSWORD,
     full_name: 'Coach Anderson',
     user_type: 'coach',
     profile: {

@@ -1,20 +1,18 @@
 /**
- * TileGrid - Responsive fixed-size tile container
+ * TileGrid - Responsive tile container
  *
- * Tiles are FIXED at 155x155px (Apple Weather style).
- * Number of tiles per row adjusts based on available width (1-4 tiles).
+ * Mobile: 2 small tiles per row, filling available width
+ * Web/Tablet: Fixed 155x155px tiles (Apple Weather style), 1-4 per row
  * Uses flexWrap to naturally reflow tiles.
  */
 
-import React from 'react';
-import { StyleSheet, View, Platform } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, View, Platform, LayoutChangeEvent } from 'react-native';
 
-// Layout constants - Apple Weather widget sizes
-const TILE_SIZE = 155;
+// Layout constants
+const TILE_SIZE_FIXED = 155;
 const TILE_GAP = 12;
-
-// DEBUG: Set to true to see tile wrapper boundaries (web only)
-const DEBUG_TILE_BOUNDS = false;
+const MOBILE_BREAKPOINT = 500;
 
 interface TileGridProps {
   /** Tile components to render */
@@ -25,21 +23,26 @@ interface TileGridProps {
 
 export function TileGrid({ children, gap = TILE_GAP }: TileGridProps) {
   const childArray = React.Children.toArray(children);
+  const [containerWidth, setContainerWidth] = useState(0);
 
-  // DEBUG styles (applied inline on web)
-  const debugContainerStyle = DEBUG_TILE_BOUNDS && Platform.OS === 'web'
-    ? { borderWidth: 2, borderColor: 'blue', borderStyle: 'dashed' as const }
-    : {};
-  const debugTileStyle = DEBUG_TILE_BOUNDS && Platform.OS === 'web'
-    ? { borderWidth: 1, borderColor: 'red', borderStyle: 'solid' as const }
-    : {};
+  const onLayout = useCallback((e: LayoutChangeEvent) => {
+    setContainerWidth(e.nativeEvent.layout.width);
+  }, []);
+
+  // On mobile native, calculate tile width to fit 2 per row
+  const isMobileNative = Platform.OS !== 'web' && containerWidth > 0 && containerWidth < MOBILE_BREAKPOINT;
+  const mobileTileSize = isMobileNative
+    ? Math.floor((containerWidth - gap) / 2)
+    : TILE_SIZE_FIXED;
+
+  const tileSize = isMobileNative ? mobileTileSize : TILE_SIZE_FIXED;
 
   return (
-    <View style={[styles.container, { gap }, debugContainerStyle]}>
+    <View style={[styles.container, { gap }]} onLayout={onLayout}>
       {childArray.map((child, index) => (
         <View
           key={index}
-          style={[styles.tile, debugTileStyle]}
+          style={{ width: tileSize, height: tileSize }}
         >
           {child}
         </View>
@@ -52,11 +55,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    // Left-aligned, tiles wrap naturally based on container width
-  },
-  tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
   },
 });
 

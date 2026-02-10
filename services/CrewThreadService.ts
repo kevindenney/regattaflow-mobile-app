@@ -137,27 +137,39 @@ export class CrewThreadService {
 
         if (directMembers && directMembers.length > 0) {
           const otherUserIds = [...new Set(directMembers.map((m: any) => m.user_id))];
-          const { data: otherProfiles } = await supabase
-            .from('profiles')
-            .select('id, full_name, avatar_emoji, avatar_color')
+
+          // Get full_name from users table
+          const { data: otherUsers } = await supabase
+            .from('users')
+            .select('id, full_name')
             .in('id', otherUserIds);
 
-          // Build a map from thread_id to the other user's profile
-          const profileMap = new Map<string, any>();
-          (otherProfiles || []).forEach((p: any) => {
-            profileMap.set(p.id, p);
+          // Get avatar data from sailor_profiles table
+          const { data: otherSailorProfiles } = await supabase
+            .from('sailor_profiles')
+            .select('user_id, avatar_emoji, avatar_color')
+            .in('user_id', otherUserIds);
+
+          // Build maps for lookup
+          const userNameMap = new Map<string, string>();
+          (otherUsers || []).forEach((u: any) => {
+            userNameMap.set(u.id, u.full_name);
+          });
+
+          const avatarMap = new Map<string, any>();
+          (otherSailorProfiles || []).forEach((sp: any) => {
+            avatarMap.set(sp.user_id, sp);
           });
 
           directMembers.forEach((m: any) => {
-            const profile = profileMap.get(m.user_id);
-            if (profile) {
-              otherUserMap.set(m.thread_id, {
-                id: profile.id,
-                fullName: profile.full_name,
-                avatarEmoji: profile.avatar_emoji,
-                avatarColor: profile.avatar_color,
-              });
-            }
+            const fullName = userNameMap.get(m.user_id);
+            const avatar = avatarMap.get(m.user_id);
+            otherUserMap.set(m.thread_id, {
+              id: m.user_id,
+              fullName: fullName || null,
+              avatarEmoji: avatar?.avatar_emoji || null,
+              avatarColor: avatar?.avatar_color || null,
+            });
           });
         }
       }
@@ -221,18 +233,26 @@ export class CrewThreadService {
           .single();
 
         if (otherMember) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('id, full_name, avatar_emoji, avatar_color')
+          // Get full_name from users table
+          const { data: userData } = await supabase
+            .from('users')
+            .select('id, full_name')
             .eq('id', otherMember.user_id)
             .single();
 
-          if (profile) {
+          // Get avatar data from sailor_profiles table
+          const { data: sailorProfile } = await supabase
+            .from('sailor_profiles')
+            .select('avatar_emoji, avatar_color')
+            .eq('user_id', otherMember.user_id)
+            .maybeSingle();
+
+          if (userData) {
             otherUser = {
-              id: profile.id,
-              fullName: profile.full_name,
-              avatarEmoji: profile.avatar_emoji,
-              avatarColor: profile.avatar_color,
+              id: userData.id,
+              fullName: userData.full_name,
+              avatarEmoji: sailorProfile?.avatar_emoji || null,
+              avatarColor: sailorProfile?.avatar_color || null,
             };
           }
         }
@@ -502,16 +522,16 @@ export class CrewThreadService {
         return existingThread;
       }
 
-      // Get other user's name
-      const { data: profile } = await supabase
-        .from('profiles')
+      // Get other user's name from users table
+      const { data: userData } = await supabase
+        .from('users')
         .select('full_name')
         .eq('id', otherUserId)
         .single();
 
       // Create new direct thread
       return this.createThread({
-        name: profile?.full_name || 'Direct Message',
+        name: userData?.full_name || 'Direct Message',
         avatarEmoji: '💬',
         threadType: 'direct',
         memberIds: [otherUserId],
@@ -540,25 +560,43 @@ export class CrewThreadService {
       if (membersError) throw membersError;
       if (!members || members.length === 0) return [];
 
-      // Then get profiles for all member user IDs
+      // Then get user info and avatar data for all member user IDs
       const userIds = members.map((m: any) => m.user_id);
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_emoji, avatar_color')
+
+      // Get full_name from users table
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, full_name')
         .in('id', userIds);
 
-      if (profilesError) {
-        logger.warn('Failed to load profiles for members:', profilesError);
+      if (usersError) {
+        logger.warn('Failed to load users for members:', usersError);
       }
 
-      // Create a map for quick profile lookup
-      const profileMap = new Map<string, any>();
-      (profiles || []).forEach((p: any) => {
-        profileMap.set(p.id, p);
+      // Get avatar data from sailor_profiles table
+      const { data: sailorProfiles, error: sailorProfilesError } = await supabase
+        .from('sailor_profiles')
+        .select('user_id, avatar_emoji, avatar_color')
+        .in('user_id', userIds);
+
+      if (sailorProfilesError) {
+        logger.warn('Failed to load sailor profiles for members:', sailorProfilesError);
+      }
+
+      // Create maps for quick lookup
+      const userMap = new Map<string, any>();
+      (users || []).forEach((u: any) => {
+        userMap.set(u.id, u);
+      });
+
+      const sailorProfileMap = new Map<string, any>();
+      (sailorProfiles || []).forEach((sp: any) => {
+        sailorProfileMap.set(sp.user_id, sp);
       });
 
       return members.map((row: any) => {
-        const profile = profileMap.get(row.user_id);
+        const user = userMap.get(row.user_id);
+        const sailorProfile = sailorProfileMap.get(row.user_id);
         return {
           id: row.id,
           threadId: row.thread_id,
@@ -566,9 +604,9 @@ export class CrewThreadService {
           role: row.role as 'owner' | 'admin' | 'member',
           joinedAt: row.joined_at,
           lastReadAt: row.last_read_at,
-          fullName: profile?.full_name || null,
-          avatarEmoji: profile?.avatar_emoji || null,
-          avatarColor: profile?.avatar_color || null,
+          fullName: user?.full_name || null,
+          avatarEmoji: sailorProfile?.avatar_emoji || null,
+          avatarColor: sailorProfile?.avatar_color || null,
         };
       });
     } catch (error) {
@@ -684,21 +722,42 @@ export class CrewThreadService {
 
       if (error) throw error;
 
-      // Batch-load profiles
+      // Batch-load user info and avatar data
       const userIds = [...new Set((data || []).map((m: any) => m.user_id))];
       const profileMap = new Map<string, any>();
 
       if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_emoji, avatar_color')
+        // Get full_name from users table
+        const { data: users } = await supabase
+          .from('users')
+          .select('id, full_name')
           .in('id', userIds);
 
-        (profiles || []).forEach((p: any) => {
-          profileMap.set(p.id, {
-            fullName: p.full_name,
-            avatarEmoji: p.avatar_emoji,
-            avatarColor: p.avatar_color,
+        // Get avatar data from sailor_profiles table
+        const { data: sailorProfiles } = await supabase
+          .from('sailor_profiles')
+          .select('user_id, avatar_emoji, avatar_color')
+          .in('user_id', userIds);
+
+        // Create maps for lookup
+        const userMap = new Map<string, any>();
+        (users || []).forEach((u: any) => {
+          userMap.set(u.id, u);
+        });
+
+        const sailorProfileMap = new Map<string, any>();
+        (sailorProfiles || []).forEach((sp: any) => {
+          sailorProfileMap.set(sp.user_id, sp);
+        });
+
+        // Merge data into profileMap
+        userIds.forEach((uid) => {
+          const user = userMap.get(uid);
+          const sailorProfile = sailorProfileMap.get(uid);
+          profileMap.set(uid, {
+            fullName: user?.full_name || null,
+            avatarEmoji: sailorProfile?.avatar_emoji || null,
+            avatarColor: sailorProfile?.avatar_color || null,
           });
         });
       }
@@ -743,11 +802,17 @@ export class CrewThreadService {
 
       if (error) throw error;
 
-      // Get profile for return
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, avatar_emoji, avatar_color')
+      // Get user info and avatar for return
+      const { data: userData } = await supabase
+        .from('users')
+        .select('full_name')
         .eq('id', user.id)
+        .maybeSingle();
+
+      const { data: sailorProfile } = await supabase
+        .from('sailor_profiles')
+        .select('avatar_emoji, avatar_color')
+        .eq('user_id', user.id)
         .maybeSingle();
 
       return {
@@ -757,13 +822,11 @@ export class CrewThreadService {
         message: data.message,
         messageType: data.message_type as 'text' | 'system' | 'image',
         createdAt: data.created_at,
-        profile: profile
-          ? {
-              fullName: profile.full_name,
-              avatarEmoji: profile.avatar_emoji,
-              avatarColor: profile.avatar_color,
-            }
-          : null,
+        profile: {
+          fullName: userData?.full_name || null,
+          avatarEmoji: sailorProfile?.avatar_emoji || null,
+          avatarColor: sailorProfile?.avatar_color || null,
+        },
       };
     } catch (error) {
       logger.error('sendMessage failed:', error);
@@ -831,25 +894,25 @@ export class CrewThreadService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return { users: [], error: 'Not authenticated' };
 
-      // Search profiles
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
+      // Search users table for full_name
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
         .select('id, full_name')
         .neq('id', user.id)
         .ilike('full_name', `%${query}%`)
         .limit(10);
 
-      if (profilesError) {
-        logger.warn('searchUsers profiles query failed:', profilesError.message);
+      if (usersError) {
+        logger.warn('searchUsers query failed:', usersError.message);
         return { users: [], error: 'Search unavailable' };
       }
 
-      if (!profiles || profiles.length === 0) {
+      if (!usersData || usersData.length === 0) {
         return { users: [] };
       }
 
       // Get sailor_profiles for avatar data
-      const userIds = profiles.map(p => p.id);
+      const userIds = usersData.map(u => u.id);
       const { data: sailorProfiles } = await supabase
         .from('sailor_profiles')
         .select('user_id, avatar_emoji, avatar_color')
@@ -865,11 +928,11 @@ export class CrewThreadService {
       }
 
       return {
-        users: profiles.map((p: any) => {
-          const avatar = avatarMap.get(p.id);
+        users: usersData.map((u: any) => {
+          const avatar = avatarMap.get(u.id);
           return {
-            id: p.id,
-            fullName: p.full_name || 'Unknown',
+            id: u.id,
+            fullName: u.full_name || 'Unknown',
             avatarEmoji: avatar?.emoji || null,
             avatarColor: avatar?.color || null,
           };
@@ -878,6 +941,152 @@ export class CrewThreadService {
     } catch (error: any) {
       logger.error('searchUsers failed:', error);
       return { users: [], error: error.message || 'Search failed' };
+    }
+  }
+
+  /**
+   * Get suggested contacts for new message modal
+   * Returns recent conversation contacts + people the user follows
+   */
+  static async getSuggestedContacts(limit: number = 10): Promise<{
+    users: Array<{
+      id: string;
+      fullName: string;
+      avatarEmoji: string | null;
+      avatarColor: string | null;
+      source: 'recent' | 'following';
+    }>;
+    error?: string;
+  }> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { users: [], error: 'Not authenticated' };
+
+      const suggestedUsers: Map<string, {
+        id: string;
+        fullName: string;
+        avatarEmoji: string | null;
+        avatarColor: string | null;
+        source: 'recent' | 'following';
+      }> = new Map();
+
+      // 1. Get recent direct message threads
+      const { data: recentThreads } = await supabase
+        .from('crew_threads')
+        .select(`
+          id,
+          thread_type,
+          updated_at,
+          crew_thread_members!inner (
+            user_id
+          )
+        `)
+        .eq('thread_type', 'direct')
+        .order('updated_at', { ascending: false })
+        .limit(20);
+
+      if (recentThreads && recentThreads.length > 0) {
+        // Get the other user IDs from direct threads
+        const otherUserIds: string[] = [];
+        for (const thread of recentThreads) {
+          const members = thread.crew_thread_members as any[];
+          const otherMember = members.find((m: any) => m.user_id !== user.id);
+          if (otherMember && !otherUserIds.includes(otherMember.user_id)) {
+            otherUserIds.push(otherMember.user_id);
+          }
+        }
+
+        if (otherUserIds.length > 0) {
+          // Get user info
+          const { data: recentUsers } = await supabase
+            .from('users')
+            .select('id, full_name')
+            .in('id', otherUserIds);
+
+          // Get avatar data
+          const { data: recentSailorProfiles } = await supabase
+            .from('sailor_profiles')
+            .select('user_id, avatar_emoji, avatar_color')
+            .in('user_id', otherUserIds);
+
+          const userMap = new Map<string, any>();
+          (recentUsers || []).forEach((u: any) => userMap.set(u.id, u));
+
+          const avatarMap = new Map<string, any>();
+          (recentSailorProfiles || []).forEach((sp: any) => avatarMap.set(sp.user_id, sp));
+
+          // Add to suggested users in order
+          for (const uid of otherUserIds) {
+            const userData = userMap.get(uid);
+            const avatar = avatarMap.get(uid);
+            if (userData) {
+              suggestedUsers.set(uid, {
+                id: uid,
+                fullName: userData.full_name || 'Unknown',
+                avatarEmoji: avatar?.avatar_emoji || null,
+                avatarColor: avatar?.avatar_color || null,
+                source: 'recent',
+              });
+            }
+          }
+        }
+      }
+
+      // 2. Get people the user follows
+      const { data: following } = await supabase
+        .from('user_follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+        .limit(20);
+
+      if (following && following.length > 0) {
+        const followingIds = following
+          .map((f: any) => f.following_id)
+          .filter((id: string) => !suggestedUsers.has(id)); // Don't include users already in recent
+
+        if (followingIds.length > 0) {
+          // Get user info
+          const { data: followingUsers } = await supabase
+            .from('users')
+            .select('id, full_name')
+            .in('id', followingIds);
+
+          // Get avatar data
+          const { data: followingSailorProfiles } = await supabase
+            .from('sailor_profiles')
+            .select('user_id, avatar_emoji, avatar_color')
+            .in('user_id', followingIds);
+
+          const userMap = new Map<string, any>();
+          (followingUsers || []).forEach((u: any) => userMap.set(u.id, u));
+
+          const avatarMap = new Map<string, any>();
+          (followingSailorProfiles || []).forEach((sp: any) => avatarMap.set(sp.user_id, sp));
+
+          // Add to suggested users
+          for (const uid of followingIds) {
+            const userData = userMap.get(uid);
+            const avatar = avatarMap.get(uid);
+            if (userData) {
+              suggestedUsers.set(uid, {
+                id: uid,
+                fullName: userData.full_name || 'Unknown',
+                avatarEmoji: avatar?.avatar_emoji || null,
+                avatarColor: avatar?.avatar_color || null,
+                source: 'following',
+              });
+            }
+          }
+        }
+      }
+
+      // Convert map to array and limit
+      const result = Array.from(suggestedUsers.values()).slice(0, limit);
+
+      return { users: result };
+    } catch (error: any) {
+      logger.error('getSuggestedContacts failed:', error);
+      return { users: [], error: error.message || 'Failed to load suggestions' };
     }
   }
 }

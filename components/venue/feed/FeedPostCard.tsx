@@ -3,14 +3,21 @@
  *
  * Clean, spacious feed card matching iOS design patterns.
  * Layout: venue header, title, body preview, horizontal footer with metadata.
+ *
+ * Enhanced with:
+ * - Author avatar photos (with initials fallback)
+ * - View count
+ * - Topic tag chips
+ * - Author credibility badge (race count at venue)
+ * - Condition context indicators (wind/tide)
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
-import type { FeedPost } from '@/types/community-feed';
+import type { FeedPost, TopicTag, ConditionTag } from '@/types/community-feed';
 
 interface FeedPostCardProps {
   post: FeedPost;
@@ -63,6 +70,53 @@ function getInitials(name: string | null | undefined): string {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
+// Format view count like "1.2K views"
+function formatViewCount(count: number): string {
+  if (count < 1000) return `${count}`;
+  if (count < 10000) return `${(count / 1000).toFixed(1)}K`;
+  if (count < 1000000) return `${Math.floor(count / 1000)}K`;
+  return `${(count / 1000000).toFixed(1)}M`;
+}
+
+// Get wind direction label from degrees
+function getWindDirectionLabel(degrees: number): string {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(degrees / 45) % 8;
+  return directions[index];
+}
+
+// Format condition tag for display
+function formatConditionPreview(tag: ConditionTag): string | null {
+  const parts: string[] = [];
+
+  // Wind info
+  if (tag.wind_speed_min != null || tag.wind_speed_max != null) {
+    const min = tag.wind_speed_min ?? 0;
+    const max = tag.wind_speed_max ?? min;
+    const dir = tag.wind_direction_min != null ? getWindDirectionLabel(tag.wind_direction_min) : '';
+    if (min === max) {
+      parts.push(`${min}kt ${dir}`.trim());
+    } else {
+      parts.push(`${min}-${max}kt ${dir}`.trim());
+    }
+  }
+
+  // Tide info
+  if (tag.tide_phase) {
+    const tideLabels: Record<string, string> = {
+      rising: 'Rising',
+      falling: 'Falling',
+      high: 'High',
+      low: 'Low',
+      ebb: 'Ebb',
+      flood: 'Flood',
+    };
+    parts.push(tideLabels[tag.tide_phase] || tag.tide_phase);
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
 export function FeedPostCard({
   post,
   onPress,
@@ -81,6 +135,21 @@ export function FeedPostCard({
     [post.author?.full_name]
   );
 
+  // Get first condition tag preview (if any)
+  const conditionPreview = useMemo(() => {
+    if (!post.condition_tags?.length) return null;
+    return formatConditionPreview(post.condition_tags[0]);
+  }, [post.condition_tags]);
+
+  // Limit topic tags to 2 for card display
+  const displayTags = useMemo(() => {
+    return (post.topic_tags || []).slice(0, 2);
+  }, [post.topic_tags]);
+
+  // Author stats for credibility badge
+  const authorStats = post.author_venue_stats;
+  const hasAuthorStats = authorStats && authorStats.race_count > 0;
+
   return (
     <Pressable
       style={({ pressed }) => [
@@ -94,12 +163,30 @@ export function FeedPostCard({
     >
       {/* Author line with avatar, name, badge, and timestamp */}
       <View style={styles.authorRow}>
-        <View style={[styles.authorAvatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.authorAvatarText}>{authorInitials}</Text>
+        {post.author?.avatar_url ? (
+          <Image
+            source={{ uri: post.author.avatar_url }}
+            style={styles.authorAvatarImage}
+          />
+        ) : (
+          <View style={[styles.authorAvatar, { backgroundColor: avatarColor }]}>
+            <Text style={styles.authorAvatarText}>{authorInitials}</Text>
+          </View>
+        )}
+        <View style={styles.authorInfo}>
+          <Text style={styles.authorName} numberOfLines={1}>
+            {post.author?.full_name || 'Anonymous'}
+          </Text>
+          {hasAuthorStats && (
+            <View style={styles.authorStatsBadge}>
+              <Ionicons name="trophy-outline" size={10} color="#8E8E93" />
+              <Text style={styles.authorStatsText}>
+                {authorStats.race_count} races
+                {authorStats.avg_finish && ` · Avg ${authorStats.avg_finish.toFixed(0)}th`}
+              </Text>
+            </View>
+          )}
         </View>
-        <Text style={styles.authorName} numberOfLines={1}>
-          {post.author?.full_name || 'Anonymous'}
-        </Text>
         <View style={[styles.typeBadge, { backgroundColor: typeConfig.bgColor }]}>
           <Text style={[styles.typeBadgeText, { color: typeConfig.color }]}>
             {typeConfig.label}
@@ -149,6 +236,45 @@ export function FeedPostCard({
         </Text>
       )}
 
+      {/* Topic tags row */}
+      {displayTags.length > 0 && (
+        <View style={styles.tagsRow}>
+          {displayTags.map((tag) => (
+            <View
+              key={tag.id}
+              style={[
+                styles.topicTag,
+                tag.color && { backgroundColor: `${tag.color}20` },
+              ]}
+            >
+              {tag.icon && (
+                <Ionicons
+                  name={tag.icon as any}
+                  size={11}
+                  color={tag.color || '#8E8E93'}
+                />
+              )}
+              <Text
+                style={[
+                  styles.topicTagText,
+                  tag.color && { color: tag.color },
+                ]}
+              >
+                {tag.display_name}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Condition context (wind/tide) */}
+      {conditionPreview && (
+        <View style={styles.conditionRow}>
+          <Ionicons name="partly-sunny-outline" size={12} color="#8E8E93" />
+          <Text style={styles.conditionText}>{conditionPreview}</Text>
+        </View>
+      )}
+
       {/* Footer: metrics */}
       <View style={styles.footer}>
         <View style={styles.footerLeft}>
@@ -157,6 +283,13 @@ export function FeedPostCard({
           <View style={styles.metricSpacer} />
           <Ionicons name="chatbubble-outline" size={15} color="#8E8E93" />
           <Text style={styles.metricText}>{post.comment_count}</Text>
+          {post.view_count > 0 && (
+            <>
+              <View style={styles.metricSpacer} />
+              <Ionicons name="eye-outline" size={15} color="#8E8E93" />
+              <Text style={styles.metricText}>{formatViewCount(post.view_count)}</Text>
+            </>
+          )}
         </View>
         {onPress && (
           <View style={styles.readMore}>
@@ -190,26 +323,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
-    gap: 6,
+    gap: 8,
   },
   authorAvatar: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  authorAvatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E5E5EA',
+  },
   authorAvatarText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: '#FFFFFF',
   },
-  authorName: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
-    flex: 0,
+  authorInfo: {
+    flex: 1,
     flexShrink: 1,
+    gap: 1,
+  },
+  authorName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  authorStatsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  authorStatsText: {
+    fontSize: 11,
+    color: '#8E8E93',
   },
   typeBadge: {
     paddingHorizontal: 6,
@@ -266,6 +417,46 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     lineHeight: 19,
     marginBottom: 8,
+  },
+
+  // Topic tags
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  topicTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: '#F2F2F7',
+  },
+  topicTagText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#8E8E93',
+  },
+
+  // Condition context
+  conditionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  conditionText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500',
   },
 
   // Footer

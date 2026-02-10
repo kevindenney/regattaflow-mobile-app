@@ -50,7 +50,7 @@ const QUICK_SETUP_STEPS: OnboardingStep[] = [
   'complete',
 ];
 
-// NEW: Strava-inspired flow steps
+// NEW: Strava-inspired flow steps (legacy, includes value props)
 const NEW_ONBOARDING_STEPS: OnboardingStep[] = [
   'value-track-races',
   'value-prepare-pro',
@@ -65,12 +65,17 @@ const NEW_ONBOARDING_STEPS: OnboardingStep[] = [
   'add-race',
 ];
 
+// Post-signup practical onboarding: name-only (boat/club deferred to in-app prompts)
+const POST_SIGNUP_STEPS: OnboardingStep[] = [
+  'name-photo',
+];
+
 /**
  * Create initial onboarding state
  */
 function createInitialState(useNewFlow: boolean = true): OnboardingState {
   return {
-    currentStep: useNewFlow ? 'value-track-races' : 'welcome',
+    currentStep: useNewFlow ? 'name-photo' : 'welcome',
     completedSteps: [],
     preferences: {},
     startedAt: new Date().toISOString(),
@@ -182,7 +187,7 @@ export class OnboardingStateService {
    */
   private static getStepList(): OnboardingStep[] {
     if (this.useNewFlow) {
-      return NEW_ONBOARDING_STEPS;
+      return POST_SIGNUP_STEPS;
     }
     const path = this.state?.preferences.setupPath;
     return path === 'quick' ? QUICK_SETUP_STEPS : FULL_SETUP_STEPS;
@@ -192,19 +197,14 @@ export class OnboardingStateService {
    * Get the first step for the current flow
    */
   static getFirstStep(): OnboardingStep {
-    return this.useNewFlow ? 'value-track-races' : 'welcome';
+    return this.useNewFlow ? 'name-photo' : 'welcome';
   }
 
   /**
-   * Get the starting route for onboarding, checking if user is returning
-   * Returns 'welcome-back' for returning users, or the normal first step for new users
+   * Get the starting route for onboarding (practical onboarding only)
    */
   static async getStartingRoute(): Promise<string> {
-    const hasSeen = await this.hasSeenOnboarding();
-    if (hasSeen && this.useNewFlow) {
-      return '/onboarding/welcome-back';
-    }
-    return this.useNewFlow ? '/onboarding/value/track-races' : '/onboarding/welcome';
+    return this.useNewFlow ? '/onboarding/profile/name-photo' : '/onboarding/welcome';
   }
 
   /**

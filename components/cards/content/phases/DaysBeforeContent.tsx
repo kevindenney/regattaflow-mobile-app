@@ -95,6 +95,7 @@ import type { PositionedCourse, CourseType } from '@/types/courses';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
 import { Map } from 'lucide-react-native';
+import { getOpenMeteoService } from '@/services/weather/OpenMeteoService';
 
 
 // Historical view components
@@ -140,7 +141,19 @@ import {
   TeamSetupTile,
   ComboPlaysTile,
   TeamCommsTile,
+  CourseMapTile,
 } from '@/components/races/prep/PrepTabTiles';
+
+/**
+ * Convert wind direction in degrees to cardinal direction string
+ */
+function degreesToCardinal(degrees: number | undefined): string | undefined {
+  if (degrees === undefined || !Number.isFinite(degrees)) return undefined;
+  const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+    'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  const index = Math.round(((degrees % 360) + 360) % 360 / 22.5) % 16;
+  return directions[index];
+}
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -665,6 +678,97 @@ export function DaysBeforeContent({
     fetchCrew();
   }, [user?.id]);
 
+  // State for fetched weather forecast at race time
+  const [forecastWind, setForecastWind] = useState<{ direction: number; speed: number } | null>(null);
+
+  // Fetch weather forecast for race start time using OpenMeteo
+  useEffect(() => {
+    if (!coords) {
+      setForecastWind(null);
+      return;
+    }
+
+    // Construct proper Date from race.date and race.startTime
+    // race.start_time might be a full ISO string or undefined
+    // race.date is the date (e.g., "2026-02-10")
+    // race.startTime is the time (e.g., "14:00")
+    let targetTime: Date | null = null;
+
+    // Try race.start_time first (if it's a full ISO timestamp)
+    if (race.start_time && typeof race.start_time === 'string') {
+      const parsed = new Date(race.start_time);
+      if (!isNaN(parsed.getTime())) {
+        targetTime = parsed;
+      }
+    }
+
+    // Fall back to combining race.date and race.startTime
+    if (!targetTime && race.date && race.startTime) {
+      const dateOnly = race.date.split('T')[0];
+      const combined = `${dateOnly}T${race.startTime}:00`;
+      const parsed = new Date(combined);
+      if (!isNaN(parsed.getTime())) {
+        targetTime = parsed;
+      }
+    }
+
+    if (!targetTime) {
+      console.debug('[DaysBeforeContent] Could not construct target time from race data:', {
+        start_time: race.start_time,
+        date: race.date,
+        startTime: race.startTime,
+      });
+      setForecastWind(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchForecast = async () => {
+      try {
+        const openMeteo = getOpenMeteoService();
+
+        // Only fetch if race is within the forecast window (16 days)
+        const now = new Date();
+        const daysAhead = (targetTime!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysAhead > 16 || daysAhead < 0) {
+          // Race is too far ahead or in the past - skip forecast
+          console.debug('[DaysBeforeContent] Race outside forecast window:', { daysAhead });
+          return;
+        }
+
+        console.debug('[DaysBeforeContent] Fetching forecast for:', {
+          coords,
+          targetTime: targetTime!.toISOString(),
+        });
+
+        const weather = await openMeteo.getWeatherAtTime(
+          { latitude: coords.lat, longitude: coords.lng },
+          targetTime!
+        );
+
+        if (!cancelled && weather) {
+          console.debug('[DaysBeforeContent] Forecast received:', {
+            windDirection: weather.wind.direction,
+            windSpeed: weather.wind.speed,
+          });
+          setForecastWind({
+            direction: weather.wind.direction,
+            speed: weather.wind.speed,
+          });
+        }
+      } catch (error) {
+        console.debug('[DaysBeforeContent] Could not fetch forecast for race time:', error);
+      }
+    };
+
+    fetchForecast();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [coords?.lat, coords?.lng, race.start_time, race.date, race.startTime]);
+
   // Check if this is a demo race (no carryover for demo races)
   const isDemo = race.isDemo === true;
 
@@ -1006,13 +1110,73 @@ export function DaysBeforeContent({
             },
             windDirection: data.wind_direction,
             legLengthNm: parseFloat(data.leg_length_nm),
+            startLineLengthM: data.start_line_length_m ? parseFloat(data.start_line_length_m) : 100,
             hasManualAdjustments: data.has_manual_adjustments,
             createdAt: data.created_at,
             updatedAt: data.updated_at,
           });
         } else {
-          // No positioned course found, that's okay
-          setPositionedCourse(null);
+          // No positioned course found - try to auto-generate from metadata if course type is specified
+          const metadataCourseType = metadata?.course_type;
+          if (metadataCourseType && coords) {
+            try {
+              const { CoursePositioningService } = await import('@/services/CoursePositioningService');
+              const courseTypeMap: Record<string, CourseType> = {
+                'windward/leeward': 'windward_leeward',
+                'windward_leeward': 'windward_leeward',
+                'triangle': 'triangle',
+                'olympic': 'olympic',
+                'trapezoid': 'trapezoid',
+              };
+              const courseType = courseTypeMap[metadataCourseType.toLowerCase()] || 'windward_leeward';
+
+              // Use forecast wind direction if available, otherwise default to 225 (SW)
+              const defaultWindDir = 225;
+              const generatedCourse = CoursePositioningService.calculatePositionedCourse({
+                startLineCenter: { lat: coords.lat, lng: coords.lng },
+                courseType,
+                windDirection: defaultWindDir,
+                legLengthNm: 0.5, // Default leg length
+              });
+
+              // Validate generated marks have valid coordinates
+              const validMarks = generatedCourse.marks.filter(
+                mark => Number.isFinite(mark.lat) && Number.isFinite(mark.lng)
+              );
+
+              // Validate startLine coordinates
+              const startLine = generatedCourse.startLine;
+              const validStartLine = startLine &&
+                Number.isFinite(startLine.portEnd?.lat) &&
+                Number.isFinite(startLine.portEnd?.lng) &&
+                Number.isFinite(startLine.starboardEnd?.lat) &&
+                Number.isFinite(startLine.starboardEnd?.lng);
+
+              if (validMarks.length > 0 && validStartLine) {
+                setPositionedCourse({
+                  id: 'auto-generated',
+                  regattaId: race.id,
+                  courseType,
+                  marks: validMarks,
+                  startLine,
+                  windDirection: defaultWindDir,
+                  legLengthNm: 0.5,
+                  startLineLengthM: 100,
+                  hasManualAdjustments: false,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
+                console.debug('[DaysBeforeContent] Auto-generated course from metadata:', courseType);
+              } else {
+                setPositionedCourse(null);
+              }
+            } catch (err) {
+              console.debug('[DaysBeforeContent] Could not auto-generate course:', err);
+              setPositionedCourse(null);
+            }
+          } else {
+            setPositionedCourse(null);
+          }
         }
       } catch (err) {
         console.error('[DaysBeforeContent] Exception fetching positioned course:', err);
@@ -1023,7 +1187,7 @@ export function DaysBeforeContent({
     }
 
     fetchPositionedCourse();
-  }, [race.id]);
+  }, [race.id, metadata?.course_type, coords?.lat, coords?.lng]);
 
   // ========================================================================
   // TILE PREVIEW DATA
@@ -1086,6 +1250,152 @@ export function DaysBeforeContent({
     };
     return stateLabels[tide.state] || tide.state;
   }, [race.tide, weatherSparklines?.tideLabel]);
+
+  // Marine data: extract wind/current/wave data for CourseMapTile overlays
+  const marineOverlayData = useMemo(() => {
+    const snapshots = intentions?.forecastCheck?.snapshots;
+
+    // Variables to populate
+    let windDirection: number | undefined;
+    let windSpeed: number | undefined;
+    let currentDirection: number | undefined;
+    let currentSpeed: number | undefined;
+    let waveHeight: number | undefined;
+    let waveDirection: number | undefined;
+    let source = 'none';
+
+    // HIGHEST PRIORITY: Use live forecast for race time from OpenMeteo
+    // This is the actual forecast for when the race will happen
+    if (forecastWind) {
+      windDirection = forecastWind.direction;
+      windSpeed = forecastWind.speed;
+      source = 'openMeteo';
+      console.debug('[marineOverlayData] Using OpenMeteo forecast:', { windDirection, windSpeed });
+    }
+
+    // Second priority: saved forecast snapshots (user-captured data)
+    if (windDirection === undefined && snapshots && snapshots.length > 0) {
+      const latest = snapshots[snapshots.length - 1];
+      const raceWindow = latest.raceWindow;
+
+      // Extract wind direction - try multiple sources
+      windDirection = raceWindow?.windDirectionDegreesAtStart;
+      windSpeed = windSpeed ?? raceWindow?.windSpeedAtStart;
+      currentDirection = raceWindow?.currentDirection;
+      currentSpeed = raceWindow?.currentSpeed;
+      waveHeight = latest.waveHeight;
+      waveDirection = latest.waveDirection;
+    }
+
+    // Third priority: Try strategy notes for wind if not found
+    if (windDirection === undefined) {
+      const cardinalDir = intentions?.strategyNotes?.['wind.direction'];
+      if (cardinalDir) {
+        const cardinalToDegreesMap: Record<string, number> = {
+          'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5,
+          'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5,
+          'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5,
+          'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5,
+        };
+        windDirection = cardinalToDegreesMap[cardinalDir.toUpperCase()];
+      }
+    }
+
+    if (windSpeed === undefined) {
+      const speedStr = intentions?.strategyNotes?.['wind.speed'];
+      if (speedStr) {
+        const match = speedStr.match(/(\d+)/);
+        if (match) {
+          windSpeed = parseInt(match[1], 10);
+        }
+      }
+    }
+
+    // Note: We intentionally do NOT fall back to positionedCourse.windDirection
+    // because that's the course SETUP direction, not the actual forecast wind.
+    // The map should show actual forecast conditions, not course configuration.
+
+    // Final fallback: race.wind data (may be stale or static)
+    if (windDirection === undefined && race.wind?.direction !== undefined) {
+      windDirection = race.wind.direction;
+    }
+    if (windSpeed === undefined && race.wind?.speed !== undefined) {
+      windSpeed = race.wind.speed;
+    }
+
+    // Fallback: estimate current from TidalCurrentEstimator if we have venue coords
+    // This provides real-time estimates based on lunar cycle and geographic factors
+    if (currentDirection === undefined && currentSpeed === undefined && coords) {
+      try {
+        // Dynamic import to avoid circular dependencies
+        const { TidalCurrentEstimator } = require('@/services/tides/TidalCurrentEstimator');
+
+        // Use race start time or current time
+        const targetTime = race.start_time ? new Date(race.start_time) : new Date();
+
+        // Get tide extremes if available
+        const highTide = race.tide?.extremes?.find((e: any) => e.type === 'high');
+        const lowTide = race.tide?.extremes?.find((e: any) => e.type === 'low');
+
+        const estimate = TidalCurrentEstimator.estimateCurrent(
+          coords.lat,
+          coords.lng,
+          targetTime,
+          highTide ? { type: 'high', time: new Date(highTide.time), height: highTide.height } : null,
+          lowTide ? { type: 'low', time: new Date(lowTide.time), height: lowTide.height } : null
+        );
+
+        currentDirection = estimate.direction;
+        currentSpeed = estimate.speed;
+      } catch (err) {
+        // TidalCurrentEstimator not available or error - leave as undefined
+        console.debug('[DaysBeforeContent] Could not estimate current:', err);
+      }
+    }
+
+    // Return null only if we have absolutely no data
+    if (!windDirection && !windSpeed && !currentDirection && !currentSpeed && !waveHeight) {
+      console.debug('[marineOverlayData] No data available, returning null');
+      return null;
+    }
+
+    const result = {
+      windDirection,
+      windSpeed,
+      currentDirection,
+      currentSpeed,
+      waveHeight,
+      waveDirection,
+    };
+    console.debug('[marineOverlayData] Final result:', result);
+    return result;
+  }, [forecastWind, intentions?.forecastCheck?.snapshots, intentions?.strategyNotes, coords, race.start_time, race.tide, race.wind]);
+
+  // Extract forecast data for CoursePositionEditor sparklines
+  const courseForecastData = useMemo(() => {
+    const snapshots = intentions?.forecastCheck?.snapshots;
+    if (!snapshots || snapshots.length === 0) return null;
+
+    const latest = snapshots[snapshots.length - 1];
+
+    // Convert wind forecast to the format expected by CoursePositionEditor
+    const windForecast = latest.windForecast?.map(d => ({
+      time: d.time,
+      value: d.value,
+      direction: d.direction ? parseFloat(d.direction) || undefined : undefined,
+    })) || [];
+
+    // For current, we only have race window data, not time series
+    // Create a simple array with the single value if available
+    const currentForecast = latest.raceWindow?.currentSpeedAtStart !== undefined
+      ? [{ time: 'start', value: latest.raceWindow.currentSpeedAtStart }]
+      : [];
+
+    return {
+      windForecast: windForecast.length >= 3 ? windForecast : undefined,
+      currentForecast: currentForecast.length > 0 ? currentForecast : undefined,
+    };
+  }, [intentions?.forecastCheck?.snapshots]);
 
   // Sails: get sail names from sailSelection intention
   const sailSelectionPreview = useMemo(() => {
@@ -1360,14 +1670,41 @@ export function DaysBeforeContent({
           <WeatherTile
             isComplete={isItemComplete('check_weather_forecast')}
             onPress={() => handleTilePress('check_weather_forecast', 'forecast_check')}
-            windDirection={intentions?.strategyNotes?.['wind.direction']}
-            windSpeed={intentions?.strategyNotes?.['wind.speed']}
+            windDirection={
+              // Prefer live forecast direction, fall back to saved strategy notes
+              degreesToCardinal(marineOverlayData?.windDirection) ||
+              intentions?.strategyNotes?.['wind.direction']
+            }
+            windSpeed={
+              // Prefer live forecast speed, fall back to saved strategy notes
+              marineOverlayData?.windSpeed !== undefined
+                ? `${Math.round(marineOverlayData.windSpeed)}`
+                : intentions?.strategyNotes?.['wind.speed']
+            }
             raceWind={race.wind}
             windSparkline={weatherSparklines?.windSparkline}
             tideSparkline={weatherSparklines?.tideSparkline}
             tideLabel={weatherSparklines?.tideLabel || raceTideLabel}
           />
         </TileGrid>
+        {/* Course Map Tile - below briefing and weather tiles */}
+        {coords && (
+          <View style={styles.mapSection}>
+            <CourseMapTile
+              coords={coords}
+              positionedCourse={positionedCourse}
+              isComplete={!!positionedCourse}
+              venueName={venueName}
+              onPress={() => setShowCoursePositionEditor(true)}
+              windDirection={marineOverlayData?.windDirection}
+              windSpeed={marineOverlayData?.windSpeed}
+              currentDirection={marineOverlayData?.currentDirection}
+              currentSpeed={marineOverlayData?.currentSpeed}
+              waveHeight={marineOverlayData?.waveHeight}
+              waveDirection={marineOverlayData?.waveDirection}
+            />
+          </View>
+        )}
         <AcceptedSuggestionBannerList
           suggestions={acceptedForCategory('weather')}
           onDismiss={dismissSuggestion}
@@ -1740,7 +2077,11 @@ export function DaysBeforeContent({
             boatId={userBoat?.id}
             raceStartTime={race.startTime}
             raceDate={race.date}
-            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            raceDurationHours={
+              // Use explicit time_limit_hours if set, otherwise sensible defaults by race type
+              race.time_limit_hours ? Number(race.time_limit_hours) :
+              raceType === 'distance' ? 8 : raceType === 'match' ? 1.5 : 2
+            }
             raceName={race.name}
             raceDistance={race.total_distance_nm ? Number(race.total_distance_nm) : undefined}
             onComplete={handleToolComplete}
@@ -1764,7 +2105,11 @@ export function DaysBeforeContent({
             raceDate={race.date}
             raceName={race.name}
             raceStartTime={race.startTime}
-            raceDurationHours={race.time_limit_hours ? Number(race.time_limit_hours) : undefined}
+            raceDurationHours={
+              // Use explicit time_limit_hours if set, otherwise sensible defaults by race type
+              race.time_limit_hours ? Number(race.time_limit_hours) :
+              raceType === 'distance' ? 8 : raceType === 'match' ? 1.5 : 2
+            }
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />
@@ -2150,24 +2495,88 @@ export function DaysBeforeContent({
 
       {/* Course Position Editor Modal */}
       {showCoursePositionEditor && coords && (
-        <Modal
+        <CoursePositionEditor
           visible={true}
-          animationType="slide"
-          presentationStyle="fullScreen"
-          onRequestClose={() => setShowCoursePositionEditor(false)}
-        >
-          <CoursePositionEditor
-            visible={true}
-            regattaId={race.id}
-            initialLocation={memoizedLocation}
-            courseType={raceType === 'fleet' ? 'windward_leeward' : 'custom'}
-            onSave={(course) => {
-              setPositionedCourse(course);
+          regattaId={race.id}
+          initialLocation={memoizedLocation}
+          initialCourseType={positionedCourse?.courseType || (raceType === 'fleet' ? 'windward_leeward' : 'windward_leeward')}
+          initialWindDirection={marineOverlayData?.windDirection || positionedCourse?.windDirection || 225}
+          initialWindSpeed={marineOverlayData?.windSpeed}
+          initialLegLength={positionedCourse?.legLengthNm}
+          existingCourse={positionedCourse}
+          currentDirection={marineOverlayData?.currentDirection}
+          currentSpeed={marineOverlayData?.currentSpeed}
+          windForecast={courseForecastData?.windForecast}
+          currentForecast={courseForecastData?.currentForecast}
+          onSave={async (course) => {
+            try {
+              // Get current user
+              const { data: { user } } = await supabase.auth.getUser();
+              if (!user) {
+                console.error('[DaysBeforeContent] No user found for course save');
+                return;
+              }
+
+              // Skip database save for demo races (non-UUID IDs)
+              if (!isUuid(course.regattaId)) {
+                console.log('[DaysBeforeContent] Skipping DB save for demo race, updating local state only');
+                setPositionedCourse({
+                  ...course,
+                  id: course.regattaId,
+                  userId: user.id,
+                } as PositionedCourse);
+                setShowCoursePositionEditor(false);
+                return;
+              }
+
+              // Prepare database record
+              const dbRecord = {
+                regatta_id: course.regattaId,
+                user_id: user.id,
+                course_type: course.courseType,
+                wind_direction: course.windDirection,
+                leg_length_nm: course.legLengthNm,
+                start_line_length_m: course.startLineLengthM || 100,
+                start_pin_lat: course.startLine.pin.lat,
+                start_pin_lng: course.startLine.pin.lng,
+                start_committee_lat: course.startLine.committee.lat,
+                start_committee_lng: course.startLine.committee.lng,
+                marks: course.marks,
+                has_manual_adjustments: course.hasManualAdjustments || false,
+              };
+
+              // Upsert to database (update if exists, insert if not)
+              const { data, error } = await supabase
+                .from('race_positioned_courses')
+                .upsert(dbRecord, {
+                  onConflict: 'regatta_id,user_id',
+                })
+                .select()
+                .single();
+
+              if (error) {
+                console.error('[DaysBeforeContent] Failed to save positioned course:', error);
+                // Still update local state even if DB save fails
+              } else {
+                console.log('[DaysBeforeContent] Positioned course saved:', data?.id);
+              }
+
+              // Update local state
+              setPositionedCourse({
+                ...course,
+                id: data?.id || course.regattaId,
+                userId: user.id,
+              } as PositionedCourse);
               setShowCoursePositionEditor(false);
-            }}
-            onCancel={() => setShowCoursePositionEditor(false)}
-          />
-        </Modal>
+            } catch (err) {
+              console.error('[DaysBeforeContent] Exception saving positioned course:', err);
+              // Still update local state
+              setPositionedCourse(course as PositionedCourse);
+              setShowCoursePositionEditor(false);
+            }
+          }}
+          onCancel={() => setShowCoursePositionEditor(false)}
+        />
       )}
 
       {/* Learning Tooltip Modal */}
@@ -2236,6 +2645,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     gap: 16,
+  },
+
+  // Course map section (inside Race Intel, below tiles)
+  mapSection: {
+    marginTop: 12,
   },
 
   // Loading

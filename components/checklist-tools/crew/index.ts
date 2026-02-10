@@ -7,3 +7,4 @@
 export { CrewMemberPicker } from './CrewMemberPicker';
 export { PositionAssignmentPanel } from './PositionAssignmentPanel';
 export { MeetingPointPicker } from './MeetingPointPicker';
+export { CrewManagementWizard } from './CrewManagementWizard';

@@ -133,15 +133,8 @@ const BASE_CREW_ITEMS: ChecklistItem[] = [
     raceTypes: ['fleet', 'distance', 'match', 'team'],
     phase: 'days_before',
     category: 'crew',
-    toolId: 'crew_confirmation',
-    toolType: 'quick_tips',
-    quickTips: [
-      'Contact all crew members 48+ hours before',
-      'Confirm transportation arrangements',
-      'Share meeting time and location',
-      'Discuss roles and any position changes',
-      'Verify everyone has required gear',
-    ],
+    toolId: 'crew_management',
+    toolType: 'full_wizard',
   },
   {
     id: 'assign_positions',
@@ -179,6 +172,8 @@ const BASE_LOGISTICS_ITEMS: ChecklistItem[] = [
     raceTypes: ['fleet', 'distance', 'match', 'team'],
     phase: 'days_before',
     category: 'logistics',
+    toolId: 'logistics_planner',
+    toolType: 'full_wizard',
   },
   {
     id: 'accommodation',
@@ -187,6 +182,8 @@ const BASE_LOGISTICS_ITEMS: ChecklistItem[] = [
     raceTypes: ['fleet', 'distance', 'match', 'team'],
     phase: 'days_before',
     category: 'logistics',
+    toolId: 'logistics_planner',
+    toolType: 'full_wizard',
   },
   {
     id: 'food',
@@ -195,6 +192,8 @@ const BASE_LOGISTICS_ITEMS: ChecklistItem[] = [
     raceTypes: ['fleet', 'distance', 'match', 'team'],
     phase: 'days_before',
     category: 'logistics',
+    toolId: 'logistics_planner',
+    toolType: 'full_wizard',
   },
 ];
 

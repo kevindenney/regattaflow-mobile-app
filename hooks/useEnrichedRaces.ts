@@ -226,6 +226,11 @@ function extractVenueCoordinates(regatta: RegattaRaw): { lat: number; lng: numbe
     return { lat: startCoords.lat, lng: startCoords.lng };
   }
 
+  // 3c. Check direct latitude/longitude in metadata (legacy sample race format)
+  if (typeof metadata.latitude === 'number' && typeof metadata.longitude === 'number') {
+    return { lat: metadata.latitude, lng: metadata.longitude };
+  }
+
   // 4. Check route_waypoints (distance racing) - calculate centroid
   const waypoints = regatta.route_waypoints;
   if (Array.isArray(waypoints) && waypoints.length > 0) {

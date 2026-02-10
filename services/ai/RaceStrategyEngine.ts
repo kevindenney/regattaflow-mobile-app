@@ -118,6 +118,7 @@ export class RaceStrategyEngine {
   private venueDatabase: Map<string, VenueIntelligence> = new Map();
   private customSkillId: string | null = null; // Fleet racing skill (race-strategy-analyst)
   private distanceSkillId: string | null = null; // Distance/offshore racing skill (long-distance-racing-analyst)
+  private teamSkillId: string | null = null; // Team racing skill (team-racing-analyst)
   private skillInitialized: boolean = false;
 
   private hasValidApiKey: boolean = false;
@@ -185,11 +186,19 @@ export class RaceStrategyEngine {
         logger.debug(`✅ Distance racing skill initialized: ${distanceSkillId}`);
       }
 
-      if (this.customSkillId || this.distanceSkillId) {
+      // Initialize team racing skill (team-racing-analyst)
+      const teamSkillId = SKILL_REGISTRY['team-racing-analyst'];
+      if (teamSkillId) {
+        this.teamSkillId = teamSkillId;
+        logger.debug(`✅ Team racing skill initialized: ${teamSkillId}`);
+      }
+
+      if (this.customSkillId || this.distanceSkillId || this.teamSkillId) {
         this.skillInitialized = true;
         logger.debug('RaceStrategyEngine: Skills initialized', {
           fleet: this.customSkillId,
-          distance: this.distanceSkillId
+          distance: this.distanceSkillId,
+          team: this.teamSkillId
         });
       } else {
         logger.debug('ℹ️  No skills found - using full prompt mode (still excellent quality)');
@@ -212,12 +221,17 @@ export class RaceStrategyEngine {
     raceName?: string;
   }): string | null {
     const raceType = detectRaceType(raceContext);
-    
+
+    if (raceType === 'team' && this.teamSkillId) {
+      logger.debug(`⛵ Using team racing skill for ${raceContext.raceName || 'race'}`);
+      return this.teamSkillId;
+    }
+
     if (raceType === 'distance' && this.distanceSkillId) {
       logger.debug(`🌊 Using distance racing skill for ${raceContext.raceName || 'race'}`);
       return this.distanceSkillId;
     }
-    
+
     return this.customSkillId;
   }
 

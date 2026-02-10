@@ -33,7 +33,7 @@ Tests are configured in `.maestro/config.yaml`:
 
 | User | Email | Password |
 |------|-------|----------|
-| Demo Sailor | demo-sailor@regattaflow.app | Demo123! |
+| Demo Sailor | demo-sailor@regattaflow.app | Set via `DEMO_PASSWORD` env var |
 
 ## Test Data Cleanup
 

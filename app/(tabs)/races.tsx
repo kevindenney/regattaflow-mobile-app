@@ -2532,7 +2532,7 @@ export default function RacesScreen() {
   const isDemoProfile = (profileOnboardingStep ?? '').toString().startsWith('demo');
 
   const handleClaimWorkspace = useCallback(() => {
-    router.push('/(tabs)/settings' as any);
+    router.push('/account');
   }, [router]);
 
   // Clear old details immediately on selection change to avoid showing stale details

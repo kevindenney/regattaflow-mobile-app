@@ -13,15 +13,20 @@ import {
   Pressable,
   Modal,
   ScrollView,
+  TextInput,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ChevronDown,
   Check,
   User,
+  UserPlus,
+  Trash2,
   X,
 } from 'lucide-react-native';
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 import type { CrewMember, CrewRole } from '@/services/crewManagementService';
 
 // iOS System Colors
@@ -51,6 +56,16 @@ const ROLE_COLORS: Record<CrewRole, string> = {
   other: '#636366',
 };
 
+const CREW_ROLES: { value: CrewRole; label: string }[] = [
+  { value: 'helmsman', label: 'Helm' },
+  { value: 'tactician', label: 'Tactician' },
+  { value: 'trimmer', label: 'Trimmer' },
+  { value: 'bowman', label: 'Bow' },
+  { value: 'pit', label: 'Pit' },
+  { value: 'grinder', label: 'Grinder' },
+  { value: 'other', label: 'Other' },
+];
+
 interface CrewMemberPickerProps {
   label: string;
   crewMembers: CrewMember[];
@@ -59,6 +74,8 @@ interface CrewMemberPickerProps {
   excludeIds?: string[]; // IDs to exclude (already assigned elsewhere)
   placeholder?: string;
   disabled?: boolean;
+  onAddCrew?: (name: string, role: CrewRole) => Promise<void>;
+  onRemoveCrew?: (crewMemberId: string) => Promise<void>;
 }
 
 export function CrewMemberPicker({
@@ -69,8 +86,15 @@ export function CrewMemberPicker({
   excludeIds = [],
   placeholder = 'Select crew member',
   disabled = false,
+  onAddCrew,
+  onRemoveCrew,
 }: CrewMemberPickerProps) {
   const [showPicker, setShowPicker] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState<CrewRole>('other');
+  const [isAdding, setIsAdding] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const selectedMember = crewMembers.find((m) => m.id === selectedMemberId);
 
@@ -87,6 +111,44 @@ export function CrewMemberPicker({
   const getRoleLabel = (role: CrewRole) => {
     return role.charAt(0).toUpperCase() + role.slice(1);
   };
+
+  const handleAddCrew = useCallback(async () => {
+    if (!onAddCrew || !newName.trim()) return;
+    setIsAdding(true);
+    try {
+      await onAddCrew(newName.trim(), newRole);
+      setNewName('');
+      setNewRole('other');
+      setShowAddForm(false);
+    } catch (err) {
+      // Error handled by parent
+    } finally {
+      setIsAdding(false);
+    }
+  }, [onAddCrew, newName, newRole]);
+
+  const handleRemoveCrew = useCallback((member: CrewMember) => {
+    if (!onRemoveCrew) return;
+    showConfirm(
+      'Remove Crew',
+      `Remove ${member.name} from your crew?`,
+      async () => {
+        setRemovingId(member.id);
+        try {
+          await onRemoveCrew(member.id);
+          // If the removed member was selected, deselect them
+          if (member.id === selectedMemberId) {
+            onSelect(null);
+          }
+        } catch (err) {
+          // Error handled by parent
+        } finally {
+          setRemovingId(null);
+        }
+      },
+      { destructive: true }
+    );
+  }, [onRemoveCrew, selectedMemberId, onSelect]);
 
   return (
     <View style={styles.container}>
@@ -146,6 +208,7 @@ export function CrewMemberPicker({
             style={styles.optionsList}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.optionsContent}
+            keyboardShouldPersistTaps="handled"
           >
             {/* None option */}
             <Pressable
@@ -167,49 +230,148 @@ export function CrewMemberPicker({
             {availableMembers.map((member) => {
               const isSelected = member.id === selectedMemberId;
               const isExcluded = excludeIds.includes(member.id) && !isSelected;
+              const isRemoving = removingId === member.id;
 
               return (
-                <Pressable
-                  key={member.id}
-                  style={[
-                    styles.optionRow,
-                    isSelected && styles.optionRowSelected,
-                    isExcluded && styles.optionRowDisabled,
-                  ]}
-                  onPress={() => !isExcluded && handleSelect(member)}
-                  disabled={isExcluded}
-                >
-                  <View style={[styles.avatar, { backgroundColor: ROLE_COLORS[member.role] }]}>
-                    <Text style={styles.avatarText}>
-                      {member.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.optionInfo}>
-                    <Text style={[
-                      styles.optionName,
-                      isExcluded && styles.optionNameDisabled,
-                    ]}>
-                      {member.name}
-                    </Text>
-                    <Text style={styles.optionRole}>{getRoleLabel(member.role)}</Text>
-                  </View>
-                  {isSelected && (
-                    <Check size={20} color={IOS_COLORS.blue} />
+                <View key={member.id} style={[
+                  styles.optionRow,
+                  isSelected && styles.optionRowSelected,
+                  isExcluded && styles.optionRowDisabled,
+                ]}>
+                  <Pressable
+                    style={styles.optionRowTappable}
+                    onPress={() => !isExcluded && handleSelect(member)}
+                    disabled={isExcluded || isRemoving}
+                  >
+                    <View style={[styles.avatar, { backgroundColor: ROLE_COLORS[member.role] }]}>
+                      <Text style={styles.avatarText}>
+                        {member.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.optionInfo}>
+                      <Text style={[
+                        styles.optionName,
+                        isExcluded && styles.optionNameDisabled,
+                      ]}>
+                        {member.name}
+                      </Text>
+                      <Text style={styles.optionRole}>{getRoleLabel(member.role)}</Text>
+                    </View>
+                    {isSelected && (
+                      <Check size={20} color={IOS_COLORS.blue} />
+                    )}
+                    {isExcluded && (
+                      <Text style={styles.assignedBadge}>Assigned</Text>
+                    )}
+                  </Pressable>
+                  {onRemoveCrew && (
+                    <Pressable
+                      style={styles.deleteButton}
+                      onPress={() => handleRemoveCrew(member)}
+                      disabled={isRemoving}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {isRemoving ? (
+                        <ActivityIndicator size="small" color={IOS_COLORS.red} />
+                      ) : (
+                        <Trash2 size={16} color={IOS_COLORS.red} />
+                      )}
+                    </Pressable>
                   )}
-                  {isExcluded && (
-                    <Text style={styles.assignedBadge}>Assigned</Text>
-                  )}
-                </Pressable>
+                </View>
               );
             })}
 
             {availableMembers.length === 0 && (
               <View style={styles.emptyState}>
                 <User size={32} color={IOS_COLORS.gray} />
-                <Text style={styles.emptyStateText}>No crew members found</Text>
-                <Text style={styles.emptyStateSubtext}>
-                  Add crew members in your boat settings
-                </Text>
+                <Text style={styles.emptyStateText}>No crew members yet</Text>
+                {onAddCrew ? (
+                  <Text style={styles.emptyStateSubtext}>
+                    Add your first crew member below
+                  </Text>
+                ) : (
+                  <Text style={styles.emptyStateSubtext}>
+                    Add crew members in your boat settings
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {/* Add Crew Section */}
+            {onAddCrew && (
+              <View style={styles.addCrewSection}>
+                {showAddForm ? (
+                  <View style={styles.addCrewForm}>
+                    <TextInput
+                      style={styles.addCrewInput}
+                      placeholder="Crew member name"
+                      placeholderTextColor={IOS_COLORS.gray}
+                      value={newName}
+                      onChangeText={setNewName}
+                      autoFocus
+                      returnKeyType="done"
+                      onSubmitEditing={() => newName.trim() && handleAddCrew()}
+                    />
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.roleChipsRow}
+                    >
+                      {CREW_ROLES.map((r) => (
+                        <Pressable
+                          key={r.value}
+                          style={[
+                            styles.roleChip,
+                            newRole === r.value && styles.roleChipSelected,
+                          ]}
+                          onPress={() => setNewRole(r.value)}
+                        >
+                          <Text style={[
+                            styles.roleChipText,
+                            newRole === r.value && styles.roleChipTextSelected,
+                          ]}>
+                            {r.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                    <View style={styles.addCrewActions}>
+                      <Pressable
+                        style={styles.addCrewCancelBtn}
+                        onPress={() => {
+                          setShowAddForm(false);
+                          setNewName('');
+                          setNewRole('other');
+                        }}
+                      >
+                        <Text style={styles.addCrewCancelText}>Cancel</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.addCrewConfirmBtn,
+                          (!newName.trim() || isAdding) && styles.addCrewConfirmBtnDisabled,
+                        ]}
+                        onPress={handleAddCrew}
+                        disabled={!newName.trim() || isAdding}
+                      >
+                        {isAdding ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.addCrewConfirmText}>Add</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={styles.addCrewButton}
+                    onPress={() => setShowAddForm(true)}
+                  >
+                    <UserPlus size={18} color={IOS_COLORS.blue} />
+                    <Text style={styles.addCrewButtonText}>Add Crew Member</Text>
+                  </Pressable>
+                )}
               </View>
             )}
           </ScrollView>
@@ -366,6 +528,15 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
   },
+  optionRowTappable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  deleteButton: {
+    padding: 8,
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -381,6 +552,86 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: IOS_COLORS.gray,
     textAlign: 'center',
+  },
+  addCrewSection: {
+    marginTop: 8,
+  },
+  addCrewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.blue,
+    borderStyle: 'dashed',
+  },
+  addCrewButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: IOS_COLORS.blue,
+  },
+  addCrewForm: {
+    backgroundColor: IOS_COLORS.secondaryBackground,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  addCrewInput: {
+    fontSize: 15,
+    color: IOS_COLORS.label,
+    backgroundColor: IOS_COLORS.background,
+    borderRadius: 8,
+    padding: 12,
+  },
+  roleChipsRow: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  roleChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: IOS_COLORS.background,
+  },
+  roleChipSelected: {
+    backgroundColor: IOS_COLORS.blue,
+  },
+  roleChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  roleChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  addCrewActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  addCrewCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  addCrewCancelText: {
+    fontSize: 15,
+    color: IOS_COLORS.gray,
+  },
+  addCrewConfirmBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.blue,
+  },
+  addCrewConfirmBtnDisabled: {
+    backgroundColor: IOS_COLORS.gray,
+  },
+  addCrewConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
 

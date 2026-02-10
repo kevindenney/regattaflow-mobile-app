@@ -68,6 +68,8 @@ export interface UseFeatureGateReturn {
   isBasic: boolean;
   /** Whether user has pro tier */
   isPro: boolean;
+  /** Whether user is currently in a reverse trial */
+  isTrialing: boolean;
   /** Tier display name */
   tierName: string;
   /** Trigger upgrade prompt */
@@ -83,17 +85,44 @@ export function useFeatureGate(): UseFeatureGateReturn {
   const { user, isGuest, userProfile } = useAuth();
 
   // Determine user's tier
-  // Priority: subscription_tier from profile > 'free' for signed in > 'free' for guests
+  // Priority: active trial → subscription_tier from profile → 'free'
+  // During an active trial (subscription_status = 'trialing' and trial_ends_at > now),
+  // the user has 'individual' tier access regardless of subscription_tier.
   const tier: SailorTier = useMemo(() => {
     if (isGuest) return 'free';
     if (!user) return 'free';
+
+    const profile = userProfile as any;
+    const subscriptionStatus = profile?.subscription_status;
+    const trialEndsAt = profile?.trial_ends_at;
+
+    // Active reverse trial → treat as 'individual'
+    if (subscriptionStatus === 'trialing' && trialEndsAt) {
+      const expiresAt = new Date(trialEndsAt);
+      if (expiresAt > new Date()) {
+        return 'individual';
+      }
+    }
+
     // Check user profile for subscription tier
-    const subscriptionTier = (userProfile as any)?.subscription_tier;
-    if (subscriptionTier && ['free', 'basic', 'pro'].includes(subscriptionTier)) {
+    const subscriptionTier = profile?.subscription_tier;
+    if (subscriptionTier && ['free', 'individual', 'team'].includes(subscriptionTier)) {
       return subscriptionTier as SailorTier;
     }
+    // Legacy tier names
+    if (subscriptionTier === 'basic') return 'individual';
+    if (subscriptionTier === 'pro') return 'team';
+
     return 'free';
   }, [user, isGuest, userProfile]);
+
+  // Whether user is currently in a trial
+  const isTrialing = useMemo(() => {
+    const profile = userProfile as any;
+    if (!profile?.subscription_status || profile.subscription_status !== 'trialing') return false;
+    if (!profile.trial_ends_at) return false;
+    return new Date(profile.trial_ends_at) > new Date();
+  }, [userProfile]);
 
   const tierName = SAILOR_TIERS[tier].name;
   const isFree = tier === 'free';
@@ -171,6 +200,7 @@ export function useFeatureGate(): UseFeatureGateReturn {
     isFree,
     isBasic,
     isPro,
+    isTrialing,
     tierName,
     promptUpgrade,
     promptSignUp,

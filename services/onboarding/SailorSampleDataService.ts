@@ -585,8 +585,11 @@ async function createSampleRace(
     class_name: 'Dragon',
     class_id: DRAGON_CLASS_ID,
     course_type: 'windward_leeward',
-    latitude: HK_COORDINATES.latitude,
-    longitude: HK_COORDINATES.longitude,
+    // Use venue_coordinates format that extractVenueCoordinates() recognizes
+    venue_coordinates: {
+      lat: HK_COORDINATES.latitude,
+      lng: HK_COORDINATES.longitude,
+    },
     is_sample: true, // Mark as sample data
   };
 
@@ -760,8 +763,11 @@ async function createCompletedSampleRace(
     class_name: 'Dragon',
     class_id: DRAGON_CLASS_ID,
     course_type: 'windward_leeward',
-    latitude: HK_COORDINATES.latitude,
-    longitude: HK_COORDINATES.longitude,
+    // Use venue_coordinates format that extractVenueCoordinates() recognizes
+    venue_coordinates: {
+      lat: HK_COORDINATES.latitude,
+      lng: HK_COORDINATES.longitude,
+    },
     is_sample: true,
   };
 

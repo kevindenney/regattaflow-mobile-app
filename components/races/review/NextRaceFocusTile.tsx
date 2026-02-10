@@ -205,12 +205,9 @@ export function NextRaceFocusTile({
   );
 }
 
-const TILE_SIZE = 155;
-
 const styles = StyleSheet.create({
   tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
+    flex: 1,
     backgroundColor: COLORS.background,
     borderRadius: 16,
     borderWidth: 1,

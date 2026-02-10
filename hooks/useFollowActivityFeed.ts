@@ -107,7 +107,7 @@ export function useFollowActivityFeed(): FollowActivityFeedResult {
       const items: ActivityItem[] = result.races.map((race) => ({
         id: `race-${race.id}`,
         type: race.isPast ? 'race_result' : 'race_upcoming',
-        timestamp: race.startDate,
+        timestamp: race.createdAt,
         race,
       }));
 

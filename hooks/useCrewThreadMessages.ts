@@ -233,7 +233,14 @@ export function useCrewThreadMessages({
         if (!newMessage) {
           throw new Error('Failed to send message');
         }
-        // Message will be added via realtime subscription
+        // Add message to local state immediately (realtime will deduplicate)
+        if (newMessage.profile) {
+          profileCacheRef.current[newMessage.userId] = newMessage.profile;
+        }
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMessage.id)) return prev;
+          return [...prev, newMessage];
+        });
       } catch (err) {
         logger.error('Failed to send message:', err);
         throw err;

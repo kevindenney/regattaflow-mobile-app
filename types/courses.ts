@@ -149,6 +149,7 @@ export interface PositionedCourse {
   startLine: StartLinePosition;
   windDirection: number; // degrees (0 = North, 90 = East, etc.)
   legLengthNm: number; // nautical miles
+  startLineLengthM?: number; // start line length in meters (calculated from fleet size)
   hasManualAdjustments?: boolean;
   createdAt?: string;
   updatedAt?: string;

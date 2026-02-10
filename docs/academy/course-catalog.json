@@ -1223,42 +1223,427 @@
           "title": "Team Racing Tactics",
           "slug": "team-racing-tactics",
           "level": "specializations",
-          "status": "coming-soon",
-          "releaseDate": "2026-01-01",
+          "status": "available",
+          "releaseDate": "2026-02-07",
           "duration": {
-            "totalMinutes": 180,
-            "lessons": 10,
-            "estimatedHours": 3
+            "totalMinutes": 390,
+            "lessons": 30,
+            "estimatedHours": 6.5
           },
           "price": {
-            "cents": 15000,
+            "cents": 0,
             "currency": "USD",
-            "tier": "academy"
+            "tier": "free"
           },
-          "description": "Master the unique tactics of team racing: covering, slowing opponents, and team coordination.",
+          "description": "The complete team racing course: from 'What is team racing?' through advanced championship tactics. 10 modules, 30 lessons with interactive 6-boat visualizations based on the World Sailing Call Book 2025-2028.",
+          "longDescription": "Designed for anyone from complete beginners to experienced fleet racers looking to master team racing. This course follows a pedagogical arc from understanding what a team race looks like, through scoring and rules, to executing complex tactical plays and advanced Call Book scenarios. Every interactive lesson features animated 6-boat course visualizations with blue and red team scenarios.",
           "whatYouLearn": [
-            "Team racing rules",
-            "Covering strategies",
-            "Slowing opponents",
-            "Team coordination",
-            "Match play tactics"
+            "What team racing is and how it differs from fleet, match, and distance racing",
+            "Team racing course layouts: S-Course, Digital N, and windward-leeward",
+            "3v3 combination scoring, the magic number 10, and all winning/losing combos",
+            "RRS Appendix D team racing rule modifications",
+            "The umpire system and penalty procedures",
+            "World Sailing Call Book decision framework (Sections A-F)",
+            "Strategic principles: speed, tactics, and communication",
+            "Offensive plays: mark traps, dial-ups, dial-downs, pass-backs, screens",
+            "Defensive plays: covering, pairing, and combination protection",
+            "Team communication systems and on-water calls",
+            "Race phase strategy: starts, mid-race decisions, and endgame",
+            "4v4 team racing variations and building a winning program"
           ],
-          "modules": [],
+          "modules": [
+            {
+              "id": "module-10-1",
+              "title": "The World of Team Racing",
+              "orderIndex": 1,
+              "durationMinutes": 25,
+              "lessons": [
+                {
+                  "id": "lesson-10-1-1",
+                  "title": "A Team Race from Start to Finish",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingOverviewInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": true,
+                  "description": "Watch a complete team race unfold step by step — from the starting gun to the finish line — and discover what makes this format uniquely exciting"
+                },
+                {
+                  "id": "lesson-10-1-2",
+                  "title": "How Team Racing Differs from Other Formats",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingComparisonInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 480,
+                  "isFreePreview": true,
+                  "description": "Compare team racing side-by-side with fleet, match, and distance racing across eight key dimensions"
+                },
+                {
+                  "id": "lesson-10-1-3",
+                  "title": "The Spirit of Team Racing",
+                  "lessonType": "text",
+                  "orderIndex": 3,
+                  "durationSeconds": 420,
+                  "isFreePreview": false,
+                  "description": "Understand the culture, sportsmanship, and unique camaraderie that defines team racing at every level"
+                }
+              ]
+            },
+            {
+              "id": "module-10-2",
+              "title": "The Team Racing Course",
+              "orderIndex": 2,
+              "durationMinutes": 25,
+              "lessons": [
+                {
+                  "id": "lesson-10-2-1",
+                  "title": "Course Layouts: The S-Course and Digital N",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCourseInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Explore the most common team racing course layouts and understand how each shape creates tactical opportunities"
+                },
+                {
+                  "id": "lesson-10-2-2",
+                  "title": "Race Committee Organization",
+                  "lessonType": "text",
+                  "orderIndex": 2,
+                  "durationSeconds": 420,
+                  "isFreePreview": false,
+                  "description": "Learn how the race committee sets up and runs a team racing event, from course setting to round-robin scheduling"
+                },
+                {
+                  "id": "lesson-10-2-3",
+                  "title": "How Teams Prepare Differently",
+                  "lessonType": "text",
+                  "orderIndex": 3,
+                  "durationSeconds": 480,
+                  "isFreePreview": false,
+                  "description": "Discover how team racing preparation differs from fleet racing — boat handling drills, role assignments, and practice routines"
+                }
+              ]
+            },
+            {
+              "id": "module-10-3",
+              "title": "Scoring and Combinations",
+              "orderIndex": 3,
+              "durationMinutes": 30,
+              "lessons": [
+                {
+                  "id": "lesson-10-3-1",
+                  "title": "The Magic Number: How Team Scoring Works",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingScoringInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 750,
+                  "isFreePreview": true,
+                  "description": "Learn why 10 is the magic number in team racing and how combination scoring turns individual positions into team results"
+                },
+                {
+                  "id": "lesson-10-3-2",
+                  "title": "Winning and Losing Combinations",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingScoringInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 750,
+                  "isFreePreview": false,
+                  "description": "Master all 20 possible combinations in 3v3 team racing and identify the critical cliff-edge combos"
+                },
+                {
+                  "id": "lesson-10-3-3",
+                  "title": "Combination Counting on the Water",
+                  "lessonType": "quiz",
+                  "orderIndex": 3,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Test your ability to quickly identify combinations during a race — the essential skill every team racer needs"
+                }
+              ]
+            },
+            {
+              "id": "module-10-4",
+              "title": "Rules Unique to Team Racing",
+              "orderIndex": 4,
+              "durationMinutes": 30,
+              "lessons": [
+                {
+                  "id": "lesson-10-4-1",
+                  "title": "RRS Appendix D: What Changes?",
+                  "lessonType": "text",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Understand how Racing Rules of Sailing Appendix D modifies standard rules for team racing — protests, penalties, and umpire authority"
+                },
+                {
+                  "id": "lesson-10-4-2",
+                  "title": "The Umpire System",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingUmpireSignalsInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Learn umpire flag signals, penalty types, and how to complete penalties in team racing"
+                },
+                {
+                  "id": "lesson-10-4-3",
+                  "title": "Introduction to the Call Book",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCallsInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Get your first look at the World Sailing Call Book — the definitive guide to umpire decisions in team racing"
+                }
+              ]
+            },
+            {
+              "id": "module-10-5",
+              "title": "Keys to Winning Team Racing",
+              "orderIndex": 5,
+              "durationMinutes": 30,
+              "lessons": [
+                {
+                  "id": "lesson-10-5-1",
+                  "title": "The Three Pillars: Speed, Tactics, Communication",
+                  "lessonType": "text",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Before learning specific plays, understand the three fundamental pillars that every winning team racing program is built on"
+                },
+                {
+                  "id": "lesson-10-5-2",
+                  "title": "Reading the Race: Combination Awareness",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingReadTheRaceInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Practice identifying race situations, calculating combinations on the fly, and choosing the right tactical response"
+                },
+                {
+                  "id": "lesson-10-5-3",
+                  "title": "Communication Systems and Calls",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCommsInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Learn the on-water calls that winning teams use to coordinate combination awareness, plays, and positions"
+                }
+              ]
+            },
+            {
+              "id": "module-10-6",
+              "title": "Tactical Plays — Offense",
+              "orderIndex": 6,
+              "durationMinutes": 30,
+              "lessons": [
+                {
+                  "id": "lesson-10-6-1",
+                  "title": "Mark Traps and Slow-Ups",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingTacticsInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Master the mark trap: slow your opponent at the mark so your teammate can round inside and steal a position"
+                },
+                {
+                  "id": "lesson-10-6-2",
+                  "title": "Dial-Ups and Dial-Downs",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingTacticsInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Force opponents above or below their optimal course to slow them and create opportunities for your teammates"
+                },
+                {
+                  "id": "lesson-10-6-3",
+                  "title": "Pass-Backs and Screens",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingTacticsInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 780,
+                  "isFreePreview": false,
+                  "description": "Coordinate position swaps and wind screens to improve your team's combination"
+                }
+              ]
+            },
+            {
+              "id": "module-10-7",
+              "title": "Tactical Plays — Defense",
+              "orderIndex": 7,
+              "durationMinutes": 25,
+              "lessons": [
+                {
+                  "id": "lesson-10-7-1",
+                  "title": "Combination Protection",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingScoringInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Learn when to protect your winning combination and when to attack for a better one"
+                },
+                {
+                  "id": "lesson-10-7-2",
+                  "title": "Covering and Pairing",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCoveringInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Master tight covers, loose covers, and the pairing strategy that keeps your opponents locked in losing positions"
+                },
+                {
+                  "id": "lesson-10-7-3",
+                  "title": "The Finish: Protecting Your Win",
+                  "lessonType": "text",
+                  "orderIndex": 3,
+                  "durationSeconds": 480,
+                  "isFreePreview": false,
+                  "description": "The race isn't won until every boat crosses the finish line — learn how to protect your combination in the final moments"
+                }
+              ]
+            },
+            {
+              "id": "module-10-8",
+              "title": "Call Book Deep Dive",
+              "orderIndex": 8,
+              "durationMinutes": 35,
+              "lessons": [
+                {
+                  "id": "lesson-10-8-1",
+                  "title": "Right of Way and Transitions (Sections A-B)",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCallsInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 900,
+                  "isFreePreview": false,
+                  "description": "Deep dive into port/starboard, windward/leeward, and overlap transition scenarios from the Call Book"
+                },
+                {
+                  "id": "lesson-10-8-2",
+                  "title": "Mark Room Calls (Section C)",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCallsInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Navigate complex mark-room scenarios at windward marks, leeward marks, and gates"
+                },
+                {
+                  "id": "lesson-10-8-3",
+                  "title": "Limitations, Seamanship, and Penalties (Sections D-F)",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCallsInteractive",
+                  "orderIndex": 3,
+                  "durationSeconds": 780,
+                  "isFreePreview": false,
+                  "description": "Master luffing rights, proper course limitations, seamanship obligations, and penalty exoneration scenarios"
+                }
+              ]
+            },
+            {
+              "id": "module-10-9",
+              "title": "Race Phases and Team Strategy",
+              "orderIndex": 9,
+              "durationMinutes": 30,
+              "lessons": [
+                {
+                  "id": "lesson-10-9-1",
+                  "title": "Pre-Start and Start Strategy",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingStartInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Learn coordinated team start strategies — from line-up entries to disruption starts that put your opponents on the back foot"
+                },
+                {
+                  "id": "lesson-10-9-2",
+                  "title": "Mid-Race Decision Making",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingReadTheRaceInteractive",
+                  "orderIndex": 2,
+                  "durationSeconds": 720,
+                  "isFreePreview": false,
+                  "description": "Put your skills together: read the race, identify the combination, and choose the right play at each phase"
+                },
+                {
+                  "id": "lesson-10-9-3",
+                  "title": "Endgame: The Final Leg",
+                  "lessonType": "quiz",
+                  "orderIndex": 3,
+                  "durationSeconds": 600,
+                  "isFreePreview": false,
+                  "description": "Test your endgame decision-making with scenarios where one wrong move can flip the result"
+                }
+              ]
+            },
+            {
+              "id": "module-10-10",
+              "title": "Advanced Team Racing",
+              "orderIndex": 10,
+              "durationMinutes": 30,
+              "lessons": [
+                {
+                  "id": "lesson-10-10-1",
+                  "title": "Advanced Call Book Scenarios",
+                  "lessonType": "interactive",
+                  "interactiveComponent": "TeamRacingCallsInteractive",
+                  "orderIndex": 1,
+                  "durationSeconds": 780,
+                  "isFreePreview": false,
+                  "description": "Tackle the toughest Call Book scenarios that decide championships — multi-boat interactions, compound penalties, and edge cases"
+                },
+                {
+                  "id": "lesson-10-10-2",
+                  "title": "4v4 Team Racing and Variations",
+                  "lessonType": "text",
+                  "orderIndex": 2,
+                  "durationSeconds": 480,
+                  "isFreePreview": false,
+                  "description": "Explore 4v4 team racing where 8 boats race and the magic number changes — plus other team racing formats and variations"
+                },
+                {
+                  "id": "lesson-10-10-3",
+                  "title": "Building a Winning Team Racing Program",
+                  "lessonType": "text",
+                  "orderIndex": 3,
+                  "durationSeconds": 540,
+                  "isFreePreview": false,
+                  "description": "From practice drills to team selection to regatta strategy — how the top collegiate and club programs build their team racing culture"
+                }
+              ]
+            }
+          ],
           "instructor": {
             "name": "Kevin Denney",
-            "bio": "NorthU Certified Instructor",
+            "bio": "NorthU Certified Instructor with 20+ years of racing experience across multiple classes",
             "photoUrl": "/images/instructors/kevin-denney.jpg"
           },
           "thumbnailUrl": "/images/courses/team-racing.jpg",
-          "skillsUsed": [],
+          "skillsUsed": [
+            "team-racing-analyst"
+          ],
           "targetMarkets": [
             "university-team",
-            "championship-club"
+            "championship-club",
+            "junior-program",
+            "club-racing"
           ],
           "tags": [
             "specialization",
             "team-racing",
-            "collegiate"
+            "collegiate",
+            "free",
+            "call-book"
           ],
           "certificate": {
             "enabled": true,

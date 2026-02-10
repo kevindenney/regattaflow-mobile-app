@@ -144,7 +144,7 @@ export function EquipmentIssuesSheet({
   return (
     <Actionsheet isOpen={isOpen} onClose={handleClose}>
       <ActionsheetBackdrop />
-      <ActionsheetContent className="max-h-[85%]">
+      <ActionsheetContent className="max-h-[85%] bg-white">
         <ActionsheetDragIndicatorWrapper>
           <ActionsheetDragIndicator />
         </ActionsheetDragIndicatorWrapper>

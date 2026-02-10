@@ -3,6 +3,7 @@ import {router} from 'expo-router'
 import {supabase} from '@/services/supabase'
 import {logSession, dumpSbStorage} from '@/utils/authDebug'
 import {getDashboardRoute} from '@/lib/utils/userTypeRouting'
+import {extractOAuthDisplayName} from '@/lib/utils/oauthName'
 import {ActivityIndicator, View, Text,
 } from "react-native"
 import {createLogger} from '@/lib/utils/logger'
@@ -144,12 +145,18 @@ export default function Callback(){
           logger.info('Existing user with null user_type, defaulting to sailor')
           setStatus('Setting up your account...')
 
+          // Also backfill full_name if missing
+          const fixPayload: Record<string, any> = {
+            user_type: 'sailor',
+            onboarding_completed: true,
+          }
+          if (!profile.full_name) {
+            fixPayload.full_name = extractOAuthDisplayName(session.user.user_metadata)
+          }
+
           const { error: fixError } = await supabase
             .from('users')
-            .update({
-              user_type: 'sailor',
-              onboarding_completed: true
-            })
+            .update(fixPayload)
             .eq('id', session.user.id)
 
           if (fixError) {
@@ -185,7 +192,7 @@ export default function Callback(){
           const profilePayload = {
             id: session.user.id,
             email: session.user.email,
-            full_name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || '',
+            full_name: extractOAuthDisplayName(session.user.user_metadata),
             user_type: pendingPersona,
             onboarding_completed: false, // All users must complete onboarding
           }
@@ -221,9 +228,8 @@ export default function Callback(){
 
           let onboardingRoute: string
           if (personaForOnboarding === 'sailor') {
-            // Sailors go through the new onboarding flow
-            const userName = session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Sailor'
-            onboardingRoute = `/onboarding/setup-choice?name=${encodeURIComponent(userName)}`
+            // Sailors go through name-only onboarding, then get 14-day Pro trial
+            onboardingRoute = '/onboarding/profile/name-photo'
           } else if (personaForOnboarding === 'coach') {
             onboardingRoute = '/(auth)/coach-onboarding-welcome'
           } else if (personaForOnboarding === 'club') {

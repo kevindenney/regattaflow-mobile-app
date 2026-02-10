@@ -34,6 +34,18 @@ const EARTH_RADIUS_NM = 3440.065;
 /** Default start line length in meters */
 const DEFAULT_START_LINE_LENGTH_M = 100;
 
+/** Default boat LOA in meters (~26ft keelboat) */
+const DEFAULT_BOAT_LOA_M = 8;
+
+/** Default spacing multiplier per sailing standards */
+const DEFAULT_SPACING_MULTIPLIER = 1.5;
+
+/** Minimum start line length in meters */
+const MIN_START_LINE_LENGTH_M = 50;
+
+/** Maximum start line length in meters */
+const MAX_START_LINE_LENGTH_M = 500;
+
 // =============================================================================
 // COURSE TYPE TEMPLATES
 // =============================================================================
@@ -52,8 +64,9 @@ export const COURSE_TEMPLATES: Record<CourseType, CourseTypeTemplate> = {
     defaultLegLengthNm: 0.5,
     marks: [
       { name: 'Windward Mark', type: 'windward', relX: 0, relY: 1.0, rounding: 'port', color: 'yellow' },
-      { name: 'Leeward Gate Left', type: 'gate', relX: -0.05, relY: 0, rounding: 'port', color: 'orange' },
-      { name: 'Leeward Gate Right', type: 'gate', relX: 0.05, relY: 0, rounding: 'starboard', color: 'orange' },
+      // Leeward gates positioned ~20% up the course from start line toward windward mark
+      { name: 'Leeward Gate Left', type: 'gate', relX: -0.08, relY: 0.2, rounding: 'port', color: 'orange' },
+      { name: 'Leeward Gate Right', type: 'gate', relX: 0.08, relY: 0.2, rounding: 'starboard', color: 'orange' },
     ],
   },
 
@@ -290,6 +303,25 @@ export class CoursePositioningService {
     );
 
     return { pin, committee };
+  }
+
+  /**
+   * Calculate recommended start line length based on fleet size
+   * Formula: spacingMultiplier × LOA × numberOfBoats (with min/max bounds)
+   *
+   * @param numberOfBoats Number of boats expected at start
+   * @param boatLengthM Boat LOA in meters (default ~26ft keelboat = 8m)
+   * @param spacingMultiplier Spacing multiplier (default 1.5 per sailing standards)
+   * @returns Calculated start line length in meters, bounded to 50-500m range
+   */
+  static calculateStartLineLength(
+    numberOfBoats: number,
+    boatLengthM: number = DEFAULT_BOAT_LOA_M,
+    spacingMultiplier: number = DEFAULT_SPACING_MULTIPLIER
+  ): number {
+    const calculated = numberOfBoats * boatLengthM * spacingMultiplier;
+    // Bounds: minimum 50m, maximum 500m
+    return Math.max(MIN_START_LINE_LENGTH_M, Math.min(MAX_START_LINE_LENGTH_M, calculated));
   }
 
   /**
@@ -591,6 +623,97 @@ export class CoursePositioningService {
       }
       return mark;
     });
+  }
+
+  /**
+   * Calculate finish mark position
+   * Finish buoy is opposite the pin from the committee boat
+   *
+   * @param startLine Start line position
+   * @param windDirection Wind direction in degrees (not currently used but may be useful for future enhancements)
+   * @returns Finish mark position
+   */
+  static calculateFinishMark(
+    startLine: StartLinePosition,
+    _windDirection: number
+  ): { lat: number; lng: number } {
+    // Finish buoy is opposite pin from committee boat
+    // Calculate by reflecting pin position across committee boat
+    const dx = startLine.pin.lng - startLine.committee.lng;
+    const dy = startLine.pin.lat - startLine.committee.lat;
+    return {
+      lat: startLine.committee.lat - dy,
+      lng: startLine.committee.lng - dx,
+    };
+  }
+
+  /**
+   * Reposition entire course to a new center location
+   * Preserves relative positions and orientation
+   *
+   * @param marks Current positioned marks
+   * @param startLine Current start line position
+   * @param newCenter New center point for the course
+   * @returns Repositioned marks and start line
+   */
+  static repositionCourse(
+    marks: PositionedMark[],
+    startLine: StartLinePosition,
+    newCenter: { lat: number; lng: number }
+  ): { marks: PositionedMark[]; startLine: StartLinePosition } {
+    // Calculate offset from old center to new center
+    const oldCenter = {
+      lat: (startLine.pin.lat + startLine.committee.lat) / 2,
+      lng: (startLine.pin.lng + startLine.committee.lng) / 2,
+    };
+    const latOffset = newCenter.lat - oldCenter.lat;
+    const lngOffset = newCenter.lng - oldCenter.lng;
+
+    // Apply offset to all marks and start line
+    return {
+      marks: marks.map(m => ({
+        ...m,
+        latitude: m.latitude + latOffset,
+        longitude: m.longitude + lngOffset,
+      })),
+      startLine: {
+        pin: {
+          lat: startLine.pin.lat + latOffset,
+          lng: startLine.pin.lng + lngOffset,
+        },
+        committee: {
+          lat: startLine.committee.lat + latOffset,
+          lng: startLine.committee.lng + lngOffset,
+        },
+      },
+    };
+  }
+
+  /**
+   * Realign course to wind direction after manual adjustments
+   * Clears all isUserAdjusted flags and recalculates from template
+   *
+   * @param marks Current marks (may have manual adjustments)
+   * @param startLineCenter Center point for the start line
+   * @param newWindDirection Wind direction in degrees
+   * @param legLengthNm Leg length in nautical miles
+   * @param courseType Type of course template to use
+   * @returns Newly calculated marks aligned to wind
+   */
+  static realignCourseToWind(
+    _marks: PositionedMark[],
+    startLineCenter: { lat: number; lng: number },
+    newWindDirection: number,
+    legLengthNm: number,
+    courseType: CourseType
+  ): PositionedMark[] {
+    // Recalculate from template - this clears all isUserAdjusted flags
+    return this.calculatePositionedCourse({
+      startLineCenter,
+      windDirection: newWindDirection,
+      legLengthNm,
+      courseType,
+    }).marks;
   }
 
   /**

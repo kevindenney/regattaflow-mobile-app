@@ -238,7 +238,7 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   }, [refresh]);
 
   const handleEditProfile = () => {
-    router.push('/(tabs)/settings');
+    router.push('/account');
   };
 
   const handleSeeAllStats = () => {

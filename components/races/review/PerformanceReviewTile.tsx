@@ -43,6 +43,8 @@ export interface PerformanceReviewTileProps {
   totalCount: number;
   /** Whether all items are complete */
   isComplete: boolean;
+  /** Label of the next item to review (optional) */
+  nextItemLabel?: string;
   /** Callback when tile is pressed */
   onPress: () => void;
 }
@@ -51,6 +53,7 @@ export function PerformanceReviewTile({
   completedCount,
   totalCount,
   isComplete,
+  nextItemLabel,
   onPress,
 }: PerformanceReviewTileProps) {
   // Animation (IOSWidgetCard pattern)
@@ -114,12 +117,25 @@ export function PerformanceReviewTile({
             </View>
             <Text style={styles.completeText}>{completedCount} reviewed</Text>
           </>
+        ) : completedCount === 0 && nextItemLabel ? (
+          <>
+            <Target size={20} color={COLORS.blue} />
+            <Text style={styles.nextItemLabel} numberOfLines={2}>
+              {nextItemLabel}
+            </Text>
+            <Text style={styles.itemCountHint}>{totalCount} items</Text>
+          </>
         ) : (
           <>
             <View style={styles.countRow}>
               <Text style={styles.countLarge}>{completedCount}</Text>
               <Text style={styles.countSuffix}>/{totalCount}</Text>
             </View>
+            {nextItemLabel && (
+              <Text style={styles.nextItemLabelSmall} numberOfLines={1}>
+                Next: {nextItemLabel}
+              </Text>
+            )}
             <View style={styles.progressTrack}>
               {progress > 0 && (
                 <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
@@ -137,12 +153,9 @@ export function PerformanceReviewTile({
   );
 }
 
-const TILE_SIZE = 155;
-
 const styles = StyleSheet.create({
   tile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
+    flex: 1,
     backgroundColor: COLORS.background,
     borderRadius: 16,
     borderWidth: 1,
@@ -218,6 +231,26 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: COLORS.blue,
     borderRadius: 2,
+  },
+  // Next item preview
+  nextItemLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.label,
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  nextItemLabelSmall: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.secondaryLabel,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  itemCountHint: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: COLORS.gray,
   },
   // Complete state
   completeIcon: {

@@ -44,6 +44,7 @@ import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import { useQueryClient } from '@tanstack/react-query';
 import { DetailedReviewModal } from '@/components/races/DetailedReviewModal';
+import { SuggestionsSection } from '@/components/races/suggestions/SuggestionsSection';
 import { CardMenu, type CardMenuItem } from '@/components/shared/CardMenu';
 import type { DetailCardType } from '@/constants/navigationAnimations';
 import { useRaceAnalysisData } from '@/hooks/useRaceAnalysisData';
@@ -991,13 +992,14 @@ export function RaceSummaryCard({
   }, [race.id]);
 
   // Helper to render phase tabs with iOS segmented control style (Prep/Launch/Race/Review)
+  // Max width = 2 tiles (155px each) + 1 gap (12px) = 322px
   const renderPhaseTabs = () => (
     <IOSSegmentedControl
       segments={phaseTabs}
       selectedValue={selectedPhase}
       onValueChange={handlePhaseChange}
       size="regular"
-      style={{ marginTop: 12, marginBottom: 12 }}
+      style={{ marginTop: 12, marginBottom: 12, maxWidth: 322 }}
     />
   );
 
@@ -1321,6 +1323,9 @@ export function RaceSummaryCard({
         <PhaseContentErrorBoundary phase={selectedPhase}>
           {renderPhaseContent()}
         </PhaseContentErrorBoundary>
+
+        {/* Suggestions from followers - only renders if pending suggestions exist */}
+        <SuggestionsSection raceId={cardRaceData.id} />
 
         {/* Compact Timeline Navigation with Prev/Next (Tufte: direct manipulation) */}
         {timelineRaces && timelineRaces.length > 1 && onSelectRace && (

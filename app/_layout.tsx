@@ -14,6 +14,7 @@ import {
 } from '@/lib/auth/firebaseBridge';
 import { supabase } from '@/services/supabase';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import { ContextualHintProvider } from '@/providers/ContextualHintProvider';
 import StripeProvider from '@/providers/StripeProvider';
 import { initializeCrewMutationHandlers } from '@/services/crewManagementService';
 import { initializeRaceRegistrationMutationHandlers } from '@/services/RaceRegistrationService';
@@ -489,11 +490,13 @@ export default function RootLayout() {
         <GluestackUIProvider mode="light">
           <StripeProvider>
             <AuthProvider>
+              <ContextualHintProvider>
               <ToastProvider>
                 <PushNotificationHandler>
                   <StackWithSplash />
                 </PushNotificationHandler>
               </ToastProvider>
+              </ContextualHintProvider>
             </AuthProvider>
           </StripeProvider>
         </GluestackUIProvider>

@@ -1,0 +1,120 @@
+-- Delete demo user accounts and all associated data (pre-App Store cleanup)
+DO $$
+DECLARE
+  demo_user_ids uuid[];
+  deleted_count int;
+BEGIN
+  -- Collect demo user IDs
+  SELECT array_agg(id) INTO demo_user_ids
+  FROM auth.users
+  WHERE email IN (
+    'demo-sailor@regattaflow.app',
+    'demo-coach@regattaflow.app',
+    'sarah.chen@sailing.com',
+    'coach.anderson@sailing.com',
+    'mike.thompson@racing.com',
+    'emma.wilson@yacht.club',
+    'james.rodriguez@fleet.com'
+  );
+
+  IF demo_user_ids IS NULL OR array_length(demo_user_ids, 1) = 0 THEN
+    RAISE NOTICE 'No demo users found, nothing to delete';
+    RETURN;
+  END IF;
+
+  RAISE NOTICE 'Deleting data for % demo users', array_length(demo_user_ids, 1);
+
+  -- Delete from child tables with user_id FK
+  DELETE FROM public.activity_comments WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.ai_activity_logs WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.ai_analyses WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.ai_conversations WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.ai_usage_logs WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.club_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.club_onboarding_sessions WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.club_staff WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.coach_profiles WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.community_memberships WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.crew_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.crew_thread_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.crew_thread_messages WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.documents WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.educational_checklist_completions WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.equipment_issues WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.event_registrations WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.fleet_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.fleet_notifications WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.fleet_post_likes WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.fleet_post_shares WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.follower_posts WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.global_club_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.learning_enrollments WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.learning_lesson_progress WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.notification_preferences WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.practice_intentions WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.practice_session_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.push_tokens WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_collaborators WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_documents WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_events WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_journals WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_messages WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_participants WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_patterns WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_positioned_courses WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_source_documents WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_strategies WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_suggestions WHERE race_owner_id = ANY(demo_user_ids) OR suggester_id = ANY(demo_user_ids);
+  DELETE FROM public.race_suggestions_cache WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.race_templates WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.regatta_comments WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.regatta_likes WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.rig_settings_history WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailing_documents WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailor_achievements WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailor_challenges WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailor_email_sequences WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailor_goals WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailor_media WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailor_profiles WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sailor_stats WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.saved_catalog_races WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.saved_venues WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.season_standings WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.seasons WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sensor_configurations WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.sensor_data_logs WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.social_notifications WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.subscription_team_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.subscriptions WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.suggestion_feedback WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.team_race_entry_members WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.training_plans WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.user_capabilities WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.user_club_documents WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.user_domains WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.user_location_context WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.user_manual_clubs WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.user_preferences WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.user_venue_profiles WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_community_tips WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_content_freshness WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_discussion_votes WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_intelligence_cache WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_member_roles WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_racing_area_confirmations WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_tip_votes WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.venue_transitions WHERE user_id = ANY(demo_user_ids);
+  DELETE FROM public.weather_insights WHERE user_id = ANY(demo_user_ids);
+
+  -- Delete from profiles and users
+  DELETE FROM public.profiles WHERE id = ANY(demo_user_ids);
+  DELETE FROM public.users WHERE id = ANY(demo_user_ids);
+
+  -- Delete from auth.users
+  DELETE FROM auth.users WHERE id = ANY(demo_user_ids);
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+
+  RAISE NOTICE 'Deleted % auth users', deleted_count;
+  RAISE NOTICE 'Demo user cleanup complete';
+END $$;

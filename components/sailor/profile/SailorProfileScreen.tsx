@@ -6,8 +6,10 @@ import React, { useCallback } from 'react';
 import {
   View,
   ScrollView,
+  Text,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
   StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -39,6 +41,9 @@ export function SailorProfileScreen({ userId }: SailorProfileScreenProps) {
     error,
     refetch,
     toggleFollow,
+    toggleFavorite,
+    toggleNotifications,
+    toggleMute,
     isToggling,
     isOwnProfile,
   } = useSailorFullProfile(userId);
@@ -82,8 +87,15 @@ export function SailorProfileScreen({ userId }: SailorProfileScreenProps) {
 
   if (error || !profile) {
     return (
-      <View style={styles.errorContainer}>
-        {/* Could add error UI here */}
+      <View style={[styles.errorContainer, { paddingTop: insets.top }]}>
+        <Text style={styles.errorEmoji}>🔍</Text>
+        <Text style={styles.errorTitle}>Profile not found</Text>
+        <Text style={styles.errorMessage}>
+          {error ? 'Something went wrong loading this profile.' : 'This sailor profile could not be loaded.'}
+        </Text>
+        <TouchableOpacity style={styles.errorButton} onPress={handleBack}>
+          <Text style={styles.errorButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -106,6 +118,9 @@ export function SailorProfileScreen({ userId }: SailorProfileScreenProps) {
         onFollowersPress={handleFollowersPress}
         onFollowingPress={handleFollowingPress}
         onToggleFollow={toggleFollow}
+        onToggleFavorite={toggleFavorite}
+        onToggleNotifications={toggleNotifications}
+        onToggleMute={toggleMute}
         isToggling={isToggling}
         onBack={handleBack}
       />
@@ -173,6 +188,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: IOS_COLORS.systemGroupedBackground,
+    paddingHorizontal: IOS_SPACING.xl,
+  },
+  errorEmoji: {
+    fontSize: 48,
+    marginBottom: IOS_SPACING.md,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginBottom: IOS_SPACING.xs,
+  },
+  errorMessage: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    marginBottom: IOS_SPACING.xl,
+    lineHeight: 20,
+  },
+  errorButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: IOS_COLORS.systemBlue,
+    borderRadius: 10,
+  },
+  errorButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   section: {
     marginTop: IOS_SPACING.lg,

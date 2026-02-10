@@ -1,7 +1,10 @@
 import { signOutEverywhere } from '@/lib/auth-actions'
+import { extractOAuthDisplayName } from '@/lib/utils/oauthName'
 import { nativeGoogleSignIn, nativeAppleSignIn, signOutFromNativeProviders } from '@/lib/auth/nativeOAuth'
 import { createLogger } from '@/lib/utils/logger'
+import { clearLastTab } from '@/lib/utils/lastTab'
 import { GuestStorageService } from '@/services/GuestStorageService'
+import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService'
 import { supabase, UserType } from '@/services/supabase'
 import { bindAuthDiagnostics } from '@/utils/authDebug'
 import { logAuthEvent, logAuthState } from '@/utils/errToText'
@@ -294,24 +297,40 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         ? await inferUserType()
         : (data.user_type as PersonaRole)
 
-      if (userTypeWasMissing) {
-        authDebugLog('[fetchUserProfile] No user_type found, defaulting to', resolvedUserType)
-        try {
-          await supabase
-            .from('users')
-            .update({
-              user_type: resolvedUserType,
-              onboarding_completed: true,
-            })
-            .eq('id', uid)
-        } catch (updateError) {
-          console.warn('[fetchUserProfile] Failed to persist default user_type:', updateError)
+      // Backfill full_name if missing (common for Apple/Google OAuth users)
+      const needsNameBackfill = !data?.full_name && user
+
+      if (userTypeWasMissing || needsNameBackfill) {
+        authDebugLog('[fetchUserProfile] Backfilling profile:', { userTypeWasMissing, needsNameBackfill })
+        const updatePayload: Record<string, any> = {}
+
+        if (userTypeWasMissing) {
+          updatePayload.user_type = resolvedUserType
+          updatePayload.onboarding_completed = true
+        }
+        if (needsNameBackfill) {
+          const backfilledName = extractOAuthDisplayName(user?.user_metadata)
+            || (data?.email ? data.email.split('@')[0] : '')
+          if (backfilledName) {
+            updatePayload.full_name = backfilledName
+          }
+        }
+
+        if (Object.keys(updatePayload).length > 0) {
+          try {
+            await supabase
+              .from('users')
+              .update(updatePayload)
+              .eq('id', uid)
+          } catch (updateError) {
+            console.warn('[fetchUserProfile] Failed to backfill profile:', updateError)
+          }
         }
 
         resolvedProfile = {
           ...data,
-          user_type: resolvedUserType,
-          onboarding_completed: true,
+          ...updatePayload,
+          ...(userTypeWasMissing ? { user_type: resolvedUserType, onboarding_completed: true } : {}),
         }
       }
 
@@ -361,7 +380,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         const profileData = {
           id: uid,
           email: user?.email || '',
-          full_name: user?.user_metadata?.full_name || user?.user_metadata?.name || '',
+          full_name: extractOAuthDisplayName(user?.user_metadata) || '',
           ...updates
         }
 
@@ -889,6 +908,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }
 
   const signOut = async () => {
+    // Clear saved tab so next login starts fresh
+    clearLastTab();
+
     authDebugLog('🚪 [AUTH] ===== SIGNOUT PROCESS STARTING =====')
     authDebugLog('🚪 [AUTH] Current state before signOut:', {
       signedIn,
@@ -1074,7 +1096,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
           email: trimmedEmail,
           full_name: displayName,
           user_type: personaRole,
-          onboarding_completed: personaRole === 'sailor', // Sailors skip onboarding
+          onboarding_completed: false, // All users go through practical onboarding
         }
 
         authDebugLog('[AUTH] Upserting user profile:', profilePayload)
@@ -1192,9 +1214,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       const profilePayload = {
         id: user.id,
         email: user.email,
-        full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+        full_name: extractOAuthDisplayName(user.user_metadata),
         user_type: persona,
-        onboarding_completed: persona === 'sailor',
+        onboarding_completed: false, // All users go through practical onboarding
       }
 
       authDebugLog('🔍 [LOGIN] Upserting OAuth profile:', profilePayload)
@@ -1335,6 +1357,8 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const enterGuestMode = useCallback(() => {
     authDebugLog('[AUTH] Entering guest mode')
     setIsGuest(true)
+    // Mark onboarding as seen so any residual checks treat the user correctly
+    OnboardingStateService.markOnboardingSeen()
     // Navigate to races tab
     router.replace('/(tabs)/races')
   }, [])

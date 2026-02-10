@@ -16,6 +16,7 @@ import type {
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 import { createLogger } from '@/lib/utils/logger';
 import { StormGlassService } from './StormGlassService';
+import { OpenMeteoService } from './OpenMeteoService';
 import Constants from 'expo-constants';
 
 // Weather forecast data types
@@ -108,9 +109,11 @@ export class RegionalWeatherService {
   private cache: Map<string, WeatherData> = new Map();
   private cacheTimeout = 30 * 60 * 1000; // 30 minutes
   private stormGlassService: StormGlassService | null = null;
+  private openMeteoService: OpenMeteoService;
   private logger = createLogger('RegionalWeatherService');
 
   constructor() {
+    this.openMeteoService = new OpenMeteoService();
     this.initializeWeatherModels();
     this.initializeStormGlass();
   }
@@ -344,6 +347,7 @@ export class RegionalWeatherService {
 
   /**
    * Aggregate weather data from multiple models
+   * Uses OpenMeteo as primary (FREE), Storm Glass as secondary enhancement
    */
   private async aggregateWeatherData(
     venue: SailingVenue,
@@ -354,6 +358,10 @@ export class RegionalWeatherService {
     const alerts: WeatherAlert[] = [];
     let marineConditions: MarineConditions = { seaState: 0 };
 
+    // PRIMARY: Load OpenMeteo forecasts first (FREE, always available)
+    const openMeteoForecasts = await this.loadOpenMeteoForecasts(venue, hoursAhead);
+
+    // SECONDARY: Load Storm Glass forecasts for enhancement (if available)
     const stormGlassForecasts = await this.loadStormGlassForecasts(venue, hoursAhead);
 
     // Generate forecast points (every 3 hours)
@@ -361,13 +369,21 @@ export class RegionalWeatherService {
     for (let hour = 0; hour <= hoursAhead; hour += 3) {
       const timestamp = new Date(now.getTime() + hour * 60 * 60 * 1000);
 
-      const stormGlassMatch = this.findClosestStormGlassForecast(stormGlassForecasts, timestamp);
+      // Try OpenMeteo first (primary)
+      const openMeteoMatch = this.findClosestOpenMeteoForecast(openMeteoForecasts, timestamp);
+      if (openMeteoMatch) {
+        forecasts.push(this.transformOpenMeteoToWeatherForecast(openMeteoMatch, timestamp));
+        continue;
+      }
 
+      // Try Storm Glass second (secondary enhancement)
+      const stormGlassMatch = this.findClosestStormGlassForecast(stormGlassForecasts, timestamp);
       if (stormGlassMatch) {
         forecasts.push(this.transformToWeatherForecast(stormGlassMatch));
         continue;
       }
 
+      // Final fallback to venue-specific generation
       const fallbackForecast = await this.generateVenueSpecificForecast(venue, timestamp, models[0]);
       forecasts.push(fallbackForecast);
     }
@@ -389,9 +405,9 @@ export class RegionalWeatherService {
       marineConditions,
       lastUpdated: new Date(),
       sources: {
-        primary: models[0]?.name || 'Unknown',
-        secondary: models.slice(1).map(m => m.name),
-        reliability: models[0]?.reliability || 0.8
+        primary: 'OpenMeteo', // OpenMeteo is always primary (FREE, reliable)
+        secondary: this.stormGlassService ? ['Storm Glass', ...models.map(m => m.name)] : models.map(m => m.name),
+        reliability: 0.85
       },
       localObservations
     };
@@ -399,50 +415,80 @@ export class RegionalWeatherService {
 
   /**
    * Generate venue-specific forecast based on typical conditions
-   * Uses Storm Glass API if available, falls back to simulated data
+   * Uses OpenMeteo API as primary (FREE), Storm Glass as secondary enhancement
    */
   private async generateVenueSpecificForecast(
     venue: SailingVenue,
     timestamp: Date,
     model: RegionalWeatherModel
   ): Promise<WeatherForecast> {
-    // Try to use Storm Glass first if we have valid coordinates
-    if (this.stormGlassService) {
-      const location = this.resolveVenueLocation(venue);
+    const location = this.resolveVenueLocation(venue);
 
-      if (location) {
-        try {
-          const weatherData = await this.stormGlassService.getWeatherAtTime(location, timestamp);
+    // PRIMARY: Try OpenMeteo first (FREE, always available)
+    if (location) {
+      try {
+        const weatherData = await this.openMeteoService.getWeatherAtTime(
+          { latitude: location.latitude, longitude: location.longitude },
+          timestamp
+        );
 
-          if (weatherData) {
-            return {
-              timestamp,
-              windSpeed: Math.round(weatherData.wind.speed),
-              windDirection: Math.round(weatherData.wind.direction),
-              windGusts: Math.round(weatherData.wind.gusts || weatherData.wind.speed * 1.3),
-              waveHeight: weatherData.waves?.height || 0.5,
-              wavePeriod: weatherData.waves?.period || 5,
-              waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
-              currentSpeed: weatherData.tide?.speed || 0,
-              currentDirection: weatherData.waves?.direction || weatherData.wind.direction,
-              airTemperature: weatherData.temperature || 20,
-              waterTemperature: weatherData.temperatureProfile?.water ?? (weatherData.temperature || 20) - 2,
-              visibility: (weatherData.visibility.horizontal ?? 10000) / 1000,
-              barometricPressure: weatherData.pressure.sealevel,
-              humidity: weatherData.humidity ?? weatherData.humidityProfile?.relative ?? 60,
-              precipitation: weatherData.precipitation ?? weatherData.precipitationProfile?.rate ?? 0,
-              cloudCover: weatherData.cloudCover ?? weatherData.cloudLayerProfile?.total ?? 50,
-              weatherCondition: this.mapWeatherCondition(weatherData),
-              confidence: weatherData.forecast?.confidence || model.reliability
-            };
-          }
-        } catch (error) {
-          // Log as warning, not error, since we have a fallback
-          console.warn('[RegionalWeatherService] Storm Glass API call failed, using simulated data:', error);
-          // Fall through to simulated data
+        if (weatherData) {
+          return {
+            timestamp,
+            windSpeed: Math.round(weatherData.wind.speed),
+            windDirection: Math.round(weatherData.wind.direction),
+            windGusts: Math.round(weatherData.wind.gusts || weatherData.wind.speed * 1.3),
+            waveHeight: weatherData.waves?.height || 0.5,
+            wavePeriod: weatherData.waves?.period || 5,
+            waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
+            currentSpeed: weatherData.tide?.speed || 0,
+            currentDirection: weatherData.waves?.direction || weatherData.wind.direction,
+            airTemperature: weatherData.temperature || 20,
+            waterTemperature: weatherData.temperatureProfile?.water ?? (weatherData.temperature || 20) - 2,
+            visibility: (weatherData.visibility?.horizontal ?? 10000) / 1000,
+            barometricPressure: weatherData.pressure?.sealevel || 1013,
+            humidity: weatherData.humidity ?? weatherData.humidityProfile?.relative ?? 60,
+            precipitation: weatherData.precipitation ?? weatherData.precipitationProfile?.rate ?? 0,
+            cloudCover: weatherData.cloudCover ?? weatherData.cloudLayerProfile?.total ?? 50,
+            weatherCondition: this.mapWeatherCondition(weatherData),
+            confidence: 0.85 // OpenMeteo is reliable
+          };
         }
+      } catch (error) {
+        this.logger.warn('[RegionalWeatherService] OpenMeteo API call failed, trying Storm Glass:', error);
       }
-      // No valid coordinates - silently fall through to simulated data
+    }
+
+    // SECONDARY: Try Storm Glass if OpenMeteo fails and we have API key
+    if (this.stormGlassService && location) {
+      try {
+        const weatherData = await this.stormGlassService.getWeatherAtTime(location, timestamp);
+
+        if (weatherData) {
+          return {
+            timestamp,
+            windSpeed: Math.round(weatherData.wind.speed),
+            windDirection: Math.round(weatherData.wind.direction),
+            windGusts: Math.round(weatherData.wind.gusts || weatherData.wind.speed * 1.3),
+            waveHeight: weatherData.waves?.height || 0.5,
+            wavePeriod: weatherData.waves?.period || 5,
+            waveDirection: weatherData.waves?.direction || weatherData.wind.direction,
+            currentSpeed: weatherData.tide?.speed || 0,
+            currentDirection: weatherData.waves?.direction || weatherData.wind.direction,
+            airTemperature: weatherData.temperature || 20,
+            waterTemperature: weatherData.temperatureProfile?.water ?? (weatherData.temperature || 20) - 2,
+            visibility: (weatherData.visibility.horizontal ?? 10000) / 1000,
+            barometricPressure: weatherData.pressure.sealevel,
+            humidity: weatherData.humidity ?? weatherData.humidityProfile?.relative ?? 60,
+            precipitation: weatherData.precipitation ?? weatherData.precipitationProfile?.rate ?? 0,
+            cloudCover: weatherData.cloudCover ?? weatherData.cloudLayerProfile?.total ?? 50,
+            weatherCondition: this.mapWeatherCondition(weatherData),
+            confidence: weatherData.forecast?.confidence || model.reliability
+          };
+        }
+      } catch (error) {
+        this.logger.warn('[RegionalWeatherService] Storm Glass API call failed, using simulated data:', error);
+      }
     }
 
     // Fallback: Use simulated data based on venue's typical conditions
@@ -530,6 +576,84 @@ export class RegionalWeatherService {
     };
   }
 
+  /**
+   * Load OpenMeteo forecasts (PRIMARY - FREE, always available)
+   */
+  private async loadOpenMeteoForecasts(venue: SailingVenue, hoursAhead: number): Promise<AdvancedWeatherConditions[]> {
+    const location = this.resolveVenueLocation(venue);
+    if (!location) {
+      return [];
+    }
+
+    const hours = Math.min(Math.max(hoursAhead, 6), 240);
+
+    try {
+      return await this.openMeteoService.getMarineWeather(
+        { latitude: location.latitude, longitude: location.longitude },
+        hours
+      );
+    } catch (error: any) {
+      this.logger.warn('OpenMeteo forecast fetch failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Find closest OpenMeteo forecast to target time
+   */
+  private findClosestOpenMeteoForecast(forecasts: AdvancedWeatherConditions[], target: Date): AdvancedWeatherConditions | null {
+    if (!forecasts.length) {
+      return null;
+    }
+
+    let closest: AdvancedWeatherConditions | null = null;
+    let smallestDiff = Number.POSITIVE_INFINITY;
+
+    for (const forecast of forecasts) {
+      if (!forecast.timestamp) continue;
+      const diff = Math.abs(forecast.timestamp.getTime() - target.getTime());
+      if (diff < smallestDiff) {
+        smallestDiff = diff;
+        closest = forecast;
+      }
+    }
+
+    // Only return if within 2 hours of target
+    if (closest && smallestDiff <= 2 * 60 * 60 * 1000) {
+      return closest;
+    }
+    return null;
+  }
+
+  /**
+   * Transform OpenMeteo forecast to WeatherForecast type
+   */
+  private transformOpenMeteoToWeatherForecast(data: AdvancedWeatherConditions, timestamp: Date): WeatherForecast {
+    return {
+      timestamp,
+      windSpeed: Math.round(data.wind.speed),
+      windDirection: Math.round(data.wind.direction),
+      windGusts: Math.round(data.wind.gusts || data.wind.speed * 1.3),
+      waveHeight: data.waves?.height || 0.5,
+      wavePeriod: data.waves?.period || 5,
+      waveDirection: data.waves?.direction || data.wind.direction,
+      currentSpeed: data.tide?.speed || 0,
+      currentDirection: data.waves?.direction || data.wind.direction,
+      airTemperature: data.temperature || 20,
+      waterTemperature: data.temperatureProfile?.water ?? (data.temperature || 20) - 2,
+      visibility: (data.visibility?.horizontal ?? 10000) / 1000,
+      barometricPressure: data.pressure?.sealevel || 1013,
+      humidity: data.humidity ?? data.humidityProfile?.relative ?? 60,
+      precipitation: data.precipitation ?? data.precipitationProfile?.rate ?? 0,
+      cloudCover: data.cloudCover ?? data.cloudLayerProfile?.total ?? 50,
+      weatherCondition: this.mapWeatherCondition(data),
+      confidence: 0.85 // OpenMeteo is reliable
+    };
+  }
+
+  /**
+   * Load Storm Glass forecasts (SECONDARY - requires API key)
+   */
   private async loadStormGlassForecasts(venue: SailingVenue, hoursAhead: number): Promise<AdvancedWeatherConditions[]> {
     if (!this.stormGlassService) {
       return [];
@@ -551,14 +675,11 @@ export class RegionalWeatherService {
       // Check if it's a quota/payment error (402)
       const isQuotaError = error.message?.includes('quota') || error.message?.includes('402');
       if (isQuotaError) {
-        this.logger.warn('Storm Glass API quota exceeded, using mock data fallback');
+        this.logger.warn('Storm Glass API quota exceeded');
       } else {
-        this.logger.warn('Storm Glass marine forecast fetch failed, falling back to mock data', error);
+        this.logger.warn('Storm Glass marine forecast fetch failed:', error);
       }
-
-      // Use mock data as fallback
-      const { generateMockForecast } = require('./mockWeatherData');
-      return generateMockForecast(location.latitude, location.longitude, hours);
+      return []; // Return empty, let OpenMeteo handle it
     }
   }
 
