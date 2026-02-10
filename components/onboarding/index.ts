@@ -20,3 +20,8 @@ export { OnboardingSummary } from './OnboardingSummary';
 
 // Sailor onboarding components
 export { SailorSubscriptionChoice } from './SailorSubscriptionChoice';
+
+// Feature Tour components
+export { ContextualHint } from './ContextualHint';
+export { TourStep, TourStepIndicator } from './TourStep';
+export { FeatureTour, TourOverlay, useTourContext } from './FeatureTour';

@@ -11,6 +11,7 @@ import { createLogger } from '@/lib/utils/logger';
 import { saveLastTab } from '@/lib/utils/lastTab';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
+import { FeatureTourProvider } from '@/providers/FeatureTourProvider';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
@@ -1018,13 +1019,16 @@ const styles = StyleSheet.create({
   },
 });
 
-// Wrap with CoachWorkspaceProvider for coach users and GlobalSearchProvider for search
+// Wrap with CoachWorkspaceProvider for coach users, GlobalSearchProvider for search,
+// and FeatureTourProvider for first-time user tour
 export default function TabLayout() {
   return (
     <WebDrawerProvider>
       <CoachWorkspaceProvider>
         <GlobalSearchProvider>
-          <TabLayoutInner />
+          <FeatureTourProvider autoStart={true}>
+            <TabLayoutInner />
+          </FeatureTourProvider>
         </GlobalSearchProvider>
       </CoachWorkspaceProvider>
     </WebDrawerProvider>

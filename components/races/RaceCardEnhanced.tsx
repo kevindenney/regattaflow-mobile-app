@@ -74,6 +74,8 @@ export interface RaceCardEnhancedProps {
   canManage?: boolean;
   /** Race type: fleet, distance, match, or team */
   raceType?: RaceType;
+  /** Whether this is a demo race */
+  isDemo?: boolean;
 }
 
 /**
@@ -447,6 +449,7 @@ export function RaceCardEnhanced({
   onDuplicate,
   canManage = false,
   raceType = 'fleet',
+  isDemo = false,
 }: RaceCardEnhancedProps) {
   const router = useRouter();
 
@@ -579,8 +582,13 @@ export function RaceCardEnhanced({
         {/* Header Zone */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          {/* Race Type and Fleet badges */}
+          {/* Race Type, Fleet, and Demo badges */}
           <View style={styles.badgesRow}>
+            {isDemo && (
+              <View style={styles.demoBadge}>
+                <Text style={styles.demoBadgeText}>DEMO</Text>
+              </View>
+            )}
             <RaceTypeBadge type={raceType} size="small" />
             {fleetName && (
               <View style={styles.fleetBadge}>
@@ -717,6 +725,21 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.blue,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  demoBadge: {
+    backgroundColor: `${IOS_COLORS.purple}15`,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.purple}30`,
+  },
+  demoBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: IOS_COLORS.purple,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   title: {
     ...TufteTokens.typography.primary,

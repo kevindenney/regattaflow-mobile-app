@@ -3,6 +3,7 @@
  *
  * Displays a horizontal carousel of demo/mock races for new users
  * who haven't added any races yet. Includes race cards and detail view.
+ * Includes tour step for "race_cards_navigation".
  */
 
 import { DemoAddRaceHeader } from '@/components/races/DemoAddRaceHeader';
@@ -10,6 +11,7 @@ import { DemoRaceDetail } from '@/components/races/DemoRaceDetail';
 import { DistanceRaceCard } from '@/components/races/DistanceRaceCard';
 import { RaceCardEnhanced } from '@/components/races/RaceCardEnhanced';
 import { TimelineIndicators } from '@/components/races/TimelineIndicators';
+import { TourStep } from '@/components/onboarding/TourStep';
 import { MOCK_RACES } from '@/constants/mockData';
 import * as Haptics from 'expo-haptics';
 import { useRef } from 'react';
@@ -60,96 +62,99 @@ export function DemoRacesCarousel({
       <DemoAddRaceHeader onAddRace={onAddRace} />
 
       {/* Hero Zone - Fixed height race card timeline */}
-      <View style={{ height: HERO_ZONE_HEIGHT }}>
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          pagingEnabled={false}
-          showsHorizontalScrollIndicator={false}
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            paddingLeft: MOBILE_CENTERING_PADDING,
-            paddingRight: MOBILE_CENTERING_PADDING,
-            paddingVertical: 8,
-            gap: MOBILE_CARD_GAP,
-            pointerEvents: 'box-none',
-          }}
-          nestedScrollEnabled={true}
-          scrollEventThrottle={16}
-          decelerationRate="fast"
-          snapToInterval={MOBILE_SNAP_INTERVAL}
-          snapToAlignment="start"
-          onMomentumScrollEnd={(event) => {
-            const offsetX = event.nativeEvent.contentOffset.x;
-            const adjustedOffset = offsetX + MOBILE_CENTERING_PADDING;
-            let rawIndex = Math.round(adjustedOffset / MOBILE_SNAP_INTERVAL);
-            rawIndex = Math.max(0, Math.min(rawIndex, MOCK_RACES.length - 1));
+      <TourStep step="race_cards_navigation" position="bottom">
+        <View style={{ height: HERO_ZONE_HEIGHT }}>
+          <ScrollView
+            ref={scrollViewRef}
+            horizontal
+            pagingEnabled={false}
+            showsHorizontalScrollIndicator={false}
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              paddingLeft: MOBILE_CENTERING_PADDING,
+              paddingRight: MOBILE_CENTERING_PADDING,
+              paddingVertical: 8,
+              gap: MOBILE_CARD_GAP,
+              pointerEvents: 'box-none',
+            }}
+            nestedScrollEnabled={true}
+            scrollEventThrottle={16}
+            decelerationRate="fast"
+            snapToInterval={MOBILE_SNAP_INTERVAL}
+            snapToAlignment="start"
+            onMomentumScrollEnd={(event) => {
+              const offsetX = event.nativeEvent.contentOffset.x;
+              const adjustedOffset = offsetX + MOBILE_CENTERING_PADDING;
+              let rawIndex = Math.round(adjustedOffset / MOBILE_SNAP_INTERVAL);
+              rawIndex = Math.max(0, Math.min(rawIndex, MOCK_RACES.length - 1));
 
-            const targetRace = MOCK_RACES[rawIndex];
-            if (targetRace?.id && targetRace.id !== selectedDemoRaceId) {
-              if (Platform.OS !== 'web') {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const targetRace = MOCK_RACES[rawIndex];
+              if (targetRace?.id && targetRace.id !== selectedDemoRaceId) {
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                onSelectDemoRace(targetRace.id);
               }
-              onSelectDemoRace(targetRace.id);
-            }
-          }}
-        >
-          {MOCK_RACES.map((race, index) => {
-            const isDistanceRace = race.race_type === 'distance';
-            if (isDistanceRace) {
+            }}
+          >
+            {MOCK_RACES.map((race, index) => {
+              const isDistanceRace = race.race_type === 'distance';
+              if (isDistanceRace) {
+                return (
+                  <DistanceRaceCard
+                    key={race.id}
+                    id={race.id}
+                    name={race.name}
+                    startVenue={race.venue}
+                    date={race.date}
+                    startTime={race.startTime}
+                    wind={race.wind}
+                    totalDistanceNm={race.total_distance_nm}
+                    vhf_channel={race.critical_details?.vhf_channel}
+                    isPrimary={index === 0}
+                    isMock={true}
+                    isSelected={selectedDemoRaceId === race.id}
+                    isDimmed={selectedDemoRaceId !== race.id}
+                    onSelect={() => onSelectDemoRace(race.id)}
+                    cardWidth={MOBILE_CARD_WIDTH}
+                    cardHeight={RACE_CARD_HEIGHT}
+                  />
+                );
+              }
               return (
-                <DistanceRaceCard
+                <RaceCardEnhanced
                   key={race.id}
                   id={race.id}
                   name={race.name}
-                  startVenue={race.venue}
+                  venue={race.venue}
                   date={race.date}
                   startTime={race.startTime}
                   wind={race.wind}
-                  totalDistanceNm={race.total_distance_nm}
+                  tide={race.tide}
                   vhf_channel={race.critical_details?.vhf_channel}
-                  isPrimary={index === 0}
-                  isMock={true}
                   isSelected={selectedDemoRaceId === race.id}
-                  isDimmed={selectedDemoRaceId !== race.id}
                   onSelect={() => onSelectDemoRace(race.id)}
                   cardWidth={MOBILE_CARD_WIDTH}
-                  cardHeight={RACE_CARD_HEIGHT}
+                  isDemo={true}
                 />
               );
-            }
-            return (
-              <RaceCardEnhanced
-                key={race.id}
-                id={race.id}
-                name={race.name}
-                venue={race.venue}
-                date={race.date}
-                startTime={race.startTime}
-                wind={race.wind}
-                tide={race.tide}
-                vhf_channel={race.critical_details?.vhf_channel}
-                isSelected={selectedDemoRaceId === race.id}
-                onSelect={() => onSelectDemoRace(race.id)}
-                cardWidth={MOBILE_CARD_WIDTH}
-              />
-            );
-          })}
-        </ScrollView>
+            })}
+          </ScrollView>
 
-        {/* Timeline Indicators (Dots) - Demo Race Navigation */}
-        <TimelineIndicators
-          races={MOCK_RACES}
-          selectedId={selectedDemoRaceId}
-          nextRaceIndex={0}
-          onSelect={(id) => onSelectDemoRace(id)}
-          snapInterval={MOBILE_SNAP_INTERVAL}
-          scrollViewRef={scrollViewRef}
-          activeColor="#7C3AED"
-          nextRaceColor="#34C759"
-          scrollIndexOffset={1}
-        />
-      </View>
+          {/* Timeline Indicators (Dots) - Demo Race Navigation */}
+          <TimelineIndicators
+            races={MOCK_RACES}
+            selectedId={selectedDemoRaceId}
+            nextRaceIndex={0}
+            onSelect={(id) => onSelectDemoRace(id)}
+            snapInterval={MOBILE_SNAP_INTERVAL}
+            scrollViewRef={scrollViewRef}
+            activeColor="#7C3AED"
+            nextRaceColor="#34C759"
+            scrollIndexOffset={1}
+          />
+        </View>
+      </TourStep>
 
       {/* Detail Zone - scrolls independently */}
       {selectedDemoRace && (

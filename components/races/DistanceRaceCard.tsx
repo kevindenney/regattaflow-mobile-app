@@ -794,15 +794,18 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.orange,
   },
   mockBadge: {
-    backgroundColor: IOS_COLORS.orange,
-    paddingHorizontal: 5,
+    backgroundColor: `${IOS_COLORS.purple}15`,
+    paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.purple}30`,
   },
   mockBadgeText: {
     fontSize: 9,
     fontWeight: '700',
-    color: IOS_COLORS.systemBackground,
+    color: IOS_COLORS.purple,
+    letterSpacing: 0.5,
   },
   title: {
     ...TufteTokens.typography.primary,
