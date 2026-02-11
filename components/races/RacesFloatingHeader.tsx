@@ -195,7 +195,7 @@ export function RacesFloatingHeader({
   const isLoading = loadingInsights || weatherLoading;
 
   // Build the race counter subtitle (hidden for progress segment)
-  const hasIndexCounter = Boolean(currentRaceIndex && totalRaces);
+  const hasIndexCounter = Boolean(currentRaceIndex && totalRaces && totalRaces > 0 && currentRaceIndex <= totalRaces);
   const hasUpcoming = upcomingRaces !== undefined && upcomingRaces > 0;
   const subtitleParts: string[] = [];
   if (hasIndexCounter) {

@@ -108,7 +108,7 @@ export const getTabsForUserType = (
 export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'races', label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
   { key: 'follow', label: 'Follow', route: '/(tabs)/follow', icon: 'people-outline' },
-  { key: 'community', label: 'Discuss', route: '/(tabs)/community', icon: 'chatbubbles-outline' },
+  { key: 'community', label: 'Community', route: '/(tabs)/community', icon: 'chatbubbles-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
   { key: 'reflect', label: 'Reflect', route: '/(tabs)/reflect', icon: 'stats-chart-outline' },
   { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },

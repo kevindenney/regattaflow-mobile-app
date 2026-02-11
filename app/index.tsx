@@ -16,7 +16,7 @@ import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LandingPage() {
-  const { signedIn, ready, userProfile, loading, isGuest, state, enterGuestMode } = useAuth();
+  const { signedIn, ready, userProfile, loading, isGuest, state } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(() => hasPersistedSessionHint());
   const searchParams = useLocalSearchParams<{ view?: string }>();
@@ -57,19 +57,14 @@ export default function LandingPage() {
 
         router.replace(destination);
       }
-    } else if (ready && !signedIn && !isGuest && !bypassRedirect) {
-      // Instagram-like flow: new visitors go straight to the tool in guest mode
-      enterGuestMode();
     } else if (ready && !signedIn && !isGuest && showSkeleton) {
       // Session hint was wrong (expired/invalid token) - show landing page
       setShowSkeleton(false);
     }
-  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state, enterGuestMode]);
+  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state]);
 
   // Show skeleton while auth is loading, for returning users, or during redirect
-  // This prevents flash of landing page before auto-entering guest mode
-  const willAutoEnterGuest = ready && !signedIn && !isGuest && !bypassRedirect;
-  if ((!ready || showSkeleton || signedIn || isRedirecting || willAutoEnterGuest) && !bypassRedirect) {
+  if ((!ready || showSkeleton || signedIn || isRedirecting) && !bypassRedirect) {
     return <DashboardSkeleton />;
   }
 
