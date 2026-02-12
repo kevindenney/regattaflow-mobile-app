@@ -202,6 +202,17 @@ export function ProfessionalMapScreen({
             height: '100%',
             width: '100%'
           }}
+          showWindArrows={showWindField || showWindBarbs}
+          showCurrentArrows={showCurrentArrows}
+          windDirection={currentWeather?.wind?.direction ?? 225}
+          windSpeed={currentWeather?.wind?.speed}
+          // Current direction: derive from tide or use wind-based estimate
+          // Typically current flows roughly perpendicular to coast or with prevailing tide
+          currentDirection={currentWeather?.tide?.speed ?
+            (currentWeather.tide.direction === 'flood' ? 0 :
+             currentWeather.tide.direction === 'ebb' ? 180 : 90) :
+            ((currentWeather?.wind?.direction ?? 225) + 90) % 360}
+          currentSpeed={currentWeather?.tide?.speed}
         />
       </View>
 

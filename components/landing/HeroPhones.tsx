@@ -7,14 +7,17 @@ import { router } from 'expo-router';
 import React from 'react';
 import {
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { EmbeddedRacesDemo } from './EmbeddedRacesDemo';
+import { CommunityGlobeSection } from './CommunityGlobeSection';
+import { EmbeddedInteractiveDemo } from './EmbeddedInteractiveDemo';
 import { Footer } from './Footer';
+import { LandingIosAppPreview, LandingScreensSection, type LandingTab } from './LandingIosAppPreview';
 // Removed: MiniClubDashboard, MiniCoachDashboard, MiniSailorDashboard - no longer used
 import { FeatureDescriptions, type FeatureId } from './FeatureDescriptions';
 import { MissionSection } from './MissionSection';
@@ -72,6 +75,7 @@ export function HeroPhones() {
   const [highlightedFeature, setHighlightedFeature] = React.useState<FeatureId | null>(null);
   const [zoomedFeature, setZoomedFeature] = React.useState<FeatureId | null>(null);
   const [highlightedRaceId, setHighlightedRaceId] = React.useState<string | null>(null);
+  const [previewTab, setPreviewTab] = React.useState<LandingTab>('race');
 
   // Ensure we only check dimensions after mount to avoid hydration mismatch
   React.useEffect(() => {
@@ -82,12 +86,33 @@ export function HeroPhones() {
   const isTablet = mounted && width > 768 && width <= 1024;
   const isMobile = mounted && width <= 768;
   const isSmallMobile = mounted && width <= 430; // iPhone Pro Max and smaller
-  const isExtraSmallMobile = mounted && width <= 375; // iPhone SE and smaller
-  const isSmallDesktop = mounted && width > 1200; // For three-column layout
   const shouldStackColumns = mounted && width <= 1200; // Stack below 1200px
+  const nativePhoneWidth = Math.min(width * 0.62, 280);
+  const nativePhoneHeight = Math.round(nativePhoneWidth * 2.1);
+  const heroPhoneWidth = Math.min(Math.max(width * 0.22, 250), 360);
+  const heroPhoneHeight = Math.round(heroPhoneWidth * 1.95);
+  const demoPhoneWidth = Math.min(Math.max(width * 0.24, 320), 430);
+  const demoPhoneHeight = Math.round(demoPhoneWidth * 1.8);
   const showDevControls =
     (typeof __DEV__ !== 'undefined' && __DEV__) ||
     process.env.EXPO_PUBLIC_SHOW_DEV_CONTROLS === 'true';
+
+  const featureToPreviewTab = React.useCallback((featureId: FeatureId): LandingTab => {
+    const map: Record<FeatureId, LandingTab> = {
+      'race-planning': 'race',
+      'race-day-conditions': 'race',
+      'ai-strategy': 'race',
+      'ai-rig-tuning': 'race',
+      'gps-tracking': 'follow',
+      'post-race-analysis': 'reflect',
+      'real-coaches': 'follow',
+      'venue-intelligence': 'discuss',
+      'fleet-sharing': 'follow',
+      'learning-academy': 'learn',
+      'yacht-club-integration': 'follow',
+    };
+    return map[featureId] ?? 'race';
+  }, []);
 
   // Inject responsive CSS for three-column layout and hero section (web only)
   React.useEffect(() => {
@@ -213,6 +238,130 @@ export function HeroPhones() {
           }
           [data-demo-with-features] {
             padding: 12px 8px !important;
+          }
+        }
+
+        /* Device stack (updated interface section) */
+        .device-stack {
+          position: relative;
+          width: 100%;
+          max-width: 980px;
+          margin: 0 auto;
+          min-height: 520px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .device-layer {
+          position: absolute;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        }
+
+        .device-frame {
+          background: linear-gradient(180deg, #0F172A 0%, #111827 100%);
+          border: 1px solid rgba(255,255,255,0.08);
+          box-shadow: 0 30px 80px rgba(15, 23, 42, 0.25);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .device-screen {
+          background: #0B1220;
+          overflow: hidden;
+        }
+
+        .device-macbook {
+          width: min(92%, 880px);
+          transform: translateY(-16px) translateX(-40px);
+          z-index: 1;
+          opacity: 0.9;
+          filter: blur(0.2px);
+        }
+        .device-macbook .device-frame {
+          border-radius: 20px;
+          padding: 18px 18px 28px 18px;
+        }
+        .device-macbook .device-screen {
+          width: 100%;
+          aspect-ratio: 16 / 10;
+          border-radius: 14px;
+        }
+
+        .device-ipad {
+          width: min(58%, 560px);
+          transform: translateY(90px) translateX(140px);
+          z-index: 2;
+          opacity: 0.92;
+        }
+        .device-ipad .device-frame {
+          border-radius: 28px;
+          padding: 14px;
+        }
+        .device-ipad .device-screen {
+          width: 100%;
+          aspect-ratio: 4 / 3;
+          border-radius: 18px;
+        }
+
+        .device-iphone {
+          width: min(36%, 320px);
+          transform: translateY(12px) translateX(-10px);
+          z-index: 3;
+          pointer-events: auto;
+        }
+        .device-iphone .device-frame {
+          border-radius: 36px;
+          padding: 12px;
+        }
+        .device-iphone .device-screen {
+          width: 100%;
+          aspect-ratio: 9 / 19.5;
+          border-radius: 28px;
+        }
+
+        .device-glow {
+          position: absolute;
+          inset: -40px;
+          background: radial-gradient(circle at 30% 30%, rgba(56, 189, 248, 0.18), transparent 55%),
+                      radial-gradient(circle at 70% 70%, rgba(59, 130, 246, 0.18), transparent 55%);
+          filter: blur(10px);
+          z-index: 0;
+        }
+
+        @media (max-width: 980px) {
+          .device-stack {
+            min-height: 480px;
+          }
+          .device-macbook {
+            width: 94%;
+            transform: translateY(-6px) translateX(-12px);
+          }
+          .device-ipad {
+            width: 64%;
+            transform: translateY(90px) translateX(90px);
+          }
+          .device-iphone {
+            width: 40%;
+            transform: translateY(22px) translateX(-4px);
+          }
+        }
+
+        @media (max-width: 720px) {
+          .device-stack {
+            min-height: 420px;
+          }
+          .device-macbook,
+          .device-ipad {
+            display: none;
+          }
+          .device-iphone {
+            width: min(74%, 320px);
+            transform: translateY(0);
           }
         }
         
@@ -455,8 +604,23 @@ export function HeroPhones() {
             style={styles.heroSubtitle}
             {...(Platform.OS === 'web' ? { 'data-hero-subtitle': true } : {})}
           >
-            147+ global sailing venues • Unlimited race planning • Community-powered intelligence
+            Plan faster, start cleaner, and make better tactical calls with AI built for competitive sailors.
           </Text>
+
+          <View style={styles.trustPills}>
+            <View style={styles.trustPill}>
+              <Ionicons name="location-outline" size={14} color="#E3F2FD" />
+              <Text style={styles.trustPillText}>147+ global venues</Text>
+            </View>
+            <View style={styles.trustPill}>
+              <Ionicons name="flash-outline" size={14} color="#E3F2FD" />
+              <Text style={styles.trustPillText}>AI race strategy</Text>
+            </View>
+            <View style={styles.trustPill}>
+              <Ionicons name="people-outline" size={14} color="#E3F2FD" />
+              <Text style={styles.trustPillText}>Crew & coach workflows</Text>
+            </View>
+          </View>
 
           <View style={styles.ctaButtons}>
             {user ? (
@@ -466,14 +630,30 @@ export function HeroPhones() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={styles.primaryButton} onPress={handleGetStarted}>
-                <Text style={styles.primaryButtonText}>Start Free Trial</Text>
+                <Text style={styles.primaryButtonText}>Start Free</Text>
                 <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
               </TouchableOpacity>
             )}
 
             <TouchableOpacity style={styles.secondaryButton} onPress={handleExploreVenues}>
-              <Text style={styles.secondaryButtonText}>Explore Venues</Text>
+              <Text style={styles.secondaryButtonText}>View Live Demo</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.tertiaryButton} onPress={handleScrollToPricing}>
+              <Text style={styles.tertiaryButtonText}>See Pricing</Text>
+            </TouchableOpacity>
+          </View>
+
+          {!user && (
+            <Text style={styles.ctaHelperText}>No credit card required</Text>
+          )}
+
+          <View style={styles.heroPhonePreview}>
+            <View style={styles.heroPhoneFrame}>
+              <View style={[styles.heroPhoneScreen, { width: heroPhoneWidth, height: heroPhoneHeight }]}>
+                <LandingIosAppPreview activeTab={previewTab} onTabChange={setPreviewTab} />
+              </View>
+            </View>
           </View>
 
           {/* Sign In link for existing users */}
@@ -490,22 +670,23 @@ export function HeroPhones() {
 
           {/* Also available for coaches and clubs */}
           <View style={styles.otherUserTypes}>
-            <Text style={styles.otherUserTypesText}>
-              Also available for{' '}
-              <Text
-                style={styles.otherUserTypesLink}
-                onPress={() => router.push('/coaches')}
-              >
-                coaches
+              <Text style={styles.otherUserTypesText}>
+                Need team tools? RegattaFlow also supports{' '}
+                <Text
+                  style={styles.otherUserTypesLink}
+                  onPress={() => alert('For Coaches is coming soon')}
+                >
+                  coaches
+                </Text>
+                {' '}and{' '}
+                <Text
+                  style={styles.otherUserTypesLink}
+                  onPress={() => alert('For Clubs is coming soon')}
+                >
+                  clubs
+                </Text>
+                {' '}coming soon.
               </Text>
-              {' '}and{' '}
-              <Text
-                style={styles.otherUserTypesLink}
-                onPress={() => router.push('/clubs')}
-              >
-                clubs
-              </Text>
-            </Text>
           </View>
 
           {/* App Download Buttons - only show on web */}
@@ -514,16 +695,16 @@ export function HeroPhones() {
               <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
                 <Ionicons name="logo-apple" size={18} color="rgba(255,255,255,0.6)" />
                 <View style={styles.downloadButtonText}>
-                  <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
-                  <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>App Store</Text>
+                  <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>GET ON</Text>
+                  <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>iOS (Soon)</Text>
                 </View>
               </View>
 
               <View style={[styles.downloadButton, styles.downloadButtonDisabled]}>
                 <Ionicons name="logo-google-playstore" size={18} color="rgba(255,255,255,0.6)" />
                 <View style={styles.downloadButtonText}>
-                  <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>COMING SOON</Text>
-                  <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>Google Play</Text>
+                  <Text style={[styles.downloadButtonLabel, styles.downloadButtonLabelDisabled]}>GET ON</Text>
+                  <Text style={[styles.downloadButtonStore, styles.downloadButtonStoreDisabled]}>Android (Soon)</Text>
                 </View>
               </View>
 
@@ -535,8 +716,8 @@ export function HeroPhones() {
               >
                 <Ionicons name="desktop-outline" size={18} color="#FFFFFF" />
                 <View style={styles.downloadButtonText}>
-                  <Text style={styles.downloadButtonLabel}>USE ON</Text>
-                  <Text style={styles.downloadButtonStore}>Web Browser</Text>
+                  <Text style={styles.downloadButtonLabel}>GET ON</Text>
+                  <Text style={styles.downloadButtonStore}>Web</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -566,6 +747,7 @@ export function HeroPhones() {
               highlightedFeature={highlightedFeature}
               onFeatureClick={(featureId, raceId, sectionId) => {
                 setHighlightedFeature(featureId);
+                setPreviewTab(featureToPreviewTab(featureId));
                 if (raceId) {
                   setHighlightedRaceId(raceId);
                   // Auto-clear after 3 seconds
@@ -584,25 +766,20 @@ export function HeroPhones() {
             // @ts-ignore - Web only: use native div for data attributes and CSS containment
             <div
               data-demo-center="true"
-              className={`demo-center-wrapper ${shouldStackColumns ? 'demo-center-stacked' : ''}`}
+              className={`demoCenter device-stack-wrapper ${shouldStackColumns ? 'demo-center-stacked' : ''}`}
             >
-              {/* @ts-ignore */}
-              <div
-                data-races-demo-container="true"
-                className="demo-container-wrapper"
-              >
-                {/* @ts-ignore */}
-                <div className="demo-scroll-container">
-                  <EmbeddedRacesDemo
-                    mode={isSmallMobile ? 'mobile-native' : 'fullscreen'}
-                    scrollable={true}
-                    readOnly={true}
-                    autoReset={false}
-                    hideHeader={true}
-                    highlightedFeature={highlightedFeature}
-                    highlightedRaceId={highlightedRaceId}
-                    showTabs={false}
-                  />
+              <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', alignItems: 'stretch', flexWrap: 'wrap', width: '100%' }}>
+                <div style={{ width: `min(46%, ${demoPhoneWidth}px)`, minWidth: '300px' }} className="device-frame">
+                  <div data-races-demo-container="true" className="device-screen" style={{ pointerEvents: 'auto', borderRadius: '28px', overflow: 'hidden', height: `${demoPhoneHeight}px` }}>
+                    <div className="demo-scroll-container" style={{ height: '100%' }}>
+                      <LandingIosAppPreview activeTab={previewTab} onTabChange={setPreviewTab} />
+                    </div>
+                  </div>
+                </div>
+                <div style={{ width: `min(46%, ${demoPhoneWidth}px)`, minWidth: '300px' }} className="device-frame">
+                  <div className="device-screen" style={{ borderRadius: '28px', overflow: 'hidden', height: `${demoPhoneHeight}px` }}>
+                    <EmbeddedInteractiveDemo component="StartingSequence" screenWidth={demoPhoneWidth} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -613,18 +790,25 @@ export function HeroPhones() {
                 shouldStackColumns && styles.demoCenterStacked,
               ]}
             >
-              <View style={styles.demoContainerWrapper}>
-                <View style={styles.demoContainer}>
-                  <EmbeddedRacesDemo
-                    mode={isSmallMobile ? 'mobile-native' : 'fullscreen'}
-                    scrollable={true}
-                    readOnly={true}
-                    autoReset={false}
-                    hideHeader={true}
-                    highlightedFeature={highlightedFeature}
-                    highlightedRaceId={highlightedRaceId}
-                    showTabs={false}
-                  />
+              <View style={styles.dualPhonesNative}>
+                <View style={styles.phoneCardNative}>
+                  <View style={styles.deviceFrameNative}>
+                    <View style={[styles.deviceScreenNativeBase, { width: nativePhoneWidth, height: nativePhoneHeight, borderRadius: 24 }]}>
+                      <LandingIosAppPreview activeTab={previewTab} onTabChange={setPreviewTab} />
+                    </View>
+                  </View>
+                </View>
+                <View style={[styles.phoneCardNative, styles.phoneCardLearnNative]}>
+                  <View style={styles.deviceFrameNative}>
+                    <View style={[styles.deviceScreenNativeBase, { width: nativePhoneWidth, height: nativePhoneHeight, borderRadius: 24 }]}>
+                      <ScrollView style={{ flex: 1 }}>
+                        <EmbeddedInteractiveDemo
+                          component="StartingSequence"
+                          screenWidth={nativePhoneWidth}
+                        />
+                      </ScrollView>
+                    </View>
+                  </View>
                 </View>
               </View>
             </View>
@@ -643,6 +827,7 @@ export function HeroPhones() {
               highlightedFeature={highlightedFeature}
               onFeatureClick={(featureId, raceId, sectionId) => {
                 setHighlightedFeature(featureId);
+                setPreviewTab(featureToPreviewTab(featureId));
                 if (raceId) {
                   setHighlightedRaceId(raceId);
                   // Auto-clear after 3 seconds
@@ -657,6 +842,10 @@ export function HeroPhones() {
           </View>
         </View>
       </View>
+
+      <LandingScreensSection selectedTab={previewTab} onSelectTab={setPreviewTab} />
+
+      <CommunityGlobeSection />
 
       {/* Pricing Section */}
       <View id="pricing-section" {...(Platform.OS === 'web' ? { 'data-section': 'pricing-section' } : {})}>
@@ -725,12 +914,12 @@ const styles = StyleSheet.create({
 
   // Hero Section
   heroSection: {
-    paddingVertical: 80,
+    paddingVertical: 96,
     paddingHorizontal: 24,
     width: '100%',
     ...Platform.select({
       web: {
-        minHeight: 500,
+        minHeight: 740,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -751,7 +940,7 @@ const styles = StyleSheet.create({
     }),
   },
   heroContent: {
-    maxWidth: 800,
+    maxWidth: 1180,
     alignSelf: 'center',
     width: '100%',
     alignItems: 'center',
@@ -779,10 +968,10 @@ const styles = StyleSheet.create({
   },
   // Simplified Logo Container
   logoContainer: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   logoText: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
     color: '#FFFFFF',
     letterSpacing: 0.5,
@@ -821,7 +1010,7 @@ const styles = StyleSheet.create({
     }),
   },
   heroTitle: {
-    fontSize: 36,
+    fontSize: 44,
     fontWeight: '800',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -830,8 +1019,8 @@ const styles = StyleSheet.create({
     // CRITICAL: Clean styles only - NO position, NO transform, NO animation, NO nested text
     ...Platform.select({
       web: {
-        fontSize: 'clamp(32px, 5vw, 56px)',
-        lineHeight: 1.2,
+        fontSize: 'clamp(46px, 5.5vw, 72px)',
+        lineHeight: 1.08,
         display: 'block',
         width: '100%',
         // Force single rendering
@@ -847,26 +1036,56 @@ const styles = StyleSheet.create({
     }),
   },
   heroSubtitle: {
-    fontSize: 18,
+    fontSize: 20,
     color: '#E3F2FD',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 18,
     lineHeight: 28,
     ...Platform.select({
       web: {
-        fontSize: 'clamp(14px, 2.5vw, 18px)',
-        maxWidth: 700,
+        fontSize: 'clamp(19px, 2.1vw, 24px)',
+        maxWidth: 880,
       } as any,
     }),
   },
-  ctaButtons: {
-    gap: 16,
-    width: '100%',
-    alignItems: 'center',
+  trustPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
     marginBottom: 24,
     ...Platform.select({
       web: {
+        maxWidth: 760,
+      },
+    }),
+  },
+  trustPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.26)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  trustPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EAF4FF',
+  },
+  ctaButtons: {
+    gap: 14,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 12,
+    ...Platform.select({
+      web: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
         width: 'auto',
         '@media (max-width: 480px)': {
           flexDirection: 'column',
@@ -880,8 +1099,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
+    paddingHorizontal: 38,
+    paddingVertical: 18,
     borderRadius: 12,
     ...Platform.select({
       web: {
@@ -893,25 +1112,62 @@ const styles = StyleSheet.create({
     }),
   },
   primaryButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
     color: '#0A2463',
   },
   secondaryButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
+    paddingHorizontal: 34,
+    paddingVertical: 18,
     borderRadius: 12,
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },
   secondaryButtonText: {
-    fontSize: 18,
+    fontSize: 19,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  tertiaryButton: {
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(8, 20, 46, 0.2)',
+  },
+  tertiaryButtonText: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
   },
   buttonIcon: {
     marginLeft: 8,
+  },
+  ctaHelperText: {
+    marginBottom: 12,
+    fontSize: 14,
+    color: '#E3F2FD',
+    opacity: 0.9,
+  },
+  heroPhonePreview: {
+    marginTop: 14,
+    marginBottom: 22,
+  },
+  heroPhoneFrame: {
+    backgroundColor: '#0F172A',
+    borderRadius: 30,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  heroPhoneScreen: {
+    width: 260,
+    height: 510,
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: '#0B1220',
   },
   downloadButtons: {
     gap: 8,
@@ -974,7 +1230,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.8)',
   },
   otherUserTypes: {
-    marginTop: 32,
+    marginTop: 20,
     marginBottom: 24,
     alignItems: 'center',
     ...Platform.select({
@@ -984,7 +1240,7 @@ const styles = StyleSheet.create({
     }),
   },
   otherUserTypesText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#E3F2FD',
     opacity: 0.9,
   },
@@ -1060,8 +1316,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0, // Remove horizontal padding
     ...Platform.select({
       web: {
-        paddingVertical: 80,
-        paddingHorizontal: '1%', // Minimal horizontal padding
+        paddingVertical: 88,
+        paddingHorizontal: '2%',
       },
     }),
   },
@@ -1075,7 +1331,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 24,
         alignItems: 'flex-start',
-        maxWidth: 1800,
+        maxWidth: 1920,
         alignSelf: 'center',
         paddingVertical: 40,
         paddingHorizontal: 24,
@@ -1107,9 +1363,9 @@ const styles = StyleSheet.create({
       web: {
         flexGrow: 0,
         flexShrink: 0,
-        flexBasis: 280,
-        maxWidth: 280,
-        minWidth: 280,
+        flexBasis: 320,
+        maxWidth: 320,
+        minWidth: 320,
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -1177,14 +1433,72 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  deviceStackNative: {
+    width: '100%',
+    minHeight: 420,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dualPhonesNative: {
+    width: '100%',
+    minHeight: 420,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  phoneCardNative: {
+    marginVertical: 8,
+  },
+  phoneCardLearnNative: {
+    ...Platform.select({
+      web: {
+        display: 'none',
+      } as any,
+    }),
+  },
+  deviceLayerNative: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deviceFrameNative: {
+    backgroundColor: '#0F172A',
+    borderRadius: 24,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  deviceScreenNativeBase: {
+    backgroundColor: '#0B1220',
+    overflow: 'hidden',
+  },
+  deviceMacbookNative: {
+    transform: [{ translateX: -30 }, { translateY: -20 }],
+    opacity: 0.9,
+  },
+  deviceIpadNative: {
+    transform: [{ translateX: 90 }, { translateY: 80 }],
+    opacity: 0.95,
+  },
+  deviceIphoneNative: {
+    transform: [{ translateX: -6 }, { translateY: 10 }],
+    opacity: 1,
+  },
   featuresRight: {
     ...Platform.select({
       web: {
         flexGrow: 0,
         flexShrink: 0,
-        flexBasis: 280,
-        maxWidth: 280,
-        minWidth: 280,
+        flexBasis: 320,
+        maxWidth: 320,
+        minWidth: 320,
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
@@ -1618,4 +1932,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

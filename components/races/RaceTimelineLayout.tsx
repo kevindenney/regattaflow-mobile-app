@@ -380,18 +380,20 @@ export function RaceTimelineLayout({
             )}
 
             {/* Position indicator - clickable to jump to next */}
-            <TouchableOpacity
-              onPress={() => {
-                if (nextRaceIndex !== undefined) {
-                  handleJumpToNext();
-                }
-              }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Text style={styles.timelinePositionIndicator}>
-                {selectedRaceIndex + 1}/{races.length}
-              </Text>
-            </TouchableOpacity>
+            {races.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  if (nextRaceIndex !== undefined) {
+                    handleJumpToNext();
+                  }
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.timelinePositionIndicator}>
+                  {Math.min(selectedRaceIndex + 1, races.length)}/{races.length}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 

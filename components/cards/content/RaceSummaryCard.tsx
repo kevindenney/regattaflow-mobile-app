@@ -1198,7 +1198,7 @@ export function RaceSummaryCard({
               </Text>
             </View>
           )}
-          <View style={styles.simpleHeaderRight}>
+        <View style={styles.simpleHeaderRight}>
             {/* Countdown: past = gray relative time; today = bold TODAY; future = large number */}
             <View style={styles.countdownSimple}>
               {countdown.isPast ? (
@@ -1232,6 +1232,12 @@ export function RaceSummaryCard({
             )}
           </View>
         </View>
+
+        {(race as any).isDemo && (
+          <View style={styles.sampleBadge}>
+            <Text style={styles.sampleBadgeText}>SAMPLE DATA</Text>
+          </View>
+        )}
 
         {/* Full race name */}
         <Text

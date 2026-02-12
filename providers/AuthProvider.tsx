@@ -604,7 +604,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         if (sessionError) {
           authDebugLog('[AUTH] getSession error:', sessionError)
           if (isInvalidRefreshTokenError(sessionError)) {
-            console.error('[AUTH] Invalid refresh token detected - clearing session and redirecting to login')
+            console.warn('[AUTH] Invalid refresh token detected - clearing session and redirecting to login')
             await clearInvalidSession('getSession', sessionError)
             setReady(true)
             // Redirect to login page
@@ -759,7 +759,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         authDebugLog('🚪 [AUTH] Starting state cleanup...')
 
         if ((evt as string) === 'TOKEN_REFRESH_FAILED') {
-          console.error('[AUTH] Token refresh failed. Clearing session and forcing re-authentication.')
+          console.warn('[AUTH] Token refresh failed. Clearing session and forcing re-authentication.')
           await clearInvalidSession('auth_state_change:refresh_failed')
         }
 

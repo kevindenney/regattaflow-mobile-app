@@ -27,7 +27,7 @@ export function DemoAddRaceHeader({
   return (
     <View style={addRaceHeaderStyles.container}>
       <Text style={addRaceHeaderStyles.countText}>{message}</Text>
-      <TourStep step="add_race_button" position="bottom">
+      <TourStep step="add_your_race" position="bottom">
         <Pressable
           onPress={onAddRace}
           style={({ pressed }) => [

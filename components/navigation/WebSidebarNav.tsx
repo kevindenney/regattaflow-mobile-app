@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { useWebDrawer } from '@/providers/WebDrawerProvider';
+
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import {
   type NavItem,
@@ -32,7 +33,7 @@ interface WebSidebarNavProps {
 }
 
 function WebSidebarNav({ onClose }: WebSidebarNavProps) {
-  const { userType, isGuest } = useAuth();
+  const { userType, isGuest, user, signOut } = useAuth();
   const { isPinned, togglePin, closeDrawer } = useWebDrawer();
   const pathname = usePathname();
   const router = useRouter();
@@ -47,6 +48,15 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.replace('/' as Parameters<typeof router.replace>[0]);
+    } catch (error) {
+      console.error('[WebSidebarNav] Failed to sign out:', error);
+    }
+  };
+
   // Handle sidebar toggle - if pinned, unpin and close; otherwise just close
   const handleToggleSidebar = () => {
     if (isPinned) {
@@ -57,7 +67,7 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
 
   const renderNavItem = (item: NavItem) => {
     const active = isRouteActive(item.route, pathname);
-    return (
+    const navItem = (
       <TouchableOpacity
         key={item.key}
         style={[styles.navItem, active && styles.navItemActive]}
@@ -74,6 +84,8 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
         </Text>
       </TouchableOpacity>
     );
+
+    return navItem;
   };
 
   return (
@@ -122,7 +134,23 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
         {/* Spacer */}
         <View style={styles.spacer} />
 
-        {/* Footer - Guest auth options */}
+        {/* Footer - Auth actions */}
+        {!isGuest && user && (
+          <>
+            <View style={styles.divider} />
+            <View style={styles.navSection}>
+              <TouchableOpacity
+                style={styles.navItem}
+                onPress={handleSignOut}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="log-out-outline" size={20} color={IOS_COLORS.systemRed} />
+                <Text style={[styles.navItemText, styles.signOutText]}>Sign Out</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
         {isGuest && (
           <>
             <View style={styles.divider} />
@@ -260,5 +288,9 @@ const styles = StyleSheet.create({
   },
   signInText: {
     color: IOS_COLORS.systemBlue,
+  },
+  signOutText: {
+    color: IOS_COLORS.systemRed,
+    fontWeight: '600',
   },
 });

@@ -17,6 +17,7 @@ import { RaceCardEnhanced } from '@/components/races/RaceCardEnhanced';
 import { RaceDetailZone } from '@/components/races/RaceDetailZone';
 import { RaceTimelineLayout } from '@/components/races/RaceTimelineLayout';
 import { TimelineIndicators } from '@/components/races/TimelineIndicators';
+import { TourStep } from '@/components/onboarding/TourStep';
 import {
   createDetailCardsForRace,
   renderDetailCardByType,
@@ -585,22 +586,25 @@ export function RealRacesCarousel({
     };
 
     return (
-      <View style={timelineNavStyles.container}>
-        <RaceTimelineLayout
-          races={timelineItems}
-          selectedRaceIndex={selectedRaceIndex}
-          onRaceChange={handleTimelineItemChange}
-          renderRaceCard={(item, index) => renderTimelineItem(item as TimelineItem, index)}
-          renderDetailCard={renderDetailCard}
-          detailCards={detailCards as any}
-          onDetailCardChange={handleDetailCardChange}
-          useCardPagerMode={true}
-          enableHaptics={Platform.OS !== 'web'}
-          cardWidth={MOBILE_CARD_WIDTH}
-          nextRaceIndex={nextRaceIndex}
-        />
-
-      </View>
+      <TourStep step="race_cards_navigation" position="bottom">
+        <TourStep step="phase_tabs" position="bottom">
+          <View style={timelineNavStyles.container}>
+            <RaceTimelineLayout
+              races={timelineItems}
+              selectedRaceIndex={selectedRaceIndex}
+              onRaceChange={handleTimelineItemChange}
+              renderRaceCard={(item, index) => renderTimelineItem(item as TimelineItem, index)}
+              renderDetailCard={renderDetailCard}
+              detailCards={detailCards as any}
+              onDetailCardChange={handleDetailCardChange}
+              useCardPagerMode={true}
+              enableHaptics={Platform.OS !== 'web'}
+              cardWidth={MOBILE_CARD_WIDTH}
+              nextRaceIndex={nextRaceIndex}
+            />
+          </View>
+        </TourStep>
+      </TourStep>
     );
   }
 
@@ -608,7 +612,9 @@ export function RealRacesCarousel({
   return (
     <>
       {/* Hero Zone - Fixed height race card timeline */}
-      <View style={{ height: HERO_ZONE_HEIGHT }}>
+      <TourStep step="race_cards_navigation" position="bottom">
+        <TourStep step="phase_tabs" position="bottom">
+          <View style={{ height: HERO_ZONE_HEIGHT }}>
         <ScrollView
           ref={scrollViewRef}
           horizontal
@@ -659,16 +665,18 @@ export function RealRacesCarousel({
         />
 
         {/* Timeline Indicators (Dots) */}
-        <TimelineIndicators
-          races={races}
-          selectedId={selectedRaceId}
-          onSelect={onSelectRace}
-          snapInterval={MOBILE_SNAP_INTERVAL}
-          scrollViewRef={scrollViewRef}
-          activeColor={IOS_COLORS.blue}
-          nextRaceIndex={nextRaceIndex}
-        />
-      </View>
+            <TimelineIndicators
+              races={races}
+              selectedId={selectedRaceId}
+              onSelect={onSelectRace}
+              snapInterval={MOBILE_SNAP_INTERVAL}
+              scrollViewRef={scrollViewRef}
+              activeColor={IOS_COLORS.blue}
+              nextRaceIndex={nextRaceIndex}
+            />
+          </View>
+        </TourStep>
+      </TourStep>
 
       {/* Detail Zone - Accordion sections for race details */}
       {selectedRaceData && (

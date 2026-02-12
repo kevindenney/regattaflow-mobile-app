@@ -31,6 +31,7 @@ import { supabase } from '@/services/supabase';
 
 import { IOSListItem } from '@/components/ui/ios/IOSListItem';
 import { IOSListSection } from '@/components/ui/ios/IOSListSection';
+import { TourPricingCard } from '@/components/onboarding/TourPricingCard';
 import { TufteProfileHeader } from './TufteProfileHeader';
 import { accountStyles, ICON_BACKGROUNDS } from './accountStyles';
 
@@ -66,6 +67,7 @@ export default function AccountModalContent() {
   const [boatsLoading, setBoatsLoading] = useState(true);
 
   // Settings-related state
+  const [pricingVisible, setPricingVisible] = useState(false);
   const [teamManagerVisible, setTeamManagerVisible] = useState(false);
   const [allowFollowerSharing, setAllowFollowerSharing] = useState(true);
   const [sharingSettingLoading, setSharingSettingLoading] = useState(false);
@@ -400,6 +402,13 @@ export default function AccountModalContent() {
             />
           )}
           <IOSListItem
+            title="Plans & Pricing"
+            leadingIcon="pricetags-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+            trailingAccessory="chevron"
+            onPress={() => setPricingVisible(true)}
+          />
+          <IOSListItem
             title={userProfile?.subscription_tier === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
             leadingIcon="arrow-up-circle-outline"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
@@ -576,6 +585,24 @@ export default function AccountModalContent() {
           <Text style={accountStyles.appInfoText}>2024 RegattaFlow Inc.</Text>
         </View>
       </ScrollView>
+
+      {/* Plans & Pricing Modal */}
+      <Modal
+        visible={pricingVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPricingVisible(false)}
+      >
+        <TourPricingCard
+          visible={pricingVisible}
+          standalone={false}
+          onStartTrial={() => {
+            setPricingVisible(false);
+            router.push('/subscription');
+          }}
+          onContinueFree={() => setPricingVisible(false)}
+        />
+      </Modal>
 
       {/* Team Manager Modal */}
       <Modal

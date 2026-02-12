@@ -1,6 +1,11 @@
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
 import FloatingTabBar from '@/components/navigation/FloatingTabBar';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
+import { TourOverlay } from '@/components/onboarding/FeatureTour';
+import { WelcomeCard } from '@/components/onboarding/WelcomeCard';
+import { TourBackdrop } from '@/components/onboarding/TourBackdrop';
+import { TabSweepCard } from '@/components/onboarding/TabSweepCard';
+import { TourPricingCard } from '@/components/onboarding/TourPricingCard';
 import { GlobalSearchProvider } from '@/providers/GlobalSearchProvider';
 import { useWebDrawer, WebDrawerProvider } from '@/providers/WebDrawerProvider';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
@@ -11,12 +16,12 @@ import { createLogger } from '@/lib/utils/logger';
 import { saveLastTab } from '@/lib/utils/lastTab';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
-import { FeatureTourProvider } from '@/providers/FeatureTourProvider';
+import { FeatureTourProvider, useFeatureTourContext } from '@/providers/FeatureTourProvider';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 // Lazy import WebSidebarNav only on web to avoid bundling on native
@@ -36,6 +41,23 @@ function TabLayoutInner() {
   const pathname = usePathname();
   const { isDrawerOpen, closeDrawer } = useWebDrawer();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const {
+    isTourActive,
+    currentStep,
+    shouldShowTour,
+    isTourComplete,
+    currentStepIndex,
+    totalSteps,
+    skipTour,
+    skipToPrice,
+    advanceStep,
+    previousStep,
+    goToStepIndex,
+    resetTour,
+    startTour,
+    isFullscreenStep,
+  } = useFeatureTourContext();
+  const wasTourActiveRef = useRef(false);
 
   // iPad portrait: tab bar moves to top of screen
   const isIPadPortrait = Platform.OS === 'ios' && (Platform as any).isPad === true && windowHeight > windowWidth;
@@ -69,6 +91,47 @@ function TabLayoutInner() {
       saveLastTab(pathname);
     }
   }, [pathname]);
+
+  // Auto-open tabs for the tab tour steps and keep race steps on /races.
+  useEffect(() => {
+    if (!isTourActive || !currentStep) {
+      return;
+    }
+
+    const stepRouteMap: Record<string, string> = {
+      welcome: '/races',
+      race_timeline: '/races',
+      prep_overview: '/races',
+      tab_sweep: '/races',
+      add_your_race: '/races',
+      pricing_trial: '/races',
+    };
+
+    const targetRoute = stepRouteMap[currentStep];
+    if (!targetRoute || pathname === targetRoute) {
+      return;
+    }
+
+    router.replace(targetRoute as Parameters<typeof router.replace>[0]);
+  }, [isTourActive, currentStep, pathname, router]);
+
+  // When tour ends, return to /races so demo context + add-race CTA is the final destination.
+  useEffect(() => {
+    if (isTourActive) {
+      wasTourActiveRef.current = true;
+      return;
+    }
+
+    if (!wasTourActiveRef.current) {
+      return;
+    }
+
+    if (isTourComplete && pathname !== '/races') {
+      router.replace('/races' as Parameters<typeof router.replace>[0]);
+    }
+
+    wasTourActiveRef.current = false;
+  }, [isTourActive, isTourComplete, pathname, router]);
 
   const isTabVisible = (name: string) => tabs.some(t => t.name === name);
   const findTab = (name: string) => tabs.find(tab => tab.name === name);
@@ -756,6 +819,40 @@ function TabLayoutInner() {
           {tabsContent}
         </View>
       </View>
+      <TourBackdrop />
+      <WelcomeCard
+        visible={isTourActive && shouldShowTour && currentStep === 'welcome'}
+        onStartTour={advanceStep}
+        onSkip={skipToPrice}
+      />
+      <TabSweepCard
+        visible={isTourActive && shouldShowTour && currentStep === 'tab_sweep'}
+        onNext={advanceStep}
+        onSkip={skipToPrice}
+      />
+      <TourPricingCard
+        visible={isTourActive && shouldShowTour && currentStep === 'pricing_trial'}
+        onStartTrial={() => {
+          skipTour();
+          router.push('/(auth)/signup' as any);
+        }}
+        onContinueFree={skipTour}
+      />
+      <TourOverlay
+        visible={isTourActive && shouldShowTour && !isFullscreenStep}
+        currentStepIndex={currentStepIndex}
+        totalSteps={totalSteps}
+        onSkip={skipToPrice}
+        onPrevious={__DEV__ ? previousStep : undefined}
+        onNext={__DEV__ ? advanceStep : undefined}
+        onGoToStep={__DEV__ ? goToStepIndex : undefined}
+        onReset={__DEV__ ? async () => {
+          await resetTour();
+          await startTour();
+        } : undefined}
+        showProgressIndicator
+        showSkipButton={!__DEV__}
+      />
 
     </View>
   );

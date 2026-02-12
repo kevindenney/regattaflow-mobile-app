@@ -2342,6 +2342,12 @@ export function DaysBeforeContent({
             boatId={userBoat?.id}
             venueId={venueId}
             venueName={venueName}
+            wind={marineOverlayData?.windSpeed !== undefined ? {
+              direction: degreesToCardinal(marineOverlayData?.windDirection),
+              speedMin: Math.round(marineOverlayData.windSpeed),
+              speedMax: Math.round(marineOverlayData.windSpeed),
+            } : undefined}
+            tideState={weatherSparklines?.tideLabel || raceTideLabel}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
           />

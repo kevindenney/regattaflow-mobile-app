@@ -16,7 +16,7 @@ import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LandingPage() {
-  const { signedIn, ready, userProfile, loading, isGuest, state } = useAuth();
+  const { signedIn, ready, userProfile, loading, isGuest, state, enterGuestMode } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(() => hasPersistedSessionHint());
   const searchParams = useLocalSearchParams<{ view?: string }>();
@@ -36,6 +36,13 @@ export default function LandingPage() {
   useEffect(() => {
     // Wait for auth to be ready AND not loading profile
     if (!ready || loading || isRedirecting) return;
+
+    // First-time / signed-out visitors: auto-enter guest and send to races.
+    if (!signedIn && !isGuest && state !== 'guest' && !bypassRedirect) {
+      setIsRedirecting(true);
+      enterGuestMode();
+      return;
+    }
 
     // Guest mode: redirect to races tab
     if ((isGuest || state === 'guest') && !bypassRedirect) {
@@ -61,7 +68,7 @@ export default function LandingPage() {
       // Session hint was wrong (expired/invalid token) - show landing page
       setShowSkeleton(false);
     }
-  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state]);
+  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state, enterGuestMode]);
 
   // Show skeleton while auth is loading, for returning users, or during redirect
   if ((!ready || showSkeleton || signedIn || isRedirecting) && !bypassRedirect) {

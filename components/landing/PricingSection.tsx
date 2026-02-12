@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { SAILOR_TIERS } from '@/lib/subscriptions/sailorTiers';
 
 interface PricingSectionProps {
   variant?: 'sailor' | 'coach' | 'club';
@@ -16,813 +17,290 @@ interface PricingSectionProps {
 
 export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
   const { width } = useWindowDimensions();
-  const isDesktop = width > 768;
-  const isMobile = width <= 480;
-  const isSmallMobile = width <= 375;
+  const isDesktop = width > 900;
 
-  // Show variant-specific pricing
-  if (variant === 'coach') {
-    return <CoachPricingSection isDesktop={isDesktop} />;
+  if (variant === 'coach' || variant === 'club') {
+    const audience = variant === 'coach' ? 'Coaches' : 'Clubs';
+
+    return (
+      <View id="pricing-section" style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>{audience} Pricing</Text>
+            <Text style={styles.headerSubtitle}>
+              Coming soon. We are finalizing plans for {audience.toLowerCase()}.
+            </Text>
+          </View>
+
+          <View style={styles.comingSoonCard}>
+            <Ionicons name="time-outline" size={28} color="#3E92CC" />
+            <Text style={styles.comingSoonTitle}>Pricing announcement in progress</Text>
+            <Text style={styles.comingSoonBody}>
+              Join the waitlist and we will send pricing and early access details.
+            </Text>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => {
+                if (Platform.OS === 'web') {
+                  window.location.href = 'mailto:hello@regattaflow.io?subject=Waitlist: ' + audience + ' pricing';
+                }
+              }}
+            >
+              <Text style={styles.primaryButtonText}>Join Waitlist</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
   }
 
-  if (variant === 'club') {
-    return <ClubPricingSection isDesktop={isDesktop} />;
-  }
-
   return (
     <View id="pricing-section" style={styles.container}>
-      <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-        {/* Section Header */}
+      <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={[styles.headerTitle, isDesktop && styles.headerTitleDesktop]}>
-            Simple, Transparent Pricing
-          </Text>
-          <Text style={[styles.headerSubtitle, isDesktop && styles.headerSubtitleDesktop]}>
-            Choose the plan that fits your racing goals
+          <Text style={styles.headerTitle}>Simple Sailor Pricing</Text>
+          <Text style={styles.headerSubtitle}>
+            Based on current in-app subscription tiers and Stripe web plans.
           </Text>
         </View>
 
-        {/* Race Strategy Planner Section */}
-        <View style={styles.productSection}>
-          <View style={styles.productHeader}>
-            <Ionicons name="navigate" size={24} color="#3E92CC" />
-            <Text style={styles.productTitle}>Race Strategy Planner</Text>
-          </View>
-          <Text style={styles.productSubtitle}>
-            AI-powered race planning & venue intelligence
-          </Text>
+        <View style={[styles.cardsRow, isDesktop && styles.cardsRowDesktop]}>
+          <PricingCard
+            title={SAILOR_TIERS.free.name}
+            price="$0"
+            sublabel="Get started"
+            features={[
+              'Up to 3 races',
+              '5 AI queries per month',
+              'Basic race checklists',
+              'Document upload',
+            ]}
+            cta="Get Started Free"
+            outlined
+          />
+
+          <PricingCard
+            title={SAILOR_TIERS.individual.name}
+            price={SAILOR_TIERS.individual.priceYearly || '$120'}
+            sublabel={`${SAILOR_TIERS.individual.priceMonthly || '$10'}/mo billed yearly`}
+            features={SAILOR_TIERS.individual.features.slice(0, 6)}
+            cta="Choose Individual"
+            outlined
+          />
+
+          <PricingCard
+            title={SAILOR_TIERS.team.name}
+            price={SAILOR_TIERS.team.priceYearly || '$480'}
+            sublabel={`${SAILOR_TIERS.team.priceMonthly || '$40'}/mo billed yearly`}
+            features={SAILOR_TIERS.team.features}
+            cta="Choose Team"
+            featured
+          />
         </View>
 
-        {/* Sailor Pricing Tiers */}
-        <SailorsPricing isDesktop={isDesktop} isMobile={isMobile} isSmallMobile={isSmallMobile} />
-
-        {/* Racing Academy Section */}
-        <View style={[styles.productSection, { marginTop: 48 }]}>
-          <View style={styles.productHeader}>
-            <Ionicons name="school" size={24} color="#8B5CF6" />
-            <Text style={[styles.productTitle, { color: '#8B5CF6' }]}>Racing Academy</Text>
-          </View>
-          <Text style={styles.productSubtitle}>
-            Master racing strategy with structured courses
+        <View style={styles.learnCallout}>
+          <Ionicons name="school-outline" size={20} color="#6D28D9" />
+          <Text style={styles.learnCalloutText}>
+            Learn modules are separate and purchased individually (from $30/year per module).
           </Text>
+          <TouchableOpacity style={styles.learnCalloutButton} onPress={() => router.push('/(tabs)/learn')}>
+            <Text style={styles.learnCalloutButtonText}>Explore Learn</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Racing Academy Pricing */}
-        <RacingAcademyPricing isDesktop={isDesktop} />
       </View>
     </View>
   );
 }
 
-function SailorsPricing({ isDesktop, isMobile, isSmallMobile }: { isDesktop: boolean; isMobile?: boolean; isSmallMobile?: boolean }) {
+function PricingCard({
+  title,
+  price,
+  sublabel,
+  features,
+  cta,
+  featured,
+  outlined,
+}: {
+  title: string;
+  price: string;
+  sublabel: string;
+  features: string[];
+  cta: string;
+  featured?: boolean;
+  outlined?: boolean;
+}) {
   return (
-    <View style={[
-      styles.pricingContent,
-      isDesktop && styles.pricingContentDesktop,
-      isMobile && styles.pricingContentMobile,
-    ]}>
-      {/* Free */}
-      <View style={[styles.pricingCard, isMobile && styles.pricingCardMobile]}>
-        <Text style={styles.tierName}>Free</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.price}>$0</Text>
+    <View style={[styles.card, featured && styles.cardFeatured]}>
+      {featured && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>POPULAR</Text>
         </View>
-        <Text style={styles.tierTagline}>Get started with the basics</Text>
+      )}
 
-        <View style={styles.features}>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Race tracking</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>View venue intelligence</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>10 AI queries per month</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Basic race planning</Text>
-          </View>
-        </View>
+      <Text style={[styles.cardTitle, featured && styles.cardTitleFeatured]}>{title}</Text>
+      <Text style={[styles.cardPrice, featured && styles.cardPriceFeatured]}>{price}</Text>
+      <Text style={styles.cardSublabel}>{sublabel}</Text>
 
-        <TouchableOpacity
-          style={[styles.ctaButton, styles.ctaButtonOutline]}
-          onPress={() => router.push('/(auth)/signup')}
-        >
-          <Text style={styles.ctaButtonOutlineText}>Get Started Free</Text>
-        </TouchableOpacity>
+      <View style={styles.featureList}>
+        {features.map((item) => (
+          <View key={`${title}-${item}`} style={styles.featureRow}>
+            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
+            <Text style={styles.featureText}>{item}</Text>
+          </View>
+        ))}
       </View>
 
-      {/* Basic */}
-      <View style={[styles.pricingCard, isMobile && styles.pricingCardMobile]}>
-        <Text style={styles.tierName}>Basic</Text>
-        <View style={styles.priceContainer}>
-          <Text style={styles.price}>$120</Text>
-          <Text style={styles.pricePeriod}>/year</Text>
-        </View>
-        <Text style={styles.effectiveMonthly}>$10/mo</Text>
-        <Text style={styles.tierTagline}>Essential tools for club racers</Text>
-
-        <View style={styles.features}>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Unlimited races</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>20 AI queries per month</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Automatic weather updates</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Race checklists & prep tools</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Cloud backup & sync</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.ctaButton, styles.ctaButtonOutline]}
-          onPress={() => router.push('/(auth)/signup')}
-        >
-          <Text style={styles.ctaButtonOutlineText}>Get Basic</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Pro */}
-      <View style={[styles.pricingCard, styles.pricingCardFeatured, isMobile && styles.pricingCardMobile]}>
-        <View style={styles.popularBadge}>
-          <Text style={styles.popularText}>POPULAR</Text>
-        </View>
-        <Text style={[styles.tierName, { color: '#3E92CC' }]}>Pro</Text>
-        <View style={styles.priceContainer}>
-          <Text style={[styles.price, { color: '#3E92CC' }]}>$360</Text>
-          <Text style={styles.pricePeriod}>/year</Text>
-        </View>
-        <Text style={styles.effectiveMonthly}>$30/mo</Text>
-        <Text style={styles.tierTagline}>Full features for serious sailors</Text>
-
-        <View style={styles.features}>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Everything in Basic</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Unlimited AI queries</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>AI strategy analysis</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Team sharing & collaboration</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Historical race data</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Offline mode</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#3E92CC" />
-            <Text style={styles.featureText}>Priority support</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: '#3E92CC' }]}
-          onPress={() => router.push('/(auth)/signup')}
-        >
-          <Text style={styles.ctaButtonText}>Get Pro</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function RacingAcademyPricing({ isDesktop }: { isDesktop: boolean }) {
-  return (
-    <View style={[styles.academyPricingContainer, isDesktop && styles.academyPricingContainerDesktop]}>
-      {/* Single Module */}
-      <View style={styles.academyCard}>
-        <Ionicons name="book-outline" size={32} color="#8B5CF6" />
-        <Text style={styles.academyCardTitle}>Single Module</Text>
-        <View style={styles.priceContainer}>
-          <Text style={[styles.price, { fontSize: 36, color: '#8B5CF6' }]}>$30</Text>
-          <Text style={styles.pricePeriod}>/year</Text>
-        </View>
-        <Text style={styles.academyCardDesc}>Choose any one course</Text>
-        <View style={styles.moduleList}>
-          <Text style={styles.moduleItem}>Starting Line Strategy</Text>
-          <Text style={styles.moduleItem}>Wind Shift Tactics</Text>
-          <Text style={styles.moduleItem}>Mark Rounding Mastery</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: '#8B5CF6', marginTop: 16 }]}
-          onPress={() => router.push('/learn')}
-        >
-          <Text style={styles.ctaButtonText}>Choose Module</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* All Modules Bundle */}
-      <View style={[styles.academyCard, styles.academyCardFeatured]}>
-        <View style={[styles.popularBadge, { backgroundColor: '#8B5CF6' }]}>
-          <Text style={styles.popularText}>BEST VALUE</Text>
-        </View>
-        <Ionicons name="library" size={32} color="#8B5CF6" />
-        <Text style={styles.academyCardTitle}>All Modules</Text>
-        <View style={styles.priceContainer}>
-          <Text style={[styles.price, { fontSize: 36, color: '#8B5CF6' }]}>$100</Text>
-          <Text style={styles.pricePeriod}>/year</Text>
-        </View>
-        <Text style={[styles.academyCardDesc, { color: '#10B981', fontWeight: '600' }]}>
-          Best value for complete education
-        </Text>
-        <View style={styles.moduleList}>
-          <View style={styles.moduleItemWithCheck}>
-            <Ionicons name="checkmark" size={14} color="#8B5CF6" />
-            <Text style={styles.moduleItem}>Starting Line Strategy</Text>
-          </View>
-          <View style={styles.moduleItemWithCheck}>
-            <Ionicons name="checkmark" size={14} color="#8B5CF6" />
-            <Text style={styles.moduleItem}>Wind Shift Tactics</Text>
-          </View>
-          <View style={styles.moduleItemWithCheck}>
-            <Ionicons name="checkmark" size={14} color="#8B5CF6" />
-            <Text style={styles.moduleItem}>Mark Rounding Mastery</Text>
-          </View>
-        </View>
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: '#8B5CF6', marginTop: 16 }]}
-          onPress={() => router.push('/learn')}
-        >
-          <Text style={styles.ctaButtonText}>Get All Modules</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Pro Callout */}
-      <View style={styles.championshipCallout}>
-        <Ionicons name="gift" size={20} color="#8B5CF6" />
-        <Text style={styles.championshipCalloutText}>
-          Subscribe to both Race Strategy Pro and All Learning Modules for complete racing mastery
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function CoachesPricing({ isDesktop }: { isDesktop: boolean }) {
-  return (
-    <View style={[styles.pricingContent, { justifyContent: 'center' }]}>
-      <View style={[styles.pricingCard, styles.pricingCardWide]}>
-        <Ionicons name="trending-up" size={48} color="#8B5CF6" />
-        <Text style={[styles.tierName, { color: '#8B5CF6', fontSize: 28, marginTop: 16 }]}>
-          Earn on Your Terms
-        </Text>
-        <Text style={[styles.tierTagline, { fontSize: 18, marginTop: 12 }]}>
-          Keep 85% of your earnings
-        </Text>
-
-        <View style={styles.earningsBreakdown}>
-          <View style={styles.earningsRow}>
-            <Text style={styles.earningsLabel}>Your Rate:</Text>
-            <Text style={styles.earningsValue}>You decide</Text>
-          </View>
-          <View style={styles.earningsRow}>
-            <Text style={styles.earningsLabel}>Platform Fee:</Text>
-            <Text style={[styles.earningsValue, { color: '#8B5CF6' }]}>15%</Text>
-          </View>
-          <View style={[styles.earningsRow, { paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB' }]}>
-            <Text style={[styles.earningsLabel, { fontWeight: '700' }]}>You Keep:</Text>
-            <Text style={[styles.earningsValue, { fontWeight: '700', color: '#10B981', fontSize: 24 }]}>85%</Text>
-          </View>
-        </View>
-
-        <View style={[styles.features, { marginTop: 24 }]}>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
-            <Text style={styles.featureText}>Built-in payment processing</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
-            <Text style={styles.featureText}>Session management tools</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
-            <Text style={styles.featureText}>Performance analytics for clients</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#8B5CF6" />
-            <Text style={styles.featureText}>Marketplace exposure</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: '#8B5CF6', marginTop: 24 }]}
-          onPress={() => router.push('/(auth)/signup')}
-        >
-          <Text style={styles.ctaButtonText}>Join the Marketplace</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function ClubsPricing({ isDesktop }: { isDesktop: boolean }) {
-  return (
-    <View style={[styles.pricingContent, { justifyContent: 'center' }]}>
-      <View style={[styles.pricingCard, styles.pricingCardWide]}>
-        <Ionicons name="business" size={48} color="#10B981" />
-        <Text style={[styles.tierName, { color: '#10B981', fontSize: 28, marginTop: 16 }]}>
-          Enterprise Pricing
-        </Text>
-        <Text style={[styles.tierTagline, { fontSize: 18, marginTop: 12 }]}>
-          Complete regatta management
-        </Text>
-
-        <View style={styles.clubPricingTiers}>
-          <View style={styles.clubTier}>
-            <Text style={styles.clubTierName}>Starter</Text>
-            <Text style={[styles.price, { fontSize: 32, color: '#10B981' }]}>$299</Text>
-            <Text style={styles.pricePeriod}>/month</Text>
-            <Text style={styles.clubTierDesc}>Up to 500 members</Text>
-          </View>
-
-          <View style={styles.clubTierDivider} />
-
-          <View style={styles.clubTier}>
-            <Text style={styles.clubTierName}>Professional</Text>
-            <Text style={[styles.price, { fontSize: 32, color: '#10B981' }]}>$599</Text>
-            <Text style={styles.pricePeriod}>/month</Text>
-            <Text style={styles.clubTierDesc}>Up to 2000 members</Text>
-          </View>
-
-          <View style={styles.clubTierDivider} />
-
-          <View style={styles.clubTier}>
-            <Text style={styles.clubTierName}>Enterprise</Text>
-            <Text style={[styles.price, { fontSize: 32, color: '#10B981' }]}>$999</Text>
-            <Text style={styles.pricePeriod}>/month</Text>
-            <Text style={styles.clubTierDesc}>Unlimited members</Text>
-          </View>
-        </View>
-
-        <View style={[styles.features, { marginTop: 24 }]}>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={styles.featureText}>Complete regatta management</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={styles.featureText}>Live race scoring & results</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={styles.featureText}>Member & event management</Text>
-          </View>
-          <View style={styles.feature}>
-            <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-            <Text style={styles.featureText}>Dedicated support</Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: '#10B981', marginTop: 24 }]}
-          onPress={() => {
-            if (Platform.OS === 'web') {
-              // Open email client or contact form
-              window.location.href = 'mailto:sales@regattaflow.io?subject=Club Enterprise Inquiry';
-            }
-          }}
-        >
-          <Text style={styles.ctaButtonText}>Contact Sales</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-// Wrapper component for Coach-specific pricing section
-function CoachPricingSection({ isDesktop }: { isDesktop: boolean }) {
-  return (
-    <View id="pricing-section" style={styles.container}>
-      <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, isDesktop && styles.headerTitleDesktop]}>
-            Coach Pricing
-          </Text>
-          <Text style={[styles.headerSubtitle, isDesktop && styles.headerSubtitleDesktop]}>
-            Keep more of what you earn
-          </Text>
-        </View>
-        <CoachesPricing isDesktop={isDesktop} />
-      </View>
-    </View>
-  );
-}
-
-// Wrapper component for Club-specific pricing section
-function ClubPricingSection({ isDesktop }: { isDesktop: boolean }) {
-  return (
-    <View id="pricing-section" style={styles.container}>
-      <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, isDesktop && styles.headerTitleDesktop]}>
-            Club Pricing
-          </Text>
-          <Text style={[styles.headerSubtitle, isDesktop && styles.headerSubtitleDesktop]}>
-            Complete regatta and member management
-          </Text>
-        </View>
-        <ClubsPricing isDesktop={isDesktop} />
-      </View>
+      <TouchableOpacity
+        style={[styles.ctaButton, outlined && styles.ctaButtonOutline, featured && styles.ctaButtonFeatured]}
+        onPress={() => router.push('/(auth)/signup')}
+      >
+        <Text style={[styles.ctaText, outlined && styles.ctaTextOutline]}>{cta}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: 80,
+    paddingVertical: 72,
     paddingHorizontal: 24,
     backgroundColor: '#F9FAFB',
   },
   content: {
-    maxWidth: 1200,
-    alignSelf: 'center',
+    maxWidth: 1180,
     width: '100%',
+    alignSelf: 'center',
   },
-  contentDesktop: {
-    // Additional desktop styles if needed
-  },
-
-  // Header
   header: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 28,
   },
   headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1F2937',
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#111827',
     textAlign: 'center',
-    marginBottom: 12,
-  },
-  headerTitleDesktop: {
-    fontSize: 40,
+    marginBottom: 8,
   },
   headerSubtitle: {
-    fontSize: 18,
-    color: '#6B7280',
+    fontSize: 17,
+    color: '#4B5563',
     textAlign: 'center',
   },
-  headerSubtitleDesktop: {
-    fontSize: 20,
-  },
-
-  // Pricing Content
-  pricingContent: {
-    flexDirection: 'row',
-    gap: 24,
-    flexWrap: 'wrap',
-    ...Platform.select({
-      web: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: 24,
-        maxWidth: 1200,
-        alignSelf: 'center',
-        '@media (max-width: 768px)': {
-          gridTemplateColumns: '1fr',
-          gap: 16,
-        },
-      } as any,
-    }),
-  },
-  pricingContentDesktop: {
-    flexWrap: 'nowrap',
-  },
-  pricingContentMobile: {
-    flexDirection: 'column',
+  cardsRow: {
     gap: 16,
-    paddingHorizontal: 8,
-    ...Platform.select({
-      web: {
-        display: 'flex',
-        gridTemplateColumns: '1fr',
-      } as any,
-    }),
+    flexDirection: 'column',
   },
-  pricingCard: {
+  cardsRowDesktop: {
+    flexDirection: 'row',
+  },
+  card: {
     flex: 1,
-    minWidth: 280,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 32,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#E5E7EB',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-        '@media (max-width: 768px)': {
-          minWidth: 0,
-          width: '100%',
-        },
-      } as any,
-      default: {
-        elevation: 2,
-      },
-    }),
-  },
-  pricingCardMobile: {
-    minWidth: 0,
-    width: '100%',
+    borderRadius: 16,
     padding: 24,
-    marginHorizontal: 0,
+    minHeight: 420,
   },
-  pricingCardFeatured: {
+  cardFeatured: {
     borderColor: '#3E92CC',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 4px 12px rgba(62, 146, 204, 0.2)',
-      },
-      default: {
-        elevation: 4,
-      },
-    }),
+    borderWidth: 2,
   },
-  pricingCardWide: {
-    minWidth: 400,
-    maxWidth: 600,
-    alignSelf: 'center',
-  },
-  popularBadge: {
-    position: 'absolute',
-    top: -12,
-    right: 24,
+  badge: {
+    alignSelf: 'flex-end',
     backgroundColor: '#3E92CC',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
-  },
-  popularText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  tierName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1F2937',
+    borderRadius: 999,
     marginBottom: 8,
   },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 8,
-  },
-  price: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  pricePeriod: {
-    fontSize: 18,
-    color: '#6B7280',
-    marginLeft: 4,
-  },
-  tierTagline: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 24,
-  },
-
-  // Features
-  features: {
-    gap: 12,
-    marginBottom: 24,
-  },
-  feature: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  featureText: {
-    fontSize: 14,
-    color: '#374151',
-    flex: 1,
-  },
-
-  // CTA Button
+  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
+  cardTitle: { fontSize: 26, fontWeight: '700', color: '#111827' },
+  cardTitleFeatured: { color: '#3E92CC' },
+  cardPrice: { fontSize: 42, fontWeight: '800', color: '#111827', marginTop: 8 },
+  cardPriceFeatured: { color: '#3E92CC' },
+  cardSublabel: { fontSize: 14, color: '#6B7280', marginTop: 2, marginBottom: 14 },
+  featureList: { gap: 9, marginBottom: 20 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  featureText: { fontSize: 14, color: '#374151', flex: 1 },
   ctaButton: {
-    paddingVertical: 16, // Increased from 14 for better mobile touch targets (minimum 44px height)
-    minHeight: 48, // Ensure minimum 48px touch target (iOS HIG recommends 44px minimum)
-    borderRadius: 8,
-    alignItems: 'center',
+    marginTop: 'auto',
+    borderRadius: 10,
+    minHeight: 48,
     justifyContent: 'center',
-  },
-  ctaButtonOutline: {
-    backgroundColor: 'transparent',
+    alignItems: 'center',
     borderWidth: 2,
     borderColor: '#3E92CC',
   },
-  ctaButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  ctaButtonOutlineText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3E92CC',
-  },
-
-  // Coach-specific
-  earningsBreakdown: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 24,
-  },
-  earningsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  earningsLabel: {
-    fontSize: 16,
-    color: '#6B7280',
-  },
-  earningsValue: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-
-  // Club-specific
-  clubPricingTiers: {
-    flexDirection: 'row',
-    gap: 24,
-    marginTop: 24,
-    justifyContent: 'space-around',
-  },
-  clubTier: {
-    alignItems: 'center',
-  },
-  clubTierDivider: {
-    width: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  clubTierName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  clubTierDesc: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-  },
-  
-  // Product Section Headers
-  productSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  productHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-  },
-  productTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#3E92CC',
-  },
-  productSubtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-
-  // Effective Monthly Price
-  effectiveMonthly: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
-  },
-
-  // Racing Academy Pricing
-  academyPricingContainer: {
-    flexDirection: 'row',
-    gap: 24,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginTop: 16,
-    ...Platform.select({
-      web: {
-        display: 'flex',
-        flexDirection: 'row',
-        gap: 24,
-        '@media (max-width: 768px)': {
-          flexDirection: 'column',
-          gap: 16,
-        },
-      } as any,
-    }),
-  },
-  academyPricingContainerDesktop: {
-    flexWrap: 'nowrap',
-  },
-  academyCard: {
-    flex: 1,
-    minWidth: 260,
-    maxWidth: 320,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 28,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-      } as any,
-      default: {
-        elevation: 2,
-      },
-    }),
-  },
-  academyCardFeatured: {
-    borderColor: '#8B5CF6',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.2)',
-      },
-      default: {
-        elevation: 4,
-      },
-    }),
-  },
-  academyCardTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1F2937',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  academyCardDesc: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  moduleList: {
-    gap: 8,
-    alignItems: 'center',
-  },
-  moduleItem: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  moduleItemWithCheck: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  championshipCallout: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#F5F3FF',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 24,
-    width: '100%',
-    maxWidth: 680,
-    alignSelf: 'center',
+  ctaButtonOutline: { backgroundColor: '#FFFFFF' },
+  ctaButtonFeatured: { backgroundColor: '#3E92CC' },
+  ctaText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  ctaTextOutline: { color: '#3E92CC' },
+  learnCallout: {
+    marginTop: 18,
     borderWidth: 1,
     borderColor: '#DDD6FE',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
   },
-  championshipCalloutText: {
-    fontSize: 14,
+  learnCalloutText: {
     color: '#5B21B6',
-    flex: 1,
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  learnCalloutButton: {
+    marginLeft: 'auto',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#E9D5FF',
+  },
+  learnCalloutButtonText: {
+    color: '#6D28D9',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  comingSoonCard: {
+    maxWidth: 760,
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    gap: 10,
+  },
+  comingSoonTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+  },
+  comingSoonBody: {
+    fontSize: 15,
+    color: '#4B5563',
+    textAlign: 'center',
+    maxWidth: 560,
+  },
+  primaryButton: {
+    marginTop: 10,
+    backgroundColor: '#3E92CC',
+    borderRadius: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });

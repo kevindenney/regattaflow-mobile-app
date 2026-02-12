@@ -84,6 +84,7 @@ export function SeasonHeader({
 
   const raceCount = totalRaces ?? season.summary.total_races;
   const completedRaces = season.summary.completed_races;
+  const safeRaceCount = Math.max(raceCount, completedRaces, 0);
 
   // Tufte: Single row - season name left, fraction right
   // Tap anywhere for season picker, long-press for archive
@@ -100,7 +101,7 @@ export function SeasonHeader({
         {compact ? (season.short_name || season.name) : season.name}
       </Text>
       <Text style={[styles.fraction, compact && styles.fractionCompact]}>
-        {completedRaces} of {raceCount}
+        {completedRaces} of {safeRaceCount}
       </Text>
     </Pressable>
   );

@@ -10,6 +10,7 @@
  */
 
 import { useMemo } from 'react';
+import { getDemoRaceStartDateISO, getDemoRaceStartTimeLabel } from '@/lib/demo/demoDate';
 
 // =============================================================================
 // TYPES
@@ -52,9 +53,9 @@ export interface LiveRace {
  */
 export const DEMO_RACE: LiveRace = {
   id: 'demo-race',
-  start_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week from now
-  date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-  startTime: '10:00',
+  start_date: getDemoRaceStartDateISO(7, 11, 0),
+  date: getDemoRaceStartDateISO(7, 11, 0),
+  startTime: getDemoRaceStartTimeLabel(11, 0),
   venue: 'Your Local Yacht Club',
   isDemo: true,
   metadata: {

@@ -24,4 +24,8 @@ export { SailorSubscriptionChoice } from './SailorSubscriptionChoice';
 // Feature Tour components
 export { ContextualHint } from './ContextualHint';
 export { TourStep, TourStepIndicator } from './TourStep';
-export { FeatureTour, TourOverlay, useTourContext } from './FeatureTour';
+export { TourOverlay } from './FeatureTour';
+export { WelcomeCard } from './WelcomeCard';
+export { TourBackdrop } from './TourBackdrop';
+export { TabSweepCard } from './TabSweepCard';
+export { TourPricingCard } from './TourPricingCard';

@@ -40,6 +40,9 @@ LogBox.ignoreLogs([
   'ExpoDevice',
   'Notifications.addNotificationReceivedListener is not a function',
   'Push notifications',
+  'RNMapsAirModule',
+  'LocationPreviewMap',
+  'PhaseContentErrorBoundary',
 ]);
 
 // Suppress red box errors for native modules not available in Expo Go (native platforms only)
@@ -54,7 +57,10 @@ if (Platform.OS !== 'web' && __DEV__) {
         error?.message?.includes('Cannot find native module') ||
         error?.message?.includes('ExpoPushTokenManager') ||
         error?.message?.includes('ExpoDevice') ||
-        error?.message?.includes('is not a function (it is undefined)')
+        error?.message?.includes('is not a function (it is undefined)') ||
+        error?.message?.includes('RNMapsAirModule') ||
+        error?.message?.includes('LocationPreviewMap') ||
+        error?.message?.includes('PhaseContentErrorBoundary')
       ) {
         // Log to console instead of showing red box
         console.log('[Suppressed] Push notification error (expected in Expo Go):', error.message);

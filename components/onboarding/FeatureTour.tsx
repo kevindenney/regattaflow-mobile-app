@@ -1,183 +1,31 @@
 /**
- * FeatureTour — Orchestrates the feature tour experience
+ * TourOverlay — Standalone overlay component for tour progress UI
  *
- * This component manages the overall tour flow, including:
- * - Tour progress indicator
- * - Skip tour button
- * - Coordination between tour steps
+ * Shows progress dots, step counter, and optional skip/controls.
+ * Used in the tab layout alongside the FeatureTourProvider.
  */
 
-import React, { createContext, useContext, useMemo } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
+  Platform,
   type ViewStyle,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { useFeatureTour, type TourStep } from '@/hooks/useFeatureTour';
 
-// Tour context for child components
-interface TourContextValue {
-  currentStep: TourStep | null;
-  currentStepIndex: number;
-  totalSteps: number;
-  isTourActive: boolean;
-  advanceStep: () => Promise<void>;
-  skipTour: () => Promise<void>;
-  isCurrentStep: (step: TourStep) => boolean;
-}
-
-const TourContext = createContext<TourContextValue | null>(null);
-
-/**
- * Hook to access tour context from child components
- */
-export function useTourContext() {
-  const context = useContext(TourContext);
-  if (!context) {
-    return {
-      currentStep: null,
-      currentStepIndex: 0,
-      totalSteps: 0,
-      isTourActive: false,
-      advanceStep: async () => {},
-      skipTour: async () => {},
-      isCurrentStep: () => false,
-    };
-  }
-  return context;
-}
-
-export interface FeatureTourProps {
-  children: React.ReactNode;
-  /** Callback when tour completes */
-  onComplete?: () => void;
-  /** Callback when tour is skipped */
-  onSkip?: () => void;
-  /** Whether to auto-start the tour */
-  autoStart?: boolean;
-  /** Custom style for the progress overlay */
-  overlayStyle?: ViewStyle;
-  /** Whether to show the skip button */
-  showSkipButton?: boolean;
-  /** Whether to show the progress indicator */
-  showProgressIndicator?: boolean;
-}
-
-/**
- * FeatureTour component - wraps content and provides tour functionality
- */
-export function FeatureTour({
-  children,
-  onComplete,
-  onSkip,
-  autoStart = true,
-  overlayStyle,
-  showSkipButton = true,
-  showProgressIndicator = true,
-}: FeatureTourProps) {
-  const {
-    isLoading,
-    isTourActive,
-    currentStep,
-    currentStepIndex,
-    totalSteps,
-    advanceStep,
-    skipTour,
-    isCurrentStep,
-    shouldShowTour,
-  } = useFeatureTour({
-    autoStart,
-    onComplete,
-    onSkip,
-  });
-
-  // Context value for child components
-  const contextValue = useMemo<TourContextValue>(
-    () => ({
-      currentStep,
-      currentStepIndex,
-      totalSteps,
-      isTourActive,
-      advanceStep,
-      skipTour,
-      isCurrentStep,
-    }),
-    [currentStep, currentStepIndex, totalSteps, isTourActive, advanceStep, skipTour, isCurrentStep]
-  );
-
-  if (isLoading) {
-    return <>{children}</>;
-  }
-
-  return (
-    <TourContext.Provider value={contextValue}>
-      {children}
-
-      {/* Tour overlay with progress and skip button */}
-      {isTourActive && shouldShowTour && (
-        <Animated.View
-          entering={FadeIn.duration(200)}
-          exiting={FadeOut.duration(150)}
-          style={[styles.overlay, overlayStyle]}
-          pointerEvents="box-none"
-        >
-          {/* Progress indicator at top */}
-          {showProgressIndicator && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressInner}>
-                <View style={styles.progressDots}>
-                  {Array.from({ length: totalSteps }).map((_, index) => (
-                    <View
-                      key={index}
-                      style={[
-                        styles.progressDot,
-                        index < currentStepIndex
-                          ? styles.progressDotCompleted
-                          : index === currentStepIndex - 1
-                            ? styles.progressDotCurrent
-                            : styles.progressDotUpcoming,
-                      ]}
-                    />
-                  ))}
-                </View>
-                <Text style={styles.progressText}>
-                  {currentStepIndex} of {totalSteps}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Skip button at bottom */}
-          {showSkipButton && (
-            <View style={styles.skipContainer}>
-              <TouchableOpacity
-                style={styles.skipButton}
-                onPress={skipTour}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.skipText}>Skip Tour</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </Animated.View>
-      )}
-    </TourContext.Provider>
-  );
-}
-
-/**
- * TourOverlay — Standalone overlay component for tour UI
- *
- * Can be used separately when FeatureTour wrapper isn't suitable
- */
 export interface TourOverlayProps {
   visible: boolean;
   currentStepIndex: number;
   totalSteps: number;
   onSkip: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  onGoToStep?: (index: number) => void;
+  onReset?: () => void;
   showSkipButton?: boolean;
   showProgressIndicator?: boolean;
   style?: ViewStyle;
@@ -188,11 +36,19 @@ export function TourOverlay({
   currentStepIndex,
   totalSteps,
   onSkip,
+  onPrevious,
+  onNext,
+  onGoToStep,
+  onReset,
   showSkipButton = true,
   showProgressIndicator = true,
   style,
 }: TourOverlayProps) {
+  const insets = useSafeAreaInsets();
+
   if (!visible) return null;
+
+  const hasControls = onPrevious || onNext || onReset;
 
   return (
     <Animated.View
@@ -202,26 +58,74 @@ export function TourOverlay({
       pointerEvents="box-none"
     >
       {showProgressIndicator && (
-        <View style={styles.progressContainer}>
+        <View style={[styles.progressContainer, { paddingTop: insets.top + 4 }]}>
           <View style={styles.progressInner}>
             <View style={styles.progressDots}>
-              {Array.from({ length: totalSteps }).map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.progressDot,
-                    index < currentStepIndex
-                      ? styles.progressDotCompleted
-                      : index === currentStepIndex - 1
-                        ? styles.progressDotCurrent
-                        : styles.progressDotUpcoming,
-                  ]}
-                />
-              ))}
+              {Array.from({ length: totalSteps }).map((_, index) => {
+                const dot = (
+                  <View
+                    key={index}
+                    style={[
+                      styles.progressDot,
+                      index < currentStepIndex
+                        ? styles.progressDotCompleted
+                        : index === currentStepIndex - 1
+                          ? styles.progressDotCurrent
+                          : styles.progressDotUpcoming,
+                    ]}
+                  />
+                );
+
+                if (onGoToStep) {
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      onPress={() => onGoToStep(index + 1)}
+                      activeOpacity={0.75}
+                    >
+                      {dot}
+                    </TouchableOpacity>
+                  );
+                }
+
+                return dot;
+              })}
             </View>
             <Text style={styles.progressText}>
               {currentStepIndex} of {totalSteps}
             </Text>
+            {hasControls && (
+              <View style={styles.controlsRow}>
+                {onPrevious && (
+                  <TouchableOpacity
+                    style={[styles.controlButton, currentStepIndex <= 1 && styles.controlButtonDisabled]}
+                    onPress={onPrevious}
+                    disabled={currentStepIndex <= 1}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.controlButtonText, currentStepIndex <= 1 && styles.controlButtonTextDisabled]}>Back</Text>
+                  </TouchableOpacity>
+                )}
+                {onNext && (
+                  <TouchableOpacity
+                    style={styles.controlButton}
+                    onPress={onNext}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.controlButtonText}>Next</Text>
+                  </TouchableOpacity>
+                )}
+                {onReset && (
+                  <TouchableOpacity
+                    style={styles.controlButton}
+                    onPress={onReset}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.controlButtonText}>Reset</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
         </View>
       )}
@@ -250,13 +154,14 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     alignItems: 'center',
-    paddingTop: 60, // Account for safe area
     paddingHorizontal: 20,
-    pointerEvents: 'none',
+    pointerEvents: 'auto',
   },
   progressInner: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -295,9 +200,31 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#64748B',
   },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  controlButton: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  controlButtonDisabled: {
+    backgroundColor: '#F1F5F9',
+  },
+  controlButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  controlButtonTextDisabled: {
+    color: '#94A3B8',
+  },
   skipContainer: {
     alignItems: 'center',
-    paddingBottom: 120, // Account for tab bar and safe area
+    paddingBottom: 120,
     paddingHorizontal: 20,
     pointerEvents: 'auto',
   },
@@ -318,5 +245,3 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
 });
-
-export default FeatureTour;

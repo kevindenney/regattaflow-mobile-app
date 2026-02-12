@@ -8,7 +8,8 @@
 import React from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { ContextualHint } from './ContextualHint';
-import { useTourStep, type TourStep as TourStepType } from '@/hooks/useFeatureTour';
+import { useTourStepContext, type TourStep as TourStepType } from '@/providers/FeatureTourProvider';
+import { TOUR_STEPS } from '@/services/onboarding/FeatureTourService';
 
 export interface TourStepProps {
   /** The tour step this component is associated with */
@@ -37,12 +38,17 @@ export function TourStep({
   title,
   description,
 }: TourStepProps) {
-  const { isActive, config, advance, skip } = useTourStep(step);
+  const { isActive, config, advance, skip } = useTourStepContext(step);
 
   // Use config values if not overridden
   const hintTitle = title ?? config?.title ?? '';
   const hintDescription = description ?? config?.description ?? '';
   const hintPosition = position ?? config?.position ?? 'bottom';
+
+  // Determine button label: last step → "Done", otherwise "Next →"
+  const stepIndex = TOUR_STEPS.indexOf(step);
+  const isLastStep = stepIndex === TOUR_STEPS.length - 1;
+  const dismissLabel = isLastStep ? 'Done' : 'Next \u2192';
 
   return (
     <ContextualHint
@@ -51,7 +57,11 @@ export function TourStep({
       description={hintDescription}
       position={hintPosition}
       onDismiss={advance}
+      dismissLabel={dismissLabel}
+      showSkip
+      onSkip={skip}
       style={style}
+      distance={step === 'race_timeline' ? -18 : 8}
     >
       {children}
     </ContextualHint>

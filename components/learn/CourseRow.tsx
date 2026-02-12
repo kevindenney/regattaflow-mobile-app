@@ -92,7 +92,6 @@ export function CourseRow({
       style={styles.container}
       onPress={onPress}
       activeOpacity={0.7}
-      disabled={isComingSoon}
     >
       {/* Level accent bar on left edge */}
       <View style={[styles.accentBar, { backgroundColor: accentColor }]} />

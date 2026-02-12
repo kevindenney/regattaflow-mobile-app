@@ -37,6 +37,7 @@ import { RaceListSection } from '@/components/races/RaceListSection';
 import { SeasonArchive } from '@/components/seasons/SeasonArchive';
 import { IOSRacesScreen } from '@/components/races/ios';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
+import { TourStep } from '@/components/onboarding/TourStep';
 import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
 import { calculatePerformanceMetrics } from '@/components/races/PerformanceMetrics';
 import { PlanModeContent } from '@/components/races/plan';
@@ -96,8 +97,10 @@ import {
 import { createLogger } from '@/lib/utils/logger';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
+import { useFeatureTourContext } from '@/providers/FeatureTourProvider';
 import { DemoRaceService } from '@/services/DemoRaceService';
 import { isDemoRaceId } from '@/lib/demo/demoRaceData';
+import { getDemoRaceStartDateISO, getDemoRaceStartTimeLabel } from '@/lib/demo/demoDate';
 // createSailorSampleData removed — new users see client-side demo race instead
 import type { RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { supabase } from '@/services/supabase';
@@ -131,13 +134,15 @@ const normalizeDocumentType = (
 
 export default function RacesScreen() {
   const auth = useAuth();
-  const { user, userProfile, signedIn, ready, isDemoSession, userType, isGuest } = auth;
+  const { user, userProfile, signedIn, ready, isDemoSession, userType, isGuest, enterGuestMode } = auth;
+  const { isTourActive, currentStep } = useFeatureTourContext();
 
   // Safe area insets for proper header spacing
   const insets = useSafeAreaInsets();
 
   // State for dismissing the demo notice
   const [demoNoticeDismissed, setDemoNoticeDismissed] = useState(false);
+  const [demoContextDismissed, setDemoContextDismissed] = useState(false);
 
   // Season archive modal
   const [showFullArchive, setShowFullArchive] = useState(false);
@@ -335,6 +340,7 @@ export default function RacesScreen() {
     await AsyncStorage.setItem(SAMPLE_RACE_DISMISSED_KEY, 'true');
   }, []);
 
+
   // Tips dismissal state - TODO: implement when TufteTipsCarousel is created
   // const TIPS_DISMISSED_KEY = 'regattaflow_tips_dismissed';
   // const [tipsDismissed, setTipsDismissed] = useState(false);
@@ -497,11 +503,11 @@ export default function RacesScreen() {
         return;
       }
 
-      // Redirect to login if not authenticated AND not in guest mode
-      // BUT: Skip redirect if auth is not ready yet (prevents race condition during sign-out)
+      // First-time/signed-out visitors should enter guest mode instead of being forced to login.
+      // This keeps refreshes on /races in the guest experience.
       if (!signedIn && !isGuest && ready) {
-        logger.debug('User not authenticated, redirecting to login');
-        router.replace('/(auth)/login');
+        logger.debug('User not authenticated on /races, entering guest mode');
+        enterGuestMode();
         return;
       }
 
@@ -547,7 +553,7 @@ export default function RacesScreen() {
     };
 
     checkAuthAndOnboarding();
-  }, [ready, signedIn, isGuest, user?.id, router, isDemoSession, userType]);
+  }, [ready, signedIn, isGuest, user?.id, router, isDemoSession, userType, enterGuestMode]);
 
   // Fetch data from API
   const {
@@ -670,6 +676,16 @@ export default function RacesScreen() {
     }).length;
   }, [safeRecentRaces]);
 
+  const headerTotalRaces = safeRecentRaces.length;
+  const headerCurrentRaceIndex = useMemo(() => {
+    if (!selectedRaceId || headerTotalRaces <= 0) return undefined;
+    const idx = safeRecentRaces.findIndex((r: any) => r.id === selectedRaceId);
+    return idx >= 0 ? idx + 1 : undefined;
+  }, [selectedRaceId, headerTotalRaces, safeRecentRaces]);
+
+  const showGuestContextBanner = isGuest && !demoContextDismissed && !isTourActive;
+  const showGuestTourBadge = isGuest && isTourActive;
+
   // Season-filtered race counts for display in header
   // When a season filter is active, show only races in that season
   const seasonFilteredRaces = useMemo(() => {
@@ -729,12 +745,13 @@ export default function RacesScreen() {
 
     // If no races and sample race not dismissed (only for own timeline), show demo race
     if (racesToShow.length === 0 && !sampleRaceDismissed && !isViewingOtherTimeline) {
+      const demoIso = getDemoRaceStartDateISO(7, 11, 0);
       return [{
         id: DEMO_RACE.id || 'demo-race',
         name: 'Sample Race',
         venue: DEMO_RACE.venue || 'Your Local Yacht Club',
-        date: DEMO_RACE.date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        startTime: DEMO_RACE.startTime || '10:00',
+        date: DEMO_RACE.date || demoIso,
+        startTime: DEMO_RACE.startTime || getDemoRaceStartTimeLabel(11, 0),
         boatClass: 'Your Boat Class',
         race_type: 'fleet' as const,
         isDemo: true,
@@ -2719,6 +2736,68 @@ export default function RacesScreen() {
         <View
           style={{ flex: 1 }}
         >
+          {showGuestContextBanner && (
+            <View style={{
+              position: 'absolute',
+              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 8,
+              left: 16,
+              right: 16,
+              padding: 12,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: '#BFDBFE',
+              backgroundColor: '#EFF6FF',
+              zIndex: 30,
+            }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A8A' }}>Demo mode: explore a sample race</Text>
+              <Text style={{ marginTop: 4, fontSize: 13, color: '#334155', lineHeight: 18 }}>
+                This is a walkthrough race so you can see how RegattaFlow works. Create your first race in seconds.
+              </Text>
+              <Text style={{ marginTop: 6, fontSize: 12, color: '#475569' }}>
+                Follow: fleet updates • Discuss: local tactics • Reflect: post-race progress.
+              </Text>
+              <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#2563EB',
+                    borderRadius: 10,
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                  }}
+                  onPress={handleAddRaceNavigation}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Create your first race</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+                  onPress={() => setDemoContextDismissed(true)}
+                >
+                  <Text style={{ color: '#475569', fontSize: 13, fontWeight: '600' }}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          {showGuestTourBadge && (
+            <View style={{
+              position: 'absolute',
+              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 8,
+              left: 16,
+              zIndex: 35,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: '#BFDBFE',
+              backgroundColor: '#EFF6FF',
+            }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1E3A8A' }}>
+                Demo race walkthrough
+              </Text>
+            </View>
+          )}
+
+          {/* Backdrop spotlight (TourBackdrop) now handles target highlighting */}
+
           {/* Timeline header when viewing another user */}
           {isViewingOtherTimeline && currentTimeline && (
             <View style={{
@@ -2762,6 +2841,44 @@ export default function RacesScreen() {
               </TouchableOpacity>
             </View>
           )}
+
+          {/* Tour anchor: pinned to race-card region; height covers visible card area for spotlight */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 72,
+              left: 16,
+              right: 16,
+              zIndex: 60,
+            }}
+          >
+            <TourStep
+              step="race_timeline"
+              position="bottom"
+            >
+              <View style={{ height: 180, opacity: 0 }} />
+            </TourStep>
+          </View>
+
+          {/* Tour anchor: prep_overview spotlight on detail zone below race cards */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 280,
+              left: 16,
+              right: 16,
+              zIndex: 60,
+            }}
+          >
+            <TourStep
+              step="prep_overview"
+              position="top"
+            >
+              <View style={{ height: 200, opacity: 0 }} />
+            </TourStep>
+          </View>
 
           <CardGrid
             races={cardGridRaces}
@@ -2814,6 +2931,49 @@ export default function RacesScreen() {
           onScroll={handleToolbarScroll}
           scrollEventThrottle={16}
         >
+          {showGuestContextBanner && (
+            <View style={{
+              position: 'absolute',
+              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 8,
+              left: 0,
+              right: 0,
+              marginHorizontal: 0,
+              padding: 12,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: '#BFDBFE',
+              backgroundColor: '#EFF6FF',
+              zIndex: 30,
+            }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A8A' }}>Demo mode: explore a sample race</Text>
+              <Text style={{ marginTop: 4, fontSize: 13, color: '#334155', lineHeight: 18 }}>
+                This is a walkthrough race so you can see how RegattaFlow works. Create your first race in seconds.
+              </Text>
+              <Text style={{ marginTop: 6, fontSize: 12, color: '#475569' }}>
+                Follow: fleet updates • Discuss: local tactics • Reflect: post-race progress.
+              </Text>
+              <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#2563EB',
+                    borderRadius: 10,
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                  }}
+                  onPress={handleAddRaceNavigation}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Create your first race</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+                  onPress={() => setDemoContextDismissed(true)}
+                >
+                  <Text style={{ color: '#475569', fontSize: 13, fontWeight: '600' }}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Demo notice */}
           <DemoNotice
             visible={isDemoProfile && !demoNoticeDismissed}
@@ -3210,9 +3370,9 @@ export default function RacesScreen() {
           onNewSeason={() => setShowSeasonSettings(true)}
           onBrowseCatalog={() => router.push('/catalog-race')}
           onAddButtonLayout={setAddButtonLayout}
-          totalRaces={enrichedRaces?.length || 0}
+          totalRaces={headerTotalRaces}
           upcomingRaces={upcomingRacesCount}
-          currentRaceIndex={selectedRaceId ? (enrichedRaces?.findIndex((r: any) => r.id === selectedRaceId) ?? -1) + 1 : undefined}
+          currentRaceIndex={headerCurrentRaceIndex}
           onUpcomingPress={handleUpcomingPress}
           onMeasuredHeight={setToolbarHeight}
           hidden={toolbarHidden}

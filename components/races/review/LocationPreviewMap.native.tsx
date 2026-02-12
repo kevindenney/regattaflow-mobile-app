@@ -1,17 +1,30 @@
 /**
  * LocationPreviewMap (Native) - Small static map showing a race location pin
  * Uses react-native-maps MapView with interaction disabled.
+ * Falls back to a simple colored rect when react-native-maps is unavailable (e.g. Expo Go).
  */
 
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { View, Text } from 'react-native';
 
 interface LocationPreviewMapProps {
   latitude: number;
   longitude: number;
   width: number;
   height: number;
+}
+
+let MapViewComponent: any = null;
+let MarkerComponent: any = null;
+let PROVIDER_GOOGLE_VALUE: any = null;
+
+try {
+  const maps = require('react-native-maps');
+  MapViewComponent = maps.default;
+  MarkerComponent = maps.Marker;
+  PROVIDER_GOOGLE_VALUE = maps.PROVIDER_GOOGLE;
+} catch {
+  // react-native-maps not available (e.g. Expo Go)
 }
 
 const MAP_STYLE = [
@@ -24,9 +37,28 @@ const MAP_STYLE = [
 ];
 
 export function LocationPreviewMap({ latitude, longitude, width, height }: LocationPreviewMapProps) {
+  if (!MapViewComponent) {
+    return (
+      <View
+        style={{
+          width,
+          height,
+          backgroundColor: '#c9d7e4',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 8,
+        }}
+      >
+        <Text style={{ fontSize: 11, color: '#334155' }}>
+          {latitude.toFixed(3)}, {longitude.toFixed(3)}
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <MapView
-      provider={PROVIDER_GOOGLE}
+    <MapViewComponent
+      provider={PROVIDER_GOOGLE_VALUE}
       style={{ width, height }}
       initialRegion={{
         latitude,
@@ -46,10 +78,12 @@ export function LocationPreviewMap({ latitude, longitude, width, height }: Locat
       customMapStyle={MAP_STYLE}
       pointerEvents="none"
     >
-      <Marker
-        coordinate={{ latitude, longitude }}
-        pinColor="#5AC8FA"
-      />
-    </MapView>
+      {MarkerComponent && (
+        <MarkerComponent
+          coordinate={{ latitude, longitude }}
+          pinColor="#5AC8FA"
+        />
+      )}
+    </MapViewComponent>
   );
 }

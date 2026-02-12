@@ -294,7 +294,7 @@
           "title": "Winning Starts & First Beats",
           "slug": "winning-starts-first-beats",
           "level": "level-2",
-          "status": "available",
+          "status": "coming-soon",
           "releaseDate": "2025-01-15",
           "duration": {
             "totalMinutes": 150,
@@ -537,7 +537,36 @@
             "Downwind tactics",
             "Gybe set strategies"
           ],
-          "modules": [],
+          "modules": [
+            {
+              "id": "module-5-1",
+              "title": "Downwind Sailing Fundamentals",
+              "orderIndex": 1,
+              "durationMinutes": 35,
+              "lessons": []
+            },
+            {
+              "id": "module-5-2",
+              "title": "Spinnaker Handling",
+              "orderIndex": 2,
+              "durationMinutes": 40,
+              "lessons": []
+            },
+            {
+              "id": "module-5-3",
+              "title": "VMG Optimization",
+              "orderIndex": 3,
+              "durationMinutes": 35,
+              "lessons": []
+            },
+            {
+              "id": "module-5-4",
+              "title": "Downwind Tactics",
+              "orderIndex": 4,
+              "durationMinutes": 40,
+              "lessons": []
+            }
+          ],
           "instructor": {
             "name": "Kevin Denney",
             "bio": "NorthU Certified Instructor",
@@ -636,7 +665,7 @@
           "title": "Race Preparation Mastery",
           "slug": "race-preparation-mastery",
           "level": "level-2",
-          "status": "available",
+          "status": "coming-soon",
           "releaseDate": "2025-01-15",
           "duration": {
             "totalMinutes": 240,
@@ -850,7 +879,7 @@
           "title": "Launch Phase Strategy",
           "slug": "launch-phase-strategy",
           "level": "level-2",
-          "status": "available",
+          "status": "coming-soon",
           "releaseDate": "2025-01-15",
           "duration": {
             "totalMinutes": 150,
@@ -1223,7 +1252,7 @@
           "title": "Team Racing Tactics",
           "slug": "team-racing-tactics",
           "level": "specializations",
-          "status": "available",
+          "status": "coming-soon",
           "releaseDate": "2026-02-07",
           "duration": {
             "totalMinutes": 390,
@@ -1675,7 +1704,36 @@
             "Psychological tactics",
             "Advanced maneuvers"
           ],
-          "modules": [],
+          "modules": [
+            {
+              "id": "module-11-1",
+              "title": "Pre-Start Tactics",
+              "orderIndex": 1,
+              "durationMinutes": 45,
+              "lessons": []
+            },
+            {
+              "id": "module-11-2",
+              "title": "Covering Techniques",
+              "orderIndex": 2,
+              "durationMinutes": 40,
+              "lessons": []
+            },
+            {
+              "id": "module-11-3",
+              "title": "Match Racing Rules",
+              "orderIndex": 3,
+              "durationMinutes": 35,
+              "lessons": []
+            },
+            {
+              "id": "module-11-4",
+              "title": "Advanced Maneuvers",
+              "orderIndex": 4,
+              "durationMinutes": 40,
+              "lessons": []
+            }
+          ],
           "instructor": {
             "name": "Kevin Denney",
             "bio": "NorthU Certified Instructor",

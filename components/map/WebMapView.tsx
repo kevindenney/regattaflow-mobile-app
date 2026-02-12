@@ -11,17 +11,167 @@ interface WebMapViewProps {
   onMarkPress?: (mark: any) => void;
   onMapPress?: (coordinates: any) => void;
   style?: React.CSSProperties;
+  /** Show wind direction arrows scattered across the map */
+  showWindArrows?: boolean;
+  /** Show current/tide direction arrows scattered across the map */
+  showCurrentArrows?: boolean;
+  /** Wind direction in degrees (0-360, direction wind comes FROM) */
+  windDirection?: number;
+  /** Wind speed in knots */
+  windSpeed?: number;
+  /** Current direction in degrees (0-360, direction current flows TO) */
+  currentDirection?: number;
+  /** Current speed in knots */
+  currentSpeed?: number;
 }
 
 const logger = createLogger('WebMapView');
-export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, onMapPress, style }: WebMapViewProps) {
+export function WebMapView({
+  venue,
+  marks = [],
+  clubMarkers = [],
+  onMarkPress,
+  onMapPress,
+  style,
+  showWindArrows = false,
+  showCurrentArrows = false,
+  windDirection = 0,
+  windSpeed,
+  currentDirection = 0,
+  currentSpeed,
+}: WebMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || !mapContainerRef.current) return;
 
     showInteractiveFallbackMap();
-  }, [venue, marks, clubMarkers]);
+  }, [venue, marks, clubMarkers, showWindArrows, showCurrentArrows, windDirection, currentDirection]);
+
+  /**
+   * Generate wind arrow SVG overlays scattered across the map
+   * Green arrows pointing in the direction wind is blowing TO (opposite of FROM direction)
+   */
+  const generateWindArrows = () => {
+    if (!showWindArrows) return '';
+
+    // Wind direction is where wind comes FROM, so arrows point opposite (+180)
+    const arrowDirection = (windDirection + 180) % 360;
+
+    // Grid of arrow positions (percentage-based)
+    const positions = [
+      { x: 15, y: 20 }, { x: 35, y: 18 }, { x: 55, y: 22 }, { x: 75, y: 20 },
+      { x: 25, y: 35 }, { x: 45, y: 38 }, { x: 65, y: 32 }, { x: 85, y: 36 },
+      { x: 12, y: 50 }, { x: 32, y: 52 }, { x: 52, y: 48 }, { x: 72, y: 55 },
+      { x: 20, y: 65 }, { x: 40, y: 68 }, { x: 60, y: 62 }, { x: 80, y: 67 },
+      { x: 28, y: 80 }, { x: 48, y: 78 }, { x: 68, y: 82 },
+    ];
+
+    return positions.map((pos, i) => `
+      <div style="
+        position: absolute;
+        left: ${pos.x}%;
+        top: ${pos.y}%;
+        transform: translate(-50%, -50%) rotate(${arrowDirection}deg);
+        pointer-events: none;
+        z-index: 5;
+      ">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M12 4 L12 18" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M12 4 L7 10 M12 4 L17 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    `).join('');
+  };
+
+  /**
+   * Generate current/tide arrow SVG overlays scattered across the map
+   * Blue/teal wavy arrows pointing in the direction current flows TO
+   */
+  const generateCurrentArrows = () => {
+    if (!showCurrentArrows) return '';
+
+    // Current direction is where current flows TO
+    const arrowDirection = currentDirection;
+
+    // Grid of arrow positions (offset from wind arrows)
+    const positions = [
+      { x: 22, y: 28 }, { x: 42, y: 25 }, { x: 62, y: 30 }, { x: 82, y: 27 },
+      { x: 18, y: 42 }, { x: 38, y: 45 }, { x: 58, y: 40 }, { x: 78, y: 44 },
+      { x: 25, y: 58 }, { x: 45, y: 55 }, { x: 65, y: 60 }, { x: 85, y: 57 },
+      { x: 15, y: 72 }, { x: 35, y: 75 }, { x: 55, y: 70 }, { x: 75, y: 74 },
+      { x: 38, y: 85 }, { x: 58, y: 88 },
+    ];
+
+    // Wavy arrow SVG for current
+    return positions.map((pos, i) => `
+      <div style="
+        position: absolute;
+        left: ${pos.x}%;
+        top: ${pos.y}%;
+        transform: translate(-50%, -50%) rotate(${arrowDirection}deg);
+        pointer-events: none;
+        z-index: 5;
+      ">
+        <svg width="22" height="16" viewBox="0 0 28 20" fill="none">
+          <!-- Wavy arrow body -->
+          <path d="M4 10 Q7 6, 10 10 Q13 14, 16 10 Q19 6, 22 10"
+                stroke="#0EA5E9" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+          <!-- Arrow head -->
+          <path d="M22 10 L18 6 M22 10 L18 14"
+                stroke="#0EA5E9" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    `).join('');
+  };
+
+  /**
+   * Generate legend overlay for wind and current indicators
+   */
+  const generateWeatherLegend = () => {
+    if (!showWindArrows && !showCurrentArrows) return '';
+
+    const windLabel = windSpeed !== undefined ? `Wind ${windSpeed.toFixed(0)} kt` : 'Wind';
+    const currentLabel = currentSpeed !== undefined ? `Current ${currentSpeed.toFixed(1)} kt` : 'Current';
+
+    return `
+      <div style="
+        position: absolute;
+        bottom: 60px;
+        left: 16px;
+        background: rgba(15, 23, 42, 0.9);
+        padding: 10px 14px;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        z-index: 100;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      ">
+        ${showWindArrows ? `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="transform: rotate(180deg);">
+              <path d="M12 4 L12 18" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round"/>
+              <path d="M12 4 L7 10 M12 4 L17 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span style="color: #22c55e; font-size: 12px; font-weight: 500;">${windLabel}</span>
+          </div>
+        ` : ''}
+        ${showCurrentArrows ? `
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="12" viewBox="0 0 28 20" fill="none">
+              <path d="M4 10 Q7 6, 10 10 Q13 14, 16 10 Q19 6, 22 10"
+                    stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" fill="none"/>
+              <path d="M22 10 L18 6 M22 10 L18 14"
+                    stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span style="color: #0EA5E9; font-size: 12px; font-weight: 500;">${currentLabel}</span>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
 
   const generateMarkerOverlays = () => {
     let markersHTML = '';
@@ -132,6 +282,9 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
     const raceMarks = getRaceMarksForVenue(venue); // Keep for backward compatibility
 
     const markerOverlays = generateMarkerOverlays();
+    const windArrows = generateWindArrows();
+    const currentArrows = generateCurrentArrows();
+    const weatherLegend = generateWeatherLegend();
 
     logger.debug('  venue ID:', venue);
     logger.debug('  mapped coordinates:', coords);
@@ -205,6 +358,15 @@ export function WebMapView({ venue, marks = [], clubMarkers = [], onMarkPress, o
 
         <!-- Dynamic markers from props -->
         ${markerOverlays}
+
+        <!-- Wind direction arrows overlay -->
+        ${windArrows}
+
+        <!-- Current/tide direction arrows overlay -->
+        ${currentArrows}
+
+        <!-- Weather legend -->
+        ${weatherLegend}
 
         <!-- Marker Details Modal -->
         <div id="marker-details-modal" style="

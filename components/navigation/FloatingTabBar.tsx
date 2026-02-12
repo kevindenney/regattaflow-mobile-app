@@ -6,7 +6,7 @@
  * Includes active indicator pill, press animation, and keyboard hiding.
  */
 
-import { TourStep } from '@/components/onboarding/TourStep';
+
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
 import { useGlobalSearch } from '@/providers/GlobalSearchProvider';
@@ -241,9 +241,8 @@ export default function FloatingTabBar({
     ? Math.max(insets.top, 12)
     : Math.max(Math.round(insets.bottom / 2), 8) + FLOATING_TAB_BAR_BOTTOM_MARGIN;
 
-  // Render a TabItem, optionally wrapped with TourStep for follow/community tabs
   const renderTabItem = (tab: TabItemConfig) => {
-    const tabItem = (
+    return (
       <TabItem
         key={tab.name}
         tab={tab}
@@ -251,26 +250,6 @@ export default function FloatingTabBar({
         onPress={() => handleTabPress(tab)}
       />
     );
-
-    // Wrap follow tab with tour step for step 4
-    if (tab.name === 'follow') {
-      return (
-        <TourStep key={tab.name} step="follow_tab" position="top">
-          {tabItem}
-        </TourStep>
-      );
-    }
-
-    // Wrap community tab with tour step for step 5
-    if (tab.name === 'community') {
-      return (
-        <TourStep key={tab.name} step="community_tab" position="top">
-          {tabItem}
-        </TourStep>
-      );
-    }
-
-    return tabItem;
   };
 
   const barContent = (

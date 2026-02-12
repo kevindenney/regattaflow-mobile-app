@@ -10,10 +10,20 @@ import {
   FeatureTourService,
   TOUR_STEPS,
   TOUR_STEP_CONFIGS,
+  FULLSCREEN_STEPS,
   type TourStep,
   type TourStepConfig,
+  type TourRenderMode,
 } from '@/services/onboarding/FeatureTourService';
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
+import { useAuth } from '@/providers/AuthProvider';
+
+export interface SpotlightBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 interface FeatureTourContextValue {
   // Tour state
@@ -26,15 +36,23 @@ interface FeatureTourContextValue {
   totalSteps: number;
   currentStepConfig: TourStepConfig | null;
 
+  // Spotlight
+  spotlightBounds: SpotlightBounds | null;
+  setSpotlightBounds: (bounds: SpotlightBounds | null) => void;
+
   // Tour actions
   startTour: () => Promise<void>;
   advanceStep: () => Promise<void>;
+  previousStep: () => Promise<void>;
+  goToStepIndex: (index: number) => Promise<void>;
   skipTour: () => Promise<void>;
+  skipToPrice: () => Promise<void>;
   resetTour: () => Promise<void>;
 
   // Step-specific helpers
   isCurrentStep: (step: TourStep) => boolean;
   getStepConfig: (step: TourStep) => TourStepConfig;
+  isFullscreenStep: boolean;
 }
 
 const defaultContextValue: FeatureTourContextValue = {
@@ -46,12 +64,18 @@ const defaultContextValue: FeatureTourContextValue = {
   currentStepIndex: 0,
   totalSteps: TOUR_STEPS.length,
   currentStepConfig: null,
+  spotlightBounds: null,
+  setSpotlightBounds: () => {},
   startTour: async () => {},
   advanceStep: async () => {},
+  previousStep: async () => {},
+  goToStepIndex: async () => {},
   skipTour: async () => {},
+  skipToPrice: async () => {},
   resetTour: async () => {},
   isCurrentStep: () => false,
   getStepConfig: (step) => TOUR_STEP_CONFIGS[step],
+  isFullscreenStep: false,
 };
 
 const FeatureTourContext = createContext<FeatureTourContextValue>(defaultContextValue);
@@ -72,11 +96,13 @@ export function FeatureTourProvider({
   onComplete,
   onSkip,
 }: FeatureTourProviderProps) {
+  const { isGuest } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isTourComplete, setIsTourComplete] = useState(false);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [currentStep, setCurrentStep] = useState<TourStep | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [spotlightBounds, setSpotlightBounds] = useState<SpotlightBounds | null>(null);
 
   // Load initial state
   useEffect(() => {
@@ -119,7 +145,8 @@ export function FeatureTourProvider({
 
   // Auto-start tour if conditions are met
   useEffect(() => {
-    if (!autoStart || isLoading || isTourComplete || !hasSeenOnboarding) {
+    const canAutoStart = isGuest || hasSeenOnboarding;
+    if (!autoStart || isLoading || isTourComplete || !canAutoStart) {
       return;
     }
 
@@ -129,15 +156,21 @@ export function FeatureTourProvider({
         const started = await FeatureTourService.hasTourStarted();
         if (!started) {
           await FeatureTourService.startTour();
-          const step = await FeatureTourService.getCurrentStep();
-          setCurrentStep(step);
-          setCurrentStepIndex(1);
         }
+
+        let step = await FeatureTourService.getCurrentStep();
+        if (step === null && !isTourComplete) {
+          await FeatureTourService.startTour();
+          step = await FeatureTourService.getCurrentStep();
+        }
+
+        setCurrentStep(step);
+        setCurrentStepIndex(step ? TOUR_STEPS.indexOf(step) + 1 : 0);
       };
 
       checkAndStart();
     }
-  }, [autoStart, isLoading, isTourComplete, hasSeenOnboarding, currentStep]);
+  }, [autoStart, isLoading, isTourComplete, hasSeenOnboarding, isGuest, currentStep]);
 
   // Computed properties
   const isTourActive = useMemo(() => {
@@ -145,12 +178,18 @@ export function FeatureTourProvider({
   }, [isTourComplete, currentStep]);
 
   const shouldShowTour = useMemo(() => {
-    return hasSeenOnboarding && !isTourComplete && !isLoading;
-  }, [hasSeenOnboarding, isTourComplete, isLoading]);
+    const canShow = isGuest || hasSeenOnboarding;
+    return canShow && !isTourComplete && !isLoading;
+  }, [hasSeenOnboarding, isGuest, isTourComplete, isLoading]);
 
   const currentStepConfig = useMemo(() => {
     if (!currentStep) return null;
     return TOUR_STEP_CONFIGS[currentStep];
+  }, [currentStep]);
+
+  const isFullscreenStep = useMemo(() => {
+    if (!currentStep) return false;
+    return (FULLSCREEN_STEPS as readonly string[]).includes(currentStep);
   }, [currentStep]);
 
   // Actions
@@ -177,6 +216,24 @@ export function FeatureTourProvider({
     }
   }, [onComplete]);
 
+  const previousStep = useCallback(async () => {
+    const prev = await FeatureTourService.goToPreviousStep();
+    if (!prev) return;
+
+    setCurrentStep(prev);
+    const stepIndex = TOUR_STEPS.indexOf(prev);
+    setCurrentStepIndex(stepIndex + 1);
+  }, []);
+
+  const goToStepIndex = useCallback(async (index: number) => {
+    const step = await FeatureTourService.goToStepIndex(index);
+    if (!step) return;
+
+    setCurrentStep(step);
+    setCurrentStepIndex(index);
+    setIsTourComplete(false);
+  }, []);
+
   const skipTour = useCallback(async () => {
     await FeatureTourService.skipTour();
     setCurrentStep(null);
@@ -184,6 +241,15 @@ export function FeatureTourProvider({
     setIsTourComplete(true);
     onSkip?.();
   }, [onSkip]);
+
+  const skipToPrice = useCallback(async () => {
+    const pricingIndex = TOUR_STEPS.indexOf('pricing_trial') + 1; // 1-based
+    const step = await FeatureTourService.goToStepIndex(pricingIndex);
+    if (!step) return;
+    setCurrentStep(step);
+    setCurrentStepIndex(pricingIndex);
+    setIsTourComplete(false);
+  }, []);
 
   const resetTour = useCallback(async () => {
     await FeatureTourService.resetTour();
@@ -211,12 +277,18 @@ export function FeatureTourProvider({
       currentStepIndex,
       totalSteps: TOUR_STEPS.length,
       currentStepConfig,
+      spotlightBounds,
+      setSpotlightBounds,
       startTour,
       advanceStep,
+      previousStep,
+      goToStepIndex,
       skipTour,
+      skipToPrice,
       resetTour,
       isCurrentStep,
       getStepConfig,
+      isFullscreenStep,
     }),
     [
       isLoading,
@@ -226,12 +298,17 @@ export function FeatureTourProvider({
       currentStep,
       currentStepIndex,
       currentStepConfig,
+      spotlightBounds,
       startTour,
       advanceStep,
+      previousStep,
+      goToStepIndex,
       skipTour,
+      skipToPrice,
       resetTour,
       isCurrentStep,
       getStepConfig,
+      isFullscreenStep,
     ]
   );
 
@@ -253,7 +330,7 @@ export function useFeatureTourContext(): FeatureTourContextValue {
  * Hook to check if a specific tour step is active
  */
 export function useTourStepContext(step: TourStep) {
-  const { isCurrentStep, currentStepConfig, advanceStep, skipTour, isTourActive } = useFeatureTourContext();
+  const { isCurrentStep, currentStepConfig, advanceStep, skipToPrice, isTourActive } = useFeatureTourContext();
 
   const isActive = isCurrentStep(step);
   const config = isActive ? currentStepConfig : null;
@@ -262,9 +339,9 @@ export function useTourStepContext(step: TourStep) {
     isActive,
     config,
     advance: advanceStep,
-    skip: skipTour,
+    skip: skipToPrice,
     isTourActive,
   };
 }
 
-export { TOUR_STEPS, type TourStep, type TourStepConfig };
+export { TOUR_STEPS, FULLSCREEN_STEPS, type TourStep, type TourStepConfig, type TourRenderMode };

@@ -185,7 +185,7 @@ export function RacingAcademySection() {
   };
 
   return (
-    <View style={styles.container} id="racing-academy" {...(Platform.OS === 'web' ? { 'data-section': 'racing-academy' } : {})}>
+    <View style={styles.container} id="learn-section" {...(Platform.OS === 'web' ? { 'data-section': 'learn-section' } : {})}>
       <ScrollView showsVerticalScrollIndicator={false}>
       <LinearGradient
         colors={['#F8FAFC', '#EFF6FF', '#F0F9FF']}
@@ -200,7 +200,7 @@ export function RacingAcademySection() {
               <Ionicons name="school-outline" size={40} color="#8B5CF6" />
             </View>
             <Text style={[styles.mainTitle, isDesktop && styles.mainTitleDesktop]}>
-              Racing Academy
+              Learn
             </Text>
             <Text style={[styles.heroSubtitle, isDesktop && styles.heroSubtitleDesktop]}>
               Master sailing tactics through interactive, AI-powered lessons
@@ -418,121 +418,10 @@ export function RacingAcademySection() {
             </TouchableOpacity>
           </View>
 
-          {/* Pricing Comparison */}
-          <View style={styles.pricingSection}>
-            <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>
-              Individual Pricing
-            </Text>
-            <Text style={[styles.sectionSubtitle, isDesktop && styles.sectionSubtitleDesktop]}>
-              Choose the plan that fits your sailing goals
-            </Text>
-
-            <View style={[styles.pricingGrid, isDesktop && styles.pricingGridDesktop]}>
-              {COURSE_CATALOG.pricingTiers.map((tier) => (
-                <PricingCard
-                  key={tier.id}
-                  tier={tier}
-                  isDesktop={isDesktop}
-                  isFeatured={tier.id === 'championship'}
-                />
-              ))}
-            </View>
-          </View>
-
-          {/* Institutional Packages */}
-          <View style={styles.institutionalSection}>
-            <View style={styles.institutionalHeader}>
-              <Ionicons name="business-outline" size={32} color="#2196F3" />
-              <Text style={[styles.institutionalTitle, isDesktop && styles.institutionalTitleDesktop]}>
-                For Yacht Clubs, Teams & Programs
-              </Text>
-              <Text style={[styles.institutionalSubtitle, isDesktop && styles.institutionalSubtitleDesktop]}>
-                Bring RegattaFlow Academy to your organization with custom packages
-              </Text>
-            </View>
-
-            <View style={[styles.institutionalGrid, isDesktop && styles.institutionalGridDesktop]}>
-              {COURSE_CATALOG.institutionalPackages.map((pkg) => (
-                <InstitutionalCard
-                  key={pkg.id}
-                  package={pkg}
-                  isDesktop={isDesktop}
-                  onContactSales={() => handleContactSales(pkg.id)}
-                />
-              ))}
-            </View>
-
-            <View style={styles.institutionalCTA}>
-              <Text style={styles.institutionalCTAText}>
-                Custom packages available for sailing schools, federations, and corporate programs
-              </Text>
-              <TouchableOpacity
-                style={styles.scheduleCallButton}
-                activeOpacity={0.8}
-                onPress={handleScheduleCall}
-              >
-                <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.scheduleCallButtonText}>Schedule a Call</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Coming Soon Timeline */}
-          {comingSoonCourses.length > 0 && (
-            <View style={styles.roadmapSection}>
-              <View style={styles.roadmapHeader}>
-                <Ionicons name="calendar-outline" size={28} color="#6B7280" />
-                <Text style={[styles.roadmapTitle, isDesktop && styles.roadmapTitleDesktop]}>
-                  Coming Soon
-                </Text>
-                <Text style={[styles.roadmapSubtitle, isDesktop && styles.roadmapSubtitleDesktop]}>
-                  New courses launching throughout 2025-2026
-                </Text>
-              </View>
-
-              <View style={styles.timeline}>
-                {comingSoonCourses.map((course, idx) => (
-                  <View key={course.id} style={styles.timelineItem}>
-                    <View style={styles.timelineLine}>
-                      {idx !== 0 && <View style={styles.timelineLineBefore} />}
-                      <View style={styles.timelineDot} />
-                      {idx !== comingSoonCourses.length - 1 && (
-                        <View style={styles.timelineLineAfter} />
-                      )}
-                    </View>
-
-                    <View style={styles.timelineContent}>
-                      <Text style={styles.timelineDate}>
-                        {new Date(course.releaseDate).toLocaleDateString('en-US', {
-                          month: 'long',
-                          year: 'numeric',
-                        })}
-                      </Text>
-                      <Text style={styles.timelineTitle}>{course.title}</Text>
-                      <View style={styles.timelineMeta}>
-                        <Text style={styles.timelineLevel}>
-                          {COURSE_CATALOG.levels.find((l) => l.id === course.level)?.name || course.level}
-                        </Text>
-                        <Text style={styles.timelineDuration}>
-                          {course.duration.totalMinutes} min
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              <TouchableOpacity style={styles.notifyButton} activeOpacity={0.8}>
-                <Ionicons name="notifications-outline" size={20} color="#8B5CF6" />
-                <Text style={styles.notifyButtonText}>Get notified about new courses</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
           {/* Why Choose Academy */}
           <View style={styles.whyChooseSection}>
             <Text style={[styles.sectionTitle, isDesktop && styles.sectionTitleDesktop]}>
-              Why RegattaFlow Academy?
+              Why Learn with RegattaFlow?
             </Text>
 
             <View style={[styles.benefitsGrid, isDesktop && styles.benefitsGridDesktop]}>
@@ -590,7 +479,7 @@ export function RacingAcademySection() {
                 Ready to improve your racing?
               </Text>
               <Text style={[styles.finalCTASubtitle, isDesktop && styles.finalCTASubtitleDesktop]}>
-                Start with our free Racing Basics course, or jump straight into championship-level tactics
+                Start with a free lesson, then progress through interactive tactics modules at your own pace
               </Text>
               <View style={styles.finalCTAButtons}>
                 <TouchableOpacity
@@ -2393,4 +2282,3 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
 });
-

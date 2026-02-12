@@ -26,6 +26,7 @@ import Animated, {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OfflineIndicator } from '@/components/ui/OfflineIndicator';
 import { NotificationBell } from '@/components/social/NotificationBell';
+import { TourStep } from '@/components/onboarding/TourStep';
 import {
   TabScreenToolbar,
   capsuleStyles,
@@ -217,22 +218,24 @@ export function RacesFloatingHeader({
       <View style={capsuleStyles.capsuleDivider} />
 
       {/* Add button (with ref for onboarding spotlight) */}
-      <View ref={addButtonRef} collapsable={false}>
-        <AnimatedPressable
-          style={[capsuleStyles.actionButton, addButtonAnimStyle]}
-          onPress={handleAddPress}
-          onPressIn={() => {
-            addButtonScale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
-          }}
-          onPressOut={() => {
-            addButtonScale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
-          }}
-          accessibilityLabel="Add race"
-          accessibilityRole="button"
-        >
-          <Ionicons name="add" size={20} color={IOS_COLORS.secondaryLabel} />
-        </AnimatedPressable>
-      </View>
+      <TourStep step="add_your_race" position="bottom">
+        <View ref={addButtonRef} collapsable={false}>
+          <AnimatedPressable
+            style={[capsuleStyles.actionButton, addButtonAnimStyle]}
+            onPress={handleAddPress}
+            onPressIn={() => {
+              addButtonScale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
+            }}
+            onPressOut={() => {
+              addButtonScale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
+            }}
+            accessibilityLabel="Add race"
+            accessibilityRole="button"
+          >
+            <Ionicons name="add" size={20} color={IOS_COLORS.secondaryLabel} />
+          </AnimatedPressable>
+        </View>
+      </TourStep>
     </View>
   );
 

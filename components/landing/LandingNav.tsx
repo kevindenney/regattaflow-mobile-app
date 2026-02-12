@@ -79,21 +79,21 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
   // Product sections (user types)
   const productSections: NavItem[] = [
     { label: 'For Sailors', route: '/', icon: 'boat-outline' },
-    { label: 'For Coaches', route: '/coaches', icon: 'people-outline' },
-    { label: 'For Clubs', route: '/clubs', icon: 'business-outline' },
+    { label: 'For Coaches', route: '/coaches', icon: 'people-outline', comingSoon: true },
+    { label: 'For Clubs', route: '/clubs', icon: 'business-outline', comingSoon: true },
   ];
 
   // Content sections
   const contentSections: NavItem[] = [
-    { label: 'Racing Academy', route: '/learn', icon: 'school-outline' },
+    { label: 'Learn', route: '/learn', icon: 'school-outline' },
     { label: 'Podcast', route: '/podcasts', icon: 'mic-outline' },
   ];
 
-  // Handle smooth scroll to Racing Academy section on landing page
+  // Handle smooth scroll to Learn section on landing page
   const handleRacingAcademyClick = () => {
     if (pathname === '/' && Platform.OS === 'web') {
-      // Smooth scroll to Racing Academy section
-      const element = document.getElementById('racing-academy');
+      // Smooth scroll to Learn section
+      const element = document.getElementById('learn-section');
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
@@ -171,10 +171,10 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
   const renderNavLink = (item: NavItem, isMobile = false) => {
     const isActive = isActiveRoute(item.route);
     const isComingSoon = item.comingSoon;
-    const isRacingAcademy = item.label === 'Racing Academy';
+  const isLearnLink = item.label === 'Learn';
 
     const handleClick = () => {
-      if (isRacingAcademy) {
+      if (isLearnLink) {
         handleRacingAcademyClick();
       } else {
         handleNavClick(item.route, isComingSoon);
@@ -216,7 +216,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
         )}
         {isComingSoon && (
           <View style={styles.comingSoonBadge}>
-            <Text style={styles.comingSoonText}>Soon</Text>
+            <Text style={styles.comingSoonText}>Coming Soon</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -598,17 +598,20 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
   comingSoonBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 4,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    marginLeft: 6,
   },
   comingSoonText: {
     fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: '700',
+    color: '#4F46E5',
     textTransform: 'uppercase',
+    letterSpacing: 0.25,
   },
   utilityLink: {
     paddingVertical: 8,
@@ -872,4 +875,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-

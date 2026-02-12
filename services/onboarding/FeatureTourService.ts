@@ -16,17 +16,21 @@ const TOUR_STEP_KEY = 'regattaflow_feature_tour_step';
 const TOUR_STARTED_KEY = 'regattaflow_feature_tour_started';
 
 /**
- * Tour step identifiers in order
+ * Tour step identifiers in order (6-step narrative tour)
  */
 export const TOUR_STEPS = [
-  'race_cards_navigation',    // Step 1: Swipe race cards
-  'add_race_button',          // Step 2: Add Race CTA
-  'phase_tabs',               // Step 3: Before/Racing/Review
-  'follow_tab',               // Step 4: Follow tab intro
-  'community_tab',            // Step 5: Community/Discuss
+  'welcome',              // Step 1: Full-screen welcome card
+  'race_timeline',        // Step 2: Spotlight on race carousel
+  'prep_overview',        // Step 3: Spotlight on detail cards zone (Prep/Race/Review)
+  'tab_sweep',            // Step 4: Full-screen card showing all 4 tabs
+  'add_your_race',        // Step 5: Spotlight on + button
+  'pricing_trial',        // Step 6: Full-screen pricing modal
 ] as const;
 
 export type TourStep = typeof TOUR_STEPS[number];
+
+/** How the tour step should be rendered */
+export type TourRenderMode = 'spotlight' | 'fullscreen_card' | 'fullscreen_modal';
 
 /**
  * Tour step configuration with display properties
@@ -37,46 +41,63 @@ export interface TourStepConfig {
   description: string;
   position: 'top' | 'bottom';
   targetElement: string; // CSS-like identifier for the target element
+  renderMode: TourRenderMode;
 }
+
+/** Steps rendered as full-screen overlays (not spotlight) */
+export const FULLSCREEN_STEPS: readonly TourStep[] = ['welcome', 'tab_sweep', 'pricing_trial'];
 
 /**
  * Configuration for each tour step
  */
 export const TOUR_STEP_CONFIGS: Record<TourStep, TourStepConfig> = {
-  race_cards_navigation: {
-    id: 'race_cards_navigation',
-    title: 'Swipe to Navigate',
-    description: 'Swipe left and right to see your upcoming and past races',
+  welcome: {
+    id: 'welcome',
+    title: 'Your race companion',
+    description: 'RegattaFlow helps you prepare for races, learn tactics, and track your progress.',
+    position: 'bottom',
+    targetElement: 'none',
+    renderMode: 'fullscreen_card',
+  },
+  race_timeline: {
+    id: 'race_timeline',
+    title: 'Swipe to browse races',
+    description: 'Drag left for completed races and right for upcoming ones. Each card shows your prep progress.',
     position: 'bottom',
     targetElement: 'race-cards-carousel',
+    renderMode: 'spotlight',
   },
-  add_race_button: {
-    id: 'add_race_button',
-    title: 'Add Your First Race',
-    description: 'Tap here to add your first race — paste a notice of race or enter details manually',
+  prep_overview: {
+    id: 'prep_overview',
+    title: 'Prep, Race, Review',
+    description: 'Every race has three phases. Prep your checklist and strategy, track on the water, then review and improve.',
     position: 'top',
-    targetElement: 'add-race-button',
+    targetElement: 'detail-cards-zone',
+    renderMode: 'spotlight',
   },
-  phase_tabs: {
-    id: 'phase_tabs',
-    title: 'Race Phases',
-    description: 'Each race has three phases: prepare before, execute during, and review after',
+  tab_sweep: {
+    id: 'tab_sweep',
+    title: 'Explore every tab',
+    description: 'Four tabs to power your sailing journey.',
     position: 'bottom',
-    targetElement: 'phase-tabs',
+    targetElement: 'none',
+    renderMode: 'fullscreen_card',
   },
-  follow_tab: {
-    id: 'follow_tab',
-    title: 'Follow Sailors',
-    description: 'Tap Follow to discover sailors and share your race insights',
-    position: 'top',
-    targetElement: 'follow-tab',
+  add_your_race: {
+    id: 'add_your_race',
+    title: 'Add your first race',
+    description: 'Tap + to create your first race from a notice or manual entry.',
+    position: 'bottom',
+    targetElement: 'add-race-button',
+    renderMode: 'spotlight',
   },
-  community_tab: {
-    id: 'community_tab',
-    title: 'Join the Community',
-    description: 'Tap Discuss to join communities and conversations about tactics and venues',
-    position: 'top',
-    targetElement: 'community-tab',
+  pricing_trial: {
+    id: 'pricing_trial',
+    title: 'Choose your plan',
+    description: 'Start with a 14-day free trial of all features.',
+    position: 'bottom',
+    targetElement: 'none',
+    renderMode: 'fullscreen_modal',
   },
 };
 
@@ -103,9 +124,21 @@ export class FeatureTourService {
         AsyncStorage.getItem(TOUR_STARTED_KEY),
       ]);
 
+      // Migration: if stored step is not in the current TOUR_STEPS, reset the tour
+      let validStep = currentStep as TourStep | null;
+      if (validStep && !(TOUR_STEPS as readonly string[]).includes(validStep)) {
+        logger.debug('[FeatureTourService] Stored step not in TOUR_STEPS, resetting tour:', validStep);
+        await Promise.all([
+          AsyncStorage.removeItem(TOUR_COMPLETED_KEY),
+          AsyncStorage.removeItem(TOUR_STEP_KEY),
+          AsyncStorage.removeItem(TOUR_STARTED_KEY),
+        ]);
+        validStep = null;
+      }
+
       this.cache = {
         completed: completed === 'true',
-        currentStep: currentStep as TourStep | null,
+        currentStep: validStep,
         startedAt: startedAt,
         completedAt: null,
       };
@@ -231,6 +264,75 @@ export class FeatureTourService {
       return nextStep;
     } catch (error) {
       logger.error('[FeatureTourService] Failed to advance step', error);
+      return null;
+    }
+  }
+
+  /**
+   * Move to the previous tour step.
+   * Returns the previous step, or null if already at the first step.
+   */
+  static async goToPreviousStep(): Promise<TourStep | null> {
+    try {
+      const state = await this.loadState();
+      if (state.completed || !state.currentStep) return null;
+
+      const currentIndex = TOUR_STEPS.indexOf(state.currentStep);
+      const previousIndex = currentIndex - 1;
+
+      if (previousIndex < 0) {
+        return state.currentStep;
+      }
+
+      const previousStep = TOUR_STEPS[previousIndex];
+      await AsyncStorage.setItem(TOUR_STEP_KEY, previousStep);
+
+      if (this.cache) {
+        this.cache.currentStep = previousStep;
+      }
+
+      logger.debug('[FeatureTourService] Moved to previous step:', previousStep);
+      return previousStep;
+    } catch (error) {
+      logger.error('[FeatureTourService] Failed to move to previous step', error);
+      return null;
+    }
+  }
+
+  /**
+   * Jump directly to a specific step index (1-based).
+   * Returns the selected step, or null if index is invalid.
+   */
+  static async goToStepIndex(index: number): Promise<TourStep | null> {
+    try {
+      if (index < 1 || index > TOUR_STEPS.length) {
+        return null;
+      }
+
+      const step = TOUR_STEPS[index - 1];
+      const state = await this.loadState();
+
+      if (!state.startedAt) {
+        await AsyncStorage.setItem(TOUR_STARTED_KEY, new Date().toISOString());
+        if (this.cache) {
+          this.cache.startedAt = new Date().toISOString();
+        }
+      }
+
+      await Promise.all([
+        AsyncStorage.setItem(TOUR_STEP_KEY, step),
+        AsyncStorage.removeItem(TOUR_COMPLETED_KEY),
+      ]);
+
+      if (this.cache) {
+        this.cache.currentStep = step;
+        this.cache.completed = false;
+      }
+
+      logger.debug('[FeatureTourService] Jumped to step index:', index);
+      return step;
+    } catch (error) {
+      logger.error('[FeatureTourService] Failed to jump to step index', error);
       return null;
     }
   }
