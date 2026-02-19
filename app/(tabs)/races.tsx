@@ -135,7 +135,7 @@ const normalizeDocumentType = (
 export default function RacesScreen() {
   const auth = useAuth();
   const { user, userProfile, signedIn, ready, isDemoSession, userType, isGuest, enterGuestMode } = auth;
-  const { isTourActive, currentStep } = useFeatureTourContext();
+  const { isTourActive, currentStep, triggerPricingPrompt } = useFeatureTourContext();
 
   // Safe area insets for proper header spacing
   const insets = useSafeAreaInsets();
@@ -684,7 +684,7 @@ export default function RacesScreen() {
   }, [selectedRaceId, headerTotalRaces, safeRecentRaces]);
 
   const showGuestContextBanner = isGuest && !demoContextDismissed && !isTourActive;
-  const showGuestTourBadge = isGuest && isTourActive;
+  const showGuestTourBadge = isGuest && isTourActive && !showGuestContextBanner;
 
   // Season-filtered race counts for display in header
   // When a season filter is active, show only races in that season
@@ -1839,6 +1839,7 @@ export default function RacesScreen() {
       // Auto-select the newly created race to center on it
       setSelectedRaceId(raceId);
       setHasManuallySelected(true);
+      void triggerPricingPrompt();
     },
   });
 
@@ -2736,64 +2737,138 @@ export default function RacesScreen() {
         <View
           style={{ flex: 1 }}
         >
+          {/* Welcome Card for new guest users */}
           {showGuestContextBanner && (
-            <View style={{
-              position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 8,
-              left: 16,
-              right: 16,
-              padding: 12,
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: '#BFDBFE',
-              backgroundColor: '#EFF6FF',
-              zIndex: 30,
-            }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A8A' }}>Demo mode: explore a sample race</Text>
-              <Text style={{ marginTop: 4, fontSize: 13, color: '#334155', lineHeight: 18 }}>
-                This is a walkthrough race so you can see how RegattaFlow works. Create your first race in seconds.
-              </Text>
-              <Text style={{ marginTop: 6, fontSize: 12, color: '#475569' }}>
-                Follow: fleet updates • Discuss: local tactics • Reflect: post-race progress.
-              </Text>
-              <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <>
+              {/* Dark overlay to gray out the interface */}
+              <Pressable
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                  zIndex: 34,
+                }}
+                onPress={() => setDemoContextDismissed(true)}
+              />
+              <View
+                style={{
+                  position: 'absolute',
+                  top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 16,
+                  left: 16,
+                  right: 16,
+                  zIndex: 35,
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 20,
+                  padding: 20,
+                  shadowColor: '#000000',
+                  shadowOpacity: 0.2,
+                  shadowRadius: 24,
+                  shadowOffset: { width: 0, height: 12 },
+                  elevation: 12,
+                }}
+              >
+                {/* Header */}
+                <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                  <View style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 12,
+                    backgroundColor: '#EFF6FF',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 12,
+                  }}>
+                    <Text style={{ fontSize: 24 }}>⛵</Text>
+                  </View>
+                  <Text style={{ fontSize: 20, fontWeight: '700', color: '#0F172A', textAlign: 'center' }}>
+                    Welcome to RegattaFlow
+                  </Text>
+                  <Text style={{ marginTop: 4, fontSize: 13, color: '#64748B', textAlign: 'center' }}>
+                    Your AI-powered sailing companion
+                  </Text>
+                </View>
+
+                {/* Feature Pills */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 16 }}>
+                  {[
+                    { icon: '📋', label: 'Race Prep' },
+                    { icon: '🎯', label: 'Live Tracking' },
+                    { icon: '📊', label: 'AI Debrief' },
+                    { icon: '🌤️', label: 'Weather' },
+                  ].map((item, i) => (
+                    <View key={i} style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: '#F8FAFC',
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 20,
+                      gap: 4,
+                    }}>
+                      <Text style={{ fontSize: 12 }}>{item.icon}</Text>
+                      <Text style={{ fontSize: 12, color: '#475569', fontWeight: '500' }}>{item.label}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Quick tip */}
+                <View style={{
+                  backgroundColor: '#F0FDF4',
+                  borderRadius: 10,
+                  padding: 12,
+                  marginBottom: 16,
+                }}>
+                  <Text style={{ fontSize: 12, color: '#166534', lineHeight: 17 }}>
+                    <Text style={{ fontWeight: '600' }}>💡 Tip:</Text> Swipe left/right through your races. Each has Prep → Race → Review phases.
+                  </Text>
+                </View>
+
+                {/* Pricing Cards */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
+                  <View style={{ flex: 1, backgroundColor: '#F8FAFC', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 2 }}>FREE</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>$0</Text>
+                    <Text style={{ fontSize: 10, color: '#94A3B8' }}>forever</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563EB', marginBottom: 2 }}>PRO</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>$10<Text style={{ fontSize: 11, fontWeight: '500', color: '#64748B' }}>/mo</Text></Text>
+                    <Text style={{ fontSize: 10, color: '#059669', fontWeight: '600' }}>$100/yr save 17%</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#F8FAFC', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 2 }}>TEAM</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>$20<Text style={{ fontSize: 11, fontWeight: '500', color: '#64748B' }}>/mo</Text></Text>
+                    <Text style={{ fontSize: 10, color: '#059669', fontWeight: '600' }}>$200/yr save 17%</Text>
+                  </View>
+                </View>
+
+                {/* Actions */}
                 <TouchableOpacity
                   style={{
                     backgroundColor: '#2563EB',
-                    borderRadius: 10,
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
+                    borderRadius: 12,
+                    paddingVertical: 14,
+                    alignItems: 'center',
+                    marginBottom: 10,
                   }}
-                  onPress={handleAddRaceNavigation}
+                  onPress={() => {
+                    setDemoContextDismissed(true);
+                    router.push('/(auth)/signup');
+                  }}
                 >
-                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Create your first race</Text>
+                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>Get Started Free</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+                  style={{ alignItems: 'center', paddingVertical: 6 }}
                   onPress={() => setDemoContextDismissed(true)}
                 >
-                  <Text style={{ color: '#475569', fontSize: 13, fontWeight: '600' }}>Dismiss</Text>
+                  <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '500' }}>Explore the demo first</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          )}
-          {showGuestTourBadge && (
-            <View style={{
-              position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 8,
-              left: 16,
-              zIndex: 35,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: '#BFDBFE',
-              backgroundColor: '#EFF6FF',
-            }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1E3A8A' }}>
-                Demo race walkthrough
-              </Text>
-            </View>
+            </>
           )}
 
           {/* Backdrop spotlight (TourBackdrop) now handles target highlighting */}
@@ -2847,7 +2922,7 @@ export default function RacesScreen() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 72,
+              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 52,
               left: 16,
               right: 16,
               zIndex: 60,
@@ -2857,7 +2932,7 @@ export default function RacesScreen() {
               step="race_timeline"
               position="bottom"
             >
-              <View style={{ height: 180, opacity: 0 }} />
+              <View style={{ height: 260, opacity: 0 }} />
             </TourStep>
           </View>
 
@@ -2866,7 +2941,7 @@ export default function RacesScreen() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 280,
+              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 132,
               left: 16,
               right: 16,
               zIndex: 60,
@@ -2876,7 +2951,7 @@ export default function RacesScreen() {
               step="prep_overview"
               position="top"
             >
-              <View style={{ height: 200, opacity: 0 }} />
+              <View style={{ height: 56, opacity: 0 }} />
             </TourStep>
           </View>
 
@@ -2931,55 +3006,105 @@ export default function RacesScreen() {
           onScroll={handleToolbarScroll}
           scrollEventThrottle={16}
         >
+          {/* Demo notice */}
+          <DemoNotice
+            visible={isDemoProfile && !demoNoticeDismissed && !showGuestContextBanner}
+            onDismiss={() => setDemoNoticeDismissed(true)}
+            onClaimWorkspace={handleClaimWorkspace}
+          />
+
+          {/* Welcome Card for new users (legacy ScrollView - matches CardGrid version) */}
           {showGuestContextBanner && (
-            <View style={{
-              position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 8,
-              left: 0,
-              right: 0,
-              marginHorizontal: 0,
-              padding: 12,
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: '#BFDBFE',
-              backgroundColor: '#EFF6FF',
-              zIndex: 30,
-            }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A8A' }}>Demo mode: explore a sample race</Text>
-              <Text style={{ marginTop: 4, fontSize: 13, color: '#334155', lineHeight: 18 }}>
-                This is a walkthrough race so you can see how RegattaFlow works. Create your first race in seconds.
+            <View
+              style={{
+                marginHorizontal: 16,
+                marginTop: 12,
+                marginBottom: 8,
+                padding: 16,
+                backgroundColor: '#FFFFFF',
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+                shadowColor: '#0F172A',
+                shadowOpacity: 0.12,
+                shadowRadius: 12,
+                shadowOffset: { width: 0, height: 4 },
+                elevation: 5,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>
+                Welcome to RegattaFlow
               </Text>
-              <Text style={{ marginTop: 6, fontSize: 12, color: '#475569' }}>
-                Follow: fleet updates • Discuss: local tactics • Reflect: post-race progress.
+              <Text style={{ marginTop: 6, fontSize: 13, color: '#64748B', lineHeight: 18 }}>
+                Your AI-powered sailing companion for race prep, execution, and review.
               </Text>
-              <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+
+              {/* Race Timeline */}
+              <View style={{ marginTop: 14 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F172A', marginBottom: 6 }}>
+                  Race Timeline
+                </Text>
+                <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 18 }}>
+                  Swipe left/right through your races. Each has three phases:
+                </Text>
+                <View style={{ marginTop: 8, gap: 4 }}>
+                  <Text style={{ fontSize: 13, color: '#475569' }}>
+                    <Text style={{ color: '#2563EB', fontWeight: '600' }}>Prep</Text> → Weather, docs, strategy
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#475569' }}>
+                    <Text style={{ color: '#2563EB', fontWeight: '600' }}>Race</Text> → Track performance live
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#475569' }}>
+                    <Text style={{ color: '#2563EB', fontWeight: '600' }}>Review</Text> → AI-powered debrief
+                  </Text>
+                </View>
+              </View>
+
+              {/* Pricing */}
+              <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>Free forever</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>
+                    Pro $10/mo <Text style={{ color: '#059669' }}>$100/yr</Text>
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>
+                    Team $20/mo <Text style={{ color: '#059669' }}>$200/yr</Text>
+                  </Text>
+                </View>
+              </View>
+
+              {/* Actions */}
+              <View style={{ marginTop: 12, flexDirection: 'row', gap: 8 }}>
                 <TouchableOpacity
                   style={{
+                    flex: 1,
                     backgroundColor: '#2563EB',
-                    borderRadius: 10,
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
+                    borderRadius: 8,
+                    paddingVertical: 10,
+                    alignItems: 'center',
                   }}
-                  onPress={handleAddRaceNavigation}
+                  onPress={() => {
+                    setDemoContextDismissed(true);
+                    router.push('/(auth)/signup');
+                  }}
                 >
-                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Create your first race</Text>
+                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600' }}>Sign Up Free</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={{ paddingVertical: 8, paddingHorizontal: 10 }}
+                  style={{
+                    flex: 1,
+                    backgroundColor: '#F1F5F9',
+                    borderRadius: 8,
+                    paddingVertical: 10,
+                    alignItems: 'center',
+                  }}
                   onPress={() => setDemoContextDismissed(true)}
                 >
-                  <Text style={{ color: '#475569', fontSize: 13, fontWeight: '600' }}>Dismiss</Text>
+                  <Text style={{ color: '#475569', fontSize: 13, fontWeight: '600' }}>Explore First</Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
-
-          {/* Demo notice */}
-          <DemoNotice
-            visible={isDemoProfile && !demoNoticeDismissed}
-            onDismiss={() => setDemoNoticeDismissed(true)}
-            onClaimWorkspace={handleClaimWorkspace}
-          />
 
           {/* Fleet Activity Feed - Auto-surfaces fleet mates' race prep (Inner Circle discovery) */}
           {!isGuest && hasRealRaces && (
@@ -3437,6 +3562,7 @@ export default function RacesScreen() {
         onBoatClassSelectorClose={() => setShowBoatClassSelector(false)}
         onBoatClassSelected={handleBoatClassSelected}
       />
+
 
       {/* Season Picker Modal - Select which season to filter by */}
       <SeasonPickerModal

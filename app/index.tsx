@@ -1,10 +1,9 @@
 /**
- * RegattaFlow Landing Page - Beautiful 3-tab landing experience
- * Migrated from Next.js to React Native Universal
+ * RegattaFlow Landing Page - Clean, conversion-focused landing experience
  */
 
-import { HeroPhones } from '@/components/landing/HeroPhones';
-import { LandingNav } from '@/components/landing/LandingNav';
+import { SimpleLandingNav } from '@/components/landing/SimpleLandingNav';
+import { SimpleLandingPage } from '@/components/landing/SimpleLandingPage';
 import { ScrollFix } from '@/components/landing/ScrollFix';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { getLastTabRoute } from '@/lib/utils/userTypeRouting';
@@ -16,7 +15,7 @@ import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LandingPage() {
-  const { signedIn, ready, userProfile, loading, isGuest, state, enterGuestMode } = useAuth();
+  const { signedIn, ready, userProfile, loading, isGuest, state } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [showSkeleton, setShowSkeleton] = useState(() => hasPersistedSessionHint());
   const searchParams = useLocalSearchParams<{ view?: string }>();
@@ -37,45 +36,46 @@ export default function LandingPage() {
     // Wait for auth to be ready AND not loading profile
     if (!ready || loading || isRedirecting) return;
 
-    // First-time / signed-out visitors: auto-enter guest and send to races.
-    if (!signedIn && !isGuest && state !== 'guest' && !bypassRedirect) {
+    // Native app should never show the web landing page.
+    // Signed in: send to last-tab destination. Signed out/guest: enter app at races.
+    if (Platform.OS !== 'web' && !bypassRedirect) {
       setIsRedirecting(true);
-      enterGuestMode();
+      if (signedIn) {
+        const destination = getLastTabRoute(userProfile?.user_type ?? null);
+        router.replace(destination);
+      } else {
+        router.replace('/(tabs)/races');
+      }
       return;
     }
 
-    // Guest mode: redirect to races tab
+    // Guest users: redirect to races tab
     if ((isGuest || state === 'guest') && !bypassRedirect) {
       setIsRedirecting(true);
       router.replace('/(tabs)/races');
       return;
     }
 
-    // Only redirect if signed in AND profile is loaded (or explicitly null after loading)
-    // BUT allow bypass if user explicitly wants to see landing page
+    // Signed-in users: redirect to their dashboard
     if (signedIn && !bypassRedirect) {
-      // If profile is still being fetched, wait for it
-      // userProfile will be populated after signIn completes
       if (userProfile || (!loading && ready)) {
         setIsRedirecting(true);
-
-        // Use last-visited tab on web, or role-based default
         const destination = getLastTabRoute(userProfile?.user_type ?? null);
-
         router.replace(destination);
       }
     } else if (ready && !signedIn && !isGuest && showSkeleton) {
       // Session hint was wrong (expired/invalid token) - show landing page
       setShowSkeleton(false);
     }
-  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state, enterGuestMode]);
+  }, [signedIn, ready, userProfile, loading, isRedirecting, bypassRedirect, showSkeleton, isGuest, state]);
 
   // Show skeleton while auth is loading, for returning users, or during redirect
-  if ((!ready || showSkeleton || signedIn || isRedirecting) && !bypassRedirect) {
+  // On native, always show skeleton to prevent landing page flash before redirect
+  if ((!ready || showSkeleton || signedIn || isRedirecting || Platform.OS !== 'web') && !bypassRedirect) {
     return <DashboardSkeleton />;
   }
 
-  // Show landing page for visitors
+  // Show landing page for unauthenticated visitors
   const Container = Platform.OS === 'web' ? View : SafeAreaView;
   const containerStyle = Platform.OS === 'web'
     ? [styles.container, styles.webContainer]
@@ -84,8 +84,8 @@ export default function LandingPage() {
   return (
     <Container style={containerStyle}>
       <ScrollFix />
-      <LandingNav transparent={true} sticky={true} />
-      <HeroPhones />
+      <SimpleLandingNav />
+      <SimpleLandingPage />
     </Container>
   );
 }
@@ -93,7 +93,6 @@ export default function LandingPage() {
 const styles = StyleSheet.create<{
   container: ViewStyle;
   webContainer: ViewStyle;
-  loadingContainer: ViewStyle;
 }>({
   container: {
     flex: 1,
@@ -102,10 +101,5 @@ const styles = StyleSheet.create<{
   webContainer: {
     minHeight: '100vh' as any,
     width: '100%',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 });
