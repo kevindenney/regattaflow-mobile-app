@@ -143,6 +143,8 @@ import {
   TeamCommsTile,
   CourseMapTile,
 } from '@/components/races/prep/PrepTabTiles';
+import { CoachingSuggestionTile, CoachSelectionSheet } from '@/components/races/coaching';
+import { useSailorActiveCoaches } from '@/hooks/useSailorActiveCoaches';
 
 /**
  * Convert wind direction in degrees to cardinal direction string
@@ -588,6 +590,19 @@ export function DaysBeforeContent({
 
   // State for team invite modal
   const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // State for coach selection sheet
+  const [showCoachSheet, setShowCoachSheet] = useState(false);
+
+  // Active coaches for coaching suggestion tile
+  const {
+    hasCoach,
+    primaryCoach,
+    activeCoaches,
+  } = useSailorActiveCoaches({
+    raceBoatClass: race.boatClass,
+    phase: 'prep',
+  });
 
   // State for sail inspection
   const [showSailInspection, setShowSailInspection] = useState(false);
@@ -1851,6 +1866,38 @@ export function DaysBeforeContent({
       </TileSection>
 
       {/* ================================================================ */}
+      {/* SECTION: COACHING                                                */}
+      {/* ================================================================ */}
+      <TileSection
+        title="Coaching"
+        subtitle={hasCoach && primaryCoach ? `${primaryCoach.displayName} available` : 'Get expert guidance'}
+        isComplete={false}
+      >
+        <TileGrid>
+          <CoachingSuggestionTile
+            hasCoach={hasCoach}
+            primaryCoach={primaryCoach}
+            hasMultipleCoaches={activeCoaches.length > 1}
+            phase="prep"
+            raceBoatClass={race.boatClass}
+            onPress={() => {
+              if (hasCoach && activeCoaches.length === 1 && primaryCoach) {
+                // Single coach - navigate to messaging
+                router.push(`/coach/${primaryCoach.coachId}?action=message&context=pre_race_consult&raceId=${race.id}` as any);
+              } else if (hasCoach && activeCoaches.length > 1) {
+                // Multiple coaches - show selection sheet
+                setShowCoachSheet(true);
+              } else {
+                // No coach - navigate to coach discovery
+                router.push(`/coach/discover?boatClass=${encodeURIComponent(race.boatClass || '')}&source=prep` as any);
+              }
+            }}
+            onChooseAnotherCoach={() => setShowCoachSheet(true)}
+          />
+        </TileGrid>
+      </TileSection>
+
+      {/* ================================================================ */}
       {/* SECTION: TACTICS (conditional)                                   */}
       {/* ================================================================ */}
       {hasAnyItem(['review_tactics']) && (
@@ -2643,6 +2690,25 @@ export function DaysBeforeContent({
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Coach Selection Sheet (for multiple coaches) */}
+      <CoachSelectionSheet
+        isOpen={showCoachSheet}
+        onClose={() => setShowCoachSheet(false)}
+        coaches={activeCoaches}
+        phase="prep"
+        raceId={race.id}
+        raceBoatClass={race.boatClass}
+        onSelectCoach={(coach, action) => {
+          if (action === 'message') {
+            // Navigate to coach messaging with pre-race context
+            router.push(`/coach/${coach.coachId}?action=message&context=pre_race_consult&raceId=${race.id}` as any);
+          } else {
+            // Share action - less common in prep phase but handle it
+            router.push(`/coach/${coach.coachId}?action=share&raceId=${race.id}` as any);
+          }
+        }}
+      />
     </View>
   );
 }

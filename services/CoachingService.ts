@@ -1108,6 +1108,65 @@ class CoachingService {
   }
 
   // ============================================================================
+  // Sailor Coach Relationships (sailor perspective)
+  // ============================================================================
+
+  /**
+   * Get all coaching relationships for a sailor, with coach profile data.
+   * Mirrors getClients() but from the sailor's perspective.
+   */
+  async getSailorCoachRelationships(
+    sailorId: string,
+    status?: 'active' | 'inactive' | 'completed'
+  ): Promise<(CoachingClient & { coachProfile?: CoachProfile })[]> {
+    let query = supabase
+      .from('coaching_clients')
+      .select('*')
+      .eq('sailor_id', sailorId)
+      .order('last_session_date', { ascending: false, nullsFirst: false });
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data: clients, error: clientsError } = await query;
+
+    if (clientsError) {
+      console.error('Error fetching sailor coach relationships:', clientsError);
+      throw clientsError;
+    }
+
+    if (!clients || clients.length === 0) {
+      return [];
+    }
+
+    // Get unique coach IDs
+    const coachIds = Array.from(new Set(clients.map(c => c.coach_id).filter(Boolean)));
+
+    if (coachIds.length === 0) {
+      return clients as (CoachingClient & { coachProfile?: CoachProfile })[];
+    }
+
+    // Fetch coach profile data
+    const { data: coaches, error: coachesError } = await supabase
+      .from('coach_profiles')
+      .select('*')
+      .in('id', coachIds);
+
+    if (coachesError) {
+      console.error('Error fetching coach profiles for relationships:', coachesError);
+      return clients as (CoachingClient & { coachProfile?: CoachProfile })[];
+    }
+
+    const coachMap = new Map((coaches || []).map(c => [c.id, c]));
+
+    return clients.map(client => ({
+      ...client,
+      coachProfile: client.coach_id ? coachMap.get(client.coach_id) || undefined : undefined,
+    })) as (CoachingClient & { coachProfile?: CoachProfile })[];
+  }
+
+  // ============================================================================
   // Coach Availability Management (NEW)
   // ============================================================================
 
@@ -2382,6 +2441,165 @@ class CoachingService {
       verified: coach.verified,
       matchScore: coach.match_score,
     };
+  }
+
+  // ============================================================================
+  // Sailor-side Active Coaches (NEW)
+  // ============================================================================
+
+  /**
+   * Get active coaches for a sailor with ranking info
+   * Used by CoachingSuggestionTile to show contextual coaching prompts
+   */
+  async getSailorActiveCoaches(sailorId: string): Promise<{
+    id: string;
+    coachId: string;
+    displayName: string;
+    avatarUrl?: string | null;
+    specialties: string[];
+    boatClasses: string[];
+    totalSessions: number;
+    lastSessionDate?: string | null;
+  }[]> {
+    // Fetch active coaching relationships
+    const { data: clientRecords, error: clientError } = await supabase
+      .from('coaching_clients')
+      .select('id, coach_id, total_sessions, last_session_date')
+      .eq('sailor_id', sailorId)
+      .eq('status', 'active');
+
+    if (clientError) {
+      console.error('[CoachingService.getSailorActiveCoaches] Error fetching clients:', clientError);
+      throw clientError;
+    }
+
+    if (!clientRecords || clientRecords.length === 0) {
+      return [];
+    }
+
+    // Get coach profile IDs
+    const coachIds = clientRecords.map(c => c.coach_id).filter(Boolean);
+
+    if (coachIds.length === 0) {
+      return [];
+    }
+
+    // Fetch coach profiles
+    const { data: coachProfiles, error: profileError } = await supabase
+      .from('coach_profiles')
+      .select('id, display_name, profile_photo_url, specialties, boat_classes_coached')
+      .in('id', coachIds);
+
+    if (profileError) {
+      console.error('[CoachingService.getSailorActiveCoaches] Error fetching coach profiles:', profileError);
+      throw profileError;
+    }
+
+    // Create a map for coach profiles
+    const coachMap = new Map(
+      (coachProfiles || []).map(c => [c.id, c])
+    );
+
+    // Build result array
+    return clientRecords
+      .map(client => {
+        const coachProfile = coachMap.get(client.coach_id);
+        if (!coachProfile) return null;
+
+        return {
+          id: client.id,
+          coachId: coachProfile.id,
+          displayName: coachProfile.display_name || 'Coach',
+          avatarUrl: coachProfile.profile_photo_url,
+          specialties: coachProfile.specialties || [],
+          boatClasses: coachProfile.boat_classes_coached || [],
+          totalSessions: client.total_sessions || 0,
+          lastSessionDate: client.last_session_date,
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null);
+  }
+
+  /**
+   * Share race debrief with a coach
+   * Creates a notification for the coach to review the sailor's race analysis
+   */
+  async shareDebriefWithCoach(params: {
+    coachId: string;
+    raceId: string;
+    sailorId: string;
+    sailorName?: string;
+    raceName?: string;
+    message?: string;
+  }): Promise<void> {
+    try {
+      // Get coach profile with user email
+      const { data: coachProfile, error: profileError } = await supabase
+        .from('coach_profiles')
+        .select(`
+          id,
+          display_name,
+          user_id,
+          users:coach_profiles_user_id_fkey (
+            email,
+            full_name
+          )
+        `)
+        .eq('id', params.coachId)
+        .single();
+
+      if (profileError || !coachProfile) {
+        console.error('[CoachingService.shareDebriefWithCoach] Error fetching coach profile:', profileError);
+        throw new Error('Coach not found');
+      }
+
+      // Get race details for the notification
+      const { data: raceData } = await supabase
+        .from('regattas')
+        .select('name, date')
+        .eq('id', params.raceId)
+        .single();
+
+      const raceName = params.raceName || raceData?.name || 'Race';
+      const sailorName = params.sailorName || 'Sailor';
+
+      // Send email notification to coach
+      const coachEmail = (coachProfile as any).users?.email;
+      if (coachEmail) {
+        const { emailService } = await import('./EmailService');
+        await emailService.sendCoachNotification({
+          coach_name: coachProfile.display_name || (coachProfile as any).users?.full_name || 'Coach',
+          coach_email: coachEmail,
+          notification_type: 'analysis_shared',
+          sailor_name: sailorName,
+          race_name: raceName,
+          message: params.message || `${sailorName} has shared their race debrief with you.`,
+        });
+      }
+
+      // Create in-app notification (if notifications table exists)
+      try {
+        await supabase.from('notifications').insert({
+          user_id: coachProfile.user_id,
+          type: 'debrief_shared',
+          title: `${sailorName} shared a race debrief`,
+          body: `Review their analysis for ${raceName}`,
+          data: {
+            raceId: params.raceId,
+            sailorId: params.sailorId,
+            sailorName,
+            raceName,
+          },
+          read: false,
+        });
+      } catch (notificationError) {
+        // Notifications table may not exist, continue without error
+        console.log('[CoachingService.shareDebriefWithCoach] Notification insert skipped:', notificationError);
+      }
+    } catch (error) {
+      console.error('[CoachingService.shareDebriefWithCoach] Error sharing debrief:', error);
+      throw error;
+    }
   }
 }
 

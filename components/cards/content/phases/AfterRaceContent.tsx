@@ -46,6 +46,9 @@ import { LearningCaptureTile } from '@/components/races/review/LearningCaptureTi
 import { CoachFeedbackTile } from '@/components/races/review/CoachFeedbackTile';
 import { RaceSummaryTile } from '@/components/races/review/RaceSummaryTile';
 import { EducationalChecklistSheet } from '@/components/races/review/EducationalChecklistSheet';
+import { CoachingSuggestionTile, CoachSelectionSheet } from '@/components/races/coaching';
+import { useSailorActiveCoaches } from '@/hooks/useSailorActiveCoaches';
+import { coachingService } from '@/services/CoachingService';
 import {
   POST_RACE_REVIEW_CONFIG,
   LEARNING_CAPTURE_CONFIG,
@@ -159,6 +162,19 @@ export function AfterRaceContent({
   // Educational checklist sheets
   const [showPerformanceSheet, setShowPerformanceSheet] = useState(false);
   const [showLearningSheet, setShowLearningSheet] = useState(false);
+
+  // Coach selection sheet
+  const [showCoachSheet, setShowCoachSheet] = useState(false);
+
+  // Active coaches for coaching suggestion tile
+  const {
+    hasCoach,
+    primaryCoach,
+    activeCoaches,
+  } = useSailorActiveCoaches({
+    raceBoatClass: race.boatClass,
+    phase: 'review',
+  });
 
   // Content status for share tile (loaded from Supabase)
   const [contentStatus, setContentStatus] = useState({ hasPrepNotes: false, hasPostRaceNotes: false });
@@ -537,6 +553,36 @@ export function AfterRaceContent({
             />
           </TileGrid>
         )}
+        {/* Coaching Suggestion - show when debrief is complete */}
+        {debriefComplete && (
+          <TileGrid>
+            <CoachingSuggestionTile
+              hasCoach={hasCoach}
+              primaryCoach={primaryCoach}
+              hasMultipleCoaches={activeCoaches.length > 1}
+              phase="review"
+              raceBoatClass={race.boatClass}
+              onPress={() => {
+                if (hasCoach && activeCoaches.length === 1 && primaryCoach) {
+                  // Single coach - share debrief directly
+                  coachingService.shareDebriefWithCoach({
+                    coachId: primaryCoach.coachId,
+                    raceId: race.id,
+                    sailorId: userId || '',
+                    raceName: race.name,
+                  });
+                } else if (hasCoach && activeCoaches.length > 1) {
+                  // Multiple coaches - show selection sheet
+                  setShowCoachSheet(true);
+                } else {
+                  // No coach - navigate to coach discovery
+                  router.push(`/coach/discover?boatClass=${encodeURIComponent(race.boatClass || '')}&source=review` as any);
+                }
+              }}
+              onChooseAnotherCoach={() => setShowCoachSheet(true)}
+            />
+          </TileGrid>
+        )}
       </View>
 
       {/* ================================================================ */}
@@ -734,6 +780,29 @@ export function AfterRaceContent({
         toggleItem={toggleLearningItem}
         completedCount={learningCompletedCount}
         totalCount={learningTotalCount}
+      />
+
+      {/* Coach Selection Sheet (for multiple coaches) */}
+      <CoachSelectionSheet
+        isOpen={showCoachSheet}
+        onClose={() => setShowCoachSheet(false)}
+        coaches={activeCoaches}
+        phase="review"
+        raceId={race.id}
+        raceBoatClass={race.boatClass}
+        onSelectCoach={(coach, action) => {
+          if (action === 'share') {
+            coachingService.shareDebriefWithCoach({
+              coachId: coach.coachId,
+              raceId: race.id,
+              sailorId: userId || '',
+              raceName: race.name,
+            });
+          } else {
+            // Message action - navigate to coach messaging
+            router.push(`/coach/${coach.coachId}?action=message&context=race_review&raceId=${race.id}` as any);
+          }
+        }}
       />
 
       {/* Toast notification for AI Analysis completion */}
