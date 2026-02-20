@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -21,6 +20,7 @@ import {
   type BookingRequest,
 } from '@/hooks/useCoachingSessions';
 import { coachingService } from '@/services/CoachingService';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 type ScheduleWindow = 'today' | 'week' | 'month' | 'all';
 
@@ -155,10 +155,11 @@ export default function ScheduleScreen() {
   }, [refreshSessions, refreshRequests, loadAvailability]);
 
   const handleAddAvailability = () => {
-    Alert.alert(
-      'Coming Soon',
-      'Coach availability editing is being finished—contact support if you need a slot added today.'
-    );
+    router.push('/coach/availability');
+  };
+
+  const handleManageAvailability = () => {
+    router.push('/coach/availability');
   };
 
   const handlePlanSession = () => {
@@ -168,19 +169,57 @@ export default function ScheduleScreen() {
   const handleAcceptRequest = async (requestId: string) => {
     try {
       await acceptRequest(requestId);
-      Alert.alert('Request accepted', 'The sailor will be notified and can confirm payment.');
+      showAlert('Request accepted', 'The sailor will be notified and can confirm payment.');
     } catch (error: any) {
-      Alert.alert('Unable to accept request', error?.message || 'Try again shortly.');
+      showAlert('Unable to accept request', error?.message || 'Try again shortly.');
     }
   };
 
   const handleDeclineRequest = async (requestId: string) => {
     try {
       await declineRequest(requestId);
-      Alert.alert('Request updated', 'The sailor will see that this slot is unavailable.');
+      showAlert('Request updated', 'The sailor will see that this slot is unavailable.');
     } catch (error: any) {
-      Alert.alert('Unable to update request', error?.message || 'Try again shortly.');
+      showAlert('Unable to update request', error?.message || 'Try again shortly.');
     }
+  };
+
+  const handleCompleteSession = (session: LiveCoachingSession) => {
+    router.push({
+      pathname: '/coach/complete-session',
+      params: {
+        sessionId: session.id,
+        sailorName: session.sailor?.full_name || session.sailor?.email || 'Sailor',
+        scheduledDuration: String(session.duration_minutes || 60),
+      },
+    });
+  };
+
+  const handleCancelSession = (session: LiveCoachingSession) => {
+    router.push({
+      pathname: '/coach/cancel-session',
+      params: {
+        sessionId: session.id,
+        sailorName: session.sailor?.full_name || session.sailor?.email || 'Sailor',
+      },
+    });
+  };
+
+  // Determine if session can be completed (today or past, not already completed/cancelled)
+  const canCompleteSession = (session: LiveCoachingSession) => {
+    const start = getSessionStart(session);
+    if (!start) return false;
+    const now = new Date();
+    // Can complete if session time has passed (or is today)
+    const isPastOrToday = start <= addDays(now, 1);
+    const validStatus = ['confirmed', 'scheduled', 'in_progress'].includes(session.status || '');
+    return isPastOrToday && validStatus;
+  };
+
+  // Determine if session can be cancelled
+  const canCancelSession = (session: LiveCoachingSession) => {
+    const validStatus = ['confirmed', 'scheduled', 'pending'].includes(session.status || '');
+    return validStatus;
   };
 
   const filteredSessions = useMemo<DashboardSession[]>(() => {
@@ -333,6 +372,24 @@ export default function ScheduleScreen() {
           />
         </View>
 
+        {/* Quick Actions */}
+        <View style={styles.quickActionsRow}>
+          <TouchableOpacity
+            style={styles.quickActionButton}
+            onPress={handleManageAvailability}
+          >
+            <Ionicons name="calendar-outline" size={18} color="#007AFF" />
+            <ThemedText style={styles.quickActionText}>Manage Availability</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickActionButton}
+            onPress={() => router.push('/coach/pricing')}
+          >
+            <Ionicons name="pricetag-outline" size={18} color="#007AFF" />
+            <ThemedText style={styles.quickActionText}>Manage Pricing</ThemedText>
+          </TouchableOpacity>
+        </View>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -424,6 +481,27 @@ export default function ScheduleScreen() {
                           ))}
                         </View>
                       )}
+                      {/* Session Action Buttons */}
+                      <View style={styles.sessionActions}>
+                        {canCompleteSession(session) && (
+                          <TouchableOpacity
+                            style={styles.completeButton}
+                            onPress={() => handleCompleteSession(session)}
+                          >
+                            <Ionicons name="checkmark-circle-outline" size={16} color="#059669" />
+                            <ThemedText style={styles.completeButtonText}>Complete</ThemedText>
+                          </TouchableOpacity>
+                        )}
+                        {canCancelSession(session) && (
+                          <TouchableOpacity
+                            style={styles.cancelSessionButton}
+                            onPress={() => handleCancelSession(session)}
+                          >
+                            <Ionicons name="close-circle-outline" size={16} color="#EF4444" />
+                            <ThemedText style={styles.cancelSessionButtonText}>Cancel</ThemedText>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                   );
                 })}
@@ -553,6 +631,21 @@ function BookingRequestCard({
       : null;
   const requestMessage = request.sailor_message || request.message;
 
+  // Get expiration info
+  const expiresAt = (request as any).expires_at;
+  const expiration = coachingService.getBookingRequestExpiration(expiresAt);
+
+  const getExpirationStyle = () => {
+    if (expiration.urgencyLevel === 'critical') {
+      return { backgroundColor: '#FEE2E2', color: '#DC2626' };
+    } else if (expiration.urgencyLevel === 'warning') {
+      return { backgroundColor: '#FEF3C7', color: '#D97706' };
+    }
+    return { backgroundColor: '#E0E7FF', color: '#4F46E5' };
+  };
+
+  const expirationStyle = getExpirationStyle();
+
   return (
     <View style={styles.requestCard}>
       <View style={styles.requestHeader}>
@@ -563,6 +656,21 @@ function BookingRequestCard({
           <ThemedText style={styles.requestDate}>{format(requestDate, 'MMM d · h:mm a')}</ThemedText>
         )}
       </View>
+
+      {/* Expiration countdown */}
+      {!expiration.isExpired && (
+        <View style={[styles.expirationBadge, { backgroundColor: expirationStyle.backgroundColor }]}>
+          <Ionicons
+            name={expiration.urgencyLevel === 'critical' ? 'alarm-outline' : 'time-outline'}
+            size={14}
+            color={expirationStyle.color}
+          />
+          <ThemedText style={[styles.expirationText, { color: expirationStyle.color }]}>
+            {expiration.displayText}
+          </ThemedText>
+        </View>
+      )}
+
       {requestMessage && <ThemedText style={styles.requestMessage}>{requestMessage}</ThemedText>}
       <View style={styles.requestButtons}>
         <TouchableOpacity style={styles.secondaryButton} onPress={onDecline}>
@@ -953,5 +1061,87 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     color: '#475569',
+  },
+  // Quick Actions
+  quickActionsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 10,
+    marginBottom: 8,
+  },
+  quickActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5F1FF',
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  // Session action buttons
+  sessionActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  completeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  completeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  cancelSessionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  cancelSessionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  // Expiration badge
+  expirationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  expirationText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

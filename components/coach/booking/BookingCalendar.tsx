@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { CoachAvailability, CoachingSession } from '../../../types/coach';
-import { CoachMarketplaceService } from '../../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 
 interface BookingCalendarProps {
   coachId: string;

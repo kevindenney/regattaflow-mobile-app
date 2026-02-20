@@ -9,6 +9,11 @@ import { supabase } from './supabase';
 import { logger, serializeError } from '@/lib/utils/logger';
 import { skillManagementService } from './ai/SkillManagementService';
 import {
+  isAIInFallbackMode,
+  shouldTriggerFallback,
+  activateFallbackMode
+} from '@/lib/utils/aiFallback';
+import {
   LEARNING_EVENT_EXTRACTOR_SKILL_CONTENT,
   buildExtractionPrompt,
 } from '@/skills/learning-event-extractor/skillContent';
@@ -81,14 +86,21 @@ export class AdaptiveLearningService {
 
   /**
    * Call Claude API for event extraction
+   * FIX 3: Enhanced with fallback mode support
    */
   private static async callClaudeForExtraction(
     prompt: string
   ): Promise<ExtractionResult | null> {
     try {
-      if (!ANTHROPIC_API_KEY) {
-        logger.warn('No Anthropic API key configured');
-        return null;
+      // FIX 3: Check if AI is in fallback mode
+      if (isAIInFallbackMode()) {
+        logger.debug('AI in fallback mode, skipping extraction');
+        return { events: [], extractionNotes: 'AI service temporarily unavailable' };
+      }
+
+      if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'placeholder') {
+        logger.debug('No Anthropic API key configured - extraction skipped');
+        return { events: [], extractionNotes: 'API key not configured' };
       }
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -111,9 +123,23 @@ export class AdaptiveLearningService {
         }),
       });
 
+      // FIX 3: Handle credit exhaustion and API overload status codes
+      if (response.status === 529 || response.status === 503 || response.status === 402) {
+        const reason = response.status === 529 ? 'API overloaded' :
+                      response.status === 402 ? 'Credit exhaustion' : 'Service unavailable';
+        logger.warn('Claude API unavailable', { status: response.status, reason });
+        activateFallbackMode(reason);
+        return { events: [], extractionNotes: reason };
+      }
+
       if (!response.ok) {
         const errorText = await response.text();
-        logger.error('Claude API error', { status: response.status, error: errorText });
+        // FIX 3: Check if error message indicates credit issues
+        if (shouldTriggerFallback({ message: errorText, status: response.status })) {
+          activateFallbackMode('API error indicates credit or capacity issue');
+          return { events: [], extractionNotes: 'AI service temporarily unavailable' };
+        }
+        logger.warn('Claude API error', { status: response.status });
         return null;
       }
 

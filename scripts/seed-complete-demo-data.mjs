@@ -45,18 +45,6 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 const MOCK_USERS = [
   {
-    email: 'sarah.chen@sailing.com',
-    password: DEMO_PASSWORD,
-    full_name: 'Sarah Chen',
-    user_type: 'sailor',
-    profile: {
-      home_port: 'Hong Kong',
-      sailing_since: 2015,
-      skill_level: 'advanced',
-      preferred_classes: ['Dragon', 'J/70'],
-    }
-  },
-  {
     email: 'mike.thompson@racing.com',
     password: DEMO_PASSWORD,
     full_name: 'Mike Thompson',
@@ -90,16 +78,6 @@ const MOCK_USERS = [
       sailing_since: 2012,
       skill_level: 'advanced',
       preferred_classes: ['Dragon', 'J/70'],
-    }
-  },
-  {
-    email: 'coach.anderson@sailing.com',
-    password: DEMO_PASSWORD,
-    full_name: 'Coach Anderson',
-    user_type: 'coach',
-    profile: {
-      coaching_since: 2005,
-      specialties: ['Race tactics', 'Boat speed', 'Starts'],
     }
   },
 ];
@@ -403,17 +381,9 @@ async function createFleets(clubs) {
 async function createMemberships(users, clubs, fleets) {
   console.log('\n👥 Creating club and fleet memberships...');
 
-  // Sarah Chen - RHKYC member, Dragon and J/70 fleets
-  const sarah = users.find(u => u.email === 'sarah.chen@sailing.com');
   const rhkyc = clubs.find(c => c.slug === 'rhkyc');
   const rhkycDragon = fleets.find(f => f.slug === 'rhkyc-dragon');
   const rhkycJ70 = fleets.find(f => f.slug === 'rhkyc-j70');
-
-  if (sarah && rhkyc) {
-    await createClubMembership(sarah.id, rhkyc.id, 'member');
-    if (rhkycDragon) await createFleetMembership(sarah.id, rhkycDragon.id, 'member');
-    if (rhkycJ70) await createFleetMembership(sarah.id, rhkycJ70.id, 'captain');
-  }
 
   // Mike Thompson - SFYC member, Dragon and 420 fleets
   const mike = users.find(u => u.email === 'mike.thompson@racing.com');
@@ -451,12 +421,6 @@ async function createMemberships(users, clubs, fleets) {
     if (rhkycJ70) await createFleetMembership(james.id, rhkycJ70.id, 'member');
   }
 
-  // Coach Anderson - SFYC and RHKYC
-  const coach = users.find(u => u.email === 'coach.anderson@sailing.com');
-  if (coach) {
-    if (sfyc) await createClubMembership(coach.id, sfyc.id, 'coach');
-    if (rhkyc) await createClubMembership(coach.id, rhkyc.id, 'coach');
-  }
 }
 
 async function createClubMembership(userId, clubId, role) {
@@ -614,39 +578,6 @@ async function createRaceHistory(users) {
 
   const now = new Date();
   const races = [];
-
-  // Sarah's race history (Dragon and J/70, mostly RHKYC)
-  const sarah = users.find(u => u.email === 'sarah.chen@sailing.com');
-  if (sarah) {
-    // Spring Championships (annual pattern)
-    for (let year = 0; year < 3; year++) {
-      races.push({
-        name: 'Spring Dragon Championship',
-        created_by: sarah.id,
-        start_date: formatDate(new Date(now.getFullYear() - year, 3, 15)), // April
-        metadata: {
-          venue_name: 'Victoria Harbour',
-          class: 'Dragon',
-          venue_coordinates: { lat: 22.2793, lng: 114.1628 },
-        },
-        status: 'completed',
-      });
-    }
-
-    // Regular J/70 racing (venue preference)
-    for (let i = 0; i < 5; i++) {
-      races.push({
-        name: `J/70 Race Day ${i + 1}`,
-        created_by: sarah.id,
-        start_date: formatDate(addMonths(now, -i * 0.5)),
-        metadata: {
-          venue_name: 'Hong Kong Waters',
-          class: 'J/70',
-        },
-        status: 'completed',
-      });
-    }
-  }
 
   // Mike's race history (Laser and 420, SFYC)
   const mike = users.find(u => u.email === 'mike.thompson@racing.com');

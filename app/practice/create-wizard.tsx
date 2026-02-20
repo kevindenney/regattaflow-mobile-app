@@ -18,7 +18,6 @@ import { useDrillLibrary } from '@/hooks/useDrillLibrary';
 import { usePracticeCreationWizard } from '@/hooks/usePracticeCreationWizard';
 import { useAuth } from '@/providers/AuthProvider';
 import type { SkillArea } from '@/types/practice';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Calendar, ChevronLeft, Clock, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
@@ -33,6 +32,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+let DateTimePicker: any = null;
+try {
+  DateTimePicker = require('@react-native-community/datetimepicker').default;
+} catch (_error) {
+  DateTimePicker = null;
+}
 
 export default function PracticeCreateWizardScreen() {
   const params = useLocalSearchParams<{
@@ -60,6 +66,7 @@ export default function PracticeCreateWizardScreen() {
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const hasDateTimePicker = Boolean(DateTimePicker);
 
   // Initialize schedule when in schedule mode
   useEffect(() => {
@@ -222,14 +229,26 @@ export default function PracticeCreateWizardScreen() {
         <View style={styles.scheduleSection}>
           <TouchableOpacity
             style={styles.scheduleButton}
-            onPress={() => setShowDatePicker(true)}
+            onPress={() => {
+              if (!hasDateTimePicker) {
+                Alert.alert('Unavailable', 'Date picker is unavailable in this build.');
+                return;
+              }
+              setShowDatePicker(true);
+            }}
           >
             <Calendar size={16} color={TUFTE_FORM_COLORS.primary} />
             <Text style={styles.scheduleButtonText}>{formatDate(selectedDate)}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.scheduleButton}
-            onPress={() => setShowTimePicker(true)}
+            onPress={() => {
+              if (!hasDateTimePicker) {
+                Alert.alert('Unavailable', 'Time picker is unavailable in this build.');
+                return;
+              }
+              setShowTimePicker(true);
+            }}
           >
             <Clock size={16} color={TUFTE_FORM_COLORS.primary} />
             <Text style={styles.scheduleButtonText}>{formatTime(selectedDate)}</Text>
@@ -238,7 +257,7 @@ export default function PracticeCreateWizardScreen() {
       )}
 
       {/* Date Picker Modal */}
-      {showDatePicker && (
+      {hasDateTimePicker && showDatePicker && (
         <DateTimePicker
           value={selectedDate}
           mode="date"
@@ -249,7 +268,7 @@ export default function PracticeCreateWizardScreen() {
       )}
 
       {/* Time Picker Modal */}
-      {showTimePicker && (
+      {hasDateTimePicker && showTimePicker && (
         <DateTimePicker
           value={selectedDate}
           mode="time"

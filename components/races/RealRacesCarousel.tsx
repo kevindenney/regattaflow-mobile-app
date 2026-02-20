@@ -586,8 +586,8 @@ export function RealRacesCarousel({
     };
 
     return (
-      <TourStep step="race_cards_navigation" position="bottom">
-        <TourStep step="phase_tabs" position="bottom">
+      <TourStep step="race_timeline" position="bottom">
+        <TourStep step="prep_overview" position="bottom">
           <View style={timelineNavStyles.container}>
             <RaceTimelineLayout
               races={timelineItems}
@@ -612,8 +612,8 @@ export function RealRacesCarousel({
   return (
     <>
       {/* Hero Zone - Fixed height race card timeline */}
-      <TourStep step="race_cards_navigation" position="bottom">
-        <TourStep step="phase_tabs" position="bottom">
+      <TourStep step="race_timeline" position="bottom">
+        <TourStep step="prep_overview" position="bottom">
           <View style={{ height: HERO_ZONE_HEIGHT }}>
         <ScrollView
           ref={scrollViewRef}

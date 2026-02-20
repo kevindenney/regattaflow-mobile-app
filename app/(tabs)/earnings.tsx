@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,15 +6,18 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
-  Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 import { useCoachEarningsSummary } from '@/hooks/useCoachData';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
+import { StripeConnectService, type StripeConnectStatus, type PayoutResult, type PayoutHistoryItem } from '@/services/StripeConnectService';
 
 type PeriodKey = 'week' | 'month' | 'year';
 
@@ -41,7 +44,11 @@ const getStatusPillStyle = (status: string) => {
       return { backgroundColor: '#FEF3C7', color: '#92400E' };
     case 'paid':
       return { backgroundColor: '#DCFCE7', color: '#166534' };
+    case 'in_transit':
+      return { backgroundColor: '#DBEAFE', color: '#1E40AF' };
     case 'refunded':
+      return { backgroundColor: '#FEE2E2', color: '#991B1B' };
+    case 'failed':
       return { backgroundColor: '#FEE2E2', color: '#991B1B' };
     case 'requires_action':
       return { backgroundColor: '#FDE68A', color: '#92400E' };
@@ -63,9 +70,9 @@ const formatCurrency = (amount: number, currency: string = 'USD') => {
   }
 };
 
-const formatDate = (value?: string | null) => {
+const formatDate = (value?: string | number | null) => {
   if (!value) return 'TBD';
-  const date = new Date(value);
+  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
   return date.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -139,17 +146,170 @@ const quickStatCardShadow = createShadowStyle({
 });
 
 export default function EarningsScreen() {
+  const router = useRouter();
   const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
   const earningsQuery = useCoachEarningsSummary();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>('month');
+
+  // Stripe state
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
+  const [stripeStatusLoading, setStripeStatusLoading] = useState(true);
+  const [availableBalance, setAvailableBalance] = useState(0);
+  const [pendingBalance, setPendingBalance] = useState(0);
+  const [balanceCurrency, setBalanceCurrency] = useState('usd');
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceUnavailable, setBalanceUnavailable] = useState(false);
+  const [payoutHistory, setPayoutHistory] = useState<PayoutHistoryItem[]>([]);
+  const [payoutHistoryLoading, setPayoutHistoryLoading] = useState(true);
+  const [payoutInProgress, setPayoutInProgress] = useState(false);
+  const [onboardingLoading, setOnboardingLoading] = useState(false);
 
   const summary = earningsQuery.data;
   const isLoading = personaLoading || (!summary && (earningsQuery.isLoading || earningsQuery.isFetching));
   const isConnected = !!coachId;
 
-  const handleRequestPayout = () => {
-    Alert.alert('Payout request received', 'We will notify you as soon as the transfer is on the way.');
-  };
+  const isStripeReady = stripeStatus?.connected &&
+    stripeStatus?.detailsSubmitted &&
+    stripeStatus?.payoutsEnabled;
+
+  // Load Stripe status, balance, and payout history
+  const loadStripeData = useCallback(async () => {
+    if (!coachId) return;
+
+    setStripeStatusLoading(true);
+    setBalanceLoading(true);
+    setPayoutHistoryLoading(true);
+    setBalanceUnavailable(false);
+
+    try {
+      const [status, history] = await Promise.all([
+        StripeConnectService.getConnectStatus(coachId),
+        StripeConnectService.getPayoutHistory(coachId),
+      ]);
+
+      setStripeStatus(status);
+      setPayoutHistory(history);
+
+      // BUG 3: Handle balance fetch separately so 503 errors show "unavailable" UI
+      try {
+        const balance = await StripeConnectService.getAvailableBalance(coachId);
+        setAvailableBalance(balance.available);
+        setPendingBalance(balance.pending);
+        setBalanceCurrency(balance.currency);
+      } catch (balanceError) {
+        console.error('Balance unavailable:', balanceError);
+        setBalanceUnavailable(true);
+      }
+    } catch (error) {
+      console.error('Error loading Stripe data:', error);
+    } finally {
+      setStripeStatusLoading(false);
+      setBalanceLoading(false);
+      setPayoutHistoryLoading(false);
+    }
+  }, [coachId]);
+
+  useEffect(() => {
+    if (coachId) {
+      loadStripeData();
+    }
+  }, [coachId, loadStripeData]);
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      earningsQuery.refetch(),
+      loadStripeData(),
+    ]);
+  }, [earningsQuery, loadStripeData]);
+
+  const handleRequestPayout = useCallback(() => {
+    if (!coachId || availableBalance <= 0) return;
+
+    const amountFormatted = formatCurrency(availableBalance, balanceCurrency);
+
+    showConfirm(
+      'Request Payout',
+      `Transfer ${amountFormatted} to your bank account? Funds typically arrive within 2 business days.`,
+      async () => {
+        setPayoutInProgress(true);
+        try {
+          const result: PayoutResult = await StripeConnectService.requestPayout(coachId);
+
+          if (result.success) {
+            const arrival = result.estimated_arrival
+              ? formatDate(result.estimated_arrival)
+              : 'within 2 business days';
+            showAlert(
+              'Payout initiated',
+              `${formatCurrency(result.amount || 0, result.currency || balanceCurrency)} is on its way. Estimated arrival: ${arrival}.`
+            );
+            // Refresh data to show updated balance and payout history
+            await loadStripeData();
+          } else {
+            if (result.code === 'payout_in_progress' && result.existing_payout) {
+              showAlert(
+                'Payout already in progress',
+                `A payout of ${formatCurrency(result.existing_payout.amount, result.existing_payout.currency)} is already being processed.`
+              );
+            } else if (result.code === 'insufficient_balance') {
+              showAlert('No funds available', result.error || 'No funds available for payout.');
+            } else if (result.code === 'account_restricted') {
+              showAlert(
+                'Account restricted',
+                'Your Stripe account has restrictions. Please visit your Stripe dashboard to resolve any issues.'
+              );
+            } else {
+              showAlert('Payout failed', result.error || 'Unable to process payout. Please try again.');
+            }
+          }
+        } catch (error: any) {
+          showAlert('Error', error.message || 'An unexpected error occurred.');
+        } finally {
+          setPayoutInProgress(false);
+        }
+      },
+      { confirmText: 'Confirm Payout' }
+    );
+  }, [coachId, availableBalance, balanceCurrency, loadStripeData]);
+
+  const handleStartOnboarding = useCallback(async () => {
+    if (!coachId) return;
+    setOnboardingLoading(true);
+    try {
+      const result = await StripeConnectService.startOnboarding(coachId);
+      if (result.success && result.url) {
+        if (typeof window !== 'undefined') {
+          window.location.href = result.url;
+        } else {
+          await Linking.openURL(result.url);
+        }
+      } else {
+        showAlert('Error', result.error || 'Failed to start Stripe setup.');
+      }
+    } catch (error: any) {
+      showAlert('Error', error.message || 'Failed to start Stripe setup.');
+    } finally {
+      setOnboardingLoading(false);
+    }
+  }, [coachId]);
+
+  const handleOpenStripeDashboard = useCallback(async () => {
+    if (!coachId) return;
+    try {
+      const result = await StripeConnectService.getDashboardLink(coachId);
+      if (result.success && result.url) {
+        if (typeof window !== 'undefined') {
+          window.open(result.url, '_blank');
+        } else {
+          await Linking.openURL(result.url);
+        }
+      } else {
+        showAlert('Error', result.error || 'Failed to open Stripe dashboard.');
+      }
+    } catch (error: any) {
+      showAlert('Error', error.message || 'Failed to open Stripe dashboard.');
+    }
+  }, [coachId]);
 
   const changeStats = useMemo(() => {
     if (!summary) return { current: 0, previous: 0, sessions: 0, average: 0 };
@@ -163,7 +323,7 @@ export default function EarningsScreen() {
   }, [selectedPeriod, summary]);
 
   const changePercent = formatPercentChange(changeStats.current, changeStats.previous);
-  const defaultCurrency = summary?.transactions[0]?.currency || 'USD';
+  const defaultCurrency = summary?.transactions[0]?.currency || balanceCurrency || 'USD';
 
   const breakdownEntries = useMemo(() => {
     if (!summary) return [] as Array<{ label: string; value: number }>;
@@ -204,6 +364,167 @@ export default function EarningsScreen() {
     </View>
   );
 
+  const renderStripeSetupBanner = () => {
+    if (stripeStatusLoading) return null;
+    if (isStripeReady) return null;
+
+    const needsFullSetup = !stripeStatus?.connected || stripeStatus?.needsOnboarding;
+    const needsCompletion = stripeStatus?.connected && !stripeStatus?.payoutsEnabled;
+
+    return (
+      <View style={[styles.stripeBanner, needsCompletion && styles.stripeBannerWarning]}>
+        <View style={[styles.stripeBannerIcon, needsCompletion && styles.stripeBannerIconWarning]}>
+          <Ionicons
+            name={needsFullSetup ? 'card-outline' : 'alert-circle-outline'}
+            size={24}
+            color={needsFullSetup ? '#2563EB' : '#92400E'}
+          />
+        </View>
+        <View style={styles.stripeBannerContent}>
+          <ThemedText style={styles.stripeBannerTitle}>
+            {needsFullSetup ? 'Set up payouts to receive your earnings' : 'Complete your payout setup'}
+          </ThemedText>
+          <ThemedText style={styles.stripeBannerDescription}>
+            {needsFullSetup
+              ? 'Connect your bank account through Stripe to start receiving payouts for your coaching sessions.'
+              : 'Your Stripe account needs additional information before payouts can be enabled.'}
+          </ThemedText>
+        </View>
+        <TouchableOpacity
+          style={[styles.stripeBannerButton, needsCompletion && styles.stripeBannerButtonWarning]}
+          onPress={handleStartOnboarding}
+          disabled={onboardingLoading}
+        >
+          {onboardingLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <ThemedText style={styles.stripeBannerButtonText}>
+              {needsFullSetup ? 'Set Up' : 'Complete Setup'}
+            </ThemedText>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderPayoutSection = () => {
+    if (!isStripeReady) return null;
+
+    return (
+      <View style={styles.payoutCard}>
+        <View style={styles.payoutCardHeader}>
+          <View>
+            <ThemedText style={styles.payoutLabel}>Available for payout</ThemedText>
+            {balanceLoading ? (
+              <ActivityIndicator size="small" color="#2563EB" style={{ marginTop: 8 }} />
+            ) : balanceUnavailable ? (
+              <ThemedText style={styles.balanceUnavailableText}>
+                Balance temporarily unavailable
+              </ThemedText>
+            ) : (
+              <ThemedText style={styles.payoutAmount}>
+                {formatCurrency(availableBalance, balanceCurrency)}
+              </ThemedText>
+            )}
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.payoutButton,
+              (availableBalance <= 0 || payoutInProgress || balanceLoading || balanceUnavailable) && styles.payoutButtonDisabled,
+            ]}
+            onPress={handleRequestPayout}
+            disabled={availableBalance <= 0 || payoutInProgress || balanceLoading || balanceUnavailable}
+          >
+            {payoutInProgress ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="cash-outline" size={18} color="#fff" />
+                <ThemedText style={styles.payoutButtonText}>Request Payout</ThemedText>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Pending balance info */}
+        {!balanceLoading && pendingBalance > 0 && availableBalance <= 0 && (
+          <View style={styles.pendingNotice}>
+            <Ionicons name="time-outline" size={16} color="#92400E" />
+            <ThemedText style={styles.pendingNoticeText}>
+              {formatCurrency(pendingBalance, balanceCurrency)} pending — funds become available after Stripe's standard holding period
+            </ThemedText>
+          </View>
+        )}
+
+        {/* No funds message */}
+        {!balanceLoading && availableBalance <= 0 && pendingBalance <= 0 && (
+          <View style={styles.noFundsNotice}>
+            <ThemedText style={styles.noFundsText}>No funds available for payout</ThemedText>
+          </View>
+        )}
+
+        {/* Stripe dashboard link */}
+        <TouchableOpacity style={styles.stripeDashboardLink} onPress={handleOpenStripeDashboard}>
+          <Ionicons name="open-outline" size={14} color="#6366F1" />
+          <ThemedText style={styles.stripeDashboardLinkText}>Open Stripe Dashboard</ThemedText>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderPayoutHistory = () => {
+    if (!isStripeReady) return null;
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View>
+            <ThemedText style={styles.sectionTitle}>Payout history</ThemedText>
+            <ThemedText style={styles.sectionSubtitle}>Recent bank transfers</ThemedText>
+          </View>
+        </View>
+        {payoutHistoryLoading ? (
+          <ActivityIndicator size="small" color="#94A3B8" style={{ marginTop: 8 }} />
+        ) : payoutHistory.length === 0 ? (
+          <ThemedText style={styles.emptyText}>No payouts yet</ThemedText>
+        ) : (
+          payoutHistory.map((payout) => {
+            const pill = getStatusPillStyle(payout.status);
+            return (
+              <View key={payout.id} style={styles.transactionRow}>
+                <View style={styles.payoutHistoryIcon}>
+                  <Ionicons
+                    name={payout.status === 'paid' ? 'checkmark-circle-outline' : 'arrow-forward-circle-outline'}
+                    size={18}
+                    color={payout.status === 'paid' ? '#16A34A' : '#2563EB'}
+                  />
+                </View>
+                <View style={styles.transactionContent}>
+                  <ThemedText style={styles.transactionTitle}>
+                    {payout.description || 'Bank transfer'}
+                  </ThemedText>
+                  <ThemedText style={styles.transactionSubtitle}>
+                    {payout.arrival_date ? `Arrives ${formatDate(payout.arrival_date)}` : `Created ${formatDate(payout.created)}`}
+                  </ThemedText>
+                </View>
+                <View style={styles.transactionMeta}>
+                  <ThemedText style={styles.transactionAmount}>
+                    {formatCurrency(payout.amount, payout.currency || defaultCurrency)}
+                  </ThemedText>
+                </View>
+                <View style={[styles.statusPillBase, { backgroundColor: pill.backgroundColor }]}>
+                  <ThemedText style={[styles.statusPillLabel, { color: pill.color }]}>
+                    {payout.status.replace(/_/g, ' ')}
+                  </ThemedText>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+    );
+  };
+
   if (!isConnected && !personaLoading) {
     return <ThemedView style={styles.container}>{renderConnectState()}</ThemedView>;
   }
@@ -228,7 +549,7 @@ export default function EarningsScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={earningsQuery.isRefetching} onRefresh={earningsQuery.refetch} />
+          <RefreshControl refreshing={earningsQuery.isRefetching} onRefresh={handleRefresh} />
         }
       >
         <View style={styles.header}>
@@ -236,13 +557,13 @@ export default function EarningsScreen() {
             <ThemedText style={styles.title}>Earnings</ThemedText>
             <ThemedText style={styles.subtitle}>Track payouts, income, and recent sessions</ThemedText>
           </View>
-          {summary && summary.totals.pendingPayouts > 0 && (
-            <TouchableOpacity style={styles.payoutButton} onPress={handleRequestPayout}>
-              <Ionicons name="cash-outline" size={18} color="#fff" />
-              <ThemedText style={styles.payoutButtonText}>Request payout</ThemedText>
-            </TouchableOpacity>
-          )}
         </View>
+
+        {/* Stripe Setup Banner (for coaches who haven't set up or completed Stripe) */}
+        {renderStripeSetupBanner()}
+
+        {/* Payout Section (only when Stripe is fully set up) */}
+        {renderPayoutSection()}
 
         <View style={styles.periodSelector}>
           {(Object.keys(periodLabels) as PeriodKey[]).map(period => (
@@ -325,6 +646,25 @@ export default function EarningsScreen() {
               </View>
             </View>
 
+            {/* Manage Pricing Link */}
+            <TouchableOpacity
+              style={styles.managePricingCard}
+              onPress={() => router.push('/coach/pricing')}
+            >
+              <View style={styles.managePricingContent}>
+                <View style={styles.managePricingIcon}>
+                  <Ionicons name="pricetag-outline" size={20} color="#007AFF" />
+                </View>
+                <View style={styles.managePricingText}>
+                  <ThemedText style={styles.managePricingTitle}>Manage Pricing</ThemedText>
+                  <ThemedText style={styles.managePricingSubtitle}>
+                    Update rates, custom charges, and packages
+                  </ThemedText>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#C7C7CC" />
+            </TouchableOpacity>
+
             <View style={styles.breakdownCard}>
               <View style={styles.sectionHeader}>
                 <View>
@@ -356,6 +696,9 @@ export default function EarningsScreen() {
                 })
               )}
             </View>
+
+            {/* Payout History */}
+            {renderPayoutHistory()}
 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -418,7 +761,7 @@ export default function EarningsScreen() {
                       </View>
                       <View style={[styles.statusPillBase, { backgroundColor: pill.backgroundColor }]}>
                         <ThemedText style={[styles.statusPillLabel, { color: pill.color }]}>
-                          {txn.status.replace('_', ' ')}
+                          {txn.status.replace(/_/g, ' ')}
                         </ThemedText>
                       </View>
                     </View>
@@ -453,19 +796,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     color: '#64748B',
-  },
-  payoutButton: {
-    flexDirection: 'row',
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    alignItems: 'center',
-    gap: 6,
-  },
-  payoutButtonText: {
-    color: '#fff',
-    fontWeight: '600',
   },
   periodSelector: {
     flexDirection: 'row',
@@ -657,6 +987,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  payoutHistoryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   transactionContent: {
     flex: 1,
   },
@@ -750,5 +1088,187 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'capitalize',
     color: '#0F172A',
+  },
+  // Manage Pricing Card
+  managePricingCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#E5F1FF',
+  },
+  managePricingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  managePricingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#E5F1FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  managePricingText: {
+    gap: 2,
+  },
+  managePricingTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  managePricingSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  // Stripe Setup Banner
+  stripeBanner: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  // BUG 11: Amber/warning variant for incomplete Stripe setup
+  stripeBannerWarning: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+  },
+  stripeBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stripeBannerIconWarning: {
+    backgroundColor: '#FEF3C7',
+  },
+  stripeBannerContent: {
+    flex: 1,
+    gap: 4,
+  },
+  stripeBannerTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E3A5F',
+  },
+  stripeBannerDescription: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  stripeBannerButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  stripeBannerButtonWarning: {
+    backgroundColor: '#F59E0B',
+  },
+  stripeBannerButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  // Payout Card
+  payoutCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    ...summaryCardShadow,
+  },
+  payoutCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  payoutLabel: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  payoutAmount: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  // BUG 3: Style for when balance is temporarily unavailable
+  balanceUnavailableText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#94A3B8',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  payoutButton: {
+    flexDirection: 'row',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignItems: 'center',
+    gap: 6,
+  },
+  payoutButtonDisabled: {
+    backgroundColor: '#94A3B8',
+    opacity: 0.6,
+  },
+  payoutButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  pendingNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    padding: 12,
+  },
+  pendingNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#92400E',
+    lineHeight: 18,
+  },
+  noFundsNotice: {
+    marginTop: 12,
+  },
+  noFundsText: {
+    fontSize: 13,
+    color: '#94A3B8',
+  },
+  stripeDashboardLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  stripeDashboardLinkText: {
+    fontSize: 14,
+    color: '#6366F1',
+    fontWeight: '500',
   },
 });

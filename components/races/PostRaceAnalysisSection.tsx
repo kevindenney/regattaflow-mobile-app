@@ -18,6 +18,7 @@ import { PerformanceMetrics } from '@/components/races/PerformanceMetrics';
 import { SplitTimesAnalysis } from '@/components/races/SplitTimesAnalysis';
 import { TacticalInsights } from '@/components/races/TacticalInsights';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
+import { RaceCoachingCard } from '@/components/races/RaceCoachingCard';
 import { createLogger } from '@/lib/utils/logger';
 import type { GPSPoint, DebriefSplitTime } from '@/lib/races';
 
@@ -38,6 +39,10 @@ export interface PostRaceAnalysisSectionProps {
   weather?: any;
   /** Split times data */
   splitTimes?: DebriefSplitTime[];
+  /** Boat class for coach filtering */
+  boatClass?: string;
+  /** Debrief data to share with coach */
+  debriefData?: any;
   /** Callback to share race analysis */
   onShareAnalysis: () => void;
   /** Callback to view a session */
@@ -55,6 +60,8 @@ export function PostRaceAnalysisSection({
   gpsTrack,
   weather,
   splitTimes,
+  boatClass,
+  debriefData,
   onShareAnalysis,
   onViewSession,
 }: PostRaceAnalysisSectionProps) {
@@ -117,6 +124,21 @@ export function PostRaceAnalysisSection({
       <View className="mt-4">
         <AIPatternDetection />
       </View>
+
+      {/* Coaching Card - Review Context */}
+      <RaceCoachingCard
+        raceId={raceId}
+        context="review"
+        boatClass={boatClass}
+        debriefData={debriefData || {
+          raceId,
+          raceName,
+          raceStartTime,
+          gpsTrack,
+          splitTimes,
+          weather,
+        }}
+      />
     </>
   );
 }

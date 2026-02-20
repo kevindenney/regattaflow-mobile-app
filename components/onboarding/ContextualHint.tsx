@@ -13,6 +13,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  Modal,
   type LayoutChangeEvent,
   type ViewStyle,
   useWindowDimensions,
@@ -46,6 +47,8 @@ interface ContextualHintProps {
   style?: ViewStyle;
   /** Distance in px between target and popover. */
   distance?: number;
+  /** Horizontal anchor strategy for the popover relative to target. */
+  horizontalAlign?: 'center' | 'targetLeft' | 'targetRight';
   /** Show skip action in the hint card. */
   showSkip?: boolean;
   /** Called when user taps "Skip Tour". */
@@ -55,6 +58,8 @@ interface ContextualHintProps {
   onSecondaryAction?: () => void;
   /** Pulse highlight around target while visible. */
   pulseTarget?: boolean;
+  /** Called when target wrapper is laid out with non-zero size. */
+  onTargetReady?: () => void;
 }
 
 export function ContextualHint({
@@ -67,47 +72,63 @@ export function ContextualHint({
   children,
   style,
   distance = 8,
+  horizontalAlign = 'center',
   showSkip = false,
   onSkip,
   secondaryActionLabel,
   onSecondaryAction,
   pulseTarget = false,
+  onTargetReady,
 }: ContextualHintProps) {
-  const [targetWidth, setTargetWidth] = React.useState(0);
+  const [targetBounds, setTargetBounds] = React.useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [cardHeight, setCardHeight] = React.useState(0);
   const { width: viewportWidth } = useWindowDimensions();
-  const isCompactTarget = targetWidth > 0 && targetWidth <= 72;
   const cardWidth = Math.min(340, Math.max(280, viewportWidth - 24));
-  const isNarrowTarget = targetWidth > 0 && targetWidth < cardWidth;
   const pulseScale = useSharedValue(1);
 
   // Use a separate native View ref for measureInWindow (Animated.View doesn't support it)
   const measureRef = useRef<View>(null);
   const { setSpotlightBounds } = useFeatureTourContext();
 
+  const measureTarget = useCallback(() => {
+    if (!measureRef.current) {
+      return;
+    }
+    measureRef.current.measureInWindow((x, y, width, height) => {
+      if (width > 0 && height > 0) {
+        const nextBounds = { x, y, width, height };
+        setTargetBounds(nextBounds);
+        setSpotlightBounds(nextBounds);
+      }
+    });
+  }, [setSpotlightBounds]);
+
   const handleWrapperLayout = useCallback((event: LayoutChangeEvent) => {
-    setTargetWidth(event.nativeEvent.layout.width);
-  }, []);
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      onTargetReady?.();
+      if (visible) {
+        setTimeout(measureTarget, 0);
+      }
+    }
+  }, [onTargetReady, visible, measureTarget]);
 
   // Measure wrapper position in window and report as spotlight bounds
   useEffect(() => {
     if (!visible) {
       setSpotlightBounds(null);
+      setTargetBounds(null);
+      setCardHeight(0);
       return;
     }
 
     // Delay to ensure layout is complete after animation
     const timer = setTimeout(() => {
-      if (measureRef.current) {
-        measureRef.current.measureInWindow((x, y, width, height) => {
-          if (width > 0 && height > 0) {
-            setSpotlightBounds({ x, y, width, height });
-          }
-        });
-      }
+      measureTarget();
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [visible, setSpotlightBounds]);
+  }, [visible, setSpotlightBounds, measureTarget, viewportWidth]);
 
   useEffect(() => {
     if (visible && pulseTarget) {
@@ -129,6 +150,27 @@ export function ContextualHint({
     transform: [{ scale: pulseScale.value }],
   }));
 
+  const horizontalPadding = 12;
+  const maxLeft = Math.max(horizontalPadding, viewportWidth - cardWidth - horizontalPadding);
+  const targetCenterX = targetBounds ? targetBounds.x + targetBounds.width / 2 : 0;
+  const targetLeft = targetBounds?.x ?? 0;
+  const targetRight = targetBounds ? targetBounds.x + targetBounds.width : 0;
+  const preferredLeft =
+    horizontalAlign === 'targetLeft'
+      ? targetLeft
+      : horizontalAlign === 'targetRight'
+        ? targetRight - cardWidth
+        : targetCenterX - cardWidth / 2;
+  const popoverLeft = Math.min(maxLeft, Math.max(horizontalPadding, preferredLeft));
+  const anchorOffsetX = targetBounds ? targetCenterX - popoverLeft : 0;
+  const arrowLeft = Math.max(16, Math.min(cardWidth - 26, anchorOffsetX - 8));
+  const fallbackTop = 100;
+  const popoverTop = targetBounds
+    ? position === 'top'
+      ? Math.max(8, targetBounds.y - cardHeight - distance)
+      : targetBounds.y + targetBounds.height + distance
+    : fallbackTop;
+
   return (
     <Animated.View
       style={[styles.wrapper, visible && styles.wrapperHighlight, pulseStyle, style]}
@@ -139,71 +181,82 @@ export function ContextualHint({
         {children}
       </View>
 
-      {/* Popover */}
-      {visible && (
-        <Animated.View
-          entering={FadeIn.duration(250)}
-          exiting={FadeOut.duration(150)}
-          style={[
-            styles.popover,
-            isCompactTarget
-              ? styles.popoverCompactTarget
-              : isNarrowTarget
-                ? styles.popoverNarrowTarget
-                : styles.popoverWideTarget,
-            position === 'top'
-              ? [styles.popoverTop, { marginBottom: distance }]
-              : [styles.popoverBottom, { marginTop: distance }],
-          ]}
-          pointerEvents="box-none"
-        >
-          {/* Arrow */}
-          <View
+      {/* Popover on top-most layer to avoid being blocked by backdrop */}
+      <Modal
+        transparent
+        visible={visible && !!targetBounds}
+        animationType="none"
+        statusBarTranslucent
+      >
+        <View style={styles.modalRoot} pointerEvents="box-none">
+          <Animated.View
+            entering={FadeIn.duration(220)}
+            exiting={FadeOut.duration(150)}
             style={[
-              styles.arrow,
-              position === 'top' ? styles.arrowBottom : styles.arrowTop,
+              styles.modalPopover,
+              {
+                top: popoverTop,
+                left: popoverLeft,
+                width: cardWidth,
+                opacity: position === 'top' && cardHeight === 0 ? 0 : 1,
+              },
             ]}
-          />
+            pointerEvents="auto"
+            onLayout={(event) => {
+              const nextHeight = event.nativeEvent.layout.height;
+              if (nextHeight > 0 && nextHeight !== cardHeight) {
+                setCardHeight(nextHeight);
+              }
+            }}
+          >
+            <View
+              style={[
+                styles.arrow,
+                position === 'top' ? styles.arrowBottom : styles.arrowTop,
+                { left: arrowLeft },
+              ]}
+            />
 
-          <View style={[styles.card, { width: cardWidth, maxWidth: cardWidth }]}>
-            <View style={styles.blueBorder} />
-            <View style={styles.content}>
-              <Text style={styles.title}>{title}</Text>
-              <Text style={styles.description}>{description}</Text>
-              <View style={styles.actionsRow}>
-                {secondaryActionLabel && onSecondaryAction && (
+            <View style={[styles.card, { width: cardWidth, maxWidth: cardWidth }]}>
+              <View style={styles.blueBorder} />
+              <View style={styles.content}>
+                <Text style={styles.title}>{title}</Text>
+                <Text style={styles.description}>{description}</Text>
+                <View style={styles.actionsRow}>
+                  {secondaryActionLabel && onSecondaryAction && (
+                    <TouchableOpacity
+                      style={styles.secondaryActionButton}
+                      onPress={onSecondaryAction}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.secondaryActionText}>{secondaryActionLabel}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {showSkip && onSkip && (
+                    <TouchableOpacity
+                      style={styles.skipButton}
+                      onPress={onSkip}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.skipText}>Skip</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
-                    style={styles.secondaryActionButton}
-                    onPress={onSecondaryAction}
+                    style={styles.dismissButton}
+                    onPress={onDismiss}
                     activeOpacity={0.7}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Text style={styles.secondaryActionText}>{secondaryActionLabel}</Text>
+                    <Text style={styles.dismissText}>{dismissLabel}</Text>
                   </TouchableOpacity>
-                )}
-                {showSkip && onSkip && (
-                  <TouchableOpacity
-                    style={styles.skipButton}
-                    onPress={onSkip}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Text style={styles.skipText}>Skip</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={styles.dismissButton}
-                  onPress={onDismiss}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={styles.dismissText}>{dismissLabel}</Text>
-                </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
-        </Animated.View>
-      )}
+          </Animated.View>
+        </View>
+      </Modal>
     </Animated.View>
   );
 }
@@ -223,6 +276,13 @@ const styles = StyleSheet.create({
   popover: {
     position: 'absolute',
     zIndex: 1000,
+  },
+  modalRoot: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalPopover: {
+    position: 'absolute',
+    zIndex: 1200,
   },
   popoverWideTarget: {
     left: 0,

@@ -1,10 +1,12 @@
 import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
+import { useSailorUpcomingSessions } from '@/hooks/useSailorCoachingSessions';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachProfile } from '@/services/CoachingService';
 import { CoachMatchingAgent } from '@/services/agents/CoachMatchingAgent';
 import { supabase } from '@/services/supabase';
 import { TufteCoachRow } from '@/components/coach/TufteCoachRow';
 import { TufteFiltersBar } from '@/components/coach/TufteFiltersBar';
+import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
@@ -18,6 +20,7 @@ import {
   TouchableOpacity,
   Image,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,7 +62,7 @@ interface ActiveCoachRelationship {
 
 type SortKey = 'rating' | 'sessions' | 'price' | 'name';
 
-type CoachingStatus = 'loading' | 'no_coach' | 'has_coaches' | 'empty_platform';
+type CoachingStatus = 'loading' | 'no_coach' | 'has_coaches' | 'empty_platform' | 'error';
 
 // ---------------------------------------------------------------------------
 // Skill chips for needs-based discovery
@@ -93,6 +96,7 @@ export default function CoachDiscoveryScreen() {
   const { skill: skillParam } = useLocalSearchParams<{ skill?: string }>();
   const { user } = useAuth();
   const sailorData = useSailorDashboardData();
+  const { data: upcomingSessions } = useSailorUpcomingSessions();
 
   // Coaching status
   const [coachingStatus, setCoachingStatus] = useState<CoachingStatus>('loading');
@@ -186,11 +190,11 @@ export default function CoachDiscoveryScreen() {
       if (error) throw error;
 
       if (relationships && relationships.length > 0) {
-        // Fetch coach details for each relationship
+        // Fetch coach details for each relationship (enriched with specialties, hourly_rate, bio)
         const coachIds = relationships.map(r => r.coach_id);
         const { data: coachProfiles } = await supabase
           .from('coach_profiles')
-          .select('id, display_name, profile_photo_url, specializations, rating, hourly_rate')
+          .select('id, display_name, profile_photo_url:profile_image_url, specializations, specialties, rating, hourly_rate, bio, total_sessions')
           .in('id', coachIds);
 
         const enriched = relationships.map(rel => ({
@@ -205,7 +209,7 @@ export default function CoachDiscoveryScreen() {
       }
     } catch (error) {
       console.error('Error checking coaching status:', error);
-      setCoachingStatus('no_coach');
+      setCoachingStatus('error');
     }
   };
 
@@ -221,7 +225,9 @@ export default function CoachDiscoveryScreen() {
         .from('coach_profiles')
         .select('*')
         .eq('is_verified', true)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('is_accepting_clients', true)
+        .eq('marketplace_visible', true);
 
       if (filters.location) {
         query = query.ilike('location_name', `%${filters.location}%`);
@@ -252,6 +258,7 @@ export default function CoachDiscoveryScreen() {
       }
     } catch (error) {
       console.error('Error loading coaches:', error);
+      setCoachingStatus('error');
     } finally {
       setLoading(false);
     }
@@ -590,7 +597,8 @@ export default function CoachDiscoveryScreen() {
             <AIMatchCoachCard
               key={coach.id}
               coach={coach}
-              onPress={() => handleCoachPress(coach.id)}
+              onViewProfile={() => handleCoachPress(coach.id)}
+              onBookSession={() => handleBookSession(coach.id)}
             />
           ))
         )}
@@ -608,6 +616,7 @@ export default function CoachDiscoveryScreen() {
           <ActiveCoachCard
             key={relationship.id}
             relationship={relationship}
+            nextSessionDate={getNextSessionForCoach(relationship.coach_id)}
             onBook={() => handleBookSession(relationship.coach_id)}
             onMessage={() => handleMessage(relationship.coach_id)}
             onViewProfile={() => handleCoachPress(relationship.coach_id)}
@@ -693,14 +702,64 @@ export default function CoachDiscoveryScreen() {
   // Loading state
   // -------------------------------------------------------------------------
 
+  const handleGoBack = () => {
+    router.back();
+  };
+
+  const handleRetry = useCallback(() => {
+    setCoachingStatus('loading');
+    determineCoachingStatus();
+    loadCoaches();
+  }, [user]);
+
+  // Helper: get next upcoming session date for a given coach
+  const getNextSessionForCoach = useCallback((coachId: string): string | null => {
+    if (!upcomingSessions || upcomingSessions.length === 0) return null;
+    const session = upcomingSessions.find(s => s.coach_id === coachId);
+    return session?.scheduled_at || null;
+  }, [upcomingSessions]);
+
   if (coachingStatus === 'loading') {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="chevron-back" size={24} color={c.text} />
+          </TouchableOpacity>
           <Text style={styles.title}>Find a Coach</Text>
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#666" />
+        </View>
+      </View>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // ERROR STATE
+  // -------------------------------------------------------------------------
+
+  if (coachingStatus === 'error') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="chevron-back" size={24} color={c.text} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Find a Coach</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Ionicons name="cloud-offline-outline" size={48} color={c.textLight} />
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorMessage}>
+            We couldn't load coaching data. Check your connection and try again.
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.8}>
+            <Ionicons name="refresh" size={18} color="#ffffff" />
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -714,7 +773,11 @@ export default function CoachDiscoveryScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="chevron-back" size={24} color={c.text} />
+          </TouchableOpacity>
           <Text style={styles.title}>Find a Coach</Text>
+          <View style={styles.headerSpacer} />
         </View>
         <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
           <View style={styles.emptyPlatformBanner}>
@@ -745,7 +808,11 @@ export default function CoachDiscoveryScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
+          <TouchableOpacity onPress={handleGoBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="chevron-back" size={24} color={c.text} />
+          </TouchableOpacity>
           <Text style={styles.title}>Find a Coach</Text>
+          <View style={styles.headerSpacer} />
         </View>
         <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
           {!hasSubmittedNeeds ? (
@@ -799,7 +866,11 @@ export default function CoachDiscoveryScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={handleGoBack} style={styles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="chevron-back" size={24} color={c.text} />
+        </TouchableOpacity>
         <Text style={styles.title}>Coaching</Text>
+        <View style={styles.headerSpacer} />
       </View>
       <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
         {/* Active coach cards */}
@@ -846,27 +917,31 @@ export default function CoachDiscoveryScreen() {
 
 function AIMatchCoachCard({
   coach,
-  onPress,
+  onViewProfile,
+  onBookSession,
 }: {
   coach: CoachWithScore;
-  onPress: () => void;
+  onViewProfile: () => void;
+  onBookSession: () => void;
 }) {
   const displayName = coach.display_name || 'Coach';
   const matchPercent = coach.compatibilityScore
     ? Math.round(coach.compatibilityScore * 100)
     : null;
   const rating = coach.average_rating?.toFixed(1) || '0.0';
+  const reviewCount = coach.total_sessions || 0;
+  const hourlyRate = coach.hourly_rate;
   const specialties = coach.specialties?.slice(0, 3).map(s =>
     s.replace(/_/g, ' ')
   ) || [];
 
   return (
-    <TouchableOpacity
-      style={styles.aiMatchCard}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.aiMatchCardInner}>
+    <View style={styles.aiMatchCard}>
+      <TouchableOpacity
+        onPress={onViewProfile}
+        activeOpacity={0.7}
+        style={styles.aiMatchCardInner}
+      >
         {/* Photo */}
         <View style={styles.aiMatchPhoto}>
           {coach.profile_photo_url ? (
@@ -899,7 +974,15 @@ function AIMatchCoachCard({
                 <Text style={styles.aiMatchTagText}>{spec}</Text>
               </View>
             ))}
+          </View>
+
+          {/* Rating, review count, hourly rate row */}
+          <View style={styles.aiMatchMetaRow}>
             <Text style={styles.aiMatchRating}>{rating} ★</Text>
+            <Text style={styles.aiMatchReviewCount}>({reviewCount} sessions)</Text>
+            {hourlyRate != null && (
+              <Text style={styles.aiMatchRate}>${hourlyRate}/hr</Text>
+            )}
           </View>
 
           {/* AI reason */}
@@ -909,8 +992,18 @@ function AIMatchCoachCard({
             </Text>
           )}
         </View>
+      </TouchableOpacity>
+
+      {/* Action buttons */}
+      <View style={styles.aiMatchActions}>
+        <TouchableOpacity style={styles.aiMatchActionPrimary} onPress={onBookSession} activeOpacity={0.7}>
+          <Text style={styles.aiMatchActionPrimaryText}>Book Session</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.aiMatchActionSecondary} onPress={onViewProfile} activeOpacity={0.7}>
+          <Text style={styles.aiMatchActionSecondaryText}>View Profile</Text>
+        </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 
@@ -920,11 +1013,13 @@ function AIMatchCoachCard({
 
 function ActiveCoachCard({
   relationship,
+  nextSessionDate,
   onBook,
   onMessage,
   onViewProfile,
 }: {
   relationship: ActiveCoachRelationship;
+  nextSessionDate: string | null;
   onBook: () => void;
   onMessage: () => void;
   onViewProfile: () => void;
@@ -935,6 +1030,16 @@ function ActiveCoachCard({
     s.replace(/_/g, ' ')
   );
   const rating = coach?.rating ? parseFloat(String(coach.rating)).toFixed(1) : null;
+  const hourlyRate = coach?.hourly_rate;
+
+  const formatSessionDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
 
   return (
     <TouchableOpacity
@@ -967,6 +1072,20 @@ function ActiveCoachCard({
             {rating && ` · ${rating} ★`}
             {relationship.total_sessions > 0 && ` · ${relationship.total_sessions} sessions`}
           </Text>
+          {/* Hourly rate + next session row */}
+          <View style={styles.activeCoachDetailRow}>
+            {hourlyRate != null && (
+              <Text style={styles.activeCoachRate}>${hourlyRate}/hr</Text>
+            )}
+            {nextSessionDate && (
+              <View style={styles.activeCoachNextSession}>
+                <Ionicons name="calendar-outline" size={12} color={c.match} />
+                <Text style={styles.activeCoachNextSessionText}>
+                  Next: {formatSessionDate(nextSessionDate)}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
 
@@ -991,23 +1110,23 @@ function ActiveCoachCard({
 // ---------------------------------------------------------------------------
 
 const c = {
-  text: '#111827',
-  textSecondary: '#6b7280',
-  textLight: '#9ca3af',
-  border: '#e5e7eb',
-  borderSubtle: '#f3f4f6',
-  bg: '#ffffff',
-  bgSubtle: '#f9fafb',
-  bgTertiary: '#f3f4f6',
-  accent: '#2563eb',
-  accentLight: '#dbeafe',
-  ai: '#9333ea',
+  text: IOS_COLORS.label,
+  textSecondary: IOS_COLORS.secondaryLabel,
+  textLight: IOS_COLORS.systemGray,
+  border: IOS_COLORS.separator,
+  borderSubtle: IOS_COLORS.systemGray6,
+  bg: IOS_COLORS.systemBackground,
+  bgSubtle: IOS_COLORS.secondarySystemBackground,
+  bgTertiary: IOS_COLORS.systemGray6,
+  accent: IOS_COLORS.systemBlue,
+  accentLight: '#dbeafe', // No direct IOS_COLORS equivalent for tinted blue bg
+  ai: IOS_COLORS.systemPurple,
   aiLight: '#f3e8ff',
   aiBorder: '#e9d5ff',
   aiText: '#7e22ce',
-  match: '#059669',
+  match: IOS_COLORS.systemGreen,
   matchLight: '#dcfce7',
-  star: '#d4a418',
+  star: IOS_COLORS.systemYellow,
 };
 
 const styles = StyleSheet.create({
@@ -1016,6 +1135,8 @@ const styles = StyleSheet.create({
     backgroundColor: c.bg,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingTop: Platform.OS === 'ios' ? 60 : 20,
     paddingBottom: 12,
     paddingHorizontal: 16,
@@ -1023,10 +1144,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.border,
   },
+  backButton: {
+    padding: 4,
+    marginRight: 8,
+  },
+  headerSpacer: {
+    width: 32, // Balance the back button width
+  },
   title: {
-    fontSize: 24,
+    flex: 1,
+    fontSize: 18,
     fontWeight: '600',
     color: c.text,
+    textAlign: 'center',
   },
   list: {
     flex: 1,
@@ -1316,6 +1446,52 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 18,
   },
+  aiMatchMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  aiMatchReviewCount: {
+    fontSize: 12,
+    color: c.textSecondary,
+  },
+  aiMatchRate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: c.text,
+    marginLeft: 'auto',
+  } as any,
+  aiMatchActions: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: c.border,
+    marginTop: 10,
+  },
+  aiMatchActionPrimary: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: c.accent,
+  },
+  aiMatchActionPrimaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  aiMatchActionSecondary: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: c.border,
+    backgroundColor: c.bgSubtle,
+  },
+  aiMatchActionSecondaryText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: c.text,
+  },
 
   // ---------------------------------------------------------------------------
   // Active coaches section (returning users)
@@ -1337,7 +1513,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: c.bg,
     overflow: 'hidden',
   },
@@ -1384,6 +1560,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: c.textSecondary,
     textTransform: 'capitalize',
+  },
+  activeCoachDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  activeCoachRate: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: c.text,
+  },
+  activeCoachNextSession: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  activeCoachNextSessionText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: c.match,
   },
   activeCoachActions: {
     flexDirection: 'row',
@@ -1578,5 +1775,44 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Error state
+  // ---------------------------------------------------------------------------
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: c.text,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: c.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: c.accent,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

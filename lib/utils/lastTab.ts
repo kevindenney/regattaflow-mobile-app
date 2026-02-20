@@ -8,7 +8,8 @@ const STORAGE_KEY = 'regattaflow_last_tab';
  * so we never restore stale detail screens.
  */
 const VALID_TAB_PREFIXES = [
-  '/races', '/learn', '/discover', '/discuss', '/reflect',
+  '/races', '/connect', '/learn', '/reflect', '/search',
+  '/follow', '/community', '/discover', '/discuss',
   '/courses', '/boat', '/profile', '/settings', '/strategy',
   '/map', '/clients', '/schedule', '/earnings', '/events',
   '/members', '/race-management', '/calendar', '/fleet',

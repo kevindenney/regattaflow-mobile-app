@@ -7,11 +7,11 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useRouter } from 'expo-router';
 import { CoachProfile as CoachProfileType, CoachService, SessionReview } from '../../types/coach';
-import { CoachMarketplaceService } from '../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 import BookingFlow from './booking/BookingFlow';
 
 interface CoachProfileProps {
@@ -40,7 +40,7 @@ export default function CoachProfile({ coachId }: CoachProfileProps) {
       setReviews(profileData.reviews);
     } catch (error) {
       console.error('Error loading coach profile:', error);
-      Alert.alert('Error', 'Failed to load coach profile');
+      showAlert('Error', 'Failed to load coach profile');
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,7 @@ export default function CoachProfile({ coachId }: CoachProfileProps) {
 
   const handleBookingSuccess = () => {
     setShowBookingFlow(false);
-    Alert.alert('Success', 'Your session has been booked!');
+    showAlert('Success', 'Your session has been booked!');
   };
 
   const formatPrice = (priceInCents: number) => {

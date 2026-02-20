@@ -7,10 +7,13 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
+import { Ionicons } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
+import { useUnreadMessageCount } from '@/hooks/useMessaging';
 import { coachStrategyService, type SharedStrategy } from '@/services/CoachStrategyService';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -18,6 +21,8 @@ const logger = createLogger('CoachDashboard');
 
 export function CoachDashboard() {
   const { user } = useAuth();
+  const router = useRouter();
+  const unreadMessageCount = useUnreadMessageCount(user?.id);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [coachProfile, setCoachProfile] = useState<any>(null);
@@ -68,34 +73,23 @@ export function CoachDashboard() {
   };
 
   const handleAddFeedback = async (strategy: SharedStrategy) => {
-    Alert.prompt(
-      'Add Feedback',
-      'Provide feedback on this pre-race strategy:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: async (feedback) => {
-            if (!feedback || !coachProfile?.id) return;
+    // Alert.prompt is iOS-only; use a cross-platform prompt approach
+    const feedback = window?.prompt?.('Provide feedback on this pre-race strategy:', strategy.coach_feedback || '');
+    if (feedback === null || feedback === undefined) return; // cancelled
+    if (!feedback.trim() || !coachProfile?.id) return;
 
-            const success = await coachStrategyService.addCoachFeedback(
-              strategy.id,
-              coachProfile.id,
-              feedback
-            );
-
-            if (success) {
-              Alert.alert('Success', 'Feedback saved successfully');
-              await loadCoachData();
-            } else {
-              Alert.alert('Error', 'Failed to save feedback');
-            }
-          },
-        },
-      ],
-      'plain-text',
-      strategy.coach_feedback || ''
+    const success = await coachStrategyService.addCoachFeedback(
+      strategy.id,
+      coachProfile.id,
+      feedback
     );
+
+    if (success) {
+      showAlert('Success', 'Feedback saved successfully');
+      await loadCoachData();
+    } else {
+      showAlert('Error', 'Failed to save feedback');
+    }
   };
 
   const handleMarkReviewed = async (strategy: SharedStrategy) => {
@@ -107,10 +101,10 @@ export function CoachDashboard() {
     );
 
     if (success) {
-      Alert.alert('Success', 'Strategy marked as reviewed');
+      showAlert('Success', 'Strategy marked as reviewed');
       await loadCoachData();
     } else {
-      Alert.alert('Error', 'Failed to mark as reviewed');
+      showAlert('Error', 'Failed to mark as reviewed');
     }
   };
 
@@ -170,6 +164,71 @@ export function CoachDashboard() {
             <Text style={styles.statLabel}>New</Text>
           </View>
         </View>
+      </View>
+
+      {/* Quick Actions */}
+      <View style={styles.quickActionsContainer}>
+        <TouchableOpacity
+          style={styles.quickActionRow}
+          onPress={() => router.push('/coach/messages')}
+        >
+          <View style={styles.quickActionLeft}>
+            <View>
+              <Ionicons name="chatbubbles-outline" size={18} color="#6366F1" />
+              {unreadMessageCount > 0 && (
+                <View style={styles.quickActionBadge}>
+                  <Text style={styles.quickActionBadgeText}>
+                    {unreadMessageCount > 9 ? '9+' : unreadMessageCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.quickActionLabel}>
+              {unreadMessageCount > 0 ? `Messages (${unreadMessageCount})` : 'Messages'}
+            </Text>
+          </View>
+          <Text style={styles.quickActionChevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickActionRow}
+          onPress={() => router.push('/coach/profile-edit')}
+        >
+          <View style={styles.quickActionLeft}>
+            <Ionicons name="person-circle-outline" size={18} color="#64748B" />
+            <Text style={styles.quickActionLabel}>Edit Profile</Text>
+          </View>
+          <Text style={styles.quickActionChevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickActionRow}
+          onPress={() => router.push('/coach/my-bookings')}
+        >
+          <View style={styles.quickActionLeft}>
+            <Ionicons name="calendar-outline" size={18} color="#64748B" />
+            <Text style={styles.quickActionLabel}>Manage Sessions</Text>
+          </View>
+          <Text style={styles.quickActionChevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.quickActionRow}
+          onPress={() => router.push('/coach/pricing')}
+        >
+          <View style={styles.quickActionLeft}>
+            <Ionicons name="pricetag-outline" size={18} color="#64748B" />
+            <Text style={styles.quickActionLabel}>Manage Pricing</Text>
+          </View>
+          <Text style={styles.quickActionChevron}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.quickActionRow, styles.quickActionRowLast]}
+          onPress={() => router.push('/coach/availability')}
+        >
+          <View style={styles.quickActionLeft}>
+            <Ionicons name="time-outline" size={18} color="#64748B" />
+            <Text style={styles.quickActionLabel}>Manage Availability</Text>
+          </View>
+          <Text style={styles.quickActionChevron}>›</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -452,6 +511,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
     marginTop: 2,
+  },
+  quickActionsContainer: {
+    backgroundColor: '#FFFFFF',
+    marginTop: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  quickActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F1F5F9',
+  },
+  quickActionRowLast: {
+    borderBottomWidth: 0,
+  },
+  quickActionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  quickActionLabel: {
+    fontSize: 15,
+    color: '#0F172A',
+  },
+  quickActionChevron: {
+    fontSize: 20,
+    color: '#94A3B8',
+    fontWeight: '300',
+  },
+  quickActionBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -8,
+    backgroundColor: '#EF4444',
+    borderRadius: 7,
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickActionBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,

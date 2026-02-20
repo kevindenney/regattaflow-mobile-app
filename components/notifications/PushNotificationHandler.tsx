@@ -1,22 +1,42 @@
 /**
  * PushNotificationHandler - Global push notification setup component
  *
- * This component should be placed at the root of the app (inside AuthProvider)
- * to handle push notification registration and navigation.
+ * This component should be placed at the root of the app (inside AuthProvider
+ * and ToastProvider) to handle push notification registration and navigation.
  *
  * Features:
  * - Auto-registers for push notifications when user is authenticated
  * - Handles notification taps to navigate to relevant screens
- * - Shows foreground notifications as alerts/toasts (optional)
+ * - Shows foreground notifications as in-app toasts (cross-platform)
+ * - Supports coaching deep links via `route` field in notification data
  */
 
 import { useCallback, useEffect } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { useToast } from '@/components/ui/AppToast';
+
+// BUG 29: Allowlist of valid route prefixes for deep link navigation
+const ALLOWED_ROUTE_PREFIXES = [
+  '/coach/',
+  '/(tabs)/',
+  '/race/',
+  '/sailor/',
+  '/crew-thread/',
+  '/social-notifications',
+  '/learn/',
+  '/club/',
+  '/settings',
+];
+
+/** Check if a deep link route matches the allowlist */
+function isAllowedRoute(route: string): boolean {
+  return ALLOWED_ROUTE_PREFIXES.some((prefix) => route.startsWith(prefix));
+}
 
 interface PushNotificationHandlerProps {
-  /** Whether to show alerts for foreground notifications */
+  /** Whether to show toasts for foreground notifications */
   showForegroundAlerts?: boolean;
   children?: React.ReactNode;
 }
@@ -26,17 +46,29 @@ export function PushNotificationHandler({
   children,
 }: PushNotificationHandlerProps) {
   const router = useRouter();
+  const toast = useToast();
 
   // Handle notification tap - navigate to appropriate screen
   const handleNotificationTapped = useCallback(
     (data: Record<string, any>) => {
-      // Handle message notifications
+      // Coaching notifications include a `route` field for deep linking
+      if (data.route) {
+        // BUG 29: Validate route against allowlist to prevent arbitrary navigation
+        if (!isAllowedRoute(data.route)) {
+          console.warn('[Push] Blocked navigation to unallowed route:', data.route);
+          return;
+        }
+        router.push(data.route as any);
+        return;
+      }
+
+      // Handle crew thread notifications
       if (data.thread_id) {
         router.push(`/crew-thread/${data.thread_id}`);
         return;
       }
 
-      // Handle other notification types
+      // Handle race notifications
       if (data.regatta_id) {
         router.push(`/race/${data.regatta_id}`);
         return;
@@ -56,7 +88,7 @@ export function PushNotificationHandler({
     [router]
   );
 
-  // Handle foreground notification - optionally show alert
+  // Handle foreground notification - show in-app toast
   const handleNotificationReceived = useCallback(
     (notification: any) => {
       if (!showForegroundAlerts) return;
@@ -65,28 +97,18 @@ export function PushNotificationHandler({
       const body = notification?.request?.content?.body;
       const data = notification?.request?.content?.data || {};
 
-      // Don't show alert for message notifications on iOS (use native banner)
-      if (Platform.OS === 'ios' && data.thread_id) {
+      // Don't show toast for crew thread messages on iOS (use native banner)
+      if (Platform.OS === 'ios' && data.thread_id && !data.route) {
         return;
       }
 
-      // Show alert for other notifications
       if (title) {
-        Alert.alert(
-          title,
-          body || '',
-          [
-            { text: 'Dismiss', style: 'cancel' },
-            {
-              text: 'View',
-              onPress: () => handleNotificationTapped(data),
-            },
-          ],
-          { cancelable: true }
-        );
+        // Show a brief toast with the notification title and body
+        const message = body ? `${title}: ${body}` : title;
+        toast.show(message, 'info');
       }
     },
-    [showForegroundAlerts, handleNotificationTapped]
+    [showForegroundAlerts, toast]
   );
 
   // Initialize push notifications

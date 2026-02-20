@@ -267,7 +267,7 @@ export default function SocialNotificationsScreen() {
 
   // Navigate to Follow tab
   const handleSeeAllSuggestions = useCallback(() => {
-    router.push('/(tabs)/follow');
+    router.push('/(tabs)/connect');
   }, [router]);
 
   const handleBack = useCallback(() => {

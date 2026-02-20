@@ -53,7 +53,7 @@
           "name": "Dragon Fleet",
           "emoji": "🐉",
           "boats": 28,
-          "captain": "Sarah Chen",
+          "captain": "Fleet Captain",
           "recentResult": "2024 Asia Pacific Champions | Hosting 2027 Dragon Worlds",
           "practiceNight": "Wednesdays",
           "highlight": "2027 World Championship Host Fleet"
@@ -70,7 +70,7 @@
           "name": "Foiling Dinghy Program",
           "emoji": "🪁",
           "boats": 12,
-          "captain": "Coach Anderson",
+          "captain": "Program Director",
           "recentResult": "6 sailors qualified for SailGP Inspire",
           "practiceNight": "Weekends"
         }
@@ -122,28 +122,6 @@
       "paymentStatus": "paid",
       "volunteerHours": 86,
       "notes": "Demo workspace owner"
-    },
-    {
-      "email": "sarah.chen@sailing.com",
-      "role": "race_officer",
-      "membershipType": "sailing",
-      "status": "active",
-      "memberNumber": "RHKYC-204",
-      "joinedDate": "2015-02-10",
-      "expiryDate": "2025-12-31",
-      "paymentStatus": "paid",
-      "volunteerHours": 42
-    },
-    {
-      "email": "coach.anderson@sailing.com",
-      "role": "sailing_manager",
-      "membershipType": "coach",
-      "status": "active",
-      "memberNumber": "RHKYC-318",
-      "joinedDate": "2019-07-22",
-      "expiryDate": "2025-12-31",
-      "paymentStatus": "paid",
-      "volunteerHours": 58
     },
     {
       "email": "james.rodriguez@fleet.com",
@@ -461,8 +439,7 @@
         "recentHighlights": ["2024 APAC title", "2 teams to Gold Cup"]
       },
       "members": [
-        { "email": "sarah.chen@sailing.com", "role": "owner" },
-        { "email": "james.rodriguez@fleet.com", "role": "helm" }
+        { "email": "james.rodriguez@fleet.com", "role": "owner" }
       ]
     },
     {
@@ -478,8 +455,7 @@
         "recentHighlights": ["2025 Nations' Cup finalists"]
       },
       "members": [
-        { "email": "demo-club@regattaflow.io", "role": "owner" },
-        { "email": "coach.anderson@sailing.com", "role": "coach" }
+        { "email": "demo-club@regattaflow.io", "role": "owner" }
       ]
     },
     {
@@ -494,9 +470,7 @@
         "practiceNight": "Weekend",
         "recentHighlights": ["6 Inspire qualifiers"]
       },
-      "members": [
-        { "email": "coach.anderson@sailing.com", "role": "coach" }
-      ]
+      "members": []
     }
   ]
 }

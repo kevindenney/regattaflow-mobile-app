@@ -1,9 +1,16 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 
 // Validate required environment variables at startup
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const expoExtra = (Constants.expoConfig?.extra ?? (Constants as any).manifest2?.extra ?? {}) as Record<string, string | undefined>;
+const envSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+const envSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
+const extraSupabaseUrl = expoExtra.supabaseUrl?.trim();
+const extraSupabaseAnonKey = expoExtra.supabaseAnonKey?.trim();
+
+const supabaseUrl = envSupabaseUrl || extraSupabaseUrl;
+const supabaseAnonKey = envSupabaseAnonKey || extraSupabaseAnonKey;
 
 // Track config error for UI display
 export let SUPABASE_CONFIG_ERROR: string | null = null;
@@ -15,6 +22,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   
   SUPABASE_CONFIG_ERROR = `Missing environment variables: ${missingVars.join(', ')}`;
   console.error('[SUPABASE]', SUPABASE_CONFIG_ERROR);
+} else {
+  // Keep this low-detail to avoid leaking keys while still helping diagnose native env issues.
+  const source = envSupabaseUrl && envSupabaseAnonKey ? 'process.env' : 'expo.extra';
+  console.log('[SUPABASE] Config loaded from', source, 'URL host:', supabaseUrl.replace(/^https?:\/\//, '').split('/')[0]);
 }
 
 type SecureStoreModule = typeof import('expo-secure-store');

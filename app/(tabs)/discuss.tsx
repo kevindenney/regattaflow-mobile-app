@@ -8,5 +8,5 @@
 import { Redirect } from 'expo-router';
 
 export default function DiscussRedirect() {
-  return <Redirect href="/(tabs)/community" />;
+  return <Redirect href="/(tabs)/connect" />;
 }

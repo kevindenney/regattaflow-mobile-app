@@ -14,9 +14,11 @@ const logger = createLogger('FeatureTourService');
 const TOUR_COMPLETED_KEY = 'regattaflow_feature_tour_completed';
 const TOUR_STEP_KEY = 'regattaflow_feature_tour_step';
 const TOUR_STARTED_KEY = 'regattaflow_feature_tour_started';
+const TOUR_PRICING_PROMPT_SEEN_KEY = 'regattaflow_feature_tour_pricing_prompt_seen';
 
 /**
- * Tour step identifiers in order (6-step narrative tour)
+ * Tour step identifiers in order.
+ * The core walkthrough ends at add_your_race. pricing_trial is triggered separately.
  */
 export const TOUR_STEPS = [
   'welcome',              // Step 1: Full-screen welcome card
@@ -170,6 +172,30 @@ export class FeatureTourService {
   static async hasTourStarted(): Promise<boolean> {
     const state = await this.loadState();
     return state.startedAt !== null;
+  }
+
+  /**
+   * Check if pricing prompt was already shown.
+   */
+  static async hasSeenPricingPrompt(): Promise<boolean> {
+    try {
+      const value = await AsyncStorage.getItem(TOUR_PRICING_PROMPT_SEEN_KEY);
+      return value === 'true';
+    } catch (error) {
+      logger.error('[FeatureTourService] Failed to read pricing prompt state', error);
+      return false;
+    }
+  }
+
+  /**
+   * Mark pricing prompt as shown so it does not repeat.
+   */
+  static async markPricingPromptSeen(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(TOUR_PRICING_PROMPT_SEEN_KEY, 'true');
+    } catch (error) {
+      logger.error('[FeatureTourService] Failed to save pricing prompt state', error);
+    }
   }
 
   /**
@@ -376,6 +402,7 @@ export class FeatureTourService {
         AsyncStorage.removeItem(TOUR_COMPLETED_KEY),
         AsyncStorage.removeItem(TOUR_STEP_KEY),
         AsyncStorage.removeItem(TOUR_STARTED_KEY),
+        AsyncStorage.removeItem(TOUR_PRICING_PROMPT_SEEN_KEY),
       ]);
 
       this.cache = null;

@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   TouchableOpacity,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useRouter } from 'expo-router';
 import { CoachRegistrationForm, CoachService, CoachAvailability } from '../../types/coach';
-import { CoachMarketplaceService } from '../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Import step components (we'll create these next)
@@ -83,7 +83,7 @@ export default function CoachRegistration() {
 
   const handleSubmit = async () => {
     if (!user) {
-      Alert.alert('Error', 'You must be logged in to register as a coach');
+      showAlert('Error', 'You must be logged in to register as a coach');
       return;
     }
 
@@ -91,7 +91,7 @@ export default function CoachRegistration() {
     try {
       const coach = await CoachMarketplaceService.registerCoach(formData, user.id);
 
-      Alert.alert(
+      showAlertWithButtons(
         'Registration Submitted!',
         'Your coach profile has been submitted for review. We\'ll notify you once it\'s approved.',
         [
@@ -103,7 +103,7 @@ export default function CoachRegistration() {
       );
     } catch (error) {
       console.error('Registration error:', error);
-      Alert.alert('Error', 'Failed to submit your registration. Please try again.');
+      showAlert('Error', 'Failed to submit your registration. Please try again.');
     } finally {
       setIsLoading(false);
     }

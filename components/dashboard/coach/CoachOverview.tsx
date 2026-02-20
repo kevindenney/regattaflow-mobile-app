@@ -43,6 +43,8 @@ interface CoachOverviewProps {
   onReviewClient: () => void;
   onCheckEarnings: () => void;
   onManageAvailability: () => void;
+  onMessages?: () => void;
+  unreadMessageCount?: number;
 }
 
 const logger = createLogger('CoachOverview');
@@ -55,9 +57,18 @@ export function CoachOverview({
   onPlanSession,
   onReviewClient,
   onCheckEarnings,
-  onManageAvailability
+  onManageAvailability,
+  onMessages,
+  unreadMessageCount = 0,
 }: CoachOverviewProps) {
   const quickActions: QuickAction[] = [
+    {
+      id: 'messages',
+      title: unreadMessageCount > 0 ? `Messages (${unreadMessageCount})` : 'Messages',
+      icon: 'chatbubbles',
+      gradientColors: ['#6366F1', '#8B5CF6'],
+      onPress: onMessages || (() => {}),
+    },
     {
       id: 'plan-session',
       title: 'Plan Session',

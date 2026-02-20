@@ -36,6 +36,7 @@ Deno.serve(async (req) => {
     const raceContext = buildRaceContext(race, weather, raceType);
 
     // Generate strategy using Claude
+    // FIX 5: Upgraded from claude-3-haiku-20240307 to claude-sonnet-4-20250514 for better quality
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -44,7 +45,7 @@ Deno.serve(async (req) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 4096,
         temperature: 0.3,
         messages: [

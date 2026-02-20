@@ -32,7 +32,10 @@ import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { useReflectData, type RaceLogEntry } from '@/hooks/useReflectData';
 import { useReflectProfile } from '@/hooks/useReflectProfile';
+import { useCoachingInsights } from '@/hooks/useCoachingInsights';
 import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 import {
   WeeklyCalendar,
@@ -53,6 +56,7 @@ import {
   // Phase 5: Goals, Insights, Comparisons, Sharing & Gear
   GoalsSection,
   InsightsCard,
+  CoachingInsightCard,
   ComparisonCard,
   WeeklySummaryCard,
   GearManagementSection,
@@ -91,6 +95,7 @@ interface ProgressViewProps {
 
 function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps) {
   const { data, loading, refresh } = useReflectData();
+  const { userProfile } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -131,6 +136,9 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
         <Text style={styles.emptySubtitle}>
           Start adding races to see your progress here
         </Text>
+        <TouchableOpacity style={styles.emptyPrimaryButton} onPress={() => router.push('/(tabs)/races')}>
+          <Text style={styles.emptyPrimaryButtonText}>Go to Race tab</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -171,6 +179,9 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
           trend={data.performanceTrend}
           onSeeMore={handleSeePerformance}
         />
+
+        {/* AI Coaching Insight - Pattern-based recommendations */}
+        <CoachingInsightCard sailorId={userProfile?.id} />
 
         {/* Relative Effort */}
         <RelativeEffortCard
@@ -228,6 +239,10 @@ interface ProfileViewProps {
 function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   const { data, loading, refresh } = useReflectProfile();
   const { userProfile } = useAuth();
+  const {
+    insights: coachingInsights,
+    coachingData,
+  } = useCoachingInsights(userProfile?.id);
   const [refreshing, setRefreshing] = useState(false);
   const isFreeUser = !userProfile?.subscription_tier || userProfile?.subscription_tier === 'free';
 
@@ -317,9 +332,92 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
     Alert.alert('Coming Soon', 'Full insights view is coming in a future update');
   };
 
-  const handleInsightPress = (insight: PerformanceInsight) => {
-    Alert.alert(insight.title, insight.description);
-  };
+  const handleInsightPress = useCallback(
+    async (insight: PerformanceInsight) => {
+      // Check if this is a coaching insight card
+      if (insight.id.startsWith('coaching-insight-')) {
+        const matchingData = coachingData.find(
+          (d) => d.insightId === insight.id
+        );
+        if (!matchingData) {
+          showAlert(insight.title, insight.description);
+          return;
+        }
+
+        if (matchingData.variant === 'has_coach_right_specialty') {
+          // Share trend with coach via notification
+          if (!matchingData.coachUserId) {
+            showAlert('Error', 'Could not identify the coach to share with.');
+            return;
+          }
+          try {
+            const { error } = await supabase.from('notifications').insert({
+              user_id: matchingData.coachUserId,
+              type: 'trend_shared',
+              title: 'Performance Trend Shared',
+              message: `Your sailor shared a ${matchingData.phase} performance trend with you.`,
+              data: {
+                sailor_id: userProfile?.id,
+                phase: matchingData.phase,
+                weak_race_count: matchingData.weakRaceCount,
+                total_recent_races: matchingData.totalRecentRaces,
+              },
+              read: false,
+            });
+
+            if (error) throw error;
+
+            showAlert(
+              'Trend Shared',
+              `Your ${matchingData.phase} trend has been shared with ${matchingData.coachName || 'your coach'}.`
+            );
+          } catch (err) {
+            console.error('[handleInsightPress] Error sharing trend:', err);
+            showAlert('Error', 'Could not share this trend. Please try again.');
+          }
+          return;
+        }
+
+        if (matchingData.variant === 'has_coach_wrong_specialty') {
+          // Show dialog with two options
+          showAlertWithButtons(
+            insight.title,
+            insight.description,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: `Message ${matchingData.coachName || 'Coach'}`,
+                onPress: () => {
+                  // Navigate to messaging with existing coach (placeholder)
+                  showAlert(
+                    'Coming Soon',
+                    'In-app messaging is coming in a future update.'
+                  );
+                },
+              },
+              {
+                text: 'Find Specialist',
+                onPress: () => {
+                  router.push(
+                    `/coach/discover?skill=${matchingData.skillChipKey}` as any
+                  );
+                },
+              },
+            ]
+          );
+          return;
+        }
+
+        // no_coach variant — default: show alert
+        showAlert(insight.title, insight.description);
+        return;
+      }
+
+      // Default: non-coaching insight
+      showAlert(insight.title, insight.description);
+    },
+    [coachingData, userProfile?.id]
+  );
 
   // Phase 5: Comparison handlers
   const handleSeeAllComparisons = () => {
@@ -544,7 +642,7 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
 
         {/* Phase 5: AI Insights */}
         <InsightsCard
-          insights={data.insights}
+          insights={[...coachingInsights, ...data.insights]}
           onSeeMore={handleSeeAllInsights}
           onInsightPress={handleInsightPress}
         />
@@ -737,6 +835,11 @@ function RaceLogView({ toolbarHeight, onScroll, isDesktop }: RaceLogViewProps) {
                 ? 'No races match your search'
                 : 'No races in your history yet'}
             </Text>
+            {!searchQuery && (
+              <TouchableOpacity style={styles.emptyInlineButton} onPress={() => router.push('/(tabs)/races')}>
+                <Text style={styles.emptyInlineButtonText}>Create your first race</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
@@ -863,6 +966,18 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
   },
+  emptyPrimaryButton: {
+    marginTop: 6,
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  emptyPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   // Year Stats Card
   yearStatsCard: {
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
@@ -966,6 +1081,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
+  },
+  emptyInlineButton: {
+    marginTop: 2,
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  emptyInlineButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   // Upgrade Plan Card
   upgradePlanCard: {

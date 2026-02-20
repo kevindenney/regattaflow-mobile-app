@@ -26,7 +26,16 @@ env:
     visible: ".*"
     timeout: 15000
 
-# Handle Expo dev launcher if present
+# Handle Expo dev launcher (dynamic host/port variants)
+- tapOn:
+    text: "RegattaFlow"
+    optional: true
+- tapOn:
+    text: "http://10.0.2.2:8082"
+    optional: true
+- tapOn:
+    text: "http://10.0.2.2:8081"
+    optional: true
 - tapOn:
     text: "http://localhost:8081"
     optional: true
@@ -58,17 +67,13 @@ env:
     visible: ".*"
     timeout: 5000
 
-# Try to navigate to login form (may need 1-2 taps depending on app state)
-- tapOn:
-    text: "Sign In"
-    optional: true
-
+# Navigate to account and open login
+- openLink: "exp+regattaflow-app://account"
 - extendedWaitUntil:
-    visible: ".*"
-    timeout: 3000
-
+    visible: "Account"
+    timeout: 10000
 - tapOn:
-    text: "Sign In"
+    id: "account-sign-in-button"
     optional: true
 
 # Wait for login form to appear (using testID for reliability)
@@ -77,36 +82,24 @@ env:
       id: "login-title"
     timeout: 15000
 
-# Enter credentials using coordinates (TextInput testID not reliable on iOS)
+# Enter credentials using stable testIDs
 - tapOn:
-    point: "50%,47%"
-
-- extendedWaitUntil:
-    visible: ".*"
-    timeout: 2000
-
+    id: "login-identifier-input"
+- eraseText
 - inputText: ${TEST_EMAIL}
 
 - hideKeyboard
 
-- extendedWaitUntil:
-    visible: ".*"
-    timeout: 1500
-
 - tapOn:
-    point: "50%,54%"
-
-- extendedWaitUntil:
-    visible: ".*"
-    timeout: 2000
-
+    id: "login-password-input"
+- eraseText
 - inputText: ${TEST_PASSWORD}
 
 - hideKeyboard
 
 # Submit login
 - tapOn:
-    point: "50%,68%"
+    id: "login-submit-button"
 
 # ============================================================
 # PHASE 2: VERIFY LOGGED IN

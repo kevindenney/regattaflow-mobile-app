@@ -62,7 +62,7 @@ export function DemoRacesCarousel({
       <DemoAddRaceHeader onAddRace={onAddRace} />
 
       {/* Hero Zone - Fixed height race card timeline */}
-      <TourStep step="race_cards_navigation" position="bottom">
+      <TourStep step="race_timeline" position="bottom">
         <View style={{ height: HERO_ZONE_HEIGHT }}>
           <ScrollView
             ref={scrollViewRef}

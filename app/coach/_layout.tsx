@@ -59,6 +59,56 @@ export default function CoachLayout() {
             presentation: 'modal',
           }}
         />
+        <Stack.Screen
+          name="pricing"
+          options={{
+            title: 'Manage Pricing',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="availability"
+          options={{
+            title: 'Manage Availability',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="complete-session"
+          options={{
+            title: 'Complete Session',
+            headerShown: false,
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
+          name="cancel-session"
+          options={{
+            title: 'Cancel Session',
+            headerShown: false,
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
+          name="profile-edit"
+          options={{
+            title: 'Edit Profile',
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="messages"
+          options={{
+            title: 'Messages',
+            headerShown: true,
+          }}
+        />
+        <Stack.Screen
+          name="conversation"
+          options={{
+            headerShown: false,
+          }}
+        />
       </Stack>
     </CoachWorkspaceProvider>
   );

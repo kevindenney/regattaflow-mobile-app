@@ -42,13 +42,47 @@ serve(async (req: Request) => {
       return new Response('Invalid signature', { status: 400 });
     }
 
+    // BUG 1: Idempotency check — skip if event was already processed
+    const { data: existingEvent } = await supabase
+      .from('stripe_webhook_events')
+      .select('id')
+      .eq('event_id', event.id)
+      .maybeSingle();
+
+    if (existingEvent) {
+      console.log(`Skipping already-processed event: ${event.id}`);
+      return new Response(JSON.stringify({ received: true, duplicate: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Record event as processing
+    await supabase.from('stripe_webhook_events').insert({
+      event_id: event.id,
+      event_type: event.type,
+      processed_at: new Date().toISOString(),
+    });
+
+    // BUG 9: Validate event.account for Connect events that require it
+    const connectEventTypes = [
+      'payout.paid', 'payout.failed', 'transfer.created',
+    ];
+    if (connectEventTypes.includes(event.type) && !event.account) {
+      console.warn(`Missing event.account for Connect event: ${event.type} (${event.id})`);
+      return new Response(
+        JSON.stringify({ error: `Missing event.account for ${event.type}` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Handle different event types
     switch (event.type) {
       // Payment Intent Events
       case 'payment_intent.succeeded':
         await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent);
         break;
-      
+
       case 'payment_intent.payment_failed':
         await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
         break;
@@ -87,7 +121,16 @@ serve(async (req: Request) => {
         break;
 
       case 'payout.paid':
-        await handlePayoutPaid(event.data.object as Stripe.Payout, event.account);
+        await handlePayoutPaid(event.data.object as Stripe.Payout, event.account!);
+        break;
+
+      case 'payout.failed':
+        await handlePayoutFailed(event.data.object as Stripe.Payout, event.account!);
+        break;
+
+      // BUG 10: Handle charge refunds
+      case 'charge.refunded':
+        await handleChargeRefunded(event.data.object as Stripe.Charge);
         break;
 
       default:
@@ -683,15 +726,17 @@ async function handleAccountUpdated(account: Stripe.Account) {
  * Handle transfer created (platform to connected account)
  */
 async function handleTransferCreated(transfer: Stripe.Transfer) {
-  // Log transfer for accounting
+  // BUG 2: Use upsert to handle webhook retries gracefully
   const { error } = await supabase
     .from('platform_transfers')
-    .insert({
+    .upsert({
       stripe_transfer_id: transfer.id,
       destination_account: transfer.destination as string,
       amount: transfer.amount,
       currency: transfer.currency,
       created_at: new Date(transfer.created * 1000).toISOString(),
+    }, {
+      onConflict: 'stripe_transfer_id',
     });
 
   if (error) {
@@ -702,30 +747,191 @@ async function handleTransferCreated(transfer: Stripe.Transfer) {
 /**
  * Handle payout to connected account
  */
-async function handlePayoutPaid(payout: Stripe.Payout, accountId?: string) {
-  if (accountId) {
-    // Find coach by Stripe account
+async function handlePayoutPaid(payout: Stripe.Payout, accountId: string) {
+  // Find coach by Stripe account
+  const { data: coach } = await supabase
+    .from('coach_profiles')
+    .select('id, user_id, currency')
+    .eq('stripe_account_id', accountId)
+    .single();
+
+  if (coach) {
+    // BUG 2: Use upsert to handle webhook retries gracefully
+    await supabase
+      .from('coach_payouts')
+      .upsert({
+        coach_id: coach.id,
+        stripe_payout_id: payout.id,
+        amount: payout.amount,
+        currency: payout.currency,
+        arrival_date: payout.arrival_date
+          ? new Date(payout.arrival_date * 1000).toISOString()
+          : null,
+        status: 'paid',
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'stripe_payout_id',
+      });
+
+    // BUG 13: Use coach's configured currency symbol instead of hardcoded $
+    const currencySymbol = getCurrencySymbol(coach.currency || payout.currency);
+    const formattedAmount = (payout.amount / 100).toFixed(2);
+    try {
+      await supabase.functions.invoke('send-push-notification', {
+        body: {
+          recipients: [
+            {
+              userId: coach.user_id,
+              title: 'Payout Arrived',
+              body: `Your payout of ${currencySymbol}${formattedAmount} ${payout.currency.toUpperCase()} has arrived in your bank account`,
+              data: { type: 'payout_paid', payoutId: payout.id },
+              category: 'payments',
+            },
+          ],
+        },
+      });
+    } catch (pushError) {
+      console.error('Failed to send payout paid push notification:', pushError);
+    }
+  }
+}
+
+/**
+ * Handle failed payout to connected account
+ */
+async function handlePayoutFailed(payout: Stripe.Payout, accountId: string) {
+  // Find coach by Stripe account
+  const { data: coach } = await supabase
+    .from('coach_profiles')
+    .select('id, user_id, currency')
+    .eq('stripe_account_id', accountId)
+    .single();
+
+  if (coach) {
+    // BUG 2: Use upsert to handle webhook retries gracefully
+    // BUG 8: Persist failure_message alongside status update
+    await supabase
+      .from('coach_payouts')
+      .upsert({
+        coach_id: coach.id,
+        stripe_payout_id: payout.id,
+        amount: payout.amount,
+        currency: payout.currency,
+        arrival_date: null,
+        status: 'failed',
+        failure_message: payout.failure_message || null,
+        created_at: new Date().toISOString(),
+      }, {
+        onConflict: 'stripe_payout_id',
+      });
+
+    // BUG 13: Use coach's configured currency symbol instead of hardcoded $
+    const currencySymbol = getCurrencySymbol(coach.currency || payout.currency);
+    const formattedAmount = (payout.amount / 100).toFixed(2);
+    const failureMessage = payout.failure_message || 'Please check your Stripe dashboard for details.';
+    try {
+      await supabase.functions.invoke('send-push-notification', {
+        body: {
+          recipients: [
+            {
+              userId: coach.user_id,
+              title: 'Payout Failed',
+              body: `Your payout of ${currencySymbol}${formattedAmount} ${payout.currency.toUpperCase()} failed. ${failureMessage}`,
+              data: { type: 'payout_failed', payoutId: payout.id },
+              category: 'payments',
+            },
+          ],
+        },
+      });
+    } catch (pushError) {
+      console.error('Failed to send payout failed push notification:', pushError);
+    }
+  }
+}
+
+/**
+ * BUG 13: Map currency code to symbol
+ */
+function getCurrencySymbol(currency: string): string {
+  const symbols: Record<string, string> = {
+    usd: '$',
+    eur: '€',
+    gbp: '£',
+    hkd: 'HK$',
+    aud: 'A$',
+    nzd: 'NZ$',
+    cad: 'C$',
+    sgd: 'S$',
+    jpy: '¥',
+    chf: 'CHF ',
+    sek: 'kr',
+    dkk: 'kr',
+    nok: 'kr',
+  };
+  return symbols[currency.toLowerCase()] || `${currency.toUpperCase()} `;
+}
+
+/**
+ * BUG 10: Handle charge refund — update coaching session payment status and notify coach
+ */
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const paymentIntentId = charge.payment_intent as string | null;
+  if (!paymentIntentId) return;
+
+  // Find coaching session by payment intent
+  const { data: session } = await supabase
+    .from('coaching_sessions')
+    .select('id, coach_id, sailor_id, title, total_amount')
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle();
+
+  if (!session) return;
+
+  // Determine if full or partial refund
+  const isFullRefund = charge.amount_refunded >= charge.amount;
+  const refundStatus = isFullRefund ? 'refunded' : 'partially_refunded';
+
+  // Update session payment status
+  await supabase
+    .from('coaching_sessions')
+    .update({
+      payment_status: refundStatus,
+      refunded_amount: charge.amount_refunded,
+    })
+    .eq('id', session.id);
+
+  // Notify the coach about the refund
+  if (session.coach_id) {
     const { data: coach } = await supabase
       .from('coach_profiles')
-      .select('id, user_id')
-      .eq('stripe_account_id', accountId)
+      .select('user_id, currency')
+      .eq('id', session.coach_id)
       .single();
 
     if (coach) {
-      // Record payout for coach
-      await supabase
-        .from('coach_payouts')
-        .insert({
-          coach_id: coach.id,
-          stripe_payout_id: payout.id,
-          amount: payout.amount,
-          currency: payout.currency,
-          arrival_date: payout.arrival_date 
-            ? new Date(payout.arrival_date * 1000).toISOString()
-            : null,
-          status: 'paid',
-          created_at: new Date().toISOString(),
+      const currencySymbol = getCurrencySymbol(coach.currency || charge.currency);
+      const refundedAmount = (charge.amount_refunded / 100).toFixed(2);
+      try {
+        await supabase.functions.invoke('send-push-notification', {
+          body: {
+            recipients: [
+              {
+                userId: coach.user_id,
+                title: 'Session Refund Processed',
+                body: `A ${isFullRefund ? 'full' : 'partial'} refund of ${currencySymbol}${refundedAmount} was processed for "${session.title || 'coaching session'}"`,
+                data: {
+                  type: 'charge_refunded',
+                  sessionId: session.id,
+                  route: '/coach/my-bookings',
+                },
+                category: 'payments',
+              },
+            ],
+          },
         });
+      } catch (pushError) {
+        console.error('Failed to send refund push notification:', pushError);
+      }
     }
   }
 }

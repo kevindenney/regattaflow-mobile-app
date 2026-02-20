@@ -11,10 +11,10 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Platform,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCoachOnboardingState } from '@/hooks/useCoachOnboardingState';
@@ -174,12 +174,12 @@ const CoachOnboardingProfilePreview = () => {
 
   const handlePublishProfile = async () => {
     if (!isFormComplete()) {
-      Alert.alert('Incomplete Profile', 'Please complete all onboarding steps.');
+      showAlert('Incomplete Profile', 'Please complete all onboarding steps.');
       return;
     }
 
     if (!stripeStatus.connected && !stripeStatus.skipped) {
-      Alert.alert(
+      showAlertWithButtons(
         'Payment Setup Incomplete',
         "You won't be able to accept paid bookings until you set up payments.",
         [
@@ -198,12 +198,12 @@ const CoachOnboardingProfilePreview = () => {
     try {
       const result = await publishProfile();
       if (!result.success) {
-        Alert.alert('Error', result.error || 'Failed to publish profile.');
+        showAlert('Error', result.error || 'Failed to publish profile.');
         return;
       }
       router.replace('/(auth)/coach-onboarding-complete');
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'An unexpected error occurred.');
+      showAlert('Error', error.message || 'An unexpected error occurred.');
     }
   };
 

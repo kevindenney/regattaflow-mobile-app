@@ -9,7 +9,6 @@
 
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
-import { useGlobalSearch } from '@/providers/GlobalSearchProvider';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React, { useCallback, useEffect } from 'react';
@@ -46,8 +45,11 @@ interface FloatingTabBarProps extends BottomTabBarProps {
   visibleTabs: TabItemConfig[];
   onOpenMenu: () => void;
   pathname: string;
+  onTabVisited?: (tabName: string) => void;
   /** Position at 'top' or 'bottom' of the screen (default: 'bottom') */
   position?: 'top' | 'bottom';
+  /** Badge counts keyed by tab name (e.g. { learn: 3 }) */
+  badgeCounts?: Record<string, number>;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -59,10 +61,12 @@ function TabItem({
   tab,
   isActive,
   onPress,
+  badgeCount,
 }: {
   tab: TabItemConfig;
   isActive: boolean;
   onPress: () => void;
+  badgeCount?: number;
 }) {
   const scale = useSharedValue(1);
   const activeProgress = useSharedValue(isActive ? 1 : 0);
@@ -79,7 +83,7 @@ function TabItem({
     backgroundColor: interpolateColor(
       activeProgress.value,
       [0, 1],
-      ['transparent', '#FFFFFF']
+      ['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 1)']
     ),
   }));
 
@@ -107,11 +111,20 @@ function TabItem({
       hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
     >
       <Animated.View style={[styles.tabItemInner, innerAnimatedStyle, isActive && styles.tabItemActiveShadow]}>
-        <Ionicons
-          name={iconName as any}
-          size={20}
-          color={isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
-        />
+        <View>
+          <Ionicons
+            name={iconName as any}
+            size={20}
+            color={isActive ? IOS_COLORS.systemBlue : IOS_COLORS.systemGray}
+          />
+          {badgeCount != null && badgeCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {badgeCount > 9 ? '9+' : badgeCount}
+              </Text>
+            </View>
+          )}
+        </View>
         <Text
           style={[
             styles.tabLabel,
@@ -126,49 +139,17 @@ function TabItem({
   );
 }
 
-/**
- * Search button rendered in its own circular container beside the pill
- */
-function SearchCircleButton({ onPress }: { onPress: () => void }) {
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handlePressIn = useCallback(() => {
-    scale.value = withSpring(0.9, { damping: 15, stiffness: 300 });
-  }, [scale]);
-
-  const handlePressOut = useCallback(() => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
-  }, [scale]);
-
-  return (
-    <AnimatedPressable
-      accessibilityRole="button"
-      accessibilityLabel="Search"
-      onPress={onPress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      style={[styles.searchCircle, animatedStyle]}
-      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-    >
-      <Ionicons name="search" size={18} color={IOS_COLORS.systemGray} />
-    </AnimatedPressable>
-  );
-}
-
 export default function FloatingTabBar({
   state,
   navigation,
   visibleTabs,
   onOpenMenu,
   pathname,
+  onTabVisited,
   position = 'bottom',
+  badgeCounts,
 }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { openGlobalSearch } = useGlobalSearch();
   const isTop = position === 'top';
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(1);
@@ -212,6 +193,7 @@ export default function FloatingTabBar({
   };
 
   const handleTabPress = (tab: TabItemConfig) => {
+    onTabVisited?.(tab.name);
     triggerHaptic('selection');
 
     if (tab.isMenuTrigger) {
@@ -248,6 +230,7 @@ export default function FloatingTabBar({
         tab={tab}
         isActive={isTabActive(tab.name)}
         onPress={() => handleTabPress(tab)}
+        badgeCount={badgeCounts?.[tab.name]}
       />
     );
   };
@@ -270,16 +253,8 @@ export default function FloatingTabBar({
       ]}
       pointerEvents="box-none"
     >
-      <View style={styles.barRow}>
-        <View style={styles.pillContainer}>
-          {barContent}
-        </View>
-        <SearchCircleButton
-          onPress={() => {
-            triggerHaptic('selection');
-            openGlobalSearch();
-          }}
-        />
+      <View style={styles.pillContainer}>
+        {barContent}
       </View>
     </Animated.View>
   );
@@ -299,40 +274,11 @@ const styles = StyleSheet.create({
       default: {},
     }),
   },
-  barRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   pillContainer: {
     borderRadius: 32,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.08)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-      },
-      android: {
-        elevation: 12,
-      },
-      web: {
-        boxShadow: '0 4px 20px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)',
-      } as any,
-    }),
-  },
-  searchCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -393,5 +339,22 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     color: IOS_COLORS.systemBlue,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    backgroundColor: IOS_COLORS.systemRed,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

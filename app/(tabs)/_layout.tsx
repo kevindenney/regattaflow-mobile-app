@@ -1,14 +1,16 @@
 import { EmojiTabIcon } from '@/components/icons/EmojiTabIcon';
-import FloatingTabBar from '@/components/navigation/FloatingTabBar';
+import FloatingTabBar, { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { NavigationHeader } from '@/components/navigation/NavigationHeader';
 import { TourOverlay } from '@/components/onboarding/FeatureTour';
 import { WelcomeCard } from '@/components/onboarding/WelcomeCard';
 import { TourBackdrop } from '@/components/onboarding/TourBackdrop';
 import { TabSweepCard } from '@/components/onboarding/TabSweepCard';
 import { TourPricingCard } from '@/components/onboarding/TourPricingCard';
+import { GuestUpgradeCard } from '@/components/onboarding/GuestUpgradeCard';
 import { GlobalSearchProvider } from '@/providers/GlobalSearchProvider';
 import { useWebDrawer, WebDrawerProvider } from '@/providers/WebDrawerProvider';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
+import { useUnreadMessageCount } from '@/hooks/useMessaging';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { type TabConfig, getTabsForUserType } from '@/lib/navigation-config';
 import { triggerHaptic } from '@/lib/haptics';
@@ -21,8 +23,9 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
-import React, { Suspense, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Lazy import WebSidebarNav only on web to avoid bundling on native
 const WebSidebarNav = Platform.OS === 'web'
@@ -33,14 +36,46 @@ const WebSidebarNav = Platform.OS === 'web'
 const useWebSidebar = Platform.OS === 'web' && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
 
 const logger = createLogger('_layout');
+const TAB_SWEEP_REQUIRED_TABS = ['connect', 'learn', 'reflect'] as const;
+const isTabSweepRequiredTab = (tabName: string) =>
+  TAB_SWEEP_REQUIRED_TABS.some((requiredTab) => requiredTab === tabName);
+const TAB_SWEEP_ROUTE_MAP: Record<(typeof TAB_SWEEP_REQUIRED_TABS)[number], string> = {
+  connect: '/connect',
+  learn: '/learn',
+  reflect: '/reflect',
+};
+const TAB_SWEEP_META: Record<(typeof TAB_SWEEP_REQUIRED_TABS)[number], { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  connect: { label: 'Connect', icon: 'people-outline' },
+  learn: { label: 'Learn', icon: 'school-outline' },
+  reflect: { label: 'Reflect', icon: 'stats-chart-outline' },
+};
+const TAB_SWEEP_CONTEXT_COPY: Record<
+  (typeof TAB_SWEEP_REQUIRED_TABS)[number],
+  { description: string; emptyHint: string }
+> = {
+  connect: {
+    description: 'Follow sailors, browse posts, and join community discussions.',
+    emptyHint: 'Start by following a few sailors or joining a community.',
+  },
+  learn: {
+    description: 'Browse tactical courses and continue training plans.',
+    emptyHint: 'If a filter is empty, switch to All Courses.',
+  },
+  reflect: {
+    description: 'Review race history, progress trends, and season metrics.',
+    emptyHint: 'No history yet? Create your first race to start tracking.',
+  },
+};
 
 function TabLayoutInner() {
   const { userType, user, clubProfile, personaLoading, isGuest, capabilities } = useAuth();
+  const unreadMessageCount = useUnreadMessageCount(user?.id);
   const router = useRouter();
   const navigation = useNavigation();
   const pathname = usePathname();
   const { isDrawerOpen, closeDrawer } = useWebDrawer();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const {
     isTourActive,
     currentStep,
@@ -48,24 +83,54 @@ function TabLayoutInner() {
     isTourComplete,
     currentStepIndex,
     totalSteps,
+    getStepConfig,
     skipTour,
-    skipToPrice,
     advanceStep,
     previousStep,
     goToStepIndex,
     resetTour,
     startTour,
     isFullscreenStep,
+    showResumeHint,
+    dismissResumeHint,
+    stepReadinessIssue,
+    retryAdvanceStep,
   } = useFeatureTourContext();
   const wasTourActiveRef = useRef(false);
 
   // iPad portrait: tab bar moves to top of screen
   const isIPadPortrait = Platform.OS === 'ios' && (Platform as any).isPad === true && windowHeight > windowWidth;
+  const tourChipBottom = (isIPadPortrait ? 16 : 84) + insets.bottom;
+  const readinessBottom = 116 + insets.bottom;
+  const resumeTop = insets.top + 12;
+  const floatingTabEdgeBottom = Math.max(Math.round(insets.bottom / 2), 8);
+  const showTabSweepFocus = isTourActive && shouldShowTour && currentStep === 'tab_sweep' && !isIPadPortrait;
 
   // Get tabs based on user type and capabilities
   // Sailors with coaching capability will see both sailor and coach tabs
   const tabs = getTabsForUserType(userType ?? null, isGuest, capabilities);
   const [hasRedirected, setHasRedirected] = useState(false);
+  const [tabSweepVisitedTabs, setTabSweepVisitedTabs] = useState<Set<string>>(new Set());
+  const tabSweepRemaining = Math.max(0, TAB_SWEEP_REQUIRED_TABS.length - tabSweepVisitedTabs.size);
+  const markTabSweepVisited = React.useCallback((tabName: string) => {
+    if (!isTabSweepRequiredTab(tabName)) {
+      return;
+    }
+    setTabSweepVisitedTabs((previous) => {
+      if (previous.has(tabName)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(tabName);
+      return next;
+    });
+  }, []);
+  const activeTabSweepTab = useMemo(
+    () =>
+      TAB_SWEEP_REQUIRED_TABS.find((tabId) => pathname === `/${tabId}` || pathname.startsWith(`/${tabId}/`)) ??
+      null,
+    [pathname]
+  );
 
   // Redirect legacy coach users (user_type='coach' without capabilities) to /clients
   // Note: Sailors with coaching capability do NOT redirect - they stay on /races
@@ -102,7 +167,6 @@ function TabLayoutInner() {
       welcome: '/races',
       race_timeline: '/races',
       prep_overview: '/races',
-      tab_sweep: '/races',
       add_your_race: '/races',
       pricing_trial: '/races',
     };
@@ -114,6 +178,13 @@ function TabLayoutInner() {
 
     router.replace(targetRoute as Parameters<typeof router.replace>[0]);
   }, [isTourActive, currentStep, pathname, router]);
+
+  useEffect(() => {
+    if (!isTourActive || currentStep !== 'tab_sweep') {
+      return;
+    }
+    setTabSweepVisitedTabs(new Set());
+  }, [isTourActive, currentStep]);
 
   // When tour ends, return to /races so demo context + add-race CTA is the final destination.
   useEffect(() => {
@@ -188,6 +259,7 @@ function TabLayoutInner() {
       : (tabConfig?.icon || 'ellipsis-horizontal-outline');
 
     const handlePress = () => {
+      markTabSweepVisited(tabName);
       triggerHaptic('selection');
       onPress?.({} as any);
     };
@@ -254,6 +326,8 @@ function TabLayoutInner() {
   const learnTab = findTab('learn');
   const reflectTab = findTab('reflect');
   const coursesTab = findTab('courses');
+  const connectTab = findTab('connect');
+  const searchTab = findTab('search');
   const followTab = findTab('follow');
   const communityTab = findTab('community');
   const strategyTab = findTab('strategy');
@@ -286,7 +360,9 @@ function TabLayoutInner() {
           visibleTabs={tabs}
           onOpenMenu={() => {}}
           pathname={pathname}
+          onTabVisited={markTabSweepVisited}
           position={isIPadPortrait ? 'top' : 'bottom'}
+          badgeCounts={unreadMessageCount > 0 ? { learn: unreadMessageCount } : undefined}
         />
       ) : undefined,
       tabBarStyle: isSailorUser
@@ -349,42 +425,37 @@ function TabLayoutInner() {
                 : undefined,
           }}
         />
-        {/* Tab 2: Follow (activity feed from followed sailors) */}
+        {/* Tab 2: Connect (merged Follow + Discuss) */}
         <Tabs.Screen
-          name="follow"
+          name="connect"
           options={{
-            title: followTab?.title ?? 'Follow',
+            title: connectTab?.title ?? 'Connect',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(followTab, focused, followTab?.iconFocused ?? 'people', followTab?.icon ?? 'people-outline') as any}
+                name={getIconName(connectTab, focused, connectTab?.iconFocused ?? 'people', connectTab?.icon ?? 'people-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('follow')
+            tabBarButton: !isTabVisible('connect')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('follow', followTab?.title ?? 'Follow', followTab)
+                ? renderSailorTabButton('connect', connectTab?.title ?? 'Connect', connectTab)
                 : undefined,
           }}
         />
-        {/* Tab 3: Discuss (social hub — Discuss | Messages) */}
+        {/* Hidden: Legacy follow route (redirects to connect) */}
+        <Tabs.Screen
+          name="follow"
+          options={{
+            href: null,
+          }}
+        />
+        {/* Hidden: Legacy community route (redirects to connect) */}
         <Tabs.Screen
           name="community"
           options={{
-            title: communityTab?.title ?? 'Discuss',
-            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
-              <Ionicons
-                name={getIconName(communityTab, focused, communityTab?.iconFocused ?? 'people', communityTab?.icon ?? 'people-outline') as any}
-                size={size}
-                color={color}
-              />
-            ),
-            tabBarButton: !isTabVisible('community')
-              ? () => null
-              : isSailorUser
-                ? renderSailorTabButton('community', communityTab?.title ?? 'Discuss', communityTab)
-                : undefined,
+            href: null,
           }}
         />
         {/* Hidden: Legacy discover route (redirects to community) */}
@@ -616,11 +687,23 @@ function TabLayoutInner() {
             tabBarButton: isTabVisible('map') ? undefined : () => null,
           }}
         />
+        {/* Tab 5: Search */}
         <Tabs.Screen
           name="search"
           options={{
-            title: 'Search',
-            href: null,
+            title: searchTab?.title ?? 'Search',
+            tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(searchTab, focused, searchTab?.iconFocused ?? 'search', searchTab?.icon ?? 'search-outline') as any}
+                size={size}
+                color={color}
+              />
+            ),
+            tabBarButton: !isTabVisible('search')
+              ? () => null
+              : isSailorUser
+                ? renderSailorTabButton('search', searchTab?.title ?? 'Search', searchTab)
+                : undefined,
           }}
         />
         <Tabs.Screen
@@ -823,26 +906,112 @@ function TabLayoutInner() {
       <WelcomeCard
         visible={isTourActive && shouldShowTour && currentStep === 'welcome'}
         onStartTour={advanceStep}
-        onSkip={skipToPrice}
+        onSkip={skipTour}
       />
       <TabSweepCard
         visible={isTourActive && shouldShowTour && currentStep === 'tab_sweep'}
         onNext={advanceStep}
-        onSkip={skipToPrice}
+        onSkip={skipTour}
+        canContinue={tabSweepRemaining === 0}
+        activeTabLabel={activeTabSweepTab ? TAB_SWEEP_META[activeTabSweepTab].label : undefined}
+        activeTabDescription={activeTabSweepTab ? TAB_SWEEP_CONTEXT_COPY[activeTabSweepTab].description : undefined}
+        emptyStateHint={activeTabSweepTab ? TAB_SWEEP_CONTEXT_COPY[activeTabSweepTab].emptyHint : undefined}
       />
+      {showTabSweepFocus && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.tabSweepFocusRing,
+            {
+              bottom: floatingTabEdgeBottom,
+              height: FLOATING_TAB_BAR_HEIGHT,
+            },
+          ]}
+        />
+      )}
+      {isTourActive && shouldShowTour && currentStep === 'tab_sweep' && (
+        <View style={[styles.tabSweepProgressChip, { bottom: tourChipBottom }]}>
+          <Text style={styles.tabSweepProgressText}>
+            {tabSweepRemaining === 0
+              ? 'All tabs explored'
+              : `Explore ${tabSweepRemaining} more ${tabSweepRemaining === 1 ? 'tab' : 'tabs'}`}
+          </Text>
+          <View style={styles.tabSweepPillsRow}>
+            {TAB_SWEEP_REQUIRED_TABS.map((tabId) => {
+              const isVisited = tabSweepVisitedTabs.has(tabId);
+              const tabMeta = TAB_SWEEP_META[tabId];
+              return (
+                <Pressable
+                  key={tabId}
+                  onPress={() => {
+                    markTabSweepVisited(tabId);
+                    const route = TAB_SWEEP_ROUTE_MAP[tabId];
+                    if (route && pathname !== route) {
+                      router.replace(route as Parameters<typeof router.replace>[0]);
+                    }
+                  }}
+                  style={[styles.tabSweepPill, isVisited && styles.tabSweepPillVisited]}
+                >
+                  <Ionicons
+                    name={isVisited ? 'checkmark-circle' : tabMeta.icon}
+                    size={12}
+                    color={isVisited ? '#22C55E' : '#BFDBFE'}
+                  />
+                  <Text style={[styles.tabSweepPillText, isVisited && styles.tabSweepPillTextVisited]}>
+                    {tabMeta.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+      {showResumeHint && isTourActive && shouldShowTour && (
+        <View style={[styles.resumeHintContainer, { top: resumeTop }]}>
+          <Text style={styles.resumeHintText}>
+            Tour resumed. Step {currentStepIndex} of {totalSteps}
+          </Text>
+          <TouchableOpacity onPress={dismissResumeHint} activeOpacity={0.75}>
+            <Text style={styles.resumeHintDismiss}>Got it</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {stepReadinessIssue && (
+        <View style={[styles.readinessIssueContainer, { bottom: readinessBottom }]}>
+          <Text style={styles.readinessIssueTitle}>Preparing this step</Text>
+          <Text style={styles.readinessIssueBody}>
+            "{getStepConfig(stepReadinessIssue).title}" is still loading. If this takes too long, retry.
+          </Text>
+          <TouchableOpacity
+            style={styles.readinessIssueRetryButton}
+            onPress={retryAdvanceStep}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.readinessIssueRetryText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <TourPricingCard
-        visible={isTourActive && shouldShowTour && currentStep === 'pricing_trial'}
+        visible={isTourActive && shouldShowTour && currentStep === 'pricing_trial' && !isGuestUser}
         onStartTrial={() => {
           skipTour();
           router.push('/(auth)/signup' as any);
         }}
         onContinueFree={skipTour}
       />
+      <GuestUpgradeCard
+        visible={isTourActive && shouldShowTour && currentStep === 'pricing_trial' && isGuestUser}
+        onCreateAccount={() => {
+          skipTour();
+          router.push('/(auth)/signup' as any);
+        }}
+        onContinueDemo={skipTour}
+      />
       <TourOverlay
         visible={isTourActive && shouldShowTour && !isFullscreenStep}
         currentStepIndex={currentStepIndex}
         totalSteps={totalSteps}
-        onSkip={skipToPrice}
+        onSkip={skipTour}
         onPrevious={__DEV__ ? previousStep : undefined}
         onNext={__DEV__ ? advanceStep : undefined}
         onGoToStep={__DEV__ ? goToStepIndex : undefined}
@@ -1113,6 +1282,143 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: IOS_COLORS.systemBlue,
     borderRadius: 1,
+  },
+  tabSweepProgressChip: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: '#0F274D',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(147, 197, 253, 0.35)',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+    zIndex: 1150,
+  },
+  tabSweepProgressText: {
+    color: '#EFF6FF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  tabSweepPillsRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  tabSweepPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(147, 197, 253, 0.4)',
+  },
+  tabSweepPillVisited: {
+    backgroundColor: 'rgba(22, 163, 74, 0.2)',
+    borderColor: 'rgba(34, 197, 94, 0.45)',
+  },
+  tabSweepPillText: {
+    color: '#DBEAFE',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tabSweepPillTextVisited: {
+    color: '#DCFCE7',
+  },
+  tabSweepFocusRing: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: 'rgba(59, 130, 246, 0.95)',
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+    zIndex: 1095,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  resumeHintContainer: {
+    position: 'absolute',
+    alignSelf: 'center',
+    backgroundColor: '#0A1E3B',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(147, 197, 253, 0.35)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    elevation: 6,
+    zIndex: 1160,
+  },
+  resumeHintText: {
+    color: '#DBEAFE',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resumeHintDismiss: {
+    color: '#BFDBFE',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  readinessIssueContainer: {
+    position: 'absolute',
+    alignSelf: 'center',
+    width: 310,
+    backgroundColor: '#F8FBFF',
+    borderRadius: 14,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 5,
+    zIndex: 1160,
+  },
+  readinessIssueTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0B2A52',
+    marginBottom: 4,
+  },
+  readinessIssueBody: {
+    fontSize: 13,
+    color: '#334155',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  readinessIssueRetryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#1D4ED8',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  readinessIssueRetryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });
 

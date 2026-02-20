@@ -1456,7 +1456,7 @@ export default function RacesScreen() {
 
   // Memoized navigation handlers
   const handleVenuePress = useCallback(() => {
-    router.push('/discuss');
+    router.push('/connect');
   }, [router]);
 
   // Venue insights handlers (loadCachedInsights, handleGetVenueInsights) and
@@ -1616,11 +1616,16 @@ export default function RacesScreen() {
         return;
       }
 
-      if (localRace && isDemoRaceId(selectedRaceId)) {
-        // If we have local race data and it's a demo race (not a real UUID)
-        logger.debug('[races.tsx] 📦 Using local race data (demo race):', localRace.name);
+      if (isDemoRaceId(selectedRaceId)) {
+        // Demo race IDs are not valid UUIDs — never send them to Supabase
+        if (localRace) {
+          logger.debug('[races.tsx] 📦 Using local race data (demo race):', localRace.name);
+          setSelectedRaceData(localRace);
+        } else {
+          logger.debug('[races.tsx] ⚠️ Demo race not yet in local data, skipping DB query');
+          setSelectedRaceData(null);
+        }
         setLoadingRaceDetail(false);
-        setSelectedRaceData(localRace);
         setSelectedRaceMarks([]);
         return;
       }

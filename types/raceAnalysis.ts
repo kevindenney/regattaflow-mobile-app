@@ -29,6 +29,7 @@ export interface AiCoachAnalysisSummary {
   tactical_decisions?: string | null;
   boat_handling?: string | null;
   recommendations?: string[] | null;
+  plan_vs_execution?: string | null;
   created_at?: string;
   updated_at?: string;
 }

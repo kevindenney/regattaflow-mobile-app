@@ -124,20 +124,17 @@ serve(async (req: Request) => {
     );
   } catch (error) {
     console.error('Error getting Stripe balance:', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
     const isStripeError = error instanceof Stripe.errors.StripeError;
-    
+
+    // BUG 3: Return 503 so the client knows the balance is unavailable
     return new Response(
-      JSON.stringify({ 
-        available: 0,
-        pending: 0,
-        currency: 'usd',
-        error: isStripeError ? error.message : 'Failed to get balance',
+      JSON.stringify({
+        error: isStripeError ? error.message : 'Balance temporarily unavailable',
       }),
-      { 
-        status: 200, // Return 200 with error message to avoid breaking UI
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 503,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   }

@@ -126,18 +126,15 @@ class RaceSuggestionService {
       // Cache the results
       const cacheSuccess = await this.cacheSuggestions(userId, suggestions);
       if (!cacheSuccess) {
-        console.warn('⚠️ [RaceSuggestionService] Unable to cache suggestions (see logs above)');
+        logger.debug('[RaceSuggestionService] Unable to cache suggestions');
       }
 
       return suggestions;
     } catch (error) {
-      console.error('❌ [RaceSuggestionService] Error fetching suggestions:', error);
-      console.error('❌ [RaceSuggestionService] Error details:', {
+      logger.debug('[getSuggestionsForUser] Error fetching suggestions (non-blocking):', {
         name: (error as Error).name,
         message: (error as Error).message,
-        stack: (error as Error).stack
       });
-      logger.error('[getSuggestionsForUser] Error fetching suggestions:', error);
       // Return empty suggestions on error
       return this.emptySuggestions();
     }
@@ -157,8 +154,7 @@ class RaceSuggestionService {
       .order('confidence_score', { ascending: false });
 
     if (error) {
-      console.error('❌ [getCachedSuggestions] Error fetching cached suggestions:', error);
-      logger.error('[getCachedSuggestions] Error fetching cached suggestions:', error);
+      logger.debug('[getCachedSuggestions] Error fetching cached suggestions (non-blocking):', error);
       return this.emptySuggestions();
     }
 
@@ -239,7 +235,7 @@ class RaceSuggestionService {
         .limit(20);
 
       if (eventsError || !events) {
-        logger.error('[getClubUpcomingRaces] Error fetching club events:', eventsError);
+        logger.debug('[getClubUpcomingRaces] Error fetching club events (non-blocking):', eventsError);
         return [];
       }
 
@@ -255,7 +251,7 @@ class RaceSuggestionService {
         return this.mapClubEventToSuggestion(event, club);
       });
     } catch (error) {
-      logger.error('[getClubUpcomingRaces] Error:', error);
+      logger.debug('[getClubUpcomingRaces] Error (non-blocking):', error);
       return [];
     }
   }
@@ -697,8 +693,7 @@ class RaceSuggestionService {
         });
 
       if (error) {
-        console.error('[RaceSuggestionService] Failed to cache suggestions', error);
-        logger.error('[RaceSuggestionService] Failed to cache suggestions', { error });
+        logger.debug('[RaceSuggestionService] Failed to cache suggestions (non-blocking)', { error });
         return false;
       }
 
@@ -707,8 +702,7 @@ class RaceSuggestionService {
       });
       return true;
     } catch (error) {
-      console.error('[RaceSuggestionService] Unexpected error caching suggestions', error);
-      logger.error('[RaceSuggestionService] Unexpected error caching suggestions', error);
+      logger.debug('[RaceSuggestionService] Unexpected error caching suggestions (non-blocking)', error);
       return false;
     }
   }

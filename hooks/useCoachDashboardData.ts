@@ -1,53 +1,50 @@
-// @ts-nocheck
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 
+// ---------------------------------------------------------------------------
+// Interfaces
+// ---------------------------------------------------------------------------
+
 interface CoachClient {
   id: string;
+  sailor_id: string;
   name: string;
   email: string;
   avatar?: string;
-  skill_level: 'beginner' | 'intermediate' | 'advanced' | 'expert';
-  status: 'active' | 'inactive' | 'trial';
-  next_session?: {
-    id: string;
-    date: string;
-    type: 'live_session' | 'race_support' | 'program_review';
-    venue?: string;
-  };
-  performance_trend: 'improving' | 'stable' | 'declining';
+  skill_level: string;
+  status: 'active' | 'inactive' | 'completed';
+  primary_boat_class?: string;
+  goals?: string;
   last_session_date?: string;
   total_sessions: number;
+  coach_notes?: string;
 }
 
 interface CoachSession {
   id: string;
-  client_id: string;
-  client_name: string;
-  client_avatar?: string;
-  type: 'live_session' | 'race_support' | 'program_review' | 'strategy_session';
-  date: string;
-  duration: number;
-  status: 'upcoming' | 'in_progress' | 'completed' | 'cancelled';
-  preparation_status: 'not_started' | 'in_progress' | 'ready';
-  venue?: string;
-  notes?: string;
-  earnings: number;
+  sailor_id: string;
+  sailor_name: string;
+  sailor_avatar?: string;
+  session_type: string;
+  scheduled_at: string;
+  completed_at?: string;
+  duration_minutes: number;
+  status: 'pending' | 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  fee_amount: number;
+  currency: string;
+  paid: boolean;
+  payment_status?: string;
+  session_notes?: string;
+  homework?: string;
 }
 
-interface MarketplaceLead {
+interface SessionFeedbackEntry {
   id: string;
-  client_name: string;
-  client_email: string;
-  service_requested: 'live_session' | 'program' | 'race_support';
-  skill_level: 'beginner' | 'intermediate' | 'advanced' | 'expert';
-  budget_range: string;
-  venue_preference?: string;
-  message: string;
+  session_id: string;
+  rating: number;
+  feedback_text?: string;
   created_at: string;
-  status: 'new' | 'contacted' | 'qualified' | 'converted' | 'declined';
 }
 
 interface EarningsData {
@@ -60,238 +57,356 @@ interface EarningsData {
     current: number;
     previous: number;
   };
-  transactions: Array<{
-    id: string;
-    client: string;
-    service: string;
-    amount: number;
-    date: string;
-    status: 'paid' | 'pending' | 'overdue';
-  }>;
-  breakdown: {
-    sessions: number;
-    programs: number;
-    raceDaySupport: number;
-    other: number;
-  };
-}
-
-interface Resource {
-  id: string;
-  title: string;
-  type: 'template' | 'guide' | 'video' | 'document';
-  description: string;
-  category: string;
-  downloads: number;
-  lastUsed?: string;
+  totalOutstanding: number;
+  currency: string;
 }
 
 export interface CoachDashboardData {
+  coachProfileId: string | null;
   clients: CoachClient[];
   sessions: CoachSession[];
-  leads: MarketplaceLead[];
+  feedback: SessionFeedbackEntry[];
   earnings: EarningsData;
-  resources: Resource[];
+  averageRating: number | null;
   loading: boolean;
   error: string | null;
+  refetch: () => void;
 }
+
+// ---------------------------------------------------------------------------
+// Date helpers
+// ---------------------------------------------------------------------------
+
+function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function startOfPreviousMonth(date: Date): Date {
+  const d = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  return d;
+}
+
+function endOfPreviousMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 0, 23, 59, 59, 999);
+}
+
+function oneWeekAgo(): Date {
+  return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+}
+
+function twoWeeksAgo(): Date {
+  return new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 
 export function useCoachDashboardData(): CoachDashboardData {
   const { user } = useAuth();
-  const [data, setData] = useState<CoachDashboardData>({
-    clients: [],
-    sessions: [],
-    leads: [],
-    earnings: {
-      monthly: { current: 0, previous: 0, projected: 0 },
-      weekly: { current: 0, previous: 0 },
-      transactions: [],
-      breakdown: { sessions: 0, programs: 0, raceDaySupport: 0, other: 0 },
-    },
-    resources: [],
-    loading: true,
-    error: null,
+
+  const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
+  const [clients, setClients] = useState<CoachClient[]>([]);
+  const [sessions, setSessions] = useState<CoachSession[]>([]);
+  const [feedback, setFeedback] = useState<SessionFeedbackEntry[]>([]);
+  const [earnings, setEarnings] = useState<EarningsData>({
+    monthly: { current: 0, previous: 0, projected: 0 },
+    weekly: { current: 0, previous: 0 },
+    totalOutstanding: 0,
+    currency: 'USD',
   });
+  const [averageRating, setAverageRating] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchCoachData = async () => {
-    if (!user) return;
-
-    try {
-      setData(prev => ({ ...prev, loading: true, error: null }));
-
-      // Skip coach clients query since table doesn't exist
-      const clientsData: any[] | null = null;
-      const clientsError = null;
-
-      // Skip coaching sessions query since table doesn't exist
-      const sessionsData: any[] | null = null;
-      const sessionsError = null;
-
-      // Skip marketplace leads query since table doesn't exist
-      const leadsData: any[] | null = null;
-      const leadsError = null;
-
-      // Skip coach earnings query since table doesn't exist
-      const earningsData: any[] | null = null;
-      const earningsError = null;
-
-      // Skip coaching resources query since table doesn't exist
-      const resourcesData: any[] | null = null;
-      const resourcesError = null;
-
-      // Process clients data
-      const processedClients: CoachClient[] = clientsData?.map((client: any) => ({
-        id: client.id,
-        name: client.user?.name || 'Unknown Client',
-        email: client.user?.email || '',
-        avatar: client.user?.avatar_url,
-        skill_level: client.skill_level || 'beginner',
-        status: client.status || 'active',
-        next_session: client.next_session ? {
-          id: client.next_session.id,
-          date: client.next_session.date,
-          type: client.next_session.type,
-          venue: client.next_session.venue,
-        } : undefined,
-        performance_trend: client.performance?.trend || 'stable',
-        last_session_date: client.last_session_date,
-        total_sessions: client.session_count?.[0]?.count || 0,
-      })) || [];
-
-      // Process sessions data
-      const processedSessions: CoachSession[] = sessionsData?.map((session: any) => ({
-        id: session.id,
-        client_id: session.client_id,
-        client_name: session.client?.name || 'Unknown Client',
-        client_avatar: session.client?.avatar_url,
-        type: session.type,
-        date: session.date,
-        duration: session.duration || 60,
-        status: new Date(session.date) > new Date() ? 'upcoming' :
-                session.status || 'completed',
-        preparation_status: session.preparation_status || 'not_started',
-        venue: session.venue,
-        notes: session.notes,
-        earnings: session.fee || 0,
-      })) || [];
-
-      // Process leads data
-      const processedLeads: MarketplaceLead[] = leadsData?.map((lead: any) => ({
-        id: lead.id,
-        client_name: lead.client_name,
-        client_email: lead.client_email,
-        service_requested: lead.service_requested,
-        skill_level: lead.skill_level,
-        budget_range: lead.budget_range || 'Not specified',
-        venue_preference: lead.venue_preference,
-        message: lead.message || '',
-        created_at: lead.created_at,
-        status: lead.status || 'new',
-      })) || [];
-
-      // Process earnings data
-      const currentMonth = new Date().getMonth();
-      const currentYear = new Date().getFullYear();
-
-      const monthlyEarnings = earningsData?.filter((earning: any) => {
-        const earningDate = new Date(earning.date);
-        return earningDate.getMonth() === currentMonth && earningDate.getFullYear() === currentYear;
-      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
-
-      const previousMonthEarnings = earningsData?.filter((earning: any) => {
-        const earningDate = new Date(earning.date);
-        const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-        const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-        return earningDate.getMonth() === prevMonth && earningDate.getFullYear() === prevYear;
-      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
-
-      const weeklyEarnings = earningsData?.filter((earning: any) => {
-        const earningDate = new Date(earning.date);
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        return earningDate >= weekAgo;
-      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
-
-      const previousWeekEarnings = earningsData?.filter((earning: any) => {
-        const earningDate = new Date(earning.date);
-        const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        return earningDate >= twoWeeksAgo && earningDate < weekAgo;
-      }).reduce((sum: number, earning: any) => sum + earning.amount, 0) || 0;
-
-      // Calculate breakdown by service type
-      const breakdown = earningsData?.reduce((acc: any, earning: any) => {
-        switch (earning.service_type) {
-          case 'live_session':
-            acc.sessions += earning.amount;
-            break;
-          case 'program':
-            acc.programs += earning.amount;
-            break;
-          case 'race_support':
-            acc.raceDaySupport += earning.amount;
-            break;
-          default:
-            acc.other += earning.amount;
-        }
-        return acc;
-      }, { sessions: 0, programs: 0, raceDaySupport: 0, other: 0 }) ||
-      { sessions: 0, programs: 0, raceDaySupport: 0, other: 0 };
-
-      const transactions = earningsData?.slice(0, 10).map((earning: any) => ({
-        id: earning.id,
-        client: earning.client_name || 'Unknown Client',
-        service: earning.service_type || 'Session',
-        amount: earning.amount,
-        date: earning.date,
-        status: earning.status || 'paid' as 'paid' | 'pending' | 'overdue',
-      })) || [];
-
-      // Process resources data
-      const processedResources: Resource[] = resourcesData?.map((resource: any) => ({
-        id: resource.id,
-        title: resource.title,
-        type: resource.type,
-        description: resource.description || '',
-        category: resource.category || 'General',
-        downloads: resource.download_count || 0,
-        lastUsed: resource.last_used,
-      })) || [];
-
-      setData(prev => ({
-        ...prev,
-        clients: processedClients,
-        sessions: processedSessions,
-        leads: processedLeads,
-        earnings: {
-          monthly: {
-            current: monthlyEarnings,
-            previous: previousMonthEarnings,
-            projected: Math.round(monthlyEarnings * 1.15), // Simple projection
-          },
-          weekly: {
-            current: weeklyEarnings,
-            previous: previousWeekEarnings,
-          },
-          transactions,
-          breakdown,
-        },
-        resources: processedResources,
-        loading: false,
-      }));
-
-    } catch (error) {
-      console.error('Error fetching coach dashboard data:', error);
-      setData(prev => ({
-        ...prev,
-        loading: false,
-        error: error instanceof Error ? error.message : 'Failed to load dashboard data',
-      }));
-    }
-  };
+  // Manual refetch trigger
+  const [refetchKey, setRefetchKey] = useState(0);
+  const refetch = useCallback(() => setRefetchKey((k) => k + 1), []);
 
   useEffect(() => {
-    fetchCoachData();
-  }, [user]);
+    let cancelled = false;
 
-  return data;
+    const fetchData = async () => {
+      const userId = user?.id;
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // 1. Get coach profile id
+        const { data: coachProfile, error: profileError } = await supabase
+          .from('coach_profiles')
+          .select('id, hourly_rate, currency, average_rating')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (profileError) {
+          throw new Error(`Failed to load coach profile: ${profileError.message}`);
+        }
+
+        if (!coachProfile) {
+          if (!cancelled) {
+            setCoachProfileId(null);
+            setClients([]);
+            setSessions([]);
+            setFeedback([]);
+            setAverageRating(null);
+            setLoading(false);
+            setError('No coach profile found. Please complete your coach onboarding.');
+          }
+          return;
+        }
+
+        const coachId = coachProfile.id;
+        if (!cancelled) {
+          setCoachProfileId(coachId);
+          setAverageRating(coachProfile.average_rating ?? null);
+        }
+
+        const defaultCurrency = coachProfile.currency || 'USD';
+
+        // 2. Fetch clients, sessions, and feedback in parallel
+        const [clientsResult, sessionsResult] = await Promise.all([
+          // Coaching clients with user info
+          supabase
+            .from('coaching_clients')
+            .select(`
+              id,
+              sailor_id,
+              status,
+              goals,
+              skill_level,
+              primary_boat_class,
+              total_sessions,
+              last_session_date,
+              coach_notes,
+              sailor:users!coaching_clients_sailor_id_fkey (
+                id,
+                full_name,
+                email,
+                avatar_url
+              )
+            `)
+            .eq('coach_id', coachId),
+
+          // Coaching sessions with sailor info
+          supabase
+            .from('coaching_sessions')
+            .select(`
+              id,
+              sailor_id,
+              session_type,
+              scheduled_at,
+              completed_at,
+              duration_minutes,
+              status,
+              fee_amount,
+              currency,
+              paid,
+              payment_status,
+              session_notes,
+              homework,
+              sailor:users!coaching_sessions_sailor_id_fkey (
+                id,
+                full_name,
+                email,
+                avatar_url
+              )
+            `)
+            .eq('coach_id', coachId)
+            .order('scheduled_at', { ascending: false }),
+        ]);
+
+        if (cancelled) return;
+
+        // Handle clients
+        if (clientsResult.error) {
+          console.warn('Error fetching coaching clients:', clientsResult.error.message);
+        }
+
+        const processedClients: CoachClient[] = (clientsResult.data ?? []).map((row: any) => {
+          const sailorUser = row.sailor;
+          return {
+            id: row.id,
+            sailor_id: row.sailor_id,
+            name: sailorUser?.full_name || 'Unknown',
+            email: sailorUser?.email || '',
+            avatar: sailorUser?.avatar_url || undefined,
+            skill_level: row.skill_level || 'beginner',
+            status: row.status || 'active',
+            primary_boat_class: row.primary_boat_class || undefined,
+            goals: row.goals || undefined,
+            last_session_date: row.last_session_date || undefined,
+            total_sessions: row.total_sessions ?? 0,
+            coach_notes: row.coach_notes || undefined,
+          };
+        });
+
+        // Handle sessions
+        if (sessionsResult.error) {
+          console.warn('Error fetching coaching sessions:', sessionsResult.error.message);
+        }
+
+        const rawSessions = sessionsResult.data ?? [];
+
+        const processedSessions: CoachSession[] = rawSessions.map((row: any) => {
+          const sailorUser = row.sailor;
+          return {
+            id: row.id,
+            sailor_id: row.sailor_id,
+            sailor_name: sailorUser?.full_name || 'Unknown',
+            sailor_avatar: sailorUser?.avatar_url || undefined,
+            session_type: row.session_type || 'general',
+            scheduled_at: row.scheduled_at,
+            completed_at: row.completed_at || undefined,
+            duration_minutes: row.duration_minutes ?? 60,
+            status: row.status || 'pending',
+            fee_amount: row.fee_amount ?? 0,
+            currency: row.currency || defaultCurrency,
+            paid: row.paid ?? false,
+            payment_status: row.payment_status || undefined,
+            session_notes: row.session_notes || undefined,
+            homework: row.homework || undefined,
+          };
+        });
+
+        // 3. Fetch session feedback for this coach's sessions
+        const sessionIds = rawSessions.map((s: any) => s.id);
+        let processedFeedback: SessionFeedbackEntry[] = [];
+
+        if (sessionIds.length > 0) {
+          const { data: feedbackData, error: feedbackError } = await supabase
+            .from('session_feedback')
+            .select('id, session_id, rating, feedback_text, created_at')
+            .in('session_id', sessionIds)
+            .order('created_at', { ascending: false });
+
+          if (feedbackError) {
+            console.warn('Error fetching session feedback:', feedbackError.message);
+          }
+
+          processedFeedback = (feedbackData ?? []).map((fb: any) => ({
+            id: fb.id,
+            session_id: fb.session_id,
+            rating: fb.rating,
+            feedback_text: fb.feedback_text || undefined,
+            created_at: fb.created_at,
+          }));
+        }
+
+        if (cancelled) return;
+
+        // 4. Calculate earnings from completed sessions
+        const now = new Date();
+        const monthStart = startOfMonth(now).toISOString();
+        const prevMonthStart = startOfPreviousMonth(now).toISOString();
+        const prevMonthEnd = endOfPreviousMonth(now).toISOString();
+        const weekAgo = oneWeekAgo().toISOString();
+        const twoWeekAgo = twoWeeksAgo().toISOString();
+
+        const completedPaidSessions = rawSessions.filter(
+          (s: any) => s.status === 'completed' && s.paid === true
+        );
+
+        // Current month earnings
+        const currentMonthEarnings = completedPaidSessions
+          .filter((s: any) => s.completed_at && s.completed_at >= monthStart)
+          .reduce((sum: number, s: any) => sum + (s.fee_amount ?? 0), 0);
+
+        // Previous month earnings
+        const previousMonthEarnings = completedPaidSessions
+          .filter(
+            (s: any) =>
+              s.completed_at &&
+              s.completed_at >= prevMonthStart &&
+              s.completed_at <= prevMonthEnd
+          )
+          .reduce((sum: number, s: any) => sum + (s.fee_amount ?? 0), 0);
+
+        // Current week earnings
+        const currentWeekEarnings = completedPaidSessions
+          .filter((s: any) => s.completed_at && s.completed_at >= weekAgo)
+          .reduce((sum: number, s: any) => sum + (s.fee_amount ?? 0), 0);
+
+        // Previous week earnings
+        const previousWeekEarnings = completedPaidSessions
+          .filter(
+            (s: any) =>
+              s.completed_at &&
+              s.completed_at >= twoWeekAgo &&
+              s.completed_at < weekAgo
+          )
+          .reduce((sum: number, s: any) => sum + (s.fee_amount ?? 0), 0);
+
+        // Outstanding: completed but not paid
+        const totalOutstanding = rawSessions
+          .filter((s: any) => s.status === 'completed' && !s.paid)
+          .reduce((sum: number, s: any) => sum + (s.fee_amount ?? 0), 0);
+
+        // Simple projection: if we have a partial month, extrapolate linearly
+        const dayOfMonth = now.getDate();
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const projectedMonthly =
+          dayOfMonth > 0
+            ? Math.round((currentMonthEarnings / dayOfMonth) * daysInMonth)
+            : 0;
+
+        // Compute average rating from feedback if profile rating not set
+        let computedRating = coachProfile.average_rating ?? null;
+        if (computedRating === null && processedFeedback.length > 0) {
+          const sum = processedFeedback.reduce((acc, fb) => acc + fb.rating, 0);
+          computedRating = Math.round((sum / processedFeedback.length) * 10) / 10;
+        }
+
+        if (!cancelled) {
+          setClients(processedClients);
+          setSessions(processedSessions);
+          setFeedback(processedFeedback);
+          setAverageRating(computedRating);
+          setEarnings({
+            monthly: {
+              current: currentMonthEarnings,
+              previous: previousMonthEarnings,
+              projected: projectedMonthly,
+            },
+            weekly: {
+              current: currentWeekEarnings,
+              previous: previousWeekEarnings,
+            },
+            totalOutstanding,
+            currency: defaultCurrency,
+          });
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Error fetching coach dashboard data:', err);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, refetchKey]);
+
+  return {
+    coachProfileId,
+    clients,
+    sessions,
+    feedback,
+    earnings,
+    averageRating,
+    loading,
+    error,
+    refetch,
+  };
 }

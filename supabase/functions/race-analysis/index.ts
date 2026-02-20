@@ -170,6 +170,32 @@ Deno.serve(async (req: Request) => {
       .order('created_at', { ascending: false })
       .limit(10);
 
+    // Compute GPS track summary (if track_points exist)
+    const trackSummary = computeTrackSummary(raceData.track_points);
+
+    // Fetch pre-race plan data (from sailor_race_preparation and regatta prep_notes)
+    let prepData = null;
+    let regattaPrepNotes: string | null = null;
+
+    if (raceData.regatta_id) {
+      // Fetch regatta-level prep notes
+      const { data: regatta } = await supabaseAdmin
+        .from('regattas')
+        .select('prep_notes')
+        .eq('id', raceData.regatta_id)
+        .maybeSingle();
+      regattaPrepNotes = regatta?.prep_notes || null;
+
+      // Fetch structured race preparation (strategies)
+      const { data: prep } = await supabaseAdmin
+        .from('sailor_race_preparation')
+        .select('prestart_strategy, start_strategy, upwind_strategy, windward_mark_strategy, downwind_strategy, leeward_mark_strategy, finish_strategy, rig_tuning_strategy, rig_notes')
+        .eq('race_event_id', raceData.regatta_id)
+        .eq('sailor_id', user.id)
+        .maybeSingle();
+      prepData = prep;
+    }
+
     // Call Claude API for race analysis
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!anthropicApiKey) {
@@ -179,7 +205,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const prompt = buildRaceAnalysisPrompt(enrichedRaceData, pastLearnings || []);
+    const prompt = buildRaceAnalysisPrompt(enrichedRaceData, pastLearnings || [], trackSummary, prepData, regattaPrepNotes);
 
     const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -189,7 +215,7 @@ Deno.serve(async (req: Request) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 4096,
         messages: [{
           role: 'user',
@@ -234,9 +260,10 @@ Deno.serve(async (req: Request) => {
         tactical_decisions: analysis.tactical_decisions,
         boat_handling: analysis.boat_handling,
         recommendations: analysis.recommendations,
+        plan_vs_execution: analysis.plan_vs_execution || null,
         confidence_score: analysis.confidence_score,
-        model_used: 'claude-3-haiku-20240307',
-        analysis_version: '1.0',
+        model_used: 'claude-sonnet-4-20250514',
+        analysis_version: '2.0',
       })
       .select()
       .single();
@@ -274,6 +301,186 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+/**
+ * Compute summary stats from GPS track points.
+ * Avoids sending raw points (too many tokens) — sends derived metrics instead.
+ */
+function computeTrackSummary(trackPoints: any[]): {
+  totalDistanceNm: number;
+  averageSpeedKts: number;
+  maxSpeedKts: number;
+  tackCount: number;
+  gybeCount: number;
+  legSummaries: { legNumber: number; heading: string; durationSeconds: number; distanceNm: number }[];
+} | null {
+  if (!trackPoints || trackPoints.length < 2) return null;
+
+  const METERS_PER_NM = 1852;
+  const HEADING_CHANGE_THRESHOLD = 60; // degrees — indicates tack or gybe
+
+  let totalDistanceMeters = 0;
+  let maxSpeedMs = 0;
+  const speeds: number[] = [];
+  const maneuvers: { index: number; headingChange: number; type: 'tack' | 'gybe' }[] = [];
+
+  // Leg tracking: split on heading changes > threshold
+  const legs: { startIndex: number; endIndex: number; heading: number; startTime: string; endTime: string }[] = [];
+  let currentLegStart = 0;
+
+  for (let i = 1; i < trackPoints.length; i++) {
+    const prev = trackPoints[i - 1];
+    const curr = trackPoints[i];
+
+    // Distance using Haversine
+    const dLat = (curr.lat - prev.lat) * Math.PI / 180;
+    const dLng = (curr.lng - prev.lng) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(prev.lat * Math.PI / 180) * Math.cos(curr.lat * Math.PI / 180) *
+      Math.sin(dLng / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const segmentDistance = 6371000 * c; // meters
+    totalDistanceMeters += segmentDistance;
+
+    // Speed
+    if (curr.speed != null && curr.speed > 0) {
+      speeds.push(curr.speed);
+      if (curr.speed > maxSpeedMs) maxSpeedMs = curr.speed;
+    }
+
+    // Heading change detection
+    if (prev.heading != null && curr.heading != null) {
+      let headingChange = Math.abs(curr.heading - prev.heading);
+      if (headingChange > 180) headingChange = 360 - headingChange;
+
+      if (headingChange > HEADING_CHANGE_THRESHOLD) {
+        // Determine tack vs gybe based on whether heading crosses upwind/downwind
+        // Simplified: heading changes while going roughly upwind = tack, downwind = gybe
+        const avgHeading = (prev.heading + curr.heading) / 2;
+        const type = headingChange > 90 ? 'tack' : 'gybe';
+        maneuvers.push({ index: i, headingChange, type });
+
+        // Close current leg, start new one
+        legs.push({
+          startIndex: currentLegStart,
+          endIndex: i - 1,
+          heading: prev.heading,
+          startTime: trackPoints[currentLegStart].timestamp,
+          endTime: prev.timestamp,
+        });
+        currentLegStart = i;
+      }
+    }
+  }
+
+  // Close final leg
+  legs.push({
+    startIndex: currentLegStart,
+    endIndex: trackPoints.length - 1,
+    heading: trackPoints[trackPoints.length - 1].heading ?? 0,
+    startTime: trackPoints[currentLegStart].timestamp,
+    endTime: trackPoints[trackPoints.length - 1].timestamp,
+  });
+
+  const avgSpeedMs = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
+
+  // Convert to nautical units
+  const msToKts = (ms: number) => ms * 3600 / METERS_PER_NM;
+
+  const legSummaries = legs.slice(0, 20).map((leg, idx) => {
+    // Compute leg distance
+    let legDist = 0;
+    for (let i = leg.startIndex + 1; i <= leg.endIndex; i++) {
+      const prev = trackPoints[i - 1];
+      const curr = trackPoints[i];
+      const dLat = (curr.lat - prev.lat) * Math.PI / 180;
+      const dLng = (curr.lng - prev.lng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(prev.lat * Math.PI / 180) * Math.cos(curr.lat * Math.PI / 180) *
+        Math.sin(dLng / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      legDist += 6371000 * c;
+    }
+    const legDuration = (new Date(leg.endTime).getTime() - new Date(leg.startTime).getTime()) / 1000;
+    const headingLabel = leg.heading != null
+      ? `${Math.round(leg.heading)}°`
+      : 'unknown';
+    return {
+      legNumber: idx + 1,
+      heading: headingLabel,
+      durationSeconds: Math.round(legDuration),
+      distanceNm: parseFloat((legDist / METERS_PER_NM).toFixed(2)),
+    };
+  });
+
+  return {
+    totalDistanceNm: parseFloat((totalDistanceMeters / METERS_PER_NM).toFixed(2)),
+    averageSpeedKts: parseFloat(msToKts(avgSpeedMs).toFixed(1)),
+    maxSpeedKts: parseFloat(msToKts(maxSpeedMs).toFixed(1)),
+    tackCount: maneuvers.filter(m => m.type === 'tack').length,
+    gybeCount: maneuvers.filter(m => m.type === 'gybe').length,
+    legSummaries,
+  };
+}
+
+/**
+ * Format GPS track summary for inclusion in prompt
+ */
+function formatTrackSummary(trackSummary: ReturnType<typeof computeTrackSummary>): string {
+  if (!trackSummary) return '';
+
+  const legDetails = trackSummary.legSummaries
+    .map(l => `  Leg ${l.legNumber}: heading ${l.heading}, ${l.distanceNm}nm, ${Math.round(l.durationSeconds / 60)}min`)
+    .join('\n');
+
+  return `
+GPS Track Data Summary:
+- Total distance sailed: ${trackSummary.totalDistanceNm} nm
+- Average speed: ${trackSummary.averageSpeedKts} kts
+- Max speed: ${trackSummary.maxSpeedKts} kts
+- Tacks detected: ${trackSummary.tackCount}
+- Gybes detected: ${trackSummary.gybeCount}
+- Number of legs: ${trackSummary.legSummaries.length}
+${legDetails ? `\nLeg breakdown:\n${legDetails}` : ''}
+
+Use this track data to validate the sailor's self-assessment and provide objective speed/distance/maneuver insights.
+
+`;
+}
+
+/**
+ * Format pre-race plan for inclusion in prompt
+ */
+function formatPreRacePlan(prepData: any, regattaPrepNotes: string | null): string {
+  const sections: string[] = [];
+
+  if (regattaPrepNotes) {
+    sections.push(`Regatta Prep Notes: ${regattaPrepNotes}`);
+  }
+
+  if (prepData) {
+    if (prepData.prestart_strategy) sections.push(`Pre-start strategy: ${prepData.prestart_strategy}`);
+    if (prepData.start_strategy) sections.push(`Start strategy: ${prepData.start_strategy}`);
+    if (prepData.upwind_strategy) sections.push(`Upwind strategy: ${prepData.upwind_strategy}`);
+    if (prepData.windward_mark_strategy) sections.push(`Windward mark strategy: ${prepData.windward_mark_strategy}`);
+    if (prepData.downwind_strategy) sections.push(`Downwind strategy: ${prepData.downwind_strategy}`);
+    if (prepData.leeward_mark_strategy) sections.push(`Leeward mark strategy: ${prepData.leeward_mark_strategy}`);
+    if (prepData.finish_strategy) sections.push(`Finish strategy: ${prepData.finish_strategy}`);
+    if (prepData.rig_tuning_strategy) sections.push(`Rig tuning strategy: ${prepData.rig_tuning_strategy}`);
+    if (prepData.rig_notes) sections.push(`Rig notes: ${prepData.rig_notes}`);
+  }
+
+  if (sections.length === 0) return '';
+
+  return `
+Sailor's Pre-Race Plan:
+The sailor documented these plans/strategies BEFORE the race.
+Compare what they planned vs what actually happened during execution.
+
+${sections.join('\n')}
+
+`;
+}
 
 /**
  * Format past learnings for inclusion in prompt
@@ -453,7 +660,13 @@ ${formattedSections.join('\n\n')}
 /**
  * Build a comprehensive prompt for race analysis
  */
-function buildRaceAnalysisPrompt(raceData: any, pastLearnings: any[] = []): string {
+function buildRaceAnalysisPrompt(
+  raceData: any,
+  pastLearnings: any[] = [],
+  trackSummary: ReturnType<typeof computeTrackSummary> = null,
+  prepData: any = null,
+  regattaPrepNotes: string | null = null,
+): string {
   const courseName = raceData.race_courses?.name || 'Unknown Course';
   const duration = raceData.end_time
     ? (new Date(raceData.end_time).getTime() - new Date(raceData.start_time).getTime()) / 1000 / 60
@@ -463,6 +676,10 @@ function buildRaceAnalysisPrompt(raceData: any, pastLearnings: any[] = []): stri
   // Use new debrief responses if available, fall back to legacy phase ratings
   const debriefContext = formatDebriefResponses(raceData.debrief_responses);
   const phaseRatingsContext = debriefContext || formatPhaseRatings(raceData.phase_ratings);
+  const trackContext = formatTrackSummary(trackSummary);
+  const prePlanContext = formatPreRacePlan(prepData, regattaPrepNotes);
+
+  const hasPreRacePlan = prePlanContext.length > 0;
 
   return `You are an expert sailing coach analyzing a completed race. Provide detailed performance analysis.
 
@@ -471,14 +688,14 @@ Race Details:
 - Duration: ${duration.toFixed(1)} minutes
 - Wind Conditions: ${raceData.wind_speed_knots || 'Unknown'} knots from ${raceData.wind_direction_degrees || 'Unknown'}°
 - Weather: ${raceData.weather_description || 'Not recorded'}
-${phaseRatingsContext}${learningsContext}
+${trackContext}${prePlanContext}${phaseRatingsContext}${learningsContext}
 Analyze this race and provide feedback. Pay special attention to the sailor's self-assessments above - your analysis should:
 1. Validate their perceptions where appropriate
 2. Offer specific insights on phases they rated lower or mentioned issues
 3. Suggest ways to build on phases they rated higher or mentioned success
 4. Reference their key learnings and focus areas for next race
 5. Reference past learnings when relevant, noting improvement or recurring issues
-
+${trackContext ? '6. Use the GPS track data to provide objective analysis of speed, distance, and maneuver efficiency\n' : ''}${hasPreRacePlan ? `${trackContext ? '7' : '6'}. IMPORTANT: Compare the sailor's pre-race plan against their actual execution. What did they stick to? What did they deviate from? Was that deviation smart or a mistake?\n` : ''}
 Format your response as a JSON object with these exact fields:
 {
   "overall_summary": "<2-3 sentence summary of race performance>",
@@ -488,7 +705,7 @@ Format your response as a JSON object with these exact fields:
   "tactical_decisions": "<analysis of key tactical choices during the race>",
   "boat_handling": "<analysis of maneuvers, smoothness, technique>",
   "recommendations": ["<actionable improvement 1>", "<actionable improvement 2>", "<actionable improvement 3>"],
-  "confidence_score": <number 0.0-1.0 indicating confidence in this analysis>
+  "confidence_score": <number 0.0-1.0 indicating confidence in this analysis>${hasPreRacePlan ? ',\n  "plan_vs_execution": "<specific comparison of what the sailor planned before the race vs what they actually did — what they stuck to, what they deviated from, and whether deviations were justified>"' : ''}
 }`;
 }
 

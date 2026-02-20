@@ -32,6 +32,7 @@ export { NotificationBellButton } from './NotificationBellButton';
 // Phase 5 - Goals, Insights, Comparisons, Sharing & Gear Management
 export { GoalsSection } from './GoalsSection';
 export { InsightsCard } from './InsightsCard';
+export { CoachingInsightCard } from './CoachingInsightCard';
 export { ComparisonCard } from './ComparisonCard';
 export { WeeklySummaryCard } from './WeeklySummaryCard';
 export { GearManagementSection } from './GearManagementSection';

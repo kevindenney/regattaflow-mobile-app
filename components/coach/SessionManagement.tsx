@@ -6,16 +6,24 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '../../contexts/AuthContext';
 import { CoachingSession, SessionStatus } from '../../types/coach';
-import { CoachMarketplaceService } from '../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 
 type TabType = 'upcoming' | 'past' | 'cancelled';
 
-export default function SessionManagement() {
+interface SessionManagementProps {
+  /** 'student' shows sessions where user is the sailor, 'coach' shows sessions where user is the coach */
+  role?: 'student' | 'coach';
+}
+
+export default function SessionManagement({ role = 'student' }: SessionManagementProps) {
   const { user } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
   const [sessions, setSessions] = useState<CoachingSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,54 +32,35 @@ export default function SessionManagement() {
     if (user) {
       loadSessions();
     }
-  }, [user]);
+  }, [user, role]);
 
   const loadSessions = async () => {
     if (!user) return;
 
     setLoading(true);
     try {
-      const userSessions = await CoachMarketplaceService.getUserSessions(user.id, 'student');
+      const userSessions = await CoachMarketplaceService.getUserSessions(user.id, role);
       setSessions(userSessions);
     } catch (error) {
       console.error('Error loading sessions:', error);
-      Alert.alert('Error', 'Failed to load your sessions');
+      showAlert('Error', 'Failed to load your sessions');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSessionAction = async (sessionId: string, action: 'cancel' | 'join' | 'reschedule') => {
-    try {
-      switch (action) {
-        case 'cancel':
-          Alert.alert(
-            'Cancel Session',
-            'Are you sure you want to cancel this session?',
-            [
-              { text: 'No', style: 'cancel' },
-              {
-                text: 'Yes, Cancel',
-                style: 'destructive',
-                onPress: async () => {
-                  await CoachMarketplaceService.updateSessionStatus(sessionId, 'cancelled');
-                  loadSessions();
-                },
-              },
-            ]
-          );
-          break;
-        case 'join':
-          Alert.alert('Join Session', 'This would open the video call interface in a real app.');
-          break;
-        case 'reschedule':
-          Alert.alert('Reschedule', 'Rescheduling interface would open here.');
-          break;
-      }
-    } catch (error) {
-      console.error(`Error ${action}ing session:`, error);
-      Alert.alert('Error', `Failed to ${action} session`);
-    }
+  const handleCancelSession = (session: CoachingSession) => {
+    router.push({
+      pathname: '/coach/cancel-session',
+      params: { sessionId: session.id },
+    });
+  };
+
+  const handleCompleteSession = (session: CoachingSession) => {
+    router.push({
+      pathname: '/coach/complete-session',
+      params: { sessionId: session.id },
+    });
   };
 
   const formatDate = (dateString: string) => {
@@ -140,11 +129,18 @@ export default function SessionManagement() {
     }
   };
 
+  /** Cancel is allowed at any time window — the refund amount adjusts based on proximity to session */
   const canCancelSession = (session: CoachingSession) => {
+    return ['pending', 'confirmed'].includes(session.status);
+  };
+
+  /** Complete is available on confirmed sessions whose scheduled time has passed */
+  const canCompleteSession = (session: CoachingSession) => {
     const sessionStart = new Date(session.scheduled_start);
     const now = new Date();
-    const hoursUntilSession = (sessionStart.getTime() - now.getTime()) / (1000 * 60 * 60);
-    return hoursUntilSession > 24 && ['pending', 'confirmed'].includes(session.status);
+    const isPast = sessionStart <= now;
+    const validStatus = ['confirmed', 'scheduled', 'in_progress'].includes(session.status);
+    return isPast && validStatus;
   };
 
   const canJoinSession = (session: CoachingSession) => {
@@ -233,7 +229,7 @@ export default function SessionManagement() {
               {canJoinSession(session) && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.joinButton]}
-                  onPress={() => handleSessionAction(session.id, 'join')}
+                  onPress={() => showAlert('Join Session', 'This would open the video call interface.')}
                 >
                   <Text style={styles.actionButtonText}>Join Session</Text>
                 </TouchableOpacity>
@@ -242,7 +238,7 @@ export default function SessionManagement() {
               {activeTab === 'upcoming' && session.status === 'pending' && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.rescheduleButton]}
-                  onPress={() => handleSessionAction(session.id, 'reschedule')}
+                  onPress={() => showAlert('Reschedule', 'Rescheduling interface would open here.')}
                 >
                   <Text style={[styles.actionButtonText, styles.rescheduleButtonText]}>
                     Reschedule
@@ -250,13 +246,26 @@ export default function SessionManagement() {
                 </TouchableOpacity>
               )}
 
-              {activeTab === 'upcoming' && canCancelSession(session) && (
+              {canCancelSession(session) && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.cancelButton]}
-                  onPress={() => handleSessionAction(session.id, 'cancel')}
+                  onPress={() => handleCancelSession(session)}
                 >
+                  <Ionicons name="close-circle-outline" size={16} color="#FF4444" />
                   <Text style={[styles.actionButtonText, styles.cancelButtonText]}>
                     Cancel
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {canCompleteSession(session) && (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.completeButton]}
+                  onPress={() => handleCompleteSession(session)}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={16} color="#059669" />
+                  <Text style={[styles.actionButtonText, styles.completeButtonText]}>
+                    Complete
                   </Text>
                 </TouchableOpacity>
               )}
@@ -264,7 +273,7 @@ export default function SessionManagement() {
               {activeTab === 'past' && session.status === 'completed' && (
                 <TouchableOpacity
                   style={[styles.actionButton, styles.reviewButton]}
-                  onPress={() => Alert.alert('Review', 'Review interface would open here')}
+                  onPress={() => showAlert('Review', 'Review interface would open here')}
                 >
                   <Text style={[styles.actionButtonText, styles.reviewButtonText]}>
                     Write Review
@@ -353,8 +362,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-    boxShadow: '0px 2px',
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   sessionHeader: {
     flexDirection: 'row',
@@ -431,9 +440,12 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     paddingVertical: 10,
     borderRadius: 8,
-    alignItems: 'center',
   },
   joinButton: {
     backgroundColor: '#00AA33',
@@ -444,9 +456,14 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   cancelButton: {
-    backgroundColor: '#F8F8F8',
+    backgroundColor: '#FEF2F2',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#FECACA',
+  },
+  completeButton: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
   },
   reviewButton: {
     backgroundColor: '#F8F8F8',
@@ -463,6 +480,9 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: '#FF4444',
+  },
+  completeButtonText: {
+    color: '#059669',
   },
   reviewButtonText: {
     color: '#0066CC',

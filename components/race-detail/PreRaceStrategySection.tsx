@@ -33,6 +33,7 @@ import {
   type CoachingSkillKey,
   type SkillDisplayDefinition,
 } from '../coaching/skillInvocation';
+import { RaceCoachingCard } from '@/components/races/RaceCoachingCard';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -58,6 +59,10 @@ interface PreRaceStrategySectionProps {
   raceId?: string;
   raceData?: any;
   racePhase?: RacePhase;
+  /** Boat class for coach filtering */
+  boatClass?: string;
+  /** Race plan data to share with coach */
+  racePlanData?: any;
   onSkillInvoked?: (skillId: CoachingSkillKey, advice: AdviceContent) => void;
 }
 
@@ -73,6 +78,8 @@ export function PreRaceStrategySection({
   raceId,
   raceData,
   racePhase = 'pre-race',
+  boatClass,
+  racePlanData,
   onSkillInvoked,
 }: PreRaceStrategySectionProps) {
   const [selectedSkill, setSelectedSkill] = useState<CoachingSkillKey | null>(null);
@@ -415,6 +422,18 @@ export function PreRaceStrategySection({
               </Text>
             </View>
           </View>
+        </View>
+      )}
+
+      {/* Coaching Card - Prep Context */}
+      {raceId && (
+        <View className="px-4">
+          <RaceCoachingCard
+            raceId={raceId}
+            context="prep"
+            boatClass={boatClass}
+            racePlanData={racePlanData || raceData}
+          />
         </View>
       )}
     </View>

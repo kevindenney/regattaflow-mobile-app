@@ -2,7 +2,7 @@ import { roleHome } from '@/lib/gates';
 import { useAuth } from '@/providers/AuthProvider';
 import { SUPABASE_CONFIG_ERROR } from '@/services/supabase';
 import { router, Stack, useSegments } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 
 const ONBOARDING_ROUTES = new Set([
@@ -24,6 +24,7 @@ const ONBOARDING_ROUTES = new Set([
   'coach-onboarding-expertise',
   'coach-onboarding-pricing',
   'coach-onboarding-availability',
+  'coach-onboarding-payment-setup',
   'coach-onboarding-profile-preview',
   'coach-onboarding-stripe-callback',
   'coach-onboarding-complete',
@@ -42,6 +43,20 @@ export default function AuthLayout() {
   const currentRoute = segments[segments.length - 1];
   const onboardingRoutes = ONBOARDING_ROUTES;
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Track if we've entered an onboarding flow - once in, stay in until explicitly navigating out
+  const hasEnteredOnboarding = useRef(false);
+
+  // Check if any segment is an onboarding route (handles navigation transitions)
+  const isInOnboardingFlow = segments.some(segment => onboardingRoutes.has(segment));
+
+  // Once we enter onboarding, mark it and stay in until we explicitly leave the (auth) group
+  if (isInOnboardingFlow && !hasEnteredOnboarding.current) {
+    hasEnteredOnboarding.current = true;
+  }
+
+  // Check if we're in the (auth) group at all
+  const isInAuthGroup = segments.includes('(auth)');
 
   // Guest mode: Allow access to races tab without authentication
   const isGuestMode = state === 'guest' || isGuest;
@@ -71,7 +86,10 @@ export default function AuthLayout() {
     } else if (
       state === 'ready' &&
       userType &&
-      !onboardingRoutes.has(currentRoute ?? '')
+      currentRoute && // Don't redirect during navigation transitions when route is not yet determined
+      !isInOnboardingFlow && // Use the broader check that looks at all segments
+      !hasEnteredOnboarding.current && // If we've ever entered onboarding this session, don't redirect
+      !isInAuthGroup // If we're in the (auth) group at all, don't redirect - let the flow complete
     ) {
       const destination = roleHome(userType);
       const destinationSegment = destination.split('/').pop();
@@ -82,7 +100,7 @@ export default function AuthLayout() {
 
       router.replace(destination);
     }
-  }, [state, userType, currentRoute]);
+  }, [state, userType, currentRoute, isInOnboardingFlow, isInAuthGroup]);
 
   // Show config error immediately if Supabase can't initialize
   if (SUPABASE_CONFIG_ERROR) {
@@ -141,12 +159,10 @@ export default function AuthLayout() {
     return null;
   }
 
-  // Don't render if user already has a role (will redirect above)
-  const isOnboardingRoute = onboardingRoutes.has(currentRoute ?? '');
-
-  // Only return null if user is ready AND has a userType
+  // Only return null if user is ready AND has a userType AND not in onboarding flow
   // If userType is missing, we need to show the page (login/signup)
-  if (state === 'ready' && userType && !isOnboardingRoute) {
+  // Also don't return null if we've entered onboarding or are in the (auth) group
+  if (state === 'ready' && userType && !isInOnboardingFlow && !hasEnteredOnboarding.current && !isInAuthGroup) {
     return null;
   }
 

@@ -7,9 +7,7 @@
  * Uses the race-strategy-analyst Claude Skill for expert tactical analysis.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import * as fs from 'fs';
-import * as path from 'path';
+import { supabase } from '@/services/supabase';
 import type {
   RaceAnalysis,
   CoachingFeedback,
@@ -20,20 +18,10 @@ import type {
 import type { Race } from '@/types';
 
 export class RaceCoachingService {
-  // private anthropic: Anthropic; // Disabled for web compatibility
   private playbookFrameworks: RegattaFlowPlaybookFrameworkData | null = null;
 
-  constructor(apiKey?: string) {
-    // NOTE: Anthropic SDK disabled for web compatibility
-    // Requires backend API endpoint for production
-    /*
-    this.anthropic = new Anthropic({
-      apiKey:
-        apiKey ||
-        process.env.ANTHROPIC_API_KEY ||
-        process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY,
-    });
-    */
+  constructor() {
+    // BUG 27: Anthropic SDK removed — AI calls routed through Supabase Edge Function
   }
 
   /**
@@ -661,14 +649,60 @@ Provide a 2-3 paragraph overall assessment in The teaching style:
 
 Use The voice: quantified, tactical, encouraging, with his signature phrases when appropriate.`;
 
-    const response = await this.anthropic.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: 512,
-      temperature: 0.7,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // BUG 27: Route AI call through Supabase Edge Function (same pattern as race-analysis)
+    try {
+      const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt,
+          max_tokens: 512,
+        },
+      });
 
-    return response.content[0].type === 'text' ? response.content[0].text : '';
+      if (error) {
+        console.error('Edge function error for coaching assessment:', error);
+        return this.buildFallbackAssessment(feedback, scores);
+      }
+
+      return data?.text || this.buildFallbackAssessment(feedback, scores);
+    } catch (err) {
+      console.error('Failed to generate AI assessment:', err);
+      return this.buildFallbackAssessment(feedback, scores);
+    }
+  }
+
+  /**
+   * BUG 27: Fallback assessment when AI edge function is unavailable
+   */
+  private buildFallbackAssessment(
+    feedback: CoachingFeedback[],
+    scores: FrameworkScores
+  ): string {
+    const highImpact = feedback.filter((f) => f.impact === 'high');
+    const overallScore = scores.overall_framework_adoption ?? 0;
+
+    const strengths = feedback
+      .filter((f) => f.execution_score && f.execution_score >= 80)
+      .map((f) => f.playbook_framework);
+
+    const improvements = feedback
+      .filter((f) => f.execution_score && f.execution_score < 70)
+      .map((f) => f.playbook_framework);
+
+    let assessment = `Overall framework adoption score: ${overallScore}/100. `;
+
+    if (strengths.length > 0) {
+      assessment += `Strong execution in: ${strengths.join(', ')}. `;
+    }
+
+    if (improvements.length > 0) {
+      assessment += `Priority areas for improvement: ${improvements.join(', ')}. `;
+    }
+
+    if (highImpact.length > 0) {
+      assessment += `Focus for next race: ${highImpact[0].next_race_focus}`;
+    }
+
+    return assessment;
   }
 
   /**

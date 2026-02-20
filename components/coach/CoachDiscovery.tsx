@@ -7,11 +7,11 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useRouter } from 'expo-router';
 import { CoachSearchFilters, CoachSearchResult, SkillLevel } from '../../types/coach';
-import { CoachMarketplaceService } from '../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 import CoachCard from './CoachCard';
 import CoachFilters from './CoachFilters';
 
@@ -50,7 +50,7 @@ export default function CoachDiscovery() {
       setPage(pageNum);
     } catch (error) {
       console.error('Error loading coaches:', error);
-      Alert.alert('Error', 'Failed to load coaches. Please try again.');
+      showAlert('Error', 'Failed to load coaches. Please try again.');
     } finally {
       setLoading(false);
     }

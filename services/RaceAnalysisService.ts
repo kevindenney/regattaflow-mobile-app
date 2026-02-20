@@ -18,6 +18,7 @@ export interface AnalysisResult {
   tactical_decisions: string;
   boat_handling: string;
   recommendations: string[];
+  plan_vs_execution: string | null;
   confidence_score: number;
   model_used: string;
   analysis_version: string;

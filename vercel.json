@@ -1,4 +1,8 @@
 {
+  "crons": [
+    { "path": "/api/cron/expire-booking-requests", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/session-reminders", "schedule": "*/15 * * * *" }
+  ],
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "framework": null,

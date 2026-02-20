@@ -58,7 +58,7 @@ export default function CoachOnboardingStripeCallback() {
           .eq('id', coachProfile.id);
 
         setTimeout(() => {
-          router.replace('/(auth)/coach-onboarding-complete');
+          router.replace('/(auth)/coach-onboarding-profile-preview');
         }, 2000);
       } else {
         setStatus('error');

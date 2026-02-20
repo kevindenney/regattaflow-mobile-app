@@ -28,6 +28,35 @@ export interface StripeOnboardingResult {
   error?: string;
 }
 
+export interface PayoutResult {
+  success: boolean;
+  payout_id?: string;
+  amount?: number;
+  currency?: string;
+  estimated_arrival?: string | null;
+  status?: string;
+  error?: string;
+  code?: string;
+  pending_amount?: number;
+  existing_payout?: {
+    id: string;
+    amount: number;
+    currency: string;
+    estimated_arrival: string | null;
+  };
+}
+
+export interface PayoutHistoryItem {
+  id: string;
+  amount: number;
+  currency: string;
+  created: number;
+  arrival_date: number;
+  status: string;
+  type: string;
+  description: string;
+}
+
 export class StripeConnectService {
   /**
    * Check Stripe Connect account status for a coach
@@ -94,11 +123,13 @@ export class StripeConnectService {
         },
       });
 
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error || 'Failed to fetch Stripe balance');
+        const errorData = await response.json().catch(() => ({}));
+        // BUG 3: Propagate error so the UI can distinguish "no balance" from "unavailable"
+        throw new Error(errorData?.error || 'Failed to fetch Stripe balance');
       }
 
+      const data = await response.json();
       return {
         available: typeof data.available === 'number' ? data.available : 0,
         pending: typeof data.pending === 'number' ? data.pending : 0,
@@ -106,7 +137,7 @@ export class StripeConnectService {
       };
     } catch (error) {
       console.error('Error fetching Stripe balance:', error);
-      return { available: 0, pending: 0, currency: 'usd' };
+      throw error;
     }
   }
 
@@ -148,10 +179,12 @@ export class StripeConnectService {
         },
       });
 
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.error || 'Failed to fetch Stripe transactions');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || 'Failed to fetch Stripe transactions');
       }
+
+      const data = await response.json();
 
       return Array.isArray(data?.transactions) ? data.transactions : [];
     } catch (error) {
@@ -305,6 +338,97 @@ export class StripeConnectService {
       return status.requirements?.currently_due || [];
     } catch (error) {
       console.error('Error getting requirements:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Request a payout of all available funds to the coach's bank account
+   */
+  static async requestPayout(coachId: string): Promise<PayoutResult> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      const functionUrl = getSupabaseFunctionUrl('stripe-create-payout');
+
+      const response = await fetch(functionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ coach_id: coachId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || 'Failed to create payout',
+          code: data.code,
+          pending_amount: data.pending_amount,
+          existing_payout: data.existing_payout,
+        };
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error('Error requesting payout:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get the available balance (not pending) for a coach's Stripe account
+   */
+  static async getAvailableBalance(coachId: string): Promise<{
+    available: number;
+    pending: number;
+    currency: string;
+  }> {
+    return this.getBalance(coachId).then(balance => ({
+      available: balance.available,
+      pending: balance.pending,
+      currency: balance.currency || 'usd',
+    }));
+  }
+
+  /**
+   * Get payout history for a coach via the stripe-transactions edge function
+   */
+  static async getPayoutHistory(coachId: string): Promise<PayoutHistoryItem[]> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('User not authenticated');
+      }
+
+      const functionUrl = getSupabaseFunctionUrl('stripe-transactions');
+      const params = new URLSearchParams({
+        coachId,
+        userId: session.user.id,
+      });
+
+      const response = await fetch(`${functionUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch payout history');
+      }
+
+      const data = await response.json();
+      return Array.isArray(data?.payouts) ? data.payouts : [];
+    } catch (error) {
+      console.error('Error fetching payout history:', error);
       return [];
     }
   }

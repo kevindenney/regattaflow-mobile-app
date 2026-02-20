@@ -13,7 +13,15 @@ import type {
   AIChip,
   Scenario
 } from '@/stores/raceConditionsStore';
+import {
+  isAIInFallbackMode,
+  shouldTriggerFallback,
+  activateFallbackMode,
+  getFallbackStatus
+} from '@/lib/utils/aiFallback';
+import { createLogger } from '@/lib/utils/logger';
 
+const logger = createLogger('TacticalAIService');
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 
 // ============================================================================
@@ -74,6 +82,16 @@ class TacticalAIServiceClass {
    * Get tactical recommendations for current race conditions
    */
   async getRecommendations(context: RaceContext): Promise<AIChip[]> {
+    // FIX 3: Check if AI is in fallback mode (credit exhaustion or API overload)
+    if (isAIInFallbackMode()) {
+      const status = getFallbackStatus();
+      logger.debug('AI in fallback mode, returning fallback recommendations', {
+        reason: status.reason,
+        since: status.since?.toISOString()
+      });
+      return this.generateFallbackChips(context);
+    }
+
     // Check cache first
     const cacheKey = this.getCacheKey(context);
     const cached = this.cache.get(cacheKey);
@@ -83,8 +101,14 @@ class TacticalAIServiceClass {
 
     // Validate context
     if (!context.environment || !context.course) {
-      console.warn('[TacticalAIService] Insufficient context for AI recommendations');
+      logger.debug('Insufficient context for AI recommendations');
       return [];
+    }
+
+    // FIX 3: Check if Supabase URL is configured
+    if (!SUPABASE_URL) {
+      logger.warn('Supabase URL not configured, using fallback recommendations');
+      return this.generateFallbackChips(context);
     }
 
     try {
@@ -125,18 +149,105 @@ class TacticalAIServiceClass {
 
       return prioritized;
     } catch (error) {
-      console.error('[TacticalAIService] Failed to get recommendations:', error);
-      return [];
+      // FIX 3: Handle credit exhaustion and API overload gracefully
+      if (shouldTriggerFallback(error)) {
+        const reason = (error as any)?.status === 529
+          ? 'Anthropic API overloaded'
+          : 'AI service unavailable';
+        activateFallbackMode(reason);
+        logger.warn('Activating fallback mode due to API error', { reason });
+        return this.generateFallbackChips(context);
+      }
+
+      logger.error('Failed to get recommendations', { error });
+      return this.generateFallbackChips(context);
     }
   }
 
   /**
+   * FIX 3: Generate fallback tactical chips when AI is unavailable
+   * Provides basic physics-based recommendations without AI
+   */
+  private generateFallbackChips(context: RaceContext): AIChip[] {
+    const chips: AIChip[] = [];
+    const env = context.environment;
+    const course = context.course;
+
+    if (!env || !course) {
+      return [];
+    }
+
+    // Basic tidal awareness chip
+    if (env.current.speed > 0.3) {
+      chips.push({
+        id: `fallback-tide-${Date.now()}`,
+        type: env.current.phase === 'slack' ? 'opportunity' : 'strategic',
+        skill: 'fallback-system',
+        theory: `Current is ${env.current.speed.toFixed(1)} kt ${env.current.phase}. Tidal flow affects boat speed and laylines.`,
+        execution: env.current.phase === 'slack'
+          ? 'Slack water window - good time for channel crossings or mark approaches'
+          : `Account for ${env.current.speed.toFixed(1)} kt current when calculating laylines`,
+        timing: 'Now',
+        confidence: 'moderate',
+        priority: env.current.speed > 1 ? 8 : 5,
+        isPinned: false,
+        createdAt: new Date()
+      });
+    }
+
+    // Basic wind awareness chip
+    if (env.wind.trueSpeed > 0) {
+      const windCategory = env.wind.trueSpeed < 8 ? 'light' :
+                          env.wind.trueSpeed < 15 ? 'medium' : 'heavy';
+      chips.push({
+        id: `fallback-wind-${Date.now()}`,
+        type: 'strategic',
+        skill: 'fallback-system',
+        theory: `${windCategory.charAt(0).toUpperCase() + windCategory.slice(1)} air conditions (${env.wind.trueSpeed.toFixed(0)} kt from ${env.wind.trueDirection}°)`,
+        execution: windCategory === 'light'
+          ? 'Prioritize clear air and minimize maneuvers'
+          : windCategory === 'heavy'
+            ? 'Depower early, maintain control, watch for gusts'
+            : 'Standard sailing techniques apply',
+        timing: 'Throughout race',
+        confidence: 'moderate',
+        priority: 6,
+        isPinned: false,
+        createdAt: new Date()
+      });
+    }
+
+    // Add fallback indicator
+    chips.push({
+      id: `fallback-notice-${Date.now()}`,
+      type: 'caution',
+      skill: 'fallback-system',
+      theory: '⚠️ AI recommendations unavailable',
+      execution: 'Using general sailing principles. Full AI analysis will resume when service is restored.',
+      timing: 'Now',
+      confidence: 'low',
+      priority: 3,
+      isPinned: false,
+      createdAt: new Date()
+    });
+
+    return chips;
+  }
+
+  /**
    * Call a specific Anthropic skill via Supabase Edge Function
+   * FIX 3: Enhanced error handling with fallback mode support
    */
   private async callSkill(
     skillName: string,
     context: RaceContext
   ): Promise<SkillResponse | null> {
+    // FIX 3: Skip skill calls if already in fallback mode
+    if (isAIInFallbackMode()) {
+      logger.debug(`Skipping skill ${skillName} - AI in fallback mode`);
+      return null;
+    }
+
     try {
       const payload = this.buildSkillPayload(skillName, context);
 
@@ -154,15 +265,28 @@ class TacticalAIServiceClass {
         }
       );
 
+      // FIX 3: Check for API overload or credit exhaustion status codes
+      if (response.status === 529 || response.status === 503 || response.status === 402) {
+        const reason = response.status === 529 ? 'API overloaded' :
+                      response.status === 402 ? 'Credit exhaustion' : 'Service unavailable';
+        logger.warn(`Skill ${skillName} unavailable: ${reason}`, { status: response.status });
+        activateFallbackMode(reason);
+        return null;
+      }
+
       if (!response.ok) {
-        console.error(`[TacticalAIService] Skill ${skillName} returned ${response.status}`);
+        logger.warn(`Skill ${skillName} returned error`, { status: response.status });
         return null;
       }
 
       const data = await response.json();
       return data;
     } catch (error) {
-      console.error(`[TacticalAIService] Error calling skill ${skillName}:`, error);
+      // FIX 3: Check if this error should trigger fallback mode
+      if (shouldTriggerFallback(error)) {
+        activateFallbackMode('Skill API error');
+      }
+      logger.debug(`Error calling skill ${skillName}`, { error: (error as Error)?.message });
       return null;
     }
   }

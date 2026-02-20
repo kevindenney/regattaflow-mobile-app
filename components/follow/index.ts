@@ -7,3 +7,4 @@ export { SailorActivityCard } from './SailorActivityCard';
 export { FollowerPostCard } from './FollowerPostCard';
 export { ComposePostSheet } from './ComposePostSheet';
 export { WatchFeed } from './WatchFeed';
+export { DiscoveryFeed } from './DiscoveryFeed';

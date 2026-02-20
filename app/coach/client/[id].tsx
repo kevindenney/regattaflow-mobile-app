@@ -21,7 +21,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Dimensions,
     Image,
     Platform,
@@ -32,7 +31,9 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { LineChart } from 'react-native-chart-kit';
+import { messagingService } from '@/services/MessagingService';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -75,7 +76,7 @@ export default function ClientDetailScreen() {
       setNotes(details?.coach_notes || '');
     } catch (error) {
       console.error('Error loading client details:', error);
-      Alert.alert('Error', 'Failed to load client details');
+      showAlert('Error', 'Failed to load client details');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -95,10 +96,10 @@ export default function ClientDetailScreen() {
     try {
       await coachingService.updateClient(id, { coach_notes: notes });
       setEditingNotes(false);
-      Alert.alert('Success', 'Notes saved successfully');
+      showAlert('Success', 'Notes saved successfully');
     } catch (error) {
       console.error('Error saving notes:', error);
-      Alert.alert('Error', 'Failed to save notes');
+      showAlert('Error', 'Failed to save notes');
     }
   };
 
@@ -480,6 +481,23 @@ export default function ClientDetailScreen() {
               )}
             </View>
           </View>
+
+          {/* Message button */}
+          <TouchableOpacity
+            style={styles.messageButton}
+            onPress={async () => {
+              if (!coachId || !client.sailor_id) return;
+              try {
+                const convoId = await messagingService.getOrCreateConversation(coachId, client.sailor_id);
+                router.push(`/coach/conversation/${convoId}` as any);
+              } catch (err) {
+                showAlert('Error', 'Could not open conversation');
+              }
+            }}
+          >
+            <Ionicons name="chatbubble-outline" size={16} color="#007AFF" />
+            <ThemedText style={styles.messageButtonText}>Message</ThemedText>
+          </TouchableOpacity>
         </View>
 
         {/* Stats */}
@@ -735,6 +753,22 @@ const styles = StyleSheet.create({
   },
   clientInfo: {
     flex: 1,
+  },
+  messageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  messageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
   },
   clientName: {
     fontSize: 22,

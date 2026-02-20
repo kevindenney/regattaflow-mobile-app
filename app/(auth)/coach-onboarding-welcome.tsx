@@ -56,7 +56,7 @@ const languageOptions = ['English', 'Spanish', 'French', 'German', 'Mandarin', '
 
 const CoachOnboardingWelcome = () => {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, capabilities } = useAuth();
   const { state, updateWelcome, loading } = useCoachOnboardingState();
 
   const [fullName, setFullName] = useState('');
@@ -78,6 +78,17 @@ const CoachOnboardingWelcome = () => {
       setSelectedLanguages(state.welcome.languages.length > 0 ? state.welcome.languages : ['English']);
     }
   }, [state.welcome]);
+
+  // Only redirect if user has a published coach profile (true completion)
+  // Don't redirect during onboarding in-progress
+  useEffect(() => {
+    // Check coachProfile from capabilities directly (set by AuthProvider)
+    const coachProfile = capabilities?.coachingProfile;
+    if (coachProfile?.profile_published === true) {
+      // User has completed onboarding - redirect to coach dashboard
+      router.replace('/(tabs)/coaching');
+    }
+  }, [capabilities?.coachingProfile?.profile_published, router]);
 
   const toggleLanguage = (language: string) => {
     if (selectedLanguages.includes(language)) {

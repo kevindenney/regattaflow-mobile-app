@@ -269,6 +269,13 @@ export function CoachSelectionSheet({
             style={{ maxHeight: 300 }}
             showsVerticalScrollIndicator={false}
           >
+            {coaches.length === 0 && (
+              <View style={{ paddingVertical: 32, paddingHorizontal: 20, alignItems: 'center' }}>
+                <Text style={{ fontSize: 15, color: COLORS.secondaryLabel, textAlign: 'center' }}>
+                  No coaches available yet. Browse the coach directory to find your match.
+                </Text>
+              </View>
+            )}
             {coaches.map((coach, idx) => {
               const isLast = idx === coaches.length - 1;
               const relevanceBadge = getRelevanceBadge(coach);

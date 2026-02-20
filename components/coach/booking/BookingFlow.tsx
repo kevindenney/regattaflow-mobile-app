@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import React, { useState } from 'react';
 import {
   View,
@@ -8,14 +6,14 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Alert,
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../../contexts/AuthContext';
 import { CoachProfile, CoachService, CoachingSession } from '../../../types/coach';
-import { CoachMarketplaceService } from '../../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 import PaymentService from '../../../services/PaymentService';
 import BookingCalendar, { BookingSlot } from './BookingCalendar';
 import PaymentConfirmation from '../PaymentConfirmation';
@@ -52,7 +50,7 @@ export default function BookingFlow({ coach, service, visible, onClose, onSucces
 
   const handleDetailsSubmit = () => {
     if (!sessionDetails.goals.trim()) {
-      Alert.alert('Missing Information', 'Please describe your goals for this session.');
+      showAlert('Missing Information', 'Please describe your goals for this session.');
       return;
     }
     setCurrentStep('confirm');
@@ -60,7 +58,7 @@ export default function BookingFlow({ coach, service, visible, onClose, onSucces
 
   const handleBookingConfirm = async () => {
     if (!user || !selectedSlot) {
-      Alert.alert('Error', 'Missing booking information. Please try again.');
+      showAlert('Error', 'Missing booking information. Please try again.');
       return;
     }
 
@@ -100,7 +98,7 @@ export default function BookingFlow({ coach, service, visible, onClose, onSucces
       await handlePaymentProcess(session.id);
     } catch (error) {
       console.error('Error booking session:', error);
-      Alert.alert('Booking Error', 'Failed to book the session. Please try again.');
+      showAlert('Booking Error', 'Failed to book the session. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -126,7 +124,7 @@ export default function BookingFlow({ coach, service, visible, onClose, onSucces
         onSuccess(updatedSession);
       } else {
         // Payment failed or cancelled
-        Alert.alert(
+        showAlertWithButtons(
           'Payment Failed',
           paymentResult.error || 'Payment could not be processed. Please try again.',
           [
@@ -144,7 +142,7 @@ export default function BookingFlow({ coach, service, visible, onClose, onSucces
       }
     } catch (error) {
       console.error('Payment processing error:', error);
-      Alert.alert(
+      showAlertWithButtons(
         'Payment Error',
         'There was an error processing your payment. Please try again.',
         [

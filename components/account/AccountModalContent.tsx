@@ -53,7 +53,7 @@ interface ProfileUpdates {
 }
 
 export default function AccountModalContent() {
-  const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities } = useAuth();
+  const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities, coachProfile } = useAuth();
   // User settings (tips, learning links, units)
   const { settings: userSettings, updateSetting } = useUserSettings();
   const insets = useSafeAreaInsets();
@@ -306,7 +306,7 @@ export default function AccountModalContent() {
             }}
             onPress={() => {
               handleDone();
-              router.push('/onboarding/welcome');
+              router.push('/(auth)/signup');
             }}
           >
             <Text style={{ color: IOS_COLORS.systemBlue, fontSize: 16, fontWeight: '500' }}>Create Account</Text>
@@ -509,31 +509,43 @@ export default function AccountModalContent() {
         </IOSListSection>
 
         {/* ── Coaching ─────────────────────────────────────────── */}
-        {(userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching) || capabilities?.hasCoaching ? (
-          <IOSListSection header="Coaching">
-            {userProfile?.user_type === 'sailor' && !capabilities?.hasCoaching && (
+        <IOSListSection header="Coaching">
+          {(capabilities?.hasCoaching || coachProfile?.profile_published) ? (
+            <>
               <IOSListItem
-                title="Become a Coach"
-                leadingIcon="school-outline"
+                title="Coach Dashboard"
+                leadingIcon="easel-outline"
                 leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
-                trailingAccessory="none"
-                trailingComponent={trailingValue('Coming Soon')}
-                onPress={() => showAlert('Coming Soon', 'Coach features are coming in a future update!')}
+                trailingAccessory="chevron"
+                onPress={() => router.push('/(tabs)/coaching')}
               />
-            )}
-            {capabilities?.hasCoaching && (
               <IOSListItem
-                title="Coach Profile"
+                title="Edit Coach Profile"
                 leadingIcon="person-circle-outline"
                 leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
-                trailingComponent={trailingValue(
-                  capabilities.coachingProfile?.profile_published ? 'Published' : 'Draft'
-                )}
-                onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+                trailingAccessory="chevron"
+                onPress={() => router.push('/coach/profile-edit')}
               />
-            )}
-          </IOSListSection>
-        ) : null}
+            </>
+          ) : coachProfile ? (
+            // Has coach profile but not published - show resume onboarding
+            <IOSListItem
+              title="Complete Coach Setup"
+              leadingIcon="school-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
+              trailingAccessory="chevron"
+              onPress={() => router.push('/(auth)/coach-onboarding-profile-preview')}
+            />
+          ) : (
+            <IOSListItem
+              title="Become a Coach"
+              leadingIcon="school-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+              trailingAccessory="chevron"
+              onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+            />
+          )}
+        </IOSListSection>
 
         {/* ── Support ─────────────────────────────────────────── */}
         <IOSListSection header="Support">

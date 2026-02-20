@@ -290,13 +290,99 @@ export class PushNotificationService {
           data: options.data,
         },
         trigger: options.delaySeconds
-          ? { seconds: options.delaySeconds }
+          ? { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: options.delaySeconds }
           : null,
       });
       return id;
     } catch (error) {
       console.error('Error scheduling notification:', error);
       return null;
+    }
+  }
+
+  /**
+   * Send a push notification to a user via the Supabase Edge Function.
+   * This is the primary method for sending push notifications from the client.
+   * The edge function handles token lookup, Expo Push API calls, and stale token cleanup.
+   *
+   * @param category - Notification category for preference checking (e.g. 'messages', 'booking_requests')
+   */
+  static async sendPushNotification(
+    userId: string,
+    title: string,
+    body: string,
+    data: Record<string, any> = {},
+    category?: string
+  ): Promise<boolean> {
+    // Skip on web
+    if (Platform.OS === 'web') return false;
+
+    try {
+      const { data: result, error } = await supabase.functions.invoke(
+        'send-push-notification',
+        {
+          body: {
+            recipients: [{ userId, title, body, data, category }],
+          },
+        }
+      );
+
+      if (error) {
+        console.error('[Push] Error sending notification:', error);
+        return false;
+      }
+
+      return result?.success ?? false;
+    } catch (error) {
+      console.error('[Push] Error invoking send-push-notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send push notifications to multiple users in a single batch call.
+   */
+  static async sendPushNotificationBatch(
+    recipients: Array<{
+      userId: string;
+      title: string;
+      body: string;
+      data?: Record<string, any>;
+      category?: string;
+    }>
+  ): Promise<boolean> {
+    if (Platform.OS === 'web' || recipients.length === 0) return false;
+
+    try {
+      const { data: result, error } = await supabase.functions.invoke(
+        'send-push-notification',
+        { body: { recipients } }
+      );
+
+      if (error) {
+        console.error('[Push] Error sending batch notification:', error);
+        return false;
+      }
+
+      return result?.success ?? false;
+    } catch (error) {
+      console.error('[Push] Error invoking batch send-push-notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if notifications are enabled for the current device.
+   */
+  static async areNotificationsEnabled(): Promise<boolean> {
+    await initDependencies();
+    if (!isNativeAvailable || !Notifications) return false;
+
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      return status === 'granted';
+    } catch {
+      return false;
     }
   }
 }

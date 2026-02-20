@@ -70,6 +70,8 @@ function InsightItem({
   const handleActionPress = () => {
     if (insight.actionRoute) {
       router.push(insight.actionRoute as any);
+    } else if (onPress) {
+      onPress();
     }
   };
 
@@ -148,7 +150,7 @@ function InsightItem({
         )}
 
         {/* Action Button (if available) */}
-        {insight.actionLabel && insight.actionRoute && (
+        {insight.actionLabel && (
           <Pressable
             style={({ pressed }) => [
               styles.actionButton,
@@ -156,9 +158,9 @@ function InsightItem({
             ]}
             onPress={handleActionPress}
           >
-            <Text style={styles.actionButtonText}>{insight.actionLabel}</Text>
+            <Text style={styles.actionButtonText} numberOfLines={1}>{insight.actionLabel}</Text>
             <Ionicons
-              name="chevron-forward"
+              name={insight.actionRoute ? 'chevron-forward' : 'share-outline'}
               size={14}
               color={IOS_COLORS.systemBlue}
             />
@@ -382,6 +384,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: IOS_COLORS.systemBlue,
+    flexShrink: 1,
   },
   emptyState: {
     alignItems: 'center',

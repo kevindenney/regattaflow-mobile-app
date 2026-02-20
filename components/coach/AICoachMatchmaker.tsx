@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Modal,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
-import { CoachMarketplaceService } from '@/services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 import AICoachMatchingService from '@/services/AICoachMatchingService';
 import { CoachSearchResult, SailorProfile } from '@/types/coach';
 import CoachCard from './CoachCard';
@@ -103,10 +103,9 @@ export default function AICoachMatchmaker() {
       setPreferences(prev => ({ ...prev, learningStyle: analysis.primaryStyle }));
 
       // Show analysis results
-      Alert.alert(
+      showAlert(
         'Learning Style Detected',
-        `Based on your sailing profile, we've identified your primary learning style as ${analysis.primaryStyle}. This helps us match you with compatible coaches.\n\nConfidence: ${(analysis.confidence * 100).toFixed(0)}%`,
-        [{ text: 'Got it' }]
+        `Based on your sailing profile, we've identified your primary learning style as ${analysis.primaryStyle}. This helps us match you with compatible coaches.\n\nConfidence: ${(analysis.confidence * 100).toFixed(0)}%`
       );
     } catch (error) {
       console.error('Error analyzing learning style:', error);
@@ -117,7 +116,7 @@ export default function AICoachMatchmaker() {
 
   const findMatches = async () => {
     if (!sailorProfile || !user) {
-      Alert.alert('Error', 'Please complete your sailing profile first');
+      showAlert('Error', 'Please complete your sailing profile first');
       return;
     }
 
@@ -134,7 +133,7 @@ export default function AICoachMatchmaker() {
       const coaches = searchResponse.coaches ?? [];
 
       if (coaches.length === 0) {
-        Alert.alert('No Coaches Found', 'Try adjusting your preferences to see more options');
+        showAlert('No Coaches Found', 'Try adjusting your preferences to see more options');
         setLoading(false);
         return;
       }
@@ -178,7 +177,7 @@ export default function AICoachMatchmaker() {
       setMatches(matchesWithRecommendations);
     } catch (error) {
       console.error('Error finding matches:', error);
-      Alert.alert('Error', 'Failed to find coach matches. Please try again.');
+      showAlert('Error', 'Failed to find coach matches. Please try again.');
     } finally {
       setLoading(false);
     }

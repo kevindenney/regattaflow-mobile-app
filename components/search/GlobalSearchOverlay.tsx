@@ -372,14 +372,14 @@ export default function GlobalSearchOverlay({
           router.push(`/(tabs)/race/scrollable/${item.id}` as any);
           break;
         case 'sailors':
-          router.push('/(tabs)/discover' as any);
+          router.push('/(tabs)/connect' as any);
           break;
         case 'venues':
           router.push(`/venue/${item.id}` as any);
           break;
         case 'boatClasses':
           // Navigate to discover as a safe fallback
-          router.push('/(tabs)/discover' as any);
+          router.push('/(tabs)/connect' as any);
           break;
       }
     },

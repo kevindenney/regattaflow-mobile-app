@@ -23,6 +23,8 @@ import { LessonProgressService, type LessonProgress } from '@/services/LessonPro
 import { coursePaymentService } from '@/services/CoursePaymentService';
 import CourseCatalogService, { type Course as CatalogCourse } from '@/services/CourseCatalogService';
 import { useAuth } from '@/providers/AuthProvider';
+import { useCoachingStatus } from '@/hooks/useCoachingStatus';
+import { CourseCompletionCoachPrompt } from '@/components/learn/CoachRecruitmentBanner';
 import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
@@ -30,6 +32,7 @@ import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 export default function CourseDetailScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
   const { user } = useAuth();
+  const { relationship: coachingRelationship } = useCoachingStatus();
   const insets = useSafeAreaInsets();
   const [course, setCourse] = useState<LearningCourse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -820,6 +823,11 @@ export default function CourseDetailScreen() {
                 <View style={[styles.progressBarFill, { width: `${courseProgress}%` }]} />
               </View>
             )}
+            {courseProgress === 100 && (
+              <CourseCompletionCoachPrompt
+                courseName={course?.title ?? 'this course'}
+              />
+            )}
           </View>
         ) : (
           <View style={styles.ctaButtonContainer}>
@@ -1275,6 +1283,17 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#10B981',
     borderRadius: 2,
+  },
+  courseCoachPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  courseCoachPromptText: {
+    fontSize: 13,
+    color: IOS_COLORS.systemBlue,
   },
 });
 

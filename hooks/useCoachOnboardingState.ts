@@ -122,13 +122,23 @@ export const useCoachOnboardingState = () => {
           .single();
 
         if (profile) {
+          // Convert experience_years back to display string
+          const yearsToExperience = (years: number | null): string => {
+            if (!years) return '';
+            if (years <= 2) return '1-2 years';
+            if (years <= 5) return '3-5 years';
+            if (years <= 10) return '6-10 years';
+            if (years <= 15) return '10-15 years';
+            return '15+ years';
+          };
+
           // Merge Supabase data with current state
           setState(prev => ({
             ...prev,
             welcome: {
-              fullName: profile.full_name,
-              professionalTitle: profile.professional_title,
-              experience: profile.experience_level,
+              fullName: profile.display_name || '',
+              professionalTitle: profile.professional_title || '',
+              experience: yearsToExperience(profile.experience_years),
               organization: profile.organization || undefined,
               phone: profile.phone || undefined,
               languages: profile.languages || [],
@@ -247,14 +257,24 @@ export const useCoachOnboardingState = () => {
       // Combine expertise areas and specialties into specializations array
       const specializations = [...state.expertise.areas, ...state.expertise.specialties];
 
+      // Convert experience string to years number
+      const experienceToYears = (exp: string): number => {
+        if (exp.includes('1-2')) return 2;
+        if (exp.includes('3-5')) return 5;
+        if (exp.includes('6-10')) return 10;
+        if (exp.includes('10-15')) return 15;
+        if (exp.includes('15+') || exp.includes('Olympic') || exp.includes('Professional')) return 20;
+        return 5; // default
+      };
+
       // 1. Create or update coach profile
       const { data: profile, error: profileError } = await supabase
         .from('coach_profiles')
         .upsert({
           user_id: user.id,
-          full_name: state.welcome.fullName,
+          display_name: state.welcome.fullName,
           professional_title: state.welcome.professionalTitle,
-          experience_level: state.welcome.experience,
+          experience_years: experienceToYears(state.welcome.experience),
           organization: state.welcome.organization || null,
           phone: state.welcome.phone || null,
           languages: state.welcome.languages,
@@ -329,7 +349,7 @@ export const useCoachOnboardingState = () => {
       setState(prev => ({ ...prev, saving: false, error: error.message || 'Failed to save onboarding data' }));
       return { success: false, error: error.message || 'Failed to save onboarding data' };
     }
-  }, [user, state.welcome, state.availability, state.pricing]);
+  }, [user, state.welcome, state.expertise, state.availability, state.pricing]);
 
   const publishProfile = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
     if (!user) {

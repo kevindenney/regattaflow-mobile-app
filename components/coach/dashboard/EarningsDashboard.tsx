@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
-import { CoachMarketplaceService } from '@/services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 
 interface EarningsPeriod {
   totalEarnings: number;

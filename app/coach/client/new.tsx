@@ -8,7 +8,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     ScrollView,
     StyleSheet,
@@ -16,6 +15,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 type CoachingClientSkillLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 type CoachingClientStatus = 'active' | 'inactive' | 'completed';
@@ -52,7 +52,7 @@ export default function NewClientScreen() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      Alert.alert('Search Required', 'Enter a sailor name or email to search.');
+      showAlert('Search Required', 'Enter a sailor name or email to search.');
       return;
     }
 
@@ -61,11 +61,11 @@ export default function NewClientScreen() {
       const results = await coachingService.searchSailors(searchQuery.trim());
       setSearchResults(results);
       if (!results.length) {
-        Alert.alert('No Sailors Found', 'Try a different name or email address.');
+        showAlert('No Sailors Found', 'Try a different name or email address.');
       }
     } catch (error) {
       console.error('Error searching sailors:', error);
-      Alert.alert('Search Failed', 'Unable to search sailors right now. Please try again.');
+      showAlert('Search Failed', 'Unable to search sailors right now. Please try again.');
     } finally {
       setSearching(false);
     }
@@ -73,12 +73,12 @@ export default function NewClientScreen() {
 
   const handleCreateClient = async () => {
     if (!coachId) {
-      Alert.alert('Coach Account Required', 'Switch to a coach profile to add clients.');
+      showAlert('Coach Account Required', 'Switch to a coach profile to add clients.');
       return;
     }
 
     if (!selectedSailor) {
-      Alert.alert('Select a Sailor', 'Choose a sailor from the search results first.');
+      showAlert('Select a Sailor', 'Choose a sailor from the search results first.');
       return;
     }
 
@@ -95,7 +95,7 @@ export default function NewClientScreen() {
       router.replace(`/coach/client/${newClient.id}`);
     } catch (error) {
       console.error('Error creating client:', error);
-      Alert.alert('Unable to Create Client', 'Please try again in a moment.');
+      showAlert('Unable to Create Client', 'Please try again in a moment.');
     } finally {
       setSaving(false);
     }

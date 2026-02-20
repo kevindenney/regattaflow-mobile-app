@@ -23,6 +23,7 @@ import {
   Clock,
   Award,
   RefreshCw,
+  GitCompare,
 } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { RaceAnalysisService } from '@/services/RaceAnalysisService';
@@ -42,6 +43,7 @@ interface AICoachAnalysis {
   tactical_decisions: string;
   boat_handling: string;
   recommendations: string[];
+  plan_vs_execution: string | null;
   confidence_score: number;
   created_at: string;
 }
@@ -292,6 +294,19 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
           </View>
           <Text className="text-gray-700 leading-6">{analysis.boat_handling}</Text>
         </View>
+
+        {/* Plan vs Execution */}
+        {analysis.plan_vs_execution && (
+          <View className="bg-indigo-50 rounded-lg p-4 mb-4 border-2 border-indigo-200">
+            <View className="flex-row items-center mb-3">
+              <GitCompare size={24} color="#6366f1" />
+              <Text className="text-lg font-bold text-indigo-900 ml-2">
+                Plan vs Execution
+              </Text>
+            </View>
+            <Text className="text-indigo-900 leading-6">{analysis.plan_vs_execution}</Text>
+          </View>
+        )}
 
         {/* Recommendations */}
         {analysis.recommendations && analysis.recommendations.length > 0 && (

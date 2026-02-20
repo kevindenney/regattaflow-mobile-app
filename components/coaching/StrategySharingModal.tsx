@@ -6,7 +6,6 @@ import * as Clipboard from 'expo-clipboard';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Image,
     Modal,
     Platform,
@@ -19,6 +18,7 @@ import {
     Share,
     Linking,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 const logger = createLogger('StrategySharingModal');
 
@@ -494,17 +494,17 @@ export function StrategySharingModal({
 
       if (success) {
         onShareComplete?.('coach', coach.display_name);
-        Alert.alert(
-          'Strategy Shared! ✅',
+        showAlertWithButtons(
+          'Strategy Shared!',
           `Your pre-race strategy has been shared with ${coach.display_name}. They will be notified and can provide feedback.`,
           [{ text: 'OK', onPress: onClose }]
         );
       } else {
-        Alert.alert('Error', 'Failed to share strategy. Please try again.');
+        showAlert('Error', 'Failed to share strategy. Please try again.');
       }
     } catch (error) {
       logger.error('Failed to share with coach:', error);
-      Alert.alert('Error', 'Failed to share strategy. Please try again.');
+      showAlert('Error', 'Failed to share strategy. Please try again.');
     } finally {
       setSharing(false);
     }
@@ -512,7 +512,7 @@ export function StrategySharingModal({
 
   const handleShareWithCrew = async () => {
     if (selectedCrew.length === 0) {
-      Alert.alert('Select Crew', 'Please select at least one crew member to share with.');
+      showAlert('Select Crew', 'Please select at least one crew member to share with.');
       return;
     }
 
@@ -541,14 +541,14 @@ export function StrategySharingModal({
         .join(', ');
 
       onShareComplete?.('crew', crewNames);
-      Alert.alert(
-        'Strategy Shared! ✅',
+      showAlertWithButtons(
+        'Strategy Shared!',
         `Your strategy has been shared with ${crewNames}.`,
         [{ text: 'OK', onPress: onClose }]
       );
     } catch (error) {
       logger.error('Failed to share with crew:', error);
-      Alert.alert('Error', 'Failed to share strategy. Please try again.');
+      showAlert('Error', 'Failed to share strategy. Please try again.');
     } finally {
       setSharing(false);
     }
@@ -558,10 +558,10 @@ export function StrategySharingModal({
     try {
       const text = generateShareableText();
       await Clipboard.setStringAsync(text);
-      Alert.alert('Copied! ✅', 'Strategy copied to clipboard');
+      showAlert('Copied!', 'Strategy copied to clipboard');
     } catch (error) {
       logger.error('Failed to copy:', error);
-      Alert.alert('Error', 'Failed to copy to clipboard');
+      showAlert('Error', 'Failed to copy to clipboard');
     }
   };
 
@@ -575,7 +575,7 @@ export function StrategySharingModal({
           await nav.share({ title, text });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(text);
-          Alert.alert('Copied', 'Strategy copied to clipboard');
+          showAlert('Copied', 'Strategy copied to clipboard');
         }
       } else {
         await Share.share({ message: text, title });
@@ -598,11 +598,11 @@ export function StrategySharingModal({
         await Linking.openURL(url);
         onShareComplete?.('external', 'WhatsApp');
       } else {
-        Alert.alert('WhatsApp Not Available', 'WhatsApp is not installed on this device.');
+        showAlert('WhatsApp Not Available', 'WhatsApp is not installed on this device.');
       }
     } catch (error) {
       logger.error('Failed to share via WhatsApp:', error);
-      Alert.alert('Error', 'Failed to open WhatsApp');
+      showAlert('Error', 'Failed to open WhatsApp');
     }
   };
 
@@ -617,7 +617,7 @@ export function StrategySharingModal({
       onShareComplete?.('external', 'Email');
     } catch (error) {
       logger.error('Failed to share via email:', error);
-      Alert.alert('Error', 'Failed to open email app');
+      showAlert('Error', 'Failed to open email app');
     }
   };
 
@@ -1289,13 +1289,13 @@ export function StrategySharingModal({
 
     if (!userId) {
       logger.error('Cannot toggle public sharing: userId is not set');
-      Alert.alert('Error', 'Unable to share. Please try reloading the page.');
+      showAlert('Error', 'Unable to share. Please try reloading the page.');
       return;
     }
 
     if (!raceId) {
       logger.error('Cannot toggle public sharing: raceId is not set');
-      Alert.alert('Error', 'No race selected. Please try again.');
+      showAlert('Error', 'No race selected. Please try again.');
       return;
     }
 
@@ -1307,16 +1307,15 @@ export function StrategySharingModal({
       setPublicSharingStatus(status);
 
       if (enabled && status.url) {
-        Alert.alert(
-          'Public Link Created! 🔗',
-          `Anyone with this link can view your strategy (read-only).\n\n${status.url}`,
-          [{ text: 'OK' }]
+        showAlert(
+          'Public Link Created!',
+          `Anyone with this link can view your strategy (read-only).\n\n${status.url}`
         );
       }
     } catch (error: any) {
       logger.error('Failed to toggle public sharing:', error);
       const errorMessage = error?.message || 'Unknown error';
-      Alert.alert('Error', `Failed to update sharing settings: ${errorMessage}`);
+      showAlert('Error', `Failed to update sharing settings: ${errorMessage}`);
     } finally {
       setTogglingPublicShare(false);
     }
@@ -1328,10 +1327,10 @@ export function StrategySharingModal({
     
     try {
       await Clipboard.setStringAsync(publicSharingStatus.url);
-      Alert.alert('Copied! ✅', 'Public link copied to clipboard');
+      showAlert('Copied!', 'Public link copied to clipboard');
     } catch (error) {
       logger.error('Failed to copy public link:', error);
-      Alert.alert('Error', 'Failed to copy link');
+      showAlert('Error', 'Failed to copy link');
     }
   };
 

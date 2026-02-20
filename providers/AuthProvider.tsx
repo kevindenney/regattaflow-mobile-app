@@ -87,6 +87,7 @@ const getApiBase = () => {
 }
 
 const API_BASE = getApiBase()
+const POST_LOGOUT_AUTH_KEY = 'rf_force_auth_after_logout'
 
 // 🔍 DEBUG: Log env vars at module load time
 if (AUTH_DEBUG_ENABLED) {
@@ -179,6 +180,28 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [coachProfile, setCoachProfile] = useState<any | null>(null)
   const [capabilities, setCapabilities] = useState<UserCapabilities>(DEFAULT_CAPABILITIES)
   const [isDemoSession, setIsDemoSession] = useState(false)
+
+  const setPostLogoutAuthFlag = useCallback(async () => {
+    try {
+      await AsyncStorage.setItem(POST_LOGOUT_AUTH_KEY, '1')
+      safeLocalStorage.setItem(POST_LOGOUT_AUTH_KEY, '1')
+    } catch {}
+  }, [])
+
+  const consumePostLogoutAuthFlag = useCallback(async () => {
+    try {
+      const nativeValue = await AsyncStorage.getItem(POST_LOGOUT_AUTH_KEY)
+      const webValue = safeLocalStorage.getItem(POST_LOGOUT_AUTH_KEY)
+      const shouldForceAuth = nativeValue === '1' || webValue === '1'
+      if (shouldForceAuth) {
+        await AsyncStorage.removeItem(POST_LOGOUT_AUTH_KEY)
+        safeLocalStorage.removeItem(POST_LOGOUT_AUTH_KEY)
+      }
+      return shouldForceAuth
+    } catch {
+      return false
+    }
+  }, [])
 
   // Ref to prevent duplicate profile fetches during race conditions
   const profileFetchInProgress = useRef<string | null>(null)
@@ -513,38 +536,35 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         count: capabilityRecords?.length ?? 0
       })
 
-      // 2. Load coach profile if user has coaching capability OR user_type is 'coach' (backward compat)
-      const shouldLoadCoachProfile = hasCoachingCapability || userType === 'coach'
-      let loadedCoachProfile = null
+      // 2. Always try to load coach profile (for robustness - in case capability insert failed)
+      authDebugLog('[loadPersonaContext] Loading coach profile with user.id:', user.id)
 
-      if (shouldLoadCoachProfile) {
-        authDebugLog('[loadPersonaContext] Loading coach profile with user.id:', user.id)
+      const { data: coachData, error: coachError } = await supabase
+        .from('coach_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
 
-        const { data, error } = await supabase
-          .from('coach_profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle()
+      authDebugLog('[loadPersonaContext] Coach profile query result:', {
+        hasData: !!coachData,
+        profilePublished: coachData?.profile_published,
+        error: coachError?.message
+      })
 
-        authDebugLog('[loadPersonaContext] Coach profile query result:', {
-          hasData: !!data,
-          error: error?.message
-        })
-
-        if (error && error.code !== 'PGRST116') {
-          throw error
-        }
-
-        loadedCoachProfile = data ?? null
-        setCoachProfile(loadedCoachProfile)
-        authDebugLog('[loadPersonaContext] Coach profile set:', !!data)
-      } else {
-        setCoachProfile(null)
+      if (coachError && coachError.code !== 'PGRST116') {
+        console.warn('[loadPersonaContext] Coach profile query error:', coachError.message)
       }
 
-      // 3. Update capabilities state with loaded data
+      const loadedCoachProfile = coachData ?? null
+      setCoachProfile(loadedCoachProfile)
+      authDebugLog('[loadPersonaContext] Coach profile set:', !!loadedCoachProfile)
+
+      // 3. Determine hasCoaching - use capability OR legacy user_type OR published coach profile
+      const hasCoaching = hasCoachingCapability || userType === 'coach' || loadedCoachProfile?.profile_published === true
+
+      // 4. Update capabilities state with loaded data
       setCapabilities({
-        hasCoaching: hasCoachingCapability || userType === 'coach', // Include legacy coach users
+        hasCoaching,
         coachingProfile: loadedCoachProfile,
         rawCapabilities: capabilityRecords ?? [],
       })
@@ -638,6 +658,16 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
         // If no session, check if user has guest data (freemium mode)
         if (!session) {
+          const shouldForceAuth = await consumePostLogoutAuthFlag()
+          if (shouldForceAuth) {
+            setIsGuest(false)
+            setReady(true)
+            try {
+              router.replace('/(auth)/login')
+            } catch {}
+            return
+          }
+
           const hasGuestRace = await GuestStorageService.hasGuestRace()
           if (hasGuestRace) {
             authDebugLog('[AUTH] Guest race found, entering guest mode')
@@ -768,6 +798,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setSignedIn(false)
         authDebugLog('🚪 [AUTH] Clearing user state...')
         setUser(null)
+        setIsGuest(false)
         authDebugLog('🚪 [AUTH] Clearing userProfile state...')
         setUserProfile(null)
         authDebugLog('🚪 [AUTH] Clearing userType state...')
@@ -781,20 +812,19 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
         authDebugLog('🚪 [AUTH] State cleanup complete. Starting navigation...')
         
-        // Immediately redirect to landing page to prevent any route protection from redirecting to login
-        authDebugLog('🚪 [AUTH] Navigating to landing page...')
+        // Explicit sign-out should route to auth-first screen, not guest/demo.
+        authDebugLog('🚪 [AUTH] Navigating to auth login...')
         try {
           if (typeof window !== 'undefined') {
-            authDebugLog('🚪 [AUTH] Replacing browser history state...')
-            window.history.replaceState(null, '', '/')
+            authDebugLog('🚪 [AUTH] Replacing browser history state to login...')
+            window.history.replaceState(null, '', '/(auth)/login')
           }
-          // Use replace to ensure we go to landing page, not login
-          router.replace('/')
+          router.replace('/(auth)/login')
         } catch (historyError) {
           console.warn('🚪 [AUTH] History replace error:', historyError)
-          // Fallback: force navigation to landing page
+          // Fallback: force navigation to login
           try {
-            router.replace('/')
+            router.replace('/(auth)/login')
           } catch (navError) {
             console.warn('🚪 [AUTH] Navigation fallback failed:', navError)
           }
@@ -920,14 +950,16 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       ready
     })
 
-    // CRITICAL: Navigate to landing page IMMEDIATELY before clearing auth state
-    // This prevents route protection from redirecting to login
-    authDebugLog('🚪 [AUTH] Navigating to landing page immediately...')
+    // Force auth-first behavior after explicit logout.
+    await setPostLogoutAuthFlag()
+
+    // Navigate to login immediately before clearing auth state.
+    authDebugLog('🚪 [AUTH] Navigating to login immediately...')
     try {
       if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', '/')
+        window.history.replaceState(null, '', '/(auth)/login')
       }
-      router.replace('/')
+      router.replace('/(auth)/login')
     } catch (navError) {
       console.warn('🚪 [AUTH] Initial navigation error:', navError)
     }
@@ -935,6 +967,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     if (isDemoSession) {
       authDebugLog('🚪 [AUTH] Demo session detected, performing local sign out.')
       setSignedIn(false)
+      setIsGuest(false)
       setUser(null)
       setUserProfile(null)
       setUserType(null)
@@ -957,6 +990,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         console.warn('🚪 [AUTH] Fallback signOut triggered (timeout)')
         fallbackTriggered = true
         setSignedIn(false)
+        setIsGuest(false)
         setUser(null)
         setUserProfile(null)
         setUserType(null)
@@ -967,12 +1001,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setCapabilities(DEFAULT_CAPABILITIES)
         if (typeof window !== 'undefined') {
           try {
-            window.history.replaceState(null, '', '/')
+            window.history.replaceState(null, '', '/(auth)/login')
           } catch (historyError) {
             console.warn('🚪 [AUTH] History replace failed in fallback:', historyError)
           }
         }
-        router.replace('/')
+        router.replace('/(auth)/login')
       }
     }, 4000)
 
@@ -991,6 +1025,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       // (Event may not fire if network is down but local storage was cleared)
       authDebugLog('🚪 [AUTH] Clearing auth state immediately after local cleanup...')
       setSignedIn(false)
+      setIsGuest(false)
       setUser(null)
       setUserProfile(null)
       setUserType(null)
@@ -1015,12 +1050,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setCapabilities(DEFAULT_CAPABILITIES)
       if (typeof window !== 'undefined') {
         try {
-          window.history.replaceState(null, '', '/')
+          window.history.replaceState(null, '', '/(auth)/login')
         } catch (historyError) {
           console.warn('🚪 [AUTH] History replace failed after error:', historyError)
         }
       }
-      router.replace('/')
+      router.replace('/(auth)/login')
       clearTimeout(fallbackTimer)
       throw error
     } finally {

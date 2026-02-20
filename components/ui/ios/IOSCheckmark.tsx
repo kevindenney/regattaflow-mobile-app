@@ -77,7 +77,7 @@ export function IOSCheckmark({
     const backgroundColor = interpolateColor(
       progress.value,
       [0, 1],
-      ['transparent', checkedColor]
+      ['rgba(0, 0, 0, 0)', checkedColor]
     );
 
     const borderColor = interpolateColor(

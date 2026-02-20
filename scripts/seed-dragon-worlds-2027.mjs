@@ -129,25 +129,11 @@ async function setupDemoUsers() {
     'sailor'
   );
 
-  // Sarah Chen (Coach/Competitor)
-  users.sarahChen = await resolveOrCreateUser(
-    'sarah.chen@sailing.com',
-    'Sarah Chen',
-    'sailor'
-  );
-
   // Demo Club (Race Committee)
   users.demoClub = await resolveOrCreateUser(
     'demo-club@regattaflow.io',
     'RHKYC Race Office',
     'club'
-  );
-
-  // Coach Anderson (for coaching features)
-  users.coachAnderson = await resolveOrCreateUser(
-    'coach.anderson@sailing.com',
-    'Coach Anderson',
-    'coach'
   );
 
   return users;
@@ -243,8 +229,6 @@ async function setupHongKongDragonFleet(users, dragonClassId) {
   // Add fleet memberships
   const fleetMembers = [
     { userId: users.demoSailor, role: 'member' },
-    { userId: users.sarahChen, role: 'captain' },
-    { userId: users.coachAnderson, role: 'coach' },
   ];
 
   for (const member of fleetMembers) {
@@ -300,30 +284,7 @@ async function setupSailorBoats(users, dragonClassId) {
     }
   };
 
-  // Sarah Chen's boat - Golden Dragon
-  const sarahChenBoat = {
-    id: deterministicUuid('sailor_boats', 'hkg-188-golden-dragon'),
-    sailor_id: users.sarahChen,
-    class_id: dragonClassId,
-    name: 'Golden Dragon',
-    sail_number: 'HKG 188',
-    hull_number: 'HKG-188-2021',
-    manufacturer: 'Petticrows',
-    year_built: 2021,
-    hull_material: 'fiberglass',
-    status: 'active',
-    ownership_type: 'owned',
-    is_primary: true,
-    is_owner: true,
-    storage_location: 'RHKYC Shelter Cove',
-    metadata: {
-      dragonWorlds2027: true,
-      registrationStatus: 'confirmed',
-      fleetCaptainBoat: true
-    }
-  };
-
-  for (const boat of [demoSailorBoat, sarahChenBoat]) {
+  for (const boat of [demoSailorBoat]) {
     const { error } = await supabase
       .from('sailor_boats')
       .upsert(boat, { onConflict: 'id' });
@@ -447,22 +408,6 @@ async function setupRaceParticipants(regattaId, users, fleetId, boats) {
         entryNumber: 1,
         measurementComplete: true
       }
-    },
-    {
-      regatta_id: regattaId,
-      user_id: users.sarahChen,
-      fleet_id: fleetId,
-      status: 'confirmed',
-      boat_name: 'Golden Dragon',
-      sail_number: 'HKG 188',
-      visibility: 'public',
-      metadata: {
-        country: 'HKG',
-        crew: ['David Hui (Tactician)', 'Jenny Lau (Trimmer)'],
-        entryNumber: 2,
-        fleetCaptain: true,
-        measurementComplete: true
-      }
     }
   ];
 
@@ -511,30 +456,6 @@ async function setupRaceCommittee(users) {
     log.warn(`Could not setup race committee membership: ${memberError.message}`);
   } else {
     log.success('Race Committee membership configured for demo-club');
-  }
-
-  // Also ensure Sarah Chen has her officer role
-  const { error: sarahError } = await supabase
-    .from('club_members')
-    .upsert({
-      id: deterministicUuid('club_members', `${RHKYC_CLUB_ID}-${users.sarahChen}`),
-      club_id: RHKYC_CLUB_ID,
-      user_id: users.sarahChen,
-      role: 'officer',
-      membership_start: '2015-02-10',
-      membership_number: 'RHKYC-204',
-      is_active: true,
-      metadata: {
-        dragonWorlds2027: true,
-        position: 'Dragon Fleet Captain',
-        committees: ['Hong Kong Dragon Association', 'RHKYC Sailing Committee']
-      }
-    }, { onConflict: 'club_id,user_id' });
-
-  if (sarahError) {
-    log.warn(`Could not update Sarah Chen membership: ${sarahError.message}`);
-  } else {
-    log.success('Sarah Chen officer role configured');
   }
 }
 
@@ -672,20 +593,6 @@ async function enhanceSailorProfiles(users) {
         { title: 'Dragon Worlds 2027 Entry', year: 2026 },
         { title: 'RHKYC Dragon Series Winner', year: 2025 }
       ]
-    },
-    {
-      user_id: users.sarahChen,
-      home_club: 'Royal Hong Kong Yacht Club',
-      experience_level: 'professional',
-      sailing_since: '2010-01-01',
-      boat_class_preferences: ['Dragon', 'J/70'],
-      preferred_venues: ['Hong Kong - Victoria Harbour', 'Hong Kong - Clearwater Bay'],
-      achievements: [
-        { title: 'Dragon Worlds 2027 Entry', year: 2026 },
-        { title: 'RHKYC Dragon Fleet Captain', year: 2024 },
-        { title: 'Asia Pacific Dragon Championship - 2nd', year: 2024 },
-        { title: 'Hong Kong Dragon Series Champion', year: 2023 }
-      ]
     }
   ];
 
@@ -700,43 +607,6 @@ async function enhanceSailorProfiles(users) {
   }
 
   log.success('Sailor profiles enhanced');
-}
-
-// =====================================================
-// Coach Profile Enhancement
-// =====================================================
-
-async function enhanceCoachProfile(users) {
-  log.section('Enhancing Coach Profile');
-
-  const { error } = await supabase
-    .from('coach_profiles')
-    .upsert({
-      user_id: users.coachAnderson,
-      display_name: 'Coach Anderson',
-      bio: 'Experienced Dragon class coach specializing in race tactics and boat speed. Working with Hong Kong Dragon Association teams for Dragon Worlds 2027.',
-      experience_years: 20,
-      specializations: ['Race tactics', 'Boat speed', 'Starts', 'Dragon class'],
-      location_name: 'Hong Kong',
-      location_region: 'Asia Pacific',
-      languages: ['English', 'Cantonese'],
-      hourly_rate: 150,
-      currency: 'USD',
-      is_verified: true,
-      is_active: true,
-      rating: 4.8,
-      total_sessions: 150,
-      location_preferences: [
-        { venue: 'Hong Kong - Victoria Harbour', primary: true },
-        { venue: 'Hong Kong - Clearwater Bay', primary: false }
-      ]
-    }, { onConflict: 'user_id' });
-
-  if (error) {
-    log.warn(`Could not update coach profile: ${error.message}`);
-  } else {
-    log.success('Coach Anderson profile enhanced for Dragon Worlds');
-  }
 }
 
 // =====================================================
@@ -785,29 +655,25 @@ async function main() {
     
     // Enhance profiles
     await enhanceSailorProfiles(users);
-    await enhanceCoachProfile(users);
 
     console.log('\n');
     console.log('╔════════════════════════════════════════════════════════════════╗');
     console.log('║              🎉 SEED COMPLETE - DRAGON WORLDS 2027 🎉         ║');
     console.log('╚════════════════════════════════════════════════════════════════╝');
     console.log('\n');
-    
+
     console.log('📧 Demo User Accounts:');
     console.log('─'.repeat(60));
     console.log(`  Demo Sailor (Competitor)    demo-sailor@regattaflow.io`);
-    console.log(`  Sarah Chen (Fleet Captain)  sarah.chen@sailing.com`);
     console.log(`  Demo Club (Race Committee)  demo-club@regattaflow.io`);
-    console.log(`  Coach Anderson              coach.anderson@sailing.com`);
     console.log('─'.repeat(60));
     console.log('  Password: set via DEMO_PASSWORD env var');
     console.log('\n');
-    
+
     console.log('🚀 What\'s Next:');
     console.log('  1. Login as demo-sailor@regattaflow.io to see competitor view');
     console.log('  2. Login as demo-club@regattaflow.io for race committee management');
-    console.log('  3. Login as sarah.chen@sailing.com for fleet captain features');
-    console.log('  4. Check the Races tab to see Dragon Worlds 2027');
+    console.log('  3. Check the Races tab to see Dragon Worlds 2027');
     console.log('\n');
     console.log('🔗 Event Website: https://www.dragonworld2027.com');
     console.log('\n');

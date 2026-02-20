@@ -2,14 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export type LandingTab = 'race' | 'follow' | 'discuss' | 'learn' | 'reflect';
+export type LandingTab = 'race' | 'connect' | 'learn' | 'reflect' | 'search';
 
 const TABS: Array<{ key: LandingTab; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { key: 'race', label: 'Race', icon: 'flag-outline' },
-  { key: 'follow', label: 'Follow', icon: 'people-outline' },
-  { key: 'discuss', label: 'Discuss', icon: 'chatbubble-outline' },
+  { key: 'connect', label: 'Connect', icon: 'people-outline' },
   { key: 'learn', label: 'Learn', icon: 'book-outline' },
   { key: 'reflect', label: 'Reflect', icon: 'stats-chart-outline' },
+  { key: 'search', label: 'Search', icon: 'search-outline' },
 ];
 
 interface PreviewProps {
@@ -52,33 +52,19 @@ const CONTENT: Record<
       },
     ],
   },
-  follow: {
-    header: 'Follow',
-    subtitle: 'Fleet updates from your circles',
-    chips: ['Posts', 'Following'],
+  connect: {
+    header: 'Connect',
+    subtitle: 'Follow sailors & join discussions',
+    chips: ['Follow', 'Discuss'],
     cards: [
       { title: 'RHKYC Dragon Winter Series', meta: 'Fleet • Raced today', stat: 'Results posted' },
-      { title: 'Unknown Fleet Log', meta: 'Comment + tactical note', stat: 'New discussion' },
-      { title: 'Commodore Series Recap', meta: 'Highlights + crew notes', stat: '4 comments' },
-    ],
-  },
-  discuss: {
-    header: 'Discuss',
-    subtitle: 'Community signals around the world',
-    chips: ['Hot', 'New', 'Rising', 'Top'],
-    cards: [
       {
         title: 'Current patterns near Green Island',
         meta: 'Tactics • Currents • Local knowledge',
         stat: '24 upvotes',
         accent: '#0EA5E9',
       },
-      {
-        title: 'Post-race conditions report',
-        meta: 'Weather • Wind shifts • Wednesday series',
-        stat: '31 upvotes',
-      },
-      { title: 'Safety: barge near bridge', meta: 'Heads up for race committee boats', stat: '245 views' },
+      { title: 'Commodore Series Recap', meta: 'Highlights + crew notes', stat: '4 comments' },
     ],
   },
   learn: {
@@ -99,6 +85,16 @@ const CONTENT: Record<
       { title: 'This Week', meta: 'Race + training activity timeline', stat: '3 sessions' },
       { title: 'Monthly Activities', meta: '4 races • 0 podiums', stat: 'See full stats' },
       { title: 'Performance Trend', meta: 'Avg finish by venue and wind band', stat: 'Insights ready' },
+    ],
+  },
+  search: {
+    header: 'Search',
+    subtitle: 'Find sailors, clubs, and races',
+    chips: ['Sailors', 'Clubs'],
+    cards: [
+      { title: 'Sailor Search', meta: 'Suggested • Contacts • QR Code', stat: '50+ sailors' },
+      { title: 'Club Directory', meta: 'By region, class, and type', stat: '12 clubs' },
+      { title: 'Race Browser', meta: 'Find upcoming events near you', stat: 'Browse all' },
     ],
   },
 };
@@ -248,9 +244,9 @@ function ScreenshotPhonePreview({
 
 function TabReplica({ activeTab }: { activeTab: LandingTab }) {
   if (activeTab === 'race') return <RaceScreenReplica />;
-  if (activeTab === 'follow') return <FollowScreenReplica />;
-  if (activeTab === 'discuss') return <DiscussScreenReplica />;
+  if (activeTab === 'connect') return <ConnectScreenReplica />;
   if (activeTab === 'learn') return <LearnScreenReplica />;
+  if (activeTab === 'search') return <SearchScreenReplica />;
   return <ReflectScreenReplica />;
 }
 
@@ -331,14 +327,14 @@ function RaceScreenReplica() {
   );
 }
 
-function FollowScreenReplica() {
+function ConnectScreenReplica() {
   return (
     <View style={styles.replicaRoot}>
       <View style={styles.replicaStatus}><Text style={styles.replicaTime}>2:32</Text></View>
-      <Text style={styles.replicaTitle}>Follow</Text>
+      <Text style={styles.replicaTitle}>Connect</Text>
       <View style={styles.replicaTabRow}>
-        <Text style={[styles.replicaTabPill, styles.replicaTabPillActive]}>Posts</Text>
-        <Text style={styles.replicaTabPill}>Following</Text>
+        <Text style={[styles.replicaTabPill, styles.replicaTabPillActive]}>Follow</Text>
+        <Text style={styles.replicaTabPill}>Discuss</Text>
       </View>
       <View style={styles.feedCard}><Text style={styles.feedTitle}>RHKYC Dragon Winter Series - Race 4</Text><Text style={styles.feedMeta}>Fleet • Raced Feb 2 • Results</Text></View>
       <View style={styles.feedCard}><Text style={styles.feedTitle}>Commodore Series Races 5 & 6</Text><Text style={styles.feedMeta}>Fleet • Raced today • Comments</Text></View>
@@ -347,19 +343,18 @@ function FollowScreenReplica() {
   );
 }
 
-function DiscussScreenReplica() {
+function SearchScreenReplica() {
   return (
     <View style={styles.replicaRoot}>
       <View style={styles.replicaStatus}><Text style={styles.replicaTime}>2:32</Text></View>
-      <Text style={styles.replicaTitle}>Community</Text>
+      <Text style={styles.replicaTitle}>Search</Text>
       <View style={styles.replicaTabRow}>
-        <Text style={[styles.replicaTabPill, styles.replicaTabPillActive]}>Feed</Text>
-        <Text style={styles.replicaTabPill}>Communities</Text>
+        <Text style={[styles.replicaTabPill, styles.replicaTabPillActive]}>Sailors</Text>
+        <Text style={styles.replicaTabPill}>Clubs</Text>
       </View>
-      <View style={styles.chipRow}><Text style={[styles.topicChip, styles.topicChipHot]}>Hot</Text><Text style={styles.topicChip}>New</Text><Text style={styles.topicChip}>Rising</Text><Text style={styles.topicChip}>Top</Text></View>
-      <View style={styles.feedCard}><Text style={styles.feedTitle}>Current patterns near Green Island</Text><Text style={styles.feedMeta}>Currents • Tactics • 317 views</Text></View>
-      <View style={styles.feedCard}><Text style={styles.feedTitle}>Post-race conditions report</Text><Text style={styles.feedMeta}>Weather • Wind shifts • 245 views</Text></View>
-      <View style={styles.feedCard}><Text style={styles.feedTitle}>Safety: barge near Stonecutters</Text><Text style={styles.feedMeta}>Safety • Harbor notice</Text></View>
+      <View style={styles.feedCard}><Text style={styles.feedTitle}>Suggested Sailors</Text><Text style={styles.feedMeta}>Based on your clubs and fleets</Text></View>
+      <View style={styles.feedCard}><Text style={styles.feedTitle}>Club Directory</Text><Text style={styles.feedMeta}>12 clubs in your region</Text></View>
+      <View style={styles.feedCard}><Text style={styles.feedTitle}>Race Browser</Text><Text style={styles.feedMeta}>Find upcoming events near you</Text></View>
     </View>
   );
 }
@@ -409,7 +404,7 @@ export function LandingScreensSection({ selectedTab, onSelectTab }: ScreensSecti
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>All Core Screens</Text>
       <Text style={styles.sectionSubtitle}>
-        Race planning, fleet follow, community discuss, learn modules, and post-race reflection.
+        Race planning, social connect, learn modules, post-race reflection, and search.
       </Text>
       <View style={styles.screenGrid}>
         {TABS.map((tab) => (

@@ -13,18 +13,20 @@ import type {
 } from '@/lib/types/ai-knowledge';
 import { createLogger } from '@/lib/utils/logger';
 import { cachedAICall } from '@/lib/utils/aiCache';
-import { 
+import {
   isAIInFallbackMode,
   isCreditExhaustedError,
   activateFallbackMode,
   generateMockStrategy
 } from '@/lib/utils/aiFallback';
+import { isDemoMode, isAIServiceAvailable } from '@/lib/utils/demoMode';
 import Anthropic from '@anthropic-ai/sdk';
 import Constants from 'expo-constants';
 import { DocumentProcessingService } from './DocumentProcessingService';
 import { sailingEducationService } from './SailingEducationService';
 import { skillManagementService, detectRaceType, SKILL_REGISTRY } from './SkillManagementService';
 import { venueCommunityTipsService } from '@/services/venue/VenueCommunityTipsService';
+import type { RaceTuningRecommendation } from '@/services/RaceTuningService';
 
 export interface RaceConditions {
   wind: {
@@ -340,13 +342,21 @@ export class RaceStrategyEngine {
       fleetSize?: number;
       importance?: 'practice' | 'series' | 'championship' | 'worlds';
       racingAreaPolygon?: Array<{ lat: number; lng: number }>;
-      // NEW: Sailor learning profile for personalized recommendations
+      // Sailor learning profile for personalized recommendations
       sailorProfile?: {
         strengths: Array<{ metric: string; average: number; trend: string }>;
         focusAreas: Array<{ metric: string; average: number; trend: string }>;
         recurringWins?: string[];
         recurringChallenges?: string[];
         racesAnalyzed?: number;
+      };
+      // FIX 1: Rig tuning data from RaceTuningService
+      boatSetup?: RaceTuningRecommendation;
+      // FIX 2: Briefing insights from RaceBriefingService
+      briefingInsights?: {
+        keyPoints?: Array<{ title: string; content: string; priority: 'critical' | 'important' | 'consider' }>;
+        decisionPoints?: Array<{ question: string; options: string[] }>;
+        warnings?: string[];
       };
     }
   ): Promise<RaceStrategy> {
@@ -526,12 +536,22 @@ export class RaceStrategyEngine {
       ? `\nUSER-DEFINED RACING AREA:\n- Polygon vertices: ${raceContext.racingAreaSummary}\n- Treat edges as potential current relief and compression lines.\n`
       : '';
 
-    // NEW: Build personalized sailor profile section for the prompt
+    // Build personalized sailor profile section for the prompt
     const sailorProfileSection = raceContext.sailorProfile
       ? this.buildSailorProfilePromptSection(raceContext.sailorProfile)
       : '';
 
-    // NEW: Fetch community-contributed local knowledge tips relevant to current conditions
+    // FIX 1: Build boat setup section from rig tuning data
+    const boatSetupSection = raceContext.boatSetup
+      ? this.buildBoatSetupPromptSection(raceContext.boatSetup)
+      : '';
+
+    // FIX 2: Build briefing insights section
+    const briefingInsightsSection = raceContext.briefingInsights
+      ? this.buildBriefingInsightsPromptSection(raceContext.briefingInsights)
+      : '';
+
+    // Fetch community-contributed local knowledge tips relevant to current conditions
     let communityTipsSection = '';
     try {
       const communityTips = await venueCommunityTipsService.getRelevantTipsForConditions(
@@ -583,8 +603,8 @@ RACE CONTEXT:
 - Boat Type: ${raceContext.boatType || 'Keelboat'}
 - Fleet Size: ${raceContext.fleetSize || 'Standard'}
 - Importance: ${raceContext.importance || 'series'}
-${sailorProfileSection}
-Apply your race strategy expertise including shift mathematics, puff response, starting techniques, covering tactics, and champion execution methods.${raceContext.sailorProfile ? '\n\nIMPORTANT: Tailor your recommendations to this specific sailor\'s strengths and focus areas. Leverage their proven strengths while providing specific guidance to address their challenges.' : ''}
+${sailorProfileSection}${boatSetupSection}${briefingInsightsSection}
+Apply your race strategy expertise including shift mathematics, puff response, starting techniques, covering tactics, and champion execution methods.${raceContext.sailorProfile ? '\n\nIMPORTANT: Tailor your recommendations to this specific sailor\'s strengths and focus areas. Leverage their proven strengths while providing specific guidance to address their challenges.' : ''}${raceContext.boatSetup ? '\n\nIMPORTANT: Consider the boat\'s current rig tuning when making tactical recommendations. The settings shown are optimized for specific conditions.' : ''}${raceContext.briefingInsights ? '\n\nIMPORTANT: Incorporate the briefing intelligence into your strategy. Address key points and warnings from the race briefing.' : ''}
 
 TASK: Generate a comprehensive venue-based race strategy including:
 1. OVERALL APPROACH - Strategic philosophy with theory + execution
@@ -713,7 +733,7 @@ CRITICAL OUTPUT RULES:
     racesAnalyzed?: number;
   }): string {
     const lines: string[] = ['\nSAILOR PERFORMANCE PROFILE (based on post-race analysis):'];
-    
+
     if (sailorProfile.racesAnalyzed) {
       lines.push(`- Races analyzed: ${sailorProfile.racesAnalyzed}`);
     }
@@ -738,6 +758,84 @@ CRITICAL OUTPUT RULES:
 
     if (sailorProfile.recurringChallenges && sailorProfile.recurringChallenges.length > 0) {
       lines.push('- RECURRING CHALLENGES: ' + sailorProfile.recurringChallenges.slice(0, 2).join('; '));
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * FIX 1: Build a prompt section describing the boat's rig tuning setup
+   * Connects RaceTuningService data to strategy generation
+   */
+  private buildBoatSetupPromptSection(boatSetup: RaceTuningRecommendation): string {
+    const lines: string[] = ['\nBOAT RIG TUNING (from tuning guide):'];
+
+    lines.push(`- Guide: ${boatSetup.guideTitle} (${boatSetup.guideSource})`);
+
+    if (boatSetup.sectionTitle) {
+      lines.push(`- Configuration: ${boatSetup.sectionTitle}`);
+    }
+
+    if (boatSetup.conditionSummary) {
+      lines.push(`- Optimized for: ${boatSetup.conditionSummary}`);
+    }
+
+    if (boatSetup.settings && boatSetup.settings.length > 0) {
+      lines.push('- Current settings:');
+      boatSetup.settings.slice(0, 8).forEach(setting => {
+        lines.push(`  • ${setting.label}: ${setting.value}`);
+      });
+    }
+
+    if (boatSetup.equipmentSpecificNotes && boatSetup.equipmentSpecificNotes.length > 0) {
+      lines.push('- Equipment notes:');
+      boatSetup.equipmentSpecificNotes.slice(0, 3).forEach(note => {
+        lines.push(`  • ${note}`);
+      });
+    }
+
+    if (boatSetup.caveats && boatSetup.caveats.length > 0) {
+      lines.push('- Tuning caveats: ' + boatSetup.caveats.slice(0, 2).join('; '));
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * FIX 2: Build a prompt section describing briefing insights
+   * Connects RaceBriefingService data to strategy generation
+   */
+  private buildBriefingInsightsPromptSection(briefingInsights: {
+    keyPoints?: Array<{ title: string; content: string; priority: 'critical' | 'important' | 'consider' }>;
+    decisionPoints?: Array<{ question: string; options: string[] }>;
+    warnings?: string[];
+  }): string {
+    const lines: string[] = ['\nRACE BRIEFING INTELLIGENCE:'];
+
+    if (briefingInsights.keyPoints && briefingInsights.keyPoints.length > 0) {
+      lines.push('- KEY STRATEGIC POINTS (from briefing):');
+      // Prioritize critical items first
+      const sortedPoints = [...briefingInsights.keyPoints].sort((a, b) => {
+        const priorityOrder = { critical: 0, important: 1, consider: 2 };
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      });
+      sortedPoints.slice(0, 5).forEach(point => {
+        lines.push(`  • [${point.priority.toUpperCase()}] ${point.title}: ${point.content}`);
+      });
+    }
+
+    if (briefingInsights.decisionPoints && briefingInsights.decisionPoints.length > 0) {
+      lines.push('- DECISIONS TO MAKE:');
+      briefingInsights.decisionPoints.slice(0, 3).forEach(decision => {
+        lines.push(`  • ${decision.question} (options: ${decision.options.join(', ')})`);
+      });
+    }
+
+    if (briefingInsights.warnings && briefingInsights.warnings.length > 0) {
+      lines.push('- WARNINGS:');
+      briefingInsights.warnings.slice(0, 3).forEach(warning => {
+        lines.push(`  ⚠️ ${warning}`);
+      });
     }
 
     return lines.join('\n');

@@ -1,2 +1,2 @@
-// Entry point for Expo Router
-require('expo-router/entry');
+import 'react-native-gesture-handler';
+import 'expo-router/entry';

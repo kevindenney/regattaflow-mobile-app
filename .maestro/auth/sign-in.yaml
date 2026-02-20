@@ -1,6 +1,5 @@
 # Sign In Flow Test
-# Tests navigation to the login screen and form presence
-# Note: Full credential entry requires testID selector improvements
+# Tests sign in through Account modal using stable testIDs
 appId: com.regattaflow.app
 tags:
   - auth
@@ -18,7 +17,16 @@ env:
     visible: ".*"
     timeout: 15000
 
-# Handle Expo dev launcher if present
+# Handle Expo dev launcher (dynamic host/port variants)
+- tapOn:
+    text: "RegattaFlow"
+    optional: true
+- tapOn:
+    text: "http://10.0.2.2:8082"
+    optional: true
+- tapOn:
+    text: "http://10.0.2.2:8081"
+    optional: true
 - tapOn:
     text: "http://localhost:8081"
     optional: true
@@ -50,36 +58,23 @@ env:
     visible: ".*"
     timeout: 5000
 
-# Try to navigate to login
-# First tap Sign In if on landing page
-- tapOn:
-    text: "Sign In"
-    optional: true
-
-# Wait for navigation
+# Navigate into Account then open Login
+- openLink: "exp+regattaflow-app://account"
 - extendedWaitUntil:
-    visible: ".*"
-    timeout: 3000
-
-# Tap Sign In again if on Account modal
+    visible: "Account"
+    timeout: 10000
 - tapOn:
-    text: "Sign In"
-    optional: true
-
-# Wait for login form
+    id: "account-sign-in-button"
 - extendedWaitUntil:
-    visible: ".*"
-    timeout: 5000
-
-# Verify login form title is visible using testID
+    visible:
+      id: "login-title"
+    timeout: 20000
 - assertVisible:
     id: "login-title"
-    optional: true
-
-# Alternative: Check for "Welcome back" text
 - assertVisible:
-    text: "Continue with Google"
-    optional: true
+    id: "login-identifier-input"
+- assertVisible:
+    id: "login-password-input"
 
 # ============================================================
 # CREDENTIAL ENTRY
@@ -87,21 +82,19 @@ env:
 # Using coordinate-based input as fallback.
 # ============================================================
 
-# Tap email field (approximate position)
-- tapOn:
-    point: "50%,47%"
-
 # Enter email
+- tapOn:
+    id: "login-identifier-input"
+- eraseText
 - inputText: ${TEST_EMAIL}
 
 # Hide keyboard for consistent positioning
 - hideKeyboard
 
-# Tap password field
-- tapOn:
-    point: "50%,54%"
-
 # Enter password
+- tapOn:
+    id: "login-password-input"
+- eraseText
 - inputText: ${TEST_PASSWORD}
 
 # Hide keyboard
@@ -109,7 +102,7 @@ env:
 
 # Tap Sign In button
 - tapOn:
-    point: "50%,68%"
+    id: "login-submit-button"
 
 # ============================================================
 # VERIFY SIGN IN SUCCESS
@@ -121,30 +114,8 @@ env:
     timeout: 10000
 
 # Wait for main app screen to appear after sign-in
-# The bottom tab bar should show one of these tabs
 - extendedWaitUntil:
-    visible:
-      anyOf:
-        - "Race"
-        - "Races"
-        - "My Races"
-        - "Schedule"
-        - "Home"
+    visible: "Race"
     timeout: 60000
 
-# Alternative check - verify we're NOT on the login screen anymore
-- assertNotVisible:
-    text: "Sign In"
-    optional: true
-
-# Verify bottom navigation appeared (any tab)
-- assertVisible:
-    anyOf:
-      - "Race"
-      - "Races"
-      - "My Races"
-      - "Schedule"
-      - "Home"
-      - "Learn"
-      - "Discuss"
-    optional: true
+- assertVisible: "Race"

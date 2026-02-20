@@ -47,10 +47,10 @@ export const getTabsForUserType = (
   if (isGuest) {
     return [
       { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'follow', title: 'Follow', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'community', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
+      { name: 'connect', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
+      { name: 'search', title: 'Search', icon: 'search-outline', iconFocused: 'search' },
     ];
   }
 
@@ -78,10 +78,10 @@ export const getTabsForUserType = (
   if (userType === 'sailor' || userType === 'coach') {
     const tabs: TabConfig[] = [
       { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'follow', title: 'Follow', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'community', title: 'Discuss', icon: 'chatbubbles-outline', iconFocused: 'chatbubbles' },
+      { name: 'connect', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
+      { name: 'search', title: 'Search', icon: 'search-outline', iconFocused: 'search' },
     ];
 
     // Add coaching tabs if user has coaching capability
@@ -107,8 +107,7 @@ export const getTabsForUserType = (
 // Navigation items by persona (used by NavigationDrawer and WebSidebarNav)
 export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'races', label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
-  { key: 'follow', label: 'Follow', route: '/(tabs)/follow', icon: 'people-outline' },
-  { key: 'community', label: 'Community', route: '/(tabs)/community', icon: 'chatbubbles-outline' },
+  { key: 'connect', label: 'Connect', route: '/(tabs)/connect', icon: 'people-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
   { key: 'reflect', label: 'Reflect', route: '/(tabs)/reflect', icon: 'stats-chart-outline' },
   { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },

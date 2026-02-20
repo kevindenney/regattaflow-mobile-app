@@ -349,7 +349,7 @@ export function CommunityGlobeSection() {
               );
             })}
 
-            <TouchableOpacity style={styles.cta} onPress={() => router.push('/(tabs)/discuss')}>
+            <TouchableOpacity style={styles.cta} onPress={() => router.push('/(tabs)/connect')}>
               <Ionicons name="chatbubbles-outline" size={18} color="#FFFFFF" />
               <Text style={styles.ctaText}>Explore {selectedCity} Conversation</Text>
             </TouchableOpacity>

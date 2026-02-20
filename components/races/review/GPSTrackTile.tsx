@@ -4,6 +4,12 @@
  * Large tile (full width of 2-column row) showing GPS track mini-map
  * with key stats. Falls back to a "No track" placeholder when no data.
  *
+ * Enhanced with:
+ * - VMG (Velocity Made Good) calculation when wind direction is available
+ * - Tack/gybe detection from heading changes
+ * - Speed-over-time SVG chart colored by leg phase
+ * - Per-leg stats breakdown (distance, avg speed, avg VMG, time)
+ *
  * Follows IOSWidgetCard animation (Reanimated scale 0.96 spring, haptics)
  * and IOSConditionsWidgets visual style.
  */
@@ -22,8 +28,8 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import Svg, { Polyline, Circle } from 'react-native-svg';
-import { Navigation, Route, Check, Clock, Gauge, MapPin } from 'lucide-react-native';
+import Svg, { Polyline, Circle, Line } from 'react-native-svg';
+import { Navigation, Route, Check, Clock, Gauge, MapPin, Wind, Repeat, ArrowUpDown } from 'lucide-react-native';
 import { triggerHaptic } from '@/lib/haptics';
 import { IOS_ANIMATIONS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 import { supabase } from '@/services/supabase';
@@ -36,20 +42,32 @@ const COLORS = {
   green: '#34C759',
   orange: '#FF9500',
   teal: '#5AC8FA',
+  red: '#FF3B30',
+  indigo: '#5856D6',
   gray: '#8E8E93',
   gray3: '#C7C7CC',
   gray5: '#E5E5EA',
   gray6: '#F2F2F7',
   label: '#000000',
   secondaryLabel: '#3C3C43',
+  tertiaryLabel: '#48484A',
   background: '#FFFFFF',
+  upwind: '#34C759',
+  downwind: '#007AFF',
 };
 
 // Tile dimensions: 2 small tiles wide + gap = 155 + 12 + 155 = 322
 const TILE_WIDTH = 322;
-const TILE_HEIGHT = 322;
+const COMPACT_TILE_HEIGHT = 322;
 const MAP_HEIGHT = 200;
 const MAP_PADDING = 16;
+const SPEED_CHART_HEIGHT = 60;
+const SPEED_CHART_WIDTH = TILE_WIDTH - MAP_PADDING * 2 - 24; // padding from tile + internal
+
+// --- Constants for analysis ---
+const MS_TO_KNOTS = 1.94384;
+const HEADING_CHANGE_THRESHOLD = 60; // degrees for tack/gybe detection
+const MANEUVER_TIME_WINDOW_MS = 15000; // 15s window for detecting a single maneuver
 
 interface GPSPoint {
   lat: number;
@@ -65,6 +83,7 @@ interface TrackData {
   end_time: string;
   duration_seconds: number;
   track_points: GPSPoint[];
+  wind_direction: number | null;
 }
 
 export interface GPSTrackTileProps {
@@ -78,6 +97,10 @@ export interface GPSTrackTileProps {
   raceVenue?: string;
   onPress: () => void;
 }
+
+// =============================================================================
+// Pure computation functions
+// =============================================================================
 
 /** Haversine distance in nautical miles */
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -97,8 +120,290 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 /** Format seconds as M:SS */
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const secs = Math.round(seconds % 60);
   return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+/** Normalize heading difference to [-180, 180] */
+function headingDiff(a: number, b: number): number {
+  let d = b - a;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return d;
+}
+
+/**
+ * Calculate VMG: speed * cos(angle between heading and wind direction)
+ * Positive VMG = making progress toward wind (upwind VMG)
+ * For downwind, we compute VMG toward the downwind direction (wind + 180)
+ */
+function calcVMG(speedMs: number, heading: number, windDir: number): { upwind: number; downwind: number } {
+  const toRad = Math.PI / 180;
+  // Upwind VMG: component of boat speed directly into the wind
+  // Wind comes FROM windDir, so upwind target bearing = windDir
+  const upwindAngle = Math.abs(headingDiff(heading, windDir));
+  const upwindVMG = speedMs * MS_TO_KNOTS * Math.cos(upwindAngle * toRad);
+
+  // Downwind VMG: component of boat speed directly away from the wind
+  const downwindDir = (windDir + 180) % 360;
+  const downwindAngle = Math.abs(headingDiff(heading, downwindDir));
+  const downwindVMG = speedMs * MS_TO_KNOTS * Math.cos(downwindAngle * toRad);
+
+  return { upwind: upwindVMG, downwind: downwindVMG };
+}
+
+/** Determine if a heading relative to wind is upwind (<= 90 from wind) */
+function isUpwindHeading(heading: number, windDir: number): boolean {
+  const angle = Math.abs(headingDiff(heading, windDir));
+  return angle <= 90;
+}
+
+interface Maneuver {
+  index: number;
+  type: 'tack' | 'gybe';
+  headingChange: number;
+  timestamp: string;
+}
+
+interface DetectedLeg {
+  startIndex: number;
+  endIndex: number;
+  phase: 'upwind' | 'downwind' | 'unknown';
+  distance: number; // nm
+  avgSpeedKts: number;
+  avgVMGKts: number | null; // null if no wind data
+  durationSeconds: number;
+}
+
+interface TrackAnalysis {
+  totalDistance: number;
+  maxSpeedKts: number;
+  duration: number;
+  tacks: number;
+  gybes: number;
+  maneuvers: Maneuver[];
+  avgUpwindVMG: number | null;
+  avgDownwindVMG: number | null;
+  legs: DetectedLeg[];
+  speedTimeSeries: { elapsedSec: number; speedKts: number; phase: 'upwind' | 'downwind' | 'unknown' }[];
+  hasGaps: boolean;
+  windAvailable: boolean;
+}
+
+/**
+ * Detect tacks and gybes from heading changes.
+ * A maneuver is a heading change > HEADING_CHANGE_THRESHOLD within MANEUVER_TIME_WINDOW_MS.
+ * Type depends on wind direction: heading change while upwind = tack, while downwind = gybe.
+ * Without wind data, we classify by the magnitude: >90° = tack, else gybe.
+ */
+function detectManeuvers(points: GPSPoint[], windDir: number | null): Maneuver[] {
+  const maneuvers: Maneuver[] = [];
+  if (points.length < 3) return maneuvers;
+
+  let i = 1;
+  while (i < points.length) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    if (prev.heading == null || curr.heading == null) {
+      i++;
+      continue;
+    }
+
+    const change = Math.abs(headingDiff(prev.heading, curr.heading));
+    if (change > HEADING_CHANGE_THRESHOLD) {
+      // Check if this is within a reasonable time window
+      const dt = new Date(curr.timestamp).getTime() - new Date(prev.timestamp).getTime();
+      if (dt <= MANEUVER_TIME_WINDOW_MS && dt > 0) {
+        let type: 'tack' | 'gybe';
+        if (windDir != null) {
+          type = isUpwindHeading(prev.heading, windDir) ? 'tack' : 'gybe';
+        } else {
+          type = change > 90 ? 'tack' : 'gybe';
+        }
+        maneuvers.push({ index: i, type, headingChange: change, timestamp: curr.timestamp });
+        // Skip ahead a few points to avoid double-counting the same maneuver
+        i += 2;
+        continue;
+      }
+    }
+    i++;
+  }
+
+  return maneuvers;
+}
+
+/**
+ * Segment track into legs based on maneuver points.
+ * Each leg runs between consecutive maneuvers.
+ */
+function segmentLegs(
+  points: GPSPoint[],
+  maneuvers: Maneuver[],
+  windDir: number | null,
+): DetectedLeg[] {
+  if (points.length < 2) return [];
+
+  const boundaries = [0, ...maneuvers.map((m) => m.index), points.length - 1];
+  const legs: DetectedLeg[] = [];
+
+  for (let b = 0; b < boundaries.length - 1; b++) {
+    const startIdx = boundaries[b];
+    const endIdx = boundaries[b + 1];
+    if (endIdx <= startIdx) continue;
+
+    let dist = 0;
+    const speeds: number[] = [];
+    const vmgValues: number[] = [];
+
+    for (let i = startIdx + 1; i <= endIdx; i++) {
+      dist += haversineDistance(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
+      if (points[i].speed != null && points[i].speed! > 0) {
+        speeds.push(points[i].speed! * MS_TO_KNOTS);
+      }
+      if (windDir != null && points[i].speed != null && points[i].heading != null) {
+        const vmg = calcVMG(points[i].speed!, points[i].heading!, windDir);
+        // Pick the VMG component that matches the leg phase
+        const upwind = isUpwindHeading(points[i].heading!, windDir);
+        vmgValues.push(upwind ? vmg.upwind : vmg.downwind);
+      }
+    }
+
+    const startTime = new Date(points[startIdx].timestamp).getTime();
+    const endTime = new Date(points[endIdx].timestamp).getTime();
+    const durationSec = (endTime - startTime) / 1000;
+
+    // Determine leg phase from the dominant heading direction
+    let phase: 'upwind' | 'downwind' | 'unknown' = 'unknown';
+    if (windDir != null) {
+      let upwindCount = 0;
+      let total = 0;
+      for (let i = startIdx; i <= endIdx; i++) {
+        if (points[i].heading != null) {
+          total++;
+          if (isUpwindHeading(points[i].heading!, windDir)) upwindCount++;
+        }
+      }
+      if (total > 0) {
+        phase = upwindCount / total > 0.5 ? 'upwind' : 'downwind';
+      }
+    }
+
+    const avgSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : 0;
+    const avgVMG = vmgValues.length > 0 ? vmgValues.reduce((a, b) => a + b, 0) / vmgValues.length : null;
+
+    legs.push({
+      startIndex: startIdx,
+      endIndex: endIdx,
+      phase,
+      distance: dist,
+      avgSpeedKts: avgSpeed,
+      avgVMGKts: avgVMG,
+      durationSeconds: Math.max(durationSec, 0),
+    });
+  }
+
+  return legs;
+}
+
+/** Full track analysis computation — deterministic, pure function */
+function analyzeTrack(points: GPSPoint[], windDir: number | null): TrackAnalysis | null {
+  if (!points || points.length < 2) return null;
+
+  // Check for GPS gaps (>30 seconds between consecutive points)
+  let hasGaps = false;
+  for (let i = 1; i < points.length; i++) {
+    const dt = new Date(points[i].timestamp).getTime() - new Date(points[i - 1].timestamp).getTime();
+    if (dt > 30000) {
+      hasGaps = true;
+      break;
+    }
+  }
+
+  // Basic stats
+  let totalDistance = 0;
+  let maxSpeedMs = 0;
+  for (let i = 1; i < points.length; i++) {
+    totalDistance += haversineDistance(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
+    if (points[i].speed != null && points[i].speed! > maxSpeedMs) maxSpeedMs = points[i].speed!;
+  }
+
+  const startMs = new Date(points[0].timestamp).getTime();
+  const endMs = new Date(points[points.length - 1].timestamp).getTime();
+  const duration = (endMs - startMs) / 1000;
+
+  // Maneuvers
+  const maneuvers = detectManeuvers(points, windDir);
+  const tacks = maneuvers.filter((m) => m.type === 'tack').length;
+  const gybes = maneuvers.filter((m) => m.type === 'gybe').length;
+
+  // Legs
+  const legs = segmentLegs(points, maneuvers, windDir);
+
+  // VMG averages
+  let avgUpwindVMG: number | null = null;
+  let avgDownwindVMG: number | null = null;
+  if (windDir != null) {
+    const upwindVMGs: number[] = [];
+    const downwindVMGs: number[] = [];
+
+    for (const p of points) {
+      if (p.speed != null && p.speed > 0 && p.heading != null) {
+        const vmg = calcVMG(p.speed, p.heading, windDir);
+        if (isUpwindHeading(p.heading, windDir)) {
+          if (vmg.upwind > 0) upwindVMGs.push(vmg.upwind);
+        } else {
+          if (vmg.downwind > 0) downwindVMGs.push(vmg.downwind);
+        }
+      }
+    }
+
+    if (upwindVMGs.length > 0) {
+      avgUpwindVMG = upwindVMGs.reduce((a, b) => a + b, 0) / upwindVMGs.length;
+    }
+    if (downwindVMGs.length > 0) {
+      avgDownwindVMG = downwindVMGs.reduce((a, b) => a + b, 0) / downwindVMGs.length;
+    }
+  }
+
+  // Speed time series (downsample to ~100 points for chart)
+  const step = Math.max(1, Math.floor(points.length / 100));
+  const speedTimeSeries: TrackAnalysis['speedTimeSeries'] = [];
+  for (let i = 0; i < points.length; i += step) {
+    const p = points[i];
+    const elapsedSec = (new Date(p.timestamp).getTime() - startMs) / 1000;
+    const speedKts = (p.speed || 0) * MS_TO_KNOTS;
+    let phase: 'upwind' | 'downwind' | 'unknown' = 'unknown';
+    if (windDir != null && p.heading != null) {
+      phase = isUpwindHeading(p.heading, windDir) ? 'upwind' : 'downwind';
+    }
+    speedTimeSeries.push({ elapsedSec, speedKts, phase });
+  }
+  // Always include the last point
+  const lastPt = points[points.length - 1];
+  if (speedTimeSeries.length === 0 || speedTimeSeries[speedTimeSeries.length - 1].elapsedSec !== duration) {
+    speedTimeSeries.push({
+      elapsedSec: duration,
+      speedKts: (lastPt.speed || 0) * MS_TO_KNOTS,
+      phase: windDir != null && lastPt.heading != null
+        ? (isUpwindHeading(lastPt.heading, windDir) ? 'upwind' : 'downwind')
+        : 'unknown',
+    });
+  }
+
+  return {
+    totalDistance,
+    maxSpeedKts: maxSpeedMs * MS_TO_KNOTS,
+    duration,
+    tacks,
+    gybes,
+    maneuvers,
+    avgUpwindVMG,
+    avgDownwindVMG,
+    legs,
+    speedTimeSeries,
+    hasGaps,
+    windAvailable: windDir != null,
+  };
 }
 
 /** Convert GPS points to SVG polyline points string */
@@ -106,7 +411,7 @@ function pointsToSvg(
   points: GPSPoint[],
   width: number,
   height: number,
-  padding: number = 16
+  padding: number = 16,
 ): {
   polylinePoints: string;
   startPoint: { x: number; y: number };
@@ -153,6 +458,195 @@ function pointsToSvg(
   };
 }
 
+/** Build SVG polyline segments for the speed chart, one per color phase */
+function buildSpeedChartSegments(
+  series: TrackAnalysis['speedTimeSeries'],
+  chartW: number,
+  chartH: number,
+): { points: string; color: string }[] {
+  if (series.length < 2) return [];
+
+  const maxTime = series[series.length - 1].elapsedSec || 1;
+  const maxSpeed = Math.max(...series.map((s) => s.speedKts), 1);
+
+  const toX = (sec: number) => (sec / maxTime) * chartW;
+  const toY = (kts: number) => chartH - (kts / maxSpeed) * (chartH - 4); // 4px top padding
+
+  // Build contiguous segments by phase color
+  const segments: { points: string; color: string }[] = [];
+  let currentColor = phaseColor(series[0].phase);
+  let currentPoints: string[] = [`${toX(series[0].elapsedSec)},${toY(series[0].speedKts)}`];
+
+  for (let i = 1; i < series.length; i++) {
+    const color = phaseColor(series[i].phase);
+    const pt = `${toX(series[i].elapsedSec)},${toY(series[i].speedKts)}`;
+
+    if (color !== currentColor) {
+      // Close current segment with overlap point for continuity
+      currentPoints.push(pt);
+      segments.push({ points: currentPoints.join(' '), color: currentColor });
+      // Start new segment from same point
+      currentColor = color;
+      currentPoints = [pt];
+    } else {
+      currentPoints.push(pt);
+    }
+  }
+
+  if (currentPoints.length > 0) {
+    segments.push({ points: currentPoints.join(' '), color: currentColor });
+  }
+
+  return segments;
+}
+
+function phaseColor(phase: 'upwind' | 'downwind' | 'unknown'): string {
+  if (phase === 'upwind') return COLORS.upwind;
+  if (phase === 'downwind') return COLORS.downwind;
+  return COLORS.teal;
+}
+
+// =============================================================================
+// Speed Chart Component
+// =============================================================================
+
+function SpeedChart({ analysis }: { analysis: TrackAnalysis }) {
+  const segments = useMemo(
+    () => buildSpeedChartSegments(analysis.speedTimeSeries, SPEED_CHART_WIDTH, SPEED_CHART_HEIGHT),
+    [analysis.speedTimeSeries],
+  );
+
+  if (segments.length === 0) return null;
+
+  const maxSpeed = Math.max(...analysis.speedTimeSeries.map((s) => s.speedKts), 1);
+
+  return (
+    <View style={styles.chartContainer}>
+      <View style={styles.chartHeader}>
+        <Text style={styles.chartTitle}>SPEED</Text>
+        <Text style={styles.chartSubtitle}>{maxSpeed.toFixed(1)} kts max</Text>
+      </View>
+      <View style={styles.chartArea}>
+        {/* Y-axis label */}
+        <View style={styles.chartYAxis}>
+          <Text style={styles.chartAxisLabel}>{maxSpeed.toFixed(0)}</Text>
+          <Text style={styles.chartAxisLabel}>0</Text>
+        </View>
+        <Svg width={SPEED_CHART_WIDTH} height={SPEED_CHART_HEIGHT}>
+          {/* Grid lines */}
+          <Line
+            x1={0} y1={0} x2={SPEED_CHART_WIDTH} y2={0}
+            stroke={COLORS.gray5} strokeWidth={0.5}
+          />
+          <Line
+            x1={0} y1={SPEED_CHART_HEIGHT / 2} x2={SPEED_CHART_WIDTH} y2={SPEED_CHART_HEIGHT / 2}
+            stroke={COLORS.gray5} strokeWidth={0.5} strokeDasharray="4,4"
+          />
+          <Line
+            x1={0} y1={SPEED_CHART_HEIGHT} x2={SPEED_CHART_WIDTH} y2={SPEED_CHART_HEIGHT}
+            stroke={COLORS.gray5} strokeWidth={0.5}
+          />
+          {/* Speed line segments colored by phase */}
+          {segments.map((seg, idx) => (
+            <Polyline
+              key={idx}
+              points={seg.points}
+              fill="none"
+              stroke={seg.color}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+        </Svg>
+      </View>
+      {/* Legend */}
+      {analysis.windAvailable && (
+        <View style={styles.chartLegend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: COLORS.upwind }]} />
+            <Text style={styles.legendLabel}>Upwind</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: COLORS.downwind }]} />
+            <Text style={styles.legendLabel}>Downwind</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// =============================================================================
+// Leg Stats Component
+// =============================================================================
+
+function LegStats({ legs, windAvailable }: { legs: DetectedLeg[]; windAvailable: boolean }) {
+  if (legs.length === 0) return null;
+
+  // Only show meaningful legs (> 5 seconds, > 0.001 nm)
+  const meaningfulLegs = legs.filter((l) => l.durationSeconds > 5 && l.distance > 0.001);
+  if (meaningfulLegs.length === 0) return null;
+
+  // Cap at 8 legs for display
+  const displayLegs = meaningfulLegs.slice(0, 8);
+
+  return (
+    <View style={styles.legsContainer}>
+      <Text style={styles.legsTitle}>LEG BREAKDOWN</Text>
+      {/* Column headers */}
+      <View style={styles.legHeaderRow}>
+        <Text style={[styles.legHeaderCell, styles.legNameCol]}>Leg</Text>
+        <Text style={[styles.legHeaderCell, styles.legStatCol]}>Dist</Text>
+        <Text style={[styles.legHeaderCell, styles.legStatCol]}>Avg Spd</Text>
+        {windAvailable && <Text style={[styles.legHeaderCell, styles.legStatCol]}>VMG</Text>}
+        <Text style={[styles.legHeaderCell, styles.legStatCol]}>Time</Text>
+      </View>
+      {displayLegs.map((leg, idx) => {
+        const phaseLabel = leg.phase === 'upwind'
+          ? `\u25B2 Up ${Math.ceil((idx + 1) / 2)}`
+          : leg.phase === 'downwind'
+            ? `\u25BC Dn ${Math.ceil((idx + 1) / 2)}`
+            : `Leg ${idx + 1}`;
+        const phaseTextColor = leg.phase === 'upwind'
+          ? COLORS.upwind
+          : leg.phase === 'downwind'
+            ? COLORS.downwind
+            : COLORS.tertiaryLabel;
+
+        return (
+          <View key={idx} style={[styles.legRow, idx % 2 === 0 && styles.legRowAlt]}>
+            <Text style={[styles.legCell, styles.legNameCol, { color: phaseTextColor }]} numberOfLines={1}>
+              {phaseLabel}
+            </Text>
+            <Text style={[styles.legCell, styles.legStatCol]}>
+              {leg.distance < 0.01 ? '<.01' : leg.distance.toFixed(2)}
+            </Text>
+            <Text style={[styles.legCell, styles.legStatCol]}>
+              {leg.avgSpeedKts.toFixed(1)}
+            </Text>
+            {windAvailable && (
+              <Text style={[styles.legCell, styles.legStatCol]}>
+                {leg.avgVMGKts != null ? leg.avgVMGKts.toFixed(1) : '—'}
+              </Text>
+            )}
+            <Text style={[styles.legCell, styles.legStatCol]}>
+              {formatDuration(leg.durationSeconds)}
+            </Text>
+          </View>
+        );
+      })}
+      {meaningfulLegs.length > 8 && (
+        <Text style={styles.legsOverflow}>+{meaningfulLegs.length - 8} more legs</Text>
+      )}
+    </View>
+  );
+}
+
+// =============================================================================
+// Main Component
+// =============================================================================
+
 export function GPSTrackTile({
   raceId,
   userId,
@@ -168,7 +662,7 @@ export function GPSTrackTile({
   // Location state — use props first, then fetch from DB as fallback
   const [dbLocation, setDbLocation] = useState<{ lat: number; lng: number; venue?: string } | null>(null);
 
-  // Fetch track data
+  // Fetch track data (now includes wind_direction)
   useEffect(() => {
     if (!timerSessionId) {
       setLoading(false);
@@ -182,7 +676,7 @@ export function GPSTrackTile({
         setLoading(true);
         const { data, error } = await supabase
           .from('race_timer_sessions')
-          .select('id, start_time, end_time, duration_seconds, track_points')
+          .select('id, start_time, end_time, duration_seconds, track_points, wind_direction')
           .eq('id', timerSessionId!)
           .single();
 
@@ -293,28 +787,10 @@ export function GPSTrackTile({
     return () => { cancelled = true; };
   }, [raceId, raceLatitude, raceLongitude]);
 
-  // Stats
-  const stats = useMemo(() => {
+  // Track analysis (VMG, tacks, gybes, legs, speed series)
+  const analysis = useMemo(() => {
     if (!trackData?.track_points?.length) return null;
-    const points = trackData.track_points;
-    const speeds = points.map((p) => p.speed || 0).filter((s) => s > 0);
-    const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : 0;
-
-    let distance = 0;
-    for (let i = 1; i < points.length; i++) {
-      distance += haversineDistance(
-        points[i - 1].lat,
-        points[i - 1].lng,
-        points[i].lat,
-        points[i].lng
-      );
-    }
-
-    return {
-      maxSpeed: maxSpeed * 1.94384, // m/s → knots
-      distance,
-      duration: trackData.duration_seconds || 0,
-    };
+    return analyzeTrack(trackData.track_points, trackData.wind_direction);
   }, [trackData]);
 
   // SVG data
@@ -325,6 +801,7 @@ export function GPSTrackTile({
   }, [trackData, mapWidth]);
 
   const hasTrack = !!svgData;
+  const hasAnalysis = !!analysis;
 
   // Animation
   const scaleVal = useSharedValue(1);
@@ -356,6 +833,8 @@ export function GPSTrackTile({
     <AnimatedPressable
       style={[
         styles.tile,
+        // Auto-height when we have analysis data, compact otherwise
+        hasAnalysis ? styles.tileExpanded : styles.tileCompact,
         hasTrack && styles.tileComplete,
         animatedStyle,
         Platform.OS !== 'web' && IOS_SHADOWS.card,
@@ -366,7 +845,7 @@ export function GPSTrackTile({
       accessibilityRole="button"
       accessibilityLabel={
         hasTrack
-          ? `GPS Track: ${stats ? `${formatDuration(stats.duration)}, ${stats.maxSpeed.toFixed(1)} knots max` : 'recorded'}`
+          ? `GPS Track: ${analysis ? `${formatDuration(analysis.duration)}, ${analysis.maxSpeedKts.toFixed(1)} knots max` : 'recorded'}`
           : 'GPS Track: loading'
       }
     >
@@ -407,7 +886,7 @@ export function GPSTrackTile({
               cx={svgData.endPoint.x}
               cy={svgData.endPoint.y}
               r={5}
-              fill="#FF3B30"
+              fill={COLORS.red}
             />
           </Svg>
         ) : hasRaceLocation ? (
@@ -433,22 +912,22 @@ export function GPSTrackTile({
         )}
       </View>
 
-      {/* Stats row */}
-      {stats ? (
+      {/* Primary stats row (Duration / Max Speed / Distance) */}
+      {analysis ? (
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Clock size={12} color={COLORS.blue} />
-            <Text style={styles.statValue}>{formatDuration(stats.duration)}</Text>
+            <Text style={styles.statValue}>{formatDuration(analysis.duration)}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Gauge size={12} color={COLORS.green} />
-            <Text style={styles.statValue}>{stats.maxSpeed.toFixed(1)} kts</Text>
+            <Text style={styles.statValue}>{analysis.maxSpeedKts.toFixed(1)} kts</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <MapPin size={12} color={COLORS.orange} />
-            <Text style={styles.statValue}>{stats.distance.toFixed(2)} nm</Text>
+            <Text style={styles.statValue}>{analysis.totalDistance.toFixed(2)} nm</Text>
           </View>
         </View>
       ) : !loading && hasRaceLocation && resolvedVenue ? (
@@ -462,30 +941,99 @@ export function GPSTrackTile({
         </View>
       ) : null}
 
+      {/* Secondary stats row (VMG / Tacks / Gybes) — only when analysis exists */}
+      {analysis && (
+        <View style={styles.secondaryStatsRow}>
+          {analysis.windAvailable && analysis.avgUpwindVMG != null ? (
+            <>
+              <View style={styles.statItem}>
+                <Wind size={11} color={COLORS.upwind} />
+                <Text style={styles.statValueSmall}>
+                  {analysis.avgUpwindVMG.toFixed(1)}
+                </Text>
+                <Text style={styles.statLabelSmall}>VMG up</Text>
+              </View>
+              <View style={styles.statDividerSmall} />
+              <View style={styles.statItem}>
+                <Wind size={11} color={COLORS.downwind} />
+                <Text style={styles.statValueSmall}>
+                  {analysis.avgDownwindVMG != null ? analysis.avgDownwindVMG.toFixed(1) : '—'}
+                </Text>
+                <Text style={styles.statLabelSmall}>VMG dn</Text>
+              </View>
+              <View style={styles.statDividerSmall} />
+            </>
+          ) : (
+            <View style={styles.noWindHint}>
+              <Wind size={10} color={COLORS.gray3} />
+              <Text style={styles.noWindText}>Add wind data for VMG</Text>
+            </View>
+          )}
+          <View style={styles.statItem}>
+            <Repeat size={11} color={COLORS.indigo} />
+            <Text style={styles.statValueSmall}>{analysis.tacks}</Text>
+            <Text style={styles.statLabelSmall}>Tacks</Text>
+          </View>
+          <View style={styles.statDividerSmall} />
+          <View style={styles.statItem}>
+            <ArrowUpDown size={11} color={COLORS.orange} />
+            <Text style={styles.statValueSmall}>{analysis.gybes}</Text>
+            <Text style={styles.statLabelSmall}>Gybes</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Speed Chart */}
+      {analysis && analysis.speedTimeSeries.length >= 2 && (
+        <SpeedChart analysis={analysis} />
+      )}
+
+      {/* Leg Breakdown */}
+      {analysis && (
+        <LegStats legs={analysis.legs} windAvailable={analysis.windAvailable} />
+      )}
+
+      {/* GPS gap warning */}
+      {analysis?.hasGaps && (
+        <Text style={styles.gapWarning}>
+          Incomplete GPS data — some track segments may be missing
+        </Text>
+      )}
+
       {/* Footer */}
       <Text style={styles.hint} numberOfLines={1}>
-        {hasTrack ? 'View analysis' : 'View session'}
+        {hasTrack ? 'View full analysis' : 'View session'}
       </Text>
     </AnimatedPressable>
   );
 }
 
+// =============================================================================
+// Styles
+// =============================================================================
+
 const styles = StyleSheet.create({
   tile: {
     width: TILE_WIDTH,
-    height: TILE_HEIGHT,
     backgroundColor: COLORS.background,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.gray5,
     padding: 12,
-    justifyContent: 'space-between',
+    gap: 6,
     ...Platform.select({
       web: {
         boxShadow: '0 2px 10px rgba(0, 0, 0, 0.06)',
       },
       default: {},
     }),
+  },
+  tileCompact: {
+    height: COMPACT_TILE_HEIGHT,
+    justifyContent: 'space-between',
+  },
+  tileExpanded: {
+    // Auto height — no fixed height
   },
   tileComplete: {
     borderColor: `${COLORS.green}60`,
@@ -516,7 +1064,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   mapContainer: {
-    flex: 1,
+    height: MAP_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.gray6,
@@ -573,6 +1121,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.gray,
   },
+
+  // --- Stats rows ---
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -580,25 +1130,183 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 6,
   },
+  secondaryStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.gray5,
+  },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   statValue: {
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.label,
   },
+  statValueSmall: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.label,
+  },
+  statLabelSmall: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: COLORS.gray,
+  },
   statDivider: {
     width: 1,
     height: 14,
+    backgroundColor: COLORS.gray5,
+  },
+  statDividerSmall: {
+    width: 1,
+    height: 12,
     backgroundColor: COLORS.gray5,
   },
   statsPlaceholder: {
     fontSize: 12,
     fontWeight: '500',
     color: COLORS.gray3,
+  },
+  noWindHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flex: 1,
+  },
+  noWindText: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: COLORS.gray3,
+  },
+
+  // --- Speed Chart ---
+  chartContainer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.gray5,
+    paddingTop: 6,
+    gap: 4,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chartTitle: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: COLORS.gray,
+    letterSpacing: 0.6,
+  },
+  chartSubtitle: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: COLORS.gray,
+  },
+  chartArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  chartYAxis: {
+    justifyContent: 'space-between',
+    height: SPEED_CHART_HEIGHT,
+    width: 18,
+  },
+  chartAxisLabel: {
+    fontSize: 8,
+    fontWeight: '500',
+    color: COLORS.gray3,
+    textAlign: 'right',
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  legendDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  legendLabel: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: COLORS.gray,
+  },
+
+  // --- Leg Breakdown ---
+  legsContainer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.gray5,
+    paddingTop: 6,
+    gap: 2,
+  },
+  legsTitle: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: COLORS.gray,
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  legHeaderRow: {
+    flexDirection: 'row',
+    paddingVertical: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.gray5,
+  },
+  legHeaderCell: {
+    fontSize: 8,
+    fontWeight: '600',
+    color: COLORS.gray,
+    textTransform: 'uppercase',
+  },
+  legNameCol: {
+    flex: 1.2,
+  },
+  legStatCol: {
+    flex: 1,
+    textAlign: 'right',
+  },
+  legRow: {
+    flexDirection: 'row',
+    paddingVertical: 3,
+  },
+  legRowAlt: {
+    backgroundColor: `${COLORS.gray6}80`,
+    borderRadius: 4,
+  },
+  legCell: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: COLORS.tertiaryLabel,
+  },
+  legsOverflow: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: COLORS.gray,
+    textAlign: 'center',
+    paddingTop: 2,
+  },
+
+  // --- Footer ---
+  gapWarning: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: COLORS.orange,
+    textAlign: 'center',
   },
   hint: {
     fontSize: 11,

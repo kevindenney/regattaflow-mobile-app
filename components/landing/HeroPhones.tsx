@@ -538,9 +538,9 @@ export function HeroPhones() {
 
   const handleExploreVenues = () => {
     if (user && userProfile) {
-      router.push('/(tabs)/discuss');
+      router.push('/(tabs)/connect');
     } else {
-      router.push('/(tabs)/discuss');
+      router.push('/(tabs)/connect');
     }
   };
 

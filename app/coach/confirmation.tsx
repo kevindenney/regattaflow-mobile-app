@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-    Alert,
     Platform,
     ScrollView,
     Share,
@@ -11,6 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 export default function BookingConfirmationScreen() {
   const router = useRouter();
@@ -39,11 +39,7 @@ export default function BookingConfirmationScreen() {
 
   const handleAddToCalendar = () => {
     // In a real implementation, this would use expo-calendar
-    Alert.alert(
-      'Add to Calendar',
-      'Calendar integration coming soon. You can manually add this to your calendar.',
-      [{ text: 'OK' }]
-    );
+    showAlert('Add to Calendar', 'Calendar integration coming soon. You can manually add this to your calendar.');
   };
 
   const handleMessageCoach = () => {
@@ -59,7 +55,7 @@ export default function BookingConfirmationScreen() {
           await nav.share({ text: message });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(message);
-          Alert.alert('Copied', 'Booking details copied to clipboard');
+          showAlert('Copied', 'Booking details copied to clipboard');
         }
       } else {
         await Share.share({ message });

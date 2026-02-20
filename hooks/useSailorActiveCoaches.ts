@@ -151,7 +151,7 @@ export function useSailorActiveCoaches(
       // Fetch coach profiles
       const { data: coachProfiles, error: profileError } = await supabase
         .from('coach_profiles')
-        .select('id, display_name, profile_photo_url, specialties, boat_classes_coached')
+        .select('id, display_name, profile_photo_url:profile_image_url, specialties, boat_classes_coached')
         .in('id', coachIds);
 
       if (profileError) {

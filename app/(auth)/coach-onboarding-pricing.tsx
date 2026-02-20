@@ -69,6 +69,9 @@ const CoachOnboardingPricing = () => {
     five: '',
     ten: '',
   });
+  const [singleEnabled, setSingleEnabled] = useState(true);
+  const [fivePackEnabled, setFivePackEnabled] = useState(true);
+  const [tenPackEnabled, setTenPackEnabled] = useState(true);
 
   // Load saved state
   useEffect(() => {
@@ -79,6 +82,10 @@ const CoachOnboardingPricing = () => {
       setSessionDuration(state.pricing.sessionDuration || '60');
       if (state.pricing.packagePrices) {
         setPackagePrices(state.pricing.packagePrices);
+        // Restore toggle states: a tier is enabled if its price was saved
+        setSingleEnabled(!!state.pricing.packagePrices.single);
+        setFivePackEnabled(!!state.pricing.packagePrices.five);
+        setTenPackEnabled(!!state.pricing.packagePrices.ten);
       }
     }
   }, [state.pricing]);
@@ -91,8 +98,18 @@ const CoachOnboardingPricing = () => {
     if (pricingModel === 'hourly') {
       return hourlyRate.length > 0 && !isNaN(parseFloat(hourlyRate));
     }
-    return Object.values(packagePrices).every(
-      price => price.length > 0 && !isNaN(parseFloat(price))
+    // At least one tier must be enabled
+    const enabledTiers = [
+      { enabled: singleEnabled, price: packagePrices.single },
+      { enabled: fivePackEnabled, price: packagePrices.five },
+      { enabled: tenPackEnabled, price: packagePrices.ten },
+    ].filter(t => t.enabled);
+
+    if (enabledTiers.length === 0) return false;
+
+    // Every enabled tier must have a valid price
+    return enabledTiers.every(
+      t => t.price.length > 0 && !isNaN(parseFloat(t.price))
     );
   };
 
@@ -105,6 +122,12 @@ const CoachOnboardingPricing = () => {
     return (rate * (1 - PLATFORM_FEE)).toFixed(0);
   };
 
+  const getEnabledPackagePrices = () => ({
+    single: singleEnabled ? packagePrices.single : '',
+    five: fivePackEnabled ? packagePrices.five : '',
+    ten: tenPackEnabled ? packagePrices.ten : '',
+  });
+
   const handleContinue = () => {
     if (!isFormValid()) return;
 
@@ -113,7 +136,7 @@ const CoachOnboardingPricing = () => {
       currency,
       hourlyRate: pricingModel === 'hourly' ? hourlyRate : undefined,
       sessionDuration: pricingModel === 'hourly' ? sessionDuration : undefined,
-      packagePrices: pricingModel === 'packages' ? packagePrices : undefined,
+      packagePrices: pricingModel === 'packages' ? getEnabledPackagePrices() : undefined,
     });
 
     router.push('/(auth)/coach-onboarding-payment-setup');
@@ -125,7 +148,7 @@ const CoachOnboardingPricing = () => {
       currency,
       hourlyRate: pricingModel === 'hourly' ? hourlyRate : undefined,
       sessionDuration: pricingModel === 'hourly' ? sessionDuration : undefined,
-      packagePrices: pricingModel === 'packages' ? packagePrices : undefined,
+      packagePrices: pricingModel === 'packages' ? getEnabledPackagePrices() : undefined,
     });
 
     router.replace('/(tabs)/coaching');
@@ -295,63 +318,99 @@ const CoachOnboardingPricing = () => {
             <View style={styles.card}>
               {/* Single Session */}
               <View style={styles.packageRow}>
+                <TouchableOpacity
+                  style={styles.tierToggle}
+                  onPress={() => setSingleEnabled(!singleEnabled)}
+                >
+                  <Ionicons
+                    name={singleEnabled ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={singleEnabled ? COLORS.primary : COLORS.tertiaryLabel}
+                  />
+                </TouchableOpacity>
                 <View style={styles.packageInfo}>
-                  <Text style={styles.packageLabel}>Single Session</Text>
+                  <Text style={[styles.packageLabel, !singleEnabled && styles.packageLabelDisabled]}>Single Session</Text>
                   <Text style={styles.packageDesc}>Pay per session</Text>
                 </View>
-                <View style={styles.packageInput}>
-                  <Text style={styles.packageCurrency}>{getSelectedCurrency().symbol}</Text>
-                  <TextInput
-                    style={styles.packageValue}
-                    placeholder="100"
-                    placeholderTextColor={COLORS.tertiaryLabel}
-                    value={packagePrices.single}
-                    onChangeText={(text) => updatePackagePrice('single', text)}
-                    keyboardType="numeric"
-                  />
-                </View>
+                {singleEnabled && (
+                  <View style={styles.packageInput}>
+                    <Text style={styles.packageCurrency}>{getSelectedCurrency().symbol}</Text>
+                    <TextInput
+                      style={styles.packageValue}
+                      placeholder="100"
+                      placeholderTextColor={COLORS.tertiaryLabel}
+                      value={packagePrices.single}
+                      onChangeText={(text) => updatePackagePrice('single', text)}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                )}
               </View>
 
               <View style={styles.inputSeparator} />
 
               {/* 5 Sessions */}
               <View style={styles.packageRow}>
+                <TouchableOpacity
+                  style={styles.tierToggle}
+                  onPress={() => setFivePackEnabled(!fivePackEnabled)}
+                >
+                  <Ionicons
+                    name={fivePackEnabled ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={fivePackEnabled ? COLORS.primary : COLORS.tertiaryLabel}
+                  />
+                </TouchableOpacity>
                 <View style={styles.packageInfo}>
-                  <Text style={styles.packageLabel}>5 Sessions</Text>
+                  <Text style={[styles.packageLabel, !fivePackEnabled && styles.packageLabelDisabled]}>5 Sessions</Text>
                   <Text style={styles.packageDesc}>Save 10%</Text>
                 </View>
-                <View style={styles.packageInput}>
-                  <Text style={styles.packageCurrency}>{getSelectedCurrency().symbol}</Text>
-                  <TextInput
-                    style={styles.packageValue}
-                    placeholder="450"
-                    placeholderTextColor={COLORS.tertiaryLabel}
-                    value={packagePrices.five}
-                    onChangeText={(text) => updatePackagePrice('five', text)}
-                    keyboardType="numeric"
-                  />
-                </View>
+                {fivePackEnabled && (
+                  <View style={styles.packageInput}>
+                    <Text style={styles.packageCurrency}>{getSelectedCurrency().symbol}</Text>
+                    <TextInput
+                      style={styles.packageValue}
+                      placeholder="450"
+                      placeholderTextColor={COLORS.tertiaryLabel}
+                      value={packagePrices.five}
+                      onChangeText={(text) => updatePackagePrice('five', text)}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                )}
               </View>
 
               <View style={styles.inputSeparator} />
 
               {/* 10 Sessions */}
               <View style={styles.packageRow}>
+                <TouchableOpacity
+                  style={styles.tierToggle}
+                  onPress={() => setTenPackEnabled(!tenPackEnabled)}
+                >
+                  <Ionicons
+                    name={tenPackEnabled ? 'checkbox' : 'square-outline'}
+                    size={22}
+                    color={tenPackEnabled ? COLORS.primary : COLORS.tertiaryLabel}
+                  />
+                </TouchableOpacity>
                 <View style={styles.packageInfo}>
-                  <Text style={styles.packageLabel}>10 Sessions</Text>
+                  <Text style={[styles.packageLabel, !tenPackEnabled && styles.packageLabelDisabled]}>10 Sessions</Text>
                   <Text style={styles.packageDesc}>Save 20%</Text>
                 </View>
-                <View style={styles.packageInput}>
-                  <Text style={styles.packageCurrency}>{getSelectedCurrency().symbol}</Text>
-                  <TextInput
-                    style={styles.packageValue}
-                    placeholder="800"
-                    placeholderTextColor={COLORS.tertiaryLabel}
-                    value={packagePrices.ten}
-                    onChangeText={(text) => updatePackagePrice('ten', text)}
-                    keyboardType="numeric"
-                  />
-                </View>
+                {tenPackEnabled && (
+                  <View style={styles.packageInput}>
+                    <Text style={styles.packageCurrency}>{getSelectedCurrency().symbol}</Text>
+                    <TextInput
+                      style={styles.packageValue}
+                      placeholder="800"
+                      placeholderTextColor={COLORS.tertiaryLabel}
+                      value={packagePrices.ten}
+                      onChangeText={(text) => updatePackagePrice('ten', text)}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                )}
               </View>
             </View>
 
@@ -688,6 +747,14 @@ const styles = StyleSheet.create({
   packageLabel: {
     fontSize: 17,
     color: COLORS.label,
+  },
+  packageLabelDisabled: {
+    color: COLORS.tertiaryLabel,
+  },
+  tierToggle: {
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   packageDesc: {
     fontSize: 13,

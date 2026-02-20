@@ -8,7 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { CoachRegistrationForm, SkillLevel } from '../../../types/coach';
-import { CoachMarketplaceService } from '../../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 
 interface ExpertiseStepProps {
   data: CoachRegistrationForm;

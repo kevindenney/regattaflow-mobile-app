@@ -1,10 +1,9 @@
 import { coachingService } from '@/services/CoachingService';
 import { supabase } from '@/services/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     ScrollView,
     StyleSheet,
@@ -13,6 +12,24 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
+
+interface CustomCharge {
+  id: string;
+  label: string;
+  amount_cents: number;
+  description?: string;
+  is_active: boolean;
+  session_types?: string[];
+}
+
+interface CoachPricing {
+  hourly_rate: number | null;
+  currency: string;
+  session_type_rates: Record<string, number>;
+  custom_charges: CustomCharge[];
+}
 
 export default function BookingFormScreen() {
   const router = useRouter();
@@ -34,8 +51,14 @@ export default function BookingFormScreen() {
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
   const [locationNotes, setLocationNotes] = useState('');
 
+  // Custom charges state
+  const [coachPricing, setCoachPricing] = useState<CoachPricing | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(true);
+  const [selectedChargeIds, setSelectedChargeIds] = useState<string[]>([]);
+
   useEffect(() => {
     loadVenues();
+    loadCoachPricing();
   }, []);
 
   const loadVenues = async () => {
@@ -53,22 +76,116 @@ export default function BookingFormScreen() {
     }
   };
 
+  const loadCoachPricing = async () => {
+    if (!params.coachId) return;
+
+    try {
+      setPricingLoading(true);
+      const pricing = await coachingService.getCoachPricing(params.coachId);
+      if (pricing) {
+        setCoachPricing({
+          hourly_rate: pricing.hourly_rate,
+          currency: pricing.currency,
+          session_type_rates: pricing.session_type_rates,
+          custom_charges: pricing.custom_charges,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading coach pricing:', error);
+    } finally {
+      setPricingLoading(false);
+    }
+  };
+
+  // Get applicable custom charges for the selected session type
+  const applicableCharges = useMemo(() => {
+    if (!coachPricing?.custom_charges) return [];
+
+    return coachPricing.custom_charges.filter(charge => {
+      if (!charge.is_active) return false;
+      // If session_types is specified, only show for those types
+      if (charge.session_types && charge.session_types.length > 0) {
+        // Map our session type to the coach's session types
+        const sessionTypeMap: Record<string, string> = {
+          'one_on_one': 'on_water',
+          'video_analysis': 'video_review',
+          'race_debrief': 'strategy',
+          'group': 'on_water',
+        };
+        const mappedType = sessionTypeMap[sessionType] || sessionType;
+        return charge.session_types.includes(mappedType);
+      }
+      return true;
+    });
+  }, [coachPricing, sessionType]);
+
+  const toggleCharge = (chargeId: string) => {
+    setSelectedChargeIds(prev =>
+      prev.includes(chargeId)
+        ? prev.filter(id => id !== chargeId)
+        : [...prev, chargeId]
+    );
+  };
+
   const calculateSessionCost = () => {
-    if (!params.startTime || !params.endTime || !params.hourlyRate) return 0;
+    if (!params.startTime || !params.endTime) return { base: 0, charges: 0, total: 0 };
 
     const start = new Date(params.startTime);
     const end = new Date(params.endTime);
     const hours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
 
-    return (parseInt(params.hourlyRate) / 100) * hours;
+    // Get the rate for this session type, or fall back to hourly rate from params
+    let rateInCents = parseInt(params.hourlyRate) || 0;
+
+    if (coachPricing) {
+      // Check for session-type-specific rate
+      const sessionTypeMap: Record<string, string> = {
+        'one_on_one': 'on_water',
+        'video_analysis': 'video_review',
+        'race_debrief': 'strategy',
+        'group': 'on_water',
+      };
+      const mappedType = sessionTypeMap[sessionType] || sessionType;
+      const typeRate = coachPricing.session_type_rates[mappedType];
+
+      if (typeRate) {
+        rateInCents = typeRate;
+      } else if (coachPricing.hourly_rate) {
+        rateInCents = coachPricing.hourly_rate;
+      }
+    }
+
+    const baseCost = (rateInCents / 100) * hours;
+
+    // Calculate custom charges
+    let chargesCost = 0;
+    selectedChargeIds.forEach(chargeId => {
+      const charge = coachPricing?.custom_charges?.find(c => c.id === chargeId);
+      if (charge) {
+        chargesCost += charge.amount_cents / 100;
+      }
+    });
+
+    return {
+      base: baseCost,
+      charges: chargesCost,
+      total: baseCost + chargesCost,
+    };
   };
+
+  const costs = calculateSessionCost();
 
   const handleSubmitBooking = async () => {
     try {
       setLoading(true);
 
-      const totalCost = calculateSessionCost();
-      const totalCostCents = Math.round(totalCost * 100);
+      const sessionCosts = calculateSessionCost();
+      const totalCostCents = Math.round(sessionCosts.total * 100);
+
+      // Get selected custom charges for the booking
+      const selectedCharges = selectedChargeIds
+        .map(id => coachPricing?.custom_charges?.find(c => c.id === id))
+        .filter(Boolean);
 
       // Create the booking request (coach will accept/reject)
       const booking = await coachingService.createBookingRequest(
@@ -80,11 +197,12 @@ export default function BookingFormScreen() {
           message: message.trim() || undefined,
           availabilitySlotId: params.slotId,
           totalAmountCents: totalCostCents,
+          customCharges: selectedCharges,
         }
       );
 
       // Show success message
-      Alert.alert(
+      showAlertWithButtons(
         'Booking Request Sent',
         `Your booking request has been sent to ${params.coachName}. You'll receive an email when they respond. Payment will be processed after the coach accepts your request.`,
         [
@@ -96,7 +214,7 @@ export default function BookingFormScreen() {
       );
     } catch (error: any) {
       console.error('Error creating booking:', error);
-      Alert.alert('Error', error.message || 'Failed to send booking request. Please try again.');
+      showAlert('Error', error.message || 'Failed to send booking request. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -151,9 +269,9 @@ export default function BookingFormScreen() {
           </View>
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Total Cost</Text>
+            <Text style={styles.detailLabel}>Base Rate</Text>
             <Text style={styles.detailValue}>
-              ${calculateSessionCost().toFixed(2)}
+              ${costs.base.toFixed(2)}
             </Text>
           </View>
         </View>
@@ -193,6 +311,45 @@ export default function BookingFormScreen() {
             ))}
           </View>
         </View>
+
+        {/* Custom Charges / Add-ons */}
+        {!pricingLoading && applicableCharges.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Add-ons (Optional)</Text>
+            <Text style={styles.addonsSubtitle}>
+              Select any additional services you need for your session
+            </Text>
+            <View style={styles.chargesContainer}>
+              {applicableCharges.map((charge) => (
+                <TouchableOpacity
+                  key={charge.id}
+                  style={[
+                    styles.chargeCard,
+                    selectedChargeIds.includes(charge.id) && styles.chargeCardActive,
+                  ]}
+                  onPress={() => toggleCharge(charge.id)}
+                >
+                  <View style={styles.chargeHeader}>
+                    <View style={styles.chargeCheckbox}>
+                      {selectedChargeIds.includes(charge.id) && (
+                        <Ionicons name="checkmark" size={16} color="#007AFF" />
+                      )}
+                    </View>
+                    <View style={styles.chargeInfo}>
+                      <Text style={styles.chargeLabel}>{charge.label}</Text>
+                      {charge.description && (
+                        <Text style={styles.chargeDescription}>{charge.description}</Text>
+                      )}
+                    </View>
+                    <Text style={styles.chargeAmount}>
+                      +${(charge.amount_cents / 100).toFixed(2)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Venue/Location */}
         <View style={styles.section}>
@@ -263,10 +420,22 @@ export default function BookingFormScreen() {
       {/* Submit Button */}
       <View style={styles.submitBar}>
         <View style={styles.totalContainer}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalAmount}>
-            ${calculateSessionCost().toFixed(2)}
-          </Text>
+          {costs.charges > 0 && (
+            <View style={styles.costBreakdown}>
+              <View style={styles.costRow}>
+                <Text style={styles.costLabel}>Base Rate</Text>
+                <Text style={styles.costValue}>${costs.base.toFixed(2)}</Text>
+              </View>
+              <View style={styles.costRow}>
+                <Text style={styles.costLabel}>Add-ons</Text>
+                <Text style={styles.costValue}>${costs.charges.toFixed(2)}</Text>
+              </View>
+            </View>
+          )}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalAmount}>${costs.total.toFixed(2)}</Text>
+          </View>
         </View>
         <TouchableOpacity
           style={[
@@ -462,5 +631,81 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     fontSize: 14,
     backgroundColor: '#FFFFFF',
+  },
+  addonsSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+  },
+  chargesContainer: {
+    gap: 8,
+  },
+  chargeCard: {
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  chargeCardActive: {
+    borderColor: '#007AFF',
+    backgroundColor: '#E8F4FD',
+  },
+  chargeHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  chargeCheckbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#007AFF',
+    borderRadius: 4,
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chargeInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  chargeLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  chargeDescription: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  chargeAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  costBreakdown: {
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  costRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  costLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  costValue: {
+    fontSize: 14,
+    color: '#333',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 });

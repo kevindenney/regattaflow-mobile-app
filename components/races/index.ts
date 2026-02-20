@@ -87,6 +87,9 @@ export { FleetPostRaceInsights } from './FleetPostRaceInsights';
 export { AIPatternDetection } from './debrief/AIPatternDetection';
 export { RegattaFlowPlaybookCoaching } from './RegattaFlowPlaybookCoaching';
 
+// Coaching Integration Components
+export { RaceCoachingCard } from './RaceCoachingCard';
+
 // Race Learning & Insights Components
 export { RaceLearningInsights, PreRaceReminderCard } from './RaceLearningInsights';
 export { RacePrepLearningCard } from './RacePrepLearningCard';

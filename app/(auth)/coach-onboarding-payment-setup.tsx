@@ -12,11 +12,11 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Linking,
   StyleSheet,
   Platform,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCoachOnboardingState } from '@/hooks/useCoachOnboardingState';
@@ -110,7 +110,7 @@ const CoachOnboardingPaymentSetup = () => {
 
   const handleStartStripeConnect = async () => {
     if (!user) {
-      Alert.alert('Error', 'Please sign in to continue');
+      showAlert('Error', 'Please sign in to continue');
       return;
     }
 
@@ -168,7 +168,7 @@ const CoachOnboardingPaymentSetup = () => {
       }
     } catch (error: any) {
       console.error('Error starting Stripe Connect:', error);
-      Alert.alert('Error', error.message || 'Failed to start payment setup');
+      showAlert('Error', error.message || 'Failed to start payment setup');
       setSetupStatus('error');
     } finally {
       setIsConnecting(false);
@@ -176,35 +176,29 @@ const CoachOnboardingPaymentSetup = () => {
   };
 
   const handleSkipForNow = async () => {
-    Alert.alert(
+    showConfirm(
       'Skip Payment Setup?',
       "You won't be able to accept paid bookings until you complete payment setup. You can set this up later from your dashboard.",
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Skip',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (coachProfileId) {
-                await supabase
-                  .from('coach_profiles')
-                  .update({
-                    stripe_onboarding_skipped: true,
-                    stripe_onboarding_skipped_at: new Date().toISOString(),
-                  })
-                  .eq('id', coachProfileId);
-              }
+      async () => {
+        try {
+          if (coachProfileId) {
+            await supabase
+              .from('coach_profiles')
+              .update({
+                stripe_onboarding_skipped: true,
+                stripe_onboarding_skipped_at: new Date().toISOString(),
+              })
+              .eq('id', coachProfileId);
+          }
 
-              updatePaymentSetup({ stripeOnboardingSkipped: true });
-              router.push('/(auth)/coach-onboarding-profile-preview');
-            } catch (error) {
-              console.error('Error skipping payment setup:', error);
-              router.push('/(auth)/coach-onboarding-profile-preview');
-            }
-          },
-        },
-      ]
+          updatePaymentSetup({ stripeOnboardingSkipped: true });
+          router.push('/(auth)/coach-onboarding-profile-preview');
+        } catch (error) {
+          console.error('Error skipping payment setup:', error);
+          router.push('/(auth)/coach-onboarding-profile-preview');
+        }
+      },
+      { destructive: true, confirmText: 'Skip' }
     );
   };
 

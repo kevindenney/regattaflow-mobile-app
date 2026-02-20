@@ -50,16 +50,81 @@ const expertiseOptions = [
   { id: 'offshore', title: 'Offshore Racing', subtitle: 'Long-distance racing' },
 ];
 
-// Sailing class specialties
+// Sailing class specialties - comprehensive list
 const specialtiesOptions = [
-  { id: 'dragon', title: 'Dragon' },
-  { id: 'melges', title: 'Melges' },
+  // Olympic Classes
+  { id: 'ilca_7', title: 'ILCA 7 (Laser)' },
+  { id: 'ilca_6', title: 'ILCA 6 (Radial)' },
+  { id: 'ilca_4', title: 'ILCA 4' },
   { id: '470', title: '470' },
-  { id: 'laser', title: 'Laser/ILCA' },
-  { id: 'swan', title: 'Swan' },
-  { id: 'j_boats', title: 'J/Boats' },
-  { id: 'one_design', title: 'One-Design' },
+  { id: '49er', title: '49er' },
+  { id: '49er_fx', title: '49er FX' },
+  { id: 'nacra_17', title: 'Nacra 17' },
+  { id: 'iqfoil', title: 'iQFoil' },
+  { id: 'kite', title: 'Formula Kite' },
+  // Classic One-Design
+  { id: 'dragon', title: 'Dragon' },
+  { id: 'star', title: 'Star' },
+  { id: 'etchells', title: 'Etchells' },
+  { id: 'soling', title: 'Soling' },
+  { id: 'finn', title: 'Finn' },
+  { id: 'snipe', title: 'Snipe' },
+  { id: 'lightning', title: 'Lightning' },
+  { id: 'thistle', title: 'Thistle' },
+  { id: 'flying_scot', title: 'Flying Scot' },
+  // Youth Classes
+  { id: 'optimist', title: 'Optimist' },
+  { id: '29er', title: '29er' },
+  { id: 'rs_feva', title: 'RS Feva' },
+  { id: 'laser_bug', title: 'Laser Bug' },
+  { id: 'topper', title: 'Topper' },
+  { id: 'club_420', title: 'Club 420' },
+  // Keelboats
+  { id: 'j70', title: 'J/70' },
+  { id: 'j80', title: 'J/80' },
+  { id: 'j105', title: 'J/105' },
+  { id: 'j111', title: 'J/111' },
+  { id: 'j122', title: 'J/122' },
+  { id: 'melges_24', title: 'Melges 24' },
+  { id: 'melges_32', title: 'Melges 32' },
+  { id: 'melges_40', title: 'Melges 40' },
+  { id: 'farr_40', title: 'Farr 40' },
+  { id: 'swan_36', title: 'Swan 36' },
+  { id: 'swan_42', title: 'Swan 42' },
+  { id: 'swan_45', title: 'Swan 45' },
+  { id: 'tp52', title: 'TP52' },
+  { id: 'rc44', title: 'RC44' },
+  // Multihulls
+  { id: 'hobie_16', title: 'Hobie 16' },
+  { id: 'hobie_18', title: 'Hobie 18' },
+  { id: 'f18', title: 'F18' },
+  { id: 'a_cat', title: 'A-Class Cat' },
+  { id: 'tornado', title: 'Tornado' },
+  { id: 'weta', title: 'Weta' },
+  // Foiling
+  { id: 'moth', title: 'Moth' },
+  { id: 'waszp', title: 'WASZP' },
+  { id: 'ac75', title: 'AC75' },
+  { id: 'foiling_other', title: 'Foiling (Other)' },
+  // Cruiser/Racer
+  { id: 'irc', title: 'IRC Rated' },
+  { id: 'orc', title: 'ORC Rated' },
+  { id: 'phrf', title: 'PHRF Rated' },
+  { id: 'beneteau', title: 'Beneteau' },
+  { id: 'bavaria', title: 'Bavaria' },
+  { id: 'dehler', title: 'Dehler' },
+  { id: 'x_yachts', title: 'X-Yachts' },
+  // Match Racing
+  { id: 'match_racing_any', title: 'Match Racing' },
+  // Offshore
+  { id: 'volvo_65', title: 'VO65' },
+  { id: 'imoca_60', title: 'IMOCA 60' },
+  { id: 'class_40', title: 'Class 40' },
+  { id: 'mini_650', title: 'Mini 6.50' },
+  // Other
+  { id: 'one_design_other', title: 'One-Design (Other)' },
   { id: 'grand_prix', title: 'Grand Prix' },
+  { id: 'superyacht', title: 'Superyacht Racing' },
 ];
 
 const CoachOnboardingExpertise = () => {

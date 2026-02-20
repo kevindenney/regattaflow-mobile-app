@@ -7,11 +7,11 @@ import {
   TextInput,
   ScrollView,
   Modal,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { CoachingSession, CoachProfile, SessionReview } from '../../types/coach';
-import { CoachMarketplaceService } from '../../services/CoachService';
+import { CoachMarketplaceService } from '@/services/CoachingService';
 
 interface SessionReviewProps {
   session: CoachingSession;
@@ -107,19 +107,19 @@ export default function SessionReview({
     const requiredRatings = ratingCategories.filter(cat => cat.required);
     for (const category of requiredRatings) {
       if (reviewData[category.key] === 0) {
-        Alert.alert('Missing Rating', `Please provide a rating for ${category.label}`);
+        showAlert('Missing Rating', `Please provide a rating for ${category.label}`);
         return false;
       }
     }
 
     // Check review text
     if (!reviewData.review_text.trim()) {
-      Alert.alert('Missing Review', 'Please write a review describing your experience');
+      showAlert('Missing Review', 'Please write a review describing your experience');
       return false;
     }
 
     if (reviewData.review_text.trim().length < 20) {
-      Alert.alert('Review Too Short', 'Please provide a more detailed review (at least 20 characters)');
+      showAlert('Review Too Short', 'Please provide a more detailed review (at least 20 characters)');
       return false;
     }
 
@@ -150,7 +150,7 @@ export default function SessionReview({
 
       const createdReview = await CoachMarketplaceService.createReview(review);
 
-      Alert.alert(
+      showAlertWithButtons(
         'Review Submitted',
         'Thank you for your feedback! Your review helps other sailors find great coaches.',
         [
@@ -165,7 +165,7 @@ export default function SessionReview({
       );
     } catch (error) {
       console.error('Error submitting review:', error);
-      Alert.alert('Error', 'Failed to submit your review. Please try again.');
+      showAlert('Error', 'Failed to submit your review. Please try again.');
     } finally {
       setSubmitting(false);
     }

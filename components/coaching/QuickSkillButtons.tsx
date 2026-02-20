@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, Alert, Platform } from 'react-native';
+import { View, Text, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   DEFAULT_SKILL_ORDER,
   SKILL_DISPLAY,
@@ -45,31 +46,15 @@ export function QuickSkillButtons({
       // Format the message
       const message = advice.primary + (advice.details ? `\n\n${advice.details}` : '');
 
-      // Show the advice - use browser alert on web
-      if (Platform.OS === 'web') {
-        window.alert(`${skill.icon} ${skill.label}\n\n${message}`);
-      } else {
-        Alert.alert(
-          `${skill.icon} ${skill.label}`,
-          message,
-          [{ text: 'Got it', style: 'default' }]
-        );
-      }
+      // Show the advice
+      showAlert(`${skill.icon} ${skill.label}`, message);
 
       // Also trigger the parent callback
       onSkillInvoked?.(skill.id, advice);
     } catch (error) {
       console.error('❌ Error invoking skill:', error);
 
-      if (Platform.OS === 'web') {
-        window.alert('Unable to get AI advice\n\nPlease try again.');
-      } else {
-        Alert.alert(
-          'Unable to get advice',
-          'The AI Coach is temporarily unavailable. Please try again.',
-          [{ text: 'OK' }]
-        );
-      }
+      showAlert('Unable to get advice', 'The AI Coach is temporarily unavailable. Please try again.');
     } finally {
       setLoadingSkill(null);
     }

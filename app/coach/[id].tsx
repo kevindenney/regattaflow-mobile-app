@@ -10,13 +10,26 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
+import { Ionicons } from '@expo/vector-icons';
 import { coachingService } from '@/services/CoachingService';
+import { useCoachingStatus } from '@/hooks/useCoachingStatus';
+import { parseISO, isWithinInterval, startOfDay } from 'date-fns';
+
+interface BlockedDate {
+  id: string;
+  start_date: string;
+  end_date: string;
+  reason?: string;
+  block_type: string;
+}
 
 export default function CoachProfileScreen() {
   const router = useRouter();
   const { id, action } = useLocalSearchParams<{ id: string; action?: string }>();
+  const { relationship } = useCoachingStatus();
   const [coach, setCoach] = useState<any>(null);
   const [availability, setAvailability] = useState<any[]>([]);
+  const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
@@ -36,6 +49,7 @@ export default function CoachProfileScreen() {
   }, [action, coach, availability]);
 
   const loadCoachProfile = async () => {
+    if (!id) return;
     try {
       setLoading(true);
       const profile = await coachingService.getCoachPublicProfile(id);
@@ -51,6 +65,10 @@ export default function CoachProfileScreen() {
         true
       );
       setAvailability(slots);
+
+      // Load blocked dates to filter from calendar
+      const blocked = await coachingService.getBlockedDates(id);
+      setBlockedDates(blocked);
     } catch (error) {
       console.error('Error loading coach profile:', error);
     } finally {
@@ -58,19 +76,48 @@ export default function CoachProfileScreen() {
     }
   };
 
+  // Check if a date falls within any blocked date range
+  const isDateBlocked = (dateStr: string): boolean => {
+    const checkDate = startOfDay(parseISO(dateStr));
+    return blockedDates.some((blocked) => {
+      const startDate = startOfDay(parseISO(blocked.start_date));
+      const endDate = startOfDay(parseISO(blocked.end_date));
+      return isWithinInterval(checkDate, { start: startDate, end: endDate });
+    });
+  };
+
   const getMarkedDates = () => {
     const marked: any = {};
 
-    availability.forEach((slot) => {
-      const date = new Date(slot.start_time).toISOString().split('T')[0];
-      marked[date] = {
-        marked: true,
-        dotColor: '#007AFF',
-        activeOpacity: 0,
-      };
+    // Mark blocked dates as disabled
+    blockedDates.forEach((blocked) => {
+      const start = parseISO(blocked.start_date);
+      const end = parseISO(blocked.end_date);
+      let current = start;
+      while (current <= end) {
+        const dateStr = current.toISOString().split('T')[0];
+        marked[dateStr] = {
+          disabled: true,
+          disableTouchEvent: true,
+          textColor: '#CCCCCC',
+        };
+        current = new Date(current.getTime() + 24 * 60 * 60 * 1000);
+      }
     });
 
-    if (selectedDate) {
+    // Mark available dates (skip if blocked)
+    availability.forEach((slot) => {
+      const date = new Date(slot.start_time).toISOString().split('T')[0];
+      if (!marked[date]?.disabled) {
+        marked[date] = {
+          marked: true,
+          dotColor: '#007AFF',
+          activeOpacity: 0,
+        };
+      }
+    });
+
+    if (selectedDate && !marked[selectedDate]?.disabled) {
       marked[selectedDate] = {
         ...marked[selectedDate],
         selected: true,
@@ -114,6 +161,12 @@ export default function CoachProfileScreen() {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Coach not found</Text>
+        <TouchableOpacity
+          style={{ marginTop: 16, paddingVertical: 10, paddingHorizontal: 20, backgroundColor: '#007AFF', borderRadius: 8 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: '#fff', fontWeight: '600', fontSize: 15 }}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -183,7 +236,7 @@ export default function CoachProfileScreen() {
             {coach.specialties.map((specialty: string, index: number) => (
               <View key={index} style={styles.specialtyBadge}>
                 <Text style={styles.specialtyText}>
-                  {specialty.replace('_', ' ')}
+                  {specialty.replace(/_/g, ' ')}
                 </Text>
               </View>
             ))}
@@ -208,7 +261,12 @@ export default function CoachProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Availability</Text>
         <Calendar
-          onDayPress={(day) => setSelectedDate(day.dateString)}
+          onDayPress={(day) => {
+            // Don't allow selecting blocked dates
+            if (!isDateBlocked(day.dateString)) {
+              setSelectedDate(day.dateString);
+            }
+          }}
           markedDates={getMarkedDates()}
           theme={{
             selectedDayBackgroundColor: '#007AFF',
@@ -280,6 +338,20 @@ export default function CoachProfileScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Subtle coaching prompt for coached sailors */}
+      {relationship === 'HAS_COACH' && (
+        <View style={styles.coachingPromptSection}>
+          <TouchableOpacity
+            style={styles.coachingPromptLink}
+            onPress={() => router.push('/(auth)/coach-onboarding-welcome')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.coachingPromptText}>Interested in coaching others?</Text>
+            <Ionicons name="arrow-forward" size={14} color="#007AFF" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={{ height: 50 }} />
     </ScrollView>
@@ -486,5 +558,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#374151',
+  },
+  coachingPromptSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  coachingPromptLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  coachingPromptText: {
+    fontSize: 14,
+    color: '#007AFF',
   },
 });

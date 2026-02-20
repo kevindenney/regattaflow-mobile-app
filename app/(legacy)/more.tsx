@@ -113,7 +113,7 @@ export default function MoreScreen() {
             icon={MapPin}
             title="Venue Intelligence"
             subtitle="Global venue analysis and insights"
-            onPress={() => router.push('/discuss')}
+            onPress={() => router.push('/connect')}
             badge="AI"
             badgeColor="bg-purple-500"
           />

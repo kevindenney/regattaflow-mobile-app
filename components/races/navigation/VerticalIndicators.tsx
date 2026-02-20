@@ -120,13 +120,13 @@ function IndicatorItem({
     const backgroundColor = interpolateColor(
       distance,
       [0, 1],
-      [activeColor + '20', 'transparent'] // 20 = 12% opacity
+      [activeColor + '20', 'rgba(0, 0, 0, 0)'] // 20 = 12% opacity
     );
 
     const borderColor = interpolateColor(
       distance,
       [0, 1],
-      [activeColor, 'transparent']
+      [activeColor, 'rgba(0, 0, 0, 0)']
     );
 
     return {

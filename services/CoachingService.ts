@@ -11,6 +11,20 @@
 import { addDays } from 'date-fns';
 import { supabase } from './supabase';
 import type { CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
+import type {
+  CoachProfile as MarketplaceCoachProfile,
+  CoachSearchFilters,
+  CoachSearchResult,
+  CoachRegistrationForm,
+  CoachProfileResponse,
+  SearchResponse,
+  CoachDashboardData,
+  StudentDashboardData,
+  SailingSpecialty,
+  SailorProfile,
+  CoachingSession as MarketplaceCoachingSession,
+  SessionReview,
+} from '@/types/coach';
 
 export interface CoachProfile {
   id: string;
@@ -231,7 +245,53 @@ export interface CoachEarningsSummary {
   pendingTransactions: CoachEarningsTransaction[];
 }
 
+/**
+ * Custom charge definition for add-on fees
+ */
+interface CustomCharge {
+  id: string;
+  label: string;
+  amount_cents: number;
+  description?: string;
+  is_active: boolean;
+  session_types?: string[]; // If specified, only applies to these session types
+}
+
 class CoachingService {
+  /**
+   * Get authenticated user with session refresh.
+   * Attempts to refresh the session if the token is expired.
+   * Returns the user object, or null if authentication fails entirely.
+   */
+  private async getAuthenticatedUser() {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (user) return user;
+
+    // Token may be expired — try refreshing
+    if (error) {
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshData.user) {
+        console.warn('[CoachingService] Session refresh failed:', refreshError?.message || 'No user after refresh');
+        return null;
+      }
+      return refreshData.user;
+    }
+
+    return null;
+  }
+
+  /**
+   * Get authenticated user, throwing if not authenticated.
+   * Use this in methods that require authentication.
+   */
+  private async requireAuth() {
+    const user = await this.getAuthenticatedUser();
+    if (!user) {
+      throw new Error('Not authenticated. Please sign in again.');
+    }
+    return user;
+  }
+
   /**
    * Get coach profile for current user
    */
@@ -257,7 +317,7 @@ class CoachingService {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [clientsResult, sessionsResult, monthSessionsResult, upcomingResult, feedbackResult] = await Promise.all([
+    const [clientsResult, sessionsResult, monthSessionsResult, upcomingResult, coachSessionIdsResult] = await Promise.all([
       // Active clients count
       supabase
         .from('coaching_clients')
@@ -280,37 +340,31 @@ class CoachingService {
         .eq('status', 'completed')
         .gte('completed_at', startOfMonth.toISOString()),
 
-      // Upcoming sessions
+      // Upcoming sessions (include confirmed and pending statuses too)
       supabase
         .from('coaching_sessions')
         .select('id', { count: 'exact', head: true })
         .eq('coach_id', coachId)
-        .eq('status', 'scheduled')
+        .in('status', ['scheduled', 'confirmed', 'pending'])
         .gte('scheduled_at', now.toISOString()),
 
-      // Average rating - get all feedback first, then filter by coach sessions
+      // Get session IDs for this coach (for feedback lookup)
       supabase
-        .from('session_feedback')
-        .select('rating, session_id')
-    ]);
-
-    // WORKAROUND: Filter feedback by coach's sessions manually since JOIN doesn't work
-    let averageRating: number | undefined = undefined;
-    if (feedbackResult.data && feedbackResult.data.length > 0) {
-      // Get session IDs for this coach
-      const { data: coachSessions } = await supabase
         .from('coaching_sessions')
         .select('id')
-        .eq('coach_id', coachId);
+        .eq('coach_id', coachId)
+    ]);
 
-      const coachSessionIds = new Set(coachSessions?.map(s => s.id) || []);
+    // Get feedback only for this coach's sessions (server-side filtered)
+    const coachSessionIds = (coachSessionIdsResult.data || []).map(s => s.id);
+    let averageRating: number | undefined = undefined;
+    if (coachSessionIds.length > 0) {
+      const { data: coachFeedback } = await supabase
+        .from('session_feedback')
+        .select('rating')
+        .in('session_id', coachSessionIds);
 
-      // Filter feedback to only include coach's sessions
-      const coachFeedback = feedbackResult.data.filter(f =>
-        coachSessionIds.has(f.session_id)
-      );
-
-      if (coachFeedback.length > 0) {
+      if (coachFeedback && coachFeedback.length > 0) {
         averageRating = coachFeedback.reduce((sum, f) => sum + f.rating, 0) / coachFeedback.length;
       }
     }
@@ -1302,8 +1356,7 @@ class CoachingService {
       totalAmountCents: number;
     }
   ): Promise<any> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const user = await this.requireAuth();
 
     const { data, error } = await supabase
       .from('session_bookings')
@@ -1353,6 +1406,20 @@ class CoachingService {
       });
     }
 
+    // Send push notification to coach
+    if (data?.coach?.user_id) {
+      const { PushNotificationService } = await import('./PushNotificationService');
+      const sailorName = data.sailor?.full_name || 'A sailor';
+      const dateStr = requestedStartTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      PushNotificationService.sendPushNotification(
+        data.coach.user_id,
+        'New Session Request',
+        `${sailorName} requested a session for ${dateStr}`,
+        { type: 'new_booking', route: '/(tabs)/schedule', booking_id: data.id },
+        'booking_requests'
+      ).catch(() => {});
+    }
+
     return data;
   }
 
@@ -1360,8 +1427,7 @@ class CoachingService {
    * Get booking requests for sailor
    */
   async getSailorBookingRequests(status?: string): Promise<any[]> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const user = await this.requireAuth();
 
     let query = supabase
       .from('session_bookings')
@@ -1370,7 +1436,7 @@ class CoachingService {
         coach:coach_profiles!coach_id (
           id,
           display_name,
-          profile_photo_url,
+          profile_photo_url:profile_image_url,
           hourly_rate_usd
         )
       `)
@@ -1395,8 +1461,7 @@ class CoachingService {
    * Get coaching sessions for a sailor (confirmed/completed)
    */
   async getSailorSessions(status?: 'scheduled' | 'completed' | 'pending'): Promise<CoachingSession[]> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const user = await this.requireAuth();
 
     let query = supabase
       .from('coaching_sessions')
@@ -1405,7 +1470,7 @@ class CoachingService {
         coach:coach_profiles!coach_id (
           id,
           display_name,
-          profile_photo_url
+          profile_photo_url:profile_image_url
         )
       `)
       .eq('sailor_id', user.id)
@@ -1459,8 +1524,7 @@ class CoachingService {
    * Accept booking request (Coach side)
    */
   async acceptBookingRequest(bookingId: string): Promise<string> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const user = await this.requireAuth();
 
     // Get booking details before accepting
     const { data: booking } = await supabase
@@ -1528,6 +1592,47 @@ class CoachingService {
 
       // Send to coach
       await emailService.sendCoachBookingConfirmationToCoach(emailData);
+
+      // Send system message in the coach-sailor conversation
+      try {
+        const { messagingService } = await import('./MessagingService');
+        const sessionDate = booking.requested_start_time
+          ? new Date(booking.requested_start_time).toLocaleDateString('en-US', {
+              month: 'short', day: 'numeric',
+            })
+          : 'TBD';
+        const sessionTime = booking.requested_start_time
+          ? new Date(booking.requested_start_time).toLocaleTimeString('en-US', {
+              hour: 'numeric', minute: '2-digit',
+            })
+          : '';
+        await messagingService.sendSystemMessage(
+          booking.coach?.user_id || user.id,
+          booking.sailor_id,
+          `Session booked for ${sessionDate}${sessionTime ? ` at ${sessionTime}` : ''}`,
+          { booking_id: bookingId, session_id: data }
+        );
+      } catch (msgError) {
+        console.error('[acceptBookingRequest] Messaging error (non-fatal):', msgError);
+      }
+
+      // Send push notification to sailor
+      try {
+        const { PushNotificationService } = await import('./PushNotificationService');
+        const coachName = booking.coach?.display_name || 'Your coach';
+        const dateStr = booking.requested_start_time
+          ? new Date(booking.requested_start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : '';
+        PushNotificationService.sendPushNotification(
+          booking.sailor_id,
+          'Booking Confirmed',
+          `${coachName} accepted your session request${dateStr ? ` for ${dateStr}` : ''}`,
+          { type: 'booking_accepted', route: '/coach/my-bookings', booking_id: bookingId, session_id: data },
+          'booking_requests'
+        ).catch(() => {});
+      } catch (pushError) {
+        console.error('[acceptBookingRequest] Push error (non-fatal):', pushError);
+      }
     }
 
     return data; // Returns session ID
@@ -1537,8 +1642,17 @@ class CoachingService {
    * Reject booking request (Coach side)
    */
   async rejectBookingRequest(bookingId: string, response: string): Promise<void> {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not authenticated');
+    const user = await this.requireAuth();
+
+    // Get booking details before rejecting (for notification)
+    const { data: booking } = await supabase
+      .from('session_bookings')
+      .select(`
+        sailor_id,
+        coach:coach_profiles!coach_id (display_name)
+      `)
+      .eq('id', bookingId)
+      .single();
 
     const { error } = await supabase.rpc('reject_booking', {
       p_booking_id: bookingId,
@@ -1549,6 +1663,19 @@ class CoachingService {
     if (error) {
       console.error('Error rejecting booking:', error);
       throw error;
+    }
+
+    // Send push notification to sailor
+    if (booking?.sailor_id) {
+      const { PushNotificationService } = await import('./PushNotificationService');
+      const coachName = (booking.coach as any)?.display_name || 'Your coach';
+      PushNotificationService.sendPushNotification(
+        booking.sailor_id,
+        'Booking Update',
+        `${coachName} couldn't accommodate your request`,
+        { type: 'booking_rejected', route: '/coach/discover', booking_id: bookingId },
+        'booking_requests'
+      ).catch(() => {});
     }
   }
 
@@ -2016,6 +2143,14 @@ class CoachingService {
 
     if (fetchError || !session) throw new Error('Session not found');
 
+    // Validate session status - can only cancel if not already completed or cancelled
+    if (session.status === 'completed') {
+      throw new Error('Cannot cancel a completed session');
+    }
+    if (session.status === 'cancelled') {
+      throw new Error('This session has already been cancelled');
+    }
+
     // Calculate refund based on cancellation policy
     const hoursUntilSession = (
       new Date(session.scheduled_at).getTime() - Date.now()
@@ -2424,7 +2559,7 @@ class CoachingService {
       id: coach.coach_id || coach.id,
       userId: coach.user_id,
       name: coach.display_name,
-      photo: coach.profile_photo_url,
+      photo: coach.profile_photo_url || coach.profile_image_url,
       bio: coach.bio,
       specialties: coach.specialties || [],
       hourlyRate: coach.hourly_rate,
@@ -2441,6 +2576,672 @@ class CoachingService {
       verified: coach.verified,
       matchScore: coach.match_score,
     };
+  }
+
+  // ===== MARKETPLACE METHODS (migrated from CoachService.ts) =====
+
+  /**
+   * Register a new coach with complete profile
+   */
+  async registerCoach(formData: CoachRegistrationForm, userId: string): Promise<MarketplaceCoachProfile> {
+    try {
+      // 1. Create coach profile
+      const coachProfileData = {
+        user_id: userId,
+        ...formData.personal_info,
+        ...formData.credentials,
+        ...formData.expertise,
+        status: 'pending' as const,
+        currency: 'USD',
+      };
+
+      const { data: coach, error: profileError } = await supabase
+        .from('coach_profiles')
+        .insert(coachProfileData)
+        .select()
+        .single();
+
+      if (profileError) throw profileError;
+
+      // 2. Create services
+      if (formData.services.length > 0) {
+        const servicesData = formData.services.map(service => ({
+          ...service,
+          coach_id: coach.id,
+        }));
+
+        const { error: servicesError } = await supabase
+          .from('coach_services')
+          .insert(servicesData);
+
+        if (servicesError) throw servicesError;
+      }
+
+      // 3. Create availability slots
+      if (formData.availability.length > 0) {
+        const availabilityData = formData.availability.map(slot => ({
+          ...slot,
+          coach_id: coach.id,
+        }));
+
+        const { error: availabilityError } = await supabase
+          .from('coach_availability')
+          .insert(availabilityData);
+
+        if (availabilityError) throw availabilityError;
+      }
+
+      return coach;
+    } catch (error) {
+      console.error('Error registering coach:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the sailor profile associated with a user
+   */
+  async getSailorProfile(userId: string): Promise<SailorProfile | null> {
+    try {
+      const { data, error } = await supabase
+        .from('sailor_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        throw error;
+      }
+
+      return (data as SailorProfile) ?? null;
+    } catch (error) {
+      console.error('Error fetching sailor profile:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get coach profile by coach ID with all related data
+   * (Different from getCoachProfile which looks up by user_id)
+   */
+  async getCoachProfileById(coachId: string): Promise<CoachProfileResponse> {
+    try {
+      // Get coach profile
+      const { data: coach, error: coachError } = await supabase
+        .from('coach_profiles')
+        .select('*')
+        .eq('id', coachId)
+        .single();
+
+      if (coachError) throw coachError;
+
+      // Get services
+      const { data: services, error: servicesError } = await supabase
+        .from('coach_services')
+        .select('*')
+        .eq('coach_id', coachId)
+        .eq('is_active', true);
+
+      if (servicesError) throw servicesError;
+
+      // Get availability
+      const { data: availability, error: availabilityError } = await supabase
+        .from('coach_availability')
+        .select('*')
+        .eq('coach_id', coachId);
+
+      if (availabilityError) throw availabilityError;
+
+      // Get recent reviews
+      const { data: reviews, error: reviewsError } = await supabase
+        .from('session_reviews')
+        .select(`
+          *,
+          coaching_sessions!inner(coach_id)
+        `)
+        .eq('coaching_sessions.coach_id', coachId)
+        .eq('reviewer_type', 'student')
+        .eq('moderation_status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (reviewsError) throw reviewsError;
+
+      return {
+        coach,
+        services: services || [],
+        availability: availability || [],
+        reviews: reviews || []
+      };
+    } catch (error) {
+      console.error('Error getting coach profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update coach profile by coach ID
+   */
+  async updateCoachProfile(coachId: string, updates: Partial<MarketplaceCoachProfile>): Promise<MarketplaceCoachProfile> {
+    try {
+      const { data, error } = await supabase
+        .from('coach_profiles')
+        .update(updates)
+        .eq('id', coachId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating coach profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search coaches with marketplace filters
+   * (Different from searchCoaches which uses RPC)
+   */
+  async searchCoachesMarketplace(
+    filters: CoachSearchFilters = {},
+    page: number = 1,
+    perPage: number = 20
+  ): Promise<SearchResponse> {
+    try {
+      let query = supabase
+        .from('coach_profiles')
+        .select(`
+          *,
+          coach_services!inner(*)
+        `)
+        .eq('status', 'active');
+
+      // Apply filters
+      if (filters.boat_classes?.length) {
+        query = query.overlaps('boat_classes', filters.boat_classes);
+      }
+
+      if (filters.specialties?.length) {
+        query = query.overlaps('specialties', filters.specialties);
+      }
+
+      if (filters.skill_levels?.length) {
+        query = query.overlaps('skill_levels', filters.skill_levels);
+      }
+
+      if (filters.location) {
+        query = query.ilike('location', `%${filters.location}%`);
+      }
+
+      if (filters.languages?.length) {
+        query = query.overlaps('languages', filters.languages);
+      }
+
+      if (filters.rating) {
+        query = query.gte('average_rating', filters.rating);
+      }
+
+      // Time zone filter
+      if (filters.time_zone) {
+        query = query.eq('time_zone', filters.time_zone);
+      }
+
+      // Apply price range filter on services
+      if (filters.price_range) {
+        query = query.gte('coach_services.base_price', filters.price_range[0])
+                    .lte('coach_services.base_price', filters.price_range[1]);
+      }
+
+      // Session type filter - filter coaches who offer specific service types
+      if (filters.session_types?.length) {
+        query = query.in('coach_services.service_type', filters.session_types);
+      }
+
+      // Pagination
+      const offset = (page - 1) * perPage;
+      query = query.range(offset, offset + perPage - 1);
+
+      // Order by rating and total reviews
+      query = query.order('average_rating', { ascending: false })
+                  .order('total_reviews', { ascending: false });
+
+      const { data: coaches, error, count } = await query;
+
+      if (error) throw error;
+
+      // Transform data to include services and calculate next available slot
+      let searchResults: CoachSearchResult[] = await Promise.all(
+        (coaches || []).map(async (coach: any) => {
+          const services = coach.coach_services || [];
+          delete coach.coach_services; // Remove nested services from coach object
+
+          return {
+            ...coach,
+            services,
+            next_available: await this.getNextAvailableSlot(coach.id),
+            match_score: this.calculateMatchScore(coach, filters)
+          };
+        })
+      );
+
+      // Apply minimum match score filter if specified
+      if (filters.min_match_score !== undefined) {
+        searchResults = searchResults.filter(
+          coach => (coach.match_score || 0) >= filters.min_match_score!
+        );
+      }
+
+      return {
+        coaches: searchResults,
+        total_count: searchResults.length, // Update count after filtering
+        page,
+        per_page: perPage,
+        filters_applied: filters
+      };
+    } catch (error) {
+      console.error('Error searching coaches:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get next available time slot for a coach
+   */
+  async getNextAvailableSlot(coachId: string): Promise<string | undefined> {
+    try {
+      // Get coach availability
+      const { data: availability } = await supabase
+        .from('coach_availability')
+        .select('*')
+        .eq('coach_id', coachId)
+        .eq('is_recurring', true);
+
+      if (!availability?.length) return undefined;
+
+      // Get existing bookings for next 30 days
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 30);
+
+      const { data: bookings } = await supabase
+        .from('coaching_sessions')
+        .select('scheduled_start, scheduled_end')
+        .eq('coach_id', coachId)
+        .gte('scheduled_start', startDate.toISOString())
+        .lte('scheduled_start', endDate.toISOString())
+        .in('status', ['confirmed', 'pending']);
+
+      // Simple algorithm to find next available slot
+      const now = new Date();
+      for (let i = 0; i < 30; i++) {
+        const checkDate = new Date(now);
+        checkDate.setDate(checkDate.getDate() + i);
+        const dayOfWeek = checkDate.getDay();
+
+        const dayAvailability = availability.filter(slot => slot.day_of_week === dayOfWeek);
+
+        for (const slot of dayAvailability) {
+          const slotStart = new Date(checkDate);
+          const [startHour, startMinute] = slot.start_time.split(':');
+          slotStart.setHours(parseInt(startHour), parseInt(startMinute), 0, 0);
+
+          // Check if this slot is not booked
+          const isBooked = bookings?.some(booking => {
+            const bookingStart = new Date(booking.scheduled_start);
+            const bookingEnd = new Date(booking.scheduled_end);
+            return slotStart >= bookingStart && slotStart < bookingEnd;
+          });
+
+          if (!isBooked && slotStart > now) {
+            return slotStart.toISOString();
+          }
+        }
+      }
+
+      return undefined;
+    } catch (error) {
+      console.error('Error getting next available slot:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Calculate match score for coach based on search filters
+   */
+  private calculateMatchScore(coach: MarketplaceCoachProfile, filters: CoachSearchFilters): number {
+    let score = 0;
+    let maxScore = 0;
+
+    // Boat class match
+    if (filters.boat_classes?.length) {
+      maxScore += 30;
+      const matchingClasses = coach.boat_classes.filter(cls =>
+        filters.boat_classes!.includes(cls)
+      );
+      score += (matchingClasses.length / filters.boat_classes.length) * 30;
+    }
+
+    // Specialty match
+    if (filters.specialties?.length) {
+      maxScore += 25;
+      const matchingSpecialties = coach.specialties.filter(spec =>
+        filters.specialties!.includes(spec)
+      );
+      score += (matchingSpecialties.length / filters.specialties.length) * 25;
+    }
+
+    // Rating weight
+    maxScore += 20;
+    score += (coach.average_rating / 5) * 20;
+
+    // Experience weight
+    maxScore += 15;
+    score += Math.min(coach.years_coaching / 10, 1) * 15;
+
+    // Location preference
+    if (filters.location) {
+      maxScore += 10;
+      if (coach.location.toLowerCase().includes(filters.location.toLowerCase())) {
+        score += 10;
+      }
+    }
+
+    return maxScore > 0 ? score / maxScore : 0.5;
+  }
+
+  /**
+   * Book a marketplace coaching session
+   * (Different from bookSession which integrates with Stripe)
+   */
+  async bookMarketplaceSession(sessionData: Partial<MarketplaceCoachingSession>): Promise<MarketplaceCoachingSession> {
+    try {
+      const { data, error } = await supabase
+        .from('coaching_sessions')
+        .insert(sessionData)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error booking session:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get coaching sessions for a user by role
+   */
+  async getUserSessions(userId: string, role: 'student' | 'coach'): Promise<MarketplaceCoachingSession[]> {
+    try {
+      let query = supabase
+        .from('coaching_sessions')
+        .select('*');
+
+      if (role === 'student') {
+        query = query.eq('student_id', userId);
+      } else {
+        query = query.eq('coach_id', userId);
+      }
+
+      const { data, error } = await query.order('scheduled_start', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error getting user sessions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update session status
+   */
+  async updateSessionStatus(sessionId: string, status: MarketplaceCoachingSession['status'], notes?: string): Promise<MarketplaceCoachingSession> {
+    try {
+      const updateData: any = { status };
+      if (notes) updateData.session_notes = notes;
+      if (status === 'in_progress') updateData.actual_start = new Date().toISOString();
+      if (status === 'completed') updateData.actual_end = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('coaching_sessions')
+        .update(updateData)
+        .eq('id', sessionId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating session status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Submit a session review
+   */
+  async submitReview(reviewData: Partial<SessionReview>): Promise<SessionReview> {
+    try {
+      const { data, error } = await supabase
+        .from('session_reviews')
+        .insert(reviewData)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get coach marketplace dashboard data
+   * (Different from getCoachDashboardData which uses RPC)
+   */
+  async getCoachMarketplaceDashboard(coachId: string): Promise<CoachDashboardData> {
+    try {
+      // Get profile
+      const { data: profile } = await supabase
+        .from('coach_profiles')
+        .select('*')
+        .eq('id', coachId)
+        .single();
+
+      // Get upcoming sessions
+      const { data: upcoming_sessions } = await supabase
+        .from('coaching_sessions')
+        .select('*')
+        .eq('coach_id', coachId)
+        .gte('scheduled_start', new Date().toISOString())
+        .in('status', ['pending', 'confirmed'])
+        .order('scheduled_start')
+        .limit(10);
+
+      // Get monthly stats
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const { data: monthly_sessions } = await supabase
+        .from('coaching_sessions')
+        .select('status, total_amount')
+        .eq('coach_id', coachId)
+        .gte('created_at', startOfMonth.toISOString());
+
+      const monthly_earnings = monthly_sessions
+        ?.filter(s => s.status === 'completed')
+        .reduce((sum, s) => sum + (s.total_amount * 0.85), 0) || 0; // 15% platform fee
+
+      const session_stats = {
+        total_this_month: monthly_sessions?.length || 0,
+        completed_this_month: monthly_sessions?.filter(s => s.status === 'completed').length || 0,
+        avg_rating_this_month: profile?.average_rating || 0
+      };
+
+      // Get pending reviews
+      const { data: pending_reviews } = await supabase
+        .from('session_reviews')
+        .select(`
+          *,
+          coaching_sessions!inner(coach_id, student_id)
+        `)
+        .eq('coaching_sessions.coach_id', coachId)
+        .eq('reviewer_type', 'student')
+        .eq('moderation_status', 'pending')
+        .limit(10);
+
+      // Get recent reviews
+      const { data: recent_reviews } = await supabase
+        .from('session_reviews')
+        .select(`
+          *,
+          coaching_sessions!inner(coach_id, student_id)
+        `)
+        .eq('coaching_sessions.coach_id', coachId)
+        .eq('reviewer_type', 'student')
+        .eq('moderation_status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      return {
+        profile: profile!,
+        upcoming_sessions: upcoming_sessions || [],
+        pending_reviews: pending_reviews || [],
+        monthly_earnings,
+        session_stats,
+        recent_reviews: recent_reviews || []
+      };
+    } catch (error) {
+      console.error('Error getting coach dashboard:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get student dashboard data
+   * NOTE: Contains a known SQL injection vulnerability in the .not() call
+   * that will be fixed separately.
+   */
+  async getStudentDashboard(userId: string): Promise<StudentDashboardData> {
+    try {
+      // Get upcoming sessions
+      const { data: upcoming_sessions } = await supabase
+        .from('coaching_sessions')
+        .select(`
+          *,
+          coach_profiles!coaching_sessions_coach_id_fkey(first_name, last_name, profile_photo_url:profile_image_url)
+        `)
+        .eq('student_id', userId)
+        .gte('scheduled_start', new Date().toISOString())
+        .in('status', ['pending', 'confirmed'])
+        .order('scheduled_start')
+        .limit(10);
+
+      // Get recent sessions
+      const { data: recent_sessions } = await supabase
+        .from('coaching_sessions')
+        .select(`
+          *,
+          coach_profiles!coaching_sessions_coach_id_fkey(first_name, last_name, profile_photo_url:profile_image_url)
+        `)
+        .eq('student_id', userId)
+        .lt('scheduled_start', new Date().toISOString())
+        .order('scheduled_start', { ascending: false })
+        .limit(5);
+
+      // Get favorite coaches (coaches with multiple sessions)
+      const { data: sessions_by_coach } = await supabase
+        .from('coaching_sessions')
+        .select('id, coach_id')
+        .eq('student_id', userId)
+        .eq('status', 'completed');
+
+      type CoachSessionCountRow = { coach_id: string | null };
+      const coachCounts = (sessions_by_coach as CoachSessionCountRow[] | null)?.reduce<Record<string, number>>((acc, session) => {
+        if (!session.coach_id) return acc;
+        acc[session.coach_id] = (acc[session.coach_id] || 0) + 1;
+        return acc;
+      }, {}) || {};
+
+      const favoriteCoachIds = Object.entries(coachCounts)
+        .filter(([_, count]) => (count as number) >= 2)
+        .slice(0, 5);
+
+      let favorite_coaches: MarketplaceCoachProfile[] = [];
+      if (favoriteCoachIds.length > 0) {
+        const { data: favoriteCoachRows } = await supabase
+          .from('coach_profiles')
+          .select('*')
+          .in('id', favoriteCoachIds.map(([coachId]) => String(coachId)));
+
+        favorite_coaches = favoriteCoachRows ?? [];
+      }
+
+      // Get pending reviews (two-step approach to avoid SQL injection)
+      const completedSessionIds = (sessions_by_coach || [])
+        .map((session) => session.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+      let reviewedIds: string[] = [];
+      if (completedSessionIds.length > 0) {
+        const { data: reviewedSessionIds } = await supabase
+          .from('session_feedback')
+          .select('session_id')
+          .in('session_id', completedSessionIds);
+
+        reviewedIds = (reviewedSessionIds || [])
+          .map((row) => row.session_id)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      }
+
+      let pendingReviewsQuery = supabase
+        .from('session_reviews')
+        .select('*')
+        .eq('reviewer_id', userId)
+        .eq('reviewer_type', 'student')
+        .eq('moderation_status', 'pending')
+        .limit(5);
+
+      if (reviewedIds.length > 0) {
+        pendingReviewsQuery = pendingReviewsQuery.not('session_id', 'in', `(${reviewedIds.join(',')})`);
+      }
+
+      const { data: pending_reviews } = await pendingReviewsQuery;
+
+      return {
+        upcoming_sessions: upcoming_sessions || [],
+        recent_sessions: recent_sessions || [],
+        favorite_coaches: favorite_coaches || [],
+        recommended_coaches: [], // TODO: Implement AI recommendations
+        pending_reviews: pending_reviews || []
+      };
+    } catch (error) {
+      console.error('Error getting student dashboard:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all sailing specialties
+   */
+  async getSailingSpecialties(): Promise<SailingSpecialty[]> {
+    try {
+      const { data, error } = await supabase
+        .from('sailing_specialties')
+        .select('*')
+        .order('category, name');
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error getting sailing specialties:', error);
+      return [];
+    }
   }
 
   // ============================================================================
@@ -2487,7 +3288,7 @@ class CoachingService {
     // Fetch coach profiles
     const { data: coachProfiles, error: profileError } = await supabase
       .from('coach_profiles')
-      .select('id, display_name, profile_photo_url, specialties, boat_classes_coached')
+      .select('id, display_name, profile_photo_url:profile_image_url, specialties, boat_classes_coached')
       .in('id', coachIds);
 
     if (profileError) {
@@ -2518,6 +3319,409 @@ class CoachingService {
         };
       })
       .filter((c): c is NonNullable<typeof c> => c !== null);
+  }
+
+  // ============================================================================
+  // Coach Pricing Management
+  // ============================================================================
+
+  /**
+   * Get coach pricing details including custom charges and session type rates
+   */
+  async getCoachPricing(coachId: string): Promise<{
+    hourly_rate: number | null;
+    currency: string;
+    session_durations: number[];
+    session_type_rates: Record<string, number>;
+    custom_charges: CustomCharge[];
+    package_pricing: Record<string, number>;
+    pricing_history: any[];
+    min_booking_notice_hours: number;
+    cancellation_hours: number;
+  } | null> {
+    const { data, error } = await supabase
+      .from('coach_profiles')
+      .select(`
+        hourly_rate,
+        currency,
+        session_durations,
+        session_type_rates,
+        custom_charges,
+        package_pricing,
+        pricing_history,
+        min_booking_notice_hours,
+        cancellation_hours
+      `)
+      .eq('id', coachId)
+      .single();
+
+    if (error) {
+      console.error('[CoachingService.getCoachPricing] Error:', error);
+      return null;
+    }
+
+    return {
+      hourly_rate: data.hourly_rate,
+      currency: data.currency || 'USD',
+      session_durations: data.session_durations || [60],
+      session_type_rates: data.session_type_rates || {},
+      custom_charges: data.custom_charges || [],
+      package_pricing: data.package_pricing || {},
+      pricing_history: data.pricing_history || [],
+      min_booking_notice_hours: data.min_booking_notice_hours || 24,
+      cancellation_hours: data.cancellation_hours || 24,
+    };
+  }
+
+  /**
+   * Update coach pricing settings
+   * Automatically records history via database trigger
+   */
+  async updateCoachPricing(
+    coachId: string,
+    updates: {
+      hourly_rate?: number;
+      currency?: string;
+      session_durations?: number[];
+      session_type_rates?: Record<string, number>;
+      custom_charges?: CustomCharge[];
+      package_pricing?: Record<string, number>;
+      min_booking_notice_hours?: number;
+      cancellation_hours?: number;
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      const updateData: Record<string, any> = {};
+
+      if (updates.hourly_rate !== undefined) updateData.hourly_rate = updates.hourly_rate;
+      if (updates.currency !== undefined) updateData.currency = updates.currency;
+      if (updates.session_durations !== undefined) updateData.session_durations = updates.session_durations;
+      if (updates.session_type_rates !== undefined) updateData.session_type_rates = updates.session_type_rates;
+      if (updates.custom_charges !== undefined) updateData.custom_charges = updates.custom_charges;
+      if (updates.package_pricing !== undefined) updateData.package_pricing = updates.package_pricing;
+      if (updates.min_booking_notice_hours !== undefined) updateData.min_booking_notice_hours = updates.min_booking_notice_hours;
+      if (updates.cancellation_hours !== undefined) updateData.cancellation_hours = updates.cancellation_hours;
+
+      const { error } = await supabase
+        .from('coach_profiles')
+        .update(updateData)
+        .eq('id', coachId);
+
+      if (error) {
+        console.error('[CoachingService.updateCoachPricing] Error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('[CoachingService.updateCoachPricing] Error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Add a custom charge to coach's pricing
+   */
+  async addCustomCharge(
+    coachId: string,
+    charge: Omit<CustomCharge, 'id'>
+  ): Promise<{ success: boolean; id?: string; error?: string }> {
+    try {
+      const pricing = await this.getCoachPricing(coachId);
+      if (!pricing) {
+        return { success: false, error: 'Coach profile not found' };
+      }
+
+      const newCharge: CustomCharge = {
+        ...charge,
+        id: crypto.randomUUID(),
+      };
+
+      const updatedCharges = [...pricing.custom_charges, newCharge];
+
+      const result = await this.updateCoachPricing(coachId, {
+        custom_charges: updatedCharges,
+      });
+
+      if (!result.success) {
+        return result;
+      }
+
+      return { success: true, id: newCharge.id };
+    } catch (err) {
+      console.error('[CoachingService.addCustomCharge] Error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Update a custom charge
+   */
+  async updateCustomCharge(
+    coachId: string,
+    chargeId: string,
+    updates: Partial<Omit<CustomCharge, 'id'>>
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const pricing = await this.getCoachPricing(coachId);
+      if (!pricing) {
+        return { success: false, error: 'Coach profile not found' };
+      }
+
+      const updatedCharges = pricing.custom_charges.map((charge) =>
+        charge.id === chargeId ? { ...charge, ...updates } : charge
+      );
+
+      return await this.updateCoachPricing(coachId, {
+        custom_charges: updatedCharges,
+      });
+    } catch (err) {
+      console.error('[CoachingService.updateCustomCharge] Error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Delete a custom charge
+   */
+  async deleteCustomCharge(
+    coachId: string,
+    chargeId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const pricing = await this.getCoachPricing(coachId);
+      if (!pricing) {
+        return { success: false, error: 'Coach profile not found' };
+      }
+
+      const updatedCharges = pricing.custom_charges.filter(
+        (charge) => charge.id !== chargeId
+      );
+
+      return await this.updateCoachPricing(coachId, {
+        custom_charges: updatedCharges,
+      });
+    } catch (err) {
+      console.error('[CoachingService.deleteCustomCharge] Error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  // ============================================================================
+  // Coach Availability Management
+  // ============================================================================
+
+  /**
+   * Get coach's weekly availability slots
+   */
+  async getCoachWeeklyAvailability(coachId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('coach_availability')
+      .select('*')
+      .eq('coach_id', coachId)
+      .order('day_of_week', { ascending: true })
+      .order('start_time', { ascending: true });
+
+    if (error) {
+      console.error('[CoachingService.getCoachWeeklyAvailability] Error:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Update coach's accepting clients status
+   */
+  async updateAcceptingClients(
+    coachId: string,
+    isAccepting: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      const { error } = await supabase
+        .from('coach_profiles')
+        .update({ is_accepting_clients: isAccepting })
+        .eq('id', coachId);
+
+      if (error) {
+        console.error('[CoachingService.updateAcceptingClients] Error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('[CoachingService.updateAcceptingClients] Error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Get coach's blocked dates (vacation, regatta days, etc.)
+   */
+  async getBlockedDates(coachId: string): Promise<{
+    id: string;
+    start_date: string;
+    end_date: string;
+    reason?: string;
+    block_type: string;
+  }[]> {
+    const { data, error } = await supabase
+      .from('coach_blocked_dates')
+      .select('*')
+      .eq('coach_id', coachId)
+      .order('start_date', { ascending: true });
+
+    if (error) {
+      console.error('[CoachingService.getBlockedDates] Error:', error);
+      return [];
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Add a blocked date range
+   */
+  async addBlockedDate(
+    coachId: string,
+    blockedDate: {
+      start_date: string;
+      end_date: string;
+      reason?: string;
+      block_type?: string;
+    }
+  ): Promise<{ success: boolean; id?: string; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      const { data, error } = await supabase
+        .from('coach_blocked_dates')
+        .insert({
+          coach_id: coachId,
+          start_date: blockedDate.start_date,
+          end_date: blockedDate.end_date,
+          reason: blockedDate.reason,
+          block_type: blockedDate.block_type || 'vacation',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[CoachingService.addBlockedDate] Error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, id: data.id };
+    } catch (err) {
+      console.error('[CoachingService.addBlockedDate] Error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Delete a blocked date
+   */
+  async deleteBlockedDate(
+    blockedDateId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      const { error } = await supabase
+        .from('coach_blocked_dates')
+        .delete()
+        .eq('id', blockedDateId);
+
+      if (error) {
+        console.error('[CoachingService.deleteBlockedDate] Error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('[CoachingService.deleteBlockedDate] Error:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Check if a date is blocked for a coach
+   */
+  async isDateBlocked(coachId: string, date: Date): Promise<boolean> {
+    const dateStr = date.toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('coach_blocked_dates')
+      .select('id')
+      .eq('coach_id', coachId)
+      .lte('start_date', dateStr)
+      .gte('end_date', dateStr)
+      .limit(1);
+
+    if (error) {
+      console.error('[CoachingService.isDateBlocked] Error:', error);
+      return false;
+    }
+
+    return (data?.length || 0) > 0;
+  }
+
+  /**
+   * Calculate session price with custom charges
+   */
+  calculateSessionPrice(
+    pricing: {
+      hourly_rate: number | null;
+      session_type_rates: Record<string, number>;
+      custom_charges: CustomCharge[];
+    },
+    sessionType: string,
+    durationMinutes: number,
+    selectedChargeIds: string[] = []
+  ): {
+    baseAmount: number;
+    customChargesAmount: number;
+    customChargesBreakdown: { id: string; label: string; amount: number }[];
+    totalAmount: number;
+  } {
+    // Get the rate for this session type, or fall back to hourly rate
+    const rate = pricing.session_type_rates[sessionType] || pricing.hourly_rate || 0;
+
+    // Calculate base amount (rate is per hour, so adjust for duration)
+    const baseAmount = Math.round((rate / 60) * durationMinutes);
+
+    // Calculate custom charges
+    const applicableCharges = pricing.custom_charges.filter((charge) => {
+      if (!charge.is_active) return false;
+      if (!selectedChargeIds.includes(charge.id)) return false;
+      // If session_types is specified, check if this session type is included
+      if (charge.session_types && charge.session_types.length > 0) {
+        return charge.session_types.includes(sessionType);
+      }
+      return true;
+    });
+
+    const customChargesBreakdown = applicableCharges.map((charge) => ({
+      id: charge.id,
+      label: charge.label,
+      amount: charge.amount_cents,
+    }));
+
+    const customChargesAmount = customChargesBreakdown.reduce(
+      (sum, charge) => sum + charge.amount,
+      0
+    );
+
+    return {
+      baseAmount,
+      customChargesAmount,
+      customChargesBreakdown,
+      totalAmount: baseAmount + customChargesAmount,
+    };
   }
 
   /**
@@ -2596,14 +3800,680 @@ class CoachingService {
         // Notifications table may not exist, continue without error
         console.log('[CoachingService.shareDebriefWithCoach] Notification insert skipped:', notificationError);
       }
+
+      // Send debrief share as a message in the coach-sailor conversation
+      try {
+        const { messagingService } = await import('./MessagingService');
+        const coachUserId = coachProfile.user_id;
+        const content = params.message || `${sailorName} shared their race debrief for ${raceName}`;
+        await messagingService.sendMessage(
+          await messagingService.getOrCreateConversation(coachUserId, params.sailorId),
+          params.sailorId,
+          content,
+          'debrief_share',
+          {
+            race_id: params.raceId,
+            race_name: raceName,
+            sailor_name: sailorName,
+          }
+        );
+      } catch (msgError) {
+        console.error('[shareDebriefWithCoach] Messaging error (non-fatal):', msgError);
+      }
     } catch (error) {
       console.error('[CoachingService.shareDebriefWithCoach] Error sharing debrief:', error);
       throw error;
     }
   }
+
+  // ============================================================================
+  // Session Lifecycle Management
+  // ============================================================================
+
+  /**
+   * Complete a session with structured notes and engagement rating
+   */
+  async completeSessionWithNotes(
+    sessionId: string,
+    completionData: {
+      actualDurationMinutes: number;
+      structuredNotes: {
+        what_was_covered?: string;
+        what_went_well?: string;
+        areas_to_work_on?: string;
+        homework_next_steps?: string;
+      };
+      sailorEngagementRating?: number; // 1-5, private coach metric
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      // Get session details
+      const { data: session, error: fetchError } = await supabase
+        .from('coaching_sessions')
+        .select(`
+          *,
+          sailor:users!sailor_id (
+            id, email, full_name
+          ),
+          coach:coach_profiles!coach_id (
+            id, display_name, user_id
+          )
+        `)
+        .eq('id', sessionId)
+        .single();
+
+      if (fetchError || !session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      // Validate session status - can only complete if not already completed or cancelled
+      if (session.status === 'completed') {
+        return { success: false, error: 'This session has already been completed' };
+      }
+      if (session.status === 'cancelled') {
+        return { success: false, error: 'Cannot complete a cancelled session' };
+      }
+
+      // Update session to completed with structured notes
+      const { error: updateError } = await supabase
+        .from('coaching_sessions')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          actual_duration_minutes: completionData.actualDurationMinutes,
+          session_notes_structured: completionData.structuredNotes,
+          sailor_engagement_rating: completionData.sailorEngagementRating,
+          // Also save flat notes for backwards compatibility
+          session_notes: [
+            completionData.structuredNotes.what_was_covered,
+            completionData.structuredNotes.what_went_well,
+            completionData.structuredNotes.areas_to_work_on,
+          ].filter(Boolean).join('\n\n'),
+          homework: completionData.structuredNotes.homework_next_steps,
+        })
+        .eq('id', sessionId);
+
+      if (updateError) {
+        console.error('[CoachingService.completeSessionWithNotes] Update error:', updateError);
+        return { success: false, error: updateError.message };
+      }
+
+      // Trigger payment charge if not already processed
+      // This would call the payment edge function
+      // await this.triggerSessionPayment(sessionId);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('[CoachingService.completeSessionWithNotes] Error:', error);
+      return { success: false, error: error.message || 'Failed to complete session' };
+    }
+  }
+
+  /**
+   * Send session summary to sailor
+   */
+  async sendSessionSummaryToSailor(sessionId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: session, error: fetchError } = await supabase
+        .from('coaching_sessions')
+        .select(`
+          *,
+          sailor:users!sailor_id (
+            id, email, full_name
+          ),
+          coach:coach_profiles!coach_id (
+            id, display_name, user_id
+          )
+        `)
+        .eq('id', sessionId)
+        .single();
+
+      if (fetchError || !session) {
+        return { success: false, error: 'Session not found' };
+      }
+
+      // Send email with session summary
+      try {
+        const { emailService } = await import('./EmailService');
+
+        // Build session notes from structured data if available
+        const structuredNotes = session.session_notes_structured as any;
+        let notesText = session.session_notes || '';
+        if (structuredNotes) {
+          const parts = [];
+          if (structuredNotes.what_was_covered) parts.push(`What was covered:\n${structuredNotes.what_was_covered}`);
+          if (structuredNotes.what_went_well) parts.push(`What went well:\n${structuredNotes.what_went_well}`);
+          if (structuredNotes.areas_to_work_on) parts.push(`Areas to work on:\n${structuredNotes.areas_to_work_on}`);
+          if (parts.length > 0) notesText = parts.join('\n\n');
+        }
+
+        await emailService.sendSessionCompletionNotification({
+          sailor_name: session.sailor?.full_name || 'Sailor',
+          sailor_email: session.sailor?.email || '',
+          coach_name: session.coach?.display_name || 'Coach',
+          session_type: session.session_type,
+          session_date: session.scheduled_at || session.started_at || '',
+          session_notes: notesText,
+          homework: structuredNotes?.homework_next_steps || session.homework,
+        });
+      } catch (emailError) {
+        console.error('[sendSessionSummaryToSailor] Email error:', emailError);
+        // Continue - we'll mark it as sent anyway
+      }
+
+      // Mark summary as sent
+      await supabase
+        .from('coaching_sessions')
+        .update({ summary_sent_to_sailor: true })
+        .eq('id', sessionId);
+
+      // Send session notes as a message in the conversation
+      try {
+        const { messagingService } = await import('./MessagingService');
+        const coachUserId = session.coach?.user_id || (session as any).coach_id;
+        const sailorId = session.sailor?.id || (session as any).sailor_id;
+        if (coachUserId && sailorId) {
+          const structuredNotes = session.session_notes_structured as any;
+          const preview = structuredNotes?.what_was_covered
+            || session.session_notes
+            || 'Session notes shared';
+          await messagingService.sendMessage(
+            await messagingService.getOrCreateConversation(coachUserId, sailorId),
+            coachUserId,
+            preview,
+            'session_note',
+            {
+              session_id: sessionId,
+              session_date: session.scheduled_at || session.started_at,
+              structured_notes: structuredNotes,
+              homework: structuredNotes?.homework_next_steps || session.homework,
+            }
+          );
+        }
+      } catch (msgError) {
+        console.error('[sendSessionSummaryToSailor] Messaging error (non-fatal):', msgError);
+      }
+
+      // Send push notification to sailor
+      try {
+        const { PushNotificationService } = await import('./PushNotificationService');
+        const coachName = session.coach?.display_name || 'Your coach';
+        const sailorId = session.sailor?.id || (session as any).sailor_id;
+        const coachUserId = session.coach?.user_id;
+        if (sailorId) {
+          // Build conversation deep link if possible
+          let route = '/coach/my-bookings';
+          if (coachUserId && sailorId) {
+            try {
+              const { messagingService } = await import('./MessagingService');
+              const convoId = await messagingService.getOrCreateConversation(coachUserId, sailorId);
+              route = `/coach/conversation/${convoId}`;
+            } catch { /* fallback to bookings */ }
+          }
+          PushNotificationService.sendPushNotification(
+            sailorId,
+            'Session Notes Shared',
+            `${coachName} shared notes from your session`,
+            { type: 'session_summary', route, session_id: sessionId },
+            'messages'
+          ).catch(() => {});
+        }
+      } catch (pushError) {
+        console.error('[sendSessionSummaryToSailor] Push error (non-fatal):', pushError);
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Calculate refund amount for session cancellation
+   * Returns the refund breakdown based on cancellation policy
+   */
+  calculateRefundAmount(
+    sessionScheduledAt: string | Date,
+    feeAmountCents: number
+  ): {
+    hoursUntilSession: number;
+    refundPercentage: number;
+    refundAmountCents: number;
+    policy: string;
+  } {
+    const scheduledTime = new Date(sessionScheduledAt);
+    const hoursUntilSession = (scheduledTime.getTime() - Date.now()) / (1000 * 60 * 60);
+
+    let refundPercentage = 0;
+    let policy = '';
+
+    if (hoursUntilSession >= 24) {
+      refundPercentage = 100;
+      policy = 'Full refund (24+ hours notice)';
+    } else if (hoursUntilSession >= 12) {
+      refundPercentage = 50;
+      policy = '50% refund (12-24 hours notice)';
+    } else {
+      refundPercentage = 0;
+      policy = 'No refund (less than 12 hours notice)';
+    }
+
+    return {
+      hoursUntilSession: Math.max(0, hoursUntilSession),
+      refundPercentage,
+      refundAmountCents: Math.round(feeAmountCents * (refundPercentage / 100)),
+      policy,
+    };
+  }
+
+  /**
+   * Get session details for completion/cancellation UI
+   */
+  async getSessionDetails(sessionId: string): Promise<{
+    id: string;
+    status: string;
+    scheduledAt: string;
+    durationMinutes: number;
+    sessionType: string;
+    feeAmountCents: number;
+    sailor: { id: string; name: string; email: string } | null;
+    coach: { id: string; name: string } | null;
+    notes: string | null;
+    structuredNotes: any | null;
+  } | null> {
+    const { data, error } = await supabase
+      .from('coaching_sessions')
+      .select(`
+        *,
+        sailor:users!sailor_id (id, email, full_name),
+        coach:coach_profiles!coach_id (id, display_name)
+      `)
+      .eq('id', sessionId)
+      .single();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      status: data.status,
+      scheduledAt: data.scheduled_at || data.start_time,
+      durationMinutes: data.duration_minutes,
+      sessionType: data.session_type,
+      feeAmountCents: Math.round((data.fee_amount || data.price || 0) * 100),
+      sailor: data.sailor ? {
+        id: data.sailor.id,
+        name: data.sailor.full_name || 'Unknown',
+        email: data.sailor.email || '',
+      } : null,
+      coach: data.coach ? {
+        id: data.coach.id,
+        name: data.coach.display_name || 'Coach',
+      } : null,
+      notes: data.session_notes,
+      structuredNotes: data.session_notes_structured,
+    };
+  }
+
+  // ============================================================================
+  // Booking Request Expiration Management
+  // ============================================================================
+
+  /**
+   * Get time remaining until booking request expires
+   */
+  getBookingRequestExpiration(expiresAt: string | null): {
+    isExpired: boolean;
+    hoursRemaining: number;
+    minutesRemaining: number;
+    urgencyLevel: 'normal' | 'warning' | 'critical';
+    displayText: string;
+  } {
+    if (!expiresAt) {
+      return {
+        isExpired: false,
+        hoursRemaining: 48,
+        minutesRemaining: 0,
+        urgencyLevel: 'normal',
+        displayText: 'Expires in 48 hours',
+      };
+    }
+
+    const expirationTime = new Date(expiresAt);
+    const now = Date.now();
+    const msRemaining = expirationTime.getTime() - now;
+
+    if (msRemaining <= 0) {
+      return {
+        isExpired: true,
+        hoursRemaining: 0,
+        minutesRemaining: 0,
+        urgencyLevel: 'critical',
+        displayText: 'Expired',
+      };
+    }
+
+    const hoursRemaining = Math.floor(msRemaining / (1000 * 60 * 60));
+    const minutesRemaining = Math.floor((msRemaining % (1000 * 60 * 60)) / (1000 * 60));
+
+    let urgencyLevel: 'normal' | 'warning' | 'critical' = 'normal';
+    let displayText = '';
+
+    if (hoursRemaining < 6) {
+      urgencyLevel = 'critical';
+      if (hoursRemaining < 1) {
+        displayText = `Expires in ${minutesRemaining}m`;
+      } else {
+        displayText = `Expires in ${hoursRemaining}h ${minutesRemaining}m`;
+      }
+    } else if (hoursRemaining < 24) {
+      urgencyLevel = 'warning';
+      displayText = `Expires in ${hoursRemaining} hours`;
+    } else {
+      displayText = `Expires in ${hoursRemaining} hours`;
+    }
+
+    return {
+      isExpired: false,
+      hoursRemaining,
+      minutesRemaining,
+      urgencyLevel,
+      displayText,
+    };
+  }
+
+  /**
+   * Manually expire a booking request (used by edge function)
+   */
+  async expireBookingRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase
+        .from('session_bookings')
+        .update({
+          status: 'expired',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId)
+        .eq('status', 'pending');
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get pending booking requests with expiration info
+   */
+  async getPendingBookingRequestsWithExpiration(coachId: string): Promise<Array<{
+    id: string;
+    sailorId: string;
+    sailorName: string;
+    requestedStartTime: string;
+    requestedEndTime: string;
+    message: string | null;
+    createdAt: string;
+    expiresAt: string | null;
+    expiration: {
+      isExpired: boolean;
+      hoursRemaining: number;
+      minutesRemaining: number;
+      urgencyLevel: 'normal' | 'warning' | 'critical';
+      displayText: string;
+    };
+  }>> {
+    const { data, error } = await supabase
+      .from('session_bookings')
+      .select(`
+        *,
+        sailor:users!sailor_id (id, email, full_name)
+      `)
+      .eq('coach_id', coachId)
+      .eq('status', 'pending')
+      .order('expires_at', { ascending: true });
+
+    if (error || !data) return [];
+
+    return data.map((request) => ({
+      id: request.id,
+      sailorId: request.sailor_id,
+      sailorName: request.sailor?.full_name || request.sailor?.email || 'Unknown',
+      requestedStartTime: request.requested_start_time,
+      requestedEndTime: request.requested_end_time,
+      message: request.sailor_message || request.message,
+      createdAt: request.created_at,
+      expiresAt: request.expires_at,
+      expiration: this.getBookingRequestExpiration(request.expires_at),
+    }));
+  }
+
+  // ============================================================================
+  // Coach Profile Editor
+  // ============================================================================
+
+  /**
+   * Get full coach profile for editing
+   */
+  async getCoachProfileForEdit(coachId: string): Promise<{
+    id: string;
+    displayName: string;
+    profilePhotoUrl: string | null;
+    bio: string | null;
+    professionalTitle: string | null;
+    specializations: string[];
+    experienceYears: number | null;
+    languages: string[];
+    certifications: string[];
+    boatClasses: string[];
+    teachingModalities: string[];
+    marketplaceVisible: boolean;
+    isActive: boolean;
+    hourlyRate: number | null;
+    currency: string;
+  } | null> {
+    const { data, error } = await supabase
+      .from('coach_profiles')
+      .select(`
+        id,
+        display_name,
+        profile_photo_url:profile_image_url,
+        bio,
+        professional_title,
+        specializations,
+        experience_years,
+        languages,
+        certifications,
+        boat_classes,
+        teaching_modalities,
+        marketplace_visible,
+        is_active,
+        hourly_rate,
+        currency
+      `)
+      .eq('id', coachId)
+      .single();
+
+    if (error || !data) {
+      console.error('[getCoachProfileForEdit] Error:', error);
+      return null;
+    }
+
+    return {
+      id: data.id,
+      displayName: data.display_name || '',
+      profilePhotoUrl: data.profile_photo_url,
+      bio: data.bio,
+      professionalTitle: data.professional_title,
+      specializations: data.specializations || [],
+      experienceYears: data.experience_years,
+      languages: data.languages || ['English'],
+      certifications: data.certifications || [],
+      boatClasses: data.boat_classes || [],
+      teachingModalities: data.teaching_modalities || ['on_water'],
+      marketplaceVisible: data.marketplace_visible ?? true,
+      isActive: data.is_active ?? true,
+      hourlyRate: data.hourly_rate,
+      currency: data.currency || 'USD',
+    };
+  }
+
+  /**
+   * Update coach profile with full editing capabilities
+   */
+  async updateCoachProfileFull(
+    coachId: string,
+    updates: {
+      displayName?: string;
+      profilePhotoUrl?: string | null;
+      bio?: string;
+      professionalTitle?: string;
+      specializations?: string[];
+      experienceYears?: number;
+      languages?: string[];
+      certifications?: string[];
+      boatClasses?: string[];
+      teachingModalities?: string[];
+      marketplaceVisible?: boolean;
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+
+      if (updates.displayName !== undefined) updateData.display_name = updates.displayName;
+      if (updates.profilePhotoUrl !== undefined) updateData.profile_image_url = updates.profilePhotoUrl;
+      if (updates.bio !== undefined) updateData.bio = updates.bio;
+      if (updates.professionalTitle !== undefined) updateData.professional_title = updates.professionalTitle;
+      if (updates.specializations !== undefined) updateData.specializations = updates.specializations;
+      if (updates.experienceYears !== undefined) updateData.experience_years = updates.experienceYears;
+      if (updates.languages !== undefined) updateData.languages = updates.languages;
+      if (updates.certifications !== undefined) updateData.certifications = updates.certifications;
+      if (updates.boatClasses !== undefined) updateData.boat_classes = updates.boatClasses;
+      if (updates.teachingModalities !== undefined) updateData.teaching_modalities = updates.teachingModalities;
+      if (updates.marketplaceVisible !== undefined) updateData.marketplace_visible = updates.marketplaceVisible;
+
+      const { error } = await supabase
+        .from('coach_profiles')
+        .update(updateData)
+        .eq('id', coachId);
+
+      if (error) {
+        console.error('[updateCoachProfileFull] Error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('[updateCoachProfileFull] Error:', error);
+      return { success: false, error: error.message || 'Failed to update profile' };
+    }
+  }
+
+  /**
+   * Toggle marketplace visibility
+   */
+  async toggleMarketplaceVisibility(coachId: string, visible: boolean): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      const { error } = await supabase
+        .from('coach_profiles')
+        .update({
+          marketplace_visible: visible,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', coachId);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Upload profile photo and get URL
+   */
+  async uploadProfilePhoto(coachId: string, imageUri: string): Promise<{ url: string | null; error?: string }> {
+    try {
+      await this.requireAuth();
+
+      // Convert URI to blob for upload
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+
+      const fileName = `coach-${coachId}-${Date.now()}.jpg`;
+      const filePath = `coach-photos/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, blob, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: 'image/jpeg',
+        });
+
+      if (uploadError) {
+        console.error('[uploadProfilePhoto] Upload error:', uploadError);
+        return { url: null, error: uploadError.message };
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      return { url: urlData.publicUrl };
+    } catch (error: any) {
+      console.error('[uploadProfilePhoto] Error:', error);
+      return { url: null, error: error.message };
+    }
+  }
 }
 
 export const coachingService = new CoachingService();
+
+// Backwards compatibility - CoachMarketplaceService methods are now on coachingService
+// Existing imports use CoachMarketplaceService.methodName() (static-style calls),
+// so this proxy object delegates to the coachingService singleton.
+export const CoachMarketplaceService = {
+  registerCoach: (...args: Parameters<typeof coachingService.registerCoach>) =>
+    coachingService.registerCoach(...args),
+  getSailorProfile: (...args: Parameters<typeof coachingService.getSailorProfile>) =>
+    coachingService.getSailorProfile(...args),
+  getCoachProfile: (...args: Parameters<typeof coachingService.getCoachProfileById>) =>
+    coachingService.getCoachProfileById(...args),
+  updateCoachProfile: (...args: Parameters<typeof coachingService.updateCoachProfile>) =>
+    coachingService.updateCoachProfile(...args),
+  searchCoaches: (...args: Parameters<typeof coachingService.searchCoachesMarketplace>) =>
+    coachingService.searchCoachesMarketplace(...args),
+  getNextAvailableSlot: (...args: Parameters<typeof coachingService.getNextAvailableSlot>) =>
+    coachingService.getNextAvailableSlot(...args),
+  bookSession: (...args: Parameters<typeof coachingService.bookMarketplaceSession>) =>
+    coachingService.bookMarketplaceSession(...args),
+  getUserSessions: (...args: Parameters<typeof coachingService.getUserSessions>) =>
+    coachingService.getUserSessions(...args),
+  updateSessionStatus: (...args: Parameters<typeof coachingService.updateSessionStatus>) =>
+    coachingService.updateSessionStatus(...args),
+  submitReview: (...args: Parameters<typeof coachingService.submitReview>) =>
+    coachingService.submitReview(...args),
+  getCoachDashboard: (...args: Parameters<typeof coachingService.getCoachMarketplaceDashboard>) =>
+    coachingService.getCoachMarketplaceDashboard(...args),
+  getStudentDashboard: (...args: Parameters<typeof coachingService.getStudentDashboard>) =>
+    coachingService.getStudentDashboard(...args),
+  getSailingSpecialties: (...args: Parameters<typeof coachingService.getSailingSpecialties>) =>
+    coachingService.getSailingSpecialties(...args),
+};
 
 const LEGACY_DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 const LEGACY_TIME_BLOCKS = [

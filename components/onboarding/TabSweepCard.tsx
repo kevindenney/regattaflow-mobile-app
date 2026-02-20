@@ -14,95 +14,66 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-
-interface TabRow {
-  icon: keyof typeof Ionicons.glyphMap;
-  name: string;
-  description: string;
-  color: string;
-}
-
-const TABS: TabRow[] = [
-  {
-    icon: 'people-outline',
-    name: 'Follow',
-    description: 'Discover sailors and share race insights',
-    color: '#3B82F6',
-  },
-  {
-    icon: 'chatbubbles-outline',
-    name: 'Discuss',
-    description: 'Join communities and conversations',
-    color: '#8B5CF6',
-  },
-  {
-    icon: 'school-outline',
-    name: 'Learn',
-    description: 'Race-focused courses and drills',
-    color: '#10B981',
-  },
-  {
-    icon: 'stats-chart-outline',
-    name: 'Reflect',
-    description: 'Review race logs and track progress',
-    color: '#F59E0B',
-  },
-];
-
 export interface TabSweepCardProps {
   visible: boolean;
   onNext: () => void;
   onSkip: () => void;
+  canContinue: boolean;
+  activeTabLabel?: string;
+  activeTabDescription?: string;
+  emptyStateHint?: string;
 }
 
-export function TabSweepCard({ visible, onNext, onSkip }: TabSweepCardProps) {
+export function TabSweepCard({
+  visible,
+  onNext,
+  onSkip,
+  canContinue,
+  activeTabLabel,
+  activeTabDescription,
+  emptyStateHint,
+}: TabSweepCardProps) {
   const { width } = useWindowDimensions();
 
   if (!visible) return null;
 
-  const cardWidth = Math.min(360, width - 48);
+  const cardWidth = Math.min(300, width - 60);
 
   return (
     <Animated.View
       entering={FadeIn.duration(300)}
       exiting={FadeOut.duration(200)}
       style={styles.backdrop}
+      pointerEvents="box-none"
     >
       <View style={[styles.card, { width: cardWidth }]}>
         <Text style={styles.title}>Explore every tab</Text>
-        <Text style={styles.subtitle}>
-          Four tabs to power your sailing journey.
-        </Text>
+        <Text style={styles.subtitle}>Tap each tab once. Use the progress pills below.</Text>
+        {!!activeTabLabel && !!activeTabDescription && (
+          <View style={styles.contextBox}>
+            <Text style={styles.contextTitle}>{activeTabLabel}</Text>
+            <Text style={styles.contextBody}>{activeTabDescription}</Text>
+            {!!emptyStateHint && <Text style={styles.contextHint}>{emptyStateHint}</Text>}
+          </View>
+        )}
 
-        <View style={styles.tabList}>
-          {TABS.map((tab) => (
-            <View key={tab.name} style={styles.tabRow}>
-              <View style={[styles.iconCircle, { backgroundColor: `${tab.color}15` }]}>
-                <Ionicons name={tab.icon} size={22} color={tab.color} />
-              </View>
-              <View style={styles.tabText}>
-                <Text style={styles.tabName}>{tab.name}</Text>
-                <Text style={styles.tabDescription}>{tab.description}</Text>
-              </View>
-            </View>
-          ))}
+        <View style={styles.actionsRow}>
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={onSkip}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.skipButtonText}>Skip</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.nextButton, !canContinue && styles.nextButtonDisabled]}
+            onPress={onNext}
+            disabled={!canContinue}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.nextButtonText, !canContinue && styles.nextButtonTextDisabled]}>Next</Text>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={styles.nextButton}
-          onPress={onNext}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.nextButtonText}>Next</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={onSkip}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.skipButtonText}>Skip</Text>
-        </TouchableOpacity>
       </View>
     </Animated.View>
   );
@@ -111,87 +82,93 @@ export function TabSweepCard({ visible, onNext, onSkip }: TabSweepCardProps) {
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    paddingTop: 78,
     zIndex: 1100,
   },
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 28,
-    paddingHorizontal: 24,
-    alignItems: 'center',
+    borderRadius: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    alignItems: 'stretch',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   title: {
-    fontSize: 22,
+    fontSize: 15,
     fontWeight: '800',
     color: '#0F172A',
     textAlign: 'center',
-    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#64748B',
     textAlign: 'center',
-    marginBottom: 20,
+    marginTop: 2,
+    marginBottom: 7,
   },
-  tabList: {
-    width: '100%',
-    gap: 14,
-    marginBottom: 24,
+  contextBox: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
-  tabRow: {
+  contextTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1E3A8A',
+  },
+  contextBody: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#1E3A8A',
+  },
+  contextHint: {
+    marginTop: 4,
+    fontSize: 10,
+    color: '#475569',
+  },
+  actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabText: {
-    flex: 1,
-  },
-  tabName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 1,
-  },
-  tabDescription: {
-    fontSize: 13,
-    color: '#64748B',
-    lineHeight: 18,
+    justifyContent: 'flex-end',
+    gap: 8,
   },
   nextButton: {
     backgroundColor: '#2563EB',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-    width: '100%',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 12,
   },
   nextButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  nextButtonDisabled: {
+    backgroundColor: '#BFDBFE',
+  },
+  nextButtonTextDisabled: {
+    color: '#E2E8F0',
+  },
   skipButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   skipButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#94A3B8',
   },

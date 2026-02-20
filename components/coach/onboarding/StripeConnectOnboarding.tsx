@@ -10,10 +10,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Linking,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -107,11 +107,11 @@ export const StripeConnectOnboarding: React.FC<StripeConnectOnboardingProps> = (
         }
       } else {
         const error = await response.json();
-        Alert.alert('Error', error.error || 'Failed to start onboarding');
+        showAlert('Error', error.error || 'Failed to start onboarding');
       }
     } catch (error: any) {
       console.error('Error starting onboarding:', error);
-      Alert.alert('Error', 'Failed to start onboarding process');
+      showAlert('Error', 'Failed to start onboarding process');
     } finally {
       setConnecting(false);
     }
@@ -142,11 +142,11 @@ export const StripeConnectOnboarding: React.FC<StripeConnectOnboardingProps> = (
           await Linking.openURL(url);
         }
       } else {
-        Alert.alert('Error', 'Failed to open Stripe dashboard');
+        showAlert('Error', 'Failed to open Stripe dashboard');
       }
     } catch (error) {
       console.error('Error opening dashboard:', error);
-      Alert.alert('Error', 'Failed to open Stripe dashboard');
+      showAlert('Error', 'Failed to open Stripe dashboard');
     }
   };
 

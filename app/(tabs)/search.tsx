@@ -9,7 +9,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { TabScreenToolbar, type ToolbarAction } from '@/components/ui/TabScreenToolbar';
 import { SailorSearchContent } from '@/components/search/SailorSearchContent';
@@ -30,17 +29,8 @@ export default function SearchTab() {
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll } = useScrollToolbarHide();
 
-  // Toolbar actions
-  const toolbarActions: ToolbarAction[] = useMemo(
-    () => [
-      {
-        icon: 'close',
-        label: 'Close',
-        onPress: () => router.back(),
-      },
-    ],
-    []
-  );
+  // Toolbar actions (none — Search is a primary tab now)
+  const toolbarActions: ToolbarAction[] = useMemo(() => [], []);
 
   return (
     <View style={styles.container}>

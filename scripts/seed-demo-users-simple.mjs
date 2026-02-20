@@ -45,12 +45,6 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 const MOCK_USERS = [
   {
-    email: 'sarah.chen@sailing.com',
-    password: DEMO_PASSWORD,
-    full_name: 'Sarah Chen',
-    user_type: 'sailor',
-  },
-  {
     email: 'mike.thompson@racing.com',
     password: DEMO_PASSWORD,
     full_name: 'Mike Thompson',
@@ -67,12 +61,6 @@ const MOCK_USERS = [
     password: DEMO_PASSWORD,
     full_name: 'James Rodriguez',
     user_type: 'sailor',
-  },
-  {
-    email: 'coach.anderson@sailing.com',
-    password: DEMO_PASSWORD,
-    full_name: 'Coach Anderson',
-    user_type: 'coach',
   },
 ];
 
@@ -151,37 +139,6 @@ async function createSampleRaces(users) {
   };
 
   // Create some historical races for each sailor to enable pattern detection
-  const sarah = users.find(u => u.email === 'sarah.chen@sailing.com');
-  if (sarah) {
-    // Spring Dragon Championship pattern (3 years)
-    for (let year = 0; year < 3; year++) {
-      races.push({
-        name: 'Spring Dragon Championship',
-        created_by: sarah.id,
-        start_date: new Date(now.getFullYear() - year, 3, 15).toISOString(), // April
-        metadata: {
-          venue_name: 'Victoria Harbour',
-          class: 'Dragon',
-        },
-        status: 'completed',
-      });
-    }
-
-    // Regular J/70 racing
-    for (let i = 0; i < 5; i++) {
-      races.push({
-        name: `J/70 Club Race`,
-        created_by: sarah.id,
-        start_date: monthsAgo(i * 0.5),
-        metadata: {
-          venue_name: 'Hong Kong Waters',
-          class: 'J/70',
-        },
-        status: 'completed',
-      });
-    }
-  }
-
   const mike = users.find(u => u.email === 'mike.thompson@racing.com');
   if (mike) {
     // Bay Challenge pattern (2 years)
@@ -263,7 +220,7 @@ async function main() {
     console.log('──────────────────────────────────────────────────────────\n');
     console.log('💡 Next Steps:');
     console.log('   1. Use these credentials on the login page');
-    console.log('   2. Login as Sarah Chen or Mike Thompson');
+    console.log('   2. Login as Mike Thompson or Emma Wilson');
     console.log('   3. Go to Add Race screen');
     console.log('   4. See pattern-based suggestions!\n');
     console.log('🔄 To generate fresh suggestions for all users:');

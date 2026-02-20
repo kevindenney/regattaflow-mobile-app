@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     RefreshControl,
     ScrollView,
@@ -13,6 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 export default function MyBookingsScreen() {
   const router = useRouter();
@@ -56,25 +56,19 @@ export default function MyBookingsScreen() {
   };
 
   const handleCancelBooking = async (bookingId: string) => {
-    Alert.alert(
+    showConfirm(
       'Cancel Booking',
       'Are you sure you want to cancel this booking request?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await coachingService.cancelBookingRequest(bookingId, 'Cancelled by sailor');
-              loadBookings();
-            } catch (error) {
-              console.error('Error cancelling booking:', error);
-              Alert.alert('Error', 'Failed to cancel booking');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await coachingService.cancelBookingRequest(bookingId, 'Cancelled by sailor');
+          loadBookings();
+        } catch (error) {
+          console.error('Error cancelling booking:', error);
+          showAlert('Error', 'Failed to cancel booking');
+        }
+      },
+      { destructive: true, cancelText: 'No', confirmText: 'Yes, Cancel' }
     );
   };
 

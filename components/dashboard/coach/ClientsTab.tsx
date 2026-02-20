@@ -26,6 +26,7 @@ interface ClientsTabProps {
   onClientPress: (clientId: string) => void;
   onScheduleSession: (clientId: string) => void;
   onViewProgress: (clientId: string) => void;
+  onMessage?: (clientId: string) => void;
   onAddClient: () => void;
 }
 
@@ -34,6 +35,7 @@ export function ClientsTab({
   onClientPress,
   onScheduleSession,
   onViewProgress,
+  onMessage,
   onAddClient
 }: ClientsTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -248,7 +250,10 @@ export function ClientsTab({
                   <Ionicons name="analytics-outline" size={16} color="#10B981" />
                   <Text style={styles.actionButtonText}>Progress</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => onMessage?.(client.id)}
+                >
                   <Ionicons name="chatbubble-outline" size={16} color="#6366F1" />
                   <Text style={styles.actionButtonText}>Message</Text>
                 </TouchableOpacity>

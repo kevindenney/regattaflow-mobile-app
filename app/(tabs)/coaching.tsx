@@ -352,7 +352,7 @@ export default function CoachingHubScreen() {
         { label: 'Upcoming', value: `${metricsData.upcomingSessions || 0}`, helper: 'sessions' },
         { label: 'Coaches', value: `${metricsData.activeClients || 0}`, helper: 'active' },
         { label: 'Rating', value: metricsData.averageRating ? metricsData.averageRating.toFixed(1) : '—', helper: 'avg' },
-        { label: 'Hours', value: `${((metricsData.sessionsThisMonth || 0) * 60 / 60).toFixed(1)}`, helper: 'this month' },
+        { label: 'Sessions', value: `${metricsData.sessionsThisMonth || 0}`, helper: 'this month' },
       ];
     }
 
@@ -468,7 +468,7 @@ export default function CoachingHubScreen() {
         <TufteSection
           title="QUICK ACTIONS"
           action="Manage"
-          onActionPress={() => router.push('/coach/profile')}
+          onActionPress={() => router.push('/coach/my-bookings')}
         >
           <View style={styles.quickActionsContainer}>
             <TouchableOpacity
@@ -502,12 +502,22 @@ export default function CoachingHubScreen() {
               <Text style={styles.quickActionChevron}>›</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.quickActionRow, styles.quickActionRowLast]}
+              style={styles.quickActionRow}
               onPress={() => router.push('/coach/confirmation')}
             >
               <View style={styles.quickActionLeft}>
                 <Ionicons name="chatbubbles-outline" size={18} color={IOS_COLORS.secondaryLabel} />
                 <Text style={styles.quickActionLabel}>Share feedback</Text>
+              </View>
+              <Text style={styles.quickActionChevron}>›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.quickActionRow, styles.quickActionRowLast]}
+              onPress={() => router.push('/coach/profile-edit')}
+            >
+              <View style={styles.quickActionLeft}>
+                <Ionicons name="person-circle-outline" size={18} color={IOS_COLORS.secondaryLabel} />
+                <Text style={styles.quickActionLabel}>Edit Profile</Text>
               </View>
               <Text style={styles.quickActionChevron}>›</Text>
             </TouchableOpacity>
@@ -525,7 +535,7 @@ export default function CoachingHubScreen() {
               <TufteSessionRow
                 key={session.id}
                 session={session}
-                onPress={() => router.push(`/coach/session/${session.id}`)}
+                onPress={() => router.push('/coach/my-bookings')}
                 isLast={index === upcomingSessions.length - 1}
               />
             ))}

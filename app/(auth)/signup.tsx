@@ -152,7 +152,7 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.title}>Create your account</Text>
+          <Text testID="signup-title" style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>Start with 14 days of full Pro access — no card required</Text>
 
           {/* Error Message Banner */}
@@ -168,6 +168,7 @@ export default function SignUp() {
           {/* Social Sign-up Options (above form) */}
           <View style={styles.socialContainer}>
             <TouchableOpacity
+              testID="signup-google-button"
               style={[styles.socialButton, styles.googleButton, isLoading && styles.buttonDisabled]}
               onPress={handleGoogleSignUp}
               disabled={isLoading}
@@ -208,6 +209,7 @@ export default function SignUp() {
           {/* Form Fields */}
           <Text style={styles.sectionLabel}>Full Name *</Text>
           <TextInput
+            testID="signup-name-input"
             style={styles.input}
             placeholder="Your name"
             value={username}
@@ -220,6 +222,7 @@ export default function SignUp() {
 
           <Text style={styles.sectionLabel}>Email *</Text>
           <TextInput
+            testID="signup-email-input"
             style={styles.input}
             placeholder="your.email@example.com"
             value={email}
@@ -233,6 +236,7 @@ export default function SignUp() {
 
           <Text style={styles.sectionLabel}>Password *</Text>
           <TextInput
+            testID="signup-password-input"
             style={styles.input}
             placeholder="Minimum 6 characters"
             value={password}
@@ -244,6 +248,7 @@ export default function SignUp() {
 
           {/* Submit Button */}
           <TouchableOpacity
+            testID="signup-submit-button"
             style={[styles.primaryButton, isLoading && styles.buttonDisabled]}
             onPress={handleSignUp}
             disabled={isLoading}
@@ -262,6 +267,7 @@ export default function SignUp() {
 
           {/* Login Link */}
           <TouchableOpacity
+            testID="signup-signin-link"
             style={styles.linkButton}
             onPress={() => router.push('/(auth)/login')}
             disabled={isLoading}

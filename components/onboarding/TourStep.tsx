@@ -8,7 +8,7 @@
 import React from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { ContextualHint } from './ContextualHint';
-import { useTourStepContext, type TourStep as TourStepType } from '@/providers/FeatureTourProvider';
+import { useFeatureTourContext, useTourStepContext, type TourStep as TourStepType } from '@/providers/FeatureTourProvider';
 import { TOUR_STEPS } from '@/services/onboarding/FeatureTourService';
 
 export interface TourStepProps {
@@ -20,6 +20,10 @@ export interface TourStepProps {
   style?: ViewStyle;
   /** Override the default position from config */
   position?: 'top' | 'bottom';
+  /** Horizontal alignment for hint card relative to target */
+  horizontalAlign?: 'center' | 'targetLeft' | 'targetRight';
+  /** Distance between target and hint card */
+  distance?: number;
   /** Override the default title from config */
   title?: string;
   /** Override the default description from config */
@@ -35,10 +39,13 @@ export function TourStep({
   children,
   style,
   position,
+  horizontalAlign,
+  distance,
   title,
   description,
 }: TourStepProps) {
   const { isActive, config, advance, skip } = useTourStepContext(step);
+  const { markStepReady } = useFeatureTourContext();
 
   // Use config values if not overridden
   const hintTitle = title ?? config?.title ?? '';
@@ -60,8 +67,10 @@ export function TourStep({
       dismissLabel={dismissLabel}
       showSkip
       onSkip={skip}
+      onTargetReady={() => markStepReady(step)}
       style={style}
-      distance={step === 'race_timeline' ? -18 : 8}
+      horizontalAlign={horizontalAlign}
+      distance={distance ?? 10}
     >
       {children}
     </ContextualHint>

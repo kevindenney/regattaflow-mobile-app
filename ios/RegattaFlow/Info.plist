@@ -42,14 +42,14 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.googleusercontent.apps.176626806015-s39mdhh67n9u2vpmo62jacrcif0g4g0d</string>
+          <string>com.googleusercontent.apps.176626806015-2aa2ujl7jiierinonf1v5rmnkjfhmodp</string>
         </array>
       </dict>
     </array>
     <key>CFBundleVersion</key>
-    <string>9</string>
+    <string>2</string>
     <key>GMSApiKey</key>
-    <string>AIzaSyBvc-fxG40bcPy8oBrbLP9qPsGseVzQY9s</string>
+    <string>AIzaSyDwKC0yJn5U3dQX8DCMcJw5wGP__yMfi0I</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>LSMinimumSystemVersion</key>

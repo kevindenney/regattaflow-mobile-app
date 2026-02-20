@@ -18,7 +18,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCoachOnboardingState } from '@/hooks/useCoachOnboardingState';
-import Slider from '@react-native-community/slider';
 
 // Design tokens (consistent with other screens)
 const COLORS = {
@@ -321,24 +320,23 @@ const CoachOnboardingAvailability = () => {
             {/* Distance Slider (only shown when in-person is enabled) */}
             {inPersonCoaching && (
               <View style={styles.sliderContainer}>
-                <View style={styles.sliderHeader}>
-                  <Text style={styles.sliderLabel}>Travel distance</Text>
-                  <Text style={styles.sliderValue}>{maxDistance} km</Text>
-                </View>
-                <Slider
-                  style={styles.slider}
-                  minimumValue={5}
-                  maximumValue={100}
-                  step={5}
-                  value={maxDistance}
-                  onValueChange={setMaxDistance}
-                  minimumTrackTintColor={COLORS.primary}
-                  maximumTrackTintColor={COLORS.unselected}
-                  thumbTintColor={COLORS.primary}
-                />
-                <View style={styles.sliderRange}>
-                  <Text style={styles.sliderRangeText}>5 km</Text>
-                  <Text style={styles.sliderRangeText}>100 km</Text>
+                <Text style={styles.sliderLabel}>Travel distance</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 8 }}>
+                  <TouchableOpacity
+                    style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}
+                    onPress={() => setMaxDistance(Math.max(5, maxDistance - 5))}
+                  >
+                    <Text style={{ fontSize: 20, fontWeight: '600', color: '#374151' }}>{'\u2212'}</Text>
+                  </TouchableOpacity>
+                  <Text style={{ fontSize: 24, fontWeight: '700', color: '#1F2937', minWidth: 80, textAlign: 'center' }}>
+                    {maxDistance} km
+                  </Text>
+                  <TouchableOpacity
+                    style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center' }}
+                    onPress={() => setMaxDistance(Math.min(100, maxDistance + 5))}
+                  >
+                    <Text style={{ fontSize: 20, fontWeight: '600', color: '#374151' }}>+</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
@@ -661,31 +659,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
-  sliderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
   sliderLabel: {
     fontSize: 13,
-    color: COLORS.tertiaryLabel,
-  },
-  sliderValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: COLORS.primary,
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-  },
-  sliderRange: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sliderRangeText: {
-    fontSize: 11,
     color: COLORS.tertiaryLabel,
   },
 

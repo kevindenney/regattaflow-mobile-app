@@ -7,9 +7,9 @@ import {
   ScrollView,
   Modal,
   Platform,
-  Alert,
   Share,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { CoachingSession } from '../../types/coach';
 
 interface PaymentReceiptProps {
@@ -88,7 +88,7 @@ Thank you for using RegattaFlow!
           await nav.share({ title, text: message });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(message);
-          Alert.alert('Copied', 'Receipt copied to clipboard');
+          showAlert('Copied', 'Receipt copied to clipboard');
         }
       } else {
         await Share.share({ message, title });

@@ -46,7 +46,7 @@ export interface BookingRequest {
   session_id?: string | null;
   coach_id: string;
   sailor_id: string;
-  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'expired';
   requested_start_time?: string | null;
   requested_end_time?: string | null;
   session_type?: string | null;
@@ -55,6 +55,8 @@ export interface BookingRequest {
   total_amount_cents?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  expires_at?: string | null;
+  expiration_warning_sent?: boolean;
   message?: string | null; // legacy field fallback
   session?: CoachingSession | null;
 }

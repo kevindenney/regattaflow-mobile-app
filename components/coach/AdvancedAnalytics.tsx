@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   Image,
   Dimensions,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import ComputerVisionService from '../../services/ComputerVisionService';
 import IoTSensorService from '../../services/IoTSensorService';
@@ -382,7 +382,7 @@ export default function AdvancedAnalytics() {
       setActiveTab('trim');
     } catch (error) {
       console.error('Error capturing and analyzing:', error);
-      Alert.alert('Error', 'Failed to capture and analyze image. Please try again.');
+      showAlert('Error', 'Failed to capture and analyze image. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -391,16 +391,16 @@ export default function AdvancedAnalytics() {
   const handleStartRecording = () => {
     IoTSensorService.startRecording(`session-${Date.now()}`);
     setIsRecording(true);
-    Alert.alert('Recording Started', 'Sensor data recording has started for this session.');
+    showAlert('Recording Started', 'Sensor data recording has started for this session.');
   };
 
   const handleStopRecording = async () => {
     try {
       await IoTSensorService.stopRecording();
       setIsRecording(false);
-      Alert.alert('Recording Saved', 'Session data has been saved successfully.');
+      showAlert('Recording Saved', 'Session data has been saved successfully.');
     } catch (error) {
-      Alert.alert('Error', 'Failed to save session data.');
+      showAlert('Error', 'Failed to save session data.');
     }
   };
 
