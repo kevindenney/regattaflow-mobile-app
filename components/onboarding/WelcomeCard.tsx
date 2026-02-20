@@ -1,8 +1,7 @@
 /**
- * WelcomeCard — Centered modal card shown as the first tour step.
+ * WelcomeCard — Centered modal card shown after signup.
  *
- * Renders a dark backdrop with a white card containing the welcome
- * message and "Start Tour" / "Skip" buttons.
+ * Simple welcome screen with quick links to important features.
  */
 
 import React from 'react';
@@ -13,20 +12,59 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 export interface WelcomeCardProps {
   visible: boolean;
   onStartTour: () => void;
   onSkip: () => void;
+  onNavigate?: (route: string) => void;
 }
 
-export function WelcomeCard({ visible, onStartTour, onSkip }: WelcomeCardProps) {
+interface QuickLink {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+  route: string;
+  color: string;
+}
+
+const QUICK_LINKS: QuickLink[] = [
+  {
+    icon: 'add-circle',
+    title: 'Add a Race',
+    description: 'Track an upcoming regatta',
+    route: '/(tabs)/races',
+    color: '#2563EB',
+  },
+  {
+    icon: 'school',
+    title: 'Learn Tactics',
+    description: 'Racing strategies & tips',
+    route: '/(tabs)/learn',
+    color: '#059669',
+  },
+  {
+    icon: 'people',
+    title: 'Find a Coach',
+    description: 'Connect with sailing coaches',
+    route: '/coach/discover',
+    color: '#7C3AED',
+  },
+];
+
+export function WelcomeCard({ visible, onStartTour, onSkip, onNavigate }: WelcomeCardProps) {
   const { width } = useWindowDimensions();
 
   if (!visible) return null;
 
-  const cardWidth = Math.min(360, width - 48);
+  const cardWidth = Math.min(380, width - 40);
+
+  const handleQuickLink = (route: string) => {
+    onSkip(); // Dismiss the card
+    onNavigate?.(route);
+  };
 
   return (
     <Animated.View
@@ -36,23 +74,38 @@ export function WelcomeCard({ visible, onStartTour, onSkip }: WelcomeCardProps) 
     >
       <View style={[styles.card, { width: cardWidth }]}>
         <Text style={styles.emoji}>⛵</Text>
-        <Text style={styles.title}>Your race companion</Text>
+        <Text style={styles.title}>Welcome to RegattaFlow!</Text>
         <Text style={styles.description}>
-          RegattaFlow helps you prepare for races, learn tactics, and track your progress.
+          Your sailing race companion. Here's how to get started:
         </Text>
+
+        {/* Quick Links */}
+        <View style={styles.linksContainer}>
+          {QUICK_LINKS.map((link, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.linkButton}
+              onPress={() => handleQuickLink(link.route)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.linkIcon, { backgroundColor: `${link.color}15` }]}>
+                <Ionicons name={link.icon} size={24} color={link.color} />
+              </View>
+              <View style={styles.linkContent}>
+                <Text style={styles.linkTitle}>{link.title}</Text>
+                <Text style={styles.linkDescription}>{link.description}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <TouchableOpacity
-          style={styles.startButton}
-          onPress={onStartTour}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.startButtonText}>Take the Tour</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.skipButton}
+          style={styles.dismissButton}
           onPress={onSkip}
           activeOpacity={0.7}
         >
-          <Text style={styles.skipButtonText}>Skip</Text>
+          <Text style={styles.dismissButtonText}>Got it, let me explore</Text>
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -70,8 +123,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    paddingVertical: 32,
-    paddingHorizontal: 28,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 12 },
@@ -95,29 +148,48 @@ const styles = StyleSheet.create({
     color: '#475569',
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  startButton: {
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
+  linksContainer: {
     width: '100%',
+    marginBottom: 16,
+  },
+  linkButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
   },
-  startButtonText: {
+  linkIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  linkContent: {
+    flex: 1,
+  },
+  linkTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  skipButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  skipButtonText: {
-    fontSize: 14,
     fontWeight: '600',
-    color: '#94A3B8',
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  linkDescription: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  dismissButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  dismissButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#2563EB',
   },
 });

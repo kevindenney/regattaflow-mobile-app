@@ -12,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalSearchParams } from 'expo-router';
 
 import { FollowContent } from '@/components/connect/FollowContent';
 import { DiscussContent } from '@/components/connect/DiscussContent';
@@ -38,10 +39,13 @@ const STORAGE_KEY = 'regattaflow_connect_segment';
 // =============================================================================
 
 export default function ConnectTab() {
+  const params = useLocalSearchParams<{ segment?: string }>();
   const insets = useSafeAreaInsets();
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll } = useScrollToolbarHide();
   const [activeSegment, setActiveSegment] = useState<ConnectSegment>('follow');
+
+  const routeSegment = params.segment === 'discuss' ? 'discuss' : params.segment === 'follow' ? 'follow' : null;
 
   // Load persisted segment on mount
   useEffect(() => {
@@ -51,6 +55,14 @@ export default function ConnectTab() {
       }
     }).catch(() => {});
   }, []);
+
+  // Allow deep links / bridge redirects to force a starting segment.
+  useEffect(() => {
+    if (routeSegment) {
+      setActiveSegment(routeSegment);
+      AsyncStorage.setItem(STORAGE_KEY, routeSegment).catch(() => {});
+    }
+  }, [routeSegment]);
 
   // Save segment on change
   const handleSegmentChange = (segment: ConnectSegment) => {

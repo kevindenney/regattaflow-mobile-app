@@ -217,11 +217,13 @@ export default function FloatingTabBar({
   };
 
   // Position close to screen edge.
-  // Bottom: half the safe-area inset so the pill clears the home indicator
+  // Bottom: ensure clearance from home indicator / gesture bar
   // Top: safe-area top for iPad portrait mode
+  // Android needs more space to avoid overlapping the gesture navigation bar
+  const androidBottomExtra = Platform.OS === 'android' ? 12 : 0;
   const edgePosition = isTop
     ? Math.max(insets.top, 12)
-    : Math.max(Math.round(insets.bottom / 2), 8) + FLOATING_TAB_BAR_BOTTOM_MARGIN;
+    : Math.max(insets.bottom, 8) + FLOATING_TAB_BAR_BOTTOM_MARGIN + androidBottomExtra;
 
   const renderTabItem = (tab: TabItemConfig) => {
     return (
@@ -279,6 +281,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.08)',
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -288,6 +291,8 @@ const styles = StyleSheet.create({
       },
       android: {
         elevation: 12,
+        // Ensure proper sizing on Android
+        minHeight: 64,
       },
       web: {
         boxShadow: '0 4px 20px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.08)',
@@ -297,22 +302,22 @@ const styles = StyleSheet.create({
   tabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: Platform.OS === 'android' ? 8 : 4,
     paddingVertical: 4,
-    height: 56,
+    height: Platform.OS === 'android' ? 60 : 56,
   },
   tabItem: {
-    minWidth: 48,
+    minWidth: Platform.OS === 'android' ? 52 : 48,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 2,
+    paddingHorizontal: Platform.OS === 'android' ? 4 : 2,
   },
   tabItemInner: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: Platform.OS === 'android' ? 12 : 10,
+    paddingVertical: Platform.OS === 'android' ? 6 : 5,
     borderRadius: 14,
   },
   tabItemActiveShadow: {

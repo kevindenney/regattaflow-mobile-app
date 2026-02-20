@@ -837,7 +837,7 @@ export function GPSTrackTile({
         hasAnalysis ? styles.tileExpanded : styles.tileCompact,
         hasTrack && styles.tileComplete,
         animatedStyle,
-        Platform.OS !== 'web' && IOS_SHADOWS.card,
+        Platform.OS === 'ios' && IOS_SHADOWS.card,
       ]}
       onPress={handlePress}
       onPressIn={handlePressIn}

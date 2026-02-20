@@ -10,7 +10,8 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, TextInput, Pressable, Platform, ActivityIndicator, Modal, ScrollView, SafeAreaView } from 'react-native';
+import { StyleSheet, View, Text, TextInput, Pressable, Platform, ActivityIndicator, Modal, ScrollView } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Polyline, Circle, Line } from 'react-native-svg';
 import { X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -465,8 +466,8 @@ export function RaceResultDetailSheet({
       transparent={false}
       onRequestClose={handleClose}
     >
-      <View style={styles.modalBackground}>
-      <SafeAreaView style={styles.modalContainer}>
+      <SafeAreaView style={styles.modalBackground} edges={['top', 'left', 'right']}>
+      <View style={styles.modalContainer}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Race Result</Text>
@@ -647,8 +648,8 @@ export function RaceResultDetailSheet({
             </Pressable>
           </View>
         </ScrollView>
-      </SafeAreaView>
       </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -672,7 +673,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: Platform.OS === 'android' ? 20 : 8,
     paddingBottom: 16,
     width: '100%',
     position: 'relative',

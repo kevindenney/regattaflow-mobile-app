@@ -907,6 +907,7 @@ function TabLayoutInner() {
         visible={isTourActive && shouldShowTour && currentStep === 'welcome'}
         onStartTour={advanceStep}
         onSkip={skipTour}
+        onNavigate={(route) => router.push(route as any)}
       />
       <TabSweepCard
         visible={isTourActive && shouldShowTour && currentStep === 'tab_sweep'}

@@ -285,9 +285,10 @@ function FirebaseBridgeHandler() {
                 // Notify parent app (Dragon Worlds WebView) of success
                 notifyAuthSuccess('session-established');
 
-                // Navigate to the community/discuss page
-                console.log('[FirebaseBridge] Navigating to community page');
-                router.replace('/community/2027-hk-dragon-worlds');
+                // Navigate into the main tab experience so web users retain tab navigation.
+                // Use Connect with Discuss segment preselected for Dragon Worlds context.
+                console.log('[FirebaseBridge] Navigating to Connect tab (Discuss segment)');
+                router.replace('/connect?segment=discuss&community=2027-hk-dragon-worlds');
                 return;
               }
               // Wait 200ms before next attempt

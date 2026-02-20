@@ -110,7 +110,7 @@ export function AIAnalysisTile({
         style={[
           styles.largeTile,
           animatedStyle,
-          Platform.OS !== 'web' && IOS_SHADOWS.card,
+          Platform.OS === 'ios' && IOS_SHADOWS.card,
         ]}
         onPress={handlePress}
         onPressIn={handlePressIn}
@@ -182,7 +182,7 @@ export function AIAnalysisTile({
       style={[
         styles.tile,
         animatedStyle,
-        Platform.OS !== 'web' && IOS_SHADOWS.card,
+        Platform.OS === 'ios' && IOS_SHADOWS.card,
         isDisabled && styles.tileDisabled,
       ]}
       onPress={handlePress}

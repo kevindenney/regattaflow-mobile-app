@@ -29,6 +29,7 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, ChevronLeft, ChevronRight, Check } from 'lucide-react-native';
 
 import { useDebriefInterview, type DebriefResponseValue } from '@/hooks/useDebriefInterview';
@@ -533,13 +534,14 @@ export function StructuredDebriefInterview({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <TouchableOpacity onPress={onClose} style={styles.closeButton} hitSlop={{ top: 20, bottom: 12, left: 12, right: 12 }}>
             <X size={24} color={IOS_COLORS.label} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -661,6 +663,7 @@ export function StructuredDebriefInterview({
           </>
         ) : null}
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -670,9 +673,12 @@ export function StructuredDebriefInterview({
 // =============================================================================
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: IOS_COLORS.systemBackground,
+  },
+  container: {
+    flex: 1,
   },
 
   // Header

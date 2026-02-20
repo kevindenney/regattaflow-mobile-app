@@ -214,7 +214,7 @@ export function CourseMapTile({
           styles.tile,
           isComplete && styles.tileComplete,
           animatedStyle,
-          IOS_SHADOWS.card,
+          Platform.OS === 'ios' && IOS_SHADOWS.card,
         ]}
         onPress={handlePress}
         onPressIn={handlePressIn}
@@ -261,7 +261,7 @@ export function CourseMapTile({
         styles.tile,
         isComplete && styles.tileComplete,
         animatedStyle,
-        IOS_SHADOWS.card,
+        Platform.OS === 'ios' && IOS_SHADOWS.card,
       ]}
       onPress={handlePress}
       onPressIn={handlePressIn}

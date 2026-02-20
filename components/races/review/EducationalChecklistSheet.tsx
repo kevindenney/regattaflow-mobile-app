@@ -17,7 +17,9 @@ import {
   Pressable,
   ScrollView,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Check, ChevronDown, ChevronUp, BookOpen, Target, Lightbulb } from 'lucide-react-native';
 import Animated, {
   useSharedValue,
@@ -210,6 +212,7 @@ export function EducationalChecklistSheet({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -222,7 +225,7 @@ export function EducationalChecklistSheet({
               {isAllComplete && <Check size={12} color={COLORS.green} strokeWidth={3} />}
             </View>
           </View>
-          <Pressable style={styles.closeButton} onPress={onClose} hitSlop={8}>
+          <Pressable style={styles.closeButton} onPress={onClose} hitSlop={{ top: 20, bottom: 12, left: 12, right: 12 }}>
             <X size={24} color={COLORS.gray} />
           </Pressable>
         </View>
@@ -274,21 +277,26 @@ export function EducationalChecklistSheet({
           )}
         </ScrollView>
       </View>
+      </SafeAreaView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: COLORS.groupedBackground,
+  },
+  container: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingTop: Platform.OS === 'android' ? 20 : 14,
+    paddingBottom: 14,
     backgroundColor: COLORS.background,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.gray5,

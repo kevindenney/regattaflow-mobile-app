@@ -8,7 +8,8 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, Modal, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, Modal, ScrollView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Target, ChevronRight, TrendingUp, TrendingDown, Minus, Plus, Pencil, X, Check, History, Star } from 'lucide-react-native';
 
 import {
@@ -429,10 +430,11 @@ export function NextRaceFocusSection({
         presentationStyle="pageSheet"
         onRequestClose={() => setShowHistoryModal(false)}
       >
+        <SafeAreaView style={historyStyles.safeArea} edges={['top', 'left', 'right']}>
         <View style={historyStyles.container}>
           <View style={historyStyles.header}>
             <Text style={historyStyles.title}>Focus History</Text>
-            <Pressable style={historyStyles.closeButton} onPress={() => setShowHistoryModal(false)}>
+            <Pressable style={historyStyles.closeButton} onPress={() => setShowHistoryModal(false)} hitSlop={{ top: 20, bottom: 12, left: 12, right: 12 }}>
               <X size={24} color={IOS_COLORS.gray} />
             </Pressable>
           </View>
@@ -511,6 +513,7 @@ export function NextRaceFocusSection({
             )}
           </ScrollView>
         </View>
+        </SafeAreaView>
       </Modal>
     </View>
   );
@@ -876,16 +879,20 @@ const pickerStyles = StyleSheet.create({
 
 // History modal styles
 const historyStyles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  container: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? 20 : 12,
+    paddingBottom: 12,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: IOS_COLORS.gray5,

@@ -79,16 +79,12 @@ const CoachOnboardingWelcome = () => {
     }
   }, [state.welcome]);
 
-  // Only redirect if user has a published coach profile (true completion)
-  // Don't redirect during onboarding in-progress
+  // Redirect existing coaches away from onboarding entry.
   useEffect(() => {
-    // Check coachProfile from capabilities directly (set by AuthProvider)
-    const coachProfile = capabilities?.coachingProfile;
-    if (coachProfile?.profile_published === true) {
-      // User has completed onboarding - redirect to coach dashboard
+    if (capabilities?.hasCoaching) {
       router.replace('/(tabs)/coaching');
     }
-  }, [capabilities?.coachingProfile?.profile_published, router]);
+  }, [capabilities?.hasCoaching, router]);
 
   const toggleLanguage = (language: string) => {
     if (selectedLanguages.includes(language)) {

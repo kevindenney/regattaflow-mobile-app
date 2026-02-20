@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ViewStyle, TextStyle } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ViewStyle, TextStyle, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
@@ -168,7 +168,7 @@ export function IOSWidgetCard({
         styles.container,
         dimensions,
         { backgroundColor },
-        IOS_SHADOWS.card,
+        Platform.OS === 'ios' && IOS_SHADOWS.card,
         animatedStyle,
         style,
       ]}

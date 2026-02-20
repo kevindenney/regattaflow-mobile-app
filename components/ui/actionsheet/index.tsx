@@ -11,7 +11,9 @@ import {
   FlatList,
   SectionList,
   PressableProps,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PrimitiveIcon, UIIcon } from '@gluestack-ui/icon';
 import { tva } from '@gluestack-ui/nativewind-utils/tva';
 import type { VariantProps } from '@gluestack-ui/nativewind-utils';
@@ -91,7 +93,7 @@ cssInterop(PrimitiveIcon, {
   },
 });
 
-const actionsheetStyle = tva({ base: 'w-full h-full web:pointer-events-none' });
+const actionsheetStyle = tva({ base: 'w-full h-full web:pointer-events-none absolute top-0 left-0 right-0 bottom-0' });
 
 const actionsheetContentStyle = tva({
   base: 'items-center rounded-tl-3xl rounded-tr-3xl p-5 pt-2 bg-background-0 web:pointer-events-auto web:select-none shadow-hard-5 border border-b-0 border-outline-100',
@@ -279,12 +281,13 @@ type IActionsheetIconProps = VariantProps<typeof actionsheetIconStyle> &
 const Actionsheet = React.forwardRef<
   React.ElementRef<typeof UIActionsheet>,
   IActionsheetProps
->(({ className, ...props }, ref) => {
+>(({ className, style, ...props }, ref) => {
   return (
     <UIActionsheet
       className={actionsheetStyle({
         class: className,
       })}
+      style={[{ zIndex: 9999, elevation: 100 }, style]}
       ref={ref}
       {...props}
     />
@@ -294,12 +297,25 @@ const Actionsheet = React.forwardRef<
 const ActionsheetContent = React.forwardRef<
   React.ElementRef<typeof UIActionsheet.Content>,
   IActionsheetContentProps
->(({ className, ...props }, ref) => {
+>(({ className, style, ...props }, ref) => {
+  const insets = useSafeAreaInsets();
+  // On Android, ensure content doesn't go under status bar when sheet is tall
+  const topPadding = Platform.OS === 'android' ? Math.max(insets.top, 24) : 0;
+
   return (
     <UIActionsheet.Content
       className={actionsheetContentStyle({
         class: className,
       })}
+      style={[
+        {
+          zIndex: 9999,
+          elevation: 100,
+          backgroundColor: '#FFFFFF',
+          marginTop: topPadding,
+        },
+        style
+      ]}
       ref={ref}
       {...props}
     />
@@ -387,14 +403,14 @@ const ActionsheetDragIndicatorWrapper = React.forwardRef<
 const ActionsheetBackdrop = React.forwardRef<
   React.ElementRef<typeof UIActionsheet.Backdrop>,
   IActionsheetBackdropProps
->(({ className, ...props }, ref) => {
+>(({ className, style, ...props }, ref) => {
   return (
     <UIActionsheet.Backdrop
       initial={{
         opacity: 0,
       }}
       animate={{
-        opacity: 0.5,
+        opacity: 0.6,
       }}
       exit={{
         opacity: 0,
@@ -403,6 +419,7 @@ const ActionsheetBackdrop = React.forwardRef<
       className={actionsheetBackdropStyle({
         class: className,
       })}
+      style={[{ zIndex: 9998, elevation: 99 }, style]}
       ref={ref}
     />
   );

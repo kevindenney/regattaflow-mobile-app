@@ -56,7 +56,7 @@ export default function AuthLayout() {
   }
 
   // Check if we're in the (auth) group at all
-  const isInAuthGroup = segments.includes('(auth)');
+  const isInAuthGroup = (segments as string[]).includes('(auth)');
 
   // Guest mode: Allow access to races tab without authentication
   const isGuestMode = state === 'guest' || isGuest;

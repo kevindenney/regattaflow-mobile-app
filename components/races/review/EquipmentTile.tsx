@@ -75,7 +75,7 @@ export function EquipmentTile({
         styles.tile,
         hasIssues && styles.tileComplete,
         animatedStyle,
-        Platform.OS !== 'web' && IOS_SHADOWS.card,
+        Platform.OS === 'ios' && IOS_SHADOWS.card,
       ]}
       onPress={handlePress}
       onPressIn={handlePressIn}

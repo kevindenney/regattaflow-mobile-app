@@ -24,7 +24,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createLogger } from '@/lib/utils/logger';
 
 interface BoatClass {
@@ -38,6 +38,7 @@ const logger = createLogger('AddBoatScreen');
 
 export default function AddBoatScreen() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [boatClasses, setBoatClasses] = useState<BoatClass[]>([]);
@@ -83,9 +84,9 @@ export default function AddBoatScreen() {
     try {
       setLoadingClasses(true);
 
-      // Create a timeout promise (5 seconds)
+      // Create a timeout promise (15 seconds - increased for mobile networks)
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out after 5 seconds')), 5000)
+        setTimeout(() => reject(new Error('Request timed out after 15 seconds')), 15000)
       );
 
       // Race the Supabase query against the timeout
@@ -293,20 +294,21 @@ export default function AddBoatScreen() {
 
   if (loadingClasses) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text style={styles.loadingText}>Loading boat classes...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
+        keyboardVerticalOffset={insets.top}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -582,10 +584,10 @@ export default function AddBoatScreen() {
             />
           </View>
 
-          <View style={styles.bottomSpacer} />
+          <View style={[styles.bottomSpacer, { height: 32 + insets.bottom + 80 }]} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -142,7 +142,7 @@ export function ShareInsightsTile({
         styles.tile,
         isComplete && styles.tileComplete,
         animatedStyle,
-        Platform.OS !== 'web' && IOS_SHADOWS.card,
+        Platform.OS === 'ios' && IOS_SHADOWS.card,
       ]}
       onPress={handlePress}
       onPressIn={handlePressIn}

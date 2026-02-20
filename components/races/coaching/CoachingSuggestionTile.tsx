@@ -134,7 +134,7 @@ export function CoachingSuggestionTile({
         hasCoach && styles.tileHasCoach,
         isDiscovery && styles.tileDiscovery,
         animatedStyle,
-        Platform.OS !== 'web' && IOS_SHADOWS.card,
+        Platform.OS === 'ios' && IOS_SHADOWS.card,
       ]}
       onPress={handlePress}
       onPressIn={handlePressIn}

@@ -396,7 +396,7 @@ const styles = StyleSheet.create({
     borderRadius: IOS_RADIUS.lg,
     width: '100%',
     maxWidth: 340,
-    ...IOS_SHADOWS.card,
+    ...(Platform.OS === 'ios' ? IOS_SHADOWS.card : {}),
     overflow: 'hidden',
   },
   menuHeader: {
