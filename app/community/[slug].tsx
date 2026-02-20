@@ -64,6 +64,14 @@ export default function CommunityDetailScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { user, signedIn } = useAuth();
+  const normalizedSlug = Array.isArray(slug) ? slug[0] : slug;
+
+  // Safety redirect for Dragon Worlds browser entrypoint so users land in tabbed Connect experience.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (normalizedSlug !== '2027-hk-dragon-worlds') return;
+    router.replace('/connect?segment=discuss&community=2027-hk-dragon-worlds');
+  }, [normalizedSlug, router]);
 
   // Track if we've refetched after auth became available
   const hasRefetchedAfterAuth = useRef(false);
