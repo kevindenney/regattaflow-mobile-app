@@ -69,8 +69,8 @@ import { DemoPostCard, DemoCommunityCard } from './DemoCards';
 type CommunitySegment = 'feed' | 'communities';
 
 const SEGMENTS: { value: CommunitySegment; label: string }[] = [
-  { value: 'feed', label: 'Feed' },
-  { value: 'communities', label: 'Communities' },
+  { value: 'feed', label: 'Your Feed' },
+  { value: 'communities', label: 'Browse' },
 ];
 
 const SORT_OPTIONS: { key: FeedSortType; label: string }[] = [
@@ -149,8 +149,8 @@ function DemoDiscussView({
 }) {
   type DemoSegment = 'feed' | 'communities';
   const DEMO_SEGMENTS: { value: DemoSegment; label: string }[] = [
-    { value: 'feed', label: 'Feed' },
-    { value: 'communities', label: vocab('Community') },
+    { value: 'feed', label: 'Your Feed' },
+    { value: 'communities', label: 'Browse' },
   ];
 
   const [segment, setSegment] = React.useState<DemoSegment>('feed');
@@ -203,6 +203,11 @@ function DemoDiscussView({
             selectedValue={segment}
             onValueChange={setSegment}
           />
+          <Text style={styles.segmentHint}>
+            {segment === 'feed'
+              ? 'Posts from forums you\'ve joined'
+              : 'Find and join forums to discuss'}
+          </Text>
         </View>
         {segment === 'feed' && joinedIds.size > 0 && (
           <View style={styles.sortPillRow}>
@@ -514,6 +519,11 @@ export function DiscussContent({ toolbarOffset, onScroll }: DiscussContentProps)
             selectedValue={segment}
             onValueChange={setSegment}
           />
+          <Text style={styles.segmentHint}>
+            {segment === 'feed'
+              ? 'Posts from communities you\'ve joined'
+              : 'Find and join communities to discuss'}
+          </Text>
         </View>
         {segment === 'feed' && filtersActive && (
           <View style={styles.activeFilterHint}>
@@ -829,6 +839,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: IOS_SPACING.lg,
     paddingTop: IOS_SPACING.xs,
     paddingBottom: IOS_SPACING.sm,
+  },
+  segmentHint: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    marginTop: 6,
   },
 
   // Floating action buttons

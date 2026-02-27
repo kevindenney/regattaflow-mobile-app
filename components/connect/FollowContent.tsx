@@ -43,8 +43,8 @@ import { DemoPeerCard, DemoPostCard, DemoEmptyState } from './DemoCards';
 type FeedSubTab = 'posts' | 'following';
 
 const FEED_SEGMENTS: { value: FeedSubTab; label: string }[] = [
-  { value: 'posts', label: 'Posts' },
-  { value: 'following', label: 'Following' },
+  { value: 'following', label: 'Discover' },
+  { value: 'posts', label: 'Activity' },
 ];
 
 /** Show search bar when follower count reaches this threshold */
@@ -123,6 +123,11 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
             selectedValue={feedSubTab}
             onValueChange={handleSubTabChange}
           />
+          <Text style={styles.segmentHint}>
+            {feedSubTab === 'following'
+              ? 'Find classmates and preceptors to follow'
+              : 'Updates from people you follow'}
+          </Text>
         </View>
 
         {feedSubTab === 'following' ? (
@@ -222,6 +227,11 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
           selectedValue={feedSubTab}
           onValueChange={handleSubTabChange}
         />
+        <Text style={styles.segmentHint}>
+          {feedSubTab === 'following'
+            ? 'Find sailors to follow'
+            : 'Updates from people you follow'}
+        </Text>
       </View>
 
       {feedSubTab === 'following' ? (
@@ -280,6 +290,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: IOS_SPACING.lg,
     paddingTop: IOS_SPACING.xs,
     paddingBottom: IOS_SPACING.sm,
+  },
+  segmentHint: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    marginTop: 6,
   },
   searchContainer: {
     paddingHorizontal: IOS_SPACING.lg,

@@ -28,8 +28,8 @@ import { IOS_COLORS } from '@/lib/design-tokens-ios';
 type ConnectSegment = 'follow' | 'discuss';
 
 const CONNECT_SEGMENTS = [
-  { value: 'follow' as const, label: 'Follow' },
-  { value: 'discuss' as const, label: 'Discuss' },
+  { value: 'follow' as const, label: 'People' },
+  { value: 'discuss' as const, label: 'Forums' },
 ];
 
 const STORAGE_KEY = 'regattaflow_connect_segment';
