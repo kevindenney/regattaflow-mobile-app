@@ -7,6 +7,7 @@ import {
   type CardType
 } from '@/components/cards';
 import { IOS_COLORS } from '@/components/cards/constants';
+import { TimelineGridView } from '@/components/cards/TimelineGridView';
 
 import {
   PreRaceStrategySection,
@@ -158,6 +159,7 @@ export default function RacesScreen() {
   // Season state and hooks
   const [showSeasonSettings, setShowSeasonSettings] = useState(false);
   const [showSeasonPicker, setShowSeasonPicker] = useState(false);
+  const [isGridView, setIsGridView] = useState(false);
 
   // filterSeasonId: null = "All Races", undefined = use current season, string = specific season
   const [filterSeasonId, setFilterSeasonId] = useState<string | null | undefined>(undefined);
@@ -2889,41 +2891,56 @@ export default function RacesScreen() {
             </TourStep>
           </View>
 
-          <CardGrid
-            races={cardGridRaces}
-            renderCardContent={renderCardGridContent}
-            onRaceChange={handleCardGridRaceChange}
-            onCardChange={handleCardGridCardChange}
-            initialRaceIndex={Math.max(0, cardGridRaces.findIndex(r => r.id === (selectedRaceId || safeNextRace?.id)))}
-            nextRaceIndex={!isViewingOtherTimeline && safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
-            enableHaptics={FEATURE_FLAGS.ENABLE_CARD_HAPTICS}
-            persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
-            style={{ flex: 1 }}
-            userId={user?.id}
-            topInset={totalHeaderHeight}
-            safeAreaTop={insets.top}
-            toolbarHidden={toolbarHidden}
-            onContentScroll={handleToolbarScroll}
-            onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
-            onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
-            deletingRaceId={deletingRaceId}
-            onUploadDocument={isViewingOtherTimeline ? undefined : handleCardGridUploadDocument}
-            onRaceComplete={isViewingOtherTimeline ? undefined : handleRaceComplete}
-            onOpenPostRaceInterview={isViewingOtherTimeline ? undefined : (raceId, _raceName) => {
-              // Find the race data from cardGridRaces to pass directly (avoids stale closure issues)
-              const raceData = cardGridRaces.find(r => r.id === raceId);
-              // Select the race if different
-              if (raceId !== selectedRaceId) {
-                setSelectedRaceId(raceId);
+          {isGridView ? (
+            <TimelineGridView
+              races={cardGridRaces}
+              selectedRaceId={selectedRaceId || undefined}
+              nextRaceIndex={!isViewingOtherTimeline && safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
+              onSelectRace={(index, race) => {
+                setSelectedRaceId(race.id);
                 setHasManuallySelected(true);
-              }
-              // Pass raceId and raceData directly to avoid stale closure issues with setTimeout
-              handleOpenPostRaceInterviewManually(raceId, raceData ? { name: raceData.name, start_date: raceData.start_date || raceData.date } : undefined);
-            }}
-            onDismissSample={isViewingOtherTimeline ? undefined : handleDismissSampleRace}
-            refetchTrigger={refetchTrigger}
-            nowBarWeather={nowBarWeather}
-          />
+                setIsGridView(false); // zoom back in
+              }}
+              topInset={totalHeaderHeight}
+              seasonHeaderHeight={SEASON_HEADER_HEIGHT}
+            />
+          ) : (
+            <CardGrid
+              races={cardGridRaces}
+              renderCardContent={renderCardGridContent}
+              onRaceChange={handleCardGridRaceChange}
+              onCardChange={handleCardGridCardChange}
+              initialRaceIndex={Math.max(0, cardGridRaces.findIndex(r => r.id === (selectedRaceId || safeNextRace?.id)))}
+              nextRaceIndex={!isViewingOtherTimeline && safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
+              enableHaptics={FEATURE_FLAGS.ENABLE_CARD_HAPTICS}
+              persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
+              style={{ flex: 1 }}
+              userId={user?.id}
+              topInset={totalHeaderHeight}
+              safeAreaTop={insets.top}
+              toolbarHidden={toolbarHidden}
+              onContentScroll={handleToolbarScroll}
+              onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
+              onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
+              deletingRaceId={deletingRaceId}
+              onUploadDocument={isViewingOtherTimeline ? undefined : handleCardGridUploadDocument}
+              onRaceComplete={isViewingOtherTimeline ? undefined : handleRaceComplete}
+              onOpenPostRaceInterview={isViewingOtherTimeline ? undefined : (raceId, _raceName) => {
+                // Find the race data from cardGridRaces to pass directly (avoids stale closure issues)
+                const raceData = cardGridRaces.find(r => r.id === raceId);
+                // Select the race if different
+                if (raceId !== selectedRaceId) {
+                  setSelectedRaceId(raceId);
+                  setHasManuallySelected(true);
+                }
+                // Pass raceId and raceData directly to avoid stale closure issues with setTimeout
+                handleOpenPostRaceInterviewManually(raceId, raceData ? { name: raceData.name, start_date: raceData.start_date || raceData.date } : undefined);
+              }}
+              onDismissSample={isViewingOtherTimeline ? undefined : handleDismissSampleRace}
+              refetchTrigger={refetchTrigger}
+              nowBarWeather={nowBarWeather}
+            />
+          )}
         </View>
       ) : (
         <ScrollView
@@ -3332,6 +3349,8 @@ export default function RacesScreen() {
           loadingInsights={loadingInsights}
           weatherLoading={weatherLoading}
           isOnline={isOnline}
+          isGridView={isGridView}
+          onToggleGridView={() => setIsGridView(v => !v)}
           onAddRace={handleShowAddRaceSheet}
           onAddStep={handleAddStep}
           onAddPractice={handleAddPractice}

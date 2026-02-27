@@ -55,6 +55,10 @@ export interface RacesFloatingHeaderProps {
   weatherLoading?: boolean;
   /** Whether device is online */
   isOnline: boolean;
+  /** Whether grid (zoom-out) view is active */
+  isGridView?: boolean;
+  /** Toggle between card and grid view */
+  onToggleGridView?: () => void;
   /** Callback when add race is pressed */
   onAddRace: () => void;
   /** Callback when add blank step is pressed */
@@ -103,6 +107,8 @@ export function RacesFloatingHeader({
   loadingInsights = false,
   weatherLoading = false,
   isOnline,
+  isGridView,
+  onToggleGridView,
   onAddRace,
   onAddStep,
   onAddPractice,
@@ -214,7 +220,7 @@ export function RacesFloatingHeader({
   }
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' | ') : undefined;
 
-  // Custom right capsule with notification bell and add button (preserving add button ref)
+  // Custom right capsule with notification bell, grid toggle, and add button
   const rightCapsule = (
     <View style={capsuleStyles.capsule}>
       {/* Notification bell */}
@@ -223,6 +229,29 @@ export function RacesFloatingHeader({
       </View>
 
       <View style={capsuleStyles.capsuleDivider} />
+
+      {/* Grid/card view toggle */}
+      {onToggleGridView && (
+        <>
+          <Pressable
+            style={capsuleStyles.actionButton}
+            onPress={() => {
+              triggerHaptic('selection');
+              onToggleGridView();
+            }}
+            accessibilityLabel={isGridView ? 'Card view' : 'Grid view'}
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name={isGridView ? 'square-outline' : 'grid-outline'}
+              size={18}
+              color={isGridView ? IOS_COLORS.blue : IOS_COLORS.secondaryLabel}
+            />
+          </Pressable>
+          <View style={capsuleStyles.capsuleDivider} />
+        </>
+      )}
+
 
       {/* Add button (with ref for onboarding spotlight) */}
       <TourStep step="add_your_race" position="bottom" horizontalAlign="targetRight" distance={18}>
