@@ -149,7 +149,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
        args[0].includes('60000ms') ||
        args[0].includes('fontfaceobserver') ||
        args[0].includes('"shadow*" style props are deprecated') ||
-       args[0].includes('"textShadow*" style props are deprecated'))
+       args[0].includes('"textShadow*" style props are deprecated') ||
+       args[0].includes('A text node cannot be a child of a <View>'))
     ) {
       return;
     }
@@ -160,7 +161,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
          args[0].message?.includes('60000ms') ||
          args[0].message?.includes('fontfaceobserver') ||
          args[0].message?.includes('shadow*') ||
-         args[0].message?.includes('textShadow*'))) {
+         args[0].message?.includes('textShadow*') ||
+         args[0].message?.includes('text node cannot be a child'))) {
       return;
     }
     originalError.apply(console, args);
