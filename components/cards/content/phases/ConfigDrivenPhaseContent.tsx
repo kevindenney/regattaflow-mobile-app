@@ -238,7 +238,8 @@ export function ConfigDrivenPhaseContent({
   onModulePress,
 }: ConfigDrivenPhaseContentProps) {
   // Determine the event subtype from race data (e.g., 'blank_activity', 'clinical_shift')
-  const eventSubtype = (race as any)?.race_type ?? (race as any)?.metadata?.event_subtype;
+  // Prefer metadata.event_subtype (explicit) over race_type (may be constrained to sailing values)
+  const eventSubtype = (race as any)?.metadata?.event_subtype ?? (race as any)?.race_type;
   const subtypeOverride = eventSubtype ? config.subtypeOverrides?.[eventSubtype] : undefined;
   const phaseOverrideModules = subtypeOverride?.phaseDefaultOverrides?.[phase];
 

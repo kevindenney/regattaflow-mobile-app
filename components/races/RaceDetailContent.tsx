@@ -116,6 +116,7 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
           race_type: data.race_type || 'fleet',
           time_limit_hours: data.time_limit_hours,
           created_by: data.created_by,
+          metadata: data.metadata || null,
         });
         return;
       }

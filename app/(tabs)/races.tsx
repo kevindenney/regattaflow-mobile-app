@@ -1116,7 +1116,7 @@ export default function RacesScreen() {
           start_date: `${dateStr}T${timeStr}:00`,
           created_by: user.id,
           status: 'planned',
-          race_type: 'blank_activity',
+          race_type: 'fleet',
           metadata: {
             event_subtype: 'blank_activity',
             interest_slug: currentInterest?.slug ?? 'nursing',
