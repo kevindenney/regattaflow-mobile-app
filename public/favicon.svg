@@ -1,16 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Navy background -->
-  <rect width="32" height="32" rx="6" fill="#0a1832"/>
+  <!-- Blue gradient background -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#007AFF"/>
+      <stop offset="100%" stop-color="#5856D6"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
 
-  <!-- R mark with circle and wave -->
-  <g transform="translate(16, 16)">
-    <!-- Circle -->
-    <circle r="11" stroke="white" stroke-width="1.5" fill="none"/>
-
-    <!-- R letter -->
-    <text x="0" y="3" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="white">R</text>
-
-    <!-- Wave -->
-    <path d="M-6 5 Q-3 3.5 0 5 Q3 6.5 6 5" stroke="white" stroke-width="1" fill="none" stroke-linecap="round"/>
-  </g>
+  <!-- B letter -->
+  <text x="16" y="22" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="700" fill="white">B</text>
 </svg>
