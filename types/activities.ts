@@ -61,6 +61,7 @@ export interface ActivityTemplateRow {
   enrollment_count: number;
   created_at: string;
   updated_at: string;
+  publisher_name: string | null;
 }
 
 export function rowToActivityTemplate(row: ActivityTemplateRow): ActivityTemplate {
@@ -82,6 +83,7 @@ export function rowToActivityTemplate(row: ActivityTemplateRow): ActivityTemplat
     enrollmentCount: row.enrollment_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    publisherName: row.publisher_name ?? undefined,
   };
 }
 
@@ -122,6 +124,7 @@ export function rowToActivityEnrollment(row: ActivityEnrollmentRow): ActivityEnr
 export interface CreateActivityTemplateInput {
   publisherType: PublisherType;
   publisherId: string;
+  publisherName?: string;
   interestId: string;
   eventType: string;
   eventSubtype?: string;

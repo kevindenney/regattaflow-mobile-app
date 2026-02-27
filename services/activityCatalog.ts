@@ -254,6 +254,7 @@ export async function createTemplate(
     .insert({
       publisher_type: input.publisherType,
       publisher_id: input.publisherId,
+      publisher_name: input.publisherName ?? null,
       interest_id: input.interestId,
       event_type: input.eventType,
       event_subtype: input.eventSubtype ?? null,

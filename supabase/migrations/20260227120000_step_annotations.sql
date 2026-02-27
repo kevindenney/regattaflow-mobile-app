@@ -40,6 +40,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_step_annotations_updated_at ON betterat_step_annotations;
 CREATE TRIGGER trg_step_annotations_updated_at
   BEFORE UPDATE ON betterat_step_annotations
   FOR EACH ROW EXECUTE FUNCTION update_step_annotations_updated_at();
