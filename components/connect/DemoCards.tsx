@@ -114,7 +114,11 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
   const [localComments, setLocalComments] = useState<DemoComment[]>([]);
   const displayUpvotes = upvoted ? post.upvotes + 1 : post.upvotes;
 
-  const allComments = [...(post.comments ?? []), ...localComments];
+  // Sort by upvotes descending (Reddit-style "Best"), user comments at the end
+  const allComments = [
+    ...[...(post.comments ?? [])].sort((a, b) => b.upvotes - a.upvotes),
+    ...localComments,
+  ];
   const displayCommentCount = post.commentCount + localComments.length;
 
   const handleSubmitComment = useCallback(() => {
