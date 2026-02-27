@@ -7,8 +7,12 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { BLWParser, SailwaveData, Competitor, Race, RaceResult, ScoringConfig } from './BLWParser';
 import { BLWGenerator } from './BLWGenerator';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SailwaveService');
 
 // ============================================================================
 // Types
@@ -239,7 +243,7 @@ export class SailwaveService {
     const result = await this.exportBLW(regattaId, options);
 
     if (!result.success || !result.blob || !result.filename) {
-      console.error('Export failed:', result.errors);
+      logger.error('Export failed:', result.errors);
       return false;
     }
 
@@ -442,8 +446,7 @@ export class SailwaveService {
       }
 
       try {
-        const { error: resultError } = await supabase.from('race_results').insert({
-          race_id: raceId,
+        const basePayload = {
           entry_id: entryId,
           finish_position: result.position,
           elapsed_time: result.elapsedTime,
@@ -455,7 +458,35 @@ export class SailwaveService {
           redress_given: result.redress,
           redress_position: result.redressPosition,
           sailwave_id: result.id,
+        };
+
+        let { error: resultError } = await supabase.from('race_results').insert({
+          race_id: raceId,
+          ...basePayload,
         });
+
+        if (isMissingIdColumn(resultError, 'race_results', 'race_id')) {
+          const { data: raceRecord, error: raceLookupError } = await supabase
+            .from('regatta_races')
+            .select('race_number')
+            .eq('id', raceId)
+            .maybeSingle();
+
+          if (raceLookupError || !raceRecord?.race_number) {
+            warnings.push(
+              `Failed to import result: could not resolve race_number fallback (${raceLookupError?.message || 'missing race'})`
+            );
+            skipped++;
+            continue;
+          }
+
+          const fallbackInsert = await supabase.from('race_results').insert({
+            regatta_id: regattaId,
+            race_number: raceRecord.race_number,
+            ...basePayload,
+          });
+          resultError = fallbackInsert.error;
+        }
 
         if (resultError) {
           warnings.push(`Failed to import result: ${resultError.message}`);
@@ -688,4 +719,3 @@ export class SailwaveService {
 
 // Export singleton instance
 export const sailwaveService = new SailwaveService();
-

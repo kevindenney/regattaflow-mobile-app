@@ -89,7 +89,7 @@ export function EducationalChecklist({
   // Get document status for document-related items
   const {
     documentsForDisplay,
-    loading: docsLoading,
+    loading: _docsLoading,
     isExtracting,
   } = useRaceDocuments({
     raceId,
@@ -227,9 +227,10 @@ export function EducationalChecklist({
     // Placeholder for tools not yet implemented
     return (
       <View style={styles.placeholderContainer}>
-        <Text style={styles.placeholderTitle}>Coming Soon</Text>
+        <Text style={styles.placeholderTitle}>Tool Not Included In This Build</Text>
         <Text style={styles.placeholderText}>
-          The {activeToolItem.toolButtonLabel || 'tool'} wizard is being developed.
+          The {activeToolItem.toolButtonLabel || 'tool'} wizard is not included in this build.
+          You can continue preparation using Learn and strategy notes.
         </Text>
       </View>
     );

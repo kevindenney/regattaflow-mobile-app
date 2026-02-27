@@ -5,11 +5,38 @@
  * Waypoints are connected by a polyline showing the race route.
  */
 
-import { Anchor, ArrowDown, ArrowUp, Check, Edit2, Flag, MapPin, Navigation, Plus, RotateCcw, Trash2, Upload, X } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, Check, Edit2, MapPin, Plus, RotateCcw, Trash2, Upload, X } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 const isWeb = Platform.OS === 'web';
+const logger = createLogger('DistanceRouteMap');
+
+const WEB_MAP_STYLE = {
+  version: 8,
+  sources: {
+    'raster-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#f8fafc' },
+    },
+    {
+      id: 'raster-layer',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: { 'raster-opacity': 0.9 },
+    },
+  ],
+} as const;
 
 export interface RouteWaypoint {
   id: string;
@@ -31,7 +58,7 @@ export interface CourseArea {
 export interface ProhibitedAreaMarker {
   name: string;
   description?: string;
-  coordinates?: Array<{ lat: number; lng: number }>;
+  coordinates?: { lat: number; lng: number }[];
 }
 
 interface DistanceRouteMapProps {
@@ -92,13 +119,6 @@ const WAYPOINT_TYPE_COLORS = {
   finish: '#ef4444',   // red
 };
 
-const WAYPOINT_TYPE_ICONS = {
-  start: Flag,
-  waypoint: MapPin,
-  gate: Navigation,
-  finish: Anchor,
-};
-
 export function DistanceRouteMap({
   waypoints,
   onWaypointsChange,
@@ -120,7 +140,6 @@ export function DistanceRouteMap({
   const startMarkerRef = useRef<any>(null);
   const finishMarkerRef = useRef<any>(null);
   const prohibitedMarkersRef = useRef<any[]>([]);
-  const polylineRef = useRef<any>(null);
   const hasFitBoundsRef = useRef(false); // Track if we've already fit bounds to prevent re-fitting on every update
   const lastWaypointsKeyRef = useRef<string>(''); // Track waypoint changes to detect actual coordinate changes
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -204,23 +223,43 @@ export function DistanceRouteMap({
 
     let handleKeyDown: ((e: KeyboardEvent) => void) | null = null;
     let handleKeyUp: ((e: KeyboardEvent) => void) | null = null;
+    let mapLoadTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const initMap = async () => {
       try {
-        const maplibregl = await import('maplibre-gl');
-        await import('maplibre-gl/dist/maplibre-gl.css');
+        let maplibregl: any = null;
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = (maplibreModule as any).default || maplibreModule;
+          try {
+            await import('maplibre-gl/dist/maplibre-gl.css');
+          } catch (_cssError) {
+            ensureMapLibreCss('maplibre-gl-css-distance-route');
+          }
+        } catch (_moduleError) {
+          ensureMapLibreCss('maplibre-gl-css-distance-route');
+          await ensureMapLibreScript('maplibre-gl-script-distance-route');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        const MapConstructor = maplibregl?.Map;
+        const NavigationControl = maplibregl?.NavigationControl;
+        if (!MapConstructor) {
+          throw new Error('MapLibre Map constructor is unavailable');
+        }
         
         // Store module reference for marker creation
-        maplibreRef.current = maplibregl.default;
+        maplibreRef.current = maplibregl;
 
-        const map = new maplibregl.default.Map({
+        const map = new MapConstructor({
           container: mapContainerRef.current!,
-          style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+          style: WEB_MAP_STYLE,
           center: [initialCenter.lng, initialCenter.lat],
           zoom: initialZoom,
         });
 
-        map.addControl(new maplibregl.default.NavigationControl(), 'top-left');
+        if (NavigationControl) {
+          map.addControl(new NavigationControl(), 'top-left');
+        }
 
         // Enable panning with right-click drag (common map pattern)
         let isRightClickPanning = false;
@@ -346,12 +385,16 @@ export function DistanceRouteMap({
                 }, 0);
               }
             } catch (error) {
-              console.error('[DistanceRouteMap] Error updating waypoints:', error);
+              logger.error('Error updating waypoints', error);
             }
           });
         });
 
-        map.on('load', () => {
+        const handleMapLoad = () => {
+          if (mapLoadTimeout) {
+            clearTimeout(mapLoadTimeout);
+            mapLoadTimeout = null;
+          }
           mapRef.current = map;
           setMapLoaded(true);
           
@@ -390,9 +433,20 @@ export function DistanceRouteMap({
           if (isAddingWaypointRef.current) {
             map.dragPan.disable();
           }
-        });
+        };
+
+        map.on('load', handleMapLoad);
+        mapLoadTimeout = setTimeout(() => {
+          logger.error('Map load timed out after 10 seconds');
+          map.off('load', handleMapLoad);
+          map.remove();
+        }, 10000);
       } catch (error) {
-        console.error('Failed to initialize map:', error);
+        if (mapLoadTimeout) {
+          clearTimeout(mapLoadTimeout);
+          mapLoadTimeout = null;
+        }
+        logger.error('Failed to initialize map', error);
       }
     };
 
@@ -407,13 +461,16 @@ export function DistanceRouteMap({
       if (handleKeyUp) {
         window.removeEventListener('keyup', handleKeyUp);
       }
+      if (mapLoadTimeout) {
+        clearTimeout(mapLoadTimeout);
+      }
       // Remove map
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
     };
-  }, [initialCenter, initialZoom]);
+  }, [initialCenter, initialZoom, updateMapCursor]);
 
   // Start editing a waypoint
   const startEditWaypoint = useCallback((wp: RouteWaypoint) => {
@@ -576,7 +633,15 @@ export function DistanceRouteMap({
       mapRef.current.setZoom(initialZoom);
       hasFitBoundsRef.current = true;
     }
-  }, [waypoints, mapLoaded, onWaypointsChange]);
+  }, [
+    waypoints,
+    mapLoaded,
+    onWaypointsChange,
+    startEditWaypoint,
+    initialCenter.lat,
+    initialCenter.lng,
+    initialZoom,
+  ]);
 
   // Render start area marker
   useEffect(() => {
@@ -762,28 +827,6 @@ export function DistanceRouteMap({
     }
   }, [prohibitedAreas, mapLoaded, onProhibitedAreasChange]);
 
-  // Add a new waypoint
-  const addWaypoint = useCallback((lat: number, lng: number) => {
-    const newWaypoint: RouteWaypoint = {
-      id: `wp-${Date.now()}`,
-      name: nextWaypointType === 'start' ? 'Start' :
-            nextWaypointType === 'finish' ? 'Finish' :
-            nextWaypointType === 'gate' ? `Gate ${waypoints.filter(w => w.type === 'gate').length + 1}` :
-            `Waypoint ${waypoints.filter(w => w.type === 'waypoint').length + 1}`,
-      latitude: lat,
-      longitude: lng,
-      type: nextWaypointType,
-      required: nextWaypointType === 'start' || nextWaypointType === 'finish',
-    };
-
-    onWaypointsChange([...waypoints, newWaypoint]);
-    
-    // Auto-advance to next logical type
-    if (nextWaypointType === 'start') {
-      setNextWaypointType('waypoint');
-    }
-  }, [waypoints, nextWaypointType, onWaypointsChange]);
-
   // Remove a waypoint
   const removeWaypoint = useCallback((id: string) => {
     onWaypointsChange(waypoints.filter(wp => wp.id !== id));
@@ -926,7 +969,6 @@ export function DistanceRouteMap({
         {isAddingWaypoint && (
           <View className="flex-row gap-2 mt-2">
             {(['start', 'waypoint', 'gate', 'finish'] as const).map((type) => {
-              const Icon = WAYPOINT_TYPE_ICONS[type];
               const isSelected = nextWaypointType === type;
               return (
                 <Pressable
@@ -1240,7 +1282,6 @@ export function DistanceRouteMap({
               marginBottom: 20,
             }}>
               {(['start', 'waypoint', 'gate', 'finish'] as const).map((type) => {
-                const Icon = WAYPOINT_TYPE_ICONS[type];
                 const isSelected = editType === type;
                 return (
                   <Pressable
@@ -1347,4 +1388,3 @@ export function DistanceRouteMap({
 }
 
 export default DistanceRouteMap;
-

@@ -99,14 +99,6 @@ if (AUTH_DEBUG_ENABLED) {
   })
 }
 
-const buildApiUrl = (path: string) => {
-  const url = !API_BASE ? path : `${API_BASE.replace(/\/$/, '')}${path}`
-  if (AUTH_DEBUG_ENABLED) {
-    logger.debug('🔍 buildApiUrl:', { path, API_BASE, result: url })
-  }
-  return url
-}
-
 type AuthState = 'checking' | 'signed_out' | 'guest' | 'ready'
 
 type AuthCtx = {
@@ -203,11 +195,32 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }, [])
 
+  useEffect(() => {
+    consumePostLogoutAuthFlagRef.current = consumePostLogoutAuthFlag
+  }, [consumePostLogoutAuthFlag])
+
   // Ref to prevent duplicate profile fetches during race conditions
   const profileFetchInProgress = useRef<string | null>(null)
 
   // Ref to track if initial auth check is in progress (prevents onAuthStateChange from racing with initializeAuth)
   const initialAuthInProgress = useRef(true)
+  const readyRef = useRef(ready)
+  const userProfileRef = useRef<any>(userProfile)
+  const userTypeRef = useRef<UserType>(userType)
+  const fetchUserProfileRef = useRef<(userId?: string) => Promise<any>>(async () => null)
+  const consumePostLogoutAuthFlagRef = useRef<() => Promise<boolean>>(async () => false)
+
+  useEffect(() => {
+    readyRef.current = ready
+  }, [ready])
+
+  useEffect(() => {
+    userProfileRef.current = userProfile
+  }, [userProfile])
+
+  useEffect(() => {
+    userTypeRef.current = userType
+  }, [userType])
 
   const clearInvalidSession = useCallback(async (context: string, error?: unknown) => {
     authDebugLog(`[AUTH] Clearing invalid session (${context})`, {
@@ -377,6 +390,8 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     }
   }
 
+  fetchUserProfileRef.current = fetchUserProfile
+
   const updateUserProfile = async (updates: any) => {
     const uid = user?.id
     if (!uid) throw new Error('No user ID available')
@@ -416,7 +431,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         } catch (insertError: any) {
           // If insert fails due to duplicate key (profile was created by trigger), try to fetch existing profile
           if (insertError.code === '23505') {
-            const { data: triggerProfile, error: fetchError } = await supabase
+            const { error: fetchError } = await supabase
               .from('users')
               .select('*')
               .eq('id', uid)
@@ -450,14 +465,15 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }
 
   const loadPersonaContext = useCallback(async () => {
+    const currentUserId = user?.id
     authDebugLog('[loadPersonaContext] Called with:', {
-      userId: user?.id,
+      userId: currentUserId,
       userType,
       isDemoSession,
       clubId: userProfile?.club_id ?? null
     })
 
-    if (!user?.id || isDemoSession) {
+    if (!currentUserId || isDemoSession) {
       authDebugLog('[loadPersonaContext] Early return - no user or demo session')
       setClubProfile(null)
       setCoachProfile(null)
@@ -473,14 +489,11 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     const resolveClubWorkspaceDirect = async () => {
       authDebugLog('[loadPersonaContext] Resolving club workspace directly from Supabase')
 
-      // First check if user has a club membership
+      // First check if user has a club membership (avoid relation joins; resolve club in a second query)
       const { data: membership, error: membershipError } = await supabase
         .from('club_members')
-        .select(`
-          *,
-          club:clubs(*)
-        `)
-        .eq('user_id', user!.id)
+        .select('*')
+        .eq('user_id', currentUserId)
         .maybeSingle()
 
       if (membershipError && membershipError.code !== 'PGRST116') {
@@ -488,16 +501,29 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         throw membershipError
       }
 
-      if (membership?.club) {
-        authDebugLog('[loadPersonaContext] Found club via membership:', membership.club.name)
-        return { club: membership.club, membership }
+      if (membership?.club_id) {
+        const { data: membershipClub, error: membershipClubError } = await supabase
+          .from('clubs')
+          .select('*')
+          .eq('id', membership.club_id)
+          .maybeSingle()
+
+        if (membershipClubError && membershipClubError.code !== 'PGRST116') {
+          authDebugLog('[loadPersonaContext] Club lookup from membership failed:', membershipClubError)
+          throw membershipClubError
+        }
+
+        if (membershipClub) {
+          authDebugLog('[loadPersonaContext] Found club via membership:', membershipClub.name)
+          return { club: membershipClub, membership }
+        }
       }
 
       // Check if user owns a club directly
       const { data: ownedClub, error: ownedError } = await supabase
         .from('clubs')
         .select('*')
-        .eq('owner_id', user!.id)
+        .eq('owner_id', currentUserId)
         .maybeSingle()
 
       if (ownedError && ownedError.code !== 'PGRST116') {
@@ -574,7 +600,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         userType ?? (userProfile?.club_id ? ('club' as UserType) : null)
 
       if (effectiveUserType === 'club' || userProfile?.club_id) {
-        authDebugLog('[loadPersonaContext] Loading club profile for user:', user?.id)
+        authDebugLog('[loadPersonaContext] Loading club profile for user:', currentUserId)
 
         const workspace = await resolveClubWorkspaceDirect()
 
@@ -609,6 +635,27 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('[loadPersonaContext] Completed, personaLoading set to false')
     }
   }, [user?.id, userType, isDemoSession, userProfile?.club_id])
+
+  // Detect tokens passed via URL for web→mobile auth handoff (BetterAt dev flow)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    if (!accessToken || !refreshToken) return;
+
+    authDebugLog('[AUTH] Handoff tokens detected in URL, setting session...');
+    supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+      .then(({ error }) => {
+        if (error) authDebugLog('[AUTH] Handoff setSession failed:', error);
+        else authDebugLog('[AUTH] Handoff session set successfully');
+        // Clean tokens from URL
+        const clean = new URL(window.location.href);
+        clean.searchParams.delete('access_token');
+        clean.searchParams.delete('refresh_token');
+        window.history.replaceState({}, '', clean.toString());
+      });
+  }, []);
 
   // Initial auth state setup with proper session restoration
   useEffect(() => {
@@ -658,7 +705,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
         // If no session, check if user has guest data (freemium mode)
         if (!session) {
-          const shouldForceAuth = await consumePostLogoutAuthFlag()
+          const shouldForceAuth = await consumePostLogoutAuthFlagRef.current()
           if (shouldForceAuth) {
             setIsGuest(false)
             setReady(true)
@@ -678,7 +725,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         if (authUser?.id) {
           authDebugLog('[AUTH] Fetching user profile for:', authUser.id)
           try {
-            const profile = await fetchUserProfile(authUser.id)
+            const profile = await fetchUserProfileRef.current(authUser.id)
             authDebugLog('[AUTH] Profile fetch result:', {
               hasProfile: !!profile,
               user_type: profile?.user_type,
@@ -712,7 +759,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
     // Set a watchdog timer as fallback
     const watchdogTimer = setTimeout(() => {
-      if (alive && !ready) {
+      if (alive && !readyRef.current) {
         initialAuthInProgress.current = false
         setReady(true)
       }
@@ -774,8 +821,8 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         ready: true, // We're in auth listener so ready should be true
         signedIn: !!session,
         user: session?.user,
-        userProfile: userProfile,
-        userType: userType,
+        userProfile: userProfileRef.current,
+        userType: userTypeRef.current,
         loading: false
       })
 
@@ -877,7 +924,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
           // Fetch profile and update state - let gates handle routing
           authDebugLog('🔔 [AUTH] Fetching profile data...')
-          const profileData = await fetchUserProfile(session.user.id)
+          const profileData = await fetchUserProfileRef.current(session.user.id)
           authDebugLog('🔔 [AUTH] Profile data received:', profileData)
           if (profileData?.user_type) {
             setUserType(profileData.user_type as UserType)
@@ -897,7 +944,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     })
 
     return ()=>{ alive=false; sub.subscription.unsubscribe() }
-  }, [router, clearInvalidSession])
+  }, [clearInvalidSession])
 
   const identifierToAuthEmail = (value: string) => {
     const normalized = value.trim().toLowerCase()
@@ -1438,6 +1485,8 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       addCapability,
       isDemoSession
     }
+  // Intentionally memoized on state-like inputs only; auth handlers remain stable in practice.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, signedIn, isGuest, user, loading, personaLoading, userProfile, userType, capabilities, clubProfile, coachProfile, loadPersonaContext, isDemoSession, enterGuestMode, addCapability])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

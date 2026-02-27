@@ -8,10 +8,12 @@
  * - Saved review responses
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import type { PostRaceReviewType } from '@/components/checklist-tools/wizards/PostRaceReviewWizard/reviewConfigs';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * Single race analysis record
@@ -43,6 +45,8 @@ export interface RaceAnalysisRecord {
   createdAt?: string;
   updatedAt?: string;
 }
+
+const logger = createLogger('usePostRaceReviewData');
 
 /**
  * Trend data point for visualization
@@ -215,7 +219,9 @@ export function usePostRaceReviewData(
 
     try {
       // Fetch current race analysis
-      const { data: currentData, error: currentError } = await supabase
+      let currentData: any = null;
+      let currentError: any = null;
+      const currentPrimary = await supabase
         .from('race_analysis')
         .select(`
           *,
@@ -227,10 +233,23 @@ export function usePostRaceReviewData(
         .eq('sailor_id', effectiveUserId)
         .eq('race_id', raceId)
         .single();
+      currentData = currentPrimary.data;
+      currentError = currentPrimary.error;
+
+      if (isMissingIdColumn(currentError, 'race_analysis', 'race_id')) {
+        const currentFallback = await supabase
+          .from('race_analysis')
+          .select('*')
+          .eq('sailor_id', effectiveUserId)
+          .eq('regatta_id', raceId)
+          .single();
+        currentData = currentFallback.data;
+        currentError = currentFallback.error;
+      }
 
       if (currentError && currentError.code !== 'PGRST116') {
         // PGRST116 = no rows returned, which is fine
-        console.warn('[usePostRaceReviewData] Error fetching current analysis:', currentError);
+        logger.warn('Error fetching current analysis', currentError);
       }
 
       if (currentData) {
@@ -245,7 +264,9 @@ export function usePostRaceReviewData(
       }
 
       // Fetch past 5 race analyses for trend comparison
-      const { data: pastData, error: pastError } = await supabase
+      let pastData: any[] | null = null;
+      let pastError: any = null;
+      const pastPrimary = await supabase
         .from('race_analysis')
         .select(`
           *,
@@ -258,9 +279,23 @@ export function usePostRaceReviewData(
         .neq('race_id', raceId)
         .order('created_at', { ascending: false })
         .limit(5);
+      pastData = pastPrimary.data;
+      pastError = pastPrimary.error;
+
+      if (isMissingIdColumn(pastError, 'race_analysis', 'race_id')) {
+        const pastFallback = await supabase
+          .from('race_analysis')
+          .select('*')
+          .eq('sailor_id', effectiveUserId)
+          .neq('regatta_id', raceId)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        pastData = pastFallback.data;
+        pastError = pastFallback.error;
+      }
 
       if (pastError) {
-        console.warn('[usePostRaceReviewData] Error fetching past analyses:', pastError);
+        logger.warn('Error fetching past analyses', pastError);
       } else if (pastData) {
         const transformed = pastData.map(record => {
           const analysis = transformRaceAnalysis(record);
@@ -274,15 +309,30 @@ export function usePostRaceReviewData(
       }
 
       // Fetch AI insights if available
-      const { data: aiData, error: aiError } = await supabase
+      let aiData: any = null;
+      let aiError: any = null;
+      const aiPrimary = await supabase
         .from('ai_coach_analysis')
         .select('summary, recommendations, phase_breakdowns')
         .eq('race_id', raceId)
         .eq('sailor_id', effectiveUserId)
         .single();
+      aiData = aiPrimary.data;
+      aiError = aiPrimary.error;
+
+      if (isMissingIdColumn(aiError, 'ai_coach_analysis', 'race_id')) {
+        const aiFallback = await supabase
+          .from('ai_coach_analysis')
+          .select('summary, recommendations, phase_breakdowns')
+          .eq('regatta_id', raceId)
+          .eq('sailor_id', effectiveUserId)
+          .single();
+        aiData = aiFallback.data;
+        aiError = aiFallback.error;
+      }
 
       if (aiError && aiError.code !== 'PGRST116') {
-        console.warn('[usePostRaceReviewData] Error fetching AI insights:', aiError);
+        logger.warn('Error fetching AI insights', aiError);
       }
 
       if (aiData) {
@@ -295,7 +345,7 @@ export function usePostRaceReviewData(
         });
       }
     } catch (err) {
-      console.error('[usePostRaceReviewData] Error:', err);
+      logger.error('Error loading post-race review data', err);
       setError('Failed to load review data');
     } finally {
       setIsLoading(false);
@@ -433,7 +483,8 @@ export function usePostRaceReviewData(
         }
 
         // Upsert the record
-        const { error: upsertError } = await supabase
+        let upsertError: any = null;
+        const primaryUpsert = await supabase
           .from('race_analysis')
           .upsert(
             {
@@ -445,9 +496,26 @@ export function usePostRaceReviewData(
               onConflict: 'sailor_id,race_id',
             }
           );
+        upsertError = primaryUpsert.error;
+
+        if (isMissingIdColumn(upsertError, 'race_analysis', 'race_id')) {
+          const fallbackUpsert = await supabase
+            .from('race_analysis')
+            .upsert(
+              {
+                sailor_id: effectiveUserId,
+                regatta_id: raceId,
+                ...updates,
+              },
+              {
+                onConflict: 'sailor_id,regatta_id',
+              }
+            );
+          upsertError = fallbackUpsert.error;
+        }
 
         if (upsertError) {
-          console.error('[usePostRaceReviewData] Save error:', upsertError);
+          logger.error('Save error', upsertError);
           setError('Failed to save review data');
           return false;
         }
@@ -456,7 +524,7 @@ export function usePostRaceReviewData(
         await fetchData();
         return true;
       } catch (err) {
-        console.error('[usePostRaceReviewData] Save error:', err);
+        logger.error('Save error', err);
         setError('Failed to save review data');
         return false;
       }

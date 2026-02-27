@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button, ButtonText } from '@/components/ui/button';
 import { Sparkles, Brain, TrendingUp, Wind, Waves, Clock, AlertCircle } from 'lucide-react-native';
 import { enhancedClaudeClient } from '@/services/ai';
+import { createLogger } from '@/lib/utils/logger';
 
 interface AIRaceStrategyProps {
   race: any;
@@ -16,6 +17,8 @@ interface StrategySection {
   content: string;
   icon: string;
 }
+
+const logger = createLogger('AIRaceStrategy');
 
 export function AIRaceStrategy({ race, weatherData, tidalData }: AIRaceStrategyProps) {
   const [loading, setLoading] = useState(false);
@@ -84,7 +87,7 @@ Be specific, actionable, and reference the proven frameworks from your knowledge
       setStrategy(response.text);
 
     } catch (err) {
-      console.error('❌ Error generating strategy:', err);
+      logger.error('Error generating strategy', err);
       setError(err instanceof Error ? err.message : 'Failed to generate strategy');
     } finally {
       setLoading(false);

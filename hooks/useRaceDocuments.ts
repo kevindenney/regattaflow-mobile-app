@@ -109,6 +109,12 @@ export function useRaceDocuments(
   const [storedExtractionChecked, setStoredExtractionChecked] = useState(false);
   const [typePickerVisible, setTypePickerVisible] = useState(false);
   const [internalReloadKey, setInternalReloadKey] = useState(0);
+  const isMountedRef = useRef(true);
+  const activeRaceIdRef = useRef<string | null | undefined>(raceId);
+  const activeUserIdRef = useRef<string | null | undefined>(userId);
+  const documentsLoadRunIdRef = useRef(0);
+  const storedExtractionRunIdRef = useRef(0);
+  const extractionRunIdRef = useRef(0);
 
   // Ref for type selection promise
   const typeResolverRef = useRef<((type: RaceDocumentType | null) => void) | null>(null);
@@ -122,6 +128,10 @@ export function useRaceDocuments(
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      isMountedRef.current = false;
+      documentsLoadRunIdRef.current += 1;
+      storedExtractionRunIdRef.current += 1;
+      extractionRunIdRef.current += 1;
       if (typeResolverRef.current) {
         typeResolverRef.current(null);
         typeResolverRef.current = null;
@@ -129,59 +139,76 @@ export function useRaceDocuments(
     };
   }, []);
 
+  useEffect(() => {
+    activeRaceIdRef.current = raceId;
+    activeUserIdRef.current = userId;
+  }, [raceId, userId]);
+
   // Load documents
   useEffect(() => {
-    let isActive = true;
+    const runId = ++documentsLoadRunIdRef.current;
+    const targetRaceId = raceId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === documentsLoadRunIdRef.current &&
+      activeRaceIdRef.current === targetRaceId;
 
-    if (!raceId || isDemoSession) {
+    if (!targetRaceId || isDemoSession) {
+      if (!canCommit()) {
+        return () => {
+          documentsLoadRunIdRef.current += 1;
+        };
+      }
       setDocuments([]);
       setDisplayDocuments({ raceDocuments: [], clubDocuments: [], allDocuments: [] });
       setError(null);
       setLoading(false);
       return () => {
-        isActive = false;
+        documentsLoadRunIdRef.current += 1;
       };
     }
 
     const loadDocuments = async () => {
+      if (!canCommit()) return;
       setLoading(true);
       setError(null);
 
       try {
         // Load race documents (legacy format for backward compatibility)
-        const docs = await raceDocumentService.getRaceDocuments(raceId);
-        if (!isActive) return;
+        const docs = await raceDocumentService.getRaceDocuments(targetRaceId);
+        if (!canCommit()) return;
         setDocuments(docs);
 
         // Also load unified display documents (with optional club inheritance)
-        const displayDocs = await raceDocumentService.getRaceDocumentsWithInheritance(raceId, {
+        const displayDocs = await raceDocumentService.getRaceDocumentsWithInheritance(targetRaceId, {
           includeClubDocs,
         });
-        if (!isActive) return;
+        if (!canCommit()) return;
         setDisplayDocuments(displayDocs);
       } catch (err) {
-        if (!isActive) return;
-        logger.warn('Unable to load race documents', { error: err, raceId });
+        if (!canCommit()) return;
+        logger.warn('Unable to load race documents', { error: err, raceId: targetRaceId });
         setDocuments([]);
         setDisplayDocuments({ raceDocuments: [], clubDocuments: [], allDocuments: [] });
         setError('Unable to load race documents');
       } finally {
-        if (isActive) {
-          setLoading(false);
-        }
+        if (!canCommit()) return;
+        setLoading(false);
       }
     };
 
-    loadDocuments();
+    void loadDocuments();
 
     return () => {
-      isActive = false;
+      documentsLoadRunIdRef.current += 1;
     };
   }, [raceId, reloadKey, internalReloadKey, isDemoSession, includeClubDocs]);
 
   // Load stored extraction data when documents change
   useEffect(() => {
-    let isActive = true;
+    const runId = ++storedExtractionRunIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current && runId === storedExtractionRunIdRef.current;
 
     const loadStoredExtraction = async () => {
       // Find NOR or SI document that might have extraction data
@@ -191,6 +218,7 @@ export function useRaceDocuments(
 
       if (!norOrSiDoc?.document?.id) {
         // No document to check, mark as checked
+        if (!canCommit()) return;
         setStoredExtractionChecked(true);
         return;
       }
@@ -199,16 +227,18 @@ export function useRaceDocuments(
 
       // Check if we already loaded for this document (using ref to avoid stale closure)
       if (loadedStoredExtractionForDocRef.current === docId) {
+        if (!canCommit()) return;
         setStoredExtractionChecked(true);
         return;
       }
 
       // Reset check flag - we're about to load
+      if (!canCommit()) return;
       setStoredExtractionChecked(false);
 
       try {
         const stored = await documentExtractionService.getStoredExtraction(docId);
-        if (!isActive) return;
+        if (!canCommit()) return;
 
         // Mark this document as loaded
         loadedStoredExtractionForDocRef.current = docId;
@@ -224,19 +254,25 @@ export function useRaceDocuments(
         }
       } catch (err) {
         logger.warn('Error loading stored extraction', { error: err });
+        if (!canCommit()) return;
         setStoredExtractionChecked(true);
       }
     };
 
     if (documents.length > 0 && !loading) {
-      loadStoredExtraction();
+      void loadStoredExtraction();
     } else if (!loading && documents.length === 0) {
       // No documents, mark as checked
+      if (!canCommit()) {
+        return () => {
+          storedExtractionRunIdRef.current += 1;
+        };
+      }
       setStoredExtractionChecked(true);
     }
 
     return () => {
-      isActive = false;
+      storedExtractionRunIdRef.current += 1;
     };
   }, [documents, loading]);
 
@@ -302,6 +338,8 @@ export function useRaceDocuments(
 
   // Upload document
   const upload = useCallback(async (preselectedType?: RaceDocumentType) => {
+    const targetRaceId = raceId;
+    const targetUserId = userId;
     if (isUploading) return;
 
     if (isDemoSession) {
@@ -309,12 +347,12 @@ export function useRaceDocuments(
       return;
     }
 
-    if (!userId) {
+    if (!targetUserId) {
       Alert.alert('Sign in required', 'Please sign in to upload documents.');
       return;
     }
 
-    if (!raceId) {
+    if (!targetRaceId) {
       Alert.alert('Select a race', 'Choose a race to attach documents to.');
       return;
     }
@@ -333,9 +371,10 @@ export function useRaceDocuments(
     }
 
     logger.debug('Opening file picker...');
+    if (!isMountedRef.current || activeRaceIdRef.current !== targetRaceId || activeUserIdRef.current !== targetUserId) return;
     setIsUploading(true);
     try {
-      const uploadResult = await documentStorageService.pickAndUploadDocument(userId);
+      const uploadResult = await documentStorageService.pickAndUploadDocument(targetUserId);
       logger.debug('File picker result', { success: uploadResult.success, error: uploadResult.error });
 
       if (!uploadResult.success || !uploadResult.document) {
@@ -351,9 +390,9 @@ export function useRaceDocuments(
       }
 
       const linked = await raceDocumentService.linkDocumentToRace({
-        regattaId: raceId,
+        regattaId: targetRaceId,
         documentId: uploadResult.document.id,
-        userId,
+        userId: targetUserId,
         documentType,
       });
 
@@ -368,6 +407,13 @@ export function useRaceDocuments(
       // Trigger AI extraction for NOR and SI documents (runs in background)
       const documentUrl = uploadResult.document.url || uploadResult.document.public_url;
       if ((documentType === 'nor' || documentType === 'sailing_instructions') && documentUrl) {
+        const extractionRunId = ++extractionRunIdRef.current;
+        const canCommitExtraction = () =>
+          isMountedRef.current &&
+          extractionRunIdRef.current === extractionRunId &&
+          activeRaceIdRef.current === targetRaceId &&
+          activeUserIdRef.current === targetUserId;
+        if (!canCommitExtraction()) return;
         setIsExtracting(true);
         setExtractionResult(null);
 
@@ -375,10 +421,11 @@ export function useRaceDocuments(
         documentExtractionService.extractAndUpdateRace({
           documentUrl,
           documentId: uploadResult.document.id,
-          raceId,
+          raceId: targetRaceId,
           documentType,
         }).then((extractResult) => {
           hasExtractedDataRef.current = !!extractResult.data;
+          if (!canCommitExtraction()) return;
           setExtractionResult(extractResult);
           setIsExtracting(false);
 
@@ -390,6 +437,7 @@ export function useRaceDocuments(
         }).catch((err) => {
           logger.error('Upload extraction error', { error: err });
           hasExtractedDataRef.current = false;
+          if (!canCommitExtraction()) return;
           setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
           setIsExtracting(false);
         });
@@ -398,13 +446,17 @@ export function useRaceDocuments(
       logger.error('Error uploading document', { error: err });
       Alert.alert('Upload failed', 'An unexpected error occurred.');
     } finally {
-      setIsUploading(false);
+      if (isMountedRef.current && activeRaceIdRef.current === targetRaceId && activeUserIdRef.current === targetUserId) {
+        setIsUploading(false);
+      }
     }
   }, [isUploading, isDemoSession, userId, raceId, requestTypeSelection, refresh]);
 
   // Add document from URL
   const addFromUrl = useCallback(
     async (url: string, documentType: RaceDocumentType, name?: string): Promise<boolean> => {
+      const targetRaceId = raceId;
+      const targetUserId = userId;
       logger.debug('addFromUrl called', { url, documentType, name, userId, raceId, isDemoSession });
 
       if (isDemoSession) {
@@ -412,12 +464,12 @@ export function useRaceDocuments(
         return false;
       }
 
-      if (!userId) {
+      if (!targetUserId) {
         Alert.alert('Sign in required', 'Please sign in to add documents.');
         return false;
       }
 
-      if (!raceId) {
+      if (!targetRaceId) {
         Alert.alert('Select a race', 'Choose a race to attach documents to.');
         return false;
       }
@@ -428,11 +480,12 @@ export function useRaceDocuments(
       }
 
       logger.debug('addFromUrl: Starting upload...', { url: url.trim() });
+      if (!isMountedRef.current || activeRaceIdRef.current !== targetRaceId || activeUserIdRef.current !== targetUserId) return false;
       setIsUploading(true);
       try {
         // Save document from URL
         logger.debug('addFromUrl: Calling saveDocumentFromUrl...');
-        const result = await documentStorageService.saveDocumentFromUrl(userId, url.trim(), name);
+        const result = await documentStorageService.saveDocumentFromUrl(targetUserId, url.trim(), name);
         logger.debug('addFromUrl: saveDocumentFromUrl result', { success: result.success, error: result.error, docId: result.document?.id });
 
         if (!result.success || !result.document) {
@@ -443,9 +496,9 @@ export function useRaceDocuments(
         // Link to race
         logger.debug('addFromUrl: Calling linkDocumentToRace...', { raceId, documentId: result.document.id });
         const linked = await raceDocumentService.linkDocumentToRace({
-          regattaId: raceId,
+          regattaId: targetRaceId,
           documentId: result.document.id,
-          userId,
+          userId: targetUserId,
           documentType,
         });
         logger.debug('addFromUrl: linkDocumentToRace result', { linked });
@@ -460,6 +513,13 @@ export function useRaceDocuments(
 
         // Trigger AI extraction for NOR and SI documents (runs in background)
         if (documentType === 'nor' || documentType === 'sailing_instructions') {
+          const extractionRunId = ++extractionRunIdRef.current;
+          const canCommitExtraction = () =>
+            isMountedRef.current &&
+            extractionRunIdRef.current === extractionRunId &&
+            activeRaceIdRef.current === targetRaceId &&
+            activeUserIdRef.current === targetUserId;
+          if (!canCommitExtraction()) return false;
           setIsExtracting(true);
           setExtractionResult(null);
 
@@ -473,7 +533,7 @@ export function useRaceDocuments(
           documentExtractionService.extractAndUpdateRace({
             documentUrl: url.trim(),
             documentId: result.document.id,
-            raceId,
+            raceId: targetRaceId,
             documentType,
           }).then((extractResult) => {
             logger.info('🔍 [DEBUG] Extraction completed', {
@@ -485,6 +545,7 @@ export function useRaceDocuments(
               error: extractResult.error
             });
             hasExtractedDataRef.current = !!extractResult.data;
+            if (!canCommitExtraction()) return;
             setExtractionResult(extractResult);
             logger.info('🔍 [DEBUG] setExtractionResult called with:', {
               success: extractResult.success,
@@ -500,6 +561,7 @@ export function useRaceDocuments(
           }).catch((err) => {
             logger.error('🔍 [DEBUG] Extraction error caught', { error: err });
             hasExtractedDataRef.current = false;
+            if (!canCommitExtraction()) return;
             setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
             setIsExtracting(false);
           });
@@ -511,7 +573,9 @@ export function useRaceDocuments(
         Alert.alert('Error', 'An unexpected error occurred.');
         return false;
       } finally {
-        setIsUploading(false);
+        if (isMountedRef.current && activeRaceIdRef.current === targetRaceId && activeUserIdRef.current === targetUserId) {
+          setIsUploading(false);
+        }
       }
     },
     [isDemoSession, userId, raceId, refresh]
@@ -520,6 +584,8 @@ export function useRaceDocuments(
   // Add document from pasted text content
   const addFromText = useCallback(
     async (textContent: string, documentType: RaceDocumentType, name?: string): Promise<boolean> => {
+      const targetRaceId = raceId;
+      const targetUserId = userId;
       logger.debug('addFromText called', { textLength: textContent.length, documentType, name, userId, raceId, isDemoSession });
 
       if (isDemoSession) {
@@ -527,12 +593,12 @@ export function useRaceDocuments(
         return false;
       }
 
-      if (!userId) {
+      if (!targetUserId) {
         Alert.alert('Sign in required', 'Please sign in to add documents.');
         return false;
       }
 
-      if (!raceId) {
+      if (!targetRaceId) {
         Alert.alert('Select a race', 'Choose a race to attach documents to.');
         return false;
       }
@@ -543,11 +609,12 @@ export function useRaceDocuments(
       }
 
       logger.debug('addFromText: Starting save...', { textLength: textContent.trim().length });
+      if (!isMountedRef.current || activeRaceIdRef.current !== targetRaceId || activeUserIdRef.current !== targetUserId) return false;
       setIsUploading(true);
       try {
         // Save document from text content
         logger.debug('addFromText: Calling saveDocumentFromText...');
-        const result = await documentStorageService.saveDocumentFromText(userId, textContent.trim(), name);
+        const result = await documentStorageService.saveDocumentFromText(targetUserId, textContent.trim(), name);
         logger.debug('addFromText: saveDocumentFromText result', { success: result.success, error: result.error, docId: result.document?.id });
 
         if (!result.success || !result.document) {
@@ -558,9 +625,9 @@ export function useRaceDocuments(
         // Link to race
         logger.debug('addFromText: Calling linkDocumentToRace...', { raceId, documentId: result.document.id });
         const linked = await raceDocumentService.linkDocumentToRace({
-          regattaId: raceId,
+          regattaId: targetRaceId,
           documentId: result.document.id,
-          userId,
+          userId: targetUserId,
           documentType,
         });
         logger.debug('addFromText: linkDocumentToRace result', { linked });
@@ -575,6 +642,13 @@ export function useRaceDocuments(
 
         // Trigger AI extraction for NOR and SI documents (runs in background)
         if (documentType === 'nor' || documentType === 'sailing_instructions') {
+          const extractionRunId = ++extractionRunIdRef.current;
+          const canCommitExtraction = () =>
+            isMountedRef.current &&
+            extractionRunIdRef.current === extractionRunId &&
+            activeRaceIdRef.current === targetRaceId &&
+            activeUserIdRef.current === targetUserId;
+          if (!canCommitExtraction()) return false;
           setIsExtracting(true);
           setExtractionResult(null);
 
@@ -582,10 +656,11 @@ export function useRaceDocuments(
           documentExtractionService.extractFromText({
             text: textContent.trim(),
             documentId: result.document.id,
-            raceId,
+            raceId: targetRaceId,
             documentType,
           }).then((extractResult) => {
             hasExtractedDataRef.current = !!extractResult.data;
+            if (!canCommitExtraction()) return;
             setExtractionResult(extractResult);
             setIsExtracting(false);
 
@@ -597,6 +672,7 @@ export function useRaceDocuments(
           }).catch((err) => {
             logger.error('Text extraction error', { error: err });
             hasExtractedDataRef.current = false;
+            if (!canCommitExtraction()) return;
             setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
             setIsExtracting(false);
           });
@@ -608,7 +684,9 @@ export function useRaceDocuments(
         Alert.alert('Error', 'An unexpected error occurred.');
         return false;
       } finally {
-        setIsUploading(false);
+        if (isMountedRef.current && activeRaceIdRef.current === targetRaceId && activeUserIdRef.current === targetUserId) {
+          setIsUploading(false);
+        }
       }
     },
     [isDemoSession, userId, raceId, refresh]
@@ -639,7 +717,9 @@ export function useRaceDocuments(
   // Trigger extraction for an existing document
   const triggerExtraction = useCallback(
     async (documentUrl: string, documentId: string, documentType: RaceDocumentType) => {
-      if (!raceId || isExtracting) return;
+      const targetRaceId = raceId;
+      const targetUserId = userId;
+      if (!targetRaceId || isExtracting) return;
 
       // Check ref to prevent extraction when we already have stored data
       // This avoids race conditions with stale closure values
@@ -659,6 +739,7 @@ export function useRaceDocuments(
             fieldsCount: storedExtraction.extractedFields?.length
           });
           hasExtractedDataRef.current = true;
+          if (!isMountedRef.current || activeRaceIdRef.current !== targetRaceId || activeUserIdRef.current !== targetUserId) return;
           setExtractionResult(storedExtraction);
           return;
         }
@@ -667,6 +748,13 @@ export function useRaceDocuments(
       }
 
       logger.debug('Triggering extraction for existing document', { documentUrl, documentId, documentType });
+      const extractionRunId = ++extractionRunIdRef.current;
+      const canCommitExtraction = () =>
+        isMountedRef.current &&
+        extractionRunIdRef.current === extractionRunId &&
+        activeRaceIdRef.current === targetRaceId &&
+        activeUserIdRef.current === targetUserId;
+      if (!canCommitExtraction()) return;
       setIsExtracting(true);
       setExtractionResult(null);
       hasExtractedDataRef.current = false; // Clear ref since we're starting fresh extraction
@@ -674,10 +762,11 @@ export function useRaceDocuments(
       documentExtractionService.extractAndUpdateRace({
         documentUrl,
         documentId,
-        raceId,
+        raceId: targetRaceId,
         documentType,
       }).then((extractResult) => {
         hasExtractedDataRef.current = !!extractResult.data;
+        if (!canCommitExtraction()) return;
         setExtractionResult(extractResult);
         setIsExtracting(false);
 
@@ -689,11 +778,12 @@ export function useRaceDocuments(
       }).catch((err) => {
         logger.error('Triggered extraction error', { error: err });
         hasExtractedDataRef.current = false;
+        if (!canCommitExtraction()) return;
         setExtractionResult({ success: false, error: err.message || 'Extraction failed' });
         setIsExtracting(false);
       });
     },
-    [raceId, isExtracting, refresh]
+    [raceId, userId, isExtracting, refresh]
   );
 
   // Clear extraction result (for re-extraction)

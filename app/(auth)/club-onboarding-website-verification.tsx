@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Image } from '@/components/ui';
-import { ChevronLeft, Globe, Shield, Download, Zap, Check, X, Search, Copy } from 'lucide-react-native';
+import { ChevronLeft, Globe, Shield, Download, Zap, Check, Search, Copy } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/services/supabase';
 import { ClubVerificationService, ClubExtractedData } from '@/services/ClubVerificationService';
@@ -105,7 +105,7 @@ const ClubOnboardingWebsiteVerification = () => {
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (_text: string) => {
     // In React Native, we'd use @react-native-clipboard/clipboard
     // For now, just show an alert
     Alert.alert('Copied', 'Verification code copied to clipboard');
@@ -131,7 +131,7 @@ const ClubOnboardingWebsiteVerification = () => {
       {/* Header */}
       <View className="bg-blue-600 pt-12 pb-6 px-4">
         <View className="flex-row items-center mb-4">
-          <TouchableOpacity className="p-2 -ml-2">
+          <TouchableOpacity className="p-2 -ml-2" onPress={() => router.back()}>
             <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text className="text-white text-lg font-bold flex-1 text-center">Club Setup</Text>
@@ -420,7 +420,7 @@ const ClubOnboardingWebsiteVerification = () => {
         
         <TouchableOpacity 
           className="py-3 items-center"
-          onPress={() => Alert.alert('Skip', 'Your progress will be saved')}
+          onPress={() => router.push('/club-dashboard')}
         >
           <Text className="text-blue-600 font-bold">Complete later</Text>
         </TouchableOpacity>

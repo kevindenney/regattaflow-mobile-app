@@ -5,7 +5,7 @@
  * Vertical slice: AI Processing → Validation → Visualization
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,8 +19,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import RaceEventService from '../../../services/RaceEventService';
 import {
   RaceEventWithDetails,
-  ExtractionStatus,
-  DocumentProcessingJob
+  ExtractionStatus
 } from '../../../types/raceEvents';
 
 export default function ValidateRaceEventScreen() {
@@ -29,47 +28,88 @@ export default function ValidateRaceEventScreen() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    loadRaceEvent();
-
-    // Poll for processing updates
-    const interval = setInterval(() => {
-      if (processing) {
-        loadRaceEvent();
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
-    }, 2000);
+    };
+  }, []);
 
-    return () => clearInterval(interval);
-  }, [id, processing]);
-
-  const loadRaceEvent = async () => {
+  const loadRaceEvent = useCallback(async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
     if (!id) return;
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
+    if (showLoading) {
+      setLoading(true);
+    }
 
     try {
       const { data, error } = await RaceEventService.getRaceEvent(id);
 
       if (error) throw error;
       if (!data) throw new Error('Race event not found');
+      if (!canCommit()) return;
 
       setRaceEvent(data);
+      setError(null);
 
       // Check if still processing
       if (data.extraction_status === ExtractionStatus.PROCESSING ||
           data.extraction_status === ExtractionStatus.PENDING) {
         setProcessing(true);
+        setLoading(false);
       } else {
         setProcessing(false);
         setLoading(false);
       }
     } catch (err) {
       console.error('Error loading race event:', err);
+      if (!canCommit()) return;
+      setProcessing(false);
       setError(err instanceof Error ? err.message : 'Failed to load race event');
       setLoading(false);
     }
-  };
+  }, [id]);
 
-  const handleApprove = async () => {
+  useEffect(() => {
+    void loadRaceEvent({ showLoading: true });
+  }, [loadRaceEvent]);
+
+  useEffect(() => {
+    if (!processing) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
+
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
+    pollIntervalRef.current = setInterval(() => {
+      void loadRaceEvent();
+    }, 2000);
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [loadRaceEvent, processing]);
+
+  const handleApprove = useCallback(async () => {
     if (!raceEvent) return;
 
     try {
@@ -84,7 +124,7 @@ export default function ValidateRaceEventScreen() {
       console.error('Error approving race:', err);
       setError('Failed to approve race');
     }
-  };
+  }, [raceEvent]);
 
   const handleEdit = () => {
     if (!raceEvent) return;
@@ -111,7 +151,7 @@ export default function ValidateRaceEventScreen() {
         <Text style={styles.errorText}>Error: {error}</Text>
         <TouchableOpacity
           style={styles.retryButton}
-          onPress={loadRaceEvent}
+          onPress={() => void loadRaceEvent({ showLoading: true })}
         >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
@@ -142,7 +182,7 @@ export default function ValidateRaceEventScreen() {
 
           {raceEvent.processing_jobs && raceEvent.processing_jobs.length > 0 && (
             <View style={styles.jobsList}>
-              {raceEvent.processing_jobs.map((job, index) => (
+              {raceEvent.processing_jobs.map((job) => (
                 <View key={job.id} style={styles.jobItem}>
                   <Text style={styles.jobType}>{job.document_type}</Text>
                   <Text style={styles.jobStatus}>{job.status}</Text>
@@ -260,7 +300,7 @@ export default function ValidateRaceEventScreen() {
           </View>
         ) : (
           <View style={styles.marksList}>
-            {raceEvent.marks?.map((mark, index) => {
+            {raceEvent.marks?.map((mark) => {
               const coords = extractCoordinates(mark.position);
               return (
                 <View key={mark.id} style={styles.markItem}>

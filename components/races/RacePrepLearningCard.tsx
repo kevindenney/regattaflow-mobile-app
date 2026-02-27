@@ -20,6 +20,9 @@ import { ChevronDown, ChevronUp, Lightbulb, MapPin, Wind, Flag, Target } from 'l
 import { postRaceLearningService } from '@/services/PostRaceLearningService';
 import { useAuth } from '@/providers/AuthProvider';
 import type { LearningProfile } from '@/types/raceLearning';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RacePrepLearningCard');
 
 interface RacePrepLearningCardProps {
   /** Venue name to find venue-specific insights */
@@ -96,7 +99,7 @@ export function RacePrepLearningCard({
           }
         }
       } catch (error) {
-        console.error('Failed to load race prep learning insights:', error);
+        logger.error('Failed to load race prep learning insights', error);
       } finally {
         setLoading(false);
       }
@@ -555,4 +558,3 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
-

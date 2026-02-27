@@ -13,6 +13,7 @@ import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { useUnreadMessageCount } from '@/hooks/useMessaging';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { type TabConfig, getTabsForUserType } from '@/lib/navigation-config';
+import { useVocabulary } from '@/hooks/useVocabulary';
 import { triggerHaptic } from '@/lib/haptics';
 import { createLogger } from '@/lib/utils/logger';
 import { saveLastTab } from '@/lib/utils/lastTab';
@@ -23,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { Tabs, useNavigation, usePathname, useRouter } from 'expo-router';
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Platform, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -32,8 +33,8 @@ const WebSidebarNav = Platform.OS === 'web'
   ? React.lazy(() => import('@/components/navigation/WebSidebarNav'))
   : null;
 
-// Whether to use the web sidebar layout (web only, behind feature flag)
-const useWebSidebar = Platform.OS === 'web' && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
+// Web sidebar should be desktop-only; phones/tablets use tab UX.
+const WEB_SIDEBAR_MIN_WIDTH = 1024;
 
 const logger = createLogger('_layout');
 const TAB_SWEEP_REQUIRED_TABS = ['connect', 'learn', 'reflect'] as const;
@@ -69,12 +70,21 @@ const TAB_SWEEP_CONTEXT_COPY: Record<
 
 function TabLayoutInner() {
   const { userType, user, clubProfile, personaLoading, isGuest, capabilities } = useAuth();
+  const { vocabulary } = useVocabulary();
   const unreadMessageCount = useUnreadMessageCount(user?.id);
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const navigation = useNavigation();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
   const { isDrawerOpen, closeDrawer } = useWebDrawer();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const useWebSidebar =
+    Platform.OS === 'web' &&
+    FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT &&
+    windowWidth >= WEB_SIDEBAR_MIN_WIDTH;
   const insets = useSafeAreaInsets();
   const {
     isTourActive,
@@ -108,7 +118,10 @@ function TabLayoutInner() {
 
   // Get tabs based on user type and capabilities
   // Sailors with coaching capability will see both sailor and coach tabs
-  const tabs = getTabsForUserType(userType ?? null, isGuest, capabilities);
+  const tabs = useMemo(
+    () => getTabsForUserType(userType ?? null, isGuest, capabilities, vocabulary),
+    [userType, isGuest, capabilities, vocabulary],
+  );
   const [hasRedirected, setHasRedirected] = useState(false);
   const [tabSweepVisitedTabs, setTabSweepVisitedTabs] = useState<Set<string>>(new Set());
   const tabSweepRemaining = Math.max(0, TAB_SWEEP_REQUIRED_TABS.length - tabSweepVisitedTabs.size);
@@ -138,17 +151,17 @@ function TabLayoutInner() {
     const isLegacyCoach = userType === 'coach' && !capabilities?.hasCoaching;
     if (isLegacyCoach && !hasRedirected && !personaLoading) {
       setHasRedirected(true);
-      router.replace('/(tabs)/clients');
+      routerRef.current.replace('/(tabs)/clients');
     }
-  }, [userType, capabilities, hasRedirected, personaLoading, router]);
+  }, [userType, capabilities, hasRedirected, personaLoading]);
 
   // Redirect club users to /events on initial load
   useEffect(() => {
     if (userType === 'club' && !hasRedirected && !personaLoading) {
       setHasRedirected(true);
-      router.replace('/(tabs)/events');
+      routerRef.current.replace('/(tabs)/events');
     }
-  }, [userType, hasRedirected, personaLoading, router]);
+  }, [userType, hasRedirected, personaLoading]);
 
   // Persist the current tab for "remember last tab" on web
   useEffect(() => {
@@ -172,12 +185,12 @@ function TabLayoutInner() {
     };
 
     const targetRoute = stepRouteMap[currentStep];
-    if (!targetRoute || pathname === targetRoute) {
+    if (!targetRoute || pathnameRef.current === targetRoute) {
       return;
     }
 
-    router.replace(targetRoute as Parameters<typeof router.replace>[0]);
-  }, [isTourActive, currentStep, pathname, router]);
+    routerRef.current.replace(targetRoute as Parameters<typeof router.replace>[0]);
+  }, [isTourActive, currentStep]);
 
   useEffect(() => {
     if (!isTourActive || currentStep !== 'tab_sweep') {
@@ -197,12 +210,12 @@ function TabLayoutInner() {
       return;
     }
 
-    if (isTourComplete && pathname !== '/races') {
-      router.replace('/races' as Parameters<typeof router.replace>[0]);
+    if (isTourComplete && pathnameRef.current !== '/races') {
+      routerRef.current.replace('/races' as Parameters<typeof router.replace>[0]);
     }
 
     wasTourActiveRef.current = false;
-  }, [isTourActive, isTourComplete, pathname, router]);
+  }, [isTourActive, isTourComplete]);
 
   const isTabVisible = (name: string) => tabs.some(t => t.name === name);
   const findTab = (name: string) => tabs.find(tab => tab.name === name);
@@ -884,8 +897,8 @@ function TabLayoutInner() {
 
   return (
     <View style={styles.container}>
-      {/* Hide navigation header on all tabs - each tab renders its own content */}
-      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={false} hidden={true} />
+      {/* Show navigation header with interest switcher */}
+      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={true} hidden={false} />
 
       <View style={useWebSidebar ? styles.webShelfRow : styles.nativeRow}>
         {/* Shelf panel — persistent on web, pushes content right */}

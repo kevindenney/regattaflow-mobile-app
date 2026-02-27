@@ -47,6 +47,13 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/community/2027-hk-dragon-worlds",
+      "destination": "/connect?segment=discuss&community=2027-hk-dragon-worlds",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/privacy",

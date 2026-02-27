@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -19,34 +18,67 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
   const { width } = useWindowDimensions();
   const isDesktop = width > 900;
 
-  if (variant === 'coach' || variant === 'club') {
-    const audience = variant === 'coach' ? 'Coaches' : 'Clubs';
-
+  if (variant === 'coach') {
     return (
       <View id="pricing-section" style={styles.container}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>{audience} Pricing</Text>
+            <Text style={styles.headerTitle}>Coaches Pricing</Text>
             <Text style={styles.headerSubtitle}>
-              Coming soon. We are finalizing plans for {audience.toLowerCase()}.
+              Simple, aligned pricing: we only make money when you do.
             </Text>
           </View>
 
-          <View style={styles.comingSoonCard}>
-            <Ionicons name="time-outline" size={28} color="#3E92CC" />
-            <Text style={styles.comingSoonTitle}>Pricing announcement in progress</Text>
-            <Text style={styles.comingSoonBody}>
-              Join the waitlist and we will send pricing and early access details.
+          <View style={styles.offerCard}>
+            <Ionicons name="cash-outline" size={28} color="#8B5CF6" />
+            <Text style={styles.offerTitle}>5% platform fee on coaching fees earned</Text>
+            <Text style={styles.offerBody}>
+              No monthly subscription. RegattaFlow takes 5% only on sessions paid inside the platform.
             </Text>
+            <View style={styles.offerList}>
+              <Text style={styles.offerItem}>• Keep 95% of each booking</Text>
+              <Text style={styles.offerItem}>• No setup fee</Text>
+              <Text style={styles.offerItem}>• Cancel anytime</Text>
+            </View>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => {
-                if (Platform.OS === 'web') {
-                  window.location.href = 'mailto:hello@regattaflow.io?subject=Waitlist: ' + audience + ' pricing';
-                }
-              }}
+              onPress={() => router.push({ pathname: '/(auth)/signup', params: { persona: 'coach' } })}
             >
-              <Text style={styles.primaryButtonText}>Join Waitlist</Text>
+              <Text style={styles.primaryButtonText}>Start Coaching Free</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (variant === 'club') {
+    return (
+      <View id="pricing-section" style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Clubs Pricing</Text>
+            <Text style={styles.headerSubtitle}>
+              One straightforward plan for race management.
+            </Text>
+          </View>
+
+          <View style={styles.offerCard}>
+            <Ionicons name="business-outline" size={28} color="#10B981" />
+            <Text style={styles.offerTitle}>$99/month per club</Text>
+            <Text style={styles.offerBody}>
+              Includes race entry management, scoring tools, and member operations in one plan.
+            </Text>
+            <View style={styles.offerList}>
+              <Text style={styles.offerItem}>• Unlimited races and members</Text>
+              <Text style={styles.offerItem}>• Committee + volunteer tools included</Text>
+              <Text style={styles.offerItem}>• $79/month when billed annually</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.primaryButton}
+              onPress={() => router.push({ pathname: '/(auth)/signup', params: { persona: 'club' } })}
+            >
+              <Text style={styles.primaryButtonText}>Start Managing Free</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -77,6 +109,7 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
             ]}
             cta="Get Started Free"
             outlined
+            persona={variant}
           />
 
           <PricingCard
@@ -86,6 +119,7 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
             features={SAILOR_TIERS.individual.features.slice(0, 6)}
             cta="Choose Individual"
             outlined
+            persona={variant}
           />
 
           <PricingCard
@@ -95,6 +129,7 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
             features={SAILOR_TIERS.team.features}
             cta="Choose Team"
             featured
+            persona={variant}
           />
         </View>
 
@@ -120,6 +155,7 @@ function PricingCard({
   cta,
   featured,
   outlined,
+  persona = 'sailor',
 }: {
   title: string;
   price: string;
@@ -128,6 +164,7 @@ function PricingCard({
   cta: string;
   featured?: boolean;
   outlined?: boolean;
+  persona?: 'sailor' | 'coach' | 'club';
 }) {
   return (
     <View style={[styles.card, featured && styles.cardFeatured]}>
@@ -152,7 +189,7 @@ function PricingCard({
 
       <TouchableOpacity
         style={[styles.ctaButton, outlined && styles.ctaButtonOutline, featured && styles.ctaButtonFeatured]}
-        onPress={() => router.push('/(auth)/signup')}
+        onPress={() => router.push({ pathname: '/(auth)/signup', params: { persona } })}
       >
         <Text style={[styles.ctaText, outlined && styles.ctaTextOutline]}>{cta}</Text>
       </TouchableOpacity>
@@ -268,7 +305,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  comingSoonCard: {
+  offerCard: {
     maxWidth: 760,
     alignSelf: 'center',
     backgroundColor: '#FFFFFF',
@@ -279,17 +316,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  comingSoonTitle: {
+  offerTitle: {
     fontSize: 26,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
   },
-  comingSoonBody: {
+  offerBody: {
     fontSize: 15,
     color: '#4B5563',
     textAlign: 'center',
     maxWidth: 560,
+  },
+  offerList: {
+    alignSelf: 'stretch',
+    marginTop: 6,
+    gap: 6,
+  },
+  offerItem: {
+    fontSize: 14,
+    color: '#374151',
+    textAlign: 'center',
   },
   primaryButton: {
     marginTop: 10,

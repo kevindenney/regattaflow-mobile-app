@@ -24,14 +24,13 @@ import {
   ActivityIndicator,
   TurboModuleRegistry,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Check,
   ChevronDown,
   ChevronUp,
   MapPin,
-  Navigation,
   RotateCcw,
   Save,
   Target,
@@ -164,9 +163,7 @@ export function CoursePositionEditor({
 
   // Recalculate when parameters change
   useEffect(() => {
-    if (startLineCenter) {
-      calculateCourse();
-    }
+    calculateCourse();
   }, [calculateCourse]);
 
   // Initial region for map
@@ -368,6 +365,18 @@ export function CoursePositionEditor({
     }
   }, [hasChanges, onCancel]);
 
+  const handleContactSupport = useCallback(() => {
+    const subject = encodeURIComponent('Course Positioning Map Unavailable');
+    const body = encodeURIComponent(
+      `Course positioning map is unavailable in this build.\n\n` +
+      `Regatta ID: ${regattaId}\n` +
+      `Platform: ${Platform.OS}\n` +
+      `Maps module available: ${mapsAvailable ? 'yes' : 'no'}`
+    );
+    const mailtoUrl = `mailto:support@regattaflow.com?subject=${subject}&body=${body}`;
+    Linking.openURL(mailtoUrl).catch(() => {});
+  }, [regattaId]);
+
   // Get wind direction label
   const getWindLabel = (degrees: number): string => {
     const index = Math.round(degrees / 45) % 8;
@@ -383,14 +392,6 @@ export function CoursePositionEditor({
     if (mark.type === 'offset') return 'O';
     return (index + 1).toString();
   };
-
-  // Course line coordinates
-  const courseCoordinates = useMemo(() => {
-    return marks.map((m) => ({
-      latitude: m.latitude,
-      longitude: m.longitude,
-    }));
-  }, [marks]);
 
   // Start line coordinates
   const startLineCoordinates = useMemo(() => {
@@ -420,9 +421,14 @@ export function CoursePositionEditor({
             <Text style={styles.fallbackText}>
               Course positioning requires a development build with native maps support.
             </Text>
-            <Pressable onPress={onCancel} style={styles.fallbackButton}>
-              <Text style={styles.fallbackButtonText}>Close</Text>
-            </Pressable>
+            <View style={styles.fallbackActions}>
+              <Pressable onPress={onCancel} style={styles.fallbackButton}>
+                <Text style={styles.fallbackButtonText}>Close</Text>
+              </Pressable>
+              <Pressable onPress={handleContactSupport} style={styles.fallbackButtonSecondary}>
+                <Text style={styles.fallbackButtonText}>Contact Support</Text>
+              </Pressable>
+            </View>
           </View>
         </SafeAreaView>
       </Modal>
@@ -1030,11 +1036,24 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   fallbackButton: {
-    marginTop: 24,
     paddingHorizontal: 24,
     paddingVertical: 12,
     backgroundColor: IOS_COLORS.secondarySystemBackground,
     borderRadius: 10,
+  },
+  fallbackActions: {
+    marginTop: 24,
+    width: '100%',
+    alignItems: 'center',
+    gap: 10,
+  },
+  fallbackButtonSecondary: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_COLORS.gray3,
   },
   fallbackButtonText: {
     fontSize: 16,

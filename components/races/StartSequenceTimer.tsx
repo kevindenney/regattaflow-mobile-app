@@ -8,6 +8,7 @@
 import { Play, RotateCcw, Timer } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, Vibration, View } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
 
 interface StartSequenceTimerProps {
   compact?: boolean; // Use compact UI for smaller cards
@@ -15,6 +16,7 @@ interface StartSequenceTimerProps {
 
 const START_SEQUENCE_SECONDS = 5 * 60; // 5 minutes
 const ALERT_INTERVALS = [300, 240, 60, 30, 10, 5, 4, 3, 2, 1, 0]; // Seconds to alert
+const logger = createLogger('StartSequenceTimer');
 
 export function StartSequenceTimer({ compact = false }: StartSequenceTimerProps) {
   const [isActive, setIsActive] = useState(false);
@@ -26,7 +28,7 @@ export function StartSequenceTimer({ compact = false }: StartSequenceTimerProps)
     try {
       Vibration.vibrate(pattern || 200);
     } catch (error) {
-      console.error('Error vibrating:', error);
+      logger.error('Error vibrating', error);
     }
   }, []);
 

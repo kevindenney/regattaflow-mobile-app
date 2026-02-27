@@ -234,7 +234,7 @@ RigTuningCard (displays with AI visual theme)
 
 ## API Requirements
 
-- Anthropic API key must be configured (`EXPO_PUBLIC_ANTHROPIC_API_KEY`)
+- Anthropic API key must be configured (`ANTHROPIC_API_KEY`)
 - Uses Claude Sonnet 3.5 model for AI generation
 - Approximately 2000-3000 tokens per recommendation
 

@@ -4,7 +4,7 @@
  * Uses Silent AI Extraction with Progressive Disclosure pattern
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -18,12 +18,16 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/providers/AuthProvider';
 import { ConversationalOnboardingAgent } from '@/services/agents/ConversationalOnboardingAgent';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import { PersonaTabBar, PersonaType } from '@/components/onboarding/PersonaTabBar';
 import { OnboardingProgressBar } from '@/components/onboarding/OnboardingProgressBar';
 import { OnboardingSection } from '@/components/onboarding/OnboardingSection';
 import { FreeformInputField } from '@/components/onboarding/FreeformInputField';
 import { ExtractedEntity } from '@/components/onboarding/ExtractedDataPreview';
 import { QuickPasteOptions } from '@/components/onboarding/QuickPasteOptions';
+
+const logger = createLogger('UnifiedOnboarding');
 
 interface SailorOnboardingData {
   aboutYou: {
@@ -36,11 +40,11 @@ interface SailorOnboardingData {
     fleets?: string[];
   };
   raceCalendar: {
-    races?: Array<{
+    races?: {
       name: string;
       date: string;
       location: string;
-    }>;
+    }[];
   };
   nextRace: {
     name?: string;
@@ -311,8 +315,117 @@ export default function UnifiedOnboarding() {
     }
 
     try {
-      // TODO: Call agent to save profile data
-      // await agent.executeTool('save_sailor_profile', { sailor_id: user?.id, ...sailorData });
+      if (!user?.id) {
+        throw new Error('Missing authenticated user');
+      }
+
+      const nowIso = new Date().toISOString();
+      const displayName = sailorData.aboutYou.name?.trim();
+      const normalizedBoatClass = sailorData.aboutYou.boatClass?.trim();
+      const normalizedSailNumber = sailorData.aboutYou.sailNumber?.trim();
+      const normalizedBoatName = sailorData.aboutYou.boatName?.trim();
+
+      // 1) Mark onboarding complete on users row (primary gate used by auth callback/routing).
+      const userUpdatePayload: Record<string, unknown> = {
+        onboarding_completed: true,
+      };
+      if (displayName) {
+        userUpdatePayload.full_name = displayName;
+      }
+      if (selectedPersona === 'sailor' || selectedPersona === 'coach' || selectedPersona === 'club') {
+        userUpdatePayload.user_type = selectedPersona;
+      }
+
+      const { error: userUpdateError } = await supabase
+        .from('users')
+        .update(userUpdatePayload)
+        .eq('id', user.id);
+      if (userUpdateError) {
+        throw userUpdateError;
+      }
+
+      // 2) Best-effort sailor profile/boat persistence for sailor persona.
+      if (selectedPersona === 'sailor') {
+        try {
+          await supabase
+            .from('sailor_profiles')
+            .upsert({
+              user_id: user.id,
+              profile_completed: true,
+              updated_at: nowIso,
+            });
+        } catch (profileError) {
+          logger.warn('Unable to persist sailor profile during unified onboarding', profileError);
+        }
+
+        if (normalizedBoatClass || normalizedSailNumber || normalizedBoatName) {
+          try {
+            const { data: profileRow } = await supabase
+              .from('sailor_profiles')
+              .select('id')
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+            if (profileRow?.id) {
+              let resolvedClassId: string | null = null;
+              if (normalizedBoatClass) {
+                const { data: classRows } = await supabase
+                  .from('boat_classes')
+                  .select('id, name')
+                  .ilike('name', normalizedBoatClass)
+                  .limit(1);
+                resolvedClassId = classRows?.[0]?.id || null;
+              }
+
+              await supabase
+                .from('sailor_boats')
+                .upsert({
+                  sailor_id: profileRow.id,
+                  class_id: resolvedClassId,
+                  sail_number: normalizedSailNumber || null,
+                  boat_name: normalizedBoatName || null,
+                  is_primary: true,
+                  updated_at: nowIso,
+                });
+            }
+          } catch (boatError) {
+            logger.warn('Unable to persist boat details during unified onboarding', boatError);
+          }
+        }
+
+        // 3) Best-effort next race creation from extracted "next race" section.
+        if (sailorData.nextRace.name && sailorData.nextRace.date) {
+          const regattaBase = {
+            name: sailorData.nextRace.name,
+            start_date: new Date(sailorData.nextRace.date).toISOString(),
+            end_date: new Date(sailorData.nextRace.date).toISOString(),
+            venue: sailorData.nextRace.venue || null,
+            metadata: {
+              source: 'unified_onboarding',
+              documents: sailorData.nextRace.documents || [],
+            },
+          } as Record<string, unknown>;
+
+          try {
+            const withCreatedBy = await supabase.from('regattas').insert({
+              ...regattaBase,
+              created_by: user.id,
+            });
+
+            if (withCreatedBy.error) {
+              const withUserId = await supabase.from('regattas').insert({
+                ...regattaBase,
+                user_id: user.id,
+              });
+              if (withUserId.error) {
+                logger.warn('Unable to persist next race during onboarding', withUserId.error);
+              }
+            }
+          } catch (raceError) {
+            logger.warn('Unable to persist next race during onboarding', raceError);
+          }
+        }
+      }
 
       // Navigate to appropriate dashboard
       if (selectedPersona === 'sailor') {
@@ -436,28 +549,45 @@ export default function UnifiedOnboarding() {
           {selectedPersona === 'club' && (
             <View className="p-4">
               <Text className="text-lg font-semibold text-gray-700">
-                Club Onboarding Coming Soon
+                Club Onboarding
               </Text>
               <Text className="text-sm text-gray-500 mt-2">
-                Club onboarding flow is under development.
+                Continue with the dedicated club onboarding flow to set up your organization.
               </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/club-onboarding')}
+                className="mt-4 bg-sky-600 py-3 px-4 rounded-lg"
+              >
+                <Text className="text-white text-center font-semibold">
+                  Continue Club Onboarding
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
           {selectedPersona === 'coach' && (
             <View className="p-4">
               <Text className="text-lg font-semibold text-gray-700">
-                Coach Onboarding Coming Soon
+                Coach Onboarding
               </Text>
               <Text className="text-sm text-gray-500 mt-2">
-                Coach onboarding flow is under development.
+                Continue with the coach onboarding flow to configure expertise and availability.
               </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/coach-onboarding-welcome')}
+                className="mt-4 bg-sky-600 py-3 px-4 rounded-lg"
+              >
+                <Text className="text-white text-center font-semibold">
+                  Continue Coach Onboarding
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </ScrollView>
 
         {/* Bottom Action */}
-        <View className="p-6 border-t border-gray-200 bg-white">
+        {selectedPersona === 'sailor' && (
+          <View className="p-6 border-t border-gray-200 bg-white">
           <TouchableOpacity
             onPress={handleSaveAndContinue}
             className={`py-4 rounded-lg ${
@@ -476,7 +606,8 @@ export default function UnifiedOnboarding() {
               You can complete remaining sections later
             </Text>
           )}
-        </View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

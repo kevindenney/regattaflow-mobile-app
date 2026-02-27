@@ -10,8 +10,10 @@ import { Play, Square, Navigation } from 'lucide-react-native';
 import { gpsTracker } from '@/services/GPSTracker';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { createLogger } from '@/lib/utils/logger';
 
 const DEFAULT_RACE_TIME = '10:00';
+const logger = createLogger('RaceTimer');
 
 function normalizeRaceTime(time: string): string | null {
   if (!time) return null;
@@ -105,7 +107,7 @@ interface RaceTimerProps {
 
 export function RaceTimer({
   raceId,
-  raceName,
+  raceName: _raceName,
   raceDate,
   raceTime,
   onRaceComplete,
@@ -212,7 +214,7 @@ export function RaceTimer({
       setGpsPointCount(0);
 
     } catch (error: any) {
-      console.error('Error starting race timer:', error);
+      logger.error('Error starting race timer', error);
       Alert.alert('Error', 'Failed to start race timer. Please try again.');
     }
   }, [user, raceId]);
@@ -230,7 +232,7 @@ export function RaceTimer({
       // Always open post-race interview - user can skip from there
       onRaceComplete(sessionId);
     } catch (error: any) {
-      console.error('Error stopping race timer:', error);
+      logger.error('Error stopping race timer', error);
       Alert.alert('Error', 'Failed to stop race timer.');
     }
   }, [sessionId, onRaceComplete]);

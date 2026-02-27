@@ -7,6 +7,7 @@
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 // Dynamic import helper for expo-location (native only)
 let LocationModule: typeof import('expo-location') | null = null;
@@ -34,6 +35,7 @@ export interface RaceTimerSession {
   id: string;
   sailor_id: string;
   regatta_id?: string;
+  race_id?: string;
   start_time: string;
   end_time?: string;
   duration_seconds?: number;
@@ -58,6 +60,7 @@ export class RaceTimerService {
   private static activeSession: string | null = null;
   private static trackingInterval: ReturnType<typeof setInterval> | null = null;
   private static trackPoints: GPSTrackPoint[] = [];
+  private static raceTimerSessionIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
 
   /**
    * Start a race timer session
@@ -69,7 +72,7 @@ export class RaceTimerService {
   ): Promise<RaceTimerSession | null> {
     const Location = await getLocationModule();
     if (!Location) {
-      console.error('Location tracking not available on web');
+      logger.error('Location tracking not available on web');
       return null;
     }
 
@@ -77,23 +80,38 @@ export class RaceTimerService {
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.error('Location permission not granted');
+        logger.error('Location permission not granted');
         return null;
       }
 
       // Create session
-      const { data: session, error } = await supabase
-        .from('race_timer_sessions')
-        .insert({
-          sailor_id: sailorId,
-          regatta_id: regattaId,
-          start_time: new Date().toISOString(),
-          wind_direction: conditions?.wind_direction,
-          wind_speed: conditions?.wind_speed,
-          wave_height: conditions?.wave_height,
-        })
-        .select()
-        .single();
+      const createWithColumn = (column: 'regatta_id' | 'race_id') =>
+        supabase
+          .from('race_timer_sessions')
+          .insert({
+            sailor_id: sailorId,
+            [column]: regattaId,
+            start_time: new Date().toISOString(),
+            wind_direction: conditions?.wind_direction,
+            wind_speed: conditions?.wind_speed,
+            wave_height: conditions?.wave_height,
+          })
+          .select()
+          .single();
+
+      let { data: session, error } = await createWithColumn(this.raceTimerSessionIdColumn);
+      if (
+        error &&
+        this.raceTimerSessionIdColumn === 'regatta_id' &&
+        isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')
+      ) {
+        const fallback = await createWithColumn('race_id');
+        session = fallback.data;
+        error = fallback.error;
+        if (!error) {
+          this.raceTimerSessionIdColumn = 'race_id';
+        }
+      }
 
       if (error) throw error;
 
@@ -104,7 +122,7 @@ export class RaceTimerService {
 
       return session;
     } catch (error) {
-      console.error('Error starting race timer session:', error);
+      logger.error('Error starting race timer session:', error);
       return null;
     }
   }
@@ -145,7 +163,7 @@ export class RaceTimerService {
 
       this.trackPoints.push(trackPoint);
     } catch (error) {
-      console.error('Error recording GPS point:', error);
+      logger.error('Error recording GPS point:', error);
     }
   }
 
@@ -211,7 +229,7 @@ export class RaceTimerService {
 
       return session;
     } catch (error) {
-      console.error('Error ending race timer session:', error);
+      logger.error('Error ending race timer session:', error);
       return null;
     }
   }
@@ -231,7 +249,7 @@ export class RaceTimerService {
       logger.debug('AI analysis completed for session:', sessionId);
     } catch (error) {
       // Log error but don't throw - this is a background operation
-      console.error('Error triggering AI analysis:', error);
+      logger.error('Error triggering AI analysis:', error);
     }
   }
 
@@ -264,7 +282,7 @@ export class RaceTimerService {
 
       return session;
     } catch (error) {
-      console.error('Error getting race timer session:', error);
+      logger.error('Error getting race timer session:', error);
       return null;
     }
   }
@@ -285,7 +303,7 @@ export class RaceTimerService {
 
       return sessions || [];
     } catch (error) {
-      console.error('Error getting sailor sessions:', error);
+      logger.error('Error getting sailor sessions:', error);
       return [];
     }
   }
@@ -295,17 +313,32 @@ export class RaceTimerService {
    */
   static async getRegattaSessions(regattaId: string): Promise<RaceTimerSession[]> {
     try {
-      const { data: sessions, error } = await supabase
-        .from('race_timer_sessions')
-        .select('*')
-        .eq('regatta_id', regattaId)
-        .order('start_time', { ascending: false });
+      const queryWithColumn = (column: 'regatta_id' | 'race_id') =>
+        supabase
+          .from('race_timer_sessions')
+          .select('*')
+          .eq(column, regattaId)
+          .order('start_time', { ascending: false });
+
+      let { data: sessions, error } = await queryWithColumn(this.raceTimerSessionIdColumn);
+      if (
+        error &&
+        this.raceTimerSessionIdColumn === 'regatta_id' &&
+        isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')
+      ) {
+        const fallback = await queryWithColumn('race_id');
+        sessions = fallback.data;
+        error = fallback.error;
+        if (!error) {
+          this.raceTimerSessionIdColumn = 'race_id';
+        }
+      }
 
       if (error) throw error;
 
       return sessions || [];
     } catch (error) {
-      console.error('Error getting regatta sessions:', error);
+      logger.error('Error getting regatta sessions:', error);
       return [];
     }
   }
@@ -325,7 +358,7 @@ export class RaceTimerService {
 
       return true;
     } catch (error) {
-      console.error('Error deleting race timer session:', error);
+      logger.error('Error deleting race timer session:', error);
       return false;
     }
   }
@@ -351,7 +384,7 @@ export class RaceTimerService {
 
       return true;
     } catch (error) {
-      console.error('Error updating race conditions:', error);
+      logger.error('Error updating race conditions:', error);
       return false;
     }
   }
@@ -371,7 +404,7 @@ export class RaceTimerService {
 
       return session?.auto_analyzed || false;
     } catch (error) {
-      console.error('Error checking if session is analyzed:', error);
+      logger.error('Error checking if session is analyzed:', error);
       return false;
     }
   }
@@ -393,7 +426,7 @@ export class RaceTimerService {
 
       return sessions || [];
     } catch (error) {
-      console.error('Error getting unanalyzed sessions:', error);
+      logger.error('Error getting unanalyzed sessions:', error);
       return [];
     }
   }

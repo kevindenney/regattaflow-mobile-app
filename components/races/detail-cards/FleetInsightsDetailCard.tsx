@@ -26,6 +26,9 @@ import Animated, {
 import { supabase } from '@/services/supabase';
 import { CARD_EXPAND_DURATION, CARD_COLLAPSE_DURATION } from '@/constants/navigationAnimations';
 import { IOS_COLORS } from '@/components/cards/constants';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('FleetInsightsDetailCard');
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -109,7 +112,7 @@ export function FleetInsightsDetailCard({
           .limit(10);
 
         if (sessionsError) {
-          console.warn('[FleetInsightsCard] Sessions query error:', sessionsError);
+          logger.warn('Sessions query error', sessionsError);
           setInsights([]);
           setLoading(false);
           return;
@@ -154,7 +157,7 @@ export function FleetInsightsDetailCard({
 
         setInsights(computedInsights);
       } catch (error) {
-        console.warn('[FleetInsightsCard] Error loading insights:', error);
+        logger.warn('Error loading insights', error);
         setInsights([]);
       } finally {
         setLoading(false);

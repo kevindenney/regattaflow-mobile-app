@@ -16,6 +16,8 @@ import {
     PostRaceAnalysisCard,
     PreRaceStrategySection,
     RaceDetailMapHero,
+    RaceDocumentsCard,
+    type RaceDocument,
     RaceInfoCards,
     RacePhaseHeader,
     RigTuningCard,
@@ -35,19 +37,21 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Animated,
+    Modal,
     Platform,
     
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
-    ViewStyle
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 // import { StrategyPlanningCard } from '@/components/race-detail/StrategyPlanningCard'; // No longer used - strategy planning is integrated into individual strategy cards
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { useRaceWeather } from '@/hooks/useRaceWeather';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { useAuth } from '@/providers/AuthProvider';
 import { autoCourseGenerator } from '@/services/AutoCourseGeneratorService';
 import { supabase } from '@/services/supabase';
@@ -72,14 +76,14 @@ interface RaceEvent {
   // Race Type (Fleet vs Distance)
   race_type?: 'fleet' | 'distance';
   // Distance racing fields
-  route_waypoints?: Array<{
+  route_waypoints?: {
     name: string;
     latitude: number;
     longitude: number;
     type: 'start' | 'waypoint' | 'gate' | 'finish';
     required: boolean;
     passingSide?: 'port' | 'starboard' | 'either';
-  }>;
+  }[];
   total_distance_nm?: number;
   time_limit_hours?: number;
   start_finish_same_location?: boolean;
@@ -118,13 +122,16 @@ export default function RaceDetailScrollable() {
   const [marks, setMarks] = useState<CourseMark[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
-  const [drawingPolygon, setDrawingPolygon] = useState<Array<{lat: number, lng: number}>>([]);
+  const [drawingPolygon, setDrawingPolygon] = useState<{lat: number, lng: number}[]>([]);
   const [pendingCourseId, setPendingCourseId] = useState<string | null>(null);
-  const [sailorId, setSailorId] = useState<string | null>(null);
   const [userBoatId, setUserBoatId] = useState<string | null>(null);
   const [showTrackImport, setShowTrackImport] = useState(false);
   const [importedTracks, setImportedTracks] = useState<Track[]>([]);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<RaceDocument[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
   const lastCourseParam = useRef<string | null>(null);
 
   // Get real weather for course filtering
@@ -178,47 +185,18 @@ export default function RaceDetailScrollable() {
   const analysisRef = useRef<View>(null);
   const [analysisMeasured, setAnalysisMeasured] = useState(false);
   const [mapCompact, setMapCompact] = useState(false);
+  const [showFullscreenMap, setShowFullscreenMap] = useState(false);
 
   useEffect(() => {
     loadRaceData();
-  }, [id]);
+  }, [loadRaceData]);
 
   // Reload race data when screen comes into focus (e.g., after editing)
   useFocusEffect(
     useCallback(() => {
-      if (id) {
-        loadRaceData();
-      }
-    }, [id])
+      loadRaceData();
+    }, [loadRaceData])
   );
-
-  // Fetch sailor profile ID
-  useEffect(() => {
-    const fetchSailorId = async () => {
-      if (!user) return;
-
-      try {
-        const { data: sailorProfile, error } = await supabase
-          .from('sailor_profiles')
-          .select('id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error('[RaceDetailScrollable] Error fetching sailor profile:', error);
-          return;
-        }
-
-        if (sailorProfile) {
-          setSailorId(sailorProfile.id);
-        }
-      } catch (error) {
-        console.error('[RaceDetailScrollable] Failed to fetch sailor profile:', error);
-      }
-    };
-
-    fetchSailorId();
-  }, [user]);
 
   // Fetch user's primary boat for sail checks
   // Note: sailor_boats.sailor_id = auth.uid() (user.id), not sailor_profiles.id
@@ -283,7 +261,7 @@ export default function RaceDetailScrollable() {
     return () => {
       scrollY.removeListener(listener);
     };
-  }, []);
+  }, [scrollY]);
 
   // Scroll to analysis section when section=analysis param is present
   useEffect(() => {
@@ -291,7 +269,7 @@ export default function RaceDetailScrollable() {
       // Delay to ensure layout is complete
       const timer = setTimeout(() => {
         // Use measureInWindow to get absolute screen position, then scroll
-        analysisRef.current?.measureInWindow((x, y, width, height) => {
+        analysisRef.current?.measureInWindow((_x, y) => {
           // y is the current screen position of the element
           // Since we start at scroll 0, y represents the scroll target
           // Subtract some offset for the header (~ 60px)
@@ -304,11 +282,17 @@ export default function RaceDetailScrollable() {
     }
   }, [section, loading, race, analysisMeasured]);
 
-  const loadRaceData = async () => {
+  const loadRaceData = useCallback(async () => {
     if (!id) return;
 
     try {
       setLoading(true);
+      setLoadErrorMessage(null);
+      // Clear stale state while loading a new race.
+      setRace(null);
+      setMarks([]);
+      setDocuments([]);
+      setDocumentsError(null);
       logger.debug('[RaceDetailScrollable] Loading race:', id);
 
       // Load race details from regattas table (same as original race detail)
@@ -320,11 +304,15 @@ export default function RaceDetailScrollable() {
 
       if (raceError) {
         console.error('[RaceDetailScrollable] Error loading race:', raceError);
+        setLoadErrorMessage(raceError.message || 'Failed to load race.');
+        setRace(null);
         return;
       }
 
       if (!raceData) {
         console.error('[RaceDetailScrollable] Race not found');
+        setLoadErrorMessage('Race not found.');
+        setRace(null);
         return;
       }
 
@@ -339,6 +327,10 @@ export default function RaceDetailScrollable() {
         start_time: raceData.start_date,
         racing_area_polygon: raceData.racing_area_polygon,
         venue: raceData.metadata?.venue_name ? {
+          id:
+            (typeof raceData.venue_id === 'string' && raceData.venue_id) ||
+            (typeof raceData.metadata?.venue_id === 'string' && raceData.metadata.venue_id) ||
+            undefined,
           name: raceData.metadata.venue_name,
           coordinates_lat: raceData.metadata?.venue_lat || 22.2650,
           coordinates_lng: raceData.metadata?.venue_lng || 114.2620,
@@ -359,17 +351,30 @@ export default function RaceDetailScrollable() {
       };
 
       // Look up actual venue ID from sailing_venues if we have a venue name
-      if (transformedRace.venue?.name) {
-        const { data: venueData } = await supabase
+      if (transformedRace.venue?.name && !transformedRace.venue.id) {
+        const venueName = transformedRace.venue.name.trim();
+        const exactVenueLookup = await supabase
           .from('sailing_venues')
           .select('id')
-          .ilike('name', `%${transformedRace.venue.name}%`)
+          .ilike('name', venueName)
           .limit(1)
           .maybeSingle();
 
-        if (venueData) {
-          transformedRace.venue.id = venueData.id;
-          logger.debug('[RaceDetailScrollable] Found venue ID:', venueData.id);
+        if (exactVenueLookup.data?.id) {
+          transformedRace.venue.id = exactVenueLookup.data.id;
+          logger.debug('[RaceDetailScrollable] Found venue ID by exact name:', exactVenueLookup.data.id);
+        } else {
+          const fuzzyVenueLookup = await supabase
+            .from('sailing_venues')
+            .select('id')
+            .ilike('name', `%${venueName}%`)
+            .limit(1)
+            .maybeSingle();
+
+          if (fuzzyVenueLookup.data?.id) {
+            transformedRace.venue.id = fuzzyVenueLookup.data.id;
+            logger.debug('[RaceDetailScrollable] Found venue ID by fuzzy name:', fuzzyVenueLookup.data.id);
+          }
         }
       }
 
@@ -377,11 +382,22 @@ export default function RaceDetailScrollable() {
       logger.debug('[RaceDetailScrollable] Race loaded:', transformedRace);
 
       // Try to find associated race_event for marks
-      const { data: raceEvent } = await supabase
+      let raceEvent: { id: string } | null = null;
+      const primaryRaceEvent = await supabase
         .from('race_events')
         .select('id')
         .eq('regatta_id', id)
         .maybeSingle();
+      raceEvent = primaryRaceEvent.data;
+
+      if (isMissingIdColumn(primaryRaceEvent.error, 'race_events', 'regatta_id')) {
+        const fallbackRaceEvent = await supabase
+          .from('race_events')
+          .select('id')
+          .eq('race_id', id)
+          .maybeSingle();
+        raceEvent = fallbackRaceEvent.data;
+      }
 
       // Track if marks were found from any source
       let marksFound = false;
@@ -440,12 +456,74 @@ export default function RaceDetailScrollable() {
         setMarks(convertedMarks);
         logger.debug('[RaceDetailScrollable] Marks loaded from route_waypoints:', convertedMarks.length);
       }
+
+      // Load race documents (best effort, non-blocking for screen)
+      if (user?.id) {
+        setDocumentsLoading(true);
+        setDocumentsError(null);
+        try {
+          let docQuery = await supabase
+            .from('sailing_documents')
+            .select('id, user_id, filename, mime_type, file_size, created_at, processing_status, course_data, metadata')
+            .eq('user_id', user.id)
+            .eq('metadata->>regatta_id', id)
+            .order('created_at', { ascending: false });
+
+          if (docQuery.error && isMissingIdColumn(docQuery.error, 'sailing_documents', 'metadata')) {
+            docQuery = await supabase
+              .from('sailing_documents')
+              .select('id, user_id, filename, mime_type, file_size, created_at, processing_status, course_data, metadata')
+              .eq('user_id', user.id)
+              .order('created_at', { ascending: false });
+          }
+
+          if (docQuery.error) {
+            throw docQuery.error;
+          }
+
+          const mappedDocuments: RaceDocument[] = (docQuery.data || []).map((doc: any) => {
+            const type: RaceDocument['type'] = (() => {
+              const fileName = (doc.filename || '').toLowerCase();
+              if (fileName.includes('instruction') || fileName.includes('si')) return 'sailing_instructions';
+              if (fileName.includes('nor') || fileName.includes('notice of race')) return 'nor';
+              if (fileName.includes('course') || fileName.includes('diagram')) return 'course_diagram';
+              if (fileName.includes('amend')) return 'amendment';
+              if (fileName.includes('notam')) return 'notam';
+              return 'other';
+            })();
+
+            return {
+              id: doc.id,
+              name: doc.filename || 'Untitled document',
+              type,
+              size: typeof doc.file_size === 'number' ? doc.file_size : 0,
+              uploadedAt: doc.created_at || new Date().toISOString(),
+              aiProcessed: Boolean(doc.processing_status === 'completed'),
+              hasExtractedCourse: Boolean(doc.course_data),
+            };
+          });
+
+          setDocuments(mappedDocuments);
+        } catch (docError: any) {
+          logger.warn('[RaceDetailScrollable] Failed to load race documents', { message: docError?.message });
+          setDocumentsError(docError?.message || 'Failed to load race documents.');
+          setDocuments([]);
+        } finally {
+          setDocumentsLoading(false);
+        }
+      } else {
+        setDocuments([]);
+        setDocumentsLoading(false);
+        setDocumentsError(null);
+      }
     } catch (error) {
       console.error('[RaceDetailScrollable] Error:', error);
+      setLoadErrorMessage(error instanceof Error ? error.message : 'Failed to load race.');
+      setRace(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, user?.id]);
 
   const handleManageCrewNavigation = useCallback(() => {
     if (!race) {
@@ -484,7 +562,7 @@ export default function RaceDetailScrollable() {
     return weather?.wind
       ? (weather.wind.speedMin + weather.wind.speedMax) / 2
       : undefined;
-  }, [weather?.wind?.speedMin, weather?.wind?.speedMax]);
+  }, [weather?.wind]);
 
   // Extract additional weather data from raw forecast if available
   const rawForecast = useMemo(() => weather?.raw?.forecast?.[0], [weather?.raw?.forecast]);
@@ -516,9 +594,7 @@ export default function RaceDetailScrollable() {
       race?.metadata?.class_name
     ),
   }), [
-    race?.class_id,
-    race?.boat_class?.name,
-    race?.metadata?.class_name,
+    race,
     averageWindSpeed,
     weather?.wind?.speedMin,
     weather?.wind?.speedMax,
@@ -531,6 +607,7 @@ export default function RaceDetailScrollable() {
   const {
     recommendation: tuningRecommendation,
     loading: tuningLoading,
+    error: tuningError,
     refresh: refreshTuning,
   } = useRaceTuningRecommendation(tuningOptions);
 
@@ -551,6 +628,15 @@ export default function RaceDetailScrollable() {
     setShowMenu(!showMenu);
   };
 
+  const handleOpenDocuments = useCallback((documentId?: string) => {
+    if (!race?.id) return;
+    const params: Record<string, string> = { id: race.id };
+    if (documentId) {
+      params.documentId = documentId;
+    }
+    router.push({ pathname: '/race/documents/[id]', params } as any);
+  }, [race?.id]);
+
   // Helper: Determine race status for phase-based rendering
   const getRaceStatus = (): 'upcoming' | 'in_progress' | 'completed' => {
     if (!race?.start_time) return 'upcoming';
@@ -568,13 +654,13 @@ export default function RaceDetailScrollable() {
     return 'in_progress';
   };
 
-  const handleRacingAreaChange = (polygon: Array<{lat: number, lng: number}>) => {
+  const handleRacingAreaChange = (polygon: {lat: number, lng: number}[]) => {
     setDrawingPolygon(polygon);
   };
 
   const handleSaveRacingArea = async () => {
     if (drawingPolygon.length < 3) {
-      alert('Please draw at least 3 points for the racing area');
+      showAlert('Racing Area', 'Please draw at least 3 points for the racing area.');
       return;
     }
 
@@ -584,11 +670,22 @@ export default function RaceDetailScrollable() {
 
       // First, check if race_event exists
       let raceEventId = null;
-      const { data: raceEvent } = await supabase
+      let raceEvent: { id: string } | null = null;
+      const primaryRaceEvent = await supabase
         .from('race_events')
         .select('id')
         .eq('regatta_id', id)
         .maybeSingle();
+      raceEvent = primaryRaceEvent.data;
+
+      if (isMissingIdColumn(primaryRaceEvent.error, 'race_events', 'regatta_id')) {
+        const fallbackRaceEvent = await supabase
+          .from('race_events')
+          .select('id')
+          .eq('race_id', id)
+          .maybeSingle();
+        raceEvent = fallbackRaceEvent.data;
+      }
 
       if (!raceEvent) {
         // Create a race_event if it doesn't exist
@@ -735,7 +832,7 @@ export default function RaceDetailScrollable() {
           description: mark.description,
         }));
 
-        const { data: insertedMarks, error: marksError } = await supabase
+        const { error: marksError } = await supabase
           .from('race_marks')
           .insert(marksToInsert)
           .select();
@@ -757,23 +854,26 @@ export default function RaceDetailScrollable() {
 
         setMarks(convertedMarks);
 
-        alert(`Racing area saved with ${generatedMarks.length} auto-generated course marks!`);
+        showAlert('Racing Area Saved', `Saved with ${generatedMarks.length} auto-generated course marks.`);
       } catch (markError: any) {
         console.error('[RaceDetailScrollable] Error generating marks:', markError);
-        alert(`Racing area saved, but failed to generate marks: ${markError.message}`);
+        showAlert(
+          'Racing Area Saved',
+          `Saved, but failed to generate marks: ${markError.message || 'Unknown error.'}`
+        );
       }
 
       setDrawingPolygon([]);
       // Note: No need to reload race data - marks are already set in state above
     } catch (error: any) {
       console.error('[RaceDetailScrollable] Error saving racing area:', error);
-      alert(`Failed to save racing area: ${error.message || 'Unknown error'}`);
+      showAlert('Save Failed', `Failed to save racing area: ${error.message || 'Unknown error'}`);
     }
   };
 
   const handleFullscreen = () => {
     logger.debug('[RaceDetailScrollable] Fullscreen map');
-    // TODO: Implement fullscreen map modal
+    setShowFullscreenMap(true);
   };
 
   const handleCourseSelected = (courseMarks: Mark[]) => {
@@ -804,7 +904,10 @@ export default function RaceDetailScrollable() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Race not found</Text>
+          <Text style={styles.errorText}>{loadErrorMessage || 'Race not found.'}</Text>
+          <TouchableOpacity onPress={loadRaceData} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
@@ -1066,6 +1169,7 @@ export default function RaceDetailScrollable() {
             boatClassName={race.boat_class?.name}
             recommendation={tuningRecommendation}
             loading={tuningLoading}
+            errorMessage={tuningError?.message ?? null}
             onRefresh={race.class_id ? refreshTuning : undefined}
           />
 
@@ -1176,22 +1280,22 @@ export default function RaceDetailScrollable() {
             }}
           />
 
-          {/* Documents card disabled - requires authentication
           <RaceDocumentsCard
             raceId={race.id}
-            onUpload={() => {
-              logger.debug('[RaceDetail] Upload document tapped');
-              // TODO: Navigate to document upload
-            }}
+            documents={documents}
+            isLoading={documentsLoading}
+            error={documentsError}
+            onRetry={loadRaceData}
+            onUpload={handleOpenDocuments}
             onDocumentPress={(doc) => {
               logger.debug('[RaceDetail] Document pressed:', doc);
-              // TODO: Open document viewer
+              handleOpenDocuments(doc.id);
             }}
             onShareWithFleet={(docId) => {
               logger.debug('[RaceDetail] Share document with fleet:', docId);
+              handleOpenDocuments(docId);
             }}
           />
-          */}
 
           {/* GPS Tracks - Post-Race Analysis */}
           <TracksCard
@@ -1260,6 +1364,38 @@ export default function RaceDetailScrollable() {
         </View>
       )}
 
+      {/* Fullscreen map modal */}
+      <Modal
+        visible={showFullscreenMap}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setShowFullscreenMap(false)}
+      >
+        <SafeAreaView style={styles.fullscreenContainer}>
+          <View style={styles.fullscreenHeader}>
+            <TouchableOpacity
+              onPress={() => setShowFullscreenMap(false)}
+              style={styles.fullscreenCloseButton}
+            >
+              <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
+            </TouchableOpacity>
+            <Text style={styles.fullscreenTitle}>Race Map</Text>
+            <View style={styles.fullscreenCloseButton} />
+          </View>
+          {race ? (
+            <RaceDetailMapHero
+              race={race}
+              racingAreaPolygon={drawingPolygon.length > 0 ? drawingPolygon : undefined}
+              marks={marks}
+              compact={false}
+              onFullscreen={() => setShowFullscreenMap(false)}
+              onRacingAreaChange={handleRacingAreaChange}
+              onSaveRacingArea={handleSaveRacingArea}
+            />
+          ) : null}
+        </SafeAreaView>
+      </Modal>
+
       {/* Track Import Modal */}
       <TrackImportModal
         visible={showTrackImport}
@@ -1275,16 +1411,6 @@ export default function RaceDetailScrollable() {
 }
 
 const logger = createLogger('[id]');
-type ShadowProps = Pick<ViewStyle, 'shadowColor' | 'shadowOffset' | 'shadowOpacity' | 'shadowRadius' | 'elevation'>;
-
-const getShadowStyle = (webShadow: string, nativeShadow: ShadowProps): ViewStyle => {
-  if (Platform.OS === 'web') {
-    // On web, use boxShadow only - completely omit shadow* props to avoid deprecation warnings
-    return { boxShadow: webShadow } as ViewStyle;
-  }
-  // On native platforms, use shadow props
-  return nativeShadow;
-};
 
 const styles = StyleSheet.create({
   container: {
@@ -1343,6 +1469,30 @@ const styles = StyleSheet.create({
   bottomSpacer: {
     height: 32,
   },
+  fullscreenContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  fullscreenHeader: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  fullscreenCloseButton: {
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullscreenTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
@@ -1370,6 +1520,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  retryButton: {
+    backgroundColor: '#0EA5E9',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  retryButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

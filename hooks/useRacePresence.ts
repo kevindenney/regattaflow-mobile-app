@@ -51,6 +51,15 @@ export function useRacePresence({
   const [presentUsers, setPresentUsers] = useState<PresenceUser[]>([]);
   const [isTracking, setIsTracking] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const isMountedRef = useRef(true);
+  const effectRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      effectRunIdRef.current += 1;
+    };
+  }, []);
 
   // Sync presence state from Supabase channel
   const syncPresence = useCallback((state: Record<string, any[]>) => {
@@ -70,9 +79,14 @@ export function useRacePresence({
   }, []);
 
   useEffect(() => {
+    const runId = ++effectRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === effectRunIdRef.current;
+
     if (!regattaId || !userId || !enabled) {
-      setPresentUsers([]);
-      setIsTracking(false);
+      if (canCommit()) {
+        setPresentUsers([]);
+        setIsTracking(false);
+      }
       return;
     }
 
@@ -85,13 +99,16 @@ export function useRacePresence({
 
     channel
       .on('presence', { event: 'sync' }, () => {
+        if (!canCommit()) return;
         const state = channel.presenceState();
         syncPresence(state);
       })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
+        if (!canCommit()) return;
         logger.info('Presence join:', newPresences?.length);
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+        if (!canCommit()) return;
         logger.info('Presence leave:', leftPresences?.length);
       })
       .subscribe(async (status) => {
@@ -101,20 +118,22 @@ export function useRacePresence({
             displayName: displayName || 'Unknown',
             joinedAt: new Date().toISOString(),
           });
-          setIsTracking(true);
+          if (canCommit()) {
+            setIsTracking(true);
+          }
         }
       });
 
     // Handle app state changes — untrack when backgrounded
     const handleAppState = (state: AppStateStatus) => {
-      if (state === 'active' && channelRef.current) {
-        channelRef.current.track({
+      if (state === 'active') {
+        void channel.track({
           userId,
           displayName: displayName || 'Unknown',
           joinedAt: new Date().toISOString(),
         });
-      } else if (state === 'background' && channelRef.current) {
-        channelRef.current.untrack();
+      } else if (state === 'background') {
+        void channel.untrack();
       }
     };
 
@@ -122,12 +141,17 @@ export function useRacePresence({
 
     return () => {
       subscription.remove();
+      if (effectRunIdRef.current === runId) {
+        effectRunIdRef.current += 1;
+      }
       if (channelRef.current) {
-        channelRef.current.untrack();
-        supabase.removeChannel(channelRef.current);
+        void channelRef.current.untrack();
+        void supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
-      setIsTracking(false);
+      if (canCommit()) {
+        setIsTracking(false);
+      }
     };
   }, [regattaId, userId, displayName, enabled, syncPresence]);
 

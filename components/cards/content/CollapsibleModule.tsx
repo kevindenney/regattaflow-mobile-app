@@ -32,12 +32,16 @@ interface CollapsibleModuleProps {
   onHide?: () => void;
   /** Module content */
   children: React.ReactNode;
+  /** Optional icon name override (from interest config moduleInfo) */
+  iconName?: string;
 }
 
 /**
- * Get icon for a module
+ * Get icon for a module.
+ * Falls back to CONTENT_MODULE_INFO for sailing modules.
  */
-function getModuleIcon(moduleId: ContentModuleId): string {
+function getModuleIcon(moduleId: ContentModuleId, iconOverride?: string): string {
+  if (iconOverride) return iconOverride;
   return CONTENT_MODULE_INFO[moduleId]?.icon || 'document-outline';
 }
 
@@ -51,6 +55,7 @@ export function CollapsibleModule({
   onToggle,
   onHide,
   children,
+  iconName,
 }: CollapsibleModuleProps) {
   return (
     <View style={styles.container}>

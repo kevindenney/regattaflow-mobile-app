@@ -25,6 +25,7 @@ import { tuningGuideExtractionService } from '@/services/TuningGuideExtractionSe
 export default function TuningGuidesScreen() {
   const { user } = useAuth();
   const sailorData = useSailorDashboardData();
+  const insets = useSafeAreaInsets();
 
   const [personalGuides, setPersonalGuides] = useState<TuningGuide[]>([]);
   const [fleetGuides, setFleetGuides] = useState<FleetTuningGuide[]>([]);
@@ -277,7 +278,6 @@ export default function TuningGuidesScreen() {
   }
 
   const guides = filteredGuides();
-  const insets = useSafeAreaInsets();
 
   return (
     <View style={styles.container}>

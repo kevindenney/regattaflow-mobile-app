@@ -123,7 +123,20 @@ export default function ParticipantEventScreen() {
     }
 
     if (!canRegister?.canRegister) {
-      Alert.alert('Cannot Register', canRegister?.reason || 'Registration is not available');
+      const reason = canRegister?.reason || 'Registration is not available';
+      const actions: { text: string; style?: 'cancel' | 'default' | 'destructive'; onPress?: () => void }[] = [
+        { text: 'Close', style: 'cancel' },
+      ];
+      if (event?.contact_email) {
+        actions.push({
+          text: 'Contact Organizer',
+          onPress: () =>
+            Linking.openURL(
+              `mailto:${event.contact_email}?subject=${encodeURIComponent(`Event registration question: ${event.title}`)}`
+            ),
+        });
+      }
+      Alert.alert('Cannot Register', reason, actions);
       return;
     }
 
@@ -497,7 +510,6 @@ export default function ParticipantEventScreen() {
               !canRegister?.canRegister && styles.ctaButtonDisabled,
             ]}
             onPress={handleRegister}
-            disabled={!canRegister?.canRegister && !!user}
           >
             <Ionicons name="boat" size={20} color="#FFFFFF" />
             <ThemedText style={styles.ctaButtonText}>
@@ -870,4 +882,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-

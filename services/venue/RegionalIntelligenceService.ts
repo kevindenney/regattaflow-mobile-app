@@ -10,6 +10,9 @@ import type {
   WeatherSourceConfig,
   CulturalBriefing,
 } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RegionalIntelligenceService');
 
 // Extended type for complete regional intelligence
 export interface RegionalIntelligenceData {
@@ -1268,7 +1271,7 @@ export class RegionalIntelligenceService {
       try {
         callback(data);
       } catch (error) {
-        console.error('🧠 Error in intelligence update callback:', error);
+        logger.error('🧠 Error in intelligence update callback:', error);
       }
     });
   }

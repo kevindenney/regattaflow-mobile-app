@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { RegattaFlowLogo } from '@/components/RegattaFlowLogo';
+import { BetterAtLogo } from '@/components/BetterAtLogo';
 
 export function SimpleLandingNav() {
   const { width } = useWindowDimensions();
@@ -65,22 +65,27 @@ export function SimpleLandingNav() {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }
             }}
-            accessibilityLabel="RegattaFlow home"
+            accessibilityLabel="BetterAt home"
           >
-            <RegattaFlowLogo size={32} variant="white" />
-            <Text style={styles.logoText}>RegattaFlow</Text>
+            <BetterAtLogo size={32} variant="white" />
+            <Text style={styles.logoText}>BetterAt</Text>
           </TouchableOpacity>
 
           {/* Desktop links */}
           {isDesktop ? (
             <View style={styles.desktopLinks}>
               <TouchableOpacity
-                onPress={() => scrollToSection('how-it-works')}
+                onPress={() => router.push('/sail-racing' as any)}
               >
-                <Text style={styles.navLink}>How It Works</Text>
+                <Text style={styles.navLink}>Sail Racing</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => scrollToSection('pricing-section')}
+                onPress={() => router.push('/nursing' as any)}
+              >
+                <Text style={styles.navLink}>Nursing</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.push('/pricing')}
               >
                 <Text style={styles.navLink}>Pricing</Text>
               </TouchableOpacity>
@@ -128,8 +133,8 @@ export function SimpleLandingNav() {
               {/* Close button */}
               <View style={styles.mobileMenuHeader}>
                 <View style={styles.logoRow}>
-                  <RegattaFlowLogo size={28} variant="white" />
-                  <Text style={styles.logoText}>RegattaFlow</Text>
+                  <BetterAtLogo size={28} variant="white" />
+                  <Text style={styles.logoText}>BetterAt</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setMobileMenuOpen(false)}
@@ -143,24 +148,75 @@ export function SimpleLandingNav() {
               <View style={styles.mobileMenuItems}>
                 <TouchableOpacity
                   style={styles.mobileMenuItem}
-                  onPress={() => scrollToSection('how-it-works')}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/sail-racing' as any);
+                  }}
                 >
                   <Ionicons
-                    name="information-circle-outline"
+                    name="boat-outline"
                     size={22}
-                    color="#93C5FD"
+                    color="#003DA5"
                   />
-                  <Text style={styles.mobileMenuText}>How It Works</Text>
+                  <Text style={styles.mobileMenuText}>Sail Racing</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.mobileMenuItem}
-                  onPress={() => scrollToSection('pricing-section')}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/nursing' as any);
+                  }}
+                >
+                  <Ionicons
+                    name="medkit-outline"
+                    size={22}
+                    color="#0097A7"
+                  />
+                  <Text style={styles.mobileMenuText}>Nursing</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.mobileMenuItem}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/drawing' as any);
+                  }}
+                >
+                  <Ionicons
+                    name="color-palette-outline"
+                    size={22}
+                    color="#E64A19"
+                  />
+                  <Text style={styles.mobileMenuText}>Drawing</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.mobileMenuItem}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/fitness' as any);
+                  }}
+                >
+                  <Ionicons
+                    name="barbell-outline"
+                    size={22}
+                    color="#2E7D32"
+                  />
+                  <Text style={styles.mobileMenuText}>Fitness</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.mobileMenuItem}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/pricing');
+                  }}
                 >
                   <Ionicons
                     name="pricetag-outline"
                     size={22}
-                    color="#93C5FD"
+                    color="rgba(255, 255, 255, 0.7)"
                   />
                   <Text style={styles.mobileMenuText}>Pricing</Text>
                 </TouchableOpacity>
@@ -177,7 +233,7 @@ export function SimpleLandingNav() {
                   <Ionicons
                     name="log-in-outline"
                     size={22}
-                    color="#93C5FD"
+                    color="rgba(255, 255, 255, 0.7)"
                   />
                   <Text style={styles.mobileMenuText}>Log In</Text>
                 </TouchableOpacity>
@@ -214,7 +270,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   navScrolled: {
-    backgroundColor: 'rgba(10, 36, 99, 0.95)',
+    backgroundColor: 'rgba(26, 26, 26, 0.95)',
   },
   navWeb: {
     position: 'fixed',
@@ -277,7 +333,7 @@ const styles = StyleSheet.create({
   getStartedText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0A2463',
+    color: '#1A1A1A',
   },
 
   hamburger: {
@@ -290,7 +346,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   mobileMenu: {
-    backgroundColor: '#0A2463',
+    backgroundColor: '#1A1A1A',
     paddingTop: Platform.OS === 'ios' ? 60 : 20,
     paddingHorizontal: 24,
     paddingBottom: 40,
@@ -333,6 +389,6 @@ const styles = StyleSheet.create({
   mobileGetStartedText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A2463',
+    color: '#1A1A1A',
   },
 });

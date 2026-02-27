@@ -12,6 +12,9 @@
  */
 
 import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CurrentVisualizationService');
 
 /**
  * Current data point
@@ -111,7 +114,7 @@ export class CurrentVisualizationService {
       const data = await response.json();
 
       if (!data.current_predictions?.cp) {
-        console.warn(`No current predictions for station ${stationId}`);
+        logger.warn(`No current predictions for station ${stationId}`);
         return [];
       }
 
@@ -122,7 +125,7 @@ export class CurrentVisualizationService {
         type: this.determineCurrentType(parseFloat(c.Speed), parseFloat(c.Direction))
       }));
     } catch (error) {
-      console.error('Failed to fetch current predictions:', error);
+      logger.error('Failed to fetch current predictions:', error);
       return [];
     }
   }
@@ -312,7 +315,7 @@ export class CurrentVisualizationService {
       return this.getNOAACurrentStations(venue.coordinates, radiusKm);
     }
 
-    console.warn(`Current data not available for ${venue.country}`);
+    logger.warn(`Current data not available for ${venue.country}`);
     return [];
   }
 

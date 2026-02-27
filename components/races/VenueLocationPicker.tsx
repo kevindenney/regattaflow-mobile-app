@@ -19,6 +19,7 @@ import {
   StyleSheet,
   Platform,
   Alert,
+  Linking,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,7 +49,7 @@ const VENUE_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
 // Web-only map component using Leaflet
 function VenueMapWeb({
   coordinates,
-  value,
+  value: _value,
   onMapClick,
   showMap,
 }: {
@@ -165,7 +166,7 @@ function VenueMapWeb({
         markerRef.current = null;
       }
     };
-  }, [showMap, coordinates?.lat, coordinates?.lng]);
+  }, [showMap, coordinates, onMapClick]);
 
   if (Platform.OS !== 'web') return null;
 
@@ -566,6 +567,19 @@ export function VenueLocationPicker({
     setShowMap(false);
   };
 
+  const handleOpenExternalMap = async () => {
+    const query = coordinates
+      ? `${coordinates.lat},${coordinates.lng}`
+      : value || 'sailing venue';
+    const url = `https://maps.google.com/?q=${encodeURIComponent(query)}`;
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      logger.error('[VenueLocationPicker] Failed to open maps app:', error);
+      Alert.alert('Map Unavailable', 'Could not open a maps app on this device.');
+    }
+  };
+
 
   const coordinatesDisplay = coordinates
     ? `${coordinates.lat.toFixed(4)}°N, ${coordinates.lng.toFixed(4)}°E`
@@ -689,11 +703,14 @@ export function VenueLocationPicker({
               <View style={styles.mapPlaceholder}>
                 <MapPin size={48} color="#3B82F6" />
                 <Text style={styles.mapPlaceholderText}>
-                  Map view coming soon
+                  Map preview unavailable on this device
                 </Text>
                 <Text style={styles.mapPlaceholderSubtext}>
-                  For now, select a venue from the suggestions
+                  Open your maps app to refine location, then keep this venue selected.
                 </Text>
+                <Pressable style={styles.externalMapButton} onPress={handleOpenExternalMap}>
+                  <Text style={styles.externalMapButtonText}>Open in Maps</Text>
+                </Pressable>
               </View>
             )}
           </View>
@@ -893,6 +910,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     marginTop: 8,
+    marginBottom: 14,
+  },
+  externalMapButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  externalMapButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   modalFooter: {
     padding: 16,

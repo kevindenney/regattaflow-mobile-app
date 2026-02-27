@@ -8,11 +8,10 @@
  * table once the migration is applied.
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   getPracticeChecklistItems,
-  getPracticeItemsGroupedByCategory,
   getCategoriesForPracticePhase,
   PracticeChecklistItem,
   PracticeChecklistCompletion,
@@ -20,24 +19,13 @@ import {
 import type { PracticePhase } from '@/types/practice';
 import type { ChecklistCategory } from '@/types/checklists';
 import { createLogger } from '@/lib/utils/logger';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const logger = createLogger('usePracticeChecklist');
 
 // =============================================================================
 // ASYNC STORAGE HELPERS
 // =============================================================================
-
-/**
- * Get AsyncStorage (cross-platform)
- */
-function getAsyncStorage() {
-  try {
-    return require('@react-native-async-storage/async-storage').default;
-  } catch {
-    // Fallback for environments where AsyncStorage isn't available
-    return null;
-  }
-}
 
 // =============================================================================
 // TYPES
@@ -120,7 +108,7 @@ const getStorageKey = (sessionId: string) =>
  */
 export function usePracticeChecklist({
   sessionId,
-  sessionName,
+  sessionName: _sessionName,
   phase,
   includeCarryover = true,
   carryoverItems = [],
@@ -133,23 +121,47 @@ export function usePracticeChecklist({
   >({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const saveRunIdRef = useRef(0);
+  const activeSessionIdRef = useRef(sessionId);
+
+  useEffect(() => {
+    activeSessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      saveRunIdRef.current += 1;
+    };
+  }, []);
 
   // Load completions from AsyncStorage on mount
   useEffect(() => {
+    const runId = ++loadRunIdRef.current;
+    const targetSessionId = sessionId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeSessionIdRef.current === targetSessionId;
+
     if (!sessionId) {
+      if (!canCommit()) return;
+      setCompletions({});
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
+    setCompletions({});
+    setIsLoading(true);
+
     const loadCompletions = async () => {
       try {
-        const AsyncStorage = getAsyncStorage();
-        if (!AsyncStorage) {
-          setIsLoading(false);
-          return;
-        }
-
         const stored = await AsyncStorage.getItem(getStorageKey(sessionId));
+        if (!canCommit()) return;
         if (stored) {
           const parsed = JSON.parse(stored);
           setCompletions(parsed.completions || {});
@@ -157,6 +169,7 @@ export function usePracticeChecklist({
       } catch (error) {
         logger.warn('Failed to load practice checklist from storage', { error });
       } finally {
+        if (!canCommit()) return;
         setIsLoading(false);
       }
     };
@@ -166,17 +179,19 @@ export function usePracticeChecklist({
 
   // Save completions to AsyncStorage when they change
   useEffect(() => {
+    const runId = ++saveRunIdRef.current;
+    const targetSessionId = sessionId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === saveRunIdRef.current &&
+      activeSessionIdRef.current === targetSessionId;
+
     if (isLoading || !sessionId) return;
 
     const saveCompletions = async () => {
       try {
+        if (!canCommit()) return;
         setIsSaving(true);
-        const AsyncStorage = getAsyncStorage();
-        if (!AsyncStorage) {
-          setIsSaving(false);
-          return;
-        }
-
         await AsyncStorage.setItem(
           getStorageKey(sessionId),
           JSON.stringify({ completions })
@@ -184,6 +199,7 @@ export function usePracticeChecklist({
       } catch (error) {
         logger.warn('Failed to save practice checklist to storage', { error });
       } finally {
+        if (!canCommit()) return;
         setIsSaving(false);
       }
     };

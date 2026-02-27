@@ -10,7 +10,7 @@
  * - Priority-based default states
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -21,8 +21,11 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { ChevronDown, ChevronRight } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CollapsibleSection');
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -91,28 +94,7 @@ export function CollapsibleSection({
   const rotateAnim = useRef(new Animated.Value(getDefaultExpanded() ? 1 : 0)).current;
   const supportsNativeDriver = Platform.OS !== 'web';
 
-  // Load persisted state on mount
-  useEffect(() => {
-    loadPersistedState();
-  }, []);
-
-  // Update rotation animation when expanded state changes
-  useEffect(() => {
-    Animated.timing(rotateAnim, {
-      toValue: isExpanded ? 1 : 0,
-      duration: 200,
-      useNativeDriver: supportsNativeDriver,
-    }).start();
-  }, [isExpanded, supportsNativeDriver]);
-
-  // Handle forceExpanded prop
-  useEffect(() => {
-    if (forceExpanded !== undefined && forceExpanded !== isExpanded) {
-      setIsExpanded(forceExpanded);
-    }
-  }, [forceExpanded]);
-
-  const loadPersistedState = async () => {
+  const loadPersistedState = useCallback(async () => {
     try {
       const stored = await AsyncStorage.getItem(`${STORAGE_KEY_PREFIX}${id}`);
       if (stored !== null) {
@@ -123,17 +105,38 @@ export function CollapsibleSection({
         }
       }
     } catch (error) {
-      console.warn(`Failed to load section state for ${id}:`, error);
+      logger.warn(`Failed to load section state for ${id}`, error);
     } finally {
       setIsInitialized(true);
     }
-  };
+  }, [id, forceExpanded]);
+
+  // Load persisted state on mount
+  useEffect(() => {
+    void loadPersistedState();
+  }, [loadPersistedState]);
+
+  // Update rotation animation when expanded state changes
+  useEffect(() => {
+    Animated.timing(rotateAnim, {
+      toValue: isExpanded ? 1 : 0,
+      duration: 200,
+      useNativeDriver: supportsNativeDriver,
+    }).start();
+  }, [isExpanded, supportsNativeDriver, rotateAnim]);
+
+  // Handle forceExpanded prop
+  useEffect(() => {
+    if (forceExpanded !== undefined && forceExpanded !== isExpanded) {
+      setIsExpanded(forceExpanded);
+    }
+  }, [forceExpanded, isExpanded]);
 
   const persistState = async (expanded: boolean) => {
     try {
       await AsyncStorage.setItem(`${STORAGE_KEY_PREFIX}${id}`, JSON.stringify(expanded));
     } catch (error) {
-      console.warn(`Failed to persist section state for ${id}:`, error);
+      logger.warn(`Failed to persist section state for ${id}`, error);
     }
   };
 

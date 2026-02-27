@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface VenueRace {
   id: string;
@@ -37,6 +38,8 @@ export interface UseVenueRacesResult {
   hasMore: boolean;
   loadMore: () => Promise<void>;
 }
+
+const logger = createLogger('useVenueRaces');
 
 /**
  * Calculate days until a date
@@ -98,13 +101,40 @@ export function useVenueRaces(
   const [offset, setOffset] = useState(0);
   
   const lastVenueIdRef = useRef<string>('');
+  const isMountedRef = useRef(true);
+  const requestIdRef = useRef(0);
+  const activeVenueIdRef = useRef<string | undefined>(venueId);
+
+  useEffect(() => {
+    activeVenueIdRef.current = venueId;
+  }, [venueId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      requestIdRef.current += 1;
+    };
+  }, []);
 
   const loadRaces = useCallback(async (reset: boolean = false) => {
-    if (!venueId) {
-      setRaces([]);
+    const targetVenueId = venueId;
+    const requestId = ++requestIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current &&
+      requestId === requestIdRef.current &&
+      activeVenueIdRef.current === targetVenueId;
+
+    if (!targetVenueId) {
+      if (canCommit()) {
+        setRaces([]);
+        setHasMore(false);
+        setError(null);
+        setIsLoading(false);
+        setOffset(0);
+      }
       return;
     }
-    
+
     setIsLoading(true);
     setError(null);
     
@@ -130,12 +160,9 @@ export function useVenueRaces(
           si_url,
           results_url,
           venue_id,
-          regatta_id,
-          clubs (
-            club_name
-          )
+          regatta_id
         `, { count: 'exact' })
-        .eq('venue_id', venueId)
+        .eq('venue_id', targetVenueId)
         .gte('end_date', today)
         .order('start_date', { ascending: true })
         .range(currentOffset, currentOffset + limit - 1);
@@ -144,7 +171,37 @@ export function useVenueRaces(
         throw new Error(queryError.message);
       }
 
-      const transformedRaces: VenueRace[] = (data || []).map((row: any) => {
+      const rows = data || [];
+      const clubIds = Array.from(new Set(rows.map((row: any) => row?.club_id).filter(Boolean))) as string[];
+      const clubNames = new Map<string, string>();
+
+      if (clubIds.length > 0) {
+        const { data: clubsData } = await supabase
+          .from('clubs')
+          .select('id, name, club_name')
+          .in('id', clubIds);
+
+        (clubsData || []).forEach((club: any) => {
+          if (club?.id) {
+            clubNames.set(club.id, club.name || club.club_name || 'Unknown Club');
+          }
+        });
+
+        const missingIds = clubIds.filter((id) => !clubNames.has(id));
+        if (missingIds.length > 0) {
+          const { data: yachtClubsData } = await supabase
+            .from('yacht_clubs')
+            .select('id, name')
+            .in('id', missingIds);
+          (yachtClubsData || []).forEach((club: any) => {
+            if (club?.id && club?.name) {
+              clubNames.set(club.id, club.name);
+            }
+          });
+        }
+      }
+
+      const transformedRaces: VenueRace[] = rows.map((row: any) => {
         const days = daysUntil(row.start_date);
         return {
           id: row.id,
@@ -159,7 +216,7 @@ export function useVenueRaces(
           siUrl: row.si_url,
           resultsUrl: row.results_url,
           clubId: row.club_id,
-          clubName: row.clubs?.club_name,
+          clubName: row.club_id ? clubNames.get(row.club_id) : undefined,
           venueId: row.venue_id,
           regattaId: row.regatta_id,
           daysUntilStart: days,
@@ -170,28 +227,43 @@ export function useVenueRaces(
       });
 
       if (reset) {
+        if (!canCommit()) return;
         setRaces(transformedRaces);
         setOffset(limit);
       } else {
+        if (!canCommit()) return;
         setRaces(prev => [...prev, ...transformedRaces]);
         setOffset(currentOffset + limit);
       }
-      
+
+      if (!canCommit()) return;
       setHasMore((count || 0) > currentOffset + limit);
     } catch (err: any) {
-      console.warn('[useVenueRaces] Error loading races:', err);
+      logger.warn('Error loading races', err);
+      if (!canCommit()) return;
       setError(err.message || 'Failed to load races');
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [venueId, limit, offset]);
 
   // Auto-load when venueId changes
   useEffect(() => {
+    if (!venueId) {
+      lastVenueIdRef.current = '';
+      setRaces([]);
+      setHasMore(false);
+      setError(null);
+      setIsLoading(false);
+      setOffset(0);
+      return;
+    }
+
     if (venueId && venueId !== lastVenueIdRef.current) {
       lastVenueIdRef.current = venueId;
       setOffset(0);
-      loadRaces(true);
+      void loadRaces(true);
     }
   }, [venueId, loadRaces]);
 
@@ -217,4 +289,3 @@ export function useVenueRaces(
 }
 
 export default useVenueRaces;
-

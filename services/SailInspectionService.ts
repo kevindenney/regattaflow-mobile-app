@@ -6,7 +6,10 @@
  */
 
 import { supabase } from '@/services/supabase';
-import { SailAnalysisAIService, SailZone, SailType, ZoneAnalysisResult, OverallSailAssessment, QuickInspectionResult, SailContext, DetectedIssue } from './ai/SailAnalysisAIService';
+import { SailAnalysisAIService, SailZone, ZoneAnalysisResult, SailContext, DetectedIssue } from './ai/SailAnalysisAIService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SailInspectionService');
 
 // =============================================================================
 // Types
@@ -199,7 +202,7 @@ export class SailInspectionService {
       });
 
     if (photoError) {
-      console.error('Failed to save photo record:', photoError);
+      logger.error('Failed to save photo record:', photoError);
     }
 
     // Update inspection with zone result
@@ -352,7 +355,7 @@ export class SailInspectionService {
       .limit(limit);
 
     if (error) {
-      console.error('Failed to get inspection history:', error);
+      logger.error('Failed to get inspection history:', error);
       return [];
     }
 
@@ -420,7 +423,7 @@ export class SailInspectionService {
       });
 
     if (error) {
-      console.error('Failed to get sails needing inspection:', error);
+      logger.error('Failed to get sails needing inspection:', error);
       return [];
     }
 
@@ -441,7 +444,7 @@ export class SailInspectionService {
    */
   static async getPreRaceInspectionAlerts(
     boatId: string,
-    raceId?: string
+    _raceId?: string
   ): Promise<SailAlert[]> {
     // Get sails that need attention within 7 days
     return this.getSailsNeedingInspection(boatId, 7);
@@ -517,7 +520,7 @@ export class SailInspectionService {
       .eq('boat_id', boatId);
 
     if (error) {
-      console.error('Failed to get sail inventory:', error);
+      logger.error('Failed to get sail inventory:', error);
       return [];
     }
 
@@ -567,7 +570,7 @@ export class SailInspectionService {
         });
 
       if (error) {
-        console.error('Upload error:', error);
+        logger.error('Upload error:', error);
         // Return local URI as fallback
         return photoUri;
       }
@@ -579,7 +582,7 @@ export class SailInspectionService {
 
       return urlData.publicUrl;
     } catch (error) {
-      console.error('Photo upload failed:', error);
+      logger.error('Photo upload failed:', error);
       return photoUri; // Return local URI as fallback
     }
   }

@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { X, Flashlight, FlashlightOff, Camera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import { IOS_COLORS, IOS_TYPOGRAPHY } from '@/lib/design-tokens-ios';
 
 // Dynamic import for expo-camera to handle cases where native module isn't available
@@ -92,6 +93,7 @@ function extractSailorId(data: string): string | null {
 // Fallback component when camera module isn't available
 function CameraUnavailable({ onClose }: { onClose: () => void }) {
   const insets = useSafeAreaInsets();
+  const rebuildCommand = 'npx expo run:ios';
 
   return (
     <View style={[styles.container, styles.unavailableContainer]}>
@@ -116,8 +118,27 @@ function CameraUnavailable({ onClose }: { onClose: () => void }) {
           The camera module requires a native app rebuild. Please rebuild the app with:
         </Text>
         <View style={styles.codeBlock}>
-          <Text style={styles.codeText}>npx expo run:ios</Text>
+          <Text style={styles.codeText}>{rebuildCommand}</Text>
         </View>
+        <Pressable
+          style={styles.secondaryActionButton}
+          onPress={async () => {
+            await Clipboard.setStringAsync(rebuildCommand);
+            Alert.alert('Copied', 'Rebuild command copied to clipboard.');
+          }}
+        >
+          <Text style={styles.secondaryActionText}>Copy Rebuild Command</Text>
+        </Pressable>
+        <Pressable
+          style={styles.secondaryActionButton}
+          onPress={() =>
+            Linking.openURL(
+              'mailto:support@regattaflow.com?subject=QR%20Scanner%20Camera%20Setup&body=Please%20help%20me%20enable%20the%20camera%20module%20for%20QR%20scanning.'
+            )
+          }
+        >
+          <Text style={styles.secondaryActionText}>Contact Support</Text>
+        </Pressable>
         <Pressable style={styles.closeButtonLarge} onPress={onClose}>
           <Text style={styles.closeButtonLargeText}>Close</Text>
         </Pressable>
@@ -137,6 +158,7 @@ export default function ScanQRScreen() {
   const cameraAvailable = CameraView !== null && useCameraPermissions !== null;
 
   // Use camera permissions hook only if available
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const permissionHook = cameraAvailable ? useCameraPermissions() : [null, () => {}];
   const [permission, requestPermission] = permissionHook;
 
@@ -478,6 +500,22 @@ const styles = StyleSheet.create({
   closeButtonLargeText: {
     ...IOS_TYPOGRAPHY.headline,
     color: '#FFFFFF',
+  },
+  secondaryActionButton: {
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    backgroundColor: IOS_COLORS.systemGray6,
+    minWidth: 220,
+  },
+  secondaryActionText: {
+    ...IOS_TYPOGRAPHY.footnote,
+    color: IOS_COLORS.systemBlue,
+    textAlign: 'center',
+    fontWeight: '600',
   },
   headerTitleDark: {
     ...IOS_TYPOGRAPHY.headline,

@@ -15,6 +15,8 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 
+type RaceResultsIdColumn = 'regatta_id' | 'race_id';
+
 interface RaceResult {
   id: string;
   entry_id: string;
@@ -46,6 +48,10 @@ export default function RaceLeaderboard({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<'elapsed' | 'corrected'>('elapsed');
+  const [idColumn, setIdColumn] = useState<RaceResultsIdColumn>('regatta_id');
+
+  const isMissingColumn = (error: any, column: RaceResultsIdColumn) =>
+    error?.code === '42703' && typeof error?.message === 'string' && error.message.includes(column);
 
   useEffect(() => {
     loadResults();
@@ -59,7 +65,6 @@ export default function RaceLeaderboard({
           event: '*',
           schema: 'public',
           table: 'race_results',
-          filter: `regatta_id=eq.${regattaId}`,
         },
         () => {
           loadResults();
@@ -74,7 +79,7 @@ export default function RaceLeaderboard({
 
   const loadResults = async () => {
     try {
-      const { data, error } = await supabase
+      const buildQuery = (column: RaceResultsIdColumn) => supabase
         .from('race_results')
         .select(`
           *,
@@ -84,13 +89,24 @@ export default function RaceLeaderboard({
             entry_class
           )
         `)
-        .eq('regatta_id', regattaId)
+        .eq(column, regattaId)
         .eq('race_number', raceNumber)
         .eq('status', 'finished')
         .order(
           sortBy === 'corrected' ? 'corrected_position' : 'finish_position',
           { ascending: true, nullsLast: true }
         );
+
+      let { data, error } = await buildQuery(idColumn);
+      if (error && idColumn === 'regatta_id' && isMissingColumn(error, 'regatta_id')) {
+        const fallbackColumn: RaceResultsIdColumn = 'race_id';
+        const fallback = await buildQuery(fallbackColumn);
+        data = fallback.data;
+        error = fallback.error;
+        if (!error) {
+          setIdColumn(fallbackColumn);
+        }
+      }
 
       if (error) throw error;
 

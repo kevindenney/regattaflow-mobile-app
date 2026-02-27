@@ -9,15 +9,17 @@
 import { NudgeList } from '@/components/checklist-tools/NudgeBanner';
 import { QuickAddSailButton, QuickAddSailForm } from '@/components/checklist-tools/QuickAddSailForm';
 import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
+import { useAuth } from '@/providers/AuthProvider';
 import { formatSailDisplayName, getSailConditionColor, useSailInventory } from '@/hooks/useSailInventory';
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
 import { SAIL_HINTS, WIND_RANGES, getWindRange, sailRecommendationService } from '@/services/ai/SailRecommendationService';
+import { sailorRacePreparationService } from '@/services/SailorRacePreparationService';
 import type {
   SailRecommendation,
   SailSelectionIntention,
   SailSelectionRecommendations,
 } from '@/types/morningChecklist';
-import type { SailInventoryItem } from '@/types/raceIntentions';
+import type { SailInventoryItem, SailSelectionIntention as PersistedSailSelectionIntention } from '@/types/raceIntentions';
 import { useRouter } from 'expo-router';
 import {
   AlertTriangle,
@@ -34,6 +36,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -83,8 +86,20 @@ interface SailSelectionWizardProps extends ChecklistToolProps {
 
 type SailCategory = 'mainsail' | 'headsail' | 'downwind';
 
+function normalizeRecommendationError(error: unknown): string {
+  const message = (error as { message?: string })?.message?.toLowerCase?.() || '';
+  if (!message) return 'Unable to load AI sail guidance right now. Showing manual selection.';
+  if (message.includes('network') || message.includes('fetch')) {
+    return 'Network issue while loading AI sail guidance. Showing manual selection.';
+  }
+  if (message.includes('permission') || message.includes('not authorized') || message.includes('row-level security')) {
+    return 'AI sail guidance is unavailable for this account. Showing manual selection.';
+  }
+  return 'AI sail guidance is temporarily unavailable. Showing manual selection.';
+}
+
 export function SailSelectionWizard({
-  item,
+  item: _item,
   regattaId,
   boatId,
   onComplete,
@@ -97,6 +112,7 @@ export function SailSelectionWizard({
   existingIntention,
 }: SailSelectionWizardProps) {
   const router = useRouter();
+  const { user } = useAuth();
 
   // Fetch sail inventory
   const {
@@ -140,6 +156,7 @@ export function SailSelectionWizard({
   // State
   const [recommendations, setRecommendations] = useState<SailSelectionRecommendations | null>(null);
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
   const [selectedSails, setSelectedSails] = useState<{
     mainsailId?: string;
     headsailId?: string;
@@ -156,8 +173,9 @@ export function SailSelectionWizard({
 
     const fetchRecommendations = async () => {
       setIsLoadingRecommendations(true);
+      setRecommendationError(null);
       try {
-        const recs = await sailRecommendationService.getRecommendations({
+        const recs = await sailRecommendationService.getAIEnhancedRecommendations({
           sails: sailInventory,
           wind: wind || {},
           waveState: waveState || undefined,
@@ -175,6 +193,18 @@ export function SailSelectionWizard({
         }
       } catch (error) {
         console.error('Failed to get sail recommendations:', error);
+        setRecommendationError(normalizeRecommendationError(error));
+        try {
+          const fallback = await sailRecommendationService.getRecommendations({
+            sails: sailInventory,
+            wind: wind || {},
+            waveState: waveState || undefined,
+            boatClass: boatClass || undefined,
+          });
+          setRecommendations(fallback);
+        } catch {
+          setRecommendations(null);
+        }
       } finally {
         setIsLoadingRecommendations(false);
       }
@@ -217,26 +247,55 @@ export function SailSelectionWizard({
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
+      if (!user?.id) {
+        Alert.alert('Sign in required', 'Please sign in to save sail selection.');
+        return;
+      }
+      if (!regattaId) {
+        Alert.alert('Race unavailable', 'Unable to save sail selection without a race id.');
+        return;
+      }
+
+      const selectedMainsail = getSailById(selectedSails.mainsailId);
+      const selectedHeadsail = getSailById(selectedSails.headsailId);
+      const selectedDownwind = getSailById(selectedSails.downwindId);
+      const windAverage =
+        wind?.average ||
+        ((wind?.speedMin ?? 0) && (wind?.speedMax ?? 0)
+          ? ((wind?.speedMin || 0) + (wind?.speedMax || 0)) / 2
+          : wind?.speedMin || wind?.speedMax || 0);
+      const windRange = windAverage > 0 ? getWindRange(windAverage) : undefined;
+
       // Build intention data
-      const intention: SailSelectionIntention = {
-        recommendations: recommendations || {
-          combinationReasoning: '',
-          conditionsSummary,
-          generatedAt: new Date().toISOString(),
-        },
-        selectedSails,
-        userNotes,
-        savedAt: new Date().toISOString(),
+      const intention: PersistedSailSelectionIntention = {
+        mainsail: selectedMainsail?.id,
+        mainsailName: selectedMainsail ? formatSailDisplayName(selectedMainsail) : undefined,
+        jib: selectedHeadsail?.id,
+        jibName: selectedHeadsail ? formatSailDisplayName(selectedHeadsail) : undefined,
+        spinnaker: selectedDownwind?.id,
+        spinnakerName: selectedDownwind ? formatSailDisplayName(selectedDownwind) : undefined,
+        notes: userNotes || recommendations?.combinationReasoning || undefined,
+        windRangeContext: windRange ? SAIL_HINTS.mainsail[windRange] : undefined,
       };
 
-      // TODO: Persist intention to sailor_race_preparation via service
+      const saved = await sailorRacePreparationService.updateSailSelection(
+        regattaId,
+        user.id,
+        intention
+      );
+      if (!saved) {
+        Alert.alert('Unable to save', 'Sail selection could not be saved right now. Please try again.');
+        return;
+      }
+
       onComplete();
     } catch (error) {
       console.error('Failed to save sail selection intention:', error);
+      Alert.alert('Save failed', 'Failed to save sail selection. Please try again.');
     } finally {
       setIsSaving(false);
     }
-  }, [recommendations, conditionsSummary, selectedSails, userNotes, onComplete]);
+  }, [user?.id, regattaId, getSailById, selectedSails, wind?.average, wind?.speedMin, wind?.speedMax, userNotes, recommendations?.combinationReasoning, onComplete]);
 
   // Handle learn more - navigate to Equipment & Rigging module in Race Preparation Mastery course
   const handleLearnMore = useCallback(() => {
@@ -538,6 +597,13 @@ export function SailSelectionWizard({
               <Text style={styles.reasoningText}>
                 {recommendations.combinationReasoning}
               </Text>
+            </View>
+          )}
+
+          {recommendationError && (
+            <View style={styles.recommendationWarningCard}>
+              <AlertTriangle size={16} color={IOS_COLORS.orange} />
+              <Text style={styles.recommendationWarningText}>{recommendationError}</Text>
             </View>
           )}
 
@@ -952,6 +1018,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: IOS_COLORS.secondaryLabel,
     lineHeight: 18,
+  },
+  recommendationWarningCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 12,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    marginBottom: 12,
+  },
+  recommendationWarningText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#9A3412',
+    lineHeight: 17,
   },
   // Bottom Action
   bottomAction: {

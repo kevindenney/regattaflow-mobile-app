@@ -648,7 +648,76 @@ class FleetService {
       throw error;
     }
 
-    // TODO: If notify_followers is true, create notifications for fleet followers
+    if (!params.notifyFollowers) {
+      return;
+    }
+
+    try {
+      const { data: fleet } = await supabase
+        .from('fleets')
+        .select('name')
+        .eq('id', params.fleetId)
+        .maybeSingle();
+
+      const { data: followers, error: followersError } = await supabase
+        .from('fleet_followers')
+        .select('follower_id, notify_on_documents')
+        .eq('fleet_id', params.fleetId)
+        .eq('notify_on_documents', true);
+
+      if (followersError) {
+        logger.warn('Unable to load fleet followers for notifications', followersError);
+        return;
+      }
+
+      const recipientIds = Array.from(
+        new Set(
+          (followers || [])
+            .map((row: any) => row?.follower_id)
+            .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+        )
+      ).filter((id) => id !== params.sharedBy);
+
+      if (recipientIds.length === 0) {
+        return;
+      }
+
+      const message = `A new fleet document was shared${fleet?.name ? ` in ${fleet.name}` : ''}.`;
+      const payload = recipientIds.map((userId) => ({
+        user_id: userId,
+        fleet_id: params.fleetId,
+        notification_type: 'tuning_guide_posted' as const,
+        actor_id: params.sharedBy,
+        message,
+        is_read: false,
+      }));
+
+      const { error: notificationError } = await supabase
+        .from('fleet_notifications')
+        .insert(payload);
+
+      if (notificationError) {
+        logger.warn('Failed to notify fleet followers about shared document', {
+          fleetId: params.fleetId,
+          documentId: params.documentId,
+          error: notificationError,
+        });
+        return;
+      }
+
+      logger.debug('Notified fleet followers for shared document', {
+        fleetId: params.fleetId,
+        documentId: params.documentId,
+        recipients: recipientIds.length,
+      });
+    } catch (notifyError) {
+      // Best effort: document sharing should not fail if notification write fails.
+      logger.warn('Unexpected error while notifying fleet followers', {
+        fleetId: params.fleetId,
+        documentId: params.documentId,
+        error: notifyError,
+      });
+    }
   }
 }
 

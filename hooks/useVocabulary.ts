@@ -1,0 +1,64 @@
+/**
+ * useVocabulary Hook
+ *
+ * Provides the interest-aware vocabulary map and a convenience `vocab`
+ * function to any component. Vocabulary is fetched once per interest via
+ * React Query and cached for the lifetime of the session.
+ *
+ * Falls back to the sail-racing defaults while loading or when no
+ * interest has been selected yet.
+ *
+ * @example
+ * const { vocab, loading } = useVocabulary();
+ * <Text>{vocab('Learning Event')}</Text>  // "Race" | "Clinical Shift" | …
+ */
+
+import { useCallback, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useInterest } from '@/providers/InterestProvider';
+import {
+  fetchVocabulary,
+  getFallbackVocabulary,
+  vocab as vocabLookup,
+  type VocabularyMap,
+} from '@/lib/vocabulary';
+
+// Re-export the type so consumers can import from one place
+export type { VocabularyMap } from '@/lib/vocabulary';
+
+export function useVocabulary() {
+  const { currentInterest } = useInterest();
+
+  const {
+    data: fetchedVocabulary,
+    isLoading,
+  } = useQuery<VocabularyMap>({
+    queryKey: ['vocabulary', currentInterest?.id],
+    queryFn: () => fetchVocabulary(currentInterest!.id, currentInterest!.slug),
+    enabled: currentInterest !== null,
+    staleTime: 1000 * 60 * 30, // 30 minutes – vocabulary rarely changes
+  });
+
+  // Stable fallback: memoize so we don't recreate on every render
+  const fallback = useMemo(
+    () => getFallbackVocabulary(currentInterest?.slug),
+    [currentInterest?.slug],
+  );
+
+  // Use interest-specific fallback while loading or when Supabase has no data
+  const vocabulary: VocabularyMap = fetchedVocabulary ?? fallback;
+
+  const vocab = useCallback(
+    (term: string): string => vocabLookup(term, vocabulary),
+    [vocabulary],
+  );
+
+  return useMemo(
+    () => ({
+      vocabulary,
+      vocab,
+      loading: isLoading,
+    }),
+    [vocabulary, vocab, isLoading],
+  );
+}

@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useCoachOnboardingState');
 
 export interface CoachWelcomeData {
   fullName: string;
@@ -76,10 +79,27 @@ export interface CoachOnboardingState {
   error: string | null;
 }
 
-const STORAGE_KEY = '@coach_onboarding_state';
+const STORAGE_KEY_PREFIX = '@coach_onboarding_state';
+const getStorageKey = (userId?: string) =>
+  userId ? `${STORAGE_KEY_PREFIX}_${userId}` : STORAGE_KEY_PREFIX;
+
+const createEmptyCoachOnboardingState = (): CoachOnboardingState => ({
+  welcome: null,
+  expertise: null,
+  availability: null,
+  pricing: null,
+  paymentSetup: null,
+  currentStep: 0,
+  loading: false,
+  saving: false,
+  error: null,
+});
 
 export const useCoachOnboardingState = () => {
   const { user } = useAuth();
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | undefined>(user?.id);
   const [state, setState] = useState<CoachOnboardingState>({
     welcome: null,
     expertise: null,
@@ -92,113 +112,134 @@ export const useCoachOnboardingState = () => {
     error: null,
   });
 
-  // Load state from AsyncStorage and Supabase on mount
   useEffect(() => {
-    loadState();
-  }, [user]);
+    activeUserIdRef.current = user?.id;
+  }, [user?.id]);
 
-  // Save state to AsyncStorage whenever it changes
   useEffect(() => {
-    if (!state.loading) {
-      saveStateToStorage();
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
+
+  const loadState = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const targetUserId = user?.id;
+    const canCommit = () =>
+      isMountedRef.current &&
+      loadRunIdRef.current === runId &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId) {
+      if (canCommit()) {
+        setState({ ...createEmptyCoachOnboardingState(), loading: false });
+      }
+      return;
     }
-  }, [state.welcome, state.expertise, state.availability, state.pricing, state.paymentSetup, state.currentStep]);
 
-  const loadState = async () => {
     try {
+      const storageKey = getStorageKey(targetUserId);
       // First, try to load from AsyncStorage (for partial progress)
-      const storedState = await AsyncStorage.getItem(STORAGE_KEY);
-      if (storedState) {
+      const storedState = await AsyncStorage.getItem(storageKey);
+      if (storedState && canCommit()) {
         const parsed = JSON.parse(storedState);
         setState(prev => ({ ...prev, ...parsed, loading: false }));
       }
 
       // Then, try to load from Supabase (if already saved)
-      if (user) {
-        const { data: profile } = await supabase
-          .from('coach_profiles')
-          .select('*, coach_availability(*), coach_services(*)')
-          .eq('user_id', user.id)
-          .single();
+      const { data: profile } = await supabase
+        .from('coach_profiles')
+        .select('*, coach_availability(*), coach_services(*)')
+        .eq('user_id', targetUserId)
+        .single();
 
-        if (profile) {
-          // Convert experience_years back to display string
-          const yearsToExperience = (years: number | null): string => {
-            if (!years) return '';
-            if (years <= 2) return '1-2 years';
-            if (years <= 5) return '3-5 years';
-            if (years <= 10) return '6-10 years';
-            if (years <= 15) return '10-15 years';
-            return '15+ years';
-          };
+      if (profile && canCommit()) {
+        // Convert experience_years back to display string
+        const yearsToExperience = (years: number | null): string => {
+          if (!years) return '';
+          if (years <= 2) return '1-2 years';
+          if (years <= 5) return '3-5 years';
+          if (years <= 10) return '6-10 years';
+          if (years <= 15) return '10-15 years';
+          return '15+ years';
+        };
 
-          // Merge Supabase data with current state
-          setState(prev => ({
-            ...prev,
-            welcome: {
-              fullName: profile.display_name || '',
-              professionalTitle: profile.professional_title || '',
-              experience: yearsToExperience(profile.experience_years),
-              organization: profile.organization || undefined,
-              phone: profile.phone || undefined,
-              languages: profile.languages || [],
+        // Merge Supabase data with current state
+        setState(prev => ({
+          ...prev,
+          welcome: {
+            fullName: profile.display_name || '',
+            professionalTitle: profile.professional_title || '',
+            experience: yearsToExperience(profile.experience_years),
+            organization: profile.organization || undefined,
+            phone: profile.phone || undefined,
+            languages: profile.languages || [],
+          },
+          expertise: {
+            areas: profile.specializations || [],
+            specialties: [], // Stored together in specializations field
+          },
+          availability: profile.coach_availability ? {
+            monday: profile.coach_availability.monday,
+            tuesday: profile.coach_availability.tuesday,
+            wednesday: profile.coach_availability.wednesday,
+            thursday: profile.coach_availability.thursday,
+            friday: profile.coach_availability.friday,
+            saturday: profile.coach_availability.saturday,
+            sunday: profile.coach_availability.sunday,
+            morning: profile.coach_availability.morning,
+            afternoon: profile.coach_availability.afternoon,
+            evening: profile.coach_availability.evening,
+            locationPreference: profile.coach_availability.location_preference,
+            remoteCoaching: profile.coach_availability.remote_coaching,
+            maxDistance: profile.coach_availability.max_distance_km,
+            individualSessions: profile.coach_availability.individual_sessions,
+            smallGroup: profile.coach_availability.small_group,
+            largeGroup: profile.coach_availability.large_group,
+          } : null,
+          pricing: profile.coach_services ? {
+            pricingModel: profile.coach_services.pricing_model,
+            currency: profile.coach_services.currency,
+            hourlyRate: profile.coach_services.hourly_rate?.toString(),
+            sessionDuration: profile.coach_services.session_duration_minutes?.toString(),
+            packagePrices: {
+              single: profile.coach_services.single_session_price?.toString() || '',
+              five: profile.coach_services.five_session_price?.toString() || '',
+              ten: profile.coach_services.ten_session_price?.toString() || '',
             },
-            expertise: {
-              areas: profile.specializations || [],
-              specialties: [], // Stored together in specializations field
-            },
-            availability: profile.coach_availability ? {
-              monday: profile.coach_availability.monday,
-              tuesday: profile.coach_availability.tuesday,
-              wednesday: profile.coach_availability.wednesday,
-              thursday: profile.coach_availability.thursday,
-              friday: profile.coach_availability.friday,
-              saturday: profile.coach_availability.saturday,
-              sunday: profile.coach_availability.sunday,
-              morning: profile.coach_availability.morning,
-              afternoon: profile.coach_availability.afternoon,
-              evening: profile.coach_availability.evening,
-              locationPreference: profile.coach_availability.location_preference,
-              remoteCoaching: profile.coach_availability.remote_coaching,
-              maxDistance: profile.coach_availability.max_distance_km,
-              individualSessions: profile.coach_availability.individual_sessions,
-              smallGroup: profile.coach_availability.small_group,
-              largeGroup: profile.coach_availability.large_group,
-            } : null,
-            pricing: profile.coach_services ? {
-              pricingModel: profile.coach_services.pricing_model,
-              currency: profile.coach_services.currency,
-              hourlyRate: profile.coach_services.hourly_rate?.toString(),
-              sessionDuration: profile.coach_services.session_duration_minutes?.toString(),
-              packagePrices: {
-                single: profile.coach_services.single_session_price?.toString() || '',
-                five: profile.coach_services.five_session_price?.toString() || '',
-                ten: profile.coach_services.ten_session_price?.toString() || '',
-              },
-            } : null,
-            paymentSetup: {
-              stripeOnboardingStarted: !!profile.stripe_account_id,
-              stripeOnboardingComplete: profile.stripe_onboarding_complete || false,
-              stripeOnboardingSkipped: profile.stripe_onboarding_skipped || false,
-              stripeAccountId: profile.stripe_account_id || undefined,
-              chargesEnabled: profile.stripe_charges_enabled || false,
-              payoutsEnabled: profile.stripe_payouts_enabled || false,
-            },
-            loading: false,
-          }));
-        }
+          } : null,
+          paymentSetup: {
+            stripeOnboardingStarted: !!profile.stripe_account_id,
+            stripeOnboardingComplete: profile.stripe_onboarding_complete || false,
+            stripeOnboardingSkipped: profile.stripe_onboarding_skipped || false,
+            stripeAccountId: profile.stripe_account_id || undefined,
+            chargesEnabled: profile.stripe_charges_enabled || false,
+            payoutsEnabled: profile.stripe_payouts_enabled || false,
+          },
+          loading: false,
+        }));
       }
 
-      setState(prev => ({ ...prev, loading: false }));
+      if (canCommit()) {
+        setState(prev => ({ ...prev, loading: false }));
+      }
     } catch (error) {
-      console.error('Error loading coach onboarding state:', error);
-      setState(prev => ({ ...prev, loading: false, error: 'Failed to load onboarding state' }));
+      logger.error('Error loading coach onboarding state', error);
+      if (canCommit()) {
+        setState(prev => ({ ...prev, loading: false, error: 'Failed to load onboarding state' }));
+      }
     }
-  };
+  }, [user?.id]);
 
-  const saveStateToStorage = async () => {
+  const saveStateToStorage = useCallback(async () => {
+    const targetUserId = activeUserIdRef.current;
+    if (!targetUserId) return;
+    const storageKey = getStorageKey(targetUserId);
+
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+      await AsyncStorage.setItem(storageKey, JSON.stringify({
         welcome: state.welcome,
         expertise: state.expertise,
         availability: state.availability,
@@ -207,9 +248,21 @@ export const useCoachOnboardingState = () => {
         currentStep: state.currentStep,
       }));
     } catch (error) {
-      console.error('Error saving state to storage:', error);
+      logger.error('Error saving state to storage', error);
     }
-  };
+  }, [state.welcome, state.expertise, state.availability, state.pricing, state.paymentSetup, state.currentStep]);
+
+  // Load state from AsyncStorage and Supabase on mount
+  useEffect(() => {
+    void loadState();
+  }, [loadState]);
+
+  // Save state to AsyncStorage whenever it changes
+  useEffect(() => {
+    if (!state.loading) {
+      void saveStateToStorage();
+    }
+  }, [state.loading, saveStateToStorage]);
 
   const updateWelcome = useCallback((data: CoachWelcomeData) => {
     setState(prev => ({ ...prev, welcome: data, currentStep: Math.max(prev.currentStep, 1) }));
@@ -243,12 +296,17 @@ export const useCoachOnboardingState = () => {
   }, []);
 
   const saveToSupabase = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (!user) {
+    const targetUserId = activeUserIdRef.current;
+    if (!targetUserId) {
       return { success: false, error: 'User not authenticated' };
     }
 
     if (!state.welcome || !state.expertise || !state.availability || !state.pricing) {
       return { success: false, error: 'Incomplete onboarding data' };
+    }
+
+    if (!isMountedRef.current) {
+      return { success: false, error: 'Component unmounted' };
     }
 
     setState(prev => ({ ...prev, saving: true, error: null }));
@@ -271,7 +329,7 @@ export const useCoachOnboardingState = () => {
       const { data: profile, error: profileError } = await supabase
         .from('coach_profiles')
         .upsert({
-          user_id: user.id,
+          user_id: targetUserId,
           display_name: state.welcome.fullName,
           professional_title: state.welcome.professionalTitle,
           experience_years: experienceToYears(state.welcome.experience),
@@ -335,24 +393,29 @@ export const useCoachOnboardingState = () => {
       const { error: userError } = await supabase
         .from('users')
         .update({ onboarding_completed: true })
-        .eq('id', user.id);
+        .eq('id', targetUserId);
 
       if (userError) throw userError;
 
       // Clear AsyncStorage after successful save
-      await AsyncStorage.removeItem(STORAGE_KEY);
+      await AsyncStorage.removeItem(getStorageKey(targetUserId));
 
-      setState(prev => ({ ...prev, saving: false }));
+      if (isMountedRef.current && activeUserIdRef.current === targetUserId) {
+        setState(prev => ({ ...prev, saving: false }));
+      }
       return { success: true };
     } catch (error: any) {
-      console.error('Error saving coach onboarding data:', error);
-      setState(prev => ({ ...prev, saving: false, error: error.message || 'Failed to save onboarding data' }));
+      logger.error('Error saving coach onboarding data', error);
+      if (isMountedRef.current && activeUserIdRef.current === targetUserId) {
+        setState(prev => ({ ...prev, saving: false, error: error.message || 'Failed to save onboarding data' }));
+      }
       return { success: false, error: error.message || 'Failed to save onboarding data' };
     }
-  }, [user, state.welcome, state.expertise, state.availability, state.pricing]);
+  }, [state.welcome, state.expertise, state.availability, state.pricing]);
 
   const publishProfile = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (!user) {
+    const targetUserId = activeUserIdRef.current;
+    if (!targetUserId) {
       return { success: false, error: 'User not authenticated' };
     }
 
@@ -367,7 +430,7 @@ export const useCoachOnboardingState = () => {
       const { error: publishError } = await supabase
         .from('coach_profiles')
         .update({ profile_published: true })
-        .eq('user_id', user.id);
+        .eq('user_id', targetUserId);
 
       if (publishError) throw publishError;
 
@@ -376,7 +439,7 @@ export const useCoachOnboardingState = () => {
       const { error: capabilityError } = await supabase
         .from('user_capabilities')
         .upsert({
-          user_id: user.id,
+          user_id: targetUserId,
           capability_type: 'coaching',
           is_active: true,
           activated_at: new Date().toISOString(),
@@ -386,30 +449,22 @@ export const useCoachOnboardingState = () => {
         });
 
       if (capabilityError) {
-        console.warn('Failed to add coaching capability:', capabilityError);
+        logger.warn('Failed to add coaching capability', capabilityError);
         // Don't fail the whole operation for capability error
       }
 
       return { success: true };
     } catch (error: any) {
-      console.error('Error publishing coach profile:', error);
+      logger.error('Error publishing coach profile', error);
       return { success: false, error: error.message || 'Failed to publish profile' };
     }
-  }, [user, saveToSupabase]);
+  }, [saveToSupabase]);
 
   const clearState = useCallback(async () => {
-    await AsyncStorage.removeItem(STORAGE_KEY);
-    setState({
-      welcome: null,
-      expertise: null,
-      availability: null,
-      pricing: null,
-      paymentSetup: null,
-      currentStep: 0,
-      loading: false,
-      saving: false,
-      error: null,
-    });
+    await AsyncStorage.removeItem(getStorageKey(activeUserIdRef.current));
+    if (isMountedRef.current) {
+      setState(createEmptyCoachOnboardingState());
+    }
   }, []);
 
   return {

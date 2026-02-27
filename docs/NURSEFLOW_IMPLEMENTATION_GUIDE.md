@@ -79,7 +79,7 @@ EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
 # AI Services
-EXPO_PUBLIC_ANTHROPIC_API_KEY=your-anthropic-key
+ANTHROPIC_API_KEY=your-anthropic-key
 
 # Optional: Google Maps (for clinical site mapping)
 EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your-google-maps-key

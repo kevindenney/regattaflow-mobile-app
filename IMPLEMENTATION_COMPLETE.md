@@ -302,7 +302,7 @@ const interval = setInterval(() => {
 - [ ] Test with no internet (offline fallback)
 
 ### Production Testing
-- [ ] Verify `EXPO_PUBLIC_ANTHROPIC_API_KEY` in production env
+- [ ] Verify `ANTHROPIC_API_KEY` in production env
 - [ ] Test on iOS device
 - [ ] Test on Android device
 - [ ] Test on web (if applicable)
@@ -316,7 +316,7 @@ const interval = setInterval(() => {
 ### Issue: "AI Coach shows 'Unable to get advice'"
 **Solution:** Check API key in `.env`:
 ```bash
-EXPO_PUBLIC_ANTHROPIC_API_KEY=sk-ant-api03-...
+ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
 
 ### Issue: "Phase not detecting correctly"

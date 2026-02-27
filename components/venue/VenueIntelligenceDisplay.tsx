@@ -673,6 +673,7 @@ function RacingIntelligence() {
           .from('club_race_calendar')
           .select(`
             id,
+            club_id,
             event_name,
             event_type,
             start_date,
@@ -682,8 +683,7 @@ function RacingIntelligence() {
             classes_included,
             nor_url,
             si_url,
-            results_url,
-            yacht_clubs(name)
+            results_url
           `)
           .eq('venue_id', currentVenue.id)
           .gte('start_date', today)
@@ -691,19 +691,40 @@ function RacingIntelligence() {
           .limit(10);
 
         if (raceError) throw raceError;
-        setRaces(raceData || []);
+        const raceRows = raceData || [];
+        const raceClubIds = Array.from(
+          new Set(
+            raceRows
+              .map((row: any) => row?.club_id)
+              .filter((clubId: any): clubId is string => typeof clubId === 'string' && clubId.length > 0)
+          )
+        );
+        let raceClubNameById = new Map<string, string>();
+        if (raceClubIds.length > 0) {
+          const { data: raceClubs } = await supabase
+            .from('yacht_clubs')
+            .select('id, name')
+            .in('id', raceClubIds);
+          raceClubNameById = new Map((raceClubs || []).map((club: any) => [club.id, club.name]));
+        }
+        setRaces(
+          raceRows.map((row: any) => ({
+            ...row,
+            yacht_clubs: row.club_id ? { name: raceClubNameById.get(row.club_id) || 'Unknown Club' } : null,
+          }))
+        );
 
         // Fetch documents
         const { data: docData, error: docError } = await supabase
           .from('club_ai_documents')
           .select(`
             id,
+            club_id,
             title,
             document_type,
             url,
             parsed,
-            publish_date,
-            yacht_clubs(name)
+            publish_date
           `)
           .order('publish_date', { ascending: false })
           .limit(10);
@@ -711,7 +732,28 @@ function RacingIntelligence() {
         if (docError && !isMissingTableError(docError)) {
           throw docError;
         }
-        setDocuments(docData || []);
+        const documentRows = docData || [];
+        const documentClubIds = Array.from(
+          new Set(
+            documentRows
+              .map((row: any) => row?.club_id)
+              .filter((clubId: any): clubId is string => typeof clubId === 'string' && clubId.length > 0)
+          )
+        );
+        let documentClubNameById = new Map<string, string>();
+        if (documentClubIds.length > 0) {
+          const { data: documentClubs } = await supabase
+            .from('yacht_clubs')
+            .select('id, name')
+            .in('id', documentClubIds);
+          documentClubNameById = new Map((documentClubs || []).map((club: any) => [club.id, club.name]));
+        }
+        setDocuments(
+          documentRows.map((row: any) => ({
+            ...row,
+            yacht_clubs: row.club_id ? { name: documentClubNameById.get(row.club_id) || 'Unknown Club' } : null,
+          }))
+        );
       } catch (error) {
         // Silent error - data will be empty
       } finally {
@@ -828,6 +870,7 @@ function ServicesIntelligence() {
           .from('club_services')
           .select(`
             id,
+            club_id,
             service_type,
             business_name,
             contact_name,
@@ -837,14 +880,34 @@ function ServicesIntelligence() {
             specialties,
             classes_supported,
             price_level,
-            preferred_by_club,
-            yacht_clubs(name)
+            preferred_by_club
           `)
           .eq('venue_id', currentVenue.id)
           .order('preferred_by_club', { ascending: false });
 
         if (error) throw error;
-        setServices(data || []);
+        const serviceRows = data || [];
+        const serviceClubIds = Array.from(
+          new Set(
+            serviceRows
+              .map((row: any) => row?.club_id)
+              .filter((clubId: any): clubId is string => typeof clubId === 'string' && clubId.length > 0)
+          )
+        );
+        let serviceClubNameById = new Map<string, string>();
+        if (serviceClubIds.length > 0) {
+          const { data: serviceClubs } = await supabase
+            .from('yacht_clubs')
+            .select('id, name')
+            .in('id', serviceClubIds);
+          serviceClubNameById = new Map((serviceClubs || []).map((club: any) => [club.id, club.name]));
+        }
+        setServices(
+          serviceRows.map((row: any) => ({
+            ...row,
+            yacht_clubs: row.club_id ? { name: serviceClubNameById.get(row.club_id) || 'Unknown Club' } : null,
+          }))
+        );
       } catch (error) {
         // Silent error - services will be empty
       } finally {

@@ -55,7 +55,7 @@ interface ProfileUpdates {
 export default function AccountModalContent() {
   const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities, coachProfile } = useAuth();
   // User settings (tips, learning links, units)
-  const { settings: userSettings, updateSetting } = useUserSettings();
+  const { settings: userSettings } = useUserSettings();
   const insets = useSafeAreaInsets();
 
   // State
@@ -86,12 +86,34 @@ export default function AccountModalContent() {
   // Check if user has a team subscription
   const isTeamSubscriber = userProfile?.subscription_tier === 'team';
 
+  const loadBoats = useCallback(async () => {
+    if (!user?.id) return;
+    setBoatsLoading(true);
+    try {
+      const userBoats = await sailorBoatService.listBoatsForSailor(user.id);
+      setBoats(
+        userBoats.map((b) => ({
+          id: b.id,
+          boat_name: b.name || b.boat_class?.name || 'Unnamed Boat',
+          boat_class_name: b.boat_class?.name || 'Unknown Class',
+          sail_number: b.sail_number,
+          status: (b.status as UserBoat['status']) || 'active',
+          is_primary: b.is_primary,
+        }))
+      );
+    } catch (error) {
+      console.error('[Account] Failed to load boats:', error);
+    } finally {
+      setBoatsLoading(false);
+    }
+  }, [user?.id]);
+
   // Load boats on mount
   useEffect(() => {
     if (user?.id) {
-      loadBoats();
+      void loadBoats();
     }
-  }, [user?.id]);
+  }, [user?.id, loadBoats]);
 
   // Load follower sharing setting on mount
   useEffect(() => {
@@ -114,28 +136,6 @@ export default function AccountModalContent() {
     }
 
     loadFollowerSharingSetting();
-  }, [user?.id]);
-
-  const loadBoats = useCallback(async () => {
-    if (!user?.id) return;
-    setBoatsLoading(true);
-    try {
-      const userBoats = await sailorBoatService.listBoatsForSailor(user.id);
-      setBoats(
-        userBoats.map((b) => ({
-          id: b.id,
-          boat_name: b.name || b.boat_class?.name || 'Unnamed Boat',
-          boat_class_name: b.boat_class?.name || 'Unknown Class',
-          sail_number: b.sail_number,
-          status: (b.status as UserBoat['status']) || 'active',
-          is_primary: b.is_primary,
-        }))
-      );
-    } catch (error) {
-      console.error('[Account] Failed to load boats:', error);
-    } finally {
-      setBoatsLoading(false);
-    }
   }, [user?.id]);
 
   // Inline profile save handler
@@ -561,14 +561,14 @@ export default function AccountModalContent() {
             leadingIcon="document-text-outline"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
             trailingAccessory="chevron"
-            onPress={() => showAlert('Coming Soon', 'Privacy policy link will be available soon!')}
+            onPress={() => router.push('/privacy')}
           />
           <IOSListItem
             title="Terms of Service"
             leadingIcon="shield-checkmark-outline"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
             trailingAccessory="chevron"
-            onPress={() => showAlert('Coming Soon', 'Terms of service link will be available soon!')}
+            onPress={() => router.push('/terms')}
           />
         </IOSListSection>
 

@@ -203,6 +203,38 @@ export interface DashboardData {
 // ============================================================================
 
 class CompetitorService {
+  private async getClubMetaByIds(clubIds: string[]): Promise<Map<string, { name: string; logo_url?: string }>> {
+    const map = new Map<string, { name: string; logo_url?: string }>();
+    if (clubIds.length === 0) return map;
+
+    const { data: clubsData } = await supabase
+      .from('clubs')
+      .select('id, name, club_name, logo_url')
+      .in('id', clubIds);
+
+    (clubsData || []).forEach((club: any) => {
+      if (club?.id) {
+        map.set(club.id, { name: club.name || club.club_name || 'Club', logo_url: club.logo_url || undefined });
+      }
+    });
+
+    const missingIds = clubIds.filter((id) => !map.has(id));
+    if (missingIds.length > 0) {
+      const { data: yachtClubsData } = await supabase
+        .from('yacht_clubs')
+        .select('id, name, logo_url')
+        .in('id', missingIds);
+
+      (yachtClubsData || []).forEach((club: any) => {
+        if (club?.id) {
+          map.set(club.id, { name: club.name || 'Club', logo_url: club.logo_url || undefined });
+        }
+      });
+    }
+
+    return map;
+  }
+
   // ==========================================================================
   // Boat Management
   // ==========================================================================
@@ -454,11 +486,7 @@ class CompetitorService {
     
     let query = supabase
       .from('competitor_alerts')
-      .select(`
-        *,
-        regatta:regattas(name),
-        club:clubs(name, logo_url)
-      `)
+      .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     
@@ -479,7 +507,33 @@ class CompetitorService {
     
     const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+    const rows = data || [];
+
+    const regattaIds = Array.from(
+      new Set(rows.map((row: any) => row?.regatta_id).filter(Boolean))
+    ) as string[];
+    const clubIds = Array.from(
+      new Set(rows.map((row: any) => row?.club_id).filter(Boolean))
+    ) as string[];
+
+    const regattaNameById = new Map<string, string>();
+    if (regattaIds.length > 0) {
+      const { data: regattasData } = await supabase
+        .from('regattas')
+        .select('id, name')
+        .in('id', regattaIds);
+      (regattasData || []).forEach((regatta: any) => {
+        if (regatta?.id && regatta?.name) regattaNameById.set(regatta.id, regatta.name);
+      });
+    }
+
+    const clubById = await this.getClubMetaByIds(clubIds);
+
+    return rows.map((row: any) => ({
+      ...row,
+      regatta: row.regatta_id ? { name: regattaNameById.get(row.regatta_id) || 'Regatta' } : undefined,
+      club: row.club_id ? clubById.get(row.club_id) : undefined,
+    }));
   }
   
   /**
@@ -559,16 +613,38 @@ class CompetitorService {
     
     const { data, error } = await supabase
       .from('competitor_favorites')
-      .select(`
-        *,
-        club:clubs(name, logo_url),
-        regatta:regattas(name)
-      `)
+      .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+    const rows = data || [];
+
+    const regattaIds = Array.from(
+      new Set(rows.map((row: any) => row?.regatta_id).filter(Boolean))
+    ) as string[];
+    const clubIds = Array.from(
+      new Set(rows.map((row: any) => row?.club_id).filter(Boolean))
+    ) as string[];
+
+    const regattaNameById = new Map<string, string>();
+    if (regattaIds.length > 0) {
+      const { data: regattasData } = await supabase
+        .from('regattas')
+        .select('id, name')
+        .in('id', regattaIds);
+      (regattasData || []).forEach((regatta: any) => {
+        if (regatta?.id && regatta?.name) regattaNameById.set(regatta.id, regatta.name);
+      });
+    }
+
+    const clubById = await this.getClubMetaByIds(clubIds);
+
+    return rows.map((row: any) => ({
+      ...row,
+      regatta: row.regatta_id ? { name: regattaNameById.get(row.regatta_id) || 'Regatta' } : undefined,
+      club: row.club_id ? clubById.get(row.club_id) : undefined,
+    }));
   }
   
   /**
@@ -826,4 +902,3 @@ class CompetitorService {
 // Export singleton instance
 export const competitorService = new CompetitorService();
 export default competitorService;
-

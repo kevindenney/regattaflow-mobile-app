@@ -126,12 +126,24 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
         return result;
       } else {
         if (Platform.OS !== 'web') {
-          Alert.alert('WhatsApp Not Available', 'WhatsApp is not installed on this device.');
+          await Share.share({
+            message: text,
+            title: content.context === 'pre-race'
+              ? `Race Strategy - ${content.raceName}`
+              : `Race Analysis - ${content.raceName}`,
+          });
+        } else {
+          const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+          if (nav?.clipboard?.writeText) {
+            await nav.clipboard.writeText(text);
+          } else {
+            throw new Error('WhatsApp unavailable and clipboard not supported');
+          }
         }
         const result: ShareResult = {
-          success: false,
+          success: true,
           channel: 'whatsapp',
-          error: 'WhatsApp not installed'
+          recipientName: 'System Share',
         };
         onShareComplete?.(result);
         return result;
@@ -149,7 +161,7 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
       onShareComplete?.(result);
       return result;
     }
-  }, [generateShareableText, onShareComplete]);
+  }, [content.context, content.raceName, generateShareableText, onShareComplete]);
 
   /**
    * Share via Email - uses native share sheet with email hint

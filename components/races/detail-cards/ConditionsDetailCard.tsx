@@ -14,7 +14,7 @@
  * - Numbers in sentence context
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -24,7 +24,7 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, {
   useAnimatedStyle,
   withTiming,
@@ -37,7 +37,6 @@ import { useSailInventory } from '@/hooks/useSailInventory';
 import { SailSelector } from '@/components/races/intentions';
 import {
   TinySparkline,
-  AnnotatedSparkline,
   WindArrow,
   HourlyForecastTable,
   TideTimesDisplay,
@@ -107,7 +106,7 @@ function getSailRecommendation(speedMin: number, speedMax: number): string {
 }
 
 // Wave impact on racing
-function getWaveImpact(height: number, period?: number): string {
+function getWaveImpact(height: number, _period?: number): string {
   if (height < 0.3) return 'Minimal wave impact';
   if (height < 0.6) return 'Light chop, adjust trim';
   if (height < 1.0) return 'Moderate chop, wave sailing';
@@ -142,7 +141,7 @@ function getSetupHeader(windRange?: string, speedMin?: number): string {
 }
 
 // Format key rig settings for compact Tufte display
-function formatRigSummary(settings?: Array<{ key: string; value: string }>): string {
+function formatRigSummary(settings?: { key: string; value: string }[]): string {
   if (!settings || settings.length === 0) return '';
   const priorityKeys = ['upper_shrouds', 'shrouds', 'forestay', 'mast_rake', 'backstay'];
   const formatted: string[] = [];
@@ -229,7 +228,7 @@ interface ConditionsDetailCardProps {
 }
 
 export function ConditionsDetailCard({
-  raceId,
+  raceId: _raceId,
   wind,
   tide,
   current,
@@ -245,8 +244,8 @@ export function ConditionsDetailCard({
   isExpanded = false,
   onToggle,
   onPress,
-  isDistanceRace = false,
-  customTitle,
+  isDistanceRace: _isDistanceRace = false,
+  customTitle: _customTitle,
   boatId,
   classId,
   className,
@@ -263,7 +262,7 @@ export function ConditionsDetailCard({
   // Fetch weather forecast for sparklines (Tufte-style inline trends)
   // Use raceStartTime if provided, otherwise fall back to raceDate
   const effectiveRaceDate = raceStartTime || raceDate;
-  const { data: forecastData, loading: forecastLoading, error: forecastError } = useRaceWeatherForecast(
+  const { data: forecastData, loading: forecastLoading } = useRaceWeatherForecast(
     venue,
     effectiveRaceDate,
     !!venue,
@@ -271,12 +270,8 @@ export function ConditionsDetailCard({
   );
 
   const windForecast = forecastData?.windForecast;
-  const tideForecast = forecastData?.tideForecast;
-  const forecastNowIndex = forecastData?.forecastNowIndex ?? 0;
   const raceStartIndex = forecastData?.raceStartIndex ?? 0;
-  const raceEndIndex = forecastData?.raceEndIndex ?? (forecastData?.windForecast?.length ?? 1) - 1;
   const windTrend = forecastData?.windTrend;
-  const tidePeakTime = forecastData?.tidePeakTime;
   // Detailed time-series data for Tufte tables
   const hourlyWind = forecastData?.hourlyWind;
   const hourlyTide = forecastData?.hourlyTide;
@@ -288,7 +283,12 @@ export function ConditionsDetailCard({
   const raceWindow = forecastData?.raceWindow;
 
   // Fetch class-specific rig tuning recommendations for Tufte setup section
-  const { recommendation: rigRecommendation, settings: rigSettings, loading: rigLoading } = useRaceTuningRecommendation({
+  const {
+    recommendation: rigRecommendation,
+    settings: rigSettings,
+    loading: _rigLoading,
+    error: rigError,
+  } = useRaceTuningRecommendation({
     classId: classId,
     className: className,
     boatId: boatId,
@@ -502,6 +502,11 @@ export function ConditionsDetailCard({
                   {rigRecommendation?.guideSource && (
                     <Text style={styles.setupSource}>
                       via {rigRecommendation.guideSource}
+                    </Text>
+                  )}
+                  {!rigRecommendation && rigError?.message && (
+                    <Text style={styles.setupSource}>
+                      {rigError.message}
                     </Text>
                   )}
                 </View>

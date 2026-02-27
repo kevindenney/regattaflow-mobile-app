@@ -6,7 +6,7 @@
  * and learning from past races. Allows crew to record key decisions.
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,21 +17,19 @@ import {
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   X,
   CheckCircle2,
-  Target,
   Wind,
-  AlertTriangle,
   Sparkles,
   Check,
   BookOpen,
   MapPin,
   History,
   Flag,
-  Navigation,
   ChevronDown,
   ChevronUp,
   Plus,
@@ -43,12 +41,12 @@ import { useStrategyRecommendations } from '@/hooks/useStrategyRecommendations';
 import { NudgeList } from '@/components/checklist-tools/NudgeBanner';
 import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
 import type { ChecklistToolProps } from '@/lib/checklists/toolRegistry';
+import { sailorRacePreparationService } from '@/services/SailorRacePreparationService';
 import type {
   TacticalIntention,
   TacticalBriefing,
   TacticalRecommendation,
 } from '@/types/morningChecklist';
-import type { PersonalizedNudge } from '@/types/adaptiveLearning';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -106,7 +104,7 @@ const CATEGORY_LABELS: Record<InsightCategory, string> = {
 export function TacticsReviewWizard({
   item,
   regattaId,
-  boatId,
+  boatId: _boatId,
   onComplete,
   onCancel,
   venueId,
@@ -124,7 +122,6 @@ export function TacticsReviewWizard({
     venueInsights: rawVenueInsights,
     conditionsInsights: rawConditionsInsights,
     isLoading: isLoadingRecommendations,
-    error: recommendationsError,
   } = useStrategyRecommendations(user?.id, {
     venueName: venueName || undefined,
     windSpeed: wind?.speedMin,
@@ -295,6 +292,15 @@ export function TacticsReviewWizard({
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
+      if (!user?.id) {
+        Alert.alert('Sign in required', 'Please sign in to save tactical review.');
+        return;
+      }
+      if (!regattaId) {
+        Alert.alert('Race unavailable', 'Unable to save tactical review without a race id.');
+        return;
+      }
+
       const intention: TacticalIntention = {
         briefing: tacticalBriefing,
         userNotes,
@@ -302,15 +308,33 @@ export function TacticsReviewWizard({
         savedAt: new Date().toISOString(),
       };
 
-      // TODO: Save to sailor_race_preparation.user_intentions via service
+      const persistedSummaryParts = [
+        `Saved at: ${intention.savedAt}`,
+        venueName ? `Venue: ${venueName}` : null,
+        intention.userNotes ? `Crew Notes: ${intention.userNotes}` : null,
+        intention.agreedDecisions.length > 0
+          ? `Agreed Decisions: ${intention.agreedDecisions.join(' | ')}`
+          : null,
+      ].filter(Boolean) as string[];
+
+      const saved = await sailorRacePreparationService.updateIntentions(regattaId, user.id, {
+        strategyNotes: {
+          [`morning_tactics_review:${item.id}`]: persistedSummaryParts.join('\n'),
+        },
+      });
+      if (!saved) {
+        Alert.alert('Unable to save', 'Tactical review could not be saved right now. Please try again.');
+        return;
+      }
 
       onComplete();
     } catch (error) {
       console.error('Failed to save tactical intention:', error);
+      Alert.alert('Save failed', 'Failed to save tactical review. Please try again.');
     } finally {
       setIsSaving(false);
     }
-  }, [tacticalBriefing, userNotes, agreedDecisions, onComplete]);
+  }, [user?.id, regattaId, tacticalBriefing, userNotes, agreedDecisions, venueName, item.id, onComplete]);
 
   // Handle learn more - navigate to Tactical Planning module in Race Preparation Mastery course
   const handleLearnMore = useCallback(() => {

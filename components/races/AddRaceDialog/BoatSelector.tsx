@@ -19,6 +19,7 @@ import { ChevronDown, Sailboat, Check, X, Plus } from 'lucide-react-native';
 import { useUserBoats } from '@/hooks/useUserBoats';
 import { sailorBoatService, type SailorBoat } from '@/services/SailorBoatService';
 import { QuickAddBoatForm } from '@/components/boats/QuickAddBoatForm';
+import { createLogger } from '@/lib/utils/logger';
 
 const COLORS = {
   primary: '#007AFF',
@@ -30,6 +31,7 @@ const COLORS = {
   separator: '#C6C6C8',
   green: '#34C759',
 };
+const logger = createLogger('BoatSelector');
 
 interface BoatSelectorProps {
   /** Currently selected boat ID */
@@ -87,7 +89,7 @@ export function BoatSelector({
       // Refetch the boats list to update the UI
       refetch();
     } catch (err) {
-      console.error('[BoatSelector] Error fetching new boat:', err);
+      logger.error('Error fetching new boat', err);
       // Still select the boat by ID even if fetch fails
       onSelect(newBoatId, null, null);
     }

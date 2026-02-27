@@ -3,7 +3,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useClubWorkspace');
-const DEBUG = true;
+const DEBUG = false;
 
 export function useClubWorkspace() {
   const {
@@ -17,6 +17,7 @@ export function useClubWorkspace() {
     logger.debug('[hook] Auth snapshot', {
       hasClubProfile: !!clubProfile,
       clubProfileId: clubProfile?.id,
+      clubProfileYachtClubId: (clubProfile as any)?.yacht_club_id,
       clubProfileUserId: clubProfile?.user_id,
       hasUserProfile: !!userProfile,
       userProfileId: userProfile?.id,
@@ -26,6 +27,11 @@ export function useClubWorkspace() {
   }
 
   const clubId = useMemo(() => {
+    const linkedClubId = (clubProfile as any)?.yacht_club_id as string | undefined;
+    if (linkedClubId) {
+      if (DEBUG) logger.debug('[hook] clubId from clubProfile.yacht_club_id', linkedClubId);
+      return linkedClubId;
+    }
     if (clubProfile?.id) {
       if (DEBUG) logger.debug('[hook] clubId from clubProfile.id', clubProfile.id);
       return clubProfile.id as string;
@@ -36,7 +42,7 @@ export function useClubWorkspace() {
     }
     if (DEBUG) logger.debug('[hook] clubId unresolved');
     return null;
-  }, [clubProfile?.id, userProfile?.club_id]);
+  }, [clubProfile?.id, (clubProfile as any)?.yacht_club_id, userProfile?.club_id]);
 
   const profile = useMemo(() => {
     if (clubProfile) {

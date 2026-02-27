@@ -6,7 +6,7 @@ import type { FleetActivityEntry, FleetOverview } from '@/services/fleetService'
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ClassSelector, ClubsAssociationsSection, CrewManagement, TuningGuidesSection } from '../../sailor';
 import { CardMenu, CardMenuItem } from '../../shared';
-import { DashboardKPICard, DashboardSection } from '../shared';
+import { DashboardSection } from '../shared';
 import { NextRaceCard } from './NextRaceCard';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 
@@ -67,7 +67,7 @@ interface SailorOverviewProps {
 
 export function SailorOverviewEnhanced({
   upcomingRaces,
-  stats,
+  stats: _stats,
   currentVenue,
   classes = [],
   activeClassId,
@@ -191,38 +191,6 @@ export function SailorOverviewEnhanced({
   };
 
   const recentFleetActivity = useMemo(() => (fleetActivity || []).slice(0, 3), [fleetActivity]);
-
-  // Helper to render class context badge
-  const renderClassContextBadge = () => {
-    if (!selectedClass) return null;
-    return (
-      <View style={styles.contextBadge}>
-        <MaterialCommunityIcons name="sail-boat" size={14} color="#2563EB" />
-        <Text style={styles.contextBadgeText}>
-          {selectedClass.name}
-          {selectedClass.sailNumber && ` #${selectedClass.sailNumber}`}
-        </Text>
-      </View>
-    );
-  };
-
-  const getStrategyStatusColor = (status: string) => {
-    switch (status) {
-      case 'ready': return '#10B981';
-      case 'in_progress': return '#F59E0B';
-      case 'pending': return '#EF4444';
-      default: return '#6B7280';
-    }
-  };
-
-  const getStrategyStatusText = (status: string) => {
-    switch (status) {
-      case 'ready': return 'Strategy Ready';
-      case 'in_progress': return 'In Progress';
-      case 'pending': return 'Needs Planning';
-      default: return 'Unknown';
-    }
-  };
 
   const getFleetActivityIcon = (type: FleetActivityEntry['activityType']) => {
     switch (type) {
@@ -639,10 +607,10 @@ export function SailorOverviewEnhanced({
             className={selectedClass.name}
             sailorId={sailorId}
             onUpload={() => {
-              alert('Upload tuning guide feature coming soon! This will allow you to upload PDFs and documents.');
+              onUploadDocuments();
             }}
             onViewAll={() => {
-              alert('Full tuning guides library coming soon! This will show all available guides for your class.');
+              router.push('/(tabs)/fleet/resources');
             }}
           />
 

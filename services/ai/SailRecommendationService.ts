@@ -9,6 +9,7 @@
  */
 
 import { createLogger } from '@/lib/utils/logger';
+import { supabase } from '@/services/supabase';
 import type { SailInventoryItem, GroupedSailInventory } from '@/types/raceIntentions';
 import type {
   SailRecommendation,
@@ -246,6 +247,79 @@ function pickBestSail(
 }
 
 class SailRecommendationService {
+  private async fetchAIEnhancement(
+    request: SailRecommendationRequest,
+    base: SailSelectionRecommendations
+  ): Promise<{
+    mainsailReasoning?: string;
+    headsailReasoning?: string;
+    downwindReasoning?: string;
+    combinationReasoning?: string;
+  } | null> {
+    const prompt = `You are a sailing coach. Improve the recommendation reasoning only.
+Return strict JSON with optional keys:
+{
+  "mainsailReasoning": "string",
+  "headsailReasoning": "string",
+  "downwindReasoning": "string",
+  "combinationReasoning": "string"
+}
+
+Rules:
+- Keep each reasoning concise (max 2 sentences).
+- Use provided conditions, race type, and wave state.
+- Do not change sail names or suggest new sails.
+- Return JSON only.
+
+Context:
+${JSON.stringify(
+  {
+    request: {
+      wind: request.wind,
+      waveState: request.waveState,
+      boatClass: request.boatClass,
+      raceType: request.raceType,
+      raceDuration: request.raceDuration,
+    },
+    baseRecommendations: {
+      mainsail: base.mainsail?.sailName,
+      headsail: base.headsail?.sailName,
+      downwind: base.downwind?.sailName,
+      combinationReasoning: base.combinationReasoning,
+      conditionsSummary: base.conditionsSummary,
+    },
+  },
+  null,
+  2
+)}`;
+
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: 450,
+        temperature: 0.2,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'AI sail enhancement call failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    if (!text) return null;
+
+    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const candidate = (codeBlockMatch?.[1] || text).trim();
+    const firstBrace = candidate.indexOf('{');
+    const lastBrace = candidate.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace <= firstBrace) return null;
+
+    const jsonText = candidate.substring(firstBrace, lastBrace + 1);
+    const parsed = JSON.parse(jsonText);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  }
+
   /**
    * Generate sail selection recommendations based on conditions
    */
@@ -334,12 +408,43 @@ class SailRecommendationService {
   async getAIEnhancedRecommendations(
     request: SailRecommendationRequest
   ): Promise<SailSelectionRecommendations> {
-    // First get rule-based recommendations
     const baseRecommendations = await this.getRecommendations(request);
 
-    // TODO: Implement AI enhancement when skill is ready
-    // For now, return rule-based recommendations
-    return baseRecommendations;
+    try {
+      const enhancement = await this.fetchAIEnhancement(request, baseRecommendations);
+      if (!enhancement) {
+        return baseRecommendations;
+      }
+
+      return {
+        ...baseRecommendations,
+        mainsail: baseRecommendations.mainsail
+          ? {
+              ...baseRecommendations.mainsail,
+              reasoning: enhancement.mainsailReasoning || baseRecommendations.mainsail.reasoning,
+            }
+          : undefined,
+        headsail: baseRecommendations.headsail
+          ? {
+              ...baseRecommendations.headsail,
+              reasoning: enhancement.headsailReasoning || baseRecommendations.headsail.reasoning,
+            }
+          : undefined,
+        downwind: baseRecommendations.downwind
+          ? {
+              ...baseRecommendations.downwind,
+              reasoning: enhancement.downwindReasoning || baseRecommendations.downwind.reasoning,
+            }
+          : undefined,
+        combinationReasoning: enhancement.combinationReasoning || baseRecommendations.combinationReasoning,
+        generatedAt: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      logger.debug('AI enhancement unavailable, using rule-based sail recommendations', {
+        message: error?.message,
+      });
+      return baseRecommendations;
+    }
   }
 }
 

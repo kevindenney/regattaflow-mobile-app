@@ -5,6 +5,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ClubDiscoveryService');
 
 export interface YachtClub {
   id: string;
@@ -48,6 +51,43 @@ export interface SailorClubMembership {
 }
 
 export class ClubDiscoveryService {
+  private static async getVenueMap(venueIds: string[]): Promise<Map<string, YachtClub['sailing_venues']>> {
+    const map = new Map<string, YachtClub['sailing_venues']>();
+    if (venueIds.length === 0) return map;
+
+    const { data } = await supabase
+      .from('sailing_venues')
+      .select('id, name, region, country')
+      .in('id', venueIds);
+
+    (data || []).forEach((venue: any) => {
+      if (venue?.id) {
+        map.set(venue.id, {
+          id: venue.id,
+          name: venue.name,
+          region: venue.region || undefined,
+          country: venue.country || undefined,
+        });
+      }
+    });
+
+    return map;
+  }
+
+  private static async getGlobalClubNameMap(clubIds: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (clubIds.length === 0) return map;
+    const { data } = await supabase
+      .from('global_clubs')
+      .select('id, name')
+      .in('id', clubIds);
+
+    (data || []).forEach((club: any) => {
+      if (club?.id && club?.name) map.set(club.id, club.name);
+    });
+    return map;
+  }
+
   /**
    * Discover yacht clubs by venue
    */
@@ -55,18 +95,23 @@ export class ClubDiscoveryService {
     try {
       const { data: clubs, error } = await supabase
         .from('yacht_clubs')
-        .select(`
-          *,
-          sailing_venues(id, name)
-        `)
+        .select('*')
         .eq('venue_id', venueId)
         .limit(limit);
 
       if (error) throw error;
 
-      return clubs || [];
+      const rows = clubs || [];
+      const venueMap = await this.getVenueMap(
+        Array.from(new Set(rows.map((club: any) => club?.venue_id).filter(Boolean)))
+      );
+
+      return rows.map((club: any) => ({
+        ...club,
+        sailing_venues: club?.venue_id ? venueMap.get(club.venue_id) : undefined,
+      }));
     } catch (error) {
-      console.error('Error discovering clubs by venue:', error);
+      logger.error('Error discovering clubs by venue:', error);
       return [];
     }
   }
@@ -86,18 +131,20 @@ export class ClubDiscoveryService {
 
       const { data: club, error: clubError } = await supabase
         .from('yacht_clubs')
-        .select(`
-          *,
-          sailing_venues(id, name)
-        `)
+        .select('*')
         .eq('id', fleet.club_id)
         .single();
 
       if (clubError) throw clubError;
 
-      return club ? [club] : [];
+      if (!club) return [];
+      const venueMap = await this.getVenueMap(club.venue_id ? [club.venue_id] : []);
+      return [{
+        ...club,
+        sailing_venues: club.venue_id ? venueMap.get(club.venue_id) : undefined,
+      }];
     } catch (error) {
-      console.error('Error discovering clubs by fleet:', error);
+      logger.error('Error discovering clubs by fleet:', error);
       return [];
     }
   }
@@ -119,7 +166,7 @@ export class ClubDiscoveryService {
 
       return associations || [];
     } catch (error) {
-      console.error('Error discovering associations by class:', error);
+      logger.error('Error discovering associations by class:', error);
       return [];
     }
   }
@@ -154,13 +201,16 @@ export class ClubDiscoveryService {
       if (venueIds.length > 0) {
         const { data: venueClubs } = await supabase
           .from('yacht_clubs')
-          .select(`
-            *,
-            sailing_venues(id, name, region, country)
-          `)
+          .select('*')
           .in('venue_id', venueIds);
-
-        clubs = venueClubs || [];
+        const rows = venueClubs || [];
+        const venueMap = await this.getVenueMap(
+          Array.from(new Set(rows.map((club: any) => club?.venue_id).filter(Boolean)))
+        );
+        clubs = rows.map((club: any) => ({
+          ...club,
+          sailing_venues: club?.venue_id ? venueMap.get(club.venue_id) : undefined,
+        }));
       }
 
       // Get class associations from boat classes
@@ -179,7 +229,7 @@ export class ClubDiscoveryService {
 
       return { clubs, associations };
     } catch (error) {
-      console.error('Error getting suggested clubs:', error);
+      logger.error('Error getting suggested clubs:', error);
       return { clubs: [], associations: [] };
     }
   }
@@ -201,20 +251,34 @@ export class ClubDiscoveryService {
           club_type: 'yacht_club',
           auto_import_races: autoImportRaces,
         })
-        .select(`
-          *,
-          yacht_clubs(
-            *,
-            sailing_venues(id, name, region, country)
-          )
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
 
-      return membership;
+      const typedMembership = membership as SailorClubMembership;
+      if (!typedMembership?.club_id) {
+        return typedMembership;
+      }
+
+      const { data: club } = await supabase
+        .from('yacht_clubs')
+        .select('*')
+        .eq('id', typedMembership.club_id)
+        .single();
+
+      const venueMap = await this.getVenueMap(club?.venue_id ? [club.venue_id] : []);
+      return {
+        ...typedMembership,
+        yacht_clubs: club
+          ? {
+              ...club,
+              sailing_venues: club.venue_id ? venueMap.get(club.venue_id) : undefined,
+            }
+          : undefined,
+      };
     } catch (error) {
-      console.error('Error adding yacht club membership:', error);
+      logger.error('Error adding yacht club membership:', error);
       return null;
     }
   }
@@ -236,20 +300,43 @@ export class ClubDiscoveryService {
           club_type: 'class_association',
           auto_import_races: autoImportRaces,
         })
-        .select(`
-          *,
-          class_associations(
-            *,
-            boat_classes(id, name, type)
-          )
-        `)
+        .select('*')
         .single();
 
       if (error) throw error;
 
-      return membership;
+      const typedMembership = membership as SailorClubMembership;
+      if (!typedMembership?.association_id) {
+        return typedMembership;
+      }
+
+      const { data: association } = await supabase
+        .from('class_associations')
+        .select('*')
+        .eq('id', typedMembership.association_id)
+        .maybeSingle();
+
+      let boatClass: any = null;
+      if (association?.class_id) {
+        const { data: boatClassData } = await supabase
+          .from('boat_classes')
+          .select('id, name, type')
+          .eq('id', association.class_id)
+          .maybeSingle();
+        boatClass = boatClassData || null;
+      }
+
+      return {
+        ...typedMembership,
+        class_associations: association
+          ? {
+              ...association,
+              boat_classes: boatClass || undefined,
+            }
+          : undefined,
+      };
     } catch (error) {
-      console.error('Error adding class association membership:', error);
+      logger.error('Error adding class association membership:', error);
       return null;
     }
   }
@@ -269,7 +356,7 @@ export class ClubDiscoveryService {
 
       return true;
     } catch (error) {
-      console.error('Error removing club membership:', error);
+      logger.error('Error removing club membership:', error);
       return false;
     }
   }
@@ -281,24 +368,48 @@ export class ClubDiscoveryService {
     try {
       const { data: memberships, error } = await supabase
         .from('sailor_clubs')
-        .select(`
-          *,
-          yacht_clubs(
-            *,
-            sailing_venues(id, name, region, country)
-          ),
-          class_associations(
-            *,
-            boat_classes(id, name, type)
-          )
-        `)
+        .select('*')
         .eq('sailor_id', sailorId);
 
       if (error) throw error;
+      const rows = (memberships || []) as SailorClubMembership[];
 
-      return memberships || [];
+      const clubIds = Array.from(new Set(rows.map((m) => m.club_id).filter(Boolean))) as string[];
+      const associationIds = Array.from(new Set(rows.map((m) => m.association_id).filter(Boolean))) as string[];
+
+      const { data: clubsData } = clubIds.length > 0
+        ? await supabase.from('yacht_clubs').select('*').in('id', clubIds)
+        : { data: [] as any[] };
+      const clubById = new Map<string, any>();
+      (clubsData || []).forEach((club: any) => clubById.set(club.id, club));
+
+      const venueMap = await this.getVenueMap(
+        Array.from(new Set((clubsData || []).map((club: any) => club?.venue_id).filter(Boolean)))
+      );
+
+      const { data: associationsData } = associationIds.length > 0
+        ? await supabase.from('class_associations').select('*, boat_classes(id, name, type)').in('id', associationIds)
+        : { data: [] as any[] };
+      const associationById = new Map<string, any>();
+      (associationsData || []).forEach((association: any) => associationById.set(association.id, association));
+
+      return rows.map((membership) => {
+        const club = membership.club_id ? clubById.get(membership.club_id) : undefined;
+        return {
+          ...membership,
+          yacht_clubs: club
+            ? {
+                ...club,
+                sailing_venues: club?.venue_id ? venueMap.get(club.venue_id) : undefined,
+              }
+            : undefined,
+          class_associations: membership.association_id
+            ? associationById.get(membership.association_id)
+            : undefined,
+        };
+      });
     } catch (error) {
-      console.error('Error getting sailor clubs:', error);
+      logger.error('Error getting sailor clubs:', error);
       return [];
     }
   }
@@ -310,18 +421,22 @@ export class ClubDiscoveryService {
     try {
       const { data: clubs, error } = await supabase
         .from('yacht_clubs')
-        .select(`
-          *,
-          sailing_venues(id, name, region, country)
-        `)
+        .select('*')
         .ilike('name', `%${query}%`)
         .limit(limit);
 
       if (error) throw error;
 
-      return clubs || [];
+      const rows = clubs || [];
+      const venueMap = await this.getVenueMap(
+        Array.from(new Set(rows.map((club: any) => club?.venue_id).filter(Boolean)))
+      );
+      return rows.map((club: any) => ({
+        ...club,
+        sailing_venues: club?.venue_id ? venueMap.get(club.venue_id) : undefined,
+      }));
     } catch (error) {
-      console.error('Error searching yacht clubs:', error);
+      logger.error('Error searching yacht clubs:', error);
       return [];
     }
   }
@@ -344,7 +459,7 @@ export class ClubDiscoveryService {
 
       return associations || [];
     } catch (error) {
-      console.error('Error searching class associations:', error);
+      logger.error('Error searching class associations:', error);
       return [];
     }
   }
@@ -368,7 +483,7 @@ export class ClubDiscoveryService {
 
       return !!data;
     } catch (error) {
-      console.error('Error checking yacht club membership:', error);
+      logger.error('Error checking yacht club membership:', error);
       return false;
     }
   }
@@ -392,7 +507,7 @@ export class ClubDiscoveryService {
 
       return !!data;
     } catch (error) {
-      console.error('Error checking class association membership:', error);
+      logger.error('Error checking class association membership:', error);
       return false;
     }
   }
@@ -416,7 +531,7 @@ export class ClubDiscoveryService {
 
       return true;
     } catch (error) {
-      console.error('Error toggling auto-import races:', error);
+      logger.error('Error toggling auto-import races:', error);
       return false;
     }
   }
@@ -436,7 +551,7 @@ export class ClubDiscoveryService {
     countryCode?: string;
     boatClassId?: string;
     limit?: number;
-  }): Promise<Array<{
+  }): Promise<{
     id: string;
     name: string;
     description?: string;
@@ -445,7 +560,7 @@ export class ClubDiscoveryService {
     memberCount: number;
     boatClassName?: string;
     source?: 'platform' | 'directory';
-  }>> {
+  }[]> {
     const { query, countryCode, boatClassId, limit = 100 } = options;
     const searchTerm = query?.trim() || '';
 
@@ -487,7 +602,7 @@ export class ClubDiscoveryService {
       const { data: clubs, error } = await clubsQuery;
 
       if (error) {
-        console.error('Error fetching global clubs:', error);
+        logger.error('Error fetching global clubs:', error);
         return [];
       }
 
@@ -525,7 +640,7 @@ export class ClubDiscoveryService {
         };
       });
     } catch (error) {
-      console.error('Error in searchClubs:', error);
+      logger.error('Error in searchClubs:', error);
       return [];
     }
   }
@@ -535,26 +650,29 @@ export class ClubDiscoveryService {
    * Uses the unified global_club_members table
    * Used by useClubSearch to check membership status
    */
-  static async getUserClubs(userId: string): Promise<Array<{ id: string; name: string }>> {
+  static async getUserClubs(userId: string): Promise<{ id: string; name: string }[]> {
     try {
       const { data: memberships, error } = await supabase
         .from('global_club_members')
-        .select('global_club_id, global_clubs(id, name)')
+        .select('global_club_id')
         .eq('user_id', userId);
 
       if (error) {
-        console.error('Error fetching user clubs:', error);
+        logger.error('Error fetching user clubs:', error);
         return [];
       }
 
-      return (memberships || [])
-        .filter((m: any) => m.global_clubs)
-        .map((m: any) => ({
-          id: m.global_clubs.id,
-          name: m.global_clubs.name,
-        }));
+      const clubIds = Array.from(
+        new Set((memberships || []).map((m: any) => m.global_club_id).filter(Boolean))
+      ) as string[];
+      const nameMap = await this.getGlobalClubNameMap(clubIds);
+
+      return clubIds.map((id) => ({
+        id,
+        name: nameMap.get(id) || 'Club',
+      }));
     } catch (error) {
-      console.error('Error in getUserClubs:', error);
+      logger.error('Error in getUserClubs:', error);
       return [];
     }
   }
@@ -576,7 +694,7 @@ export class ClubDiscoveryService {
       // Ignore duplicate key error (already a member)
       if (error && error.code !== '23505') throw error;
     } catch (error) {
-      console.error('Error joining club:', error);
+      logger.error('Error joining club:', error);
       throw error;
     }
   }
@@ -595,7 +713,7 @@ export class ClubDiscoveryService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error leaving club:', error);
+      logger.error('Error leaving club:', error);
       throw error;
     }
   }
@@ -659,7 +777,7 @@ export class ClubDiscoveryService {
       const { data: clubs, error } = await clubQuery;
 
       if (error) {
-        console.error('Error searching global clubs:', error);
+        logger.error('Error searching global clubs:', error);
         return [];
       }
 
@@ -700,7 +818,7 @@ export class ClubDiscoveryService {
         isClaimed: !!club.platform_club_id,
       }));
     } catch (error) {
-      console.error('Error in searchGlobalClubs:', error);
+      logger.error('Error in searchGlobalClubs:', error);
       return [];
     }
   }
@@ -747,7 +865,7 @@ export class ClubDiscoveryService {
         isClaimed: !!club.platform_club_id,
       };
     } catch (error) {
-      console.error('Error getting global club:', error);
+      logger.error('Error getting global club:', error);
       return null;
     }
   }
@@ -807,7 +925,7 @@ export class ClubDiscoveryService {
         .single();
 
       if (createError || !platformClub) {
-        console.error('Error creating platform club:', createError);
+        logger.error('Error creating platform club:', createError);
         return { success: false, error: 'Failed to create club' };
       }
 
@@ -822,7 +940,7 @@ export class ClubDiscoveryService {
         .eq('id', globalClubId);
 
       if (linkError) {
-        console.error('Error linking clubs:', linkError);
+        logger.error('Error linking clubs:', linkError);
       }
 
       // Add user as club owner
@@ -846,7 +964,7 @@ export class ClubDiscoveryService {
 
       return { success: true, platformClubId: platformClub.id };
     } catch (error) {
-      console.error('Error claiming club:', error);
+      logger.error('Error claiming club:', error);
       return { success: false, error: 'An unexpected error occurred' };
     }
   }
@@ -902,7 +1020,7 @@ export class ClubDiscoveryService {
         .single();
 
       if (error || !newClub) {
-        console.error('Error submitting club:', error);
+        logger.error('Error submitting club:', error);
         return { success: false, error: 'Failed to submit club' };
       }
 
@@ -917,7 +1035,7 @@ export class ClubDiscoveryService {
 
       return { success: true, clubId: newClub.id };
     } catch (error) {
-      console.error('Error submitting club:', error);
+      logger.error('Error submitting club:', error);
       return { success: false, error: 'An unexpected error occurred' };
     }
   }
@@ -939,7 +1057,7 @@ export class ClubDiscoveryService {
         throw error;
       }
     } catch (error) {
-      console.error('Error joining global club:', error);
+      logger.error('Error joining global club:', error);
       throw error;
     }
   }
@@ -957,7 +1075,7 @@ export class ClubDiscoveryService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error leaving global club:', error);
+      logger.error('Error leaving global club:', error);
       throw error;
     }
   }
@@ -965,26 +1083,29 @@ export class ClubDiscoveryService {
   /**
    * Get user's global club memberships
    */
-  static async getUserGlobalClubs(userId: string): Promise<Array<{ id: string; name: string }>> {
+  static async getUserGlobalClubs(userId: string): Promise<{ id: string; name: string }[]> {
     try {
       const { data, error } = await supabase
         .from('global_club_members')
-        .select('global_club_id, global_clubs(id, name)')
+        .select('global_club_id')
         .eq('user_id', userId);
 
       if (error) {
-        console.error('Error getting user global clubs:', error);
+        logger.error('Error getting user global clubs:', error);
         return [];
       }
 
-      return (data || [])
-        .filter((m: any) => m.global_clubs)
-        .map((m: any) => ({
-          id: m.global_clubs.id,
-          name: m.global_clubs.name,
-        }));
+      const clubIds = Array.from(
+        new Set((data || []).map((m: any) => m.global_club_id).filter(Boolean))
+      ) as string[];
+      const nameMap = await this.getGlobalClubNameMap(clubIds);
+
+      return clubIds.map((id) => ({
+        id,
+        name: nameMap.get(id) || 'Club',
+      }));
     } catch (error) {
-      console.error('Error in getUserGlobalClubs:', error);
+      logger.error('Error in getUserGlobalClubs:', error);
       return [];
     }
   }

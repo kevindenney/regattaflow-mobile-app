@@ -33,7 +33,7 @@ import {
   Flag,
 } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
-import { ClubDiscoveryService, GlobalClubResult } from '@/services/ClubDiscoveryService';
+import { ClubDiscoveryService } from '@/services/ClubDiscoveryService';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -112,11 +112,11 @@ export default function GlobalClubDetailScreen() {
   }, [user, isMember, club?.name, joinMutation, leaveMutation]);
 
   const handleClaimClub = useCallback(() => {
-    Alert.alert(
-      'Coming Soon',
-      'Club claiming will be available in a future update. Stay tuned!'
-    );
-  }, []);
+    router.push({
+      pathname: '/club-onboarding',
+      params: { claimClubId: id },
+    });
+  }, [id, router]);
 
   const handleOpenWebsite = useCallback(() => {
     if (club?.website) {

@@ -1,5 +1,18 @@
 export type ClubRole =
   | 'admin'
+  | 'race_admin'
+  | 'volunteer_results'
+  | 'member'
+  | 'guest';
+
+export type ClubRoleScope =
+  | 'management'
+  | 'race_operations'
+  | 'general';
+
+export type LegacyClubRole =
+  | 'owner'
+  | 'admin'
   | 'race_officer'
   | 'scorer'
   | 'communications'
@@ -11,14 +24,6 @@ export type ClubRole =
   | 'secretary'
   | 'member'
   | 'guest';
-
-export type ClubRoleScope =
-  | 'management'
-  | 'race_operations'
-  | 'communications'
-  | 'finance'
-  | 'membership'
-  | 'general';
 
 export interface ClubRoleDefinition {
   role: ClubRole;
@@ -40,75 +45,29 @@ export const CLUB_ROLE_DEFINITIONS: ClubRoleDefinition[] = [
       'members.manage',
       'finance.manage',
       'content.publish',
+      'results.certify',
     ],
   },
   {
-    role: 'race_officer',
-    label: 'Principal Race Officer',
-    description: 'Sets courses, manages race-day updates, and validates official results.',
+    role: 'race_admin',
+    label: 'Race Administrator',
+    description: 'Sets up races and documents, manages race-day operations, and certifies results.',
     scope: 'race_operations',
     defaultPermissions: [
-      'races.manage',
-      'courses.publish',
-      'results.validate',
+      'races.configure',
+      'documents.manage',
+      'entries.manage',
+      'results.review',
+      'results.certify',
       'notices.send',
     ],
   },
   {
-    role: 'scorer',
-    label: 'Scorer',
-    description: 'Records finishes, runs scoring, and publishes standings.',
+    role: 'volunteer_results',
+    label: 'Results Volunteer',
+    description: 'Captures provisional race results only. Cannot modify race setup or publish official results.',
     scope: 'race_operations',
-    defaultPermissions: ['results.manage', 'results.publish'],
-  },
-  {
-    role: 'communications',
-    label: 'Communications Manager',
-    description: 'Publishes documents, notices of race, and external updates.',
-    scope: 'communications',
-    defaultPermissions: ['content.publish', 'notices.send'],
-  },
-  {
-    role: 'treasurer',
-    label: 'Treasurer',
-    description: 'Oversees entry payments, refunds, and settlement reports.',
-    scope: 'finance',
-    defaultPermissions: ['finance.manage', 'entries.refund', 'reports.finance'],
-  },
-  {
-    role: 'membership_manager',
-    label: 'Membership Manager',
-    description: 'Approves membership applications and maintains club rosters.',
-    scope: 'membership',
-    defaultPermissions: ['members.manage', 'membership.approve'],
-  },
-  {
-    role: 'sailing_manager',
-    label: 'Sailing Manager',
-    description: 'Coordinates programming, training, and volunteer assignments.',
-    scope: 'management',
-    defaultPermissions: ['programs.manage', 'volunteers.schedule'],
-  },
-  {
-    role: 'race_committee',
-    label: 'Race Committee',
-    description: 'Supports race execution and updates assigned race data.',
-    scope: 'race_operations',
-    defaultPermissions: ['races.update', 'results.record'],
-  },
-  {
-    role: 'instructor',
-    label: 'Instructor',
-    description: 'Shares training material and manages assigned coaching sessions.',
-    scope: 'general',
-    defaultPermissions: ['training.manage'],
-  },
-  {
-    role: 'secretary',
-    label: 'Club Secretary',
-    description: 'Handles governance documents, minutes, and official communications.',
-    scope: 'management',
-    defaultPermissions: ['documents.manage', 'notices.send'],
+    defaultPermissions: ['results.capture'],
   },
   {
     role: 'member',
@@ -126,21 +85,57 @@ export const CLUB_ROLE_DEFINITIONS: ClubRoleDefinition[] = [
   },
 ];
 
-export const ADMIN_ACCESS_ROLES: ClubRole[] = ['admin', 'sailing_manager', 'race_officer'];
+const LEGACY_ROLE_MAP: Record<LegacyClubRole, ClubRole> = {
+  owner: 'admin',
+  admin: 'admin',
+  race_officer: 'race_admin',
+  scorer: 'volunteer_results',
+  communications: 'race_admin',
+  treasurer: 'race_admin',
+  membership_manager: 'race_admin',
+  sailing_manager: 'race_admin',
+  race_committee: 'volunteer_results',
+  instructor: 'member',
+  secretary: 'race_admin',
+  member: 'member',
+  guest: 'guest',
+};
+
+export const ROLE_ALIASES: Record<ClubRole, string[]> = {
+  admin: ['owner', 'admin'],
+  race_admin: [
+    'race_admin',
+    'race_officer',
+    'communications',
+    'treasurer',
+    'membership_manager',
+    'sailing_manager',
+    'secretary',
+  ],
+  volunteer_results: [
+    'volunteer_results',
+    'scorer',
+    'race_committee',
+  ],
+  member: ['member', 'instructor'],
+  guest: ['guest'],
+};
+
+export const ADMIN_ACCESS_ROLES: ClubRole[] = ['admin'];
 
 export const CORE_MANAGEMENT_ROLES: ClubRole[] = [
   ...ADMIN_ACCESS_ROLES,
-  'scorer',
-  'communications',
-  'treasurer',
-  'membership_manager',
+  'race_admin',
+  'volunteer_results',
 ];
 
-export const isManagementRole = (role: ClubRole): boolean =>
-  CORE_MANAGEMENT_ROLES.includes(role);
+export const getRoleAliases = (role: ClubRole): string[] => ROLE_ALIASES[role] ?? [role];
 
-export const hasAdminAccess = (role: ClubRole): boolean =>
-  ADMIN_ACCESS_ROLES.includes(role);
+export const isManagementRole = (role: string | ClubRole | null | undefined): boolean =>
+  CORE_MANAGEMENT_ROLES.includes(normalizeClubRole(role));
+
+export const hasAdminAccess = (role: string | ClubRole | null | undefined): boolean =>
+  ADMIN_ACCESS_ROLES.includes(normalizeClubRole(role));
 
 const ROLE_DEFINITION_MAP: Record<ClubRole, ClubRoleDefinition> =
   CLUB_ROLE_DEFINITIONS.reduce((acc, definition) => {
@@ -148,15 +143,19 @@ const ROLE_DEFINITION_MAP: Record<ClubRole, ClubRoleDefinition> =
     return acc;
   }, {} as Record<ClubRole, ClubRoleDefinition>);
 
-export const getClubRoleDefinition = (role: ClubRole): ClubRoleDefinition =>
-  ROLE_DEFINITION_MAP[role];
+export const getClubRoleDefinition = (role: string | ClubRole): ClubRoleDefinition =>
+  ROLE_DEFINITION_MAP[normalizeClubRole(role)];
 
 export const isValidClubRole = (role: string | null | undefined): role is ClubRole =>
   !!role && Object.prototype.hasOwnProperty.call(ROLE_DEFINITION_MAP, role);
 
-export const normalizeClubRole = (role?: string | ClubRole | null): ClubRole => {
+export const normalizeClubRole = (role?: string | ClubRole | LegacyClubRole | null): ClubRole => {
   if (role && isValidClubRole(role)) {
     return role as ClubRole;
+  }
+
+  if (role && Object.prototype.hasOwnProperty.call(LEGACY_ROLE_MAP, role)) {
+    return LEGACY_ROLE_MAP[role as LegacyClubRole];
   }
 
   return 'member';

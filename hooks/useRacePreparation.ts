@@ -17,7 +17,7 @@ import type {
   StrategyNotes,
 } from '@/types/raceIntentions';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const logger = createLogger('useRacePreparation');
 
@@ -138,14 +138,45 @@ export function useRacePreparation({
   const pendingChangesRef = useRef<Partial<SailorRacePreparation>>({});
   /** Tracks if we've completed initial load - used to prevent loading flicker on subsequent refreshes */
   const hasLoadedOnceRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const saveRunIdRef = useRef(0);
+  const activeRegattaIdRef = useRef<string | null>(regattaId);
+  const activeUserIdRef = useRef<string | undefined>(user?.id);
 
+  useEffect(() => {
+    activeRegattaIdRef.current = regattaId;
+    activeUserIdRef.current = user?.id;
+  }, [regattaId, user?.id]);
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      saveRunIdRef.current += 1;
+    };
+  }, []);
 
   /**
    * Load preparation data from Supabase or AsyncStorage
    */
   const loadPreparation = useCallback(async () => {
-    if (!regattaId) {
+    const runId = ++loadRunIdRef.current;
+    const targetRegattaId = regattaId;
+    const targetUserId = user?.id;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeRegattaIdRef.current === targetRegattaId &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetRegattaId) {
+      if (!canCommit()) return;
+      setRigNotesState('');
+      setSelectedRigPresetIdState(null);
+      setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
+      setRaceBriefData(null);
+      setIntentions(DEFAULT_INTENTIONS);
       setIsLoading(false);
       return;
     }
@@ -156,15 +187,17 @@ export function useRacePreparation({
 
     // Only show loading UI on first load - background refresh keeps existing data visible
     if (!hasLoadedOnceRef.current) {
+      if (!canCommit()) return;
       setIsLoading(true);
     }
 
     // Handle non-UUID race IDs (demo races) with local storage
-    if (!isValidUUID(regattaId)) {
+    if (!isValidUUID(targetRegattaId)) {
       try {
-        const userId = user?.id || 'guest';
-        const key = `${STORAGE_KEY_PREFIX}${regattaId}_${userId}`;
+        const demoUserId = targetUserId || 'guest';
+        const key = `${STORAGE_KEY_PREFIX}${targetRegattaId}_${demoUserId}`;
         const saved = await AsyncStorage.getItem(key);
+        if (!canCommit()) return;
         if (saved) {
           const data = JSON.parse(saved);
           const existingIntentions = data.user_intentions;
@@ -175,9 +208,10 @@ export function useRacePreparation({
 
           // If existing data is empty, try to seed with demo data
           if (!hasCompletions) {
-            const seededData = DemoRaceService.getDemoRacePreparation(regattaId);
+            const seededData = DemoRaceService.getDemoRacePreparation(targetRegattaId);
             if (seededData) {
               logger.info('Seeding demo race with preparation data (existing was empty)');
+              if (!canCommit()) return;
               setIntentions(seededData);
               // Update AsyncStorage with seeded data
               await AsyncStorage.setItem(key, JSON.stringify({
@@ -187,6 +221,7 @@ export function useRacePreparation({
               }));
             } else {
               // Not a seeded demo race, use existing empty data
+              if (!canCommit()) return;
               setRigNotesState(data.rig_notes || '');
               setSelectedRigPresetIdState(data.selected_rig_preset_id || null);
               setAcknowledgements(data.regulatory_acknowledgements || DEFAULT_ACKNOWLEDGEMENTS);
@@ -195,6 +230,7 @@ export function useRacePreparation({
             }
           } else {
             // Existing data has completions, use it
+            if (!canCommit()) return;
             setRigNotesState(data.rig_notes || '');
             setSelectedRigPresetIdState(data.selected_rig_preset_id || null);
             setAcknowledgements(data.regulatory_acknowledgements || DEFAULT_ACKNOWLEDGEMENTS);
@@ -204,9 +240,10 @@ export function useRacePreparation({
           }
         } else {
           // No existing data - check for seeded demo data
-          const seededData = DemoRaceService.getDemoRacePreparation(regattaId);
+          const seededData = DemoRaceService.getDemoRacePreparation(targetRegattaId);
           if (seededData) {
             logger.info('Using seeded demo race preparation data');
+            if (!canCommit()) return;
             setIntentions(seededData);
             // Save seeded data to AsyncStorage so it persists
             await AsyncStorage.setItem(key, JSON.stringify({
@@ -215,6 +252,7 @@ export function useRacePreparation({
             }));
           } else {
             // Truly no data available, reset to defaults
+            if (!canCommit()) return;
             setRigNotesState('');
             setSelectedRigPresetIdState(null);
             setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
@@ -223,8 +261,9 @@ export function useRacePreparation({
           }
         }
       } catch (error) {
-        console.error('[useRacePreparation] loadPreparation - AsyncStorage failed', error);
+        logger.error('loadPreparation - AsyncStorage failed', error);
       } finally {
+        if (!canCommit()) return;
         setIsLoading(false);
         hasLoadedOnceRef.current = true;
       }
@@ -232,13 +271,20 @@ export function useRacePreparation({
     }
 
     // For non-demo races, we require authentication
-    if (!user?.id) {
+    if (!targetUserId) {
+      if (!canCommit()) return;
+      setRigNotesState('');
+      setSelectedRigPresetIdState(null);
+      setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
+      setRaceBriefData(null);
+      setIntentions(DEFAULT_INTENTIONS);
       setIsLoading(false);
       return;
     }
 
     try {
-      const data = await sailorRacePreparationService.getPreparation(regattaId, user.id);
+      const data = await sailorRacePreparationService.getPreparation(targetRegattaId, targetUserId);
+      if (!canCommit()) return;
 
       if (data) {
         setRigNotesState(data.rig_notes || '');
@@ -257,6 +303,7 @@ export function useRacePreparation({
     } catch (error) {
       logger.error('Failed to load race preparation:', error);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
       hasLoadedOnceRef.current = true;
     }
@@ -266,18 +313,29 @@ export function useRacePreparation({
    * Save pending changes to Supabase or AsyncStorage
    */
   const saveChanges = useCallback(async () => {
+    const runId = ++saveRunIdRef.current;
+    const targetRegattaId = regattaId;
+    const targetUserId = user?.id;
+    const canUpdateUi = () =>
+      isMountedRef.current &&
+      runId === saveRunIdRef.current &&
+      activeRegattaIdRef.current === targetRegattaId &&
+      activeUserIdRef.current === targetUserId;
+
     // For demo races (non-UUID), we allow saving even without a user ID (guest mode)
-    const isDemoRace = !isValidUUID(regattaId);
-    if (!regattaId || (!user?.id && !isDemoRace) || Object.keys(pendingChangesRef.current).length === 0) {
+    const isDemoRace = targetRegattaId ? !isValidUUID(targetRegattaId) : false;
+    if (!targetRegattaId || (!targetUserId && !isDemoRace) || Object.keys(pendingChangesRef.current).length === 0) {
       return;
     }
 
     // Handle non-UUID race IDs (demo races) with local storage
     if (isDemoRace) {
       try {
-        setIsSaving(true);
-        const userId = user?.id || 'guest';
-        const key = `${STORAGE_KEY_PREFIX}${regattaId}_${userId}`;
+        if (canUpdateUi()) {
+          setIsSaving(true);
+        }
+        const demoUserId = targetUserId || 'guest';
+        const key = `${STORAGE_KEY_PREFIX}${targetRegattaId}_${demoUserId}`;
 
         // Load existing to merge updates
         const existingStr = await AsyncStorage.getItem(key);
@@ -290,52 +348,58 @@ export function useRacePreparation({
         };
 
         await AsyncStorage.setItem(key, JSON.stringify(merged));
-        logger.info('Demo race preparation saved to AsyncStorage', { regattaId });
+        logger.info('Demo race preparation saved to AsyncStorage', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
       } catch (error) {
-        console.error('[useRacePreparation] AsyncStorage save failed:', error);
+        logger.error('AsyncStorage save failed', error);
         logger.error('AsyncStorage save failed:', error);
         // Keep pending changes so they can be retried
       } finally {
-        setIsSaving(false);
+        if (canUpdateUi()) {
+          setIsSaving(false);
+        }
       }
       return;
     }
 
     try {
-      setIsSaving(true);
+      if (canUpdateUi()) {
+        setIsSaving(true);
+      }
 
       const updates: SailorRacePreparation = {
-        regatta_id: regattaId,
-        sailor_id: user.id,
+        regatta_id: targetRegattaId,
+        sailor_id: targetUserId!,
         ...pendingChangesRef.current,
       };
 
-      logger.info('Saving race preparation to Supabase', { regattaId, hasIntentions: !!updates.user_intentions });
+      logger.info('Saving race preparation to Supabase', { regattaId: targetRegattaId, hasIntentions: !!updates.user_intentions });
       const result = await sailorRacePreparationService.upsertPreparation(updates);
 
       if (result) {
-        logger.info('Race preparation saved successfully', { regattaId });
+        logger.info('Race preparation saved successfully', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
       } else {
         // Regatta doesn't exist - log this for debugging
-        console.warn('[useRacePreparation] Regatta does not exist, cannot save preparation:', regattaId);
-        logger.warn('Regatta does not exist, skipping save', { regattaId });
+        logger.warn('Regatta does not exist, cannot save preparation', targetRegattaId);
+        logger.warn('Regatta does not exist, skipping save', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
       }
     } catch (error: any) {
       // RLS errors (42501) are expected when race doesn't exist or user doesn't have access yet
       // This happens during sample data creation - just log as warning and clear pending changes
       if (error?.code === '42501') {
-        logger.warn('RLS policy prevented save (race may not exist yet)', { regattaId });
+        logger.warn('RLS policy prevented save (race may not exist yet)', { regattaId: targetRegattaId });
         pendingChangesRef.current = {};
       } else {
-        console.warn('[useRacePreparation] Failed to save race preparation:', error);
+        logger.warn('Failed to save race preparation', error);
         logger.warn('Failed to save race preparation:', error);
         // Keep pending changes so they can be retried
       }
     } finally {
-      setIsSaving(false);
+      if (canUpdateUi()) {
+        setIsSaving(false);
+      }
     }
   }, [regattaId, user?.id]);
 
@@ -352,7 +416,7 @@ export function useRacePreparation({
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      saveChanges();
+      void saveChanges();
     }, debounceMs);
   }, [autoSave, debounceMs, saveChanges]);
 
@@ -472,7 +536,7 @@ export function useRacePreparation({
         return merged;
       });
     },
-    [scheduleSave, regattaId, user?.id]
+    [scheduleSave]
   );
 
   /**
@@ -561,7 +625,7 @@ export function useRacePreparation({
 
   // Load data on mount or when race changes
   useEffect(() => {
-    loadPreparation();
+    void loadPreparation();
   }, [loadPreparation]);
 
   // Cleanup on unmount
@@ -572,7 +636,7 @@ export function useRacePreparation({
       }
       // Save any pending changes before unmounting
       if (Object.keys(pendingChangesRef.current).length > 0) {
-        saveChanges();
+        void saveChanges();
       }
     };
   }, [saveChanges]);
@@ -581,7 +645,7 @@ export function useRacePreparation({
   const isInitialLoading = isLoading && !hasLoadedOnceRef.current;
   const hasData = !!intentions?.updatedAt || hasLoadedOnceRef.current;
 
-  return {
+  return useMemo(() => ({
     // State
     rigNotes,
     selectedRigPresetId,
@@ -607,5 +671,28 @@ export function useRacePreparation({
     updateStrategyNote,
     save,
     refresh,
-  };
+  }), [
+    rigNotes,
+    selectedRigPresetId,
+    acknowledgements,
+    raceBriefData,
+    intentions,
+    isLoading,
+    isInitialLoading,
+    hasData,
+    isSaving,
+    setRigNotes,
+    setSelectedRigPresetId,
+    setAcknowledgementsCallback,
+    toggleAcknowledgement,
+    updateRaceBrief,
+    updateIntentions,
+    updateArrivalIntention,
+    updateSailSelection,
+    updateRigIntentions,
+    updateCourseSelection,
+    updateStrategyNote,
+    save,
+    refresh,
+  ]);
 }

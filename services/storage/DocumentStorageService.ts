@@ -49,7 +49,7 @@ export class DocumentStorageService {
 
     // Prevent concurrent picker operations
     if (this.isPickerOpen) {
-      console.warn('DocumentStorageService: Picker already open, ignoring request');
+      logger.warn('DocumentStorageService: Picker already open, ignoring request');
       return {
         success: false,
         error: 'Document picker already open. Please complete or cancel the current selection first.'
@@ -192,7 +192,7 @@ export class DocumentStorageService {
 
         // Test bucket access first
         logger.debug('🪣 DocumentStorageService: Testing bucket access...');
-        const { data: bucketTest, error: bucketError } = await Promise.race([
+        const { error: bucketError } = await Promise.race([
           supabase.storage.from(this.bucketName).list('', { limit: 1 }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Bucket test timeout')), 10000))
         ]) as any;
@@ -216,7 +216,7 @@ export class DocumentStorageService {
           }, 60000);
         });
 
-        const { data: uploadData, error: uploadError } = await Promise.race([
+        const { error: uploadError } = await Promise.race([
           uploadPromise,
           timeoutPromise
         ]) as any;
@@ -282,7 +282,7 @@ export class DocumentStorageService {
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 
       if (supabaseUrl === 'https://placeholder.supabase.co') {
-        console.warn('📄 DocumentStorageService: Using local storage fallback for documents');
+        logger.warn('📄 DocumentStorageService: Using local storage fallback for documents');
 
         // Get documents from localStorage
         try {
@@ -294,7 +294,7 @@ export class DocumentStorageService {
             return userDocs;
           }
         } catch (localError) {
-          console.error('📄 DocumentStorageService: Error reading local storage:', localError);
+          logger.error('📄 DocumentStorageService: Error reading local storage:', localError);
         }
 
         return [];
@@ -308,11 +308,10 @@ export class DocumentStorageService {
           setTimeout(() => reject(new Error('Connection test timeout after 5 seconds')), 5000);
         });
 
-        const connectionResult = await Promise.race([connectionPromise, timeoutPromise]);
-        const { data: connectionTest, error: connectionError } = connectionResult as any;
+        await Promise.race([connectionPromise, timeoutPromise]);
 
       } catch (connErr) {
-        console.error('📄 DocumentStorageService: Connection test failed, returning empty array:', connErr);
+        logger.error('📄 DocumentStorageService: Connection test failed, returning empty array:', connErr);
         return [];
       }
 
@@ -333,13 +332,13 @@ export class DocumentStorageService {
       const { data, error } = result as any;
 
       if (error) {
-        console.error('📄 DocumentStorageService: Database error:', error);
+        logger.error('📄 DocumentStorageService: Database error:', error);
 
         // Check if table doesn't exist
         if (error.message?.includes('relation "documents" does not exist') ||
             error.code === 'PGRST204' ||
             error.code === '42P01') {
-          console.warn('📄 DocumentStorageService: documents table does not exist, returning empty array');
+          logger.warn('📄 DocumentStorageService: documents table does not exist, returning empty array');
           return [];
         }
 
@@ -349,7 +348,7 @@ export class DocumentStorageService {
       return data || [];
 
     } catch (error: any) {
-      console.error('📄 DocumentStorageService: Failed to fetch documents:', error);
+      logger.error('📄 DocumentStorageService: Failed to fetch documents:', error);
       return [];
     }
   }
@@ -393,7 +392,7 @@ export class DocumentStorageService {
         .remove([doc.file_path]);
 
       if (storageError) {
-        console.error('Storage deletion error:', storageError);
+        logger.error('Storage deletion error:', storageError);
       }
 
       // Delete from database
@@ -408,7 +407,7 @@ export class DocumentStorageService {
       return true;
 
     } catch (error: any) {
-      console.error('Delete document error:', error);
+      logger.error('Delete document error:', error);
       return false;
     }
   }
@@ -654,7 +653,7 @@ export class DocumentStorageService {
       return data;
 
     } catch (error: any) {
-      console.error('Download document error:', error);
+      logger.error('Download document error:', error);
       return null;
     }
   }
@@ -677,7 +676,7 @@ export class DocumentStorageService {
       return data;
 
     } catch (error: any) {
-      console.error('Failed to get document analysis:', error);
+      logger.error('Failed to get document analysis:', error);
       return null;
     }
   }
@@ -699,7 +698,7 @@ export class DocumentStorageService {
       return true;
 
     } catch (error: any) {
-      console.error('Failed to update document analysis:', error);
+      logger.error('Failed to update document analysis:', error);
       return false;
     }
   }

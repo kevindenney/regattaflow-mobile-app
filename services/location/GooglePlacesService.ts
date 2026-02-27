@@ -5,6 +5,9 @@
  * API Documentation: https://developers.google.com/maps/documentation/places/web-service/overview
  * Requires: EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
  */
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('LocationGooglePlacesService');
 
 export interface PlaceSearchResult {
   placeId: string;
@@ -28,11 +31,11 @@ export interface PlaceDetails extends PlaceSearchResult {
     periods: any[];
     weekdayText: string[];
   };
-  photos?: Array<{
+  photos?: {
     name: string;
     widthPx: number;
     heightPx: number;
-  }>;
+  }[];
   editorialSummary?: string;
   googleMapsUri?: string;
 }
@@ -160,7 +163,7 @@ export class GooglePlacesService {
 
       if (!response.ok) {
         const error = await response.text();
-        console.error(`Google Places API error: ${response.status} - ${error}`);
+        logger.error(`Google Places API error: ${response.status} - ${error}`);
         return null;
       }
 
@@ -187,7 +190,7 @@ export class GooglePlacesService {
         googleMapsUri: place.googleMapsUri,
       };
     } catch (error: any) {
-
+      logger.error('getPlaceDetails failed:', error);
       return null;
     }
   }
@@ -218,7 +221,7 @@ export class GooglePlacesService {
       const data = await response.json();
 
       if (data.status !== 'OK' || !data.results?.[0]) {
-        console.warn(`Geocoding failed: ${data.status} - ${data.error_message || 'No results'}`);
+        logger.warn(`Geocoding failed: ${data.status} - ${data.error_message || 'No results'}`);
         return null;
       }
 
@@ -235,7 +238,7 @@ export class GooglePlacesService {
         types: result.types,
       };
     } catch (error: any) {
-
+      logger.error('geocodeAddress failed:', error);
       return null;
     }
   }
@@ -266,7 +269,7 @@ export class GooglePlacesService {
       const data = await response.json();
 
       if (data.status !== 'OK' || !data.results?.[0]) {
-        console.warn(`Reverse geocoding failed: ${data.status}`);
+        logger.warn(`Reverse geocoding failed: ${data.status}`);
         return null;
       }
 
@@ -283,7 +286,7 @@ export class GooglePlacesService {
         types: result.types,
       };
     } catch (error: any) {
-
+      logger.error('reverseGeocode failed:', error);
       return null;
     }
   }
@@ -337,10 +340,10 @@ export class GooglePlacesService {
    * @param delayMs - Delay between requests (default 100ms)
    */
   async batchSearch(
-    queries: Array<{ name: string; location?: { latitude: number; longitude: number } }>,
+    queries: { name: string; location?: { latitude: number; longitude: number } }[],
     delayMs: number = 100
-  ): Promise<Array<{ query: string; results: PlaceSearchResult[] }>> {
-    const results: Array<{ query: string; results: PlaceSearchResult[] }> = [];
+  ): Promise<{ query: string; results: PlaceSearchResult[] }[]> {
+    const results: { query: string; results: PlaceSearchResult[] }[] = [];
 
     for (const query of queries) {
 

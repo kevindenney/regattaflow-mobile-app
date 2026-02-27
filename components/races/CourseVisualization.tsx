@@ -5,14 +5,19 @@
  * Universal component (iOS, Android, Web)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, Platform, ActivityIndicator, Text } from 'react-native';
 import { CourseMark, CourseGeoJSON } from '../../types/raceEvents';
 import CourseVisualizationService from '../../services/CourseVisualizationService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CourseVisualization');
 
 // Platform-specific imports
 const MapView = Platform.select({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   web: () => require('./CourseVisualizationWeb').default,
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   default: () => require('./CourseVisualizationNative').default
 })();
 
@@ -37,11 +42,7 @@ export default function CourseVisualization({
   const [mapBounds, setMapBounds] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    generateVisualization();
-  }, [marks, racingAreaBoundary, courseConfiguration]);
-
-  const generateVisualization = () => {
+  const generateVisualization = useCallback(() => {
     try {
       // Generate GeoJSON from marks
       const geojson = CourseVisualizationService.generateCourseGeoJSON({
@@ -58,10 +59,14 @@ export default function CourseVisualization({
 
       setLoading(false);
     } catch (error) {
-      console.error('Error generating course visualization:', error);
+      logger.error('Error generating course visualization', error);
       setLoading(false);
     }
-  };
+  }, [marks, racingAreaBoundary, courseConfiguration]);
+
+  useEffect(() => {
+    generateVisualization();
+  }, [generateVisualization]);
 
   if (loading) {
     return (

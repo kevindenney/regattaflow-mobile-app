@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Text } from 'react-native';
 import maplibregl, { GeoJSONSource, LngLatBoundsLike, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -35,7 +35,30 @@ const MARK_COLORS: Record<CourseMark['type'], string> = {
   mark: '#2563eb',
 };
 
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+const MAP_STYLE = {
+  version: 8,
+  sources: {
+    'raster-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#f1f5f9' },
+    },
+    {
+      id: 'raster-layer',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: { 'raster-opacity': 0.9 },
+    },
+  ],
+} as const;
+const maplibreNs: any = (maplibregl as any)?.default || (maplibregl as any);
 
 const CourseMapView: React.FC<CourseMapViewProps> = ({
   courseMarks = [],
@@ -48,12 +71,15 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const hasFitToBoundsRef = useRef(false);
   const previousCountRef = useRef(courseMarks.length);
 
   const bounds = useMemo(() => {
     if (!courseMarks.length) return null;
-    const mapBounds = new maplibregl.LngLatBounds();
+    const LngLatBounds = maplibreNs?.LngLatBounds;
+    if (!LngLatBounds) return null;
+    const mapBounds = new LngLatBounds();
     courseMarks.forEach((mark) => {
       mapBounds.extend([mark.coordinates.longitude, mark.coordinates.latitude]);
     });
@@ -62,39 +88,66 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    const MapConstructor = maplibreNs?.Map;
+    const NavigationControl = maplibreNs?.NavigationControl;
+    const ScaleControl = maplibreNs?.ScaleControl;
+    if (!MapConstructor || !NavigationControl || !ScaleControl) {
+      setMapError('Map constructor unavailable on this browser.');
+      return;
+    }
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: MAP_STYLE,
-      center: [centerCoordinate.longitude, centerCoordinate.latitude],
-      zoom: 11,
-      pitch: 45,
-      bearing: 0,
-      antialias: true,
-    });
+    try {
+      const map = new MapConstructor({
+        container: containerRef.current,
+        style: MAP_STYLE,
+        center: [centerCoordinate.longitude, centerCoordinate.latitude],
+        zoom: 11,
+        pitch: 45,
+        bearing: 0,
+        antialias: true,
+      });
 
-    mapRef.current = map;
+      mapRef.current = map;
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-    map.addControl(new maplibregl.ScaleControl({ unit: 'nautical' }), 'bottom-left');
+      map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+      map.addControl(new ScaleControl({ unit: 'nautical' }), 'bottom-left');
 
-    const handleLoad = () => {
-      setMapReady(true);
-    };
+      const handleLoad = () => {
+        setMapReady(true);
+        setMapError(null);
+      };
 
-    map.on('load', handleLoad);
+      const handleError = () => {
+        setMapError('Unable to render map in this browser. Course markers remain editable.');
+      };
+      map.on('load', handleLoad);
+      map.on('error', handleError);
 
-    return () => {
-      map.off('load', handleLoad);
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-      map.remove();
-      mapRef.current = null;
-    };
+      return () => {
+        map.off('load', handleLoad);
+        map.off('error', handleError);
+        markersRef.current.forEach((marker) => marker.remove());
+        markersRef.current = [];
+        map.remove();
+        mapRef.current = null;
+      };
+    } catch (error) {
+      setMapError(
+        `Map initialization failed: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`
+      );
+      return;
+    }
   }, [centerCoordinate.latitude, centerCoordinate.longitude]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
+    const MarkerConstructor = maplibreNs?.Marker;
+    const PopupConstructor = maplibreNs?.Popup;
+    if (!MarkerConstructor || !PopupConstructor) {
+      return;
+    }
 
     const map = mapRef.current;
 
@@ -120,13 +173,13 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
         onMarkPress?.(mark);
       });
 
-      const marker = new maplibregl.Marker({
+      const marker = new MarkerConstructor({
         element: markerEl,
         anchor: 'center',
       })
         .setLngLat([mark.coordinates.longitude, mark.coordinates.latitude])
         .setPopup(
-          new maplibregl.Popup({ offset: 12 }).setHTML(
+          new PopupConstructor({ offset: 12 }).setHTML(
             `<strong>${mark.name}</strong><br/>${mark.type.toUpperCase()}`
           )
         )
@@ -219,7 +272,7 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
         ref={containerRef}
         style={{ position: 'absolute', inset: 0 }}
       />
-      {!mapReady && (
+      {!mapReady && !mapError && (
         <View
           style={{
             position: 'absolute',
@@ -230,6 +283,32 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
           }}
         >
           <ActivityIndicator size="small" color="#2563eb" />
+        </View>
+      )}
+      {mapError && (
+        <View
+          style={{
+            position: 'absolute',
+            inset: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.04)',
+            paddingHorizontal: 20,
+          }}
+        >
+          <Text style={{ color: '#0f172a', fontSize: 13, textAlign: 'center', lineHeight: 18 }}>
+            {mapError}
+          </Text>
+          <Text
+            style={{
+              marginTop: 8,
+              color: '#475569',
+              fontSize: 12,
+              textAlign: 'center',
+            }}
+          >
+            Center: {centerCoordinate.latitude.toFixed(4)}, {centerCoordinate.longitude.toFixed(4)}
+          </Text>
         </View>
       )}
     </View>

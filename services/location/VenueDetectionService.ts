@@ -8,6 +8,7 @@
 
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
 
 // Dynamic import helper for expo-location to avoid NativeEventEmitter error on web
 let LocationModule: typeof import('expo-location') | null = null;
@@ -57,11 +58,11 @@ export interface VenueDetectionResult {
   venue: SailingVenue | null;
   confidence: number; // 0-1
   distance: number; // meters from venue center
-  alternatives: Array<{
+  alternatives: {
     venue: SailingVenue;
     distance: number;
     confidence: number;
-  }>;
+  }[];
   detectionMethod: 'gps' | 'manual' | 'cached' | 'network';
   timestamp: Date;
 }
@@ -79,11 +80,12 @@ export interface LocationUpdate {
 }
 
 export class VenueDetectionService {
+  private logger = createLogger('VenueDetectionService');
   private venueDatabase: Map<string, SailingVenue> = new Map();
   private currentVenue: SailingVenue | null = null;
   private lastKnownLocation: any | null = null; // expo-location LocationObject
   private locationWatcher: any | null = null; // expo-location LocationSubscription
-  private listeners: Array<(update: LocationUpdate) => void> = [];
+  private listeners: ((update: LocationUpdate) => void)[] = [];
   private isInitialized = false;
 
   constructor() {
@@ -98,7 +100,7 @@ export class VenueDetectionService {
       // Skip on web - no native location support
       const Location = await getLocationModule();
       if (!Location) {
-        console.log('[VenueDetectionService] Skipping initialization on web');
+        this.logger.info('Skipping initialization on web');
         return false;
       }
 
@@ -203,7 +205,7 @@ export class VenueDetectionService {
    */
   private async detectVenueFromLocation(location: any): Promise<VenueDetectionResult> {
     const venues = Array.from(this.venueDatabase.values());
-    const results: Array<{ venue: SailingVenue; distance: number; confidence: number }> = [];
+    const results: { venue: SailingVenue; distance: number; confidence: number }[] = [];
 
     // Calculate distances to all venues
     for (const venue of venues) {

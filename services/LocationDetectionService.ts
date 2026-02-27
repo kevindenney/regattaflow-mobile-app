@@ -6,9 +6,11 @@
 
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // Dynamic import helper for expo-location (native only)
 let LocationModule: typeof import('expo-location') | null = null;
+const logger = createLogger('LocationDetectionService');
 
 async function getLocationModule() {
   if (Platform.OS === 'web') {
@@ -56,7 +58,7 @@ export class LocationDetectionService {
   } | null> {
     const Location = await getLocationModule();
     if (!Location) {
-      console.warn('Location detection not available on web');
+      logger.warn('Location detection not available on web');
       return null;
     }
 
@@ -65,7 +67,7 @@ export class LocationDetectionService {
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== 'granted') {
-        console.warn('Location permission denied');
+        logger.warn('Location permission denied');
         return null;
       }
 
@@ -89,7 +91,7 @@ export class LocationDetectionService {
         .limit(1);
 
       if (error) {
-        console.error('Error finding nearby venues:', error);
+        logger.error('Error finding nearby venues:', error);
         return null;
       }
 
@@ -114,7 +116,7 @@ export class LocationDetectionService {
         coordinates,
       };
     } catch (error) {
-      console.error('Error detecting location:', error);
+      logger.error('Error detecting location:', error);
       return null;
     }
   }
@@ -135,7 +137,7 @@ export class LocationDetectionService {
 
       return venues || [];
     } catch (error) {
-      console.error('Error searching locations:', error);
+      logger.error('Error searching locations:', error);
       return [];
     }
   }
@@ -169,7 +171,7 @@ export class LocationDetectionService {
 
       return location;
     } catch (error) {
-      console.error('Error adding sailor location:', error);
+      logger.error('Error adding sailor location:', error);
       return null;
     }
   }
@@ -193,7 +195,7 @@ export class LocationDetectionService {
 
       return locations || [];
     } catch (error) {
-      console.error('Error getting sailor locations:', error);
+      logger.error('Error getting sailor locations:', error);
       return [];
     }
   }
@@ -220,7 +222,7 @@ export class LocationDetectionService {
 
       return location || null;
     } catch (error) {
-      console.error('Error getting primary location:', error);
+      logger.error('Error getting primary location:', error);
       return null;
     }
   }
@@ -241,7 +243,7 @@ export class LocationDetectionService {
 
       return true;
     } catch (error) {
-      console.error('Error setting primary location:', error);
+      logger.error('Error setting primary location:', error);
       return false;
     }
   }
@@ -261,7 +263,7 @@ export class LocationDetectionService {
 
       return true;
     } catch (error) {
-      console.error('Error removing sailor location:', error);
+      logger.error('Error removing sailor location:', error);
       return false;
     }
   }

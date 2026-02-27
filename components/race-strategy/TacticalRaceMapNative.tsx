@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, TurboModuleRegistry } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, TurboModuleRegistry, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type {
   CourseMark,
@@ -172,6 +172,18 @@ export default function TacticalRaceMapNative({
     };
   }, [environmental]);
 
+  const handleContactSupport = useCallback(() => {
+    const subject = encodeURIComponent('3D Tactical Map Unavailable');
+    const body = encodeURIComponent(
+      `Tactical race map is unavailable in this build.\n\n` +
+      `Platform: ${Platform.OS}\n` +
+      `Maps module available: ${mapsAvailable ? 'yes' : 'no'}\n` +
+      `Race ID: ${raceEvent?.id || 'unknown'}`
+    );
+    const mailtoUrl = `mailto:support@regattaflow.com?subject=${subject}&body=${body}`;
+    Linking.openURL(mailtoUrl).catch(() => {});
+  }, [raceEvent?.id]);
+
   // Handle mark press
   const handleMarkPress = useCallback((mark: any) => {
     // Find the corresponding CourseMark
@@ -217,6 +229,9 @@ export default function TacticalRaceMapNative({
             ? 'Use the web version for full map features'
             : 'Requires a development build with native maps.\nRun: npx expo prebuild && npx expo run:ios'}
         </Text>
+        <TouchableOpacity style={styles.fallbackActionButton} onPress={handleContactSupport}>
+          <Text style={styles.fallbackActionText}>Contact Support</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -389,6 +404,20 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     textAlign: 'center',
     paddingHorizontal: 24,
+  },
+  fallbackActionButton: {
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#cbd5e1',
+  },
+  fallbackActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   controlsContainer: {
     position: 'absolute',

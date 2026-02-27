@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Dimensions, PanResponder, Animated } from 'react-native';
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
 import { ThemedText } from '../../../components/themed-text';
-import { Button } from '../ui/button';
-import { RaceCourse, Mark } from './RaceBuilder';
+import { RaceCourse } from './RaceBuilder';
 import { YachtClubCourseDesigner } from './yacht-club/YachtClubCourseDesigner';
+import { useAuth } from '@/providers/AuthProvider';
 // import Svg, { Circle, Line, Polygon, Text } from 'react-native-svg';
 
 export interface CourseDesignerProps {
@@ -12,22 +12,13 @@ export interface CourseDesignerProps {
   isPreviewMode?: boolean;
 }
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-
-// Convert between screen coordinates and geographic coordinates
-const MOCK_BOUNDS = {
-  north: 22.31,
-  south: 22.26,
-  east: 114.22,
-  west: 114.16
-};
-
-export function CourseDesigner({ course, onCourseUpdate, isPreviewMode }: CourseDesignerProps) {
-  // TODO: Detect user type from auth context
-  const userType = 'yacht_club'; // Hardcoded for now
+export function CourseDesigner({ course, onCourseUpdate }: CourseDesignerProps) {
+  const { userType } = useAuth();
+  // Keep yacht-club tooling as default while auth context is still loading.
+  const useYachtClubDesigner = !userType || userType === 'club';
 
   // Route to appropriate designer based on user type
-  if (userType === 'yacht_club') {
+  if (useYachtClubDesigner) {
     return (
       <YachtClubCourseDesigner
         course={course}

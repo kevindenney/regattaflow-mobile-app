@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, Dimensions, FlatList, TextInput as RNTextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, FlatList, TextInput as RNTextInput } from 'react-native';
 import {
   Calendar,
   ChevronLeft,
@@ -11,22 +11,11 @@ import {
   Clock,
   Users,
   FileText,
-  Download,
-  Eye,
-  Edit,
   MoreVertical,
-  CheckCircle,
-  AlertTriangle,
   X,
-  Circle,
   Sun,
   Navigation,
-  Wind,
-  Thermometer,
-  Upload,
-  Share2,
   Copy,
-  BarChart2,
   Flag,
   Mail
 } from 'lucide-react-native';
@@ -91,8 +80,6 @@ interface RegattaTemplate {
   description: string;
   type: RegattaTemplateType;
 }
-
-const { width } = Dimensions.get('window');
 
 const mockEvents: CalendarEvent[] = [
   {
@@ -823,14 +810,20 @@ const CalendarScreen = () => {
       
       {/* Other views would go here */}
       {viewMode === 'week' && (
-        <View className="flex-1 items-center justify-center px-4">
-          <Text className="text-gray-500 text-lg">Week view coming soon</Text>
+        <View className="flex-1 px-4 py-4">
+          <Text className="text-gray-700 text-base font-semibold mb-3">
+            Week View
+          </Text>
+          {renderEventList()}
         </View>
       )}
       
       {viewMode === 'day' && (
-        <View className="flex-1 items-center justify-center px-4">
-          <Text className="text-gray-500 text-lg">Day view coming soon</Text>
+        <View className="flex-1 px-4 py-4">
+          <Text className="text-gray-700 text-base font-semibold mb-3">
+            Day View
+          </Text>
+          {renderEventList()}
         </View>
       )}
       

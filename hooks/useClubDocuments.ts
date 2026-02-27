@@ -5,7 +5,7 @@
  * Provides document list and basic operations for display.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { clubDocumentService } from '@/services/ClubDocumentService';
 import type {
   ClubDocumentWithDetails,
@@ -66,27 +66,45 @@ export function useClubDocuments(options: UseClubDocumentsOptions): UseClubDocum
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [internalReloadKey, setInternalReloadKey] = useState(0);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const activeClubIdRef = useRef<string | null | undefined>(clubId);
+
+  useEffect(() => {
+    activeClubIdRef.current = clubId;
+  }, [clubId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
   // Load documents
   useEffect(() => {
-    let isActive = true;
-
     if (!clubId) {
       setDocuments([]);
       setError(null);
       setLoading(false);
-      return () => {
-        isActive = false;
-      };
+      return;
     }
 
     const loadDocuments = async () => {
+      const runId = ++loadRunIdRef.current;
+      const targetClubId = clubId;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === loadRunIdRef.current &&
+        activeClubIdRef.current === targetClubId;
+
+      if (!canCommit()) return;
       setLoading(true);
       setError(null);
 
       try {
-        const docs = await clubDocumentService.getClubDocuments(clubId);
-        if (!isActive) return;
+        const docs = await clubDocumentService.getClubDocuments(targetClubId);
+        if (!canCommit()) return;
 
         // Filter inactive if not requested
         const filtered = includeInactive
@@ -95,22 +113,18 @@ export function useClubDocuments(options: UseClubDocumentsOptions): UseClubDocum
 
         setDocuments(filtered);
       } catch (err) {
-        if (!isActive) return;
+        if (!canCommit()) return;
         logger.warn('Unable to load club documents', { error: err, clubId });
         setDocuments([]);
         setError('Unable to load club documents');
       } finally {
-        if (isActive) {
+        if (canCommit()) {
           setLoading(false);
         }
       }
     };
 
-    loadDocuments();
-
-    return () => {
-      isActive = false;
-    };
+    void loadDocuments();
   }, [clubId, includeInactive, reloadKey, internalReloadKey]);
 
   // Categorize documents

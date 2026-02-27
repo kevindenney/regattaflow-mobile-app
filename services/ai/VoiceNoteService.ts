@@ -16,9 +16,9 @@ import {
   IOSAudioQuality,
 } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
-import Anthropic from '@anthropic-ai/sdk';
 import { Platform } from 'react-native';
 import type { RaceStrategy, RaceConditions } from './RaceStrategyEngine';
+import { supabase } from '@/services/supabase';
 
 export interface VoiceNote {
   id: string;
@@ -67,16 +67,9 @@ export interface VoiceRecordingOptions {
 
 class VoiceNoteService {
   private recording: Audio.Recording | null = null;
-  private genAI: Anthropic;
   private isInitialized = false;
 
-  constructor() {
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error('EXPO_PUBLIC_ANTHROPIC_API_KEY is required for voice note processing');
-    }
-    this.genAI = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-  }
+  constructor() {}
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
@@ -310,17 +303,21 @@ Return as JSON with this structure:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307', // Using cheapest model for simple transcription (3x savings)
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: analysisPrompt
-        }]
+      const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt: analysisPrompt,
+          max_tokens: 1024,
+        },
       });
 
-      let text = message.content[0].type === 'text' ? message.content[0].text : '';
+      if (error) {
+        throw new Error(error.message || 'Voice note analysis invocation failed');
+      }
+
+      let text = typeof data?.text === 'string' ? data.text : '';
+      if (!text) {
+        throw new Error('Voice note analysis returned empty response');
+      }
 
       try {
         // Strip markdown code blocks if present

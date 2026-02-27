@@ -5,7 +5,7 @@
 
 import { TuningGuide, tuningGuideService } from '@/services/tuningGuideService';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -37,10 +37,10 @@ export function TuningGuidesSection({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadGuides();
-  }, [classId]);
+    void loadGuides();
+  }, [loadGuides]);
 
-  const loadGuides = async () => {
+  const loadGuides = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -52,7 +52,7 @@ export function TuningGuidesSection({
     } finally {
       setLoading(false);
     }
-  };
+  }, [classId]);
 
   const handleGuidePress = async (guide: TuningGuide) => {
     try {
@@ -279,8 +279,12 @@ export function TuningGuidesSection({
             } else {
               Alert.alert(
                 `${className} Tuning Guides`,
-                `You have ${guides.length} guide${guides.length > 1 ? 's' : ''} available. A full library view is coming soon!`,
-                [{ text: 'OK' }]
+                `You have ${guides.length} guide${guides.length > 1 ? 's' : ''} available.`,
+                [
+                  { text: 'Close', style: 'cancel' },
+                  { text: 'Search More', onPress: handleAutoScrape },
+                  ...(onUpload ? [{ text: 'Upload Guide', onPress: onUpload }] : []),
+                ]
               );
             }
           }}

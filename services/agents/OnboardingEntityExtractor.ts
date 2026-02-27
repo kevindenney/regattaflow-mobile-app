@@ -5,18 +5,21 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('OnboardingEntityExtractor');
 
 export interface ExtractedEntities {
   // Basic Info
-  clubs?: Array<{ name: string; confidence: number }>;
-  venues?: Array<{ name: string; location?: string; confidence: number }>;
-  boatClasses?: Array<{ name: string; confidence: number }>;
-  sailNumbers?: Array<{ number: string; boatClass?: string; confidence: number }>;
-  boatNames?: Array<{ name: string; sailNumber?: string; confidence: number }>;
+  clubs?: { name: string; confidence: number }[];
+  venues?: { name: string; location?: string; confidence: number }[];
+  boatClasses?: { name: string; confidence: number }[];
+  sailNumbers?: { number: string; boatClass?: string; confidence: number }[];
+  boatNames?: { name: string; sailNumber?: string; confidence: number }[];
 
   // Role & People
   role?: 'owner' | 'crew' | 'both';
-  crewMembers?: Array<{ name: string; position?: string }>;
+  crewMembers?: { name: string; position?: string }[];
 
   // Equipment
   sailMakers?: string[];
@@ -28,11 +31,11 @@ export interface ExtractedEntities {
   classAssociations?: string[];
 
   // URLs Found
-  urls: Array<{
+  urls: {
     url: string;
     type: 'club' | 'class' | 'calendar' | 'unknown';
     confidence: number;
-  }>;
+  }[];
 
   // Raw text for reference
   originalText: string;
@@ -57,7 +60,7 @@ export async function extractEntitiesFromText(
 
     return data as ExtractedEntities;
   } catch (error) {
-    console.error('Error extracting entities:', error);
+    logger.error('Error extracting entities', error);
     // Return minimal structure on error with regex fallback
     return {
       urls: extractURLsRegex(text),
@@ -69,11 +72,11 @@ export async function extractEntitiesFromText(
 /**
  * Fallback: Extract URLs using regex
  */
-function extractURLsRegex(text: string): Array<{
+function extractURLsRegex(text: string): {
   url: string;
   type: 'club' | 'class' | 'calendar' | 'unknown';
   confidence: number;
-}> {
+}[] {
   const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-z0-9-]+\.(com|org|net|edu|gov|hk|uk|au)[^\s]*)/gi;
   const matches = text.match(urlRegex) || [];
 
@@ -109,7 +112,7 @@ function extractURLsRegex(text: string): Array<{
  */
 export async function discoverURLsForEntities(
   entities: ExtractedEntities
-): Promise<Array<{ url: string; type: string; source: string; confidence: number }>> {
+): Promise<{ url: string; type: string; source: string; confidence: number }[]> {
   try {
     // Call Supabase Edge Function to discover URLs
     const { data, error } = await supabase.functions.invoke('discover-entity-urls', {
@@ -126,7 +129,7 @@ export async function discoverURLsForEntities(
 
     return data.discovered;
   } catch (error) {
-    console.error('Error discovering URLs:', error);
+    logger.error('Error discovering URLs', error);
     return [];
   }
 }

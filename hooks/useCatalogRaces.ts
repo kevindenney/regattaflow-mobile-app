@@ -5,15 +5,12 @@
  * discussion counts for catalog races.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   useQuery,
-  useMutation,
-  useQueryClient,
 } from '@tanstack/react-query';
 import { CatalogRaceService } from '@/services/CatalogRaceService';
 import { useAuth } from '@/providers/AuthProvider';
-import type { CatalogRace } from '@/types/catalog-race';
 
 // ============================================================================
 // QUERY KEYS
@@ -128,39 +125,70 @@ export function useSavedCatalogRaces(): UseSavedCatalogRacesReturn {
   const [followedRaceIds, setFollowedRaceIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+
+  useEffect(() => {
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const fetchFollowed = useCallback(async () => {
-    if (!user) {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = user?.id ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId) {
+      if (!canCommit()) return;
       setFollowedRaceIds(new Set());
+      setError(null);
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
     try {
       const ids = await CatalogRaceService.getFollowedRaceIds();
+      if (!canCommit()) return;
       setFollowedRaceIds(ids);
     } catch (err: unknown) {
       const message =
         typeof err === 'object' && err !== null && 'message' in err
           ? (err as { message: string }).message
           : 'Failed to fetch followed races';
+      if (!canCommit()) return;
       setError(message);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [user]);
 
   const followRace = useCallback(async (raceId: string) => {
-    if (!user) throw new Error('Must be logged in');
+    const targetUserId = user?.id ?? null;
+    if (!targetUserId) throw new Error('Must be logged in');
     await CatalogRaceService.followRace(raceId);
+    if (!isMountedRef.current || activeUserIdRef.current !== targetUserId) return;
     await fetchFollowed();
   }, [user, fetchFollowed]);
 
   const unfollowRace = useCallback(async (raceId: string) => {
-    if (!user) throw new Error('Must be logged in');
+    const targetUserId = user?.id ?? null;
+    if (!targetUserId) throw new Error('Must be logged in');
     await CatalogRaceService.unfollowRace(raceId);
+    if (!isMountedRef.current || activeUserIdRef.current !== targetUserId) return;
     await fetchFollowed();
   }, [user, fetchFollowed]);
 
@@ -169,7 +197,7 @@ export function useSavedCatalogRaces(): UseSavedCatalogRacesReturn {
   }, [followedRaceIds]);
 
   useEffect(() => {
-    fetchFollowed();
+    void fetchFollowed();
   }, [fetchFollowed]);
 
   return {

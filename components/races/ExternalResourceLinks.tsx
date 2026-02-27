@@ -12,6 +12,9 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking, Platform } from 'react-native';
 import { ExternalLink, Wind, Waves, ClipboardList, MapPin } from 'lucide-react-native';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ExternalResourceLinks');
 
 interface ExternalResourceLinksProps {
   /** Race venue coordinates */
@@ -114,14 +117,14 @@ export function ExternalResourceLinks({
       if (supported) {
         await Linking.openURL(url);
       } else {
-        console.warn(`Cannot open URL: ${url}`);
+        logger.warn(`Cannot open URL: ${url}`);
         // Fallback: try to open anyway on web
         if (Platform.OS === 'web') {
           window.open(url, '_blank');
         }
       }
     } catch (error) {
-      console.error(`Error opening ${name}:`, error);
+      logger.error(`Error opening ${name}`, error);
     }
   };
 
@@ -298,4 +301,3 @@ const styles = StyleSheet.create({
 });
 
 export default ExternalResourceLinks;
-

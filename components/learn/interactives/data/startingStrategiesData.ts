@@ -73,8 +73,8 @@ export const PORT_TACK_APPROACH_STEPS: StrategyStep[] = [
 // Placeholder for other strategies (to be implemented)
 export const SLOW_CONTROLLED_STEPS: StrategyStep[] = [
   {
-    label: "Coming Soon",
-    description: "This animation will be built out in a future step.",
+    label: "In Development",
+    description: "This sequence is being built. Use Port Tack Approach for the fully interactive demo.",
     visualState: { blue: { opacity: 0 }, red: { opacity: 0 }, yellow: { opacity: 0 } },
     details: ["This is a placeholder to prevent the application from crashing."],
   },
@@ -82,8 +82,8 @@ export const SLOW_CONTROLLED_STEPS: StrategyStep[] = [
 
 export const BARGING_DEFENSE_STEPS: StrategyStep[] = [
   {
-    label: "Coming Soon",
-    description: "This animation will be built out in a future step.",
+    label: "In Development",
+    description: "This sequence is being built. Use Port Tack Approach for the fully interactive demo.",
     visualState: { blue: { opacity: 0 }, red: { opacity: 0 }, yellow: { opacity: 0 } },
     details: ["This is a placeholder to prevent the application from crashing."],
   },
@@ -91,10 +91,9 @@ export const BARGING_DEFENSE_STEPS: StrategyStep[] = [
 
 export const VANDERBILT_START_STEPS: StrategyStep[] = [
   {
-    label: "Coming Soon",
-    description: "This animation will be built out in a future step.",
+    label: "In Development",
+    description: "This sequence is being built. Use Port Tack Approach for the fully interactive demo.",
     visualState: { blue: { opacity: 0 }, red: { opacity: 0 }, yellow: { opacity: 0 } },
     details: ["This is a placeholder to prevent the application from crashing."],
   },
 ];
-

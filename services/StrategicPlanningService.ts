@@ -1,4 +1,5 @@
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { supabase } from './supabase';
 import type { StrategySectionId, RaceStrategyNotes, StrategySectionNote } from '@/types/raceStrategy';
 
@@ -674,7 +675,7 @@ class StrategicPlanningService {
 
       if (error) {
         // Check if error is due to missing columns (migration not run)
-        if (error.message?.includes('column') || error.code === '42703') {
+        if (isMissingSupabaseColumn(error) || error.message?.includes('column')) {
           logger.warn('Public sharing columns do not exist - migration may not be run yet');
           return {
             enabled: false,

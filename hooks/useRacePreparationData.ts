@@ -180,7 +180,7 @@ export function useRacePreparationData({
     regattaAcknowledgements.signOn &&
     regattaAcknowledgements.safetyBriefing;
 
-  return {
+  return useMemo(() => ({
     rigPresets,
     isGenericDefaults,
     regulatoryDigest,
@@ -189,7 +189,16 @@ export function useRacePreparationData({
     hasPostAnalysis,
     hasCrewReady,
     hasRegulatoryAcknowledged,
-  };
+  }), [
+    rigPresets,
+    isGenericDefaults,
+    regulatoryDigest,
+    courseOutlineGroups,
+    hasStrategyGenerated,
+    hasPostAnalysis,
+    hasCrewReady,
+    hasRegulatoryAcknowledged,
+  ]);
 }
 
 export default useRacePreparationData;

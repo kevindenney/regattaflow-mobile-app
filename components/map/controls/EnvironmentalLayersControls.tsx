@@ -11,7 +11,7 @@
  * - Real-time data updates
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,9 @@ import {
   Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('EnvironmentalLayersControls');
 
 interface TidalConfig {
   enabled: boolean;
@@ -109,11 +112,7 @@ export function EnvironmentalLayersControls({
   const [expandedLayer, setExpandedLayer] = useState<'tidal' | 'current' | 'wind' | null>(null);
 
   // Load saved preferences
-  useEffect(() => {
-    loadPreferences();
-  }, []);
-
-  const loadPreferences = async () => {
+  const loadPreferences = useCallback(async () => {
     try {
       const saved = await AsyncStorage.getItem('@environmental_layers_config');
       if (saved) {
@@ -121,22 +120,20 @@ export function EnvironmentalLayersControls({
         onChange(savedConfig);
       }
     } catch (error) {
-      console.error('Failed to load environmental layers preferences:', error);
+      logger.error('Failed to load environmental layers preferences:', error);
     }
-  };
+  }, [onChange]);
+
+  useEffect(() => {
+    void loadPreferences();
+  }, [loadPreferences]);
 
   const savePreferences = async (newConfig: EnvironmentalLayersConfig) => {
     try {
       await AsyncStorage.setItem('@environmental_layers_config', JSON.stringify(newConfig));
     } catch (error) {
-      console.error('Failed to save environmental layers preferences:', error);
+      logger.error('Failed to save environmental layers preferences:', error);
     }
-  };
-
-  const updateConfig = (updates: Partial<EnvironmentalLayersConfig>) => {
-    const newConfig = { ...config, ...updates };
-    onChange(newConfig);
-    savePreferences(newConfig);
   };
 
   const updateLayerConfig = <T extends keyof EnvironmentalLayersConfig>(

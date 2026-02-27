@@ -418,8 +418,11 @@ export function HeroTabs() {
       router.push('/club-solutions');
       return;
     }
-
-    alert('Demo coming soon!');
+    if (activeTab === 'coaches') {
+      router.push('/coach/discover');
+      return;
+    }
+    router.push('/racing-console-demo');
   };
 
   return (

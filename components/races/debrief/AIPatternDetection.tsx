@@ -17,11 +17,14 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '@/providers/AuthProvider';
 import { postRaceLearningService } from '@/services/PostRaceLearningService';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   LearningProfile,
   PerformancePattern,
   RecurringInsight,
 } from '@/types/raceLearning';
+
+const logger = createLogger('AIPatternDetection');
 
 type PatternVariant = 'positive' | 'warning';
 
@@ -63,7 +66,7 @@ export const AIPatternDetection: React.FC = () => {
       const result = await postRaceLearningService.getLearningProfileForUser(user.id);
       setProfile(result);
     } catch (err) {
-      console.error('[AIPatternDetection] Failed to load learning profile', err);
+      logger.error('Failed to load learning profile', err);
       setError('Unable to load learning insights right now.');
     } finally {
       setLoading(false);
@@ -83,7 +86,7 @@ export const AIPatternDetection: React.FC = () => {
       const result = await postRaceLearningService.getLearningProfileForUser(user.id);
       setProfile(result);
     } catch (err) {
-      console.error('[AIPatternDetection] Refresh failed', err);
+      logger.error('Refresh failed', err);
       setError('Unable to refresh learning insights right now.');
     } finally {
       setRefreshing(false);

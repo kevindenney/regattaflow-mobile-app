@@ -13,6 +13,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Timer, Play, Pause, Square } from 'lucide-react-native';
 import { gpsTracker } from '@/services/GPSTracker';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('LiveRaceTimer');
 
 interface LiveRaceTimerProps {
   raceStartTime: string; // ISO 8601 format
@@ -32,8 +35,8 @@ type TimerState = 'pre-start' | 'racing' | 'paused' | 'stopped';
 export function LiveRaceTimer({
   raceStartTime,
   sessionId,
-  sailorId,
-  regattaId,
+  sailorId: _sailorId,
+  regattaId: _regattaId,
   onTimerStart,
   onTimerPause,
   onTimerStop,
@@ -80,7 +83,7 @@ export function LiveRaceTimer({
           onTrackingStart?.(sessionId);
         }
       } catch (error) {
-        console.error('[LiveRaceTimer] Failed to start GPS tracking:', error);
+        logger.error('Failed to start GPS tracking', error);
       }
     }
 
@@ -107,7 +110,7 @@ export function LiveRaceTimer({
         setGpsSessionId(null);
         onTrackingStop?.();
       } catch (error) {
-        console.error('[LiveRaceTimer] Failed to stop GPS tracking:', error);
+        logger.error('Failed to stop GPS tracking', error);
       }
     }
 

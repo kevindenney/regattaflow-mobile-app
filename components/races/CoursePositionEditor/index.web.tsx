@@ -21,10 +21,8 @@ import {
   Alert,
 } from 'react-native';
 import {
-  Check,
   MapPin,
   Navigation,
-  RotateCcw,
   Save,
   Target,
   X,
@@ -44,9 +42,34 @@ import {
 import { EditorControls } from './EditorControls';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 const logger = createLogger('CoursePositionEditor');
 const isWeb = Platform.OS === 'web';
+
+const WEB_MAP_STYLE = {
+  version: 8,
+  sources: {
+    'raster-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#f8fafc' },
+    },
+    {
+      id: 'raster-layer',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: { 'raster-opacity': 0.9 },
+    },
+  ],
+} as const;
 
 // Mark colors by type
 const MARK_COLORS: Record<string, string> = {
@@ -151,7 +174,7 @@ export function CoursePositionEditor({
     if (startLineCenter) {
       calculateCourse();
     }
-  }, [calculateCourse]);
+  }, [calculateCourse, startLineCenter]);
 
   // Callback ref to track when map container is mounted
   const mapContainerCallbackRef = useCallback((node: HTMLDivElement | null) => {
@@ -171,19 +194,37 @@ export function CoursePositionEditor({
 
     // Set flag BEFORE calling async function to prevent race condition
     isMapInitializingRef.current = true;
+    let mapLoadTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const initMap = async () => {
       try {
-        const maplibregl = await import('maplibre-gl');
-        await import('maplibre-gl/dist/maplibre-gl.css');
+        let maplibregl: any = null;
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = (maplibreModule as any).default || maplibreModule;
+          try {
+            await import('maplibre-gl/dist/maplibre-gl.css');
+          } catch (_cssError) {
+            ensureMapLibreCss('maplibre-gl-css-course-position-editor-web');
+          }
+        } catch (_moduleError) {
+          ensureMapLibreCss('maplibre-gl-css-course-position-editor-web');
+          await ensureMapLibreScript('maplibre-gl-script-course-position-editor-web');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        const MapConstructor = maplibregl?.Map;
+        const NavigationControl = maplibregl?.NavigationControl;
+        if (!MapConstructor) {
+          throw new Error('MapLibre Map constructor is unavailable');
+        }
 
-        maplibreRef.current = maplibregl.default;
+        maplibreRef.current = maplibregl;
 
         const center = startLineCenter || initialLocation || { lng: 114.16, lat: 22.28 };
 
-        const map = new maplibregl.default.Map({
+        const map = new MapConstructor({
           container: mapContainerRef.current!,
-          style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+          style: WEB_MAP_STYLE,
           center: [center.lng, center.lat],
           zoom: 13,
         });
@@ -191,7 +232,9 @@ export function CoursePositionEditor({
         // Set mapRef immediately to prevent duplicate initialization attempts
         mapRef.current = map;
 
-        map.addControl(new maplibregl.default.NavigationControl(), 'top-left');
+        if (NavigationControl) {
+          map.addControl(new NavigationControl(), 'top-left');
+        }
 
         // Error handler for tile loading issues
         map.on('error', (e: any) => {
@@ -232,7 +275,11 @@ export function CoursePositionEditor({
           }
         });
 
-        map.on('load', () => {
+        const handleMapLoad = () => {
+          if (mapLoadTimeout) {
+            clearTimeout(mapLoadTimeout);
+            mapLoadTimeout = null;
+          }
           isMapInitializingRef.current = false;
           setMapLoaded(true);
 
@@ -272,16 +319,33 @@ export function CoursePositionEditor({
               canvas.style.cursor = 'crosshair';
             }
           }
-        });
+        };
+        map.on('load', handleMapLoad);
+        mapLoadTimeout = setTimeout(() => {
+          logger.error('Map load timed out after 10 seconds');
+          setMapError('Map failed to load. Please retry.');
+          isMapInitializingRef.current = false;
+          map.off('load', handleMapLoad);
+          map.remove();
+          mapRef.current = null;
+        }, 10000);
       } catch (error) {
         logger.error('Failed to initialize map:', error);
         isMapInitializingRef.current = false;
+        setMapError('Failed to initialize map. Please retry.');
+        if (mapLoadTimeout) {
+          clearTimeout(mapLoadTimeout);
+          mapLoadTimeout = null;
+        }
       }
     };
 
     initMap();
 
     return () => {
+      if (mapLoadTimeout) {
+        clearTimeout(mapLoadTimeout);
+      }
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -289,7 +353,7 @@ export function CoursePositionEditor({
       isMapInitializingRef.current = false;
       setMapLoaded(false);
     };
-  }, [visible, initialLocation, mapContainerReady]);
+  }, [visible, initialLocation, mapContainerReady, startLineCenter]);
 
   // Update markers when marks change
   useEffect(() => {
@@ -821,7 +885,7 @@ export function CoursePositionEditor({
                   <Text className="text-xs font-semibold text-gray-500 uppercase mb-2">
                     Course Marks
                   </Text>
-                  {marks.map((mark, index) => (
+                  {marks.map((mark) => (
                     <View
                       key={mark.id}
                       className="flex-row items-center gap-2 py-1"

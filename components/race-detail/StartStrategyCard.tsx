@@ -10,6 +10,7 @@ import { raceStrategyEngine } from '@/services/ai/RaceStrategyEngine';
 import { postRaceLearningService } from '@/services/PostRaceLearningService';
 import { strategicPlanningService } from '@/services/StrategicPlanningService';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import type { LearningProfile } from '@/types/raceLearning';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -75,6 +76,31 @@ export function StartStrategyCard({
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
 
+  const resolveVenueId = useCallback(async (): Promise<string | null> => {
+    if (venueId) return venueId;
+
+    const trimmedVenueName = venueName?.trim();
+    if (!trimmedVenueName) return null;
+
+    const exact = await supabase
+      .from('sailing_venues')
+      .select('id')
+      .ilike('name', trimmedVenueName)
+      .limit(1)
+      .maybeSingle();
+
+    if (exact.data?.id) return exact.data.id;
+
+    const fuzzy = await supabase
+      .from('sailing_venues')
+      .select('id')
+      .ilike('name', `%${trimmedVenueName}%`)
+      .limit(1)
+      .maybeSingle();
+
+    return fuzzy.data?.id || null;
+  }, [venueId, venueName]);
+
   const loadStrategy = useCallback(async () => {
     if (!user) return;
 
@@ -82,12 +108,26 @@ export function StartStrategyCard({
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError, status, statusText } = await supabase
+      const primary = await supabase
         .from('race_strategies')
         .select('*')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
+      let data = primary.data;
+      let fetchError = primary.error;
+      const status = (primary as any).status;
+      const statusText = (primary as any).statusText;
+      if (fetchError && isMissingIdColumn(fetchError, 'race_strategies', 'regatta_id')) {
+        const fallback = await supabase
+          .from('race_strategies')
+          .select('*')
+          .eq('race_id', raceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        data = fallback.data;
+        fetchError = fallback.error;
+      }
 
       if (fetchError) {
         logger.warn('[StartStrategyCard] Supabase returned error when loading strategy', {
@@ -120,7 +160,8 @@ export function StartStrategyCard({
       }
     } catch (err) {
       console.error('[StartStrategyCard] Load error:', err);
-      setError('Failed to load strategy');
+      const message = err instanceof Error ? err.message : 'Failed to load strategy';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -284,13 +325,21 @@ export function StartStrategyCard({
         });
       }
 
+      const resolvedVenueId = await resolveVenueId();
+      if (!resolvedVenueId) {
+        throw new Error('Venue is missing. Add a venue to this race to generate AI start strategy.');
+      }
+
       // Generate venue-based strategy using AI
       const startTime = Date.now();
-      logger.info('[generateStrategy] Calling AI strategy engine - START', { venueId, raceName });
+      logger.info('[generateStrategy] Calling AI strategy engine - START', {
+        venueId: resolvedVenueId,
+        raceName
+      });
       logger.debug('⏳ Starting AI strategy generation...');
       
       const aiStrategy = await raceStrategyEngine.generateVenueBasedStrategy(
-        venueId || 'hong-kong', // Default to Hong Kong if no venue
+        resolvedVenueId,
         conditions,
         {
           raceName,
@@ -332,12 +381,25 @@ export function StartStrategyCard({
       // Save to database
       // First, get existing strategy_content to preserve other data
       logger.info('[generateStrategy] Fetching existing strategy from database');
-      const { data: existingData } = await supabase
+      const primaryExistingData = await supabase
         .from('race_strategies')
         .select('strategy_content')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
+      let existingData = primaryExistingData.data;
+      if (
+        primaryExistingData.error &&
+        isMissingIdColumn(primaryExistingData.error, 'race_strategies', 'regatta_id')
+      ) {
+        const fallbackExistingData = await supabase
+          .from('race_strategies')
+          .select('strategy_content')
+          .eq('race_id', raceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        existingData = fallbackExistingData.data;
+      }
 
       logger.debug('[generateStrategy] Existing data', { hasExisting: !!existingData });
 
@@ -371,11 +433,25 @@ export function StartStrategyCard({
         hasStrategyContent: !!upsertData.strategy_content
       });
 
-      const { error: upsertError } = await supabase
+      const primaryUpsert = await supabase
         .from('race_strategies')
         .upsert(upsertData, {
           onConflict: 'regatta_id,user_id'
         });
+      let upsertError = primaryUpsert.error;
+      if (upsertError && isMissingIdColumn(upsertError, 'race_strategies', 'regatta_id')) {
+        const fallbackUpsertData = {
+          ...upsertData,
+          race_id: raceId,
+          regatta_id: undefined,
+        } as any;
+        const fallbackUpsert = await supabase
+          .from('race_strategies')
+          .upsert(fallbackUpsertData, {
+            onConflict: 'race_id,user_id'
+          });
+        upsertError = fallbackUpsert.error;
+      }
 
       if (upsertError) {
         logger.error('[generateStrategy] Database upsert error', {
@@ -400,7 +476,8 @@ export function StartStrategyCard({
         stack: (err as Error)?.stack
       });
       console.error('[StartStrategyCard] Generate error:', err);
-      setError('Failed to generate strategy');
+      const message = err instanceof Error ? err.message : 'Failed to generate strategy';
+      setError(message);
     } finally {
       setLoading(false);
     }

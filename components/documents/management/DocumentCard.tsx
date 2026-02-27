@@ -31,6 +31,7 @@ import { IOS_COLORS } from '@/components/cards/constants';
 
 interface DocumentCardProps {
   document: RaceSourceDocument;
+  isSelected?: boolean;
   onPress?: () => void;
   onDelete?: () => void;
   onToggleShare?: () => void;
@@ -94,6 +95,7 @@ function getStatusLabel(status: ExtractionStatus): string {
 
 export function DocumentCard({
   document,
+  isSelected = false,
   onPress,
   onDelete,
   onToggleShare,
@@ -108,7 +110,7 @@ export function DocumentCard({
 
   return (
     <Pressable
-      style={styles.container}
+      style={[styles.container, isSelected && styles.containerSelected]}
       onPress={onPress}
       disabled={!onPress}
     >
@@ -215,6 +217,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#F3F4F6',
+  },
+  containerSelected: {
+    borderColor: IOS_COLORS.blue,
+    borderWidth: 1.5,
+    backgroundColor: '#F0F8FF',
   },
   iconContainer: {
     width: 40,

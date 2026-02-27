@@ -10,12 +10,13 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import type {
   ContentModulePreferences,
-  ContentModuleId,
   RaceType,
   UseContentPreferencesReturn,
 } from '@/types/raceCardContent';
 import { DEFAULT_CONTENT_PREFERENCES } from '@/types/raceCardContent';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const logger = createLogger('useContentPreferences');
 
@@ -43,6 +44,8 @@ export function useContentPreferences({
   const [preferences, setPreferences] = useState<ContentModulePreferences | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
 
   // Storage key based on race ID or race type
   const storageKey = raceId
@@ -50,13 +53,20 @@ export function useContentPreferences({
     : raceType
       ? `${STORAGE_KEY_PREFIX}type_${raceType}`
       : `${STORAGE_KEY_PREFIX}default`;
+  const syncRunIdRef = useRef(0);
+  const activeUserIdRef = useRef(user?.id ?? null);
+  const activeStorageKeyRef = useRef(storageKey);
+
+  useEffect(() => {
+    activeUserIdRef.current = user?.id ?? null;
+    activeStorageKeyRef.current = storageKey;
+  }, [user?.id, storageKey]);
 
   /**
    * Load preferences from local storage
    */
   const loadFromLocal = useCallback(async (): Promise<ContentModulePreferences | null> => {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       const stored = await AsyncStorage.getItem(storageKey);
 
       if (stored) {
@@ -77,7 +87,6 @@ export function useContentPreferences({
   const saveToLocal = useCallback(
     async (prefs: ContentModulePreferences): Promise<void> => {
       try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         await AsyncStorage.setItem(storageKey, JSON.stringify(prefs));
         logger.debug('Saved preferences to local storage', { storageKey });
       } catch (error) {
@@ -94,20 +103,72 @@ export function useContentPreferences({
     if (!user?.id || !enableSync) return null;
 
     try {
-      let query = supabase
-        .from('user_content_preferences')
-        .select('*')
-        .eq('user_id', user.id);
+      let data: any = null;
+      let error: any = null;
 
       if (raceId) {
-        query = query.eq('race_id', raceId);
-      } else if (raceType) {
-        query = query.is('race_id', null).eq('race_type', raceType);
-      } else {
-        query = query.is('race_id', null).is('race_type', null);
-      }
+        const primary = await supabase
+          .from('user_content_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('race_id', raceId)
+          .single();
+        data = primary.data;
+        error = primary.error;
 
-      const { data, error } = await query.single();
+        if (isMissingIdColumn(error, 'user_content_preferences', 'race_id')) {
+          const fallback = await supabase
+            .from('user_content_preferences')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('regatta_id', raceId)
+            .single();
+          data = fallback.data;
+          error = fallback.error;
+        }
+      } else if (raceType) {
+        const typed = await supabase
+          .from('user_content_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .is('race_id', null)
+          .eq('race_type', raceType)
+          .single();
+        data = typed.data;
+        error = typed.error;
+        if (isMissingIdColumn(error, 'user_content_preferences', 'race_id')) {
+          const fallback = await supabase
+            .from('user_content_preferences')
+            .select('*')
+            .eq('user_id', user.id)
+            .is('regatta_id', null)
+            .eq('race_type', raceType)
+            .single();
+          data = fallback.data;
+          error = fallback.error;
+        }
+      } else {
+        const defaults = await supabase
+          .from('user_content_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .is('race_id', null)
+          .is('race_type', null)
+          .single();
+        data = defaults.data;
+        error = defaults.error;
+        if (isMissingIdColumn(error, 'user_content_preferences', 'race_id')) {
+          const fallback = await supabase
+            .from('user_content_preferences')
+            .select('*')
+            .eq('user_id', user.id)
+            .is('regatta_id', null)
+            .is('race_type', null)
+            .single();
+          data = fallback.data;
+          error = fallback.error;
+        }
+      }
 
       if (error) {
         if (error.code !== 'PGRST116') {
@@ -146,7 +207,7 @@ export function useContentPreferences({
       try {
         const payload = {
           user_id: user.id,
-          race_id: raceId || null,
+          ...(raceId ? { race_id: raceId } : {}),
           race_type: raceId ? null : raceType || null,
           preferences: {
             moduleOrder: prefs.moduleOrder,
@@ -156,11 +217,29 @@ export function useContentPreferences({
           updated_at: new Date().toISOString(),
         };
 
-        const { error } = await supabase
+        const primary = await supabase
           .from('user_content_preferences')
           .upsert(payload, {
             onConflict: raceId ? 'user_id,race_id' : 'user_id,race_type',
           });
+        let error = primary.error;
+
+        if (raceId && isMissingIdColumn(error, 'user_content_preferences', 'race_id')) {
+          const fallbackPayload = {
+            user_id: user.id,
+            regatta_id: raceId,
+            race_id: null,
+            race_type: null,
+            preferences: payload.preferences,
+            updated_at: payload.updated_at,
+          };
+          const fallback = await supabase
+            .from('user_content_preferences')
+            .upsert(fallbackPayload, {
+              onConflict: 'user_id,regatta_id',
+            });
+          error = fallback.error;
+        }
 
         if (error) {
           logger.warn('Failed to sync preferences to Supabase', { error });
@@ -178,18 +257,30 @@ export function useContentPreferences({
    * Load preferences (local first, then sync with cloud)
    */
   const loadPreferences = useCallback(async (): Promise<ContentModulePreferences | null> => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
+    if (!canCommit()) return null;
     setIsLoading(true);
 
     try {
       // Load from local first for instant response
       const localPrefs = await loadFromLocal();
+      if (!canCommit()) return localPrefs;
 
       if (localPrefs) {
         setPreferences(localPrefs);
+      } else {
+        setPreferences(null);
+      }
+
+      if (!enableSync || !user?.id) {
+        return localPrefs;
       }
 
       // Then try to load from Supabase (might be more recent)
       const cloudPrefs = await loadFromSupabase();
+      if (!canCommit()) return cloudPrefs || localPrefs;
 
       if (cloudPrefs) {
         // Compare timestamps, use more recent
@@ -209,15 +300,25 @@ export function useContentPreferences({
       logger.error('Failed to load preferences', { error });
       return null;
     } finally {
+      if (!canCommit()) return null;
       setIsLoading(false);
     }
-  }, [loadFromLocal, loadFromSupabase, saveToLocal]);
+  }, [loadFromLocal, loadFromSupabase, saveToLocal, enableSync, user?.id]);
 
   /**
    * Save preferences (local immediately, cloud debounced)
    */
   const savePreferences = useCallback(
     async (updates: Partial<ContentModulePreferences>): Promise<void> => {
+      const runId = ++syncRunIdRef.current;
+      const targetUserId = user?.id ?? null;
+      const targetStorageKey = storageKey;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === syncRunIdRef.current &&
+        activeUserIdRef.current === targetUserId &&
+        activeStorageKeyRef.current === targetStorageKey;
+
       const updated: ContentModulePreferences = {
         ...DEFAULT_CONTENT_PREFERENCES,
         ...preferences,
@@ -229,10 +330,11 @@ export function useContentPreferences({
       };
 
       // Update state immediately
-      setPreferences(updated);
+      if (canCommit()) setPreferences(updated);
 
       // Save to local immediately
       await saveToLocal(updated);
+      if (!canCommit()) return;
 
       // Debounce cloud sync
       if (syncTimeoutRef.current) {
@@ -240,10 +342,11 @@ export function useContentPreferences({
       }
 
       syncTimeoutRef.current = setTimeout(() => {
-        syncToSupabase(updated);
+        if (!canCommit()) return;
+        void syncToSupabase(updated);
       }, DEBOUNCE_MS);
     },
-    [preferences, user?.id, raceId, raceType, saveToLocal, syncToSupabase]
+    [preferences, user?.id, raceId, raceType, saveToLocal, syncToSupabase, storageKey]
   );
 
   /**
@@ -263,6 +366,7 @@ export function useContentPreferences({
 
     // Sync reset to cloud
     if (enableSync && user?.id) {
+      syncRunIdRef.current += 1;
       await syncToSupabase(defaults);
     }
 
@@ -277,6 +381,8 @@ export function useContentPreferences({
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
+      isMountedRef.current = false;
+      syncRunIdRef.current += 1;
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }

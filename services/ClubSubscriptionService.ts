@@ -4,6 +4,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ClubSubscriptionService');
 
 export interface SubscriptionPlan {
   id: 'starter' | 'professional' | 'enterprise';
@@ -232,7 +235,7 @@ export class ClubSubscriptionService {
         });
 
       if (subError) {
-        console.error('Error creating subscription record:', subError);
+        logger.error('Error creating subscription record:', subError);
         throw new Error('Failed to save subscription');
       }
 
@@ -250,7 +253,7 @@ export class ClubSubscriptionService {
         subscriptionId,
       };
     } catch (error: any) {
-      console.error('Error creating subscription:', error);
+      logger.error('Error creating subscription:', error);
       return {
         success: false,
         error: error.message || 'Failed to create subscription',
@@ -280,13 +283,13 @@ export class ClubSubscriptionService {
         .single();
 
       if (error) {
-        console.error('Error fetching subscription:', error);
+        logger.error('Error fetching subscription:', error);
         return null;
       }
 
       return data;
     } catch (error) {
-      console.error('Error getting subscription:', error);
+      logger.error('Error getting subscription:', error);
       return null;
     }
   }
@@ -296,7 +299,7 @@ export class ClubSubscriptionService {
    */
   static async cancelSubscription(
     userId: string,
-    immediate: boolean = false
+    _immediate: boolean = false
   ): Promise<SubscriptionResult> {
     try {
       const subscription = await this.getSubscription(userId);
@@ -339,7 +342,7 @@ export class ClubSubscriptionService {
         success: true,
       };
     } catch (error: any) {
-      console.error('Error cancelling subscription:', error);
+      logger.error('Error cancelling subscription:', error);
       return {
         success: false,
         error: error.message || 'Failed to cancel subscription',
@@ -402,7 +405,7 @@ export class ClubSubscriptionService {
         success: true,
       };
     } catch (error: any) {
-      console.error('Error updating subscription:', error);
+      logger.error('Error updating subscription:', error);
       return {
         success: false,
         error: error.message || 'Failed to update subscription',
@@ -476,7 +479,7 @@ export class ClubSubscriptionService {
         platformFeeRate: totalRevenue > 0 ? (totalPlatformFees / totalRevenue) * 100 : 0,
       };
     } catch (error) {
-      console.error('Error fetching event revenue analytics:', error);
+      logger.error('Error fetching event revenue analytics:', error);
       throw error;
     }
   }
@@ -530,7 +533,7 @@ export class ClubSubscriptionService {
         registrationCount: registrations.length,
       };
     } catch (error) {
-      console.error('Error fetching combined revenue analytics:', error);
+      logger.error('Error fetching combined revenue analytics:', error);
       throw error;
     }
   }
@@ -602,7 +605,7 @@ export class ClubSubscriptionService {
         period,
       };
     } catch (error) {
-      console.error('Error fetching club earnings summary:', error);
+      logger.error('Error fetching club earnings summary:', error);
       throw error;
     }
   }
@@ -662,7 +665,7 @@ export class ClubSubscriptionService {
         subscriptionCount: subscriptions.length,
       };
     } catch (error) {
-      console.error('Error fetching platform fee summary:', error);
+      logger.error('Error fetching platform fee summary:', error);
       throw error;
     }
   }

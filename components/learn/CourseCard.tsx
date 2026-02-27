@@ -54,7 +54,6 @@ export function CourseCard({ course, isDesktop = false, onPress, onEnroll }: Cou
       style={[styles.courseCard, isDesktop && styles.courseCardDesktop]}
       onPress={onPress}
       activeOpacity={0.8}
-      disabled={course.status === 'coming-soon'}
     >
       {/* Course Thumbnail */}
       <View style={styles.courseThumbnailContainer}>
@@ -79,7 +78,7 @@ export function CourseCard({ course, isDesktop = false, onPress, onEnroll }: Cou
           {course.status === 'coming-soon' && (
             <View style={styles.comingSoonBadge}>
               <Ionicons name="time-outline" size={14} color="#FFFFFF" />
-              <Text style={styles.comingSoonText}>Coming Soon</Text>
+              <Text style={styles.comingSoonText}>Planned</Text>
             </View>
           )}
 
@@ -224,7 +223,7 @@ export function CourseCard({ course, isDesktop = false, onPress, onEnroll }: Cou
                     month: 'short',
                     year: 'numeric',
                   })
-                : 'Coming Soon'}
+                : 'Planned'}
             </Text>
           ) : (
             <View style={styles.priceContainer}>
@@ -240,19 +239,18 @@ export function CourseCard({ course, isDesktop = false, onPress, onEnroll }: Cou
             course.status === 'coming-soon' && styles.enrollButtonSecondary,
             course.price.cents === 0 && styles.enrollButtonFree,
           ]}
-          disabled={course.status === 'coming-soon'}
           onPress={handleEnroll}
           activeOpacity={0.8}
         >
           <Text style={styles.enrollButtonText}>
             {course.status === 'coming-soon'
-              ? 'Notify Me'
+              ? 'Preview'
               : course.price.cents === 0
               ? 'Start Free'
               : 'Enroll Now'}
           </Text>
           <Ionicons
-            name={course.status === 'coming-soon' ? 'notifications-outline' : 'arrow-forward'}
+            name="arrow-forward"
             size={18}
             color="#FFFFFF"
           />
@@ -585,4 +583,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

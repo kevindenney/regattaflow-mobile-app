@@ -24,7 +24,18 @@ export function CoachRecruitmentBanner({
   style,
 }: CoachRecruitmentBannerProps) {
   const router = useRouter();
-  const { shouldShowPrompt, dismiss, getBannerMessage, isLoading } = useCoachRecruitment();
+  const { shouldShowPrompt, dismiss, getBannerMessage, isLoading, error } = useCoachRecruitment();
+
+  if (error && context === 'coaches_tab') {
+    return (
+      <View style={[styles.errorContainer, style]}>
+        <Ionicons name="warning-outline" size={16} color="#9A3412" />
+        <Text style={styles.errorText}>
+          Coaching recruitment suggestions are temporarily unavailable.
+        </Text>
+      </View>
+    );
+  }
 
   if (isLoading || !shouldShowPrompt(context)) {
     return null;
@@ -224,6 +235,24 @@ const styles = StyleSheet.create({
   subtleLinkText: {
     fontSize: 14,
     color: IOS_COLORS.systemBlue,
+  },
+  errorContainer: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    marginHorizontal: 16,
+    marginVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#9A3412',
   },
 });
 

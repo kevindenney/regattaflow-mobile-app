@@ -8,6 +8,9 @@ import { OpenMeteoService } from './OpenMeteoService';
 import { OpenWeatherMapProvider } from './OpenWeatherMapProvider';
 import type { WeatherForecast as EnvironmentalForecast } from '@/types/environmental';
 import { ConfidenceLevel } from '@/types/environmental';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ProfessionalWeatherService');
 
 export class ProfessionalWeatherService {
   private apiKeys: { [key: string]: string };
@@ -32,10 +35,10 @@ export class ProfessionalWeatherService {
         timeout: 10000,
         retryAttempts: 2
       });
-      console.info('[ProfessionalWeatherService] StormGlass configured for tide data only');
+      logger.info('[ProfessionalWeatherService] StormGlass configured for tide data only');
     } else {
       this.stormGlassService = null;
-      console.info('[ProfessionalWeatherService] StormGlass not configured - tide data unavailable');
+      logger.info('[ProfessionalWeatherService] StormGlass not configured - tide data unavailable');
     }
 
     // Initialize OpenWeatherMap as fallback
@@ -48,7 +51,7 @@ export class ProfessionalWeatherService {
    * Backwards compatible helper used by legacy components (e.g. WeatherOverlay3D)
    * Converts positional args into the GeoLocation shape expected internally.
    */
-  async getAdvancedWeatherData(lat: number, lng: number, venueName?: string): Promise<AdvancedWeatherConditions> {
+  async getAdvancedWeatherData(lat: number, lng: number, _venueName?: string): Promise<AdvancedWeatherConditions> {
     return this.getAdvancedWeatherConditions({
       latitude: lat,
       longitude: lng,
@@ -76,7 +79,7 @@ export class ProfessionalWeatherService {
       weatherData = await this.openMeteoService.getWeatherAtTime(location, new Date());
       
       if (weatherData) {
-        console.info('[ProfessionalWeatherService] Weather from Open-Meteo (FREE)');
+        logger.info('[ProfessionalWeatherService] Weather from Open-Meteo (FREE)');
         
         // OPTIONAL: Add tide data from Storm Glass if available
         // This is the ONLY Storm Glass API call - saves quota!
@@ -99,14 +102,14 @@ export class ProfessionalWeatherService {
             if (nextHigh && nextLow) {
               weatherData.tide.direction = nextHigh.time < nextLow.time ? 'flood' : 'ebb';
             }
-            console.info('[ProfessionalWeatherService] Tide data from Storm Glass');
+            logger.info('[ProfessionalWeatherService] Tide data from Storm Glass');
           } catch (tideError) {
-            console.warn('[ProfessionalWeatherService] Tide data fetch failed, using defaults');
+            logger.warn('[ProfessionalWeatherService] Tide data fetch failed, using defaults');
           }
         }
       }
     } catch (error) {
-      console.error('[ProfessionalWeatherService] Open-Meteo error:', error);
+      logger.error('[ProfessionalWeatherService] Open-Meteo error:', error);
     }
 
     if (!weatherData) {
@@ -125,7 +128,7 @@ export class ProfessionalWeatherService {
    * Convenience wrapper used by visualization components to render tidal current overlays.
    * Note: Storm Glass API disabled (quota exceeded) - returns empty array
    */
-  async getTidalCurrents(_bounds: BoundingBox): Promise<Array<{ time: Date; speed: number; direction: number }>> {
+  async getTidalCurrents(_bounds: BoundingBox): Promise<{ time: Date; speed: number; direction: number }[]> {
     // Storm Glass API disabled - quota exceeded
     return [];
   }
@@ -138,14 +141,14 @@ export class ProfessionalWeatherService {
     try {
       // PRIMARY: Open-Meteo for weather + waves (FREE!)
       const forecasts = await this.openMeteoService.getMarineWeather(location, hours);
-      console.info(`[ProfessionalWeatherService] Marine forecast from Open-Meteo: ${forecasts.length} hours (FREE)`);
+      logger.info(`[ProfessionalWeatherService] Marine forecast from Open-Meteo: ${forecasts.length} hours (FREE)`);
 
       // Storm Glass tide enhancement disabled - quota exceeded
       // Forecasts will lack tide data but weather/wave data is complete from OpenMeteo
 
       return forecasts;
     } catch (error) {
-      console.error('[ProfessionalWeatherService] Marine forecast error:', error);
+      logger.error('[ProfessionalWeatherService] Marine forecast error:', error);
       const fallbackForecasts = await this.getFallbackMarineForecast(location, hours);
       if (fallbackForecasts.length > 0) {
         return fallbackForecasts;
@@ -272,15 +275,15 @@ export class ProfessionalWeatherService {
         );
 
         if (current) {
-          console.info('[ProfessionalWeatherService] Using OpenWeatherMap fallback data');
+          logger.info('[ProfessionalWeatherService] Using OpenWeatherMap fallback data');
           return this.transformOpenWeatherForecast(current, location);
         }
       } catch (error) {
-        console.warn('[ProfessionalWeatherService] OpenWeatherMap fallback failed', error);
+        logger.warn('[ProfessionalWeatherService] OpenWeatherMap fallback failed', error);
       }
     }
 
-    console.warn('[ProfessionalWeatherService] Falling back to static default weather data');
+    logger.warn('[ProfessionalWeatherService] Falling back to static default weather data');
     return this.getStaticFallbackWeather(location);
   }
 
@@ -410,7 +413,7 @@ export class ProfessionalWeatherService {
         advanced.forecast.lastUpdated = new Date();
         forecasts.push(advanced);
       } catch (error) {
-        console.warn('[ProfessionalWeatherService] OpenWeatherMap marine fallback fetch failed', error);
+        logger.warn('[ProfessionalWeatherService] OpenWeatherMap marine fallback fetch failed', error);
         break;
       }
     }

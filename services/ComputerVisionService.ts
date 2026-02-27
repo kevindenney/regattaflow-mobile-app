@@ -1,6 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ComputerVisionService');
 
 interface SailTrimAnalysis {
   overall_score: number; // 0-100
@@ -91,7 +94,45 @@ interface VideoAnalysis {
 }
 
 export class ComputerVisionService {
-  private static genAI = new Anthropic({ apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '', dangerouslyAllowBrowser: true });
+  private static async invokeVisionChat(prompt: string, imageBase64: string, maxTokens = 2048): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('sail-analysis-chat', {
+      body: {
+        prompt,
+        imageBase64,
+        mediaType: 'image/jpeg',
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Vision analysis failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text : '';
+    if (!text) {
+      throw new Error('Vision analysis returned empty response');
+    }
+    return text;
+  }
+
+  private static async invokeTextChat(prompt: string, maxTokens = 1024): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Text analysis failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text : '';
+    if (!text) {
+      throw new Error('Text analysis returned empty response');
+    }
+    return text;
+  }
 
   /**
    * Analyze sail trim from a photo or video frame
@@ -180,30 +221,7 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: base64Image
-              }
-            },
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeVisionChat(prompt, base64Image, 2048);
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -214,7 +232,7 @@ Respond in this JSON format:
       // Fallback analysis
       return this.generateFallbackSailAnalysis();
     } catch (error) {
-      console.error('Error analyzing sail trim:', error);
+      logger.error('Error analyzing sail trim:', error);
       return this.generateFallbackSailAnalysis();
     }
   }
@@ -278,30 +296,7 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: base64Image
-              }
-            },
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeVisionChat(prompt, base64Image, 2048);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -310,7 +305,7 @@ Respond in this JSON format:
 
       return this.generateFallbackPostureAnalysis();
     } catch (error) {
-      console.error('Error analyzing boat posture:', error);
+      logger.error('Error analyzing boat posture:', error);
       return this.generateFallbackPostureAnalysis();
     }
   }
@@ -382,17 +377,7 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeTextChat(prompt, 1024);
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -401,7 +386,7 @@ Respond in this JSON format:
 
       return this.generateFallbackVideoAnalysis();
     } catch (error) {
-      console.error('Error analyzing video:', error);
+      logger.error('Error analyzing video:', error);
       return this.generateFallbackVideoAnalysis();
     }
   }
@@ -439,7 +424,7 @@ Respond in this JSON format:
 
       return { imageUri, analysis };
     } catch (error) {
-      console.error('Error capturing and analyzing:', error);
+      logger.error('Error capturing and analyzing:', error);
       throw error;
     }
   }
@@ -449,7 +434,7 @@ Respond in this JSON format:
    */
   static async batchAnalyzeTrimTrends(
     imageUris: string[],
-    timeStamps: number[]
+    _timeStamps: number[]
   ): Promise<{
     trend_analysis: {
       improvement_over_time: boolean;
@@ -479,7 +464,7 @@ Respond in this JSON format:
         recommendations: this.generateTrendRecommendations(analyses),
       };
     } catch (error) {
-      console.error('Error in batch analysis:', error);
+      logger.error('Error in batch analysis:', error);
       throw error;
     }
   }
@@ -493,7 +478,7 @@ Respond in this JSON format:
       });
       return base64;
     } catch (error) {
-      console.error('Error converting image to base64:', error);
+      logger.error('Error converting image to base64:', error);
       throw error;
     }
   }

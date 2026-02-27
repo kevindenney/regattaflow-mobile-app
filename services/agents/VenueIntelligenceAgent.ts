@@ -496,20 +496,30 @@ Critical for sailors who lose connectivity on the water.`,
       const startTime = Date.now();
 
       // Load complete venue data
-      const { data: venue, error: venueError } = await supabase
+      const { data: venueBase, error: venueError } = await supabase
         .from('sailing_venues')
         .select(`
           *,
           venue_conditions(*),
           cultural_profiles(*),
-          weather_sources(*),
-          yacht_clubs(*)
+          weather_sources(*)
         `)
         .eq('id', venueId)
         .single();
 
       if (venueError) throw venueError;
-      if (!venue) throw new Error(`Venue not found: ${venueId}`);
+      if (!venueBase) throw new Error(`Venue not found: ${venueId}`);
+
+      const { data: venueClubs, error: clubsError } = await supabase
+        .from('yacht_clubs')
+        .select('*')
+        .eq('venue_id', venueId);
+      if (clubsError) throw clubsError;
+
+      const venue = {
+        ...venueBase,
+        yacht_clubs: venueClubs || [],
+      };
 
       // Get regional intelligence
       const intelligence = await this.regionalIntelligenceService.loadVenueIntelligence(venue);

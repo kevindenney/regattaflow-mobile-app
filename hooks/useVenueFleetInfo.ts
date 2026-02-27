@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface VenueFleet {
   id: string;
@@ -28,6 +29,8 @@ export interface UseVenueFleetInfoResult {
   error: string | null;
   refresh: () => Promise<void>;
 }
+
+const logger = createLogger('useVenueFleetInfo');
 
 /**
  * Get human-readable frequency label
@@ -88,7 +91,7 @@ export function useVenueFleetInfo(venueId?: string): UseVenueFleetInfoResult {
 
       setFleets(transformedFleets);
     } catch (err: any) {
-      console.error('[useVenueFleetInfo] Error loading fleets:', err);
+      logger.error('Error loading fleets', err);
       setError(err.message || 'Failed to load fleet info');
     } finally {
       setIsLoading(false);
@@ -114,4 +117,3 @@ export function useVenueFleetInfo(venueId?: string): UseVenueFleetInfoResult {
 }
 
 export default useVenueFleetInfo;
-

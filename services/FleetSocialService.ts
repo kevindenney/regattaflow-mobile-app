@@ -1,4 +1,7 @@
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('FleetSocialService');
 
 export type PostType = 'race_result' | 'tuning_guide' | 'check_in' | 'event' | 'announcement' | 'discussion';
 export type PostVisibility = 'fleet' | 'public' | 'private';
@@ -137,7 +140,7 @@ class FleetSocialService {
           .single();
 
         if (userError || !user) {
-          console.warn('[FleetSocialService] Could not fetch user data:', error, userError);
+          logger.warn('[FleetSocialService] Could not fetch user data:', error, userError);
           return null;
         }
 
@@ -159,7 +162,7 @@ class FleetSocialService {
         };
       }
     } catch (err) {
-      console.warn('[FleetSocialService] Could not fetch user data:', err);
+      logger.warn('[FleetSocialService] Could not fetch user data:', err);
     }
     return null;
   }
@@ -210,7 +213,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'loading fleet posts')) {
         return [];
       }
-      console.error('Error fetching feed posts:', error);
+      logger.error('Error fetching feed posts:', error);
       throw error;
     }
 
@@ -324,7 +327,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'creating a post')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error creating post:', error);
+      logger.error('Error creating post:', error);
       throw error;
     }
 
@@ -361,7 +364,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'updating a post')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error updating post:', error);
+      logger.error('Error updating post:', error);
       throw error;
     }
   }
@@ -380,7 +383,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'deleting a post')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error deleting post:', error);
+      logger.error('Error deleting post:', error);
       throw error;
     }
   }
@@ -411,7 +414,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'liking a post')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error liking post:', error);
+      logger.error('Error liking post:', error);
       throw error;
     }
 
@@ -434,7 +437,7 @@ class FleetSocialService {
         });
       }
     } catch (notificationError) {
-      console.error('Error creating like notification:', notificationError);
+      logger.error('Error creating like notification:', notificationError);
     }
   }
 
@@ -456,7 +459,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'unliking a post')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error unliking post:', error);
+      logger.error('Error unliking post:', error);
       throw error;
     }
   }
@@ -480,7 +483,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'loading comments')) {
         return [];
       }
-      console.error('Error fetching comments:', error);
+      logger.error('Error fetching comments:', error);
       throw error;
     }
 
@@ -536,7 +539,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'creating a comment')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error creating comment:', error);
+      logger.error('Error creating comment:', error);
       throw error;
     }
 
@@ -566,7 +569,7 @@ class FleetSocialService {
       // Mention notifications (if comment metadata includes mentions)
       this.notifyMentions(params.postId, postInfo?.fleet_id, (params as any)?.metadata, userData.user.id);
     } catch (notificationError) {
-      console.error('Error creating comment notification:', notificationError);
+      logger.error('Error creating comment notification:', notificationError);
     }
 
     return {
@@ -595,7 +598,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'deleting a comment')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error deleting comment:', error);
+      logger.error('Error deleting comment:', error);
       throw error;
     }
   }
@@ -626,7 +629,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'bookmarking a post')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error bookmarking post:', error);
+      logger.error('Error bookmarking post:', error);
       throw error;
     }
   }
@@ -649,7 +652,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'removing a bookmark')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error removing bookmark:', error);
+      logger.error('Error removing bookmark:', error);
       throw error;
     }
   }
@@ -669,7 +672,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'loading bookmarked posts')) {
         return [];
       }
-      console.error('Error fetching bookmarked posts:', error);
+      logger.error('Error fetching bookmarked posts:', error);
       throw error;
     }
 
@@ -683,7 +686,7 @@ class FleetSocialService {
       .in('id', postIds);
 
     if (postsError) {
-      console.error('Error fetching bookmarked posts details:', postsError);
+      logger.error('Error fetching bookmarked posts details:', postsError);
       return [];
     }
 
@@ -732,7 +735,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'sharing a post')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error sharing post:', error);
+      logger.error('Error sharing post:', error);
       throw error;
     }
   }
@@ -766,7 +769,7 @@ class FleetSocialService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching notifications:', error);
+      logger.error('Error fetching notifications:', error);
       throw error;
     }
 
@@ -800,7 +803,7 @@ class FleetSocialService {
       .eq('id', notificationId);
 
     if (error) {
-      console.error('Error marking notification as read:', error);
+      logger.error('Error marking notification as read:', error);
       throw error;
     }
   }
@@ -813,7 +816,7 @@ class FleetSocialService {
       .eq('is_read', false);
 
     if (error) {
-      console.error('Error marking all notifications as read:', error);
+      logger.error('Error marking all notifications as read:', error);
       throw error;
     }
   }
@@ -907,8 +910,15 @@ class FleetSocialService {
               message: data.message,
               isRead: data.is_read,
               createdAt: data.created_at,
-              actor: data.actor,
-              fleet: data.fleet,
+              actor: data.actor ? {
+                id: data.actor.id,
+                name: data.actor.full_name || 'Someone',
+                avatar_url: data.actor.avatar_url,
+              } : undefined,
+              fleet: data.fleet ? {
+                id: data.fleet.id,
+                name: data.fleet.name,
+              } : undefined,
             });
           }
         }
@@ -948,7 +958,7 @@ class FleetSocialService {
   private handleFleetSocialTableError(error: any, context: string): boolean {
     if (this.isFleetSocialTableMissing(error)) {
       if (!this.fleetSocialWarningLogged) {
-        console.warn(
+        logger.warn(
           `[FleetSocialService] fleet social tables missing while ${context}. Disabling fleet feed features for this session.`
         );
         this.fleetSocialWarningLogged = true;
@@ -1008,7 +1018,7 @@ class FleetSocialService {
           actorId,
           relatedPostId: postId,
           message: 'You were mentioned in a post',
-        }).catch((err) => console.error('Error notifying mention', userId, err))
+        }).catch((err) => logger.error('Error notifying mention', userId, err))
       )
     );
   }
@@ -1068,7 +1078,7 @@ class FleetSocialService {
       if (this.handleFleetSocialTableError(error, 'creating a notification')) {
         throw this.fleetSocialDisabledError();
       }
-      console.error('Error creating notification:', error);
+      logger.error('Error creating notification:', error);
       throw error;
     }
 
@@ -1089,7 +1099,7 @@ class FleetSocialService {
 
     // Determine notification type and filter
     let notificationType: NotificationType;
-    let shouldNotify = (f: any) => false;
+    let shouldNotify = () => false;
 
     switch (postType) {
       case 'tuning_guide':
@@ -1122,7 +1132,7 @@ class FleetSocialService {
           actorId: actorId ?? null,
           relatedPostId: postId,
         }).catch((err) => {
-          console.error('Error notifying follower', f.follower_id, err);
+          logger.error('Error notifying follower', f.follower_id, err);
         })
       )
     );

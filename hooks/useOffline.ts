@@ -5,7 +5,7 @@
  * Shows offline status, sync progress, and provides caching methods.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { offlineService, OfflineStatus } from '@/services/offlineService';
 
 export function useOffline() {
@@ -16,13 +16,26 @@ export function useOffline() {
     lastSync: null,
     failedItems: 0,
   });
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Subscribe to offline status changes
-    const unsubscribe = offlineService.subscribe(setStatus);
+    const unsubscribe = offlineService.subscribe((next) => {
+      if (!isMountedRef.current) return;
+      setStatus(next);
+    });
 
     // Get initial status
-    offlineService.getOfflineStatus().then(setStatus);
+    void offlineService.getOfflineStatus().then((next) => {
+      if (!isMountedRef.current) return;
+      setStatus(next);
+    });
 
     return () => {
       unsubscribe();

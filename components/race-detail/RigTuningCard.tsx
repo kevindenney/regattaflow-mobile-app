@@ -16,6 +16,7 @@ interface RigTuningCardProps {
   boatName?: string;  // NEW: Display which boat is being used
   recommendation?: RaceTuningRecommendation | null;
   loading?: boolean;
+  errorMessage?: string | null;
   onRefresh?: () => void;
   onBoatPress?: () => void;  // NEW: Navigate to boat details
 }
@@ -28,6 +29,7 @@ export function RigTuningCard({
   boatName,
   recommendation,
   loading = false,
+  errorMessage,
   onRefresh,
   onBoatPress,
 }: RigTuningCardProps) {
@@ -39,6 +41,8 @@ export function RigTuningCard({
 
   const statusMessage = loading
     ? 'Matching rig settings to forecast...'
+    : errorMessage
+      ? 'Unable to load tuning recommendations'
     : recommendation
       ? undefined
       : 'Add tuning guides for this class';
@@ -86,13 +90,21 @@ export function RigTuningCard({
           </View>
         )}
 
-        {!loading && !recommendation && (
+        {!loading && !recommendation && !errorMessage && (
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="book-cog-outline" size={40} color="#94A3B8" />
             <Text style={styles.emptyTitle}>No tuning data yet</Text>
             <Text style={styles.emptyText}>
               Add a tuning guide to your {boatClassName || 'class'} library to unlock race-day rig checklists.
             </Text>
+          </View>
+        )}
+
+        {!loading && !recommendation && !!errorMessage && (
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#DC2626" />
+            <Text style={styles.emptyTitle}>Tuning unavailable</Text>
+            <Text style={styles.emptyText}>{errorMessage}</Text>
           </View>
         )}
 

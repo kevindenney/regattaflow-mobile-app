@@ -7,7 +7,7 @@
  * Groups results by sailmaker for easy UI rendering.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -82,15 +82,40 @@ export function useSailProducts(
   const [products, setProducts] = useState<SailProduct[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeContextRef = useRef(`${boatClassName || ''}|${sailType || ''}`);
+
+  useEffect(() => {
+    activeContextRef.current = `${boatClassName || ''}|${sailType || ''}`;
+  }, [boatClassName, sailType]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   // Fetch products from database
   const fetchProducts = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const targetContext = `${boatClassName || ''}|${sailType || ''}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeContextRef.current === targetContext;
+
     // Skip fetch if no class name provided
     if (!boatClassName) {
+      if (!canCommit()) return;
       setProducts([]);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -115,20 +140,23 @@ export function useSailProducts(
         throw fetchError;
       }
 
+      if (!canCommit()) return;
       setProducts(data || []);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch sail products';
       logger.error('Failed to fetch sail products:', err);
+      if (!canCommit()) return;
       setError(message);
       setProducts([]);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [boatClassName, sailType]);
 
   // Fetch on mount and when parameters change
   useEffect(() => {
-    fetchProducts();
+    void fetchProducts();
   }, [fetchProducts]);
 
   // Group products by sailmaker

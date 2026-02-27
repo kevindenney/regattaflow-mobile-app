@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from './supabase';
 import { CoachSearchResult, SailorProfile } from '../types/coach';
+import { createLogger } from '@/lib/utils/logger';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const COACH_MATCH_FUNCTION_URL = SUPABASE_URL
@@ -11,6 +11,7 @@ const COACH_PLAN_SKILL_ID =
   process.env.EXPO_PUBLIC_CLAUDE_SKILL_COACH_PLAN || COACH_MATCH_SKILL_ID;
 const COACH_LEARNING_SKILL_ID =
   process.env.EXPO_PUBLIC_CLAUDE_SKILL_COACH_LEARNING || COACH_MATCH_SKILL_ID;
+const logger = createLogger('AICoachMatchingService');
 
 interface MatchingCriteria {
   sailorProfile: SailorProfile;
@@ -46,8 +47,6 @@ interface LearningStyleAnalysis {
 }
 
 export class AICoachMatchingService {
-  private static genAI = new Anthropic({ apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '', dangerouslyAllowBrowser: true });
-
   private static resolveSkillId(kind: 'match' | 'plan' | 'learning'): string | null {
     switch (kind) {
       case 'plan':
@@ -57,16 +56,6 @@ export class AICoachMatchingService {
       default:
         return COACH_MATCH_SKILL_ID;
     }
-  }
-
-  private static extractTextFromResponse(message: any): string {
-    const blocks = Array.isArray(message?.content) ? message.content : [];
-    return blocks
-      .filter((block: any) => block?.type === 'text' && typeof block?.text === 'string')
-      .map((block: any) => (block.text as string).trim())
-      .filter((text: string) => text.length > 0)
-      .join('\n')
-      .trim();
   }
 
   private static async invokeSkill(prompt: string, kind: 'match' | 'plan' | 'learning', options?: {
@@ -99,24 +88,29 @@ export class AICoachMatchingService {
           }
         } else {
           const errorText = await res.text();
-          console.warn('[coach-matching edge] non-200 response:', errorText);
+          logger.warn('[coach-matching edge] non-200 response', { errorText });
         }
       } catch (error) {
-        console.warn('[coach-matching edge] request failed, falling back to direct Anthropic call', error);
+        logger.warn('[coach-matching edge] request failed, falling back to race-coaching-chat', error);
       }
     }
 
-    const message = await this.genAI.messages.create({
-      model: 'claude-3-haiku-20240307',
-      max_tokens: maxTokens,
-      temperature,
-      messages: [{
-        role: 'user',
-        content: prompt,
-      }],
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+      },
     });
 
-    return this.extractTextFromResponse(message);
+    if (error) {
+      throw new Error(error.message || 'Coach matching AI invocation failed');
+    }
+
+    if (typeof data?.text !== 'string' || data.text.trim().length === 0) {
+      throw new Error('Coach matching AI returned empty response');
+    }
+
+    return data.text;
   }
 
   /**
@@ -189,7 +183,7 @@ Provide your analysis in this JSON format:
       // Fallback analysis based on basic profile data
       return this.fallbackLearningStyleAnalysis(sailorProfile);
     } catch (error) {
-      console.error('Error analyzing learning style:', error);
+      logger.error('Error analyzing learning style', error);
       return this.fallbackLearningStyleAnalysis(sailorProfile);
     }
   }
@@ -296,14 +290,14 @@ Respond in this JSON format:
             scores.push(this.fallbackCompatibilityScore(coach, criteria));
           }
         } catch (error) {
-          console.error(`Error analyzing coach ${coach.id}:`, error);
+          logger.error(`Error analyzing coach ${coach.id}`, error);
           scores.push(this.fallbackCompatibilityScore(coach, criteria));
         }
       }
 
       return scores.sort((a, b) => b.overallScore - a.overallScore);
     } catch (error) {
-      console.error('Error generating compatibility scores:', error);
+      logger.error('Error generating compatibility scores', error);
       return availableCoaches.map(coach => this.fallbackCompatibilityScore(coach, criteria));
     }
   }
@@ -377,7 +371,7 @@ Respond in this JSON format:
       // Fallback recommendations
       return this.fallbackSessionRecommendations(targetSkills);
     } catch (error) {
-      console.error('Error generating session recommendations:', error);
+      logger.error('Error generating session recommendations', error);
       return this.fallbackSessionRecommendations(targetSkills);
     }
   }
@@ -452,7 +446,7 @@ Respond in this JSON format:
       // Fallback analysis
       return this.fallbackTimingAnalysis(raceHistory, upcomingEvents);
     } catch (error) {
-      console.error('Error analyzing coaching timing:', error);
+      logger.error('Error analyzing coaching timing', error);
       return this.fallbackTimingAnalysis(null, null);
     }
   }
@@ -521,7 +515,7 @@ Respond in this JSON format:
     };
   }
 
-  private static fallbackTimingAnalysis(raceHistory: any, upcomingEvents: any) {
+  private static fallbackTimingAnalysis(_raceHistory: any, _upcomingEvents: any) {
     return {
       urgency: 'medium' as const,
       reasoning: 'Regular coaching recommended for continued improvement',

@@ -85,8 +85,7 @@ export function NextRaceCardTufte() {
         .from('regattas')
         .select(`
           *,
-          sailing_venues(name, city),
-          yacht_clubs(name)
+          sailing_venues(name, city)
         `)
         .in('class_id', fleetIds)
         .gte('start_date', new Date().toISOString())
@@ -96,8 +95,22 @@ export function NextRaceCardTufte() {
       if (error) throw error;
 
       if (races && races.length > 0) {
-        setNextRace(races[0]);
-        calculateTimeUntil(races[0].start_date);
+        let race: any = races[0];
+        if (race?.club_id) {
+          const { data: clubData } = await supabase
+            .from('yacht_clubs')
+            .select('name')
+            .eq('id', race.club_id)
+            .maybeSingle();
+          if (clubData?.name) {
+            race = {
+              ...race,
+              yacht_clubs: { name: clubData.name },
+            };
+          }
+        }
+        setNextRace(race);
+        calculateTimeUntil(race.start_date);
       } else {
         setNextRace(null);
       }

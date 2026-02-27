@@ -166,7 +166,7 @@ export function useRaceWeather(
       });
 
     } catch (err: any) {
-      console.error('Error fetching race weather:', err);
+      logger.error('Error fetching race weather', err);
       setError(err);
       setWeather(null);
     } finally {

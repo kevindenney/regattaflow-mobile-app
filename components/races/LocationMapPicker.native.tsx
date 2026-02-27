@@ -22,8 +22,8 @@ import {
   FlatList,
   Keyboard,
   Platform,
-  Pressable,
   TurboModuleRegistry,
+  Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, MapPin, Search, Navigation, Check } from 'lucide-react-native';
@@ -82,7 +82,6 @@ interface VenueLocation {
 
 const DEFAULT_CENTER = { lat: 22.3193, lng: 114.1694 }; // Hong Kong
 const DEFAULT_DELTA = { latitudeDelta: 0.1, longitudeDelta: 0.1 };
-const VENUE_CACHE_KEY = 'regattaflow_venue_cache_v1';
 const RECENT_VENUES_KEY = 'regattaflow_recent_venues';
 
 // Common fallback venues
@@ -154,7 +153,7 @@ export function LocationMapPicker({
     }
   };
 
-  const saveToRecentVenues = async (venue: VenueLocation) => {
+  const saveToRecentVenues = useCallback(async (venue: VenueLocation) => {
     try {
       const current = [...recentVenues];
       // Remove if exists
@@ -168,7 +167,7 @@ export function LocationMapPicker({
     } catch (e) {
       logger.warn('Failed to save recent venue:', e);
     }
-  };
+  }, [recentVenues]);
 
   // =============================================================================
   // SEARCH
@@ -277,7 +276,7 @@ export function LocationMapPicker({
       onSelectLocation(selectedLocation);
     }
     onClose();
-  }, [selectedLocation, onSelectLocation, onClose]);
+  }, [selectedLocation, saveToRecentVenues, onSelectLocation, onClose]);
 
   const handleUseCurrentLocation = useCallback(async () => {
     // TODO: Implement geolocation
@@ -288,6 +287,20 @@ export function LocationMapPicker({
       lng: DEFAULT_CENTER.lng,
     });
   }, [handleSelectVenue]);
+
+  const handleContactSupport = useCallback(() => {
+    const subject = encodeURIComponent('Location Map Unavailable');
+    const body = encodeURIComponent(
+      `Location picker map is unavailable on this build.\n\n` +
+      `Race type: ${raceType}\n` +
+      `Platform: ${Platform.OS}\n` +
+      `Maps module available: ${mapsAvailable ? 'yes' : 'no'}`
+    );
+    const mailtoUrl = `mailto:support@regattaflow.com?subject=${subject}&body=${body}`;
+    Linking.openURL(mailtoUrl).catch((error) => {
+      logger.warn('Failed to open support email:', error);
+    });
+  }, [raceType]);
 
   // =============================================================================
   // RENDER
@@ -321,6 +334,11 @@ export function LocationMapPicker({
             <Text style={styles.fallbackText}>
               Select from venues below:
             </Text>
+            <View style={styles.fallbackActions}>
+              <TouchableOpacity style={styles.fallbackActionButton} onPress={handleContactSupport}>
+                <Text style={styles.fallbackActionText}>Contact Support</Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.fallbackVenueList}>
               {/* Deduplicate venues by name */}
@@ -744,6 +762,24 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
     marginTop: 8,
+  },
+  fallbackActions: {
+    marginTop: 16,
+    width: '100%',
+  },
+  fallbackActionButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_COLORS.gray4,
+  },
+  fallbackActionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
   },
   fallbackVenueList: {
     marginTop: 24,

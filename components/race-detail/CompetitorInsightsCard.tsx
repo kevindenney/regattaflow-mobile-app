@@ -10,7 +10,7 @@ import { raceParticipantService } from '@/services/RaceParticipantService';
 import { supabase } from '@/services/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface CompetitorInsight {
   id: string;
@@ -36,6 +36,7 @@ export function CompetitorInsightsCard({ raceId, classId, isRegistered, onRegist
   const { user } = useAuth();
   const [insights, setInsights] = useState<CompetitorInsight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCompetitor, setSelectedCompetitor] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export function CompetitorInsightsCard({ raceId, classId, isRegistered, onRegist
 
     try {
       setLoading(true);
+      setError(null);
       
       // Get competitors for this race
       const competitors = await raceParticipantService.getRaceCompetitors(
@@ -98,6 +100,7 @@ export function CompetitorInsightsCard({ raceId, classId, isRegistered, onRegist
       setInsights(loadedInsights);
     } catch (error) {
       console.error('[CompetitorInsightsCard] Error loading insights:', error);
+      setError('Unable to load competitor insights right now.');
       setInsights([]);
     } finally {
       setLoading(false);
@@ -176,11 +179,23 @@ export function CompetitorInsightsCard({ raceId, classId, isRegistered, onRegist
             <Text style={styles.title}>Competitor Insights</Text>
           </View>
         </View>
-        <View style={styles.emptyState}>
-          <MaterialCommunityIcons name="account-search-outline" size={48} color={colors.text.tertiary} />
-          <Text style={styles.emptyText}>No competitor data available</Text>
-          <Text style={styles.emptySubtext}>Insights will appear as more sailors register</Text>
-        </View>
+        {error ? (
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={48} color={colors.error[600]} />
+            <Text style={styles.emptyText}>Competitor insights unavailable</Text>
+            <Text style={styles.emptySubtext}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadCompetitorInsights}>
+              <Ionicons name="refresh" size={16} color={colors.background.primary} />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <MaterialCommunityIcons name="account-search-outline" size={48} color={colors.text.tertiary} />
+            <Text style={styles.emptyText}>No competitor data available</Text>
+            <Text style={styles.emptySubtext}>Insights will appear as more sailors register</Text>
+          </View>
+        )}
       </View>
     );
   }
@@ -409,6 +424,22 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: colors.text.secondary,
+    textAlign: 'center',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    backgroundColor: colors.primary[600],
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background.primary,
   },
   insightsList: {
     maxHeight: 400,
@@ -508,4 +539,3 @@ const styles = StyleSheet.create({
     color: colors.success[700],
   },
 });
-

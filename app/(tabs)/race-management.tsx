@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
+import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { RaceCommsModal } from '@/components/ai/RaceCommsModal';
@@ -98,6 +99,7 @@ const QuickAction = ({
 );
 
 export default function RaceManagementScreen() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'active' | 'completed'>('upcoming');
   const [commsModalVisible, setCommsModalVisible] = useState(false);
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
@@ -165,19 +167,32 @@ export default function RaceManagementScreen() {
       icon: 'flag-outline',
       label: 'Launch start sequence',
       subtitle: 'Signal timers & notify fleet',
-      onPress: () => Alert.alert('Start sequence', 'Race automation coming soon.'),
+      onPress: () => {
+        setActiveTab('active');
+        const race = ACTIVE_RACES[0] ?? UPCOMING_RACES[0];
+        if (race) {
+          openCommsModal(race.id, race.name);
+        }
+      },
     },
     {
       icon: 'document-text-outline',
       label: 'Post course updates',
       subtitle: 'Share mark changes instantly',
-      onPress: () => Alert.alert('Course updates', 'Course management coming soon.'),
+      onPress: () => {
+        const race = UPCOMING_RACES[0];
+        if (race) {
+          openCommsModal(race.id, race.name);
+        } else {
+          router.push('/(tabs)/race/add-tufte');
+        }
+      },
     },
     {
       icon: 'timer-outline',
       label: 'Record finishes',
       subtitle: 'Capture times & penalties',
-      onPress: () => Alert.alert('Record finishes', 'Finish recording is coming soon.'),
+      onPress: () => router.push('/club/results/entry'),
     },
   ] as const;
 
@@ -215,11 +230,11 @@ export default function RaceManagementScreen() {
             </View>
           </View>
           <View style={styles.cardActions}>
-            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Assign PRO', 'Assign race team coming soon.')}>
+            <TouchableOpacity style={styles.cardButton} onPress={() => router.push('/(tabs)/members')}>
               <Ionicons name="people-circle-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>Assign team</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Documents', 'Document workflow coming soon.')}>
+            <TouchableOpacity style={styles.cardButton} onPress={() => router.push(`/race/documents/${race.id}`)}>
               <Ionicons name="document-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>Docs</ThemedText>
             </TouchableOpacity>
@@ -227,7 +242,7 @@ export default function RaceManagementScreen() {
               <Ionicons name="sparkles-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>AI update</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cardButtonPrimary} onPress={() => Alert.alert('Brief sailors', 'Sailor brief coming soon.')}>
+            <TouchableOpacity style={styles.cardButtonPrimary} onPress={() => openCommsModal(race.id, race.name)}>
               <Ionicons name="megaphone-outline" size={18} color="#FFFFFF" />
               <ThemedText style={styles.cardButtonPrimaryText}>Brief sailors</ThemedText>
             </TouchableOpacity>
@@ -263,15 +278,15 @@ export default function RaceManagementScreen() {
             </View>
           </View>
           <View style={styles.activeActions}>
-            <TouchableOpacity style={styles.controlPrimary} onPress={() => Alert.alert('Finish race', 'Finish flow coming soon.')}>
+            <TouchableOpacity style={styles.controlPrimary} onPress={() => router.push('/club/results/entry')}>
               <Ionicons name="flag-outline" size={20} color="#FFFFFF" />
               <ThemedText style={styles.controlPrimaryText}>Finish race</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.controlSecondary} onPress={() => Alert.alert('Pause race', 'Pause control coming soon.')}>
+            <TouchableOpacity style={styles.controlSecondary} onPress={() => router.push(`/club/race/control/${race.id}` as any)}>
               <Ionicons name="pause-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.controlSecondaryText}>Pause</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.controlSecondary} onPress={() => Alert.alert('Send update', 'On-water messaging coming soon.')}>
+            <TouchableOpacity style={styles.controlSecondary} onPress={() => openCommsModal(race.id, race.name)}>
               <Ionicons name="chatbubble-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.controlSecondaryText}>Send update</ThemedText>
             </TouchableOpacity>
@@ -302,15 +317,15 @@ export default function RaceManagementScreen() {
             </View>
           </View>
           <View style={styles.cardActions}>
-            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Publish results', 'Result publishing coming soon.')}>
+            <TouchableOpacity style={styles.cardButton} onPress={() => router.push(`/club/results/${race.id}`)}>
               <Ionicons name="cloud-upload-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>Publish</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cardButton} onPress={() => Alert.alert('Send recap', 'Recap workflow coming soon.')}>
+            <TouchableOpacity style={styles.cardButton} onPress={() => openCommsModal(race.id, race.name)}>
               <Ionicons name="mail-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>Send recap</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cardButtonPrimary} onPress={() => Alert.alert('View analytics', 'Analytics coming soon.')}>
+            <TouchableOpacity style={styles.cardButtonPrimary} onPress={() => router.push(`/race/analysis/${race.id}`)}>
               <Ionicons name="analytics-outline" size={18} color="#FFFFFF" />
               <ThemedText style={styles.cardButtonPrimaryText}>Open analytics</ThemedText>
             </TouchableOpacity>
@@ -332,7 +347,7 @@ export default function RaceManagementScreen() {
           </View>
           <TouchableOpacity
             style={styles.heroButton}
-            onPress={() => Alert.alert('Create race', 'Race creation is coming soon.')}
+            onPress={() => router.push('/(tabs)/race/add-tufte')}
           >
             <Ionicons name="add-circle" size={22} color="#FFFFFF" />
             <ThemedText style={styles.heroButtonText}>Create Race</ThemedText>
@@ -395,28 +410,28 @@ export default function RaceManagementScreen() {
           <View style={styles.operationsGrid}>
             <TouchableOpacity
               style={styles.operationTile}
-              onPress={() => Alert.alert('Safety checklist', 'Safety workflows coming soon.')}
+              onPress={() => router.push('/(tabs)/race-management')}
             >
               <Ionicons name="medkit-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>Safety checklist</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.operationTile}
-              onPress={() => Alert.alert('Weather briefing', 'Weather integrations coming soon.')}
+              onPress={() => router.push('/(tabs)/races')}
             >
               <Ionicons name="cloudy-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>Weather briefing</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.operationTile}
-              onPress={() => Alert.alert('Course library', 'Course management coming soon.')}
+              onPress={() => router.push('/(tabs)/race-management')}
             >
               <Ionicons name="map-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>Course library</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.operationTile}
-              onPress={() => Alert.alert('Result templates', 'Template management coming soon.')}
+              onPress={() => router.push('/club/results/entry')}
             >
               <Ionicons name="clipboard-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>Result templates</ThemedText>
@@ -449,7 +464,7 @@ export default function RaceManagementScreen() {
           Alert.alert(
             'Import Successful',
             `Imported ${data.competitors?.length || 0} competitors and ${data.races?.length || 0} races from Sailwave.`,
-            [{ text: 'View Results', onPress: () => {} }]
+            [{ text: 'View Results', onPress: () => router.push('/club/results/entry') }]
           );
         }}
       />

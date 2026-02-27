@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ConversationalOnboardingAgent, ConversationalContext, StreamMessage } from '@/services/agents/ConversationalOnboardingAgent';
+import { ConversationalOnboardingAgent, ConversationalContext } from '@/services/agents/ConversationalOnboardingAgent';
 
 type AssistantRole = 'assistant';
 type UserRole = 'user';
@@ -15,10 +15,13 @@ type AssistantChatMessage = ChatMessage & { role: AssistantRole };
 type SavedBoat = NonNullable<CollectedData['boats']>[number];
 
 const VENUE_DETECTION_REGEX = /found you near \*\*([^*]+)\*\*/i;
-const SAIL_NUMBER_REGEX = /(?:sail\s*number|#|sail\s+|[a-z])(\d+)/i;
 const ABBREVIATION_REGEX = /\b([A-Z]{2,6})\b/g;
 const CLUB_FULL_NAME_REGEX = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Yacht|Sailing)\s+Club)\b/gi;
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
+const SAIL_NUMBER_PATTERNS = [
+  /sail\s*(?:number|#)?\s*[:\-]?\s*([A-Z]{0,3}\s?-?\s?\d{1,5})\b/i,
+  /#\s*([A-Z]{0,3}\s?-?\s?\d{1,5})\b/i,
+] as const;
 
 const CLUB_ABBREVIATION_EXCLUSIONS = new Set(['GPS', 'AI', 'OK', 'YES', 'NO', 'USA', 'UK']);
 
@@ -85,6 +88,17 @@ const toTitleCase = (value: string): string =>
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(' ');
 
+const uniqueStrings = (values: string[]): string[] => Array.from(new Set(values));
+
+const extractSailNumber = (content: string): string | null => {
+  for (const pattern of SAIL_NUMBER_PATTERNS) {
+    const match = content.match(pattern);
+    if (!match?.[1]) continue;
+    return match[1].replace(/\s+/g, '').toUpperCase();
+  }
+  return null;
+};
+
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error && typeof error.message === 'string') {
     return error.message;
@@ -118,10 +132,10 @@ export interface CollectedDataItem {
 export interface CollectedData {
   venue?: string;
   role?: string;
-  boats?: Array<{ class: string; name?: string; sailNumber?: string }>;
+  boats?: { class: string; name?: string; sailNumber?: string }[];
   clubs?: string[];
   fleets?: string[];
-  equipment?: Array<{ boat: string; makers: string[] }>;
+  equipment?: { boat: string; makers: string[] }[];
   coaches?: string[];
   crew?: string[];
   racingAreas?: string[];
@@ -245,9 +259,8 @@ export function useStreamingChat(sailorId: string): UseStreamingChatReturn {
         }
       });
 
-      const sailNumberMatch = content.match(SAIL_NUMBER_REGEX);
-      if (sailNumberMatch && boats.length > 0) {
-        const [_, sailNumber] = sailNumberMatch;
+      const sailNumber = extractSailNumber(msg.content);
+      if (sailNumber && boats.length > 0) {
         const lastBoat = boats[boats.length - 1];
         if (lastBoat && !lastBoat.sailNumber) {
           lastBoat.sailNumber = sailNumber;
@@ -423,44 +436,38 @@ export function useStreamingChat(sailorId: string): UseStreamingChatReturn {
       setIsLoading(true);
 
       try {
-        // Create assistant message placeholder
-        const assistantMessageId = `assistant-${Date.now()}`;
-        const assistantMessage: ChatMessage = {
-          id: assistantMessageId,
-          role: 'assistant',
-          content: '',
-          timestamp: new Date(),
-          isStreaming: true,
-        };
+        const processed = await agent.processUserMessage(userMessage, collectedData || {});
+        const assistantContent =
+          processed.result?.aiResponse ||
+          'Got it. I captured that and you can continue adding details.';
 
-        setMessages(prev => [...prev, assistantMessage]);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: assistantContent,
+            timestamp: new Date(),
+          },
+        ]);
 
-        // Stream response
-        const stream = agent.streamResponse(userMessage, context);
-
-        for await (const chunk of stream) {
-          setMessages(prev =>
-            prev.map(msg =>
-              msg.id === assistantMessageId
-                ? { ...msg, content: msg.content + chunk }
-                : msg
-            )
-          );
-        }
-
-        // Mark streaming complete
-        setMessages(prev =>
-          prev.map(msg =>
-            msg.id === assistantMessageId
-              ? { ...msg, isStreaming: false }
-              : msg
-          )
-        );
-
-        // Update context with conversation summary
+        // Keep the contextual transcript in sync even when agent streaming is unavailable.
         const summary = agent.getConversationSummary();
+        const extractedBoatClass = processed.result?.boats?.[0]?.className;
+        const extractedClubs = (processed.result?.clubs || [])
+          .map((club) => club.name)
+          .filter((name): name is string => Boolean(name && name.trim().length > 0));
+        const extractedVenueName = processed.result?.venues?.[0]?.name;
+
         setContext(prev => ({
           ...prev,
+          selectedBoatClass: extractedBoatClass || prev.selectedBoatClass,
+          selectedClubs: extractedClubs.length > 0
+            ? uniqueStrings([...(prev.selectedClubs || []), ...extractedClubs])
+            : prev.selectedClubs,
+          detectedVenue: extractedVenueName
+            ? { ...(prev.detectedVenue || {}), name: extractedVenueName }
+            : prev.detectedVenue,
           conversationHistory: summary.messages,
         }));
       } catch (error: unknown) {
@@ -479,7 +486,7 @@ export function useStreamingChat(sailorId: string): UseStreamingChatReturn {
         setIsLoading(false);
       }
     },
-    [context, getAgent]
+    [collectedData, getAgent]
   );
 
   /**

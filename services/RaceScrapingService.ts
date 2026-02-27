@@ -5,6 +5,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RaceScrapingService');
 
 export interface ScrapedRace {
   name: string;
@@ -29,6 +32,74 @@ export interface ImportResult {
 }
 
 export class RaceScrapingService {
+  private static normalizeRaceDate(value?: string): string | null {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString();
+  }
+
+  private static mapExtractedRaceToScrapedRace(
+    race: any,
+    source: ScrapedRace['source'],
+    defaults: {
+      clubId?: string;
+      classId?: string;
+      sourceUrl?: string;
+      venueId?: string;
+    } = {}
+  ): ScrapedRace | null {
+    const name = race?.raceName || race?.name || race?.eventSeriesName;
+    const startDate = this.normalizeRaceDate(race?.raceDate || race?.date || race?.startDate);
+    if (!name || !startDate) return null;
+
+    return {
+      name: String(name).trim(),
+      start_date: startDate,
+      end_date: this.normalizeRaceDate(race?.endDate || race?.raceDate || race?.date) || undefined,
+      club_id: defaults.clubId,
+      venue_id: defaults.venueId,
+      class_id: defaults.classId,
+      registration_url: race?.registrationUrl || race?.entryUrl || defaults.sourceUrl,
+      notice_of_race_url: race?.noticeOfRaceUrl || race?.norUrl || defaults.sourceUrl,
+      sailing_instructions_url: race?.sailingInstructionsUrl || race?.siUrl || undefined,
+      external_id: race?.externalId || undefined,
+      source,
+    };
+  }
+
+  private static async extractRacesFromSourceUrl(
+    url: string,
+    source: ScrapedRace['source'],
+    defaults: {
+      clubId?: string;
+      classId?: string;
+      sourceUrl?: string;
+      venueId?: string;
+    } = {}
+  ): Promise<ScrapedRace[]> {
+    const { data, error } = await supabase.functions.invoke('extract-race-details', {
+      body: { url },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Race extraction failed');
+    }
+
+    const extractedRaces = Array.isArray(data?.races)
+      ? data.races
+      : (data?.data ? [data.data] : []);
+
+    return extractedRaces
+      .map((race: any) =>
+        this.mapExtractedRaceToScrapedRace(race, source, {
+          ...defaults,
+          sourceUrl: defaults.sourceUrl || url,
+        })
+      )
+      .filter((race): race is ScrapedRace => Boolean(race));
+  }
+
   /**
    * Import races from a yacht club calendar
    */
@@ -50,20 +121,24 @@ export class RaceScrapingService {
         };
       }
 
-      // TODO: Implement actual scraping logic based on club website
-      // For now, return a placeholder response
-      // In production, this would:
-      // 1. Fetch the club's race calendar page
-      // 2. Parse HTML to extract race data
-      // 3. Convert to ScrapedRace format
-      // 4. Import to database
+      if (!club.website) {
+        return {
+          success: false,
+          imported_count: 0,
+          skipped_count: 0,
+          error: 'Club has no website URL configured for import',
+        };
+      }
 
-      const scrapedRaces: ScrapedRace[] = [];
-
-      // Example: If club has structured calendar API
-      // const response = await fetch(`${club.website}/api/calendar`);
-      // const data = await response.json();
-      // scrapedRaces = data.races.map(race => ({ ... }));
+      const scrapedRaces = await this.extractRacesFromSourceUrl(
+        club.website,
+        'yacht_club',
+        {
+          clubId,
+          venueId: club.venue_id || undefined,
+          sourceUrl: club.website,
+        }
+      );
 
       return await this.importRaces(scrapedRaces, 'yacht_club', clubId);
     } catch (error: any) {
@@ -97,12 +172,24 @@ export class RaceScrapingService {
         };
       }
 
-      // TODO: Implement actual scraping logic based on association website
-      // Many class associations use standard calendar formats
-      // Dragon Class example: https://intdragon.net/calendar
-      // Would parse event listings and import regattas
+      const sourceUrl = association.website || association.racing_rules_url;
+      if (!sourceUrl) {
+        return {
+          success: false,
+          imported_count: 0,
+          skipped_count: 0,
+          error: 'Association has no source URL configured for import',
+        };
+      }
 
-      const scrapedRaces: ScrapedRace[] = [];
+      const scrapedRaces = await this.extractRacesFromSourceUrl(
+        sourceUrl,
+        'class_association',
+        {
+          classId: association.class_id || undefined,
+          sourceUrl,
+        }
+      );
 
       return await this.importRaces(scrapedRaces, 'class_association', undefined, associationId);
     } catch (error: any) {
@@ -119,7 +206,7 @@ export class RaceScrapingService {
    * Import races from Racing Rules of Sailing
    */
   static async importFromRacingRules(
-    searchParams: {
+    _searchParams: {
       country?: string;
       region?: string;
       class_id?: string;
@@ -153,11 +240,7 @@ export class RaceScrapingService {
       // Get clubs with auto_import_races enabled
       const { data: memberships, error: memberError } = await supabase
         .from('sailor_clubs')
-        .select(`
-          *,
-          yacht_clubs(id, name, website),
-          class_associations(id, name, website)
-        `)
+        .select('*')
         .eq('sailor_id', sailorId)
         .eq('auto_import_races', true);
 
@@ -218,7 +301,7 @@ export class RaceScrapingService {
     races: ScrapedRace[],
     source: ScrapedRace['source'],
     clubId?: string,
-    associationId?: string
+    _associationId?: string
   ): Promise<ImportResult> {
     try {
       if (races.length === 0) {
@@ -270,7 +353,7 @@ export class RaceScrapingService {
           .single();
 
         if (insertError) {
-          console.error(`Error importing race ${race.name}:`, insertError);
+          logger.error(`Error importing race ${race.name}:`, insertError);
           skipped++;
         } else {
           imported++;
@@ -300,17 +383,10 @@ export class RaceScrapingService {
    */
   static async importFromURL(url: string): Promise<ImportResult> {
     try {
-      // TODO: Implement URL parsing logic
-      // Would detect the type of URL (club, association, notice of race)
-      // And extract race information accordingly
-
-      // For now, return placeholder
-      return {
-        success: false,
-        imported_count: 0,
-        skipped_count: 0,
-        error: 'URL parsing not yet implemented',
-      };
+      const scrapedRaces = await this.extractRacesFromSourceUrl(url, 'manual', {
+        sourceUrl: url,
+      });
+      return await this.importRaces(scrapedRaces, 'manual');
     } catch (error: any) {
       return {
         success: false,
@@ -356,7 +432,7 @@ export class RaceScrapingService {
 
       return races || [];
     } catch (error) {
-      console.error('Error getting import history:', error);
+      logger.error('Error getting import history:', error);
       return [];
     }
   }
@@ -391,7 +467,7 @@ export class RaceScrapingService {
 
       return true;
     } catch (error) {
-      console.error('Error deleting imported races:', error);
+      logger.error('Error deleting imported races:', error);
       return false;
     }
   }

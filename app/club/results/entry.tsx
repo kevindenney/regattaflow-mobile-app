@@ -23,6 +23,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 import { supabase } from '@/services/supabase';
 import { scoringService } from '@/services/ScoringService';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 interface Entry {
   id: string;
@@ -39,6 +40,7 @@ interface FinishResult {
   status: 'finished' | 'dnf' | 'dns' | 'dsq' | 'ocs' | 'dnc' | 'ret';
   time?: string;
 }
+type RaceResultsIdColumn = 'regatta_id' | 'race_id';
 
 const STATUS_CODES = [
   { value: 'finished', label: 'OK', color: '#10B981' },
@@ -55,6 +57,7 @@ export default function ResultsEntryScreen() {
   const { regattaId, raceNumber } = useLocalSearchParams<{ regattaId: string; raceNumber: string }>();
   const { clubId, loading: clubLoading } = useClubWorkspace();
   const inputRef = useRef<TextInput>(null);
+  const raceResultsIdColumnRef = useRef<RaceResultsIdColumn>('regatta_id');
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [results, setResults] = useState<FinishResult[]>([]);
@@ -65,6 +68,24 @@ export default function ResultsEntryScreen() {
   // Quick entry mode
   const [quickSailNumber, setQuickSailNumber] = useState('');
   const [finishOrder, setFinishOrder] = useState<string[]>([]);
+
+  const withRaceResultsIdFallback = async <T,>(
+    operation: (column: RaceResultsIdColumn) => Promise<{ data: T | null; error: any }>
+  ) => {
+    const current = raceResultsIdColumnRef.current;
+    let result = await operation(current);
+    if (
+      result.error &&
+      current === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_results', current)
+    ) {
+      result = await operation('race_id');
+      if (!result.error) {
+        raceResultsIdColumnRef.current = 'race_id';
+      }
+    }
+    return result;
+  };
 
   useEffect(() => {
     if (regattaId) {
@@ -97,11 +118,14 @@ export default function ResultsEntryScreen() {
       setEntries(entriesData || []);
 
       // Get existing results for this race
-      const { data: existingResults } = await supabase
-        .from('race_results')
-        .select('*')
-        .eq('regatta_id', regattaId)
-        .eq('race_number', parseInt(raceNumber || '1'));
+      const { data: existingResults, error: existingResultsError } = await withRaceResultsIdFallback((column) =>
+        supabase
+          .from('race_results')
+          .select('*')
+          .eq(column, regattaId)
+          .eq('race_number', parseInt(raceNumber || '1'))
+      );
+      if (existingResultsError) throw existingResultsError;
 
       // Initialize results state
       const initialResults: FinishResult[] = (entriesData || []).map(entry => {
@@ -210,21 +234,24 @@ export default function ResultsEntryScreen() {
     setSaving(true);
     try {
       // Prepare results data
-      const resultsData = results.map(r => ({
-        regatta_id: regattaId,
-        race_number: parseInt(raceNumber || '1'),
-        entry_id: r.entry_id,
-        finish_position: r.position,
-        status: r.status,
-        finish_time: r.time,
-      }));
-
       // Upsert results
-      const { error } = await supabase
-        .from('race_results')
-        .upsert(resultsData, {
-          onConflict: 'regatta_id,race_number,entry_id',
-        });
+      const { error } = await withRaceResultsIdFallback((column) =>
+        supabase
+          .from('race_results')
+          .upsert(
+            results.map((r) => ({
+              [column]: regattaId,
+              race_number: parseInt(raceNumber || '1'),
+              entry_id: r.entry_id,
+              finish_position: r.position,
+              status: r.status,
+              finish_time: r.time,
+            })),
+            {
+              onConflict: `${column},race_number,entry_id`,
+            }
+          )
+      );
 
       if (error) throw error;
 
@@ -759,4 +786,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

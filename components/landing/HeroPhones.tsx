@@ -674,18 +674,18 @@ export function HeroPhones() {
                 Need team tools? RegattaFlow also supports{' '}
                 <Text
                   style={styles.otherUserTypesLink}
-                  onPress={() => alert('For Coaches is coming soon')}
+                  onPress={() => router.push('/coach/discover')}
                 >
                   coaches
                 </Text>
                 {' '}and{' '}
                 <Text
                   style={styles.otherUserTypesLink}
-                  onPress={() => alert('For Clubs is coming soon')}
+                  onPress={() => router.push('/club-solutions')}
                 >
                   clubs
                 </Text>
-                {' '}coming soon.
+                .
               </Text>
           </View>
 

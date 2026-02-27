@@ -12,11 +12,7 @@ import {
   CreateThreadInput,
   ThreadType,
 } from '@/services/CrewThreadService';
-
 export type { CrewThread, ThreadType };
-import { createLogger } from '@/lib/utils/logger';
-
-const logger = createLogger('useCrewThreads');
 
 export const CREW_THREADS_QUERY_KEY = 'crew-threads';
 export const CREW_THREAD_UNREAD_COUNT_KEY = 'crew-threads-unread-count';
@@ -35,6 +31,7 @@ interface UseCrewThreadsReturn {
 
 export function useCrewThreads(): UseCrewThreadsReturn {
   const { user } = useAuth();
+  const userId = user?.id;
   const queryClient = useQueryClient();
 
   // Fetch threads
@@ -44,20 +41,21 @@ export function useCrewThreads(): UseCrewThreadsReturn {
     error,
     refetch,
   } = useQuery({
-    queryKey: [CREW_THREADS_QUERY_KEY, user?.id],
+    queryKey: [CREW_THREADS_QUERY_KEY, userId],
     queryFn: () => CrewThreadService.getMyThreads(),
-    enabled: !!user?.id,
+    enabled: !!userId,
     staleTime: 30 * 1000, // 30 seconds
     refetchOnWindowFocus: true,
   });
 
   // Create thread mutation
   const createMutation = useMutation({
-    mutationFn: (input: CreateThreadInput) => CrewThreadService.createThread(input),
-    onSuccess: (newThread) => {
+    mutationFn: ({ input }: { input: CreateThreadInput; userId: string }) =>
+      CrewThreadService.createThread(input),
+    onSuccess: (newThread, variables) => {
       if (newThread) {
         queryClient.setQueryData(
-          [CREW_THREADS_QUERY_KEY, user?.id],
+          [CREW_THREADS_QUERY_KEY, variables.userId],
           (old: CrewThread[] | undefined) => [newThread, ...(old || [])]
         );
       }
@@ -72,11 +70,12 @@ export function useCrewThreads(): UseCrewThreadsReturn {
     }: {
       threadId: string;
       updates: { name?: string; avatarEmoji?: string };
+      userId: string;
     }) => CrewThreadService.updateThread(threadId, updates),
-    onSuccess: (success, { threadId, updates }) => {
+    onSuccess: (success, { threadId, updates, userId }) => {
       if (success) {
         queryClient.setQueryData(
-          [CREW_THREADS_QUERY_KEY, user?.id],
+          [CREW_THREADS_QUERY_KEY, userId],
           (old: CrewThread[] | undefined) =>
             (old || []).map((t) =>
               t.id === threadId ? { ...t, ...updates } : t
@@ -88,13 +87,14 @@ export function useCrewThreads(): UseCrewThreadsReturn {
 
   // Delete thread mutation
   const deleteMutation = useMutation({
-    mutationFn: (threadId: string) => CrewThreadService.deleteThread(threadId),
-    onSuccess: (success, threadId) => {
+    mutationFn: ({ threadId }: { threadId: string; userId: string }) =>
+      CrewThreadService.deleteThread(threadId),
+    onSuccess: (success, variables) => {
       if (success) {
         queryClient.setQueryData(
-          [CREW_THREADS_QUERY_KEY, user?.id],
+          [CREW_THREADS_QUERY_KEY, variables.userId],
           (old: CrewThread[] | undefined) =>
-            (old || []).filter((t) => t.id !== threadId)
+            (old || []).filter((t) => t.id !== variables.threadId)
         );
       }
     },
@@ -102,13 +102,14 @@ export function useCrewThreads(): UseCrewThreadsReturn {
 
   // Leave thread mutation
   const leaveMutation = useMutation({
-    mutationFn: (threadId: string) => CrewThreadService.leaveThread(threadId),
-    onSuccess: (success, threadId) => {
+    mutationFn: ({ threadId }: { threadId: string; userId: string }) =>
+      CrewThreadService.leaveThread(threadId),
+    onSuccess: (success, variables) => {
       if (success) {
         queryClient.setQueryData(
-          [CREW_THREADS_QUERY_KEY, user?.id],
+          [CREW_THREADS_QUERY_KEY, variables.userId],
           (old: CrewThread[] | undefined) =>
-            (old || []).filter((t) => t.id !== threadId)
+            (old || []).filter((t) => t.id !== variables.threadId)
         );
       }
     },
@@ -120,18 +121,22 @@ export function useCrewThreads(): UseCrewThreadsReturn {
     error: error instanceof Error ? error : null,
     refetch,
     createThread: async (input: CreateThreadInput) => {
-      const result = await createMutation.mutateAsync(input);
+      if (!userId) return null;
+      const result = await createMutation.mutateAsync({ input, userId });
       return result;
     },
     isCreating: createMutation.isPending,
     updateThread: async (threadId: string, updates) => {
-      return updateMutation.mutateAsync({ threadId, updates });
+      if (!userId) return false;
+      return updateMutation.mutateAsync({ threadId, updates, userId });
     },
     deleteThread: async (threadId: string) => {
-      return deleteMutation.mutateAsync(threadId);
+      if (!userId) return false;
+      return deleteMutation.mutateAsync({ threadId, userId });
     },
     leaveThread: async (threadId: string) => {
-      return leaveMutation.mutateAsync(threadId);
+      if (!userId) return false;
+      return leaveMutation.mutateAsync({ threadId, userId });
     },
   };
 }
@@ -145,15 +150,16 @@ export function useCrewThreadsUnreadCount(): {
   refetch: () => void;
 } {
   const { user } = useAuth();
+  const userId = user?.id;
 
   const {
     data: unreadCount = 0,
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: [CREW_THREAD_UNREAD_COUNT_KEY, user?.id],
+    queryKey: [CREW_THREAD_UNREAD_COUNT_KEY, userId],
     queryFn: () => CrewThreadService.getTotalUnreadCount(),
-    enabled: !!user?.id,
+    enabled: !!userId,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000, // Poll every minute for new messages
   });

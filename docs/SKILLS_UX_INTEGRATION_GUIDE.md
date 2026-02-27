@@ -116,7 +116,7 @@ export async function invokeSkillWithContext(
     headers: {
       'anthropic-version': '2023-06-01',
       'anthropic-beta': 'skills-2025-10-02',
-      'x-api-key': process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '',
+      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
       'content-type': 'application/json',
     },
     body: JSON.stringify({

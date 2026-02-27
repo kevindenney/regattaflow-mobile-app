@@ -9,6 +9,7 @@ import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { raceStrategyEngine, type RaceConditions } from '@/services/ai/RaceStrategyEngine';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -87,6 +88,67 @@ export function DistanceRacingStrategyCard({
     loadingRef.current = loading;
   }, [loading]);
 
+  const loadStrategyContent = useCallback(async () => {
+    if (!user?.id) return null;
+
+    const primary = await supabase
+      .from('race_strategies')
+      .select('strategy_content')
+      .eq('regatta_id', raceId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (primary.error && isMissingIdColumn(primary.error, 'race_strategies', 'regatta_id')) {
+      const fallback = await supabase
+        .from('race_strategies')
+        .select('strategy_content')
+        .eq('race_id', raceId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (fallback.error) throw fallback.error;
+      return fallback.data;
+    }
+
+    if (primary.error) throw primary.error;
+    return primary.data;
+  }, [raceId, user?.id]);
+
+  const upsertStrategyContent = useCallback(async (strategyContent: any, confidenceScore: number, aiGenerated: boolean) => {
+    if (!user?.id) return;
+
+    const primaryUpsert = await supabase
+      .from('race_strategies')
+      .upsert({
+        regatta_id: raceId,
+        user_id: user.id,
+        strategy_type: 'pre_race',
+        strategy_content: strategyContent,
+        confidence_score: confidenceScore,
+        ai_generated: aiGenerated,
+      }, {
+        onConflict: 'regatta_id,user_id'
+      });
+
+    if (primaryUpsert.error && isMissingIdColumn(primaryUpsert.error, 'race_strategies', 'regatta_id')) {
+      const fallbackUpsert = await supabase
+        .from('race_strategies')
+        .upsert({
+          race_id: raceId,
+          user_id: user.id,
+          strategy_type: 'pre_race',
+          strategy_content: strategyContent,
+          confidence_score: confidenceScore,
+          ai_generated: aiGenerated,
+        } as any, {
+          onConflict: 'race_id,user_id'
+        });
+      if (fallbackUpsert.error) throw fallbackUpsert.error;
+      return;
+    }
+
+    if (primaryUpsert.error) throw primaryUpsert.error;
+  }, [raceId, user?.id]);
+
   const loadDistanceStrategy = useCallback(async () => {
     if (!user) {
       setLoading(false);
@@ -97,17 +159,7 @@ export function DistanceRacingStrategyCard({
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('race_strategies')
-        .select('strategy_content')
-        .eq('regatta_id', raceId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error('[DistanceRacingStrategyCard] Fetch error:', fetchError);
-        throw fetchError;
-      }
+      const data = await loadStrategyContent();
 
       if (data && data.strategy_content) {
         const strategyContent = data.strategy_content as any;
@@ -132,11 +184,12 @@ export function DistanceRacingStrategyCard({
       }
     } catch (err) {
       console.error('[DistanceRacingStrategyCard] Load error:', err);
-      setError('Failed to load distance racing strategy');
+      const message = err instanceof Error ? err.message : 'Failed to load distance racing strategy';
+      setError(message);
     } finally {
       setLoading(false);
     }
-  }, [user, raceId]);
+  }, [user, loadStrategyContent]);
 
   useEffect(() => {
     loadDistanceStrategy();
@@ -150,9 +203,14 @@ export function DistanceRacingStrategyCard({
           event: '*',
           schema: 'public',
           table: 'race_strategies',
-          filter: `regatta_id=eq.${raceId}`,
         },
-        () => {
+        (payload) => {
+          const payloadRaceId =
+            (payload as any)?.new?.regatta_id ||
+            (payload as any)?.new?.race_id ||
+            (payload as any)?.old?.regatta_id ||
+            (payload as any)?.old?.race_id;
+          if (payloadRaceId !== raceId) return;
           // Reload strategy when it changes
           loadDistanceStrategy();
         }
@@ -189,14 +247,7 @@ export function DistanceRacingStrategyCard({
 
     const loadUserStrategy = async () => {
       try {
-        const { data, error: fetchError } = await supabase
-          .from('race_strategies')
-          .select('strategy_content')
-          .eq('regatta_id', raceId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (fetchError) throw fetchError;
+        const data = await loadStrategyContent();
 
         if (data?.strategy_content) {
           const strategyContent = data.strategy_content as any;
@@ -210,7 +261,7 @@ export function DistanceRacingStrategyCard({
     };
 
     loadUserStrategy();
-  }, [user?.id, raceId]);
+  }, [loadStrategyContent, user?.id]);
 
   // Auto-generate strategy if not exists (only once on mount)
   const hasAttemptedGeneration = useRef(false);
@@ -291,14 +342,16 @@ export function DistanceRacingStrategyCard({
         return base;
       })();
 
-      // Determine venue ID - use hong-kong as default for distance races if venue_id is missing
-      const venueId = raceData.venue_id || 'hong-kong';
-      logger.debug('[DistanceRacingStrategyCard] Using venue:', venueId);
+      const resolvedVenueId = raceData.venue_id || venueId;
+      if (!resolvedVenueId) {
+        throw new Error('Venue is missing. Add a venue to this race to generate distance strategy.');
+      }
+      logger.debug('[DistanceRacingStrategyCard] Using venue:', resolvedVenueId);
 
       // Add timeout to prevent infinite loading
       // Pass courseLengthNm to help detect distance race type for skill selection
       const strategyPromise = raceStrategyEngine.generateVenueBasedStrategy(
-        venueId,
+        resolvedVenueId,
         currentConditions,
         {
           raceName: raceData.name || raceName,
@@ -390,32 +443,14 @@ export function DistanceRacingStrategyCard({
       };
 
       // Save to database - preserve existing strategy_content to avoid overwriting other cards' data
-      const existingData = await supabase
-        .from('race_strategies')
-        .select('strategy_content')
-        .eq('regatta_id', raceId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const existingData = await loadStrategyContent();
 
       // Preserve existing data (e.g., tacticalPlan from TacticalPlanCard, startStrategy from StartStrategyCard)
-      const strategyContent = existingData.data?.strategy_content || {};
+      const strategyContent = existingData?.strategy_content || {};
       (strategyContent as any).distanceRacingStrategy = distanceStrategy;
       (strategyContent as any).fullAIStrategy = aiStrategy; // Save full AI strategy for reference
 
-      const { error: upsertError } = await supabase
-        .from('race_strategies')
-        .upsert({
-          regatta_id: raceId,
-          user_id: user.id,
-          strategy_type: 'pre_race',
-          strategy_content: strategyContent,
-          confidence_score: distanceStrategy.confidence,
-          ai_generated: true,
-        }, {
-          onConflict: 'regatta_id,user_id'
-        });
-
-      if (upsertError) throw upsertError;
+      await upsertStrategyContent(strategyContent, distanceStrategy.confidence, true);
 
       setStrategy(distanceStrategy);
       logger.debug('[DistanceRacingStrategyCard] Skill enabled:', raceStrategyEngine.isSkillReady());
@@ -530,31 +565,15 @@ export function DistanceRacingStrategyCard({
       };
 
       // Save fallback strategy to database
-      const existingData = await supabase
-        .from('race_strategies')
-        .select('strategy_content')
-        .eq('regatta_id', raceId)
-        .eq('user_id', user.id)
-        .maybeSingle();
+      const existingData = await loadStrategyContent();
 
-      const strategyContent = existingData.data?.strategy_content || {};
+      const strategyContent = existingData?.strategy_content || {};
       (strategyContent as any).distanceRacingStrategy = fallbackStrategy;
       (strategyContent as any).isFallback = true; // Mark as fallback
 
-      const { error: upsertError } = await supabase
-        .from('race_strategies')
-        .upsert({
-          regatta_id: raceId,
-          user_id: user.id,
-          strategy_type: 'pre_race',
-          strategy_content: strategyContent,
-          confidence_score: fallbackStrategy.confidence,
-          ai_generated: false, // Mark as not AI-generated
-        }, {
-          onConflict: 'regatta_id,user_id'
-        });
-
-      if (upsertError) {
+      try {
+        await upsertStrategyContent(strategyContent, fallbackStrategy.confidence, false);
+      } catch (upsertError) {
         logger.error('[DistanceRacingStrategyCard] Failed to save fallback strategy:', upsertError);
       }
 
@@ -605,29 +624,16 @@ export function DistanceRacingStrategyCard({
     setSavingUserStrategy(true);
     try {
       // Store user notes in race_strategies.strategy_content.userNotes
-      const { data: existingData } = await supabase
-        .from('race_strategies')
-        .select('strategy_content')
-        .eq('regatta_id', raceId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
+      const existingData = await loadStrategyContent();
       const strategyContent = existingData?.strategy_content || {};
       (strategyContent as any).userNotes = text;
       (strategyContent as any).distanceRacingStrategy = strategy; // Preserve strategy
 
-      const { error: upsertError } = await supabase
-        .from('race_strategies')
-        .upsert({
-          regatta_id: raceId,
-          user_id: user.id,
-          strategy_type: 'pre_race',
-          strategy_content: strategyContent,
-        }, {
-          onConflict: 'regatta_id,user_id'
-        });
-
-      if (upsertError) throw upsertError;
+      await upsertStrategyContent(
+        strategyContent,
+        strategy?.confidence || 0,
+        Boolean((strategyContent as any).fullAIStrategy) && !(strategyContent as any).isFallback
+      );
     } catch (err) {
       logger.error('[DistanceRacingStrategyCard] Error saving user strategy', err);
     } finally {
@@ -1095,7 +1101,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-
-
-
-

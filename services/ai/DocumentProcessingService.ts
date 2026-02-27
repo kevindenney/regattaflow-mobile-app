@@ -5,8 +5,9 @@
  * Processes PDFs, sailing instructions, and strategy documents using Claude AI
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import RaceCourseExtractor from './RaceCourseExtractor';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   DocumentUpload,
   DocumentAnalysis,
@@ -16,27 +17,35 @@ import type {
   RaceCourseExtraction
 } from '@/lib/types/ai-knowledge';
 
+const logger = createLogger('DocumentProcessingService');
+
 export class DocumentProcessingService {
-  // private anthropic: Anthropic; // Disabled for web compatibility
   private knowledgeBase: Map<string, ProcessedDocument> = new Map();
   private courseExtractor: RaceCourseExtractor;
 
   constructor() {
-    // NOTE: Anthropic SDK disabled for web compatibility
-    // Requires backend API endpoint for production
-    /*
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error('Anthropic API key not found. Set EXPO_PUBLIC_ANTHROPIC_API_KEY environment variable.');
+    this.courseExtractor = new RaceCourseExtractor();
+  }
+
+  private async invokeDocumentChat(prompt: string, maxTokens: number, temperature: number): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+        temperature
+      }
+    });
+
+    if (error) {
+      throw new Error(error.message || 'race-coaching-chat invocation failed');
     }
 
-        // this.anthropic = new Anthropic({
-      apiKey,
-      dangerouslyAllowBrowser: true // Development only - move to backend for production
-    });
-    */
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    if (!text) {
+      throw new Error('race-coaching-chat returned no text');
+    }
 
-    this.courseExtractor = new RaceCourseExtractor();
+    return text;
   }
 
   /**
@@ -56,9 +65,8 @@ export class DocumentProcessingService {
       if (['sailing_instructions', 'race_strategy', 'rules'].includes(analysis.documentClass)) {
         try {
           raceCourseExtraction = await this.extractRaceCourse(upload, upload.metadata?.venue);
-
         } catch (error) {
-
+          logger.warn('Race course extraction failed during document upload', error);
         }
       }
 
@@ -83,7 +91,7 @@ export class DocumentProcessingService {
       return analysis;
 
     } catch (error: any) {
-
+      logger.error('Document upload processing failed', error);
       throw new Error(`Document processing failed: ${error.message}`);
     }
   }
@@ -110,7 +118,7 @@ export class DocumentProcessingService {
       return insights;
 
     } catch (error: any) {
-
+      logger.error('Knowledge base query failed', error);
       throw new Error(`Knowledge base query failed: ${error.message}`);
     }
   }
@@ -141,7 +149,7 @@ export class DocumentProcessingService {
       return courseExtraction;
 
     } catch (error: any) {
-
+      logger.error('Race course extraction failed', error);
       throw new Error(`Race course extraction failed: ${error.message}`);
     }
   }
@@ -161,21 +169,7 @@ export class DocumentProcessingService {
     try {
       const prompt = this.buildRaceAnalysisPrompt(racingDocuments, conditions);
 
-      // Using Claude 3.5 Haiku for cost optimization
-      const message = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2048,
-        temperature: 0.3, // Creative but consistent analysis
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      // Extract text from Claude's response
-      const response = message.content[0].type === 'text'
-        ? message.content[0].text
-        : '';
+      const response = await this.invokeDocumentChat(prompt, 2048, 0.3);
 
       // Parse structured response
       const insights = this.parseStrategyResponse(response);
@@ -183,7 +177,7 @@ export class DocumentProcessingService {
       return insights;
 
     } catch (error: any) {
-
+      logger.error('Race strategy analysis failed', error);
       throw new Error(`Race strategy analysis failed: ${error.message}`);
     }
   }
@@ -259,21 +253,7 @@ Return this exact JSON structure:
 CRITICAL: Respond with ONLY the JSON object above. No explanations, no apologies, no additional text.`;
 
     try {
-      // Using Claude 3.5 Haiku for cost optimization (12x cheaper than Sonnet)
-      const message = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2048,
-        temperature: 0.2, // Low temperature for structured analysis
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      // Extract text from Claude's response
-      const response = message.content[0].type === 'text'
-        ? message.content[0].text
-        : '';
+      const response = await this.invokeDocumentChat(prompt, 2048, 0.2);
 
       // Parse JSON response
       const cleanedResponse = response.replace(/```json\n?|\n?```/g, '');
@@ -282,7 +262,7 @@ CRITICAL: Respond with ONLY the JSON object above. No explanations, no apologies
       return analysis;
 
     } catch (error) {
-      console.error('Failed to parse AI analysis:', error);
+      logger.warn('Failed to parse AI analysis; returning fallback', error);
 
       // Fallback analysis with enhanced professional sailing education structure
       return {
@@ -354,12 +334,12 @@ CRITICAL: Respond with ONLY the JSON object above. No explanations, no apologies
    */
   private async findRelevantDocuments(
     queryEmbeddings: number[],
-    context?: any
+    _context?: any
   ): Promise<ProcessedDocument[]> {
     const relevantDocs: ProcessedDocument[] = [];
     const threshold = 0.7; // Similarity threshold
 
-    for (const [id, doc] of this.knowledgeBase) {
+    for (const [_id, doc] of this.knowledgeBase) {
       const similarity = this.calculateCosineSimilarity(queryEmbeddings, doc.embeddings);
 
       if (similarity > threshold) {
@@ -437,21 +417,7 @@ Format as valid JSON array.
     `;
 
     try {
-      // Using Claude 3.5 Haiku for cost optimization
-      const message = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2048,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      // Extract text from Claude's response
-      const response = message.content[0].type === 'text'
-        ? message.content[0].text
-        : '';
+      const response = await this.invokeDocumentChat(prompt, 2048, 0.3);
 
       const cleanedResponse = response.replace(/```json\n?|\n?```/g, '');
       const insights = JSON.parse(cleanedResponse) as StrategyInsight[];
@@ -459,7 +425,7 @@ Format as valid JSON array.
       return insights;
 
     } catch (error) {
-      console.error('Failed to generate insights:', error);
+      logger.warn('Failed to generate insights; returning fallback', error);
       return [{
         type: 'general',
         title: 'Analysis Available',
@@ -559,7 +525,7 @@ Format as structured tactical advice incorporating professional sailing educatio
       }];
 
     } catch (error) {
-      console.error('Failed to parse strategy response:', error);
+      logger.warn('Failed to parse strategy response; using fallback text insight', error);
       return [{
         type: 'general',
         title: 'Strategy Analysis Available',
@@ -574,7 +540,7 @@ Format as structured tactical advice incorporating professional sailing educatio
   /**
    * Extract text from PDF
    */
-  private async extractPDFText(data: ArrayBuffer): Promise<string> {
+  private async extractPDFText(_data: ArrayBuffer): Promise<string> {
     // Mock implementation - in production use pdf.js
     return "PDF text extraction would be implemented here using pdf.js or similar library";
   }
@@ -582,7 +548,7 @@ Format as structured tactical advice incorporating professional sailing educatio
   /**
    * Perform OCR on image
    */
-  private async performOCR(data: ArrayBuffer): Promise<string> {
+  private async performOCR(_data: ArrayBuffer): Promise<string> {
     // Mock implementation - in production use Tesseract.js or cloud OCR
     return "OCR text extraction would be implemented here";
   }

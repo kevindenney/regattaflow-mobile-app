@@ -209,8 +209,8 @@ console.log(strategy.strategy.startStrategy);
 1. **Skills require Code Execution beta** - Now enabled in all API calls
 2. **Custom skills must be uploaded** - Not automatic like built-in skills
 3. **Skill ID must be set** - Add to RaceStrategyEngine after upload
-4. **Browser compatibility** - Using `dangerouslyAllowBrowser: true` (move to backend for production)
-5. **API Key required** - Set `EXPO_PUBLIC_ANTHROPIC_API_KEY` environment variable
+4. **Browser compatibility** - Using `server-side Edge Function proxy` (move to backend for production)
+5. **API Key required** - Set `ANTHROPIC_API_KEY` environment variable
 
 ## 🔐 Security
 

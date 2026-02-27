@@ -174,8 +174,6 @@ export function ShareTab({
     }
 
     const message = getShareMessage(code);
-    const url = getShareUrl(code);
-
     switch (channelId) {
       case 'whatsapp':
         const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
@@ -184,10 +182,13 @@ export function ShareTab({
           if (canOpen) {
             await Linking.openURL(whatsappUrl);
           } else {
-            Alert.alert('WhatsApp not available', 'Please install WhatsApp to share via this channel');
+            await Share.share({
+              message,
+              title: raceName ? `Join: ${raceName}` : 'Join my race',
+            });
           }
         } catch (error) {
-          Alert.alert('Error', 'Could not open WhatsApp');
+          Alert.alert('Share Unavailable', 'Could not open WhatsApp. Try Copy Link or Email.');
         }
         break;
 

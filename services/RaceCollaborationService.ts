@@ -12,6 +12,7 @@
 
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { isUuid } from '@/utils/uuid';
 import {
   RaceCollaborator,
@@ -32,6 +33,9 @@ const logger = createLogger('RaceCollaborationService');
  * Service for managing race collaboration
  */
 class RaceCollaborationServiceClass {
+  private collaboratorsIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
+  private messagesIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
+
   // =========================================================================
   // COLLABORATOR CRUD
   // =========================================================================
@@ -113,11 +117,27 @@ class RaceCollaborationServiceClass {
     }
 
     // First, get the basic collaborator data
-    const { data: collaborators, error } = await supabase
+    let result = await supabase
       .from('race_collaborators')
       .select('*')
-      .eq('regatta_id', regattaId)
+      .eq(this.collaboratorsIdColumn, regattaId)
       .order('created_at', { ascending: true });
+
+    if (
+      result.error &&
+      this.collaboratorsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_collaborators', 'regatta_id')
+    ) {
+      this.collaboratorsIdColumn = 'race_id';
+      result = await supabase
+        .from('race_collaborators')
+        .select('*')
+        .eq('race_id', regattaId)
+        .order('created_at', { ascending: true });
+    }
+
+    const collaborators = result.data;
+    const error = result.error;
 
     if (error) {
       logger.error('Failed to get collaborators:', error);
@@ -336,12 +356,28 @@ class RaceCollaborationServiceClass {
     logger.info('Requesting to join race:', { regattaId, userId });
 
     // Check if user is already a collaborator
-    const { data: existing } = await supabase
+    let existingResult = await supabase
       .from('race_collaborators')
       .select('id, status')
-      .eq('regatta_id', regattaId)
+      .eq(this.collaboratorsIdColumn, regattaId)
       .eq('user_id', userId)
       .single();
+
+    if (
+      existingResult.error &&
+      this.collaboratorsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(existingResult.error, 'race_collaborators', 'regatta_id')
+    ) {
+      this.collaboratorsIdColumn = 'race_id';
+      existingResult = await supabase
+        .from('race_collaborators')
+        .select('id, status')
+        .eq('race_id', regattaId)
+        .eq('user_id', userId)
+        .single();
+    }
+
+    const existing = existingResult.data;
 
     if (existing) {
       if (existing.status === 'accepted') {
@@ -370,10 +406,10 @@ class RaceCollaborationServiceClass {
     }
 
     // Create new collaborator with pending status
-    const { data: newCollab, error: insertError } = await supabase
+    let insertResult = await supabase
       .from('race_collaborators')
       .insert({
-        regatta_id: regattaId,
+        [this.collaboratorsIdColumn]: regattaId,
         user_id: userId,
         display_name: options?.displayName || null,
         access_level: 'view', // Will be updated when approved
@@ -382,6 +418,29 @@ class RaceCollaborationServiceClass {
       })
       .select('id')
       .single();
+
+    if (
+      insertResult.error &&
+      this.collaboratorsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(insertResult.error, 'race_collaborators', 'regatta_id')
+    ) {
+      this.collaboratorsIdColumn = 'race_id';
+      insertResult = await supabase
+        .from('race_collaborators')
+        .insert({
+          race_id: regattaId,
+          user_id: userId,
+          display_name: options?.displayName || null,
+          access_level: 'view',
+          role: options?.role || 'Requested',
+          status: 'pending',
+        })
+        .select('id')
+        .single();
+    }
+
+    const newCollab = insertResult.data;
+    const insertError = insertResult.error;
 
     if (insertError) {
       logger.error('Failed to create join request:', insertError);
@@ -431,12 +490,28 @@ class RaceCollaborationServiceClass {
     }
 
     // Check if user is already a collaborator
-    const { data: existing } = await supabase
+    let existingResult = await supabase
       .from('race_collaborators')
       .select('id')
-      .eq('regatta_id', regattaId)
+      .eq(this.collaboratorsIdColumn, regattaId)
       .eq('user_id', userId)
       .single();
+
+    if (
+      existingResult.error &&
+      this.collaboratorsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(existingResult.error, 'race_collaborators', 'regatta_id')
+    ) {
+      this.collaboratorsIdColumn = 'race_id';
+      existingResult = await supabase
+        .from('race_collaborators')
+        .select('id')
+        .eq('race_id', regattaId)
+        .eq('user_id', userId)
+        .single();
+    }
+
+    const existing = existingResult.data;
 
     if (existing) {
       // Update existing collaborator with new role and full access
@@ -460,10 +535,10 @@ class RaceCollaborationServiceClass {
     }
 
     // Create new collaborator with full access and accepted status
-    const { data: newCollab, error: insertError } = await supabase
+    let insertResult = await supabase
       .from('race_collaborators')
       .insert({
-        regatta_id: regattaId,
+        [this.collaboratorsIdColumn]: regattaId,
         user_id: userId,
         invited_by: currentUser.user.id,
         access_level: 'full',
@@ -473,6 +548,30 @@ class RaceCollaborationServiceClass {
       })
       .select('id')
       .single();
+
+    if (
+      insertResult.error &&
+      this.collaboratorsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(insertResult.error, 'race_collaborators', 'regatta_id')
+    ) {
+      this.collaboratorsIdColumn = 'race_id';
+      insertResult = await supabase
+        .from('race_collaborators')
+        .insert({
+          race_id: regattaId,
+          user_id: userId,
+          invited_by: currentUser.user.id,
+          access_level: 'full',
+          role: role,
+          status: 'accepted',
+          joined_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+    }
+
+    const newCollab = insertResult.data;
+    const insertError = insertResult.error;
 
     if (insertError) {
       logger.error('Failed to add crew collaborator:', insertError);
@@ -491,11 +590,26 @@ class RaceCollaborationServiceClass {
     regattaId: string,
     userId: string
   ): Promise<void> {
-    const { error } = await supabase
+    let result = await supabase
       .from('race_collaborators')
       .delete()
-      .eq('regatta_id', regattaId)
+      .eq(this.collaboratorsIdColumn, regattaId)
       .eq('user_id', userId);
+
+    if (
+      result.error &&
+      this.collaboratorsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_collaborators', 'regatta_id')
+    ) {
+      this.collaboratorsIdColumn = 'race_id';
+      result = await supabase
+        .from('race_collaborators')
+        .delete()
+        .eq('race_id', regattaId)
+        .eq('user_id', userId);
+    }
+
+    const error = result.error;
 
     if (error) {
       logger.error('Failed to remove crew collaborator:', error);
@@ -586,21 +700,40 @@ class RaceCollaborationServiceClass {
     const { data: collaborator, error: collabError } = await supabase
       .from('race_collaborators')
       .select('id, access_level, status')
-      .eq('regatta_id', regattaId)
+      .eq(this.collaboratorsIdColumn, regattaId)
       .eq('user_id', user.user.id)
       .single();
 
-    if (collabError && collabError.code !== 'PGRST116') {
+    let resolvedCollaborator = collaborator;
+    let resolvedCollabError = collabError;
+
+    if (
+      resolvedCollabError &&
+      this.collaboratorsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(resolvedCollabError, 'race_collaborators', 'regatta_id')
+    ) {
+      this.collaboratorsIdColumn = 'race_id';
+      const fallback = await supabase
+        .from('race_collaborators')
+        .select('id, access_level, status')
+        .eq('race_id', regattaId)
+        .eq('user_id', user.user.id)
+        .single();
+      resolvedCollaborator = fallback.data;
+      resolvedCollabError = fallback.error;
+    }
+
+    if (resolvedCollabError && resolvedCollabError.code !== 'PGRST116') {
       logger.warn('checkAccess: Failed to fetch collaborator', collabError);
     }
 
-    if (collaborator && collaborator.status === 'accepted') {
-      logger.debug('checkAccess: User is collaborator', { accessLevel: collaborator.access_level });
+    if (resolvedCollaborator && resolvedCollaborator.status === 'accepted') {
+      logger.debug('checkAccess: User is collaborator', { accessLevel: resolvedCollaborator.access_level });
       return {
         hasAccess: true,
-        accessLevel: collaborator.access_level as AccessLevel,
+        accessLevel: resolvedCollaborator.access_level as AccessLevel,
         isOwner: false,
-        collaboratorId: collaborator.id,
+        collaboratorId: resolvedCollaborator.id,
       };
     }
 
@@ -622,12 +755,29 @@ class RaceCollaborationServiceClass {
       return [];
     }
 
-    const { data: messages, error } = await supabase
+    let result = await supabase
       .from('race_messages')
       .select('*')
-      .eq('regatta_id', regattaId)
+      .eq(this.messagesIdColumn, regattaId)
       .order('created_at', { ascending: true })
       .limit(limit);
+
+    if (
+      result.error &&
+      this.messagesIdColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_messages', 'regatta_id')
+    ) {
+      this.messagesIdColumn = 'race_id';
+      result = await supabase
+        .from('race_messages')
+        .select('*')
+        .eq('race_id', regattaId)
+        .order('created_at', { ascending: true })
+        .limit(limit);
+    }
+
+    const messages = result.data;
+    const error = result.error;
 
     if (error) {
       logger.error('Failed to get messages:', error);
@@ -699,16 +849,37 @@ class RaceCollaborationServiceClass {
       throw new Error('Not authenticated');
     }
 
-    const { data, error } = await supabase
+    let result = await supabase
       .from('race_messages')
       .insert({
-        regatta_id: regattaId,
+        [this.messagesIdColumn]: regattaId,
         user_id: user.user.id,
         message,
         message_type: messageType,
       })
       .select()
       .single();
+
+    if (
+      result.error &&
+      this.messagesIdColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_messages', 'regatta_id')
+    ) {
+      this.messagesIdColumn = 'race_id';
+      result = await supabase
+        .from('race_messages')
+        .insert({
+          race_id: regattaId,
+          user_id: user.user.id,
+          message,
+          message_type: messageType,
+        })
+        .select()
+        .single();
+    }
+
+    const data = result.data;
+    const error = result.error;
 
     if (error) {
       logger.error('Failed to send message:', error);
@@ -760,9 +931,14 @@ class RaceCollaborationServiceClass {
           event: '*',
           schema: 'public',
           table: 'race_collaborators',
-          filter: `regatta_id=eq.${regattaId}`,
         },
-        async () => {
+        async (payload) => {
+          const payloadRaceId =
+            (payload as any)?.new?.regatta_id ||
+            (payload as any)?.new?.race_id ||
+            (payload as any)?.old?.regatta_id ||
+            (payload as any)?.old?.race_id;
+          if (payloadRaceId !== regattaId) return;
           // Refetch all collaborators on any change
           const collaborators = await this.getCollaborators(regattaId);
           callback(collaborators);
@@ -797,9 +973,14 @@ class RaceCollaborationServiceClass {
           event: '*',
           schema: 'public',
           table: 'race_messages',
-          filter: `regatta_id=eq.${regattaId}`,
         },
-        async () => {
+        async (payload) => {
+          const payloadRaceId =
+            (payload as any)?.new?.regatta_id ||
+            (payload as any)?.new?.race_id ||
+            (payload as any)?.old?.regatta_id ||
+            (payload as any)?.old?.race_id;
+          if (payloadRaceId !== regattaId) return;
           // Refetch all messages on any change
           const messages = await this.getMessages(regattaId);
           callback(messages);

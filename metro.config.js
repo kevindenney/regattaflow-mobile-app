@@ -83,6 +83,8 @@ config.resolver.blockList = [
   /\.expo\/.*/,
   /node_modules\/.*\/node_modules\/.*/,
   /\.next\/.*/,
+  /.*__tests__\/.*/,
+  /.*\.test\.(ts|tsx|js|jsx)$/,
 ];
 
 // Strip console.log statements in production builds

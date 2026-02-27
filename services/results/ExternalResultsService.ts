@@ -5,7 +5,6 @@
  */
 
 import { supabase } from '../supabase';
-import { SailingVenue } from '@/types/venues';
 import { createLogger } from '@/lib/utils/logger';
 
 export interface ExternalResultSource {
@@ -161,7 +160,7 @@ export class ExternalResultsService {
 
       await this.updatePollingStatus(source.id, 'success');
     } catch (error) {
-      console.error(`Error polling ${source.name}:`, error);
+      logger.error(`Error polling ${source.name}:`, error);
       await this.updatePollingStatus(source.id, 'error');
     }
   }
@@ -181,7 +180,7 @@ export class ExternalResultsService {
         logger.debug(`Saved ${results.length} results from ${regatta.name}`);
       }
     } catch (error) {
-      console.error(`Error fetching results for ${regatta.name}:`, error);
+      logger.error(`Error fetching results for ${regatta.name}:`, error);
     }
   }
 
@@ -223,7 +222,7 @@ export class ExternalResultsService {
       // Parse HTML and extract results
       return this.parseSailwaveHTML(html, regatta);
     } catch (error) {
-      console.error('Error fetching Sailwave results:', error);
+      logger.error('Error fetching Sailwave results:', error);
       return [];
     }
   }
@@ -240,7 +239,7 @@ export class ExternalResultsService {
 
       return this.parseRegattaNetworkData(data, regatta);
     } catch (error) {
-      console.error('Error fetching Regatta Network results:', error);
+      logger.error('Error fetching Regatta Network results:', error);
       return [];
     }
   }
@@ -259,7 +258,7 @@ export class ExternalResultsService {
 
       return this.parseYachtScoringData(data, regatta);
     } catch (error) {
-      console.error('Error fetching Yacht Scoring results:', error);
+      logger.error('Error fetching Yacht Scoring results:', error);
       return [];
     }
   }
@@ -278,7 +277,7 @@ export class ExternalResultsService {
 
       return this.parseRaceQsData(data, regatta);
     } catch (error) {
-      console.error('Error fetching RaceQs results:', error);
+      logger.error('Error fetching RaceQs results:', error);
       return [];
     }
   }
@@ -294,14 +293,14 @@ export class ExternalResultsService {
         await this.saveRegattaInfo(regatta);
       }
     } catch (error) {
-      console.error(`Error discovering regattas from ${source.name}:`, error);
+      logger.error(`Error discovering regattas from ${source.name}:`, error);
     }
   }
 
   /**
    * Fetch list of recent regattas from source
    */
-  private static async fetchRecentRegattas(source: ExternalResultSource): Promise<RegattaInfo[]> {
+  private static async fetchRecentRegattas(_source: ExternalResultSource): Promise<RegattaInfo[]> {
     // Implementation would vary by source
     // Return empty array for now
     return [];
@@ -323,7 +322,7 @@ export class ExternalResultsService {
       // Also update sailor performance tracking
       await this.updateSailorPerformance(results);
     } catch (error) {
-      console.error('Error saving results:', error);
+      logger.error('Error saving results:', error);
       throw error;
     }
   }
@@ -341,7 +340,7 @@ export class ExternalResultsService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error saving regatta info:', error);
+      logger.error('Error saving regatta info:', error);
       throw error;
     }
   }
@@ -376,7 +375,7 @@ export class ExternalResultsService {
             });
         }
       } catch (error) {
-        console.error(`Error updating performance for ${result.sailorName}:`, error);
+        logger.error(`Error updating performance for ${result.sailorName}:`, error);
       }
     }
   }
@@ -397,7 +396,7 @@ export class ExternalResultsService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error getting recent regattas:', error);
+      logger.error('Error getting recent regattas:', error);
       return [];
     }
   }
@@ -443,7 +442,7 @@ export class ExternalResultsService {
         .from('polling_status')
         .upsert(updateData, { onConflict: 'source_id' });
     } catch (error) {
-      console.error('Error updating polling status:', error);
+      logger.error('Error updating polling status:', error);
     }
   }
 
@@ -460,7 +459,7 @@ export class ExternalResultsService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error getting polling status:', error);
+      logger.error('Error getting polling status:', error);
       return [];
     }
   }
@@ -496,7 +495,7 @@ export class ExternalResultsService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error searching sailor results:', error);
+      logger.error('Error searching sailor results:', error);
       return [];
     }
   }
@@ -526,7 +525,7 @@ export class ExternalResultsService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error getting regatta results by venue:', error);
+      logger.error('Error getting regatta results by venue:', error);
       return [];
     }
   }
@@ -553,23 +552,23 @@ export class ExternalResultsService {
 
   // Private helper methods for parsing different formats
 
-  private static parseSailwaveHTML(html: string, regatta: RegattaInfo): RaceResult[] {
+  private static parseSailwaveHTML(_html: string, _regatta: RegattaInfo): RaceResult[] {
     // Parse Sailwave HTML tables
     // This would use a HTML parser like cheerio in a real implementation
     return [];
   }
 
-  private static parseRegattaNetworkData(data: any, regatta: RegattaInfo): RaceResult[] {
+  private static parseRegattaNetworkData(_data: any, _regatta: RegattaInfo): RaceResult[] {
     // Parse Regatta Network JSON format
     return [];
   }
 
-  private static parseYachtScoringData(data: any, regatta: RegattaInfo): RaceResult[] {
+  private static parseYachtScoringData(_data: any, _regatta: RegattaInfo): RaceResult[] {
     // Parse Yacht Scoring JSON format
     return [];
   }
 
-  private static parseRaceQsData(data: any, regatta: RegattaInfo): RaceResult[] {
+  private static parseRaceQsData(_data: any, _regatta: RegattaInfo): RaceResult[] {
     // Parse RaceQs JSON format
     return [];
   }

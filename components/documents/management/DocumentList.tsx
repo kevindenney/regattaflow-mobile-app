@@ -4,7 +4,7 @@
  * List of race source documents with grouping by type.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { FileText } from 'lucide-react-native';
 import { DocumentCard } from './DocumentCard';
@@ -12,6 +12,7 @@ import type { RaceSourceDocument, DocumentType } from '@/services/UnifiedDocumen
 
 interface DocumentListProps {
   documents: RaceSourceDocument[];
+  selectedDocumentId?: string;
   onDocumentPress?: (document: RaceSourceDocument) => void;
   onDocumentDelete?: (document: RaceSourceDocument) => void;
   onToggleShare?: (document: RaceSourceDocument) => void;
@@ -41,6 +42,7 @@ const TYPE_LABELS: Record<DocumentType, string> = {
 
 export function DocumentList({
   documents,
+  selectedDocumentId,
   onDocumentPress,
   onDocumentDelete,
   onToggleShare,
@@ -50,6 +52,8 @@ export function DocumentList({
   groupByType = true,
   emptyMessage = 'No documents yet',
 }: DocumentListProps) {
+  const flatListRef = useRef<FlatList<any>>(null);
+
   // Group documents by type
   const groupedData = useMemo(() => {
     if (!groupByType) {
@@ -80,6 +84,36 @@ export function DocumentList({
     return result;
   }, [documents, groupByType]);
 
+  const selectedIndex = useMemo(() => {
+    if (!selectedDocumentId || documents.length === 0) return -1;
+    return documents.findIndex((doc) => doc.id === selectedDocumentId);
+  }, [documents, selectedDocumentId]);
+
+  const selectedGroupIndex = useMemo(() => {
+    if (!selectedDocumentId || !groupedData || groupedData.length === 0) return -1;
+    return groupedData.findIndex((group) =>
+      group.documents.some((doc) => doc.id === selectedDocumentId)
+    );
+  }, [groupedData, selectedDocumentId]);
+
+  useEffect(() => {
+    if (!selectedDocumentId || isLoading) return;
+
+    const timer = setTimeout(() => {
+      if (!flatListRef.current) return;
+      const targetIndex = groupByType ? selectedGroupIndex : selectedIndex;
+      if (targetIndex < 0) return;
+
+      flatListRef.current.scrollToIndex({
+        index: targetIndex,
+        animated: true,
+        viewPosition: 0.1,
+      });
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [groupByType, isLoading, selectedDocumentId, selectedGroupIndex, selectedIndex]);
+
   // Empty state
   if (documents.length === 0 && !isLoading) {
     return (
@@ -99,17 +133,20 @@ export function DocumentList({
   if (!groupByType) {
     return (
       <FlatList
+        ref={flatListRef}
         data={documents}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <DocumentCard
             document={item}
+            isSelected={selectedDocumentId === item.id}
             onPress={onDocumentPress ? () => onDocumentPress(item) : undefined}
             onDelete={onDocumentDelete ? () => onDocumentDelete(item) : undefined}
             onToggleShare={onToggleShare ? () => onToggleShare(item) : undefined}
             onViewSource={onViewSource && item.sourceUrl ? () => onViewSource(item) : undefined}
           />
         )}
+        onScrollToIndexFailed={() => {}}
         contentContainerStyle={styles.listContent}
         refreshControl={
           onRefresh ? (
@@ -123,6 +160,7 @@ export function DocumentList({
   // Grouped list
   return (
     <FlatList
+      ref={flatListRef}
       data={groupedData}
       keyExtractor={(item) => item.type}
       renderItem={({ item: group }) => (
@@ -132,6 +170,7 @@ export function DocumentList({
             <DocumentCard
               key={doc.id}
               document={doc}
+              isSelected={selectedDocumentId === doc.id}
               onPress={onDocumentPress ? () => onDocumentPress(doc) : undefined}
               onDelete={onDocumentDelete ? () => onDocumentDelete(doc) : undefined}
               onToggleShare={onToggleShare ? () => onToggleShare(doc) : undefined}
@@ -140,6 +179,7 @@ export function DocumentList({
           ))}
         </View>
       )}
+      onScrollToIndexFailed={() => {}}
       contentContainerStyle={styles.listContent}
       refreshControl={
         onRefresh ? (

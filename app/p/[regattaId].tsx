@@ -20,7 +20,7 @@ import {
     Trophy,
     Users,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Linking,
@@ -76,11 +76,7 @@ export default function PublicRegattaLanding() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchRegattaData();
-  }, [regattaId]);
-
-  const fetchRegattaData = async () => {
+  const fetchRegattaData = useCallback(async () => {
     if (!regattaId) return;
     
     try {
@@ -98,7 +94,11 @@ export default function PublicRegattaLanding() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [regattaId]);
+
+  useEffect(() => {
+    fetchRegattaData();
+  }, [fetchRegattaData]);
 
   const handleShare = async () => {
     const url = `${API_BASE}/p/${regattaId}`;
@@ -159,7 +159,7 @@ export default function PublicRegattaLanding() {
       open: 'Registration Open',
       closed: 'Registration Closed',
       full: 'Full',
-      not_open: 'Coming Soon',
+      not_open: 'Registration Not Open Yet',
     };
     
     const style = colors[data.registration_status];
@@ -572,4 +572,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
-

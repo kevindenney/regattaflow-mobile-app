@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('useReflectData');
 
@@ -176,11 +177,31 @@ export function useReflectData() {
       }
 
       // Fetch timer sessions for time on water
-      const { data: sessions, error: sessionsError } = await supabase
+      let sessions: Array<{ id: string; regatta_id?: string | null; race_id?: string | null; start_time: string; end_time?: string | null }> | null = null;
+      let sessionsError: any = null;
+      const sessionsPrimary = await supabase
         .from('race_timer_sessions')
         .select('id, regatta_id, start_time, end_time')
         .eq('sailor_id', userId)
         .gte('start_time', yearStart.toISOString());
+      sessions = sessionsPrimary.data as any;
+      sessionsError = sessionsPrimary.error;
+
+      if (sessionsError && isMissingIdColumn(sessionsError, 'race_timer_sessions', 'regatta_id')) {
+        const sessionsFallback = await supabase
+          .from('race_timer_sessions')
+          .select('id, race_id, start_time, end_time')
+          .eq('sailor_id', userId)
+          .gte('start_time', yearStart.toISOString());
+        sessions = (sessionsFallback.data as any[] | null)?.map((row: any) => ({
+          id: row.id,
+          regatta_id: row.race_id,
+          race_id: row.race_id,
+          start_time: row.start_time,
+          end_time: row.end_time,
+        })) || null;
+        sessionsError = sessionsFallback.error;
+      }
 
       if (sessionsError) {
         logger.warn('Unable to load timer sessions:', sessionsError);

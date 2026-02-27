@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { realtimeService, ConnectionStatus } from '@/services/RealtimeService';
 
 /**
@@ -10,10 +10,18 @@ export function useRealtimeConnection() {
   );
   const [isConnected, setIsConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Subscribe to connection status changes
     const unsubscribe = realtimeService.onConnectionStatusChange((newStatus) => {
+      if (!isMountedRef.current) return;
       setStatus(newStatus);
       setIsConnected(newStatus === 'connected');
       setIsReconnecting(newStatus === 'reconnecting');

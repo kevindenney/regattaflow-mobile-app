@@ -18,6 +18,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CourseLibraryService } from '@/services/CourseLibraryService';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceCourse, CourseScope, CourseType } from '@/types/courses';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CourseSelector');
 
 interface CourseSelectorProps {
   visible: boolean;
@@ -102,7 +105,7 @@ export function CourseSelector({
         }
       }
     } catch (error) {
-      console.error('[CourseSelector] Error loading courses:', error);
+      logger.error('Error loading courses', error);
     } finally {
       setLoading(false);
     }

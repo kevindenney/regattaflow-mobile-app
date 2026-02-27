@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/services/supabase';
 import type { PerformanceInsight } from '@/hooks/useReflectProfile';
+import { createLogger } from '@/lib/utils/logger';
 import {
   PHASE_MAPPINGS,
   WEAKNESS_THRESHOLD,
@@ -16,6 +17,8 @@ import {
   RECENT_RACE_WINDOW,
   type PhaseMapping,
 } from '@/constants/coachingInsightMappings';
+
+const logger = createLogger('useCoachingInsights');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,11 +66,13 @@ export function useCoachingInsights(sailorId: string | undefined) {
   const [insights, setInsights] = useState<PerformanceInsight[]>([]);
   const [coachingData, setCoachingData] = useState<CoachingInsightData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (!sailorId) {
       setInsights([]);
       setCoachingData([]);
+      setError(null);
       return;
     }
 
@@ -75,19 +80,51 @@ export function useCoachingInsights(sailorId: string | undefined) {
 
     async function detect() {
       setLoading(true);
+      setError(null);
       try {
+        let relationshipWarning: Error | null = null;
+        // Resolve sailor profile id; race_analysis.sailor_id may reference sailor_profiles.id.
+        const { data: sailorProfile } = await supabase
+          .from('sailor_profiles')
+          .select('id')
+          .eq('user_id', sailorId)
+          .maybeSingle();
+        const sailorProfileId = sailorProfile?.id;
+
         // 1. Fetch the sailor's most recent race analyses
         const ratingColumns = PHASE_MAPPINGS.map((m) => m.ratingColumn);
         const selectColumns = ['id', 'created_at', ...ratingColumns].join(', ');
 
-        const { data: analyses, error: analysisError } = await supabase
-          .from('race_analysis')
-          .select(selectColumns)
-          .eq('sailor_id', sailorId)
-          .order('created_at', { ascending: false })
-          .limit(RECENT_RACE_WINDOW);
+        let analyses: any[] | null = null;
+        let analysisError: any = null;
+
+        if (sailorProfileId) {
+          const byProfileId = await supabase
+            .from('race_analysis')
+            .select(selectColumns)
+            .eq('sailor_id', sailorProfileId)
+            .order('created_at', { ascending: false })
+            .limit(RECENT_RACE_WINDOW);
+          analyses = byProfileId.data;
+          analysisError = byProfileId.error;
+        }
+
+        if (!analyses || analyses.length === 0) {
+          const byUserId = await supabase
+            .from('race_analysis')
+            .select(selectColumns)
+            .eq('sailor_id', sailorId)
+            .order('created_at', { ascending: false })
+            .limit(RECENT_RACE_WINDOW);
+          analyses = byUserId.data;
+          analysisError = byUserId.error;
+        }
 
         if (analysisError || !analyses || analyses.length === 0) {
+          if (analysisError) {
+            logger.warn('Error fetching race analyses', analysisError.message);
+            throw new Error(analysisError.message || 'Failed to load race analyses');
+          }
           if (!cancelled) {
             setInsights([]);
             setCoachingData([]);
@@ -124,7 +161,9 @@ export function useCoachingInsights(sailorId: string | undefined) {
         }
 
         // 3. Query active coaching relationships with coach specializations
-        const { data: relationships, error: relError } = await supabase
+        let relationships: ActiveCoach[] | null = null;
+        let relError: any = null;
+        const relationshipsByUser = await supabase
           .from('coaching_clients')
           .select(`
             id,
@@ -138,12 +177,36 @@ export function useCoachingInsights(sailorId: string | undefined) {
           `)
           .eq('sailor_id', sailorId)
           .eq('status', 'active');
+        relationships = relationshipsByUser.data as ActiveCoach[] | null;
+        relError = relationshipsByUser.error;
 
-        if (relError) {
-          console.warn('[useCoachingInsights] Error fetching coaching relationships:', relError.message);
+        if ((!relationships || relationships.length === 0) && sailorProfileId) {
+          const relationshipsByProfile = await supabase
+            .from('coaching_clients')
+            .select(`
+              id,
+              coach_id,
+              coach_profiles (
+                id,
+                user_id,
+                display_name,
+                specializations
+              )
+            `)
+            .eq('sailor_id', sailorProfileId)
+            .eq('status', 'active');
+          relationships = (relationshipsByProfile.data as ActiveCoach[] | null) || relationships;
+          relError = relationshipsByProfile.error || relError;
         }
 
-        const activeCoaches: ActiveCoach[] = (relationships as ActiveCoach[] | null) ?? [];
+        if (relError) {
+          logger.warn('Error fetching coaching relationships', relError.message);
+          relationshipWarning = new Error(
+            relError.message || 'Unable to verify active coaching relationships for insights.'
+          );
+        }
+
+        const activeCoaches: ActiveCoach[] = relationships ?? [];
 
         // 4. Build insights per weakness
         const newInsights: PerformanceInsight[] = [];
@@ -190,12 +253,14 @@ export function useCoachingInsights(sailorId: string | undefined) {
         if (!cancelled) {
           setInsights(newInsights);
           setCoachingData(newCoachingData);
+          setError(relationshipWarning);
         }
       } catch (err) {
-        console.error('[useCoachingInsights] Error detecting patterns:', err);
+        logger.error('Error detecting coaching insight patterns', err);
         if (!cancelled) {
           setInsights([]);
           setCoachingData([]);
+          setError(err instanceof Error ? err : new Error('Failed to load coaching insights'));
         }
       } finally {
         if (!cancelled) {
@@ -211,7 +276,7 @@ export function useCoachingInsights(sailorId: string | undefined) {
     };
   }, [sailorId]);
 
-  return { insights, coachingData, loading };
+  return { insights, coachingData, loading, error };
 }
 
 // ---------------------------------------------------------------------------

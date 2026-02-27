@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { PostRaceAnalysisCard } from '@/components/race-detail';
 import { FleetPostRaceInsights } from '@/components/races/FleetPostRaceInsights';
 import { PerformanceMetrics } from '@/components/races/PerformanceMetrics';
@@ -67,7 +67,7 @@ export function PostRaceAnalysisSection({
 }: PostRaceAnalysisSectionProps) {
   const handleExportData = () => {
     logger.debug('[PostRaceAnalysisSection] Export race analysis');
-    Alert.alert('Export', 'Race analysis export coming soon!');
+    onShareAnalysis();
   };
 
   return (

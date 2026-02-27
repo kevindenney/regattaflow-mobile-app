@@ -17,18 +17,19 @@ import {
   WeatherForecast,
   WindData,
   TideData,
-  ConfidenceLevel,
-  TideState
+  ConfidenceLevel
 } from '@/types/environmental';
 import Constants from 'expo-constants';
+import { createLogger } from '@/lib/utils/logger';
 
 const OWM_API_BASE = 'https://api.openweathermap.org/data/2.5';
+const logger = createLogger('OpenWeatherMapProvider');
 
 interface OWMForecastResponse {
   cod: string;
   message: number;
   cnt: number;
-  list: Array<{
+  list: {
     dt: number; // Unix timestamp
     main: {
       temp: number; // Kelvin
@@ -41,12 +42,12 @@ interface OWMForecastResponse {
       humidity: number; // %
       temp_kf: number;
     };
-    weather: Array<{
+    weather: {
       id: number;
       main: string;
       description: string;
       icon: string;
-    }>;
+    }[];
     clouds: {
       all: number; // % cloud cover
     };
@@ -61,7 +62,7 @@ interface OWMForecastResponse {
       pod: string; // Part of day (d/n)
     };
     dt_txt: string; // "2025-10-25 12:00:00"
-  }>;
+  }[];
   city: {
     id: number;
     name: string;
@@ -82,12 +83,12 @@ interface OWMCurrentResponse {
     lon: number;
     lat: number;
   };
-  weather: Array<{
+  weather: {
     id: number;
     main: string;
     description: string;
     icon: string;
-  }>;
+  }[];
   base: string;
   main: {
     temp: number; // Kelvin
@@ -132,7 +133,7 @@ export class OpenWeatherMapProvider {
       '';
 
     if (!this.apiKey) {
-      console.warn(
+      logger.warn(
         'OpenWeatherMap API key not set. Set EXPO_PUBLIC_OPENWEATHERMAP_API_KEY in .env or configure extra.openWeatherMapApiKey.'
       );
     }
@@ -147,7 +148,7 @@ export class OpenWeatherMapProvider {
     targetTime: Date
   ): Promise<WeatherForecast | null> {
     if (!this.apiKey) {
-      console.error('OpenWeatherMap: No API key configured');
+      logger.error('OpenWeatherMap: No API key configured');
       return null;
     }
 
@@ -159,9 +160,9 @@ export class OpenWeatherMapProvider {
 
       if (!response.ok) {
         if (response.status === 401) {
-          console.error('OpenWeatherMap: Invalid API key');
+          logger.error('OpenWeatherMap: Invalid API key');
         } else if (response.status === 429) {
-          console.error('OpenWeatherMap: Rate limit exceeded (1000 calls/day on free tier)');
+          logger.error('OpenWeatherMap: Rate limit exceeded (1000 calls/day on free tier)');
         }
         throw new Error(`OpenWeatherMap API error: ${response.status}`);
       }
@@ -183,7 +184,7 @@ export class OpenWeatherMapProvider {
 
       return this.buildForecast(closestForecast, targetTime);
     } catch (error) {
-      console.error('OpenWeatherMap Provider error:', error);
+      logger.error('OpenWeatherMap Provider error:', error);
       return null;
     }
   }
@@ -193,7 +194,7 @@ export class OpenWeatherMapProvider {
    */
   async getCurrentConditions(lat: number, lng: number): Promise<WeatherForecast | null> {
     if (!this.apiKey) {
-      console.error('OpenWeatherMap: No API key configured');
+      logger.error('OpenWeatherMap: No API key configured');
       return null;
     }
 
@@ -222,7 +223,7 @@ export class OpenWeatherMapProvider {
         provider: 'OpenWeatherMap'
       };
     } catch (error) {
-      console.error('OpenWeatherMap current conditions error:', error);
+      logger.error('OpenWeatherMap current conditions error:', error);
       return null;
     }
   }
@@ -265,13 +266,13 @@ export class OpenWeatherMapProvider {
    * Get tide data (OpenWeatherMap doesn't provide this - placeholder)
    */
   async getTideData(
-    lat: number,
-    lng: number,
-    targetTime: Date
+    _lat: number,
+    _lng: number,
+    _targetTime: Date
   ): Promise<TideData | null> {
     // OpenWeatherMap free tier doesn't provide tide data
     // Would need to use a dedicated tide API or upgrade to premium
-    console.warn('OpenWeatherMap: Tide data not available in free tier');
+    logger.warn('OpenWeatherMap: Tide data not available in free tier');
     return null;
   }
 }

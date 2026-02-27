@@ -11,6 +11,7 @@
 
 import { useMemo } from 'react';
 import { getDemoRaceStartDateISO, getDemoRaceStartTimeLabel } from '@/lib/demo/demoDate';
+import type { VocabularyMap } from '@/lib/vocabulary';
 
 // =============================================================================
 // TYPES
@@ -62,6 +63,25 @@ export const DEMO_RACE: LiveRace = {
     venue_name: 'Your Local Yacht Club',
   },
 };
+
+/** Interest-aware demo data venue and name overrides */
+const DEMO_VENUE_BY_INTEREST: Record<string, string> = {
+  'sail-racing': 'Your Local Yacht Club',
+  nursing: 'Your Local Hospital',
+  drawing: 'Your Studio',
+  fitness: 'Your Local Gym',
+};
+
+/** Returns a demo event with interest-appropriate venue and name */
+export function getDemoEvent(interestSlug: string, eventNoun: string): LiveRace {
+  const venue = DEMO_VENUE_BY_INTEREST[interestSlug] ?? 'Your Local Venue';
+  return {
+    ...DEMO_RACE,
+    name: `Sample ${eventNoun}`,
+    venue,
+    metadata: { venue_name: venue },
+  };
+}
 
 export interface UseRaceListDataParams {
   /** Live races from real-time subscription */

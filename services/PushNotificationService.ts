@@ -13,6 +13,7 @@
 
 import { Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // These will be imported dynamically when available
 let Notifications: typeof import('expo-notifications') | null = null;
@@ -20,6 +21,7 @@ let Device: typeof import('expo-device') | null = null;
 let Constants: typeof import('expo-constants') | null = null;
 let initAttempted = false;
 let isNativeAvailable = false;
+const logger = createLogger('PushNotificationService');
 
 // Initialize optional dependencies
 async function initDependencies() {
@@ -52,7 +54,7 @@ async function initDependencies() {
     } else {
       // Module imported but functions not available (Expo Go scenario)
       if (__DEV__) {
-        console.log(
+        logger.info(
           '[Push] Native modules not available. Push notifications require a development build.'
         );
       }
@@ -60,7 +62,7 @@ async function initDependencies() {
   } catch {
     // Dependencies not installed or native modules not available - this is expected in Expo Go
     if (__DEV__) {
-      console.log(
+      logger.info(
         '[Push] Native modules not available. Push notifications require a development build.'
       );
     }
@@ -198,10 +200,10 @@ export class PushNotificationService {
       });
 
       if (error) {
-        console.error('Failed to store push token:', error);
+        logger.error('Failed to store push token:', error);
       }
     } catch (error) {
-      console.error('Error storing push token:', error);
+      logger.error('Error storing push token:', error);
     }
   }
 
@@ -219,7 +221,7 @@ export class PushNotificationService {
       this.token = null;
       this.isInitialized = false;
     } catch (error) {
-      console.error('Error unregistering push token:', error);
+      logger.error('Error unregistering push token:', error);
     }
   }
 
@@ -295,7 +297,7 @@ export class PushNotificationService {
       });
       return id;
     } catch (error) {
-      console.error('Error scheduling notification:', error);
+      logger.error('Error scheduling notification:', error);
       return null;
     }
   }
@@ -328,13 +330,13 @@ export class PushNotificationService {
       );
 
       if (error) {
-        console.error('[Push] Error sending notification:', error);
+        logger.error('[Push] Error sending notification:', error);
         return false;
       }
 
       return result?.success ?? false;
     } catch (error) {
-      console.error('[Push] Error invoking send-push-notification:', error);
+      logger.error('[Push] Error invoking send-push-notification:', error);
       return false;
     }
   }
@@ -343,13 +345,13 @@ export class PushNotificationService {
    * Send push notifications to multiple users in a single batch call.
    */
   static async sendPushNotificationBatch(
-    recipients: Array<{
+    recipients: {
       userId: string;
       title: string;
       body: string;
       data?: Record<string, any>;
       category?: string;
-    }>
+    }[]
   ): Promise<boolean> {
     if (Platform.OS === 'web' || recipients.length === 0) return false;
 
@@ -360,13 +362,13 @@ export class PushNotificationService {
       );
 
       if (error) {
-        console.error('[Push] Error sending batch notification:', error);
+        logger.error('[Push] Error sending batch notification:', error);
         return false;
       }
 
       return result?.success ?? false;
     } catch (error) {
-      console.error('[Push] Error invoking batch send-push-notification:', error);
+      logger.error('[Push] Error invoking batch send-push-notification:', error);
       return false;
     }
   }

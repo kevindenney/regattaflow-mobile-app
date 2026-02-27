@@ -6,7 +6,7 @@
  * Used when user doesn't have fleet membership yet.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { FleetDiscoveryService, Fleet } from '@/services/FleetDiscoveryService';
 import { createLogger } from '@/lib/utils/logger';
@@ -67,16 +67,41 @@ export function usePublicFleets(
   const [fleets, setFleets] = useState<BrowseFleet[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
 
   const userId = user?.id;
 
+  useEffect(() => {
+    activeUserIdRef.current = userId ?? null;
+  }, [userId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
   // Fetch public fleets
   const fetchFleets = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = userId ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
     if (!enabled) {
+      if (!canCommit()) return;
       setFleets([]);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -92,8 +117,8 @@ export function usePublicFleets(
 
       // Check user's memberships if logged in
       let memberFleetIds = new Set<string>();
-      if (userId && !isGuest) {
-        const userFleets = await FleetDiscoveryService.getSailorFleets(userId);
+      if (targetUserId && !isGuest) {
+        const userFleets = await FleetDiscoveryService.getSailorFleets(targetUserId);
         memberFleetIds = new Set(userFleets.map((f: Fleet) => f.id));
       }
 
@@ -110,13 +135,16 @@ export function usePublicFleets(
         isMember: memberFleetIds.has(fleet.id),
       }));
 
+      if (!canCommit()) return;
       setFleets(browseFleets);
       logger.info('[usePublicFleets] Loaded fleets:', browseFleets.length);
     } catch (err: any) {
       logger.error('[usePublicFleets] Error:', err);
+      if (!canCommit()) return;
       setError(err?.message || 'Failed to load fleets');
       setFleets([]);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [enabled, classId, limit, userId, isGuest]);
@@ -124,14 +152,16 @@ export function usePublicFleets(
   // Join a fleet
   const joinFleet = useCallback(
     async (fleetId: string): Promise<boolean> => {
-      if (!userId || isGuest) {
+      const targetUserId = activeUserIdRef.current;
+      if (!targetUserId || isGuest) {
         logger.warn('[usePublicFleets] Cannot join fleet - not logged in');
         return false;
       }
 
       try {
-        const membership = await FleetDiscoveryService.joinFleet(userId, fleetId);
+        const membership = await FleetDiscoveryService.joinFleet(targetUserId, fleetId);
         if (membership) {
+          if (!isMountedRef.current || activeUserIdRef.current !== targetUserId) return false;
           // Update local state
           setFleets((prev) =>
             prev.map((f) => (f.id === fleetId ? { ...f, isMember: true, memberCount: f.memberCount + 1 } : f))
@@ -145,12 +175,12 @@ export function usePublicFleets(
         return false;
       }
     },
-    [userId, isGuest]
+    [isGuest]
   );
 
   // Initial fetch
   useEffect(() => {
-    fetchFleets();
+    void fetchFleets();
   }, [fetchFleets]);
 
   return {

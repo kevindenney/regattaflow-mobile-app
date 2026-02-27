@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Platform, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Platform, Image, Linking } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import {
   ArrowLeft,
@@ -56,13 +56,7 @@ export default function SettingsScreen() {
   const [loading, setLoading] = React.useState(true);
   const [profile, setProfile] = React.useState<any>(null);
   const [darkMode, setDarkMode] = React.useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
-
-  React.useEffect(() => {
-    loadProfile();
-  }, [user]);
-
-  const loadProfile = async () => {
+  const loadProfile = React.useCallback(async () => {
     if (!user) return;
 
     try {
@@ -79,7 +73,11 @@ export default function SettingsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  React.useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
 
   const handleSignOut = async () => {
     const doSignOut = async () => {
@@ -281,7 +279,7 @@ export default function SettingsScreen() {
             title="Privacy Policy"
             subtitle="Read our privacy policy"
             onPress={() => {
-              // TODO: Open privacy policy
+              router.push('/privacy');
             }}
           />
           <SettingsItem
@@ -289,16 +287,14 @@ export default function SettingsScreen() {
             title="Terms of Service"
             subtitle="Read our terms of service"
             onPress={() => {
-              // TODO: Open terms of service
+              router.push('/terms');
             }}
           />
           <SettingsItem
             icon={MessageCircle}
             title="Contact Support"
             subtitle="Get in touch with our team"
-            onPress={() => {
-              // TODO: Open contact support
-            }}
+            onPress={() => void Linking.openURL('mailto:support@regattaflow.com')}
           />
         </View>
 

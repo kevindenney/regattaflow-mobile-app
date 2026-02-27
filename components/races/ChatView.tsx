@@ -26,6 +26,9 @@ import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
 import { RaceMessage } from '@/types/raceCollaboration';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { Send, MessageSquare } from 'lucide-react-native';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ChatView');
 
 interface ChatViewProps {
   /** List of messages */
@@ -107,7 +110,7 @@ export function ChatView({
     try {
       await onSend(text);
     } catch (error) {
-      console.error('Failed to send message:', error);
+      logger.error('Failed to send message', error);
       // Restore text if send failed
       setInputText(text);
       Alert.alert(

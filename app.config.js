@@ -6,7 +6,7 @@
 
 module.exports = {
   expo: {
-    name: 'RegattaFlow',
+    name: 'BetterAt',
     slug: 'regattaflow-app',
     owner: 'denneyke',
     version: '1.0.0',
@@ -68,13 +68,13 @@ module.exports = {
       bundler: 'metro',
       output: 'single',
       favicon: './assets/images/favicon.png',
-      name: 'RegattaFlow - Sailing Race Strategy & Performance',
-      shortName: 'RegattaFlow',
+      name: 'BetterAt - Get Better at What Matters to You',
+      shortName: 'BetterAt',
       description:
-        'AI-powered sailing race strategy, performance tracking, and venue intelligence for competitive sailors worldwide',
+        'The deliberate practice platform. Plan, Do, Review — whatever your discipline. Sailing, nursing, drawing, fitness, and more.',
       lang: 'en',
       scope: '/',
-      themeColor: '#0066CC',
+      themeColor: '#1A1A1A',
       backgroundColor: '#ffffff',
       display: 'standalone',
       orientation: 'portrait',
@@ -106,7 +106,6 @@ module.exports = {
       openWeatherMapApiKey: process.env.EXPO_PUBLIC_OPENWEATHERMAP_API_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-      anthropicApiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY,
     },
   },
 };

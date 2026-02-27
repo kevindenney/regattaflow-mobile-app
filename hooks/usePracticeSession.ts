@@ -5,7 +5,7 @@
  * Provides real-time sync of session members.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { practiceSessionService } from '@/services/PracticeSessionService';
@@ -18,7 +18,6 @@ import {
   SessionReflectionInput,
   JoinPracticeInput,
   SkillArea,
-  PracticeMemberRole,
   RSVPStatus,
 } from '@/types/practice';
 import { PRACTICE_QUERY_KEYS } from './usePracticeSessions';
@@ -71,7 +70,7 @@ interface UsePracticeSessionReturn {
 
   // Focus area actions
   addFocusAreas: (
-    areas: Array<{ skillArea: SkillArea; priority: number }>
+    areas: { skillArea: SkillArea; priority: number }[]
   ) => Promise<void>;
   updateFocusAreaRating: (focusAreaId: string, rating: number, notes?: string) => Promise<void>;
   removeFocusArea: (focusAreaId: string) => Promise<void>;
@@ -106,6 +105,20 @@ export function usePracticeSession({
 
   // Local state for real-time member updates
   const [realtimeMembers, setRealtimeMembers] = useState<PracticeSessionMember[] | null>(null);
+  const isMountedRef = useRef(true);
+  const memberEffectRunIdRef = useRef(0);
+  const activeSessionIdRef = useRef(sessionId);
+
+  useEffect(() => {
+    activeSessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      memberEffectRunIdRef.current += 1;
+    };
+  }, []);
 
   // Query key for this session
   const queryKey = PRACTICE_QUERY_KEYS.session(sessionId);
@@ -124,9 +137,18 @@ export function usePracticeSession({
   });
 
   // Use realtime members if available, otherwise from query
-  const members = realtimeMembers || session?.members || [];
-  const focusAreas = session?.focusAreas || [];
-  const drills = session?.drills || [];
+  const members = useMemo(
+    () => realtimeMembers ?? session?.members ?? [],
+    [realtimeMembers, session?.members]
+  );
+  const focusAreas = useMemo(
+    () => session?.focusAreas ?? [],
+    [session?.focusAreas]
+  );
+  const drills = useMemo(
+    () => session?.drills ?? [],
+    [session?.drills]
+  );
 
   // Computed values
   const isOrganizer = useMemo(() => {
@@ -160,18 +182,36 @@ export function usePracticeSession({
 
   // Subscribe to real-time member updates
   useEffect(() => {
-    if (!sessionId || !enabled) return;
+    if (!sessionId || !enabled) {
+      if (isMountedRef.current) {
+        setRealtimeMembers(null);
+      }
+      return;
+    }
+    const runId = ++memberEffectRunIdRef.current;
+    const targetSessionId = sessionId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === memberEffectRunIdRef.current &&
+      activeSessionIdRef.current === targetSessionId;
+    if (isMountedRef.current) {
+      setRealtimeMembers(null);
+    }
 
     const unsubscribe = practiceSessionService.subscribeToMemberChanges(
       sessionId,
       (updatedMembers) => {
+        if (!canCommit()) return;
         setRealtimeMembers(updatedMembers);
       }
     );
 
     return () => {
+      memberEffectRunIdRef.current += 1;
       unsubscribe();
-      setRealtimeMembers(null);
+      if (isMountedRef.current && activeSessionIdRef.current === targetSessionId) {
+        setRealtimeMembers(null);
+      }
     };
   }, [sessionId, enabled]);
 
@@ -266,7 +306,7 @@ export function usePracticeSession({
 
   // Focus area mutations
   const addFocusAreasMutation = useMutation({
-    mutationFn: (areas: Array<{ skillArea: SkillArea; priority: number }>) =>
+    mutationFn: (areas: { skillArea: SkillArea; priority: number }[]) =>
       practiceSessionService.addFocusAreas(
         sessionId,
         areas.map((a) => ({ ...a, aiSuggested: false }))

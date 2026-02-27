@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Alert, Platform } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -99,9 +99,45 @@ export default function CrewThreadScreen() {
 
   const handleEditThread = useCallback(() => {
     setShowOptions(false);
-    // TODO: Show edit modal
-    Alert.alert('Coming Soon', 'Edit thread feature coming soon');
-  }, []);
+    if (!thread) return;
+
+    const submitRename = async (nextName?: string) => {
+      const trimmed = (nextName || '').trim();
+      if (!trimmed || trimmed === thread.name) {
+        return;
+      }
+      const ok = await CrewThreadService.updateThread(thread.id, { name: trimmed });
+      if (ok) {
+        setThread((prev) => (prev ? { ...prev, name: trimmed } : prev));
+      } else {
+        Alert.alert('Error', 'Could not update thread name.');
+      }
+    };
+
+    if (Platform.OS === 'ios' && typeof Alert.prompt === 'function') {
+      Alert.prompt(
+        'Edit Thread',
+        'Update the thread name',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save', onPress: (value) => void submitRename(value) },
+        ],
+        'plain-text',
+        thread.name
+      );
+      return;
+    }
+
+    const suggestedName = `${thread.name} (Edited)`;
+    Alert.alert(
+      'Edit Thread',
+      `Rename thread to "${suggestedName}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Rename', onPress: () => void submitRename(suggestedName) },
+      ]
+    );
+  }, [thread]);
 
   const handleLeaveThread = useCallback(async () => {
     setShowOptions(false);

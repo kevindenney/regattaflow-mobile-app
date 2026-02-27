@@ -12,7 +12,7 @@
  * Storage: Supabase `equipment_issues` table (syncs across devices)
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 
 // =============================================================================
@@ -104,14 +104,40 @@ export function useEquipmentFlow({
   const [issues, setIssues] = useState<EquipmentIssue[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const activeContextRef = useRef(
+    `${userId ?? ''}|${boatId ?? ''}|${currentRaceId ?? ''}|${unresolvedOnly ? '1' : '0'}`
+  );
+
+  useEffect(() => {
+    activeContextRef.current =
+      `${userId ?? ''}|${boatId ?? ''}|${currentRaceId ?? ''}|${unresolvedOnly ? '1' : '0'}`;
+  }, [userId, boatId, currentRaceId, unresolvedOnly]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
   // Check if we have a valid user ID (skip DB operations for demo users)
   const hasValidUser = isValidUUID(userId);
 
   // Load issues from Supabase
   const loadIssues = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const contextKey =
+      `${userId ?? ''}|${boatId ?? ''}|${currentRaceId ?? ''}|${unresolvedOnly ? '1' : '0'}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeContextRef.current === contextKey;
+
     // Skip loading for demo/invalid users - return empty
     if (!hasValidUser) {
+      if (!canCommit()) return;
       setIssues([]);
       setIsLoading(false);
       setError(null);
@@ -119,6 +145,7 @@ export function useEquipmentFlow({
     }
 
     try {
+      if (!canCommit()) return;
       setIsLoading(true);
       setError(null);
 
@@ -133,18 +160,21 @@ export function useEquipmentFlow({
       }
 
       const dbIssues = (data || []).map(mapDbRowToIssue);
+      if (!canCommit()) return;
       setIssues(dbIssues);
     } catch (err) {
+      if (!canCommit()) return;
       setError(err instanceof Error ? err : new Error('Failed to load equipment issues'));
       setIssues([]);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
-  }, [userId, hasValidUser]);
+  }, [userId, hasValidUser, boatId, currentRaceId, unresolvedOnly]);
 
   // Load on mount and when dependencies change
   useEffect(() => {
-    loadIssues();
+    void loadIssues();
   }, [loadIssues]);
 
   // Add a new issue
@@ -160,7 +190,9 @@ export function useEquipmentFlow({
     }
 
     try {
-      setError(null);
+      if (isMountedRef.current) {
+        setError(null);
+      }
       const now = new Date().toISOString();
 
       const { data, error: dbError } = await supabase
@@ -185,10 +217,13 @@ export function useEquipmentFlow({
       // Add to local state
       if (data) {
         const newIssue = mapDbRowToIssue(data);
+        if (!isMountedRef.current) return;
         setIssues(prev => [newIssue, ...prev]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to add equipment issue'));
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Failed to add equipment issue'));
+      }
       throw err;
     }
   }, [hasValidUser, userId, boatId, currentRaceId]);
@@ -201,7 +236,9 @@ export function useEquipmentFlow({
     }
 
     try {
-      setError(null);
+      if (isMountedRef.current) {
+        setError(null);
+      }
       const now = new Date().toISOString();
 
       const { error: dbError } = await supabase
@@ -218,6 +255,7 @@ export function useEquipmentFlow({
       }
 
       // Update local state
+      if (!isMountedRef.current) return;
       setIssues(prev => prev.map(issue =>
         issue.id === issueId
           ? {
@@ -228,7 +266,9 @@ export function useEquipmentFlow({
           : issue
       ));
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to resolve equipment issue'));
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Failed to resolve equipment issue'));
+      }
       throw err;
     }
   }, [hasValidUser, userId, currentRaceId]);
@@ -241,7 +281,9 @@ export function useEquipmentFlow({
     }
 
     try {
-      setError(null);
+      if (isMountedRef.current) {
+        setError(null);
+      }
 
       const { error: dbError } = await supabase
         .from('equipment_issues')
@@ -254,9 +296,12 @@ export function useEquipmentFlow({
       }
 
       // Update local state
+      if (!isMountedRef.current) return;
       setIssues(prev => prev.filter(issue => issue.id !== issueId));
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to remove equipment issue'));
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Failed to remove equipment issue'));
+      }
       throw err;
     }
   }, [hasValidUser, userId]);
@@ -269,7 +314,9 @@ export function useEquipmentFlow({
     }
 
     try {
-      setError(null);
+      if (isMountedRef.current) {
+        setError(null);
+      }
 
       const { error: dbError } = await supabase
         .from('equipment_issues')
@@ -285,13 +332,16 @@ export function useEquipmentFlow({
       }
 
       // Update local state
+      if (!isMountedRef.current) return;
       setIssues(prev => prev.map(issue =>
         issue.id === issueId
           ? { ...issue, ...updates }
           : issue
       ));
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to update equipment issue'));
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Failed to update equipment issue'));
+      }
       throw err;
     }
   }, [hasValidUser, userId]);

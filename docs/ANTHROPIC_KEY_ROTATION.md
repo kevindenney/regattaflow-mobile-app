@@ -1,6 +1,6 @@
 ## Anthropic Key Rotation (Nov 10 2025)
 
-- **New key**: Stored locally in `.env` and `.env.development` (untracked). Loaded via `ANTHROPIC_API_KEY` and `EXPO_PUBLIC_ANTHROPIC_API_KEY`.
+- **New key**: Stored locally in `.env` and `.env.development` (untracked). Loaded via `ANTHROPIC_API_KEY` and `ANTHROPIC_API_KEY`.
 - **Scope**: Used by Claude skill upload scripts, Expo web/mobile builds, GitHub Actions, Supabase Edge Functions, and Vercel.
 - **Reference**: 1Password entry `Claude API – Nov 2025` (create/update as needed).
 
@@ -24,9 +24,9 @@ set +o allexport
 
 | Surface                | Secret name                          | Action |
 |------------------------|--------------------------------------|--------|
-| GitHub Actions         | `ANTHROPIC_API_KEY`, `EXPO_PUBLIC_ANTHROPIC_API_KEY` | Update repository secrets to the new value. |
+| GitHub Actions         | `ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY` | Update repository secrets to the new value. |
 | Supabase Edge Functions| `ANTHROPIC_API_KEY` (Project settings → API → Secrets) | Rotate via `npx supabase secrets set`. |
-| Vercel / Expo EAS      | `ANTHROPIC_API_KEY`, `EXPO_PUBLIC_ANTHROPIC_API_KEY` | Update Environment Variables for all environments. |
+| Vercel / Expo EAS      | `ANTHROPIC_API_KEY`, `ANTHROPIC_API_KEY` | Update Environment Variables for all environments. |
 | Local scripts          | `.env`, `.env.development`           | Already refreshed in this workspace; ensure other machines do the same. |
 
 ### Verifications

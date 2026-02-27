@@ -10,6 +10,9 @@ import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator } from 
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { Typography, Spacing, colors, BorderRadius, Shadows } from '@/constants/designSystem';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('AIQuickEntry');
 
 export type InputMethod = 'paste' | 'upload' | 'url' | 'manual';
 
@@ -39,7 +42,7 @@ export const AIQuickEntry: React.FC<AIQuickEntryProps> = ({
         await onExtract('upload', result.assets[0].uri);
       }
     } catch (error) {
-      console.error('Document picker error:', error);
+      logger.error('Document picker error', error);
     }
   };
 

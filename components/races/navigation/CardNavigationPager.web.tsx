@@ -152,15 +152,6 @@ export function CardNavigationPager<T extends RaceData>({
     };
   }, [handleScroll]);
 
-  // Empty state
-  if (races.length === 0) {
-    return (
-      <View style={[styles.container, styles.emptyContainer, style]}>
-        {headerContent}
-      </View>
-    );
-  }
-
   /**
    * Navigate to previous card
    */
@@ -181,6 +172,15 @@ export function CardNavigationPager<T extends RaceData>({
 
   const showLeftArrow = activeIndex > 0;
   const showRightArrow = activeIndex < races.length - 1;
+
+  // Empty state
+  if (races.length === 0) {
+    return (
+      <View style={[styles.container, styles.emptyContainer, style]}>
+        {headerContent}
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, style]} testID={testID}>

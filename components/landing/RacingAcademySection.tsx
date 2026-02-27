@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  Linking,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -50,7 +51,7 @@ export function RacingAcademySection() {
     []
   );
 
-  const comingSoonCourses = useMemo<Course[]>(
+  const _comingSoonCourses = useMemo<Course[]>(
     () => COURSE_CATALOG.levels
       .flatMap((level): Course[] => level.courses)
       .filter((course) => course.status === 'coming-soon')
@@ -73,13 +74,9 @@ export function RacingAcademySection() {
     }
 
     if (course.status === 'coming-soon') {
-      // Show notification signup modal or alert
-      if (Platform.OS === 'web') {
-        alert(`"${course.title}" is coming soon! We'll notify you when it's available.`);
-      } else {
-        // For native, you could show a modal here
-        alert(`"${course.title}" is coming soon!`);
-      }
+      void Linking.openURL(
+        `mailto:learn@regattaflow.com?subject=Course%20Waitlist%3A%20${encodeURIComponent(course.title)}&body=Please%20notify%20me%20when%20this%20course%20is%20available.`
+      );
     } else {
       // Navigate to course detail page using slug (more reliable than JSON catalog ID)
       router.push({
@@ -117,12 +114,9 @@ export function RacingAcademySection() {
 
   const handleEnroll = (course: Course) => {
     if (course.status === 'coming-soon') {
-      // Show notification signup
-      if (Platform.OS === 'web') {
-        alert(`"${course.title}" is coming soon! We'll notify you when it's available.`);
-      } else {
-        alert(`"${course.title}" is coming soon!`);
-      }
+      void Linking.openURL(
+        `mailto:learn@regattaflow.com?subject=Course%20Waitlist%3A%20${encodeURIComponent(course.title)}&body=Please%20notify%20me%20when%20this%20course%20is%20available.`
+      );
     } else if (course.price.cents === 0) {
       // Free course - navigate directly using slug
       router.push({
@@ -138,7 +132,7 @@ export function RacingAcademySection() {
     }
   };
 
-  const handleContactSales = (packageId: string) => {
+  const _handleContactSales = (packageId: string) => {
     // Track analytics
     if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).gtag) {
       (window as any).gtag('event', 'contact_sales_clicked', {
@@ -146,42 +140,29 @@ export function RacingAcademySection() {
       });
     }
 
-    // Open email client or contact form
-    if (Platform.OS === 'web') {
-      window.location.href = `mailto:sales@regattaflow.com?subject=Institutional Package Inquiry: ${packageId}`;
-    } else {
-      // For native, you could use Linking API
-      alert('Please contact sales@regattaflow.com for institutional packages');
-    }
+    void Linking.openURL(
+      `mailto:sales@regattaflow.com?subject=${encodeURIComponent(`Institutional Package Inquiry: ${packageId}`)}`
+    );
   };
 
-  const handleScheduleCall = () => {
+  const _handleScheduleCall = () => {
     // Track analytics
     if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).gtag) {
       (window as any).gtag('event', 'schedule_call_clicked');
     }
 
-    // Open calendar booking or contact form
-    if (Platform.OS === 'web') {
-      // You could integrate with Calendly or similar
-      window.open('https://calendly.com/regattaflow-sales', '_blank');
-    } else {
-      alert('Please contact us to schedule a call');
-    }
+    void Linking.openURL('https://calendly.com/regattaflow-sales');
   };
 
-  const handleNotifyMe = () => {
+  const _handleNotifyMe = () => {
     // Track analytics
     if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).gtag) {
       (window as any).gtag('event', 'notify_me_clicked');
     }
 
-    // Show notification signup form or modal
-    if (Platform.OS === 'web') {
-      alert('We\'ll notify you when new courses are available!');
-    } else {
-      alert('We\'ll notify you when new courses are available!');
-    }
+    void Linking.openURL(
+      'mailto:learn@regattaflow.com?subject=Academy%20Notifications&body=Please%20notify%20me%20when%20new%20courses%20are%20available.'
+    );
   };
 
   return (
@@ -547,7 +528,6 @@ function CourseCard({ course, isDesktop, onPress, onEnroll }: CourseCardProps) {
       style={[styles.courseCard, isDesktop && styles.courseCardDesktop]}
       onPress={onPress}
       activeOpacity={0.8}
-      disabled={course.status === 'coming-soon'}
     >
       {/* Course Thumbnail */}
       <View style={styles.courseThumbnailContainer}>
@@ -572,7 +552,7 @@ function CourseCard({ course, isDesktop, onPress, onEnroll }: CourseCardProps) {
           {course.status === 'coming-soon' && (
             <View style={styles.comingSoonBadge}>
               <Ionicons name="time-outline" size={14} color="#FFFFFF" />
-              <Text style={styles.comingSoonText}>Coming Soon</Text>
+              <Text style={styles.comingSoonText}>Planned</Text>
             </View>
           )}
 
@@ -731,7 +711,6 @@ function CourseCard({ course, isDesktop, onPress, onEnroll }: CourseCardProps) {
             course.status === 'coming-soon' && styles.enrollButtonSecondary,
             course.price.cents === 0 && styles.enrollButtonFree,
           ]}
-          disabled={course.status === 'coming-soon'}
           onPress={onEnroll}
           activeOpacity={0.8}
         >
@@ -760,7 +739,7 @@ interface PricingCardProps {
   isFeatured: boolean;
 }
 
-function PricingCard({ tier, isDesktop, isFeatured }: PricingCardProps) {
+function _PricingCard({ tier, isDesktop: _isDesktop, isFeatured }: PricingCardProps) {
   const getPriceDisplay = () => {
     if (tier.price.cents === 0) {
       return { amount: 'FREE', period: '' };
@@ -834,7 +813,7 @@ interface InstitutionalCardProps {
   onContactSales: () => void;
 }
 
-function InstitutionalCard({ package: pkg, isDesktop, onContactSales }: InstitutionalCardProps) {
+function _InstitutionalCard({ package: pkg, isDesktop, onContactSales }: InstitutionalCardProps) {
   return (
     <View style={[styles.institutionalCard, isDesktop && styles.institutionalCardDesktop]}>
       <View style={styles.institutionalCardHeader}>

@@ -29,6 +29,7 @@ import { VictoryLine, VictoryChart, VictoryTheme, VictoryAxis, VictoryArea } fro
 import { RaceDetailsView, DocumentList, type Document, CourseVisualization, CourseSetupPrompt, CourseSelector } from '@/components/races';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 interface RaceDetails {
@@ -171,25 +172,46 @@ const mergeConditionsFromRecord = (record: any): StrategyConditions => {
 };
 
 const mapStrategyRecordToView = (data: any): RaceStrategyViewModel => {
-  const contingencies = data?.contingencies || {};
-  const beatStrategy = Array.isArray(data?.beat_strategy) ? data.beat_strategy : [];
-  const runStrategy = Array.isArray(data?.run_strategy) ? data.run_strategy : [];
-  const markRoundings = Array.isArray(data?.mark_roundings) ? data.mark_roundings : [];
+  const content = data?.strategy_content && typeof data.strategy_content === 'object'
+    ? data.strategy_content
+    : {};
+  const normalized = {
+    ...data,
+    ...content,
+  };
 
-  const startStrategy = data?.start_strategy ?? null;
-  const finishStrategy = data?.finish_strategy ?? null;
+  const contingencies = normalized?.contingencies || {};
+  const beatStrategy = Array.isArray(normalized?.beat_strategy) ? normalized.beat_strategy : [];
+  const runStrategy = Array.isArray(normalized?.run_strategy) ? normalized.run_strategy : [];
+  const markRoundings = Array.isArray(normalized?.mark_roundings) ? normalized.mark_roundings : [];
+
+  const startStrategy = normalized?.start_strategy ?? null;
+  const finishStrategy = normalized?.finish_strategy ?? null;
 
   const keyPoints =
-    Array.isArray(data?.key_tactical_points) && data.key_tactical_points.length > 0
-      ? data.key_tactical_points
+    Array.isArray(normalized?.key_tactical_points) && normalized.key_tactical_points.length > 0
+      ? normalized.key_tactical_points
       : extractKeyTacticalPoints({
           beatStrategy,
           runStrategy,
           markRoundings
         });
 
+  const rawConfidence =
+    typeof normalized?.confidence === 'number'
+      ? normalized.confidence
+      : typeof normalized?.confidence_score === 'number'
+      ? normalized.confidence_score
+      : undefined;
+  const confidence =
+    typeof rawConfidence === 'number'
+      ? rawConfidence > 1
+        ? Math.max(0, Math.min(1, rawConfidence / 100))
+        : Math.max(0, Math.min(1, rawConfidence))
+      : 0.5;
+
   return {
-    overallApproach: data?.overall_approach || data?.overallApproach || '',
+    overallApproach: normalized?.overall_approach || normalized?.overallApproach || '',
     startStrategy,
     beatStrategy,
     runStrategy,
@@ -202,9 +224,9 @@ const mapStrategyRecordToView = (data: any): RaceStrategyViewModel => {
       currentChange: contingencies?.currentChange ?? contingencies?.current_change ?? [],
       equipmentIssue: contingencies?.equipmentIssue ?? contingencies?.equipment_issue ?? []
     },
-    conditions: mergeConditionsFromRecord(data),
-    simulationResults: data?.simulation_results,
-    confidence: typeof data?.confidence === 'number' ? data.confidence : 0.5,
+    conditions: mergeConditionsFromRecord(normalized),
+    simulationResults: normalized?.simulation_results,
+    confidence,
     startLineSummary: extractStartLineSummary(startStrategy),
     keyTacticalPoints: keyPoints
   };
@@ -491,16 +513,33 @@ export default function RaceDetailScreen() {
       const daysUntil = Math.ceil((startDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
       // Load race documents from database (sailing_documents table)
-      // NOTE: regatta_id column doesn't exist yet in sailing_documents table
-      // For now, load all user's documents (Phase 3 will add race linking)
+      // Prefer metadata.regatta_id scoping; fallback to user documents if the JSON path is unavailable.
       logger.debug('[RaceDetail] Loading documents for user:', user?.id);
       let docsData = null;
       try {
-        const { data, error: docsError } = await supabase
+        let data: any[] | null = null;
+        let docsError: any = null;
+
+        const scopedQuery = await supabase
           .from('sailing_documents')
-          .select('id, user_id, filename, mime_type, created_at, processing_status, course_data')
+          .select('id, user_id, filename, mime_type, created_at, processing_status, course_data, metadata')
           .eq('user_id', user?.id)
+          .eq('metadata->>regatta_id', id)
           .order('created_at', { ascending: false });
+
+        data = scopedQuery.data;
+        docsError = scopedQuery.error;
+
+        if (docsError) {
+          console.warn('[RaceDetail] Regatta-scoped document query failed, falling back to user documents:', docsError);
+          const fallbackQuery = await supabase
+            .from('sailing_documents')
+            .select('id, user_id, filename, mime_type, created_at, processing_status, course_data')
+            .eq('user_id', user?.id)
+            .order('created_at', { ascending: false });
+          data = fallbackQuery.data;
+          docsError = fallbackQuery.error;
+        }
 
         if (docsError) {
           console.warn('[RaceDetail] Error loading documents (non-critical):', docsError);
@@ -523,20 +562,30 @@ export default function RaceDetailScreen() {
         // Continue anyway - documents are optional
       }
 
-      // Load race strategy if exists (race_strategies table with regatta_id)
-      // TODO: race_strategies table doesn't exist yet - commented out until table is created
-      logger.debug('[RaceDetail] Skipping strategy loading (table not yet created)');
+      // Load race strategy if exists (supports current schema with strategy_content JSONB)
       let strategyData = null;
-      /*
       try {
-        const { data, error: strategyError } = await supabase
+        let data: any = null;
+        let strategyError: any = null;
+        const primaryStrategy = await supabase
           .from('race_strategies')
-          .select('id, regatta_id, user_id, overall_approach, start_strategy, beat_strategy, run_strategy, finish_strategy, mark_roundings, contingencies, wind_speed, wind_direction, current_speed, current_direction, wave_height, simulation_results, confidence, course_marks, course_extraction, created_at')
+          .select('id, regatta_id, user_id, strategy_type, favored_end, start_line_bias, layline_approach, wind_strategy, confidence_score, strategy_content, ai_generated, ai_model, generated_at, created_at, updated_at')
           .eq('regatta_id', id)
           .eq('user_id', user?.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(); // Use maybeSingle to handle zero results gracefully
+          .maybeSingle();
+        data = primaryStrategy.data;
+        strategyError = primaryStrategy.error;
+
+        if (isMissingIdColumn(strategyError, 'race_strategies', 'regatta_id')) {
+          const fallbackStrategy = await supabase
+            .from('race_strategies')
+            .select('id, race_id, user_id, strategy_type, favored_end, start_line_bias, layline_approach, wind_strategy, confidence_score, strategy_content, ai_generated, ai_model, generated_at, created_at, updated_at')
+            .eq('race_id', id)
+            .eq('user_id', user?.id)
+            .maybeSingle();
+          data = fallbackStrategy.data;
+          strategyError = fallbackStrategy.error;
+        }
 
         if (strategyError) {
           console.warn('[RaceDetail] Error loading strategy (non-critical):', strategyError);
@@ -548,7 +597,6 @@ export default function RaceDetailScreen() {
         console.warn('[RaceDetail] Strategy loading failed (non-critical):', strategyLoadError);
         // Continue anyway - strategy is optional
       }
-      */
 
       // Process strategy data if it exists
       if (strategyData) {
@@ -560,11 +608,22 @@ export default function RaceDetailScreen() {
       logger.debug('[RaceDetail] Checking for course marks...');
       try {
         // Find race_event associated with this regatta
-        const { data: raceEvent } = await supabase
+        let raceEvent: { id: string } | null = null;
+        const primaryRaceEvent = await supabase
           .from('race_events')
           .select('id')
           .eq('regatta_id', id)
           .maybeSingle();
+        raceEvent = primaryRaceEvent.data;
+
+        if (isMissingIdColumn(primaryRaceEvent.error, 'race_events', 'regatta_id')) {
+          const fallbackRaceEvent = await supabase
+            .from('race_events')
+            .select('id')
+            .eq('race_id', id)
+            .maybeSingle();
+          raceEvent = fallbackRaceEvent.data;
+        }
 
         if (raceEvent) {
           logger.debug('[RaceDetail] Found race_event:', raceEvent.id);
@@ -798,6 +857,39 @@ export default function RaceDetailScreen() {
     router.push(`/race/edit/${id}`);
   };
 
+  const resolveVenueId = async (metadata: any): Promise<string | null> => {
+    const directVenueId =
+      metadata?.venue_id ||
+      metadata?.venue?.id ||
+      raceFullData?.venue_id;
+
+    if (typeof directVenueId === 'string' && directVenueId.trim().length > 0) {
+      return directVenueId;
+    }
+
+    const venueNameCandidates = [
+      metadata?.venue_name,
+      raceFullData?.venue_name,
+      race?.venue,
+    ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+    for (const venueName of venueNameCandidates) {
+      const trimmedName = venueName.trim();
+      const { data, error } = await supabase
+        .from('sailing_venues')
+        .select('id')
+        .ilike('name', trimmedName)
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data?.id) {
+        return data.id;
+      }
+    }
+
+    return null;
+  };
+
   const generateStrategy = async () => {
     try {
       if (!race || !raceFullData) return;
@@ -848,8 +940,10 @@ export default function RaceDetailScreen() {
         weatherRisk: windSpeed > 20 ? 'high' : windSpeed > 15 ? 'moderate' : 'low'
       };
 
-      // Get venue ID from metadata or default to hong-kong
-      const venueId = 'hong-kong'; // TODO: Extract from venue name lookup
+      const venueId = await resolveVenueId(metadata);
+      if (!venueId) {
+        throw new Error('Venue is missing. Add a venue to this race to generate AI strategy.');
+      }
 
       // Check if documents with extraction exist
       const docWithExtraction = documents.find(d => d.extraction);
@@ -941,6 +1035,42 @@ export default function RaceDetailScreen() {
         logger.debug('  Race ID:', id);
         logger.debug('  Strategy text:', strategyText);
         logger.debug('  Current metadata keys:', Object.keys(metadata));
+
+        // Persist structured strategy to race_strategies (primary store)
+        if (user?.id) {
+          const confidencePercent = Math.round((generatedStrategyView.confidence || 0) * 100);
+          const { error: strategySaveError } = await supabase
+            .from('race_strategies')
+            .upsert(
+              {
+                regatta_id: id,
+                user_id: user.id,
+                strategy_type: 'pre_race',
+                confidence_score: Math.max(0, Math.min(100, confidencePercent)),
+                strategy_content: {
+                  overall_approach: generatedStrategyView.overallApproach,
+                  start_strategy: generatedStrategyView.startStrategy,
+                  beat_strategy: generatedStrategyView.beatStrategy,
+                  run_strategy: generatedStrategyView.runStrategy,
+                  finish_strategy: generatedStrategyView.finishStrategy,
+                  mark_roundings: generatedStrategyView.markRoundings,
+                  contingencies: generatedStrategyView.contingencies,
+                  simulation_results: generatedStrategyView.simulationResults,
+                  key_tactical_points: generatedStrategyView.keyTacticalPoints,
+                  start_line_summary: generatedStrategyView.startLineSummary,
+                  conditions: generatedStrategyView.conditions,
+                },
+                ai_generated: true,
+                ai_model: 'claude-3-haiku-20240307',
+                generated_at: new Date().toISOString(),
+              },
+              { onConflict: 'regatta_id,user_id' }
+            );
+
+          if (strategySaveError) {
+            console.warn('[RaceDetail] Structured strategy save failed (non-critical):', strategySaveError);
+          }
+        }
 
         const { data: updateData, error: updateError } = await supabase
           .from('regattas')

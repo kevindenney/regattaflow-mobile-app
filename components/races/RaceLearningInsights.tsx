@@ -5,12 +5,15 @@
  * Shows strengths to celebrate, focus areas to improve, and actionable practice drills.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, RefreshControl, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { postRaceLearningService } from '@/services/PostRaceLearningService';
 import { useAuth } from '@/providers/AuthProvider';
 import type { LearningProfile } from '@/types/raceLearning';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RaceLearningInsights');
 
 interface RaceLearningInsightsProps {
   onPreRaceReminderPress?: (reminder: string) => void;
@@ -22,18 +25,18 @@ export function RaceLearningInsights({ onPreRaceReminderPress }: RaceLearningIns
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (!user?.id) return;
 
     try {
       const data = await postRaceLearningService.getLearningProfileForUser(user.id);
       setProfile(data);
     } catch (error) {
-      console.error('Failed to load learning profile:', error);
+      logger.error('Failed to load learning profile', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -42,8 +45,8 @@ export function RaceLearningInsights({ onPreRaceReminderPress }: RaceLearningIns
   };
 
   useEffect(() => {
-    loadProfile();
-  }, [user?.id]);
+    void loadProfile();
+  }, [loadProfile]);
 
   if (loading) {
     return (
@@ -265,7 +268,7 @@ export function PreRaceReminderCard({ userId, onPress }: PreRaceReminderCardProp
         const profile = await postRaceLearningService.getLearningProfileForUser(userId);
         setReminder(profile?.aiSummary?.preRaceReminder ?? null);
       } catch (error) {
-        console.error('Failed to load pre-race reminder:', error);
+        logger.error('Failed to load pre-race reminder', error);
       } finally {
         setLoading(false);
       }

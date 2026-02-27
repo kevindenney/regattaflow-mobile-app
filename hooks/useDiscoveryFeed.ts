@@ -8,7 +8,7 @@
  * - tailored: Has follows + boat class → following + class experts header + discovery
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { CrewFinderService, PublicRacePreview } from '@/services/CrewFinderService';
 import { useUserBoatClass } from '@/hooks/useClassExperts';
@@ -88,6 +88,22 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [followedUserIds, setFollowedUserIds] = useState<Set<string>>(new Set());
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const loadMoreRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+
+  useEffect(() => {
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+      loadMoreRunIdRef.current += 1;
+    };
+  }, []);
 
   const userId = user?.id;
 
@@ -104,14 +120,29 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
    * Fetch initial feed data
    */
   const fetchFeed = useCallback(async () => {
-    if (!userId || isGuest) {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = userId ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId || isGuest) {
+      if (!canCommit()) return;
       setFollowingRaces([]);
       setDiscoveryRaces([]);
       setFollowingCount(0);
+      setHasMoreFollowing(false);
+      setHasMoreDiscovery(false);
+      setFollowingOffset(0);
+      setDiscoveryOffset(0);
+      setFollowedUserIds(new Set());
+      setError(null);
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -120,11 +151,12 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
 
       // Fetch followed users' races
       const followedResult = await CrewFinderService.getFollowedUsersRaces({
-        userId,
+        userId: targetUserId,
         limit: PAGE_SIZE,
         offset: 0,
       });
 
+      if (!canCommit()) return;
       setFollowingRaces(followedResult.races);
       setFollowingCount(followedResult.followingCount);
       setHasMoreFollowing(followedResult.hasMore);
@@ -132,6 +164,7 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
 
       // Build set of followed user IDs
       const followedIds = new Set(followedResult.races.map((r) => r.userId));
+      if (!canCommit()) return;
       setFollowedUserIds(followedIds);
 
       // Fetch discovery races (excluding followed users if there are any)
@@ -139,12 +172,13 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
         followedResult.followingCount > 0 ? Array.from(followedIds) : [];
 
       const discoveryResult = await CrewFinderService.getPublicRaces({
-        limit: PAGE_SIZE,
-        offset: 0,
-        excludeUserId: userId,
-        excludeUserIds,
-      });
+          limit: PAGE_SIZE,
+          offset: 0,
+          excludeUserId: targetUserId,
+          excludeUserIds,
+        });
 
+      if (!canCommit()) return;
       setDiscoveryRaces(discoveryResult.races);
       setHasMoreDiscovery(discoveryResult.hasMore);
       setDiscoveryOffset(PAGE_SIZE);
@@ -157,8 +191,10 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
       });
     } catch (err: any) {
       logger.error('[useDiscoveryFeed] Error fetching feed:', err);
+      if (!canCommit()) return;
       setError(err?.message || 'Failed to load feed');
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [userId, isGuest]);
@@ -167,7 +203,14 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
    * Load more items (infinite scroll)
    */
   const loadMore = useCallback(async () => {
-    if (!userId || isLoadingMore) return;
+    const runId = ++loadMoreRunIdRef.current;
+    const targetUserId = userId ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadMoreRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId || isLoadingMore) return;
 
     // Decide which section to load more from
     // If we have following races and more to load, load those first
@@ -177,26 +220,26 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
 
     if (!loadMoreFollowing && !loadMoreDiscovery) return;
 
+    if (!canCommit()) return;
     setIsLoadingMore(true);
 
     try {
       if (loadMoreFollowing) {
         logger.info('[useDiscoveryFeed] Loading more following races');
         const result = await CrewFinderService.getFollowedUsersRaces({
-          userId,
+          userId: targetUserId,
           limit: PAGE_SIZE,
           offset: followingOffset,
         });
 
-        setFollowingRaces((prev) => [...prev, ...result.races]);
+        if (!canCommit()) return;
+        setFollowingRaces((prev) => {
+          const merged = [...prev, ...result.races];
+          setFollowedUserIds(new Set(merged.map((r) => r.userId)));
+          return merged;
+        });
         setHasMoreFollowing(result.hasMore);
         setFollowingOffset((prev) => prev + PAGE_SIZE);
-
-        // Update followed user IDs
-        const newFollowedIds = new Set(
-          [...followingRaces, ...result.races].map((r) => r.userId)
-        );
-        setFollowedUserIds(newFollowedIds);
       } else if (loadMoreDiscovery) {
         logger.info('[useDiscoveryFeed] Loading more discovery races');
         const excludeUserIds = Array.from(followedUserIds);
@@ -204,10 +247,11 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
         const result = await CrewFinderService.getPublicRaces({
           limit: PAGE_SIZE,
           offset: discoveryOffset,
-          excludeUserId: userId,
+          excludeUserId: targetUserId,
           excludeUserIds,
         });
 
+        if (!canCommit()) return;
         setDiscoveryRaces((prev) => [...prev, ...result.races]);
         setHasMoreDiscovery(result.hasMore);
         setDiscoveryOffset((prev) => prev + PAGE_SIZE);
@@ -215,6 +259,7 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
     } catch (err: any) {
       logger.error('[useDiscoveryFeed] Error loading more:', err);
     } finally {
+      if (!canCommit()) return;
       setIsLoadingMore(false);
     }
   }, [
@@ -225,7 +270,6 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
     followingOffset,
     discoveryOffset,
     followedUserIds,
-    followingRaces,
   ]);
 
   /**
@@ -242,13 +286,15 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
    */
   const toggleFollow = useCallback(
     async (targetUserId: string) => {
-      if (!userId) return;
+      const actorUserId = userId ?? null;
+      if (!actorUserId) return;
 
       const isCurrentlyFollowing = followedUserIds.has(targetUserId);
 
       try {
         if (isCurrentlyFollowing) {
-          await CrewFinderService.unfollowUser(userId, targetUserId);
+          await CrewFinderService.unfollowUser(actorUserId, targetUserId);
+          if (!isMountedRef.current || activeUserIdRef.current !== actorUserId) return;
           // Update local state
           setFollowedUserIds((prev) => {
             const next = new Set(prev);
@@ -262,7 +308,8 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
 
           // Move their races to discovery (they'll appear on next refresh)
         } else {
-          await CrewFinderService.followUser(userId, targetUserId);
+          await CrewFinderService.followUser(actorUserId, targetUserId);
+          if (!isMountedRef.current || activeUserIdRef.current !== actorUserId) return;
           // Update local state
           setFollowedUserIds((prev) => {
             const next = new Set(prev);
@@ -282,6 +329,7 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
           }
         }
 
+        if (!isMountedRef.current || activeUserIdRef.current !== actorUserId) return;
         // Update isFollowing flag in current races
         setFollowingRaces((prev) =>
           prev.map((r) =>
@@ -301,6 +349,7 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
       } catch (err: any) {
         logger.error('[useDiscoveryFeed] Error toggling follow:', err);
         // Revert local state on error by refreshing
+        if (!isMountedRef.current || activeUserIdRef.current !== actorUserId) return;
         await refresh();
       }
     },
@@ -354,7 +403,7 @@ export function useDiscoveryFeed(): UseDiscoveryFeedResult {
 
   // Initial fetch
   useEffect(() => {
-    fetchFeed();
+    void fetchFeed();
   }, [fetchFeed]);
 
   return {

@@ -369,12 +369,7 @@ Returns upcoming series and championship events.`,
 
         let query = supabase
           .from('racing_series')
-          .select(`
-            *,
-            boat_classes(name),
-            yacht_clubs(name),
-            sailing_venues(name)
-          `)
+          .select('*')
           .gte('start_date', `${year}-01-01`)
           .lte('start_date', `${year}-12-31`);
 
@@ -399,11 +394,32 @@ Returns upcoming series and championship events.`,
           };
         }
 
+        const clubIds = Array.from(
+          new Set(
+            series
+              .map((item) => item.club_id)
+              .filter((clubId): clubId is string => typeof clubId === 'string' && clubId.length > 0)
+          )
+        );
+        let clubNameById = new Map<string, string>();
+        if (clubIds.length > 0) {
+          const { data: clubs } = await supabase
+            .from('yacht_clubs')
+            .select('id, name')
+            .in('id', clubIds);
+          clubNameById = new Map((clubs || []).map((club) => [club.id, club.name]));
+        }
+
+        const enrichedSeries = series.map((item) => ({
+          ...item,
+          yacht_clubs: item.club_id ? { name: clubNameById.get(item.club_id) || 'Unknown Club' } : null,
+        }));
+
         const seriesList = series.map(s => `**${s.name}** (${s.race_count || '?'} races)`).join(', ');
 
         return {
           success: true,
-          series,
+          series: enrichedSeries,
           count: series.length,
           natural_language: `I found ${series.length} racing series for ${year}: ${seriesList}. Which ones are you planning to participate in?`,
         };

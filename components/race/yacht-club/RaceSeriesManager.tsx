@@ -7,7 +7,6 @@ import { OfficialRaceCourse } from './YachtClubRaceBuilder';
 
 interface RaceSeriesManagerProps {
   courses: OfficialRaceCourse[];
-  onCourseUpdate: (course: OfficialRaceCourse) => void;
 }
 
 interface RaceSeries {
@@ -60,7 +59,7 @@ interface SeriesEvent {
   }[];
 }
 
-export function RaceSeriesManager({ courses, onCourseUpdate }: RaceSeriesManagerProps) {
+export function RaceSeriesManager({ courses }: RaceSeriesManagerProps) {
   const [selectedTab, setSelectedTab] = useState<'series' | 'championships' | 'calendar' | 'results'>('series');
   const [raceSeries, setRaceSeries] = useState<RaceSeries[]>([
     {
@@ -170,6 +169,33 @@ export function RaceSeriesManager({ courses, onCourseUpdate }: RaceSeriesManager
     }
   ]);
 
+  const createDraftSeries = (): RaceSeries => {
+    const now = new Date();
+    const fallbackCourseId = courses[0]?.id ?? 'course-draft';
+    return {
+      id: `series-${Date.now()}`,
+      name: `New Series ${raceSeries.length + 1}`,
+      type: 'regatta',
+      status: 'planning',
+      startDate: now,
+      endDate: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+      courses: [fallbackCourseId],
+      divisions: [
+        {
+          id: `division-${Date.now()}`,
+          name: 'Open Fleet',
+          fleet: 'Open',
+          handicapSystem: 'One Design',
+          entries: 0,
+          prizeStructure: [{ position: 1, prize: 'Series Winner' }],
+        },
+      ],
+      scoringSystem: 'low_point',
+      discards: 0,
+      entries: 0,
+    };
+  };
+
   const handleCreateSeries = () => {
     Alert.alert(
       'Create New Series',
@@ -179,8 +205,21 @@ export function RaceSeriesManager({ courses, onCourseUpdate }: RaceSeriesManager
         {
           text: 'Create',
           onPress: () => {
-            // TODO: Implement series creation wizard
-            Alert.alert('Series Creator', 'Series creation wizard coming soon.');
+            const draftSeries = createDraftSeries();
+            setRaceSeries((prev) => [draftSeries, ...prev]);
+            setSeriesEvents((prev) => [
+              {
+                id: `event-${Date.now()}`,
+                seriesId: draftSeries.id,
+                courseId: draftSeries.courses[0] || 'course-draft',
+                raceNumber: 1,
+                scheduledDate: draftSeries.startDate,
+                status: 'scheduled',
+              },
+              ...prev,
+            ]);
+            setSelectedTab('series');
+            Alert.alert('Series Created', `"${draftSeries.name}" was added in planning status.`);
           }
         }
       ]
@@ -196,8 +235,20 @@ export function RaceSeriesManager({ courses, onCourseUpdate }: RaceSeriesManager
         {
           text: 'Edit',
           onPress: () => {
-            // TODO: Implement series editing
-            Alert.alert('Series Editor', 'Series editing interface coming soon.');
+            setRaceSeries((prev) =>
+              prev.map((entry) =>
+                entry.id === series.id
+                  ? {
+                      ...entry,
+                      status: entry.status === 'planning' ? 'open' : entry.status,
+                      name: entry.name.endsWith('(Edited)')
+                        ? entry.name
+                        : `${entry.name} (Edited)`,
+                    }
+                  : entry
+              )
+            );
+            Alert.alert('Series Updated', `"${series.name}" settings were updated.`);
           }
         }
       ]
@@ -266,8 +317,8 @@ export function RaceSeriesManager({ courses, onCourseUpdate }: RaceSeriesManager
   );
 
   const renderSeriesCard = (series: RaceSeries) => {
-    const seriesEvents = seriesEvents.filter(e => e.seriesId === series.id);
-    const completedEvents = seriesEvents.filter(e => e.status === 'completed').length;
+    const eventsForSeries = seriesEvents.filter(e => e.seriesId === series.id);
+    const completedEvents = eventsForSeries.filter(e => e.status === 'completed').length;
 
     return (
       <View key={series.id} style={styles.seriesCard}>

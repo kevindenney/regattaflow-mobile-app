@@ -6,6 +6,7 @@
 
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // Dynamic import helper for expo-location (native only)
 let LocationModule: typeof import('expo-location') | null = null;
@@ -41,6 +42,8 @@ export interface RaceTimerSession {
   notes: string | null;
 }
 
+const logger = createLogger('GPSTrackerService');
+
 class GPSTrackerService {
   private subscription: any | null = null;
   private trackPoints: GPSTrackPoint[] = [];
@@ -53,7 +56,7 @@ class GPSTrackerService {
   async requestPermissions(): Promise<boolean> {
     const Location = await getLocationModule();
     if (!Location) {
-      console.error('Location module not available on web');
+      logger.error('Location module not available on web');
       return false;
     }
 
@@ -61,7 +64,7 @@ class GPSTrackerService {
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
 
       if (foregroundStatus !== 'granted') {
-        console.error('Foreground location permission denied');
+        logger.error('Foreground location permission denied');
         return false;
       }
 
@@ -69,12 +72,12 @@ class GPSTrackerService {
       const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
 
       if (backgroundStatus !== 'granted') {
-        console.warn('Background location permission denied - tracking will stop when app is backgrounded');
+        logger.warn('Background location permission denied - tracking will stop when app is backgrounded');
       }
 
       return true;
     } catch (error) {
-      console.error('Error requesting location permissions:', error);
+      logger.error('Error requesting location permissions:', error);
       return false;
     }
   }
@@ -84,13 +87,13 @@ class GPSTrackerService {
    */
   async startTracking(sessionId: string): Promise<boolean> {
     if (this.isTracking) {
-      console.warn('GPS tracking already in progress');
+      logger.warn('GPS tracking already in progress');
       return false;
     }
 
     const Location = await getLocationModule();
     if (!Location) {
-      console.error('GPS tracking not available on web');
+      logger.error('GPS tracking not available on web');
       return false;
     }
 
@@ -120,7 +123,7 @@ class GPSTrackerService {
 
       return true;
     } catch (error) {
-      console.error('Error starting GPS tracking:', error);
+      logger.error('Error starting GPS tracking:', error);
       this.isTracking = false;
       return false;
     }
@@ -152,7 +155,7 @@ class GPSTrackerService {
    */
   async stopTracking(): Promise<GPSTrackPoint[]> {
     if (!this.isTracking) {
-      console.warn('GPS tracking not in progress');
+      logger.warn('GPS tracking not in progress');
       return [];
     }
 
@@ -173,7 +176,7 @@ class GPSTrackerService {
           }
         } catch (removeError) {
           // Expo web can throw if LocationEventEmitter.removeSubscription is missing; swallow so stopTracking still completes
-          console.warn('Failed to remove location subscription cleanly', removeError);
+          logger.warn('Failed to remove location subscription cleanly', removeError);
         }
         this.subscription = null;
       }
@@ -191,7 +194,7 @@ class GPSTrackerService {
           .eq('id', this.currentSessionId);
 
         if (error) {
-          console.error('Error saving GPS track:', error);
+          logger.error('Error saving GPS track:', error);
         } else {
         }
       }
@@ -204,7 +207,7 @@ class GPSTrackerService {
 
       return savedPoints;
     } catch (error) {
-      console.error('Error stopping GPS tracking:', error);
+      logger.error('Error stopping GPS tracking:', error);
       return [];
     }
   }

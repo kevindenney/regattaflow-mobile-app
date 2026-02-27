@@ -4,10 +4,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { OfficialRaceCourse } from './YachtClubRaceBuilder';
+import { router } from 'expo-router';
 
 interface RaceManagementPanelProps {
   course: OfficialRaceCourse | null;
-  onCourseUpdate: (course: OfficialRaceCourse) => void;
 }
 
 interface RaceEvent {
@@ -38,7 +38,7 @@ interface Protest {
   decision?: string;
 }
 
-export function RaceManagementPanel({ course, onCourseUpdate }: RaceManagementPanelProps) {
+export function RaceManagementPanel({ course }: RaceManagementPanelProps) {
   const [activeRaces, setActiveRaces] = useState<RaceEvent[]>([
     {
       id: 'race-1',
@@ -79,6 +79,44 @@ export function RaceManagementPanel({ course, onCourseUpdate }: RaceManagementPa
   ]);
 
   const [selectedTab, setSelectedTab] = useState<'racing' | 'protests' | 'scoring'>('racing');
+
+  const handleScheduleHearing = (protestId: string) => {
+    setProtests((items) =>
+      items.map((protest) =>
+        protest.id === protestId
+          ? { ...protest, status: 'scheduled' as const }
+          : protest
+      )
+    );
+    Alert.alert('Hearing Scheduled', 'The protest hearing has been scheduled.');
+  };
+
+  const handleDismissProtest = (protestId: string) => {
+    setProtests((items) =>
+      items.map((protest) =>
+        protest.id === protestId
+          ? {
+              ...protest,
+              status: 'dismissed' as const,
+              decision: 'Dismissed by race committee',
+            }
+          : protest
+      )
+    );
+    Alert.alert('Protest Dismissed', 'The protest has been marked as dismissed.');
+  };
+
+  const handleImportResults = () => {
+    router.push('/club/results' as any);
+  };
+
+  const handleExportData = () => {
+    router.push('/results-scoring' as any);
+  };
+
+  const handleConfigureScoring = () => {
+    router.push('/results-scoring' as any);
+  };
 
   const handleStartRace = (raceId: string) => {
     setActiveRaces(races => races.map(race =>
@@ -318,10 +356,18 @@ export function RaceManagementPanel({ course, onCourseUpdate }: RaceManagementPa
 
                 {protest.status === 'filed' && (
                   <View style={styles.protestActions}>
-                    <Button variant="default" style={styles.actionButton}>
+                    <Button
+                      variant="default"
+                      style={styles.actionButton}
+                      onPress={() => handleScheduleHearing(protest.id)}
+                    >
                       <ThemedText style={styles.actionButtonText}>📋 Schedule Hearing</ThemedText>
                     </Button>
-                    <Button variant="outline" style={styles.actionButton}>
+                    <Button
+                      variant="outline"
+                      style={styles.actionButton}
+                      onPress={() => handleDismissProtest(protest.id)}
+                    >
                       <ThemedText style={styles.outlineButtonText}>❌ Dismiss</ThemedText>
                     </Button>
                   </View>
@@ -348,13 +394,25 @@ export function RaceManagementPanel({ course, onCourseUpdate }: RaceManagementPa
               </ThemedText>
 
               <View style={styles.scoringActions}>
-                <Button variant="outline" style={styles.scoringButton}>
+                <Button
+                  variant="outline"
+                  style={styles.scoringButton}
+                  onPress={handleImportResults}
+                >
                   <ThemedText style={styles.outlineButtonText}>📥 Import Results</ThemedText>
                 </Button>
-                <Button variant="outline" style={styles.scoringButton}>
+                <Button
+                  variant="outline"
+                  style={styles.scoringButton}
+                  onPress={handleExportData}
+                >
                   <ThemedText style={styles.outlineButtonText}>📤 Export Data</ThemedText>
                 </Button>
-                <Button variant="default" style={styles.scoringButton}>
+                <Button
+                  variant="default"
+                  style={styles.scoringButton}
+                  onPress={handleConfigureScoring}
+                >
                   <ThemedText style={styles.actionButtonText}>🔧 Configure</ThemedText>
                 </Button>
               </View>

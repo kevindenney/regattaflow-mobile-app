@@ -86,11 +86,7 @@ Returns fleets with member counts and activity data.`,
         // Find fleets for this class
         let query = supabase
           .from('fleets')
-          .select(`
-            *,
-            yacht_clubs(name, id),
-            boat_classes(name)
-          `)
+          .select('*')
           .eq('class_id', boatClass.id)
           .in('visibility', ['public', 'club']);
 
@@ -109,13 +105,37 @@ Returns fleets with member counts and activity data.`,
           };
         }
 
+        const clubIds = Array.from(
+          new Set(
+            fleets
+              .map((fleet) => fleet.club_id)
+              .filter((clubId): clubId is string => typeof clubId === 'string' && clubId.length > 0)
+          )
+        );
+
+        let clubNameById = new Map<string, string>();
+        if (clubIds.length > 0) {
+          const { data: clubs } = await supabase
+            .from('yacht_clubs')
+            .select('id, name')
+            .in('id', clubIds);
+          clubNameById = new Map((clubs || []).map((club) => [club.id, club.name]));
+        }
+
+        const enrichedFleets = fleets.map((fleet) => ({
+          ...fleet,
+          yacht_clubs: fleet.club_id
+            ? { id: fleet.club_id, name: clubNameById.get(fleet.club_id) || 'Unknown Club' }
+            : null,
+        }));
+
         const fleetDescriptions = fleets.map(
-          f => `**${f.name}** at ${f.yacht_clubs?.name || 'Unknown Club'} (${f.member_count || 0} members)`
+          f => `**${f.name}** at ${clubNameById.get(f.club_id) || 'Unknown Club'} (${f.member_count || 0} members)`
         ).join(', ');
 
         return {
           success: true,
-          fleets,
+          fleets: enrichedFleets,
           boat_class: boatClass,
           count: fleets.length,
           natural_language: `I found ${fleets.length} active ${input.class_name} fleet${fleets.length > 1 ? 's' : ''}: ${fleetDescriptions}. Which fleet(s) do you race with?`,

@@ -5,9 +5,9 @@
  * generating new insights, and handling visibility state.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { venueIntelligenceService } from '@/services/VenueIntelligenceService';
+import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useVenueInsights');
@@ -61,17 +61,37 @@ export function useVenueInsights({
   const [venueInsights, setVenueInsights] = useState<VenueInsightsData | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const generateRunIdRef = useRef(0);
+  const activeVenueIdRef = useRef<string | null>(currentVenue?.id ?? null);
 
-  // Create agent instance (memoized via useState to avoid recreation)
-  const [venueAgent] = useState(() => new VenueIntelligenceAgent());
+  useEffect(() => {
+    activeVenueIdRef.current = currentVenue?.id ?? null;
+  }, [currentVenue?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      generateRunIdRef.current += 1;
+    };
+  }, []);
 
   // Load cached insights from database
   const loadCachedInsights = useCallback(async (venueId: string) => {
+    const runId = ++loadRunIdRef.current;
+    const targetVenueId = venueId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeVenueIdRef.current === targetVenueId;
     try {
       const cachedInsights = await venueIntelligenceService.getVenueInsights(venueId);
 
       if (cachedInsights) {
         logger.info('Loaded cached venue insights from database');
+        if (!canCommit()) return;
         setVenueInsights(cachedInsights as VenueInsightsData);
         setShowInsights(true);
       } else {
@@ -86,28 +106,91 @@ export function useVenueInsights({
   // Get AI insights for current venue (force regenerate)
   const handleGetVenueInsights = useCallback(async (forceRegenerate = false) => {
     if (!currentVenue?.id) return;
+    const runId = ++generateRunIdRef.current;
+    const targetVenueId = currentVenue.id;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === generateRunIdRef.current &&
+      activeVenueIdRef.current === targetVenueId;
 
     // If forcing regenerate, delete old insights first
     if (forceRegenerate) {
-      await venueIntelligenceService.deleteInsights(currentVenue.id);
+      await venueIntelligenceService.deleteInsights(targetVenueId);
     }
 
+    if (!canCommit()) return;
     setLoadingInsights(true);
     try {
-      const result = await venueAgent.analyzeVenue(currentVenue.id);
+      const venueName =
+        (typeof currentVenue?.name === 'string' && currentVenue.name.trim()) || 'this venue';
+      const prompt = `You are a sailing venue analyst.
+Generate concise venue intelligence for ${venueName}.
+Return strict JSON only:
+{
+  "analysis": "string",
+  "recommendations": {
+    "safety": "string",
+    "racing": "string",
+    "cultural": "string",
+    "practice": "string",
+    "timing": "string"
+  }
+}`;
 
-      if (result.success) {
-        setVenueInsights(result.insights as VenueInsightsData);
-        setShowInsights(true);
-      } else {
-        logger.error('Failed to get venue insights:', result.error);
+      const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt,
+          max_tokens: 700,
+          temperature: 0.2,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Failed to generate venue insights');
       }
+
+      const text = typeof data?.text === 'string' ? data.text : '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('Venue insights response was not valid JSON');
+      }
+
+      const generatedInsights: VenueInsightsData = {
+        venueName,
+        generatedAt: new Date().toISOString(),
+        analysis: String((parsed as any).analysis || ''),
+        recommendations: {
+          safety: String((parsed as any)?.recommendations?.safety || ''),
+          racing: String((parsed as any)?.recommendations?.racing || ''),
+          cultural: String((parsed as any)?.recommendations?.cultural || ''),
+        },
+      };
+
+      await venueIntelligenceService.saveVenueInsights({
+        venueId: targetVenueId,
+        venueName,
+        analysis: generatedInsights.analysis as string,
+        generatedAt: generatedInsights.generatedAt || new Date().toISOString(),
+        recommendations: {
+          safety: String((parsed as any)?.recommendations?.safety || ''),
+          racing: String((parsed as any)?.recommendations?.racing || ''),
+          cultural: String((parsed as any)?.recommendations?.cultural || ''),
+          practice: String((parsed as any)?.recommendations?.practice || ''),
+          timing: String((parsed as any)?.recommendations?.timing || ''),
+        },
+      });
+
+      if (!canCommit()) return;
+      setVenueInsights(generatedInsights);
+      setShowInsights(true);
     } catch (error) {
       logger.error('Error getting venue insights:', error);
     } finally {
+      if (!canCommit()) return;
       setLoadingInsights(false);
     }
-  }, [currentVenue?.id, venueAgent]);
+  }, [currentVenue?.id, currentVenue?.name]);
 
   // Handler to dismiss insights card
   const handleDismissInsights = useCallback(() => {
@@ -129,7 +212,11 @@ export function useVenueInsights({
 
       // Load cached insights for new venue
       loadCachedInsights(currentVenue.id);
+      return;
     }
+    setVenueInsights(null);
+    setShowInsights(false);
+    setLoadingInsights(false);
   }, [currentVenue?.id, loadCachedInsights]);
 
   // Trigger AI venue analysis when venue is detected (only if no cached insights)

@@ -6,6 +6,9 @@
 import { z } from 'zod';
 import { AgentTool } from './BaseAgentService';
 import { supabase } from '../supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SailNumberTools');
 
 /**
  * Tool: Search internet for sail number and import comprehensive data
@@ -36,14 +39,6 @@ Returns comprehensive boat and owner information to auto-populate profile.`,
         };
 
         // STEP 1: Search the internet for sail number information
-
-        // Build targeted search queries
-        const searchQueries = [
-          `"${input.class_name}" sail "${input.sail_number}" owner skipper`,
-          `"${input.class_name}" "${input.sail_number}" race results`,
-          `"${input.class_name}" class "${input.sail_number}" fleet`,
-          `sailflow "${input.class_name}" "${input.sail_number}"`,
-        ];
 
         // In production, this would call WebSearch or external APIs:
         // - Sailflow.com API
@@ -103,7 +98,7 @@ I'll save this sail number so we can track future results! What's the owner/skip
             });
 
           if (importError) {
-            console.error('Import error:', importError);
+            logger.error('Import error', importError);
           }
 
           // Try to extract owner/club info from results

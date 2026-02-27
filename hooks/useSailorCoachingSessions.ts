@@ -10,12 +10,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import type { CoachingSession } from '@/services/CoachingService';
+import { createLogger } from '@/lib/utils/logger';
 
 const SAILOR_COACHING_KEYS = {
   upcomingSessions: (sailorId: string) => ['sailor', 'coaching-sessions', 'upcoming', sailorId],
   recentSessions: (sailorId: string) => ['sailor', 'coaching-sessions', 'recent', sailorId],
   stats: (sailorId: string) => ['sailor', 'coaching-stats', sailorId],
 };
+const logger = createLogger('useSailorCoachingSessions');
 
 /**
  * Fetch upcoming coaching sessions for the current sailor.
@@ -49,7 +51,7 @@ export function useSailorUpcomingSessions(limit: number = 10) {
         .limit(limit);
 
       if (error) {
-        console.error('[useSailorUpcomingSessions] Query error:', error.message);
+        logger.error('useSailorUpcomingSessions query error', error.message);
         throw error;
       }
 
@@ -96,7 +98,7 @@ export function useSailorRecentSessions(limit: number = 10) {
         .limit(limit);
 
       if (error) {
-        console.error('[useSailorRecentSessions] Query error:', error.message);
+        logger.error('useSailorRecentSessions query error', error.message);
         throw error;
       }
 
@@ -160,13 +162,21 @@ export function useSailorCoachingStats() {
       ]);
 
       if (clientsResult.error) {
-        console.error('[useSailorCoachingStats] coaching_clients query error:', clientsResult.error.message);
+        logger.error('useSailorCoachingStats coaching_clients query error', clientsResult.error.message);
       }
       if (upcomingResult.error) {
-        console.error('[useSailorCoachingStats] upcoming query error:', upcomingResult.error.message);
+        logger.error('useSailorCoachingStats upcoming query error', upcomingResult.error.message);
       }
       if (completedResult.error) {
-        console.error('[useSailorCoachingStats] completed query error:', completedResult.error.message);
+        logger.error('useSailorCoachingStats completed query error', completedResult.error.message);
+      }
+      if (clientsResult.error || upcomingResult.error || completedResult.error) {
+        const messages = [
+          clientsResult.error?.message,
+          upcomingResult.error?.message,
+          completedResult.error?.message,
+        ].filter(Boolean).join('; ');
+        throw new Error(messages || 'Failed to load sailor coaching stats');
       }
 
       const completedSessions = completedResult.data ?? [];

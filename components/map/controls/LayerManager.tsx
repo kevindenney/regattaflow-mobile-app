@@ -13,7 +13,7 @@
  * - Venue-specific layer recommendations
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,9 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { SailingVenue } from '@/types/venues';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('LayerManager');
 
 export type LayerCategory = 'navigation' | 'weather' | 'racing' | 'venues';
 
@@ -71,16 +74,12 @@ const DEFAULT_LAYERS: MapLayer[] = [
   { id: 'multi-venue-areas', name: 'Racing Areas', category: 'venues', visible: false, opacity: 1.0, order: 12, icon: '🗺️', description: 'Multi-venue clubs' }
 ];
 
-export function LayerManager({ layers: initialLayers, venue, onLayersChange, style }: LayerManagerProps) {
+export function LayerManager({ layers: initialLayers, venue: _venue, onLayersChange, style }: LayerManagerProps) {
   const [expanded, setExpanded] = useState(false);
   const [layers, setLayers] = useState<MapLayer[]>(initialLayers || DEFAULT_LAYERS);
   const [expandedCategories, setExpandedCategories] = useState<Set<LayerCategory>>(new Set(['navigation']));
 
-  useEffect(() => {
-    loadSavedLayers();
-  }, []);
-
-  const loadSavedLayers = async () => {
+  const loadSavedLayers = useCallback(async () => {
     try {
       const saved = await AsyncStorage.getItem('@layer_manager_config');
       if (saved) {
@@ -89,15 +88,19 @@ export function LayerManager({ layers: initialLayers, venue, onLayersChange, sty
         onLayersChange(savedLayers);
       }
     } catch (error) {
-      console.error('Failed to load layer config:', error);
+      logger.error('Failed to load layer config:', error);
     }
-  };
+  }, [onLayersChange]);
+
+  useEffect(() => {
+    void loadSavedLayers();
+  }, [loadSavedLayers]);
 
   const saveLayers = async (newLayers: MapLayer[]) => {
     try {
       await AsyncStorage.setItem('@layer_manager_config', JSON.stringify(newLayers));
     } catch (error) {
-      console.error('Failed to save layer config:', error);
+      logger.error('Failed to save layer config:', error);
     }
   };
 

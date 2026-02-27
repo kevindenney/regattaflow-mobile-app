@@ -20,6 +20,9 @@ import {
   LiveBoat,
   GPSPosition,
 } from './types';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('TracTracService');
 
 // ============================================================================
 // Configuration
@@ -70,13 +73,13 @@ export class TracTracService {
       });
 
       if (!response.ok) {
-        console.error(`TracTrac API error: ${response.status}`);
+        logger.error(`TracTrac API error: ${response.status}`);
         return null;
       }
 
       return await response.json();
     } catch (error) {
-      console.error('Failed to fetch TracTrac event:', error);
+      logger.error('Failed to fetch TracTrac event:', error);
       return null;
     }
   }
@@ -96,7 +99,7 @@ export class TracTracService {
 
       return await response.json();
     } catch (error) {
-      console.error('Failed to fetch TracTrac races:', error);
+      logger.error('Failed to fetch TracTrac races:', error);
       return [];
     }
   }
@@ -117,7 +120,7 @@ export class TracTracService {
 
       return await response.json();
     } catch (error) {
-      console.error('Failed to fetch TracTrac boats:', error);
+      logger.error('Failed to fetch TracTrac boats:', error);
       return [];
     }
   }
@@ -143,7 +146,7 @@ export class TracTracService {
       const data = await response.json();
       return data.positions || [];
     } catch (error) {
-      console.error('Failed to fetch TracTrac track history:', error);
+      logger.error('Failed to fetch TracTrac track history:', error);
       return [];
     }
   }
@@ -193,12 +196,12 @@ export class TracTracService {
           const data = JSON.parse(event.data);
           this.handleMessage(data);
         } catch (e) {
-          console.error('Failed to parse TracTrac message:', e);
+          logger.error('Failed to parse TracTrac message:', e);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('TracTrac WebSocket error:', error);
+        logger.error('TracTrac WebSocket error:', error);
         this.config.onStatusChange?.('error');
       };
 
@@ -207,7 +210,7 @@ export class TracTracService {
         this.attemptReconnect(eventId, raceId);
       };
     } catch (error) {
-      console.error('Failed to create TracTrac WebSocket:', error);
+      logger.error('Failed to create TracTrac WebSocket:', error);
       this.config.onStatusChange?.('error');
       // Fall back to polling
       this.startPolling(eventId, raceId);
@@ -268,7 +271,7 @@ export class TracTracService {
         this.handleBoatStatusUpdate(data);
         break;
       case 'error':
-        console.error('TracTrac error:', data.message);
+        logger.error('TracTrac error:', data.message);
         break;
       default:
         break;
@@ -382,4 +385,3 @@ export class TracTracService {
 }
 
 export default TracTracService;
-

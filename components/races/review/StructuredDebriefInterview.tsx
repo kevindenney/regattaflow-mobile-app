@@ -31,10 +31,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, ChevronLeft, ChevronRight, Check } from 'lucide-react-native';
+import { createLogger } from '@/lib/utils/logger';
 
 import { useDebriefInterview, type DebriefResponseValue } from '@/hooks/useDebriefInterview';
 import { useDebriefSailContext, type SailOption } from '@/hooks/useDebriefSailContext';
-import { DEBRIEF_PHASES, type FlatQuestion, type DebriefQuestionOption } from './debriefQuestions';
+import { type FlatQuestion, type DebriefQuestionOption } from './debriefQuestions';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+
+const logger = createLogger('StructuredDebriefInterview');
 
 // IDs of sail-related questions that should show sail options
 const SAIL_QUESTION_IDS = ['prep_sail_wrong', 'prep_sail_shouldve'];
@@ -79,7 +83,7 @@ interface QuestionInputProps {
 /**
  * Boolean input (Yes/No toggle)
  */
-function BooleanInput({ question, value, onChange }: QuestionInputProps) {
+function BooleanInput({ question: _question, value, onChange }: QuestionInputProps) {
   const currentValue = typeof value === 'boolean' ? value : null;
 
   return (
@@ -433,6 +437,9 @@ export function StructuredDebriefInterview({
   onClose,
   onComplete,
 }: StructuredDebriefInterviewProps) {
+  const eventConfig = useInterestEventConfig();
+  const debriefPhases = eventConfig.debriefPhases;
+
   const {
     currentQuestion,
     responses,
@@ -469,7 +476,7 @@ export function StructuredDebriefInterview({
         await markComplete();
         onComplete(); // Only close on success
       } catch (err) {
-        console.error('[StructuredDebriefInterview] Failed to complete debrief:', err);
+        logger.error('Failed to complete debrief', err);
         setSaveError('Failed to save your responses. Please try again.');
         // Don't call onComplete - keep modal open so user can retry
       }
@@ -480,7 +487,7 @@ export function StructuredDebriefInterview({
 
   // Get current phase info
   const currentPhase = currentQuestion
-    ? DEBRIEF_PHASES[currentQuestion.phaseIndex]
+    ? debriefPhases[currentQuestion.phaseIndex]
     : null;
 
   // Render the appropriate input type
@@ -545,7 +552,7 @@ export function StructuredDebriefInterview({
             <X size={24} color={IOS_COLORS.label} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Race Debrief</Text>
+            <Text style={styles.headerTitle}>{eventConfig.eventNoun} Debrief</Text>
             {raceName && (
               <Text style={styles.headerSubtitle} numberOfLines={1}>
                 {raceName}
@@ -560,7 +567,7 @@ export function StructuredDebriefInterview({
         {/* Phase Progress Indicator */}
         <View style={styles.progressContainer}>
           <View style={styles.phaseDotsRow}>
-            {DEBRIEF_PHASES.map((phase, index) => (
+            {debriefPhases.map((phase, index) => (
               <View key={phase.id} style={styles.phaseDotWrapper}>
                 <View
                   style={[
@@ -573,7 +580,7 @@ export function StructuredDebriefInterview({
                     <Check size={10} color="#FFFFFF" strokeWidth={3} />
                   )}
                 </View>
-                {index < DEBRIEF_PHASES.length - 1 && (
+                {index < debriefPhases.length - 1 && (
                   <View
                     style={[
                       styles.phaseLine,

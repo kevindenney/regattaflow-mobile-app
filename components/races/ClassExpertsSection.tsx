@@ -25,10 +25,13 @@ import {
   Star,
   Trophy,
   UserPlus,
-  Users,
 } from 'lucide-react-native';
 import { IOS_COLORS, IOS_SPACING, IOS_RADIUS, IOS_TYPOGRAPHY } from '@/lib/design-tokens-ios';
-import { useClassExperts, useUserBoatClass, ClassExpert, ExpertRacePreview } from '@/hooks/useClassExperts';
+import { useClassExperts, useUserBoatClass, ClassExpert } from '@/hooks/useClassExperts';
+
+function stripTaggedPrefix(message: string): string {
+  return message.replace(/^\[[A-Z0-9_]+\]\s*/, '').trim();
+}
 
 /**
  * Props for ClassExpertsSection
@@ -239,7 +242,7 @@ export function ClassExpertsSection({
         <View style={styles.emptyState}>
           <Star size={32} color={IOS_COLORS.systemGray3} />
           <Text style={styles.emptyText}>
-            No experts found sharing publicly yet
+            {error ? stripTaggedPrefix(error) : 'No experts found sharing publicly yet'}
           </Text>
         </View>
       </View>

@@ -560,11 +560,16 @@ export interface FlatQuestion extends DebriefQuestion {
   globalIndex: number;
 }
 
-export function getFlatQuestions(): FlatQuestion[] {
+/**
+ * Flatten questions from the given phases (or default sailing phases).
+ * Accepts an optional phases array for interest-aware debrief.
+ */
+export function getFlatQuestions(phases?: DebriefPhase[]): FlatQuestion[] {
+  const debriefPhases = phases ?? DEBRIEF_PHASES;
   const flat: FlatQuestion[] = [];
   let globalIndex = 0;
 
-  DEBRIEF_PHASES.forEach((phase, phaseIndex) => {
+  debriefPhases.forEach((phase, phaseIndex) => {
     phase.questions.forEach((question, questionIndex) => {
       flat.push({
         ...question,
@@ -606,10 +611,12 @@ export function shouldShowQuestion(
 }
 
 /**
- * Get filtered questions based on current responses
+ * Get filtered questions based on current responses.
+ * Accepts optional phases for interest-aware debrief.
  */
 export function getActiveQuestions(
-  responses: Record<string, unknown>
+  responses: Record<string, unknown>,
+  phases?: DebriefPhase[],
 ): FlatQuestion[] {
-  return getFlatQuestions().filter((q) => shouldShowQuestion(q, responses));
+  return getFlatQuestions(phases).filter((q) => shouldShowQuestion(q, responses));
 }

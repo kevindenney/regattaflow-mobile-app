@@ -95,7 +95,7 @@ export function MyStartSection({
         <View style={[styles.container, styles.infoContainer]}>
           <Clock size={16} color="#6B7280" />
           <Text style={styles.infoText}>
-            Start sequence not available yet
+            Start sequence not published yet
           </Text>
         </View>
       );
@@ -466,4 +466,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

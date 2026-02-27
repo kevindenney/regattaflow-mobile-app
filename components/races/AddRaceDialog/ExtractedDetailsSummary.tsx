@@ -5,7 +5,7 @@
  * Supports inline editing of all fields with onChange callback.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,6 @@ import {
   MapPin,
   Navigation,
   Waves,
-  Clock,
   Shield,
   Pencil,
   Plus,
@@ -37,6 +36,9 @@ import {
 } from 'lucide-react-native';
 import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from './tufteFormStyles';
 import { IOS_COLORS } from '@/components/cards/constants';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ExtractedDetailsSummary');
 
 // Type definitions
 interface ScheduleEvent {
@@ -50,7 +52,7 @@ interface ScheduleEvent {
 interface ProhibitedArea {
   name: string;
   description?: string;
-  coordinates?: Array<{ lat: number; lng: number }>;
+  coordinates?: { lat: number; lng: number }[];
 }
 
 interface EntryFee {
@@ -158,7 +160,7 @@ export function ExtractedDetailsSummary({
 
   // Defensive check: warn if we receive wrapper format (should be unwrapped in TufteAddRaceForm)
   if (data && (data as any).races) {
-    console.warn('[ExtractedDetailsSummary] Received wrapper object - data should be unwrapped to races[0]');
+    logger.warn('Received wrapper object - data should be unwrapped to races[0]');
   }
 
   // Only show if there's data (don't show empty sections even in editable mode)

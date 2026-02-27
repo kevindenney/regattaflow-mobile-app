@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { StyleSheet, View, ActivityIndicator, Platform, Text, TurboModuleRegistry } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Platform, Text, TurboModuleRegistry, TouchableOpacity, Linking } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { supabase } from '@/services/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -254,6 +254,24 @@ export function VenueMapView({
           Native maps require a development build.{'\n'}
           Use web version or run with EAS Build.
         </Text>
+        {currentVenue && onMarkerPress ? (
+          <TouchableOpacity
+            style={styles.fallbackButtonPrimary}
+            onPress={() => onMarkerPress(currentVenue)}
+          >
+            <Text style={styles.fallbackButtonPrimaryText}>Open Current Venue</Text>
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity
+          style={styles.fallbackButtonSecondary}
+          onPress={() =>
+            Linking.openURL(
+              'mailto:support@regattaflow.com?subject=Venue%20Map%20Unavailable&body=Please%20help%20me%20enable%20native%20maps%20for%20venue%20views.'
+            )
+          }
+        >
+          <Text style={styles.fallbackButtonSecondaryText}>Contact Support</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -462,6 +480,30 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  fallbackButtonPrimary: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#007AFF',
+  },
+  fallbackButtonPrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  fallbackButtonSecondary: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  fallbackButtonSecondaryText: {
+    color: '#334155',
+    fontWeight: '600',
   },
   customMarker: {
     width: 44,

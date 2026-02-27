@@ -2,8 +2,9 @@
  * useContentModules Hook
  *
  * Resolves which content modules to display based on:
- * - Current race phase
- * - Race type
+ * - Current interest (via useInterestEventConfig)
+ * - Current event phase
+ * - Event subtype (race type for sailing, or interest-specific subtypes)
  * - User preferences
  *
  * Provides controls for reordering, collapsing, and hiding modules.
@@ -12,10 +13,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { RacePhase } from '@/components/cards/types';
 import {
-  getAvailableModules,
-  getDefaultModules,
-  getMaxModules,
+  getAvailableModulesForInterest,
+  getDefaultModulesForInterest,
+  getMaxModulesForInterest,
 } from '@/components/cards/content/moduleConfig';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useContentPreferences } from './useContentPreferences';
 import type {
   ContentModuleId,
@@ -27,22 +29,31 @@ import { createLogger } from '@/lib/utils/logger';
 const logger = createLogger('useContentModules');
 
 interface UseContentModulesOptions {
-  /** Current race phase */
+  /** Current event phase */
   phase: RacePhase;
-  /** Race type */
+  /** Race type (sailing) or event subtype ID (other interests) */
   raceType: RaceType;
-  /** Optional specific race ID for per-race preferences */
+  /** Optional specific race/event ID for per-event preferences */
   raceId?: string;
+  /** Optional explicit subtype override (if different from raceType) */
+  subtypeId?: string;
 }
 
 /**
- * Hook to resolve and manage content modules for the expanded race card
+ * Hook to resolve and manage content modules for the expanded event card.
+ * Interest-aware: uses the current interest's event config to determine
+ * which modules are available, which are default, and label overrides.
  */
 export function useContentModules({
   phase,
   raceType,
   raceId,
+  subtypeId,
 }: UseContentModulesOptions): UseContentModulesReturn {
+  const eventConfig = useInterestEventConfig();
+  // Use the explicit subtypeId if provided, otherwise fall back to raceType
+  const resolvedSubtype = subtypeId ?? raceType;
+
   // Load user preferences
   const {
     preferences,
@@ -54,20 +65,23 @@ export function useContentModules({
   // Track collapsed modules in local state (merged with preferences)
   const [localCollapsed, setLocalCollapsed] = useState<Set<ContentModuleId>>(new Set());
 
-  // Get available modules for this phase/type combination
+  // Get available modules for this phase/subtype using the interest config
   const availableModules = useMemo(
-    () => getAvailableModules(phase, raceType),
-    [phase, raceType]
+    () => getAvailableModulesForInterest(eventConfig, phase, resolvedSubtype) as ContentModuleId[],
+    [eventConfig, phase, resolvedSubtype]
   );
 
-  // Get default modules for this phase/type
+  // Get default modules for this phase/subtype using the interest config
   const defaultModules = useMemo(
-    () => getDefaultModules(phase, raceType),
-    [phase, raceType]
+    () => getDefaultModulesForInterest(eventConfig, phase, resolvedSubtype) as ContentModuleId[],
+    [eventConfig, phase, resolvedSubtype]
   );
 
   // Get max modules allowed
-  const maxModules = useMemo(() => getMaxModules(phase), [phase]);
+  const maxModules = useMemo(
+    () => getMaxModulesForInterest(eventConfig, phase),
+    [eventConfig, phase]
+  );
 
   // Resolve collapsed modules from preferences + local state
   const collapsedModules = useMemo(() => {

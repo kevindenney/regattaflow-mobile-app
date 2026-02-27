@@ -20,6 +20,33 @@ import {
 } from '../types/raceEvents';
 
 export class CourseVisualizationService {
+  private static getMarkSequence(mark: any, fallbackIndex: number): number {
+    const sequence = mark?.sequence_number ?? mark?.sequence;
+    return typeof sequence === 'number' && Number.isFinite(sequence) ? sequence : fallbackIndex + 1;
+  }
+
+  private static getMarkCoordinates(mark: any): { lat: number; lng: number } | null {
+    if (typeof mark?.latitude === 'number' && typeof mark?.longitude === 'number') {
+      return { lat: mark.latitude, lng: mark.longitude };
+    }
+    if (typeof mark?.lat === 'number' && typeof mark?.lng === 'number') {
+      return { lat: mark.lat, lng: mark.lng };
+    }
+    return this.extractCoordinates(mark?.position);
+  }
+
+  private static getMarkName(mark: any, fallbackIndex: number): string {
+    return (
+      mark?.mark_name ||
+      mark?.name ||
+      `Mark ${fallbackIndex + 1}`
+    );
+  }
+
+  private static getMarkType(mark: any): any {
+    return mark?.mark_type || mark?.type || 'windward';
+  }
+
   /**
    * Generate complete GeoJSON for race course
    */
@@ -48,10 +75,10 @@ export class CourseVisualizationService {
 
     // Add course marks
     params.marks
-      .filter(mark => mark.position) // Only marks with GPS coordinates
-      .sort((a, b) => (a.sequence_number || 999) - (b.sequence_number || 999))
+      .filter((mark) => this.getMarkCoordinates(mark)) // Only marks with coordinates
+      .sort((a, b) => this.getMarkSequence(a, 998) - this.getMarkSequence(b, 999))
       .forEach((mark, index) => {
-        const coords = this.extractCoordinates(mark.position);
+        const coords = this.getMarkCoordinates(mark);
         if (coords) {
           features.push({
             type: 'Feature',
@@ -61,10 +88,10 @@ export class CourseVisualizationService {
             } as PointGeometry,
             properties: {
               id: mark.id,
-              name: mark.mark_name,
-              type: mark.mark_type,
-              rounding: mark.rounding_direction || undefined,
-              sequence: mark.sequence_number || index + 1,
+              name: this.getMarkName(mark, index),
+              type: this.getMarkType(mark),
+              rounding: mark.rounding_direction || mark.rounding || undefined,
+              sequence: this.getMarkSequence(mark, index),
               color: mark.mark_color || undefined,
               confidence: mark.confidence_score || undefined
             }
@@ -92,15 +119,15 @@ export class CourseVisualizationService {
     courseConfiguration?: CourseConfiguration
   ): CourseFeature | null {
     const sortedMarks = marks
-      .filter(mark => mark.position && mark.sequence_number)
-      .sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0));
+      .filter((mark) => this.getMarkCoordinates(mark))
+      .sort((a, b) => this.getMarkSequence(a, 998) - this.getMarkSequence(b, 999));
 
     if (sortedMarks.length < 2) {
       return null;
     }
 
     const coordinates: [number, number][] = sortedMarks.map(mark => {
-      const coords = this.extractCoordinates(mark.position);
+      const coords = this.getMarkCoordinates(mark);
       return [coords!.lng, coords!.lat];
     }).filter(coord => coord[0] && coord[1]);
 
@@ -222,7 +249,7 @@ export class CourseVisualizationService {
     zoom: number;
   } | null {
     const coordinates = marks
-      .map(mark => this.extractCoordinates(mark.position))
+      .map((mark) => this.getMarkCoordinates(mark))
       .filter((coord): coord is { lat: number; lng: number } => coord !== null);
 
     if (coordinates.length === 0) {

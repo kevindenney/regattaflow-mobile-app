@@ -27,8 +27,9 @@ import {
 
 import { IOS_COLORS } from '@/components/cards/constants';
 import { RacePhase } from '@/components/cards/types';
-import { getModuleLabel } from '@/components/cards/content/moduleConfig';
-import type { ContentModuleId, RaceType, CONTENT_MODULE_INFO } from '@/types/raceCardContent';
+import { getModuleLabelForInterest } from '@/components/cards/content/moduleConfig';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import type { ContentModuleId, RaceType } from '@/types/raceCardContent';
 
 interface ContentConfigModalProps {
   /** Whether the modal is visible */
@@ -37,7 +38,7 @@ interface ContentConfigModalProps {
   onClose: () => void;
   /** Current race phase */
   phase: RacePhase;
-  /** Race type */
+  /** Race type or event subtype */
   raceType: RaceType;
   /** Currently displayed modules (in order) */
   currentModules: ContentModuleId[];
@@ -53,6 +54,8 @@ interface ContentConfigModalProps {
   onHideModule: (moduleId: ContentModuleId) => void;
   /** Callback to reset to defaults */
   onResetDefaults: () => void;
+  /** Optional explicit event subtype ID for label overrides */
+  subtypeId?: string;
 }
 
 /**
@@ -70,7 +73,10 @@ export function ContentConfigModal({
   onShowModule,
   onHideModule,
   onResetDefaults,
+  subtypeId,
 }: ContentConfigModalProps) {
+  const eventConfig = useInterestEventConfig();
+  const resolvedSubtype = subtypeId ?? raceType;
   // Local state for drag-to-reorder (simplified for now)
   const [localOrder, setLocalOrder] = useState<ContentModuleId[]>(currentModules);
 
@@ -147,7 +153,7 @@ export function ContentConfigModal({
           {/* Phase Info */}
           <View style={styles.phaseInfo}>
             <Text style={styles.phaseLabel}>
-              {getPhaseName(phase)} • {raceType.charAt(0).toUpperCase() + raceType.slice(1)} Race
+              {eventConfig.phaseLabels[phase]?.full ?? phase} • {eventConfig.eventNoun}
             </Text>
           </View>
 
@@ -163,7 +169,7 @@ export function ContentConfigModal({
                   <View style={styles.moduleInfo}>
                     <GripVertical size={16} color={IOS_COLORS.gray3} />
                     <Text style={styles.moduleName}>
-                      {getModuleLabel(moduleId, raceType)}
+                      {getModuleLabelForInterest(eventConfig, moduleId, resolvedSubtype)}
                     </Text>
                   </View>
                   <View style={styles.moduleActions}>
@@ -222,7 +228,7 @@ export function ContentConfigModal({
                     <View style={styles.moduleInfo}>
                       <EyeOff size={16} color={IOS_COLORS.gray2} />
                       <Text style={styles.hiddenModuleName}>
-                        {getModuleLabel(moduleId, raceType)}
+                        {getModuleLabelForInterest(eventConfig, moduleId, resolvedSubtype)}
                       </Text>
                     </View>
                     <Check size={16} color={IOS_COLORS.blue} />
@@ -242,19 +248,6 @@ export function ContentConfigModal({
       </SafeAreaView>
     </Modal>
   );
-}
-
-function getPhaseName(phase: RacePhase): string {
-  switch (phase) {
-    case 'days_before':
-      return 'Preparation';
-    case 'on_water':
-      return 'On Water';
-    case 'after_race':
-      return 'Post Race';
-    default:
-      return 'Race';
-  }
 }
 
 const styles = StyleSheet.create({

@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('useRaceEnrichment');
 
@@ -66,7 +67,7 @@ export function useRaceEnrichment(raceId: string, enabled: boolean) {
       }
 
       // Fetch regatta data and timer session in parallel
-      const [regattaResult, timerResult] = await Promise.all([
+      const [regattaResult, timerPrimary] = await Promise.all([
         supabase
           .from('regattas')
           .select('prep_notes, tuning_settings, post_race_notes, lessons_learned')
@@ -80,6 +81,18 @@ export function useRaceEnrichment(raceId: string, enabled: boolean) {
           .limit(1)
           .maybeSingle(),
       ]);
+      let timerResult = timerPrimary;
+
+      if (isMissingIdColumn(timerPrimary.error, 'race_timer_sessions', 'regatta_id')) {
+        const timerFallback = await supabase
+          .from('race_timer_sessions')
+          .select('position, fleet_size, race_count, race_results, phase_ratings')
+          .eq('race_id', raceId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        timerResult = timerFallback;
+      }
 
       if (regattaResult.error) {
         logger.error('Error fetching race enrichment:', regattaResult.error);

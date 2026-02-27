@@ -8,7 +8,7 @@
  * - Shows RegattaFlow Playbook coaching if analysis complete
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -29,7 +29,8 @@ import { coachingService } from '@/services/CoachingService';
 import { useAuth } from '@/providers/AuthProvider';
 import type { RaceAnalysis, CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
 import { createLogger } from '@/lib/utils/logger';
-import { UnifiedSharingSheet, CoachSharePrompt, type ShareableContent, type ShareResult } from '@/components/sharing';
+import { UnifiedSharingSheet, CoachSharePrompt } from '@/components/sharing';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 interface PostRaceAnalysisCardProps {
   raceId: string;
@@ -58,23 +59,17 @@ export function PostRaceAnalysisCard({
   } | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [showCoachPrompt, setShowCoachPrompt] = useState(false);
+  const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
 
   // Check if race is completed (start time in past)
   const isRaceCompleted = raceStartTime ? new Date(raceStartTime) < new Date() : false;
 
-  useEffect(() => {
-    if (isRaceCompleted) {
-      loadExistingAnalysis();
-    } else {
-      setLoading(false);
-    }
-  }, [raceId, isRaceCompleted]);
-
-  const loadExistingAnalysis = async () => {
+  const loadExistingAnalysis = useCallback(async () => {
     if (!user) return;
 
     try {
       setLoading(true);
+      setLoadErrorMessage(null);
 
       // Fetch sailor_profile to get the correct ID
       const { data: sailorProfile, error: profileError } = await supabase
@@ -85,12 +80,14 @@ export function PostRaceAnalysisCard({
 
       if (profileError) {
         console.error('[PostRaceAnalysisCard] Error fetching sailor profile:', profileError);
+        setLoadErrorMessage(profileError.message || 'Could not load your sailor profile.');
         setLoading(false);
         return;
       }
 
       if (!sailorProfile) {
         logger.debug('[PostRaceAnalysisCard] No sailor profile found - user needs to complete onboarding');
+        setLoadErrorMessage('Complete sailor onboarding to unlock post-race analysis.');
         setLoading(false);
         return;
       }
@@ -98,15 +95,33 @@ export function PostRaceAnalysisCard({
       // Store sailor ID for ExecutionEvaluationCard
       setSailorId(sailorProfile.id);
 
-      const { data, error } = await supabase
+      let data: any = null;
+      let error: any = null;
+
+      const primary = await supabase
         .from('race_analysis')
         .select('*')
         .eq('race_id', raceId)
         .eq('sailor_id', sailorProfile.id)
         .maybeSingle();
 
+      data = primary.data;
+      error = primary.error;
+
+      if (isMissingIdColumn(error, 'race_analysis', 'race_id')) {
+        const fallback = await supabase
+          .from('race_analysis')
+          .select('*')
+          .eq('regatta_id', raceId)
+          .eq('sailor_id', sailorProfile.id)
+          .maybeSingle();
+        data = fallback.data;
+        error = fallback.error;
+      }
+
       if (error) {
         console.error('[PostRaceAnalysisCard] Error loading analysis:', error);
+        setLoadErrorMessage(error.message || 'Unable to load post-race analysis right now.');
         return;
       }
 
@@ -125,10 +140,19 @@ export function PostRaceAnalysisCard({
       }
     } catch (error) {
       console.error('[PostRaceAnalysisCard] Error:', error);
+      setLoadErrorMessage((error as Error)?.message || 'Unable to load post-race analysis right now.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, raceId]);
+
+  useEffect(() => {
+    if (isRaceCompleted) {
+      void loadExistingAnalysis();
+    } else {
+      setLoading(false);
+    }
+  }, [isRaceCompleted, loadExistingAnalysis]);
 
   const handleStartAnalysis = () => {
     setShowForm(true);
@@ -166,13 +190,36 @@ export function PostRaceAnalysisCard({
         ...analysis,
       };
 
-      const { data: savedAnalysis, error: saveError } = await supabase
+      let savedAnalysis: any = null;
+      let saveError: any = null;
+      const primarySave = await supabase
         .from('race_analysis')
         .upsert(analysisData, {
           onConflict: 'race_id,sailor_id',
         })
         .select()
         .single();
+      savedAnalysis = primarySave.data;
+      saveError = primarySave.error;
+
+      if (isMissingIdColumn(saveError, 'race_analysis', 'race_id')) {
+        const fallbackSave = await supabase
+          .from('race_analysis')
+          .upsert(
+            {
+              regatta_id: raceId,
+              sailor_id: sailorProfile.id,
+              ...analysis,
+            },
+            {
+              onConflict: 'regatta_id,sailor_id',
+            }
+          )
+          .select()
+          .single();
+        savedAnalysis = fallbackSave.data;
+        saveError = fallbackSave.error;
+      }
 
       if (saveError) {
         console.error('[PostRaceAnalysisCard] Error saving analysis:', saveError);
@@ -386,12 +433,23 @@ export function PostRaceAnalysisCard({
     const demo = demoContent[demoNumber];
     if (!demo) {
       if (Platform.OS === 'web') {
-        alert('Framework Demo\n\nThis framework demonstration is coming soon!');
+        const openPlaybook = confirm(
+          'Framework Demo\n\nOpen the RegattaFlow Playbook for the full framework library?'
+        );
+        if (openPlaybook) {
+          window.open('https://regattaflowplaybook.com', '_blank');
+        }
       } else {
         Alert.alert(
           'Framework Demo',
-          'This framework demonstration is coming soon!',
-          [{ text: 'OK' }]
+          'Open the RegattaFlow Playbook for the full framework library.',
+          [
+            { text: 'Close', style: 'cancel' },
+            {
+              text: 'Open Playbook',
+              onPress: () => Linking.openURL('https://regattaflowplaybook.com'),
+            },
+          ]
         );
       }
       return;
@@ -455,6 +513,12 @@ export function PostRaceAnalysisCard({
           expandable={false}
         >
           <View style={styles.promptContainer}>
+            {loadErrorMessage && (
+              <View style={styles.errorState}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={18} color="#B91C1C" />
+                <Text style={styles.errorStateText}>{loadErrorMessage}</Text>
+              </View>
+            )}
             <View style={styles.promptIcon}>
               <MaterialCommunityIcons
                 name="clipboard-check-outline"
@@ -470,10 +534,16 @@ export function PostRaceAnalysisCard({
             <TouchableOpacity
               style={styles.startButton}
               onPress={handleStartAnalysis}
+              disabled={!!loadErrorMessage}
             >
               <MaterialCommunityIcons name="rocket-launch" size={20} color="#fff" />
               <Text style={styles.startButtonText}>Start Analysis (12 min)</Text>
             </TouchableOpacity>
+            {loadErrorMessage && (
+              <TouchableOpacity style={styles.retryButton} onPress={loadExistingAnalysis}>
+                <Text style={styles.retryButtonText}>Retry loading analysis</Text>
+              </TouchableOpacity>
+            )}
             <Text style={styles.playbookNote}>
               💡 Powered by the RegattaFlow Playbook's 40+ years of championship coaching
             </Text>
@@ -859,5 +929,38 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#0F172A',
+  },
+  errorState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  errorStateText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#991B1B',
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  retryButton: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+    backgroundColor: '#F8FAFF',
+  },
+  retryButtonText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

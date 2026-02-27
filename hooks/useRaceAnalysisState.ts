@@ -11,9 +11,11 @@
  * - "Memories fade" hint after 3+ days
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import type { RaceAnalysisState, CoachAnnotation } from '@/types/raceAnalysis';
+import { createLogger } from '@/lib/utils/logger';
 
 interface UseRaceAnalysisStateResult {
   state: RaceAnalysisState | null;
@@ -24,6 +26,7 @@ interface UseRaceAnalysisStateResult {
 }
 
 const MEMORY_FADE_THRESHOLD_DAYS = 3;
+const logger = createLogger('useRaceAnalysisState');
 
 /**
  * Calculate days since a date
@@ -52,6 +55,10 @@ export function useRaceAnalysisState(
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refetchTrigger, setRefetchTrigger] = useState(0);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeRaceIdRef = useRef<string | null | undefined>(raceId);
+  const activeUserIdRef = useRef<string | null | undefined>(userId);
 
   // Calculate if race is completed and days since
   const { isCompleted, daysSinceRace, memoryFading } = useMemo(() => {
@@ -69,38 +76,85 @@ export function useRaceAnalysisState(
   }, [raceDate]);
 
   useEffect(() => {
-    let isMounted = true;
+    activeRaceIdRef.current = raceId;
+    activeUserIdRef.current = userId;
+  }, [raceId, userId]);
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
     async function fetchAnalysisState() {
+      const runId = ++fetchRunIdRef.current;
+      const targetRaceId = raceId;
+      const targetUserId = userId;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === fetchRunIdRef.current &&
+        activeRaceIdRef.current === targetRaceId &&
+        activeUserIdRef.current === targetUserId;
       // Only fetch for completed races with valid (non-demo) IDs
-      if (!raceId || !userId || !isCompleted || raceId.startsWith('demo-')) {
+      if (!targetRaceId || !targetUserId || !isCompleted || targetRaceId.startsWith('demo-')) {
+        if (!canCommit()) return;
         setState(null);
+        setIsLoading(false);
+        setError(null);
         return;
       }
 
+      if (!canCommit()) return;
       setIsLoading(true);
       setError(null);
 
       try {
         // Check for official race result (from race_results table)
-        const { data: resultData } = await supabase
+        let resultData: { position?: number | null; points?: number | null } | null = null;
+        const primaryResult = await supabase
           .from('race_results')
           .select('position, points')
-          .eq('regatta_id', raceId)
-          .eq('sailor_id', userId)
+          .eq('regatta_id', targetRaceId)
+          .eq('sailor_id', targetUserId)
           .maybeSingle();
+        resultData = primaryResult.data;
+        if (isMissingIdColumn(primaryResult.error, 'race_results', 'regatta_id')) {
+          const fallbackResult = await supabase
+            .from('race_results')
+            .select('position, points')
+            .eq('race_id', targetRaceId)
+            .eq('sailor_id', targetUserId)
+            .maybeSingle();
+          resultData = fallbackResult.data;
+        }
 
         const hasOfficialResult = !!resultData?.position;
 
         // Check for timer session with self-reported data, key moment, and multi-race results
-        const { data: sessionData } = await supabase
+        let sessionData: any = null;
+        const sessionPrimary = await supabase
           .from('race_timer_sessions')
           .select('id, notes, auto_analyzed, self_reported_position, self_reported_fleet_size, key_moment, race_count, race_results')
-          .eq('regatta_id', raceId)
-          .eq('sailor_id', userId)
+          .eq('regatta_id', targetRaceId)
+          .eq('sailor_id', targetUserId)
           .order('end_time', { ascending: false })
           .limit(1)
           .maybeSingle();
+        sessionData = sessionPrimary.data;
+
+        if (isMissingIdColumn(sessionPrimary.error, 'race_timer_sessions', 'regatta_id')) {
+          const sessionFallback = await supabase
+            .from('race_timer_sessions')
+            .select('id, notes, auto_analyzed, self_reported_position, self_reported_fleet_size, key_moment, race_count, race_results')
+            .eq('race_id', targetRaceId)
+            .eq('sailor_id', targetUserId)
+            .order('end_time', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          sessionData = sessionFallback.data;
+        }
 
         const hasNotes = sessionData && typeof sessionData.notes === 'string' && sessionData.notes.trim().length > 0;
         const hasSelfReportedResult = !!sessionData?.self_reported_position;
@@ -109,18 +163,29 @@ export function useRaceAnalysisState(
         // Check for multi-race results (JSONB array)
         const hasMultiRaceResults = sessionData?.race_results &&
           Array.isArray(sessionData.race_results) &&
-          (sessionData.race_results as Array<{ position?: number | null }>).some(r => r.position != null);
+          (sessionData.race_results as { position?: number | null }[]).some(r => r.position != null);
         const hasMultiRaceKeyMoments = sessionData?.race_results &&
           Array.isArray(sessionData.race_results) &&
-          (sessionData.race_results as Array<{ key_moment?: string | null }>).some(r => r.key_moment?.trim());
+          (sessionData.race_results as { key_moment?: string | null }[]).some(r => r.key_moment?.trim());
 
         // Check for full race_analysis (structured form-based analysis)
-        const { data: analysisData } = await supabase
+        let analysisData: any = null;
+        const primaryAnalysis = await supabase
           .from('race_analysis')
           .select('id, key_learnings, overall_satisfaction, start_notes, upwind_notes')
-          .eq('race_id', raceId)
-          .eq('sailor_id', userId)
+          .eq('race_id', targetRaceId)
+          .eq('sailor_id', targetUserId)
           .maybeSingle();
+        analysisData = primaryAnalysis.data;
+        if (isMissingIdColumn(primaryAnalysis.error, 'race_analysis', 'race_id')) {
+          const fallbackAnalysis = await supabase
+            .from('race_analysis')
+            .select('id, key_learnings, overall_satisfaction, start_notes, upwind_notes')
+            .eq('regatta_id', targetRaceId)
+            .eq('sailor_id', targetUserId)
+            .maybeSingle();
+          analysisData = fallbackAnalysis.data;
+        }
 
         const hasFullAnalysis = !!analysisData?.overall_satisfaction;
 
@@ -142,7 +207,8 @@ export function useRaceAnalysisState(
         const hasKeyMoment = hasExplicitKeyMoment || hasNotes || hasMultiRaceKeyMoments || (analysisData?.key_learnings && analysisData.key_learnings.length > 0);
 
         // Fetch coach annotations from coach_race_annotations table
-        const { data: annotationsData } = await supabase
+        let annotationsData: any[] | null = null;
+        const primaryAnnotations = await supabase
           .from('coach_race_annotations')
           .select(`
             id,
@@ -154,14 +220,33 @@ export function useRaceAnalysisState(
             created_at,
             coach:profiles!coach_id(full_name)
           `)
-          .eq('race_id', raceId)
-          .eq('sailor_id', userId)
+          .eq('race_id', targetRaceId)
+          .eq('sailor_id', targetUserId)
           .order('created_at', { ascending: false });
+        annotationsData = primaryAnnotations.data;
+        if (isMissingIdColumn(primaryAnnotations.error, 'coach_race_annotations', 'race_id')) {
+          const fallbackAnnotations = await supabase
+            .from('coach_race_annotations')
+            .select(`
+              id,
+              regatta_id,
+              coach_id,
+              field,
+              comment,
+              is_read,
+              created_at,
+              coach:profiles!coach_id(full_name)
+            `)
+            .eq('regatta_id', targetRaceId)
+            .eq('sailor_id', targetUserId)
+            .order('created_at', { ascending: false });
+          annotationsData = fallbackAnnotations.data;
+        }
 
         // Transform to CoachAnnotation interface
         const coachAnnotations: CoachAnnotation[] = (annotationsData || []).map((ann) => ({
           id: ann.id,
-          raceId: ann.race_id,
+          raceId: ann.race_id || ann.regatta_id,
           coachId: ann.coach_id,
           coachName: (ann.coach as { full_name: string | null })?.full_name || 'Coach',
           field: ann.field,
@@ -172,10 +257,10 @@ export function useRaceAnalysisState(
 
         const hasUnreadCoachFeedback = coachAnnotations.some((ann) => !ann.isRead);
 
-        if (!isMounted) return;
+        if (!canCommit()) return;
 
         setState({
-          raceId,
+          raceId: targetRaceId,
           isCompleted,
           daysSinceRace,
           memoryFading,
@@ -187,23 +272,17 @@ export function useRaceAnalysisState(
           hasUnreadCoachFeedback,
         });
       } catch (err) {
-        console.error('[useRaceAnalysisState] Error:', err);
-        if (isMounted) {
-          setError('Failed to load analysis state');
-          setState(null);
-        }
+        logger.error('Error loading race analysis state', err);
+        if (!canCommit()) return;
+        setError('Failed to load analysis state');
+        setState(null);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (!canCommit()) return;
+        setIsLoading(false);
       }
     }
 
-    fetchAnalysisState();
-
-    return () => {
-      isMounted = false;
-    };
+    void fetchAnalysisState();
   }, [raceId, userId, isCompleted, daysSinceRace, memoryFading, refetchTrigger]);
 
   const refetch = () => setRefetchTrigger((prev) => prev + 1);
@@ -230,7 +309,7 @@ export function useRaceAnalysisState(
       // Refetch to update state
       refetch();
     } catch (err) {
-      console.error('[useRaceAnalysisState] Failed to mark annotations as read:', err);
+      logger.error('Failed to mark annotations as read', err);
     }
   };
 

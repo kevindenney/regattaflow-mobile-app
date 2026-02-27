@@ -1,9 +1,7 @@
 import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
 import { useAuth } from '@/providers/AuthProvider';
 import { coachingService, CoachProfile } from '@/services/CoachingService';
-import { CoachMatchingAgent } from '@/services/agents/CoachMatchingAgent';
 import { supabase } from '@/services/supabase';
-import type { SailorProfile as MatchingSailorProfile } from '@/types/coach';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -33,11 +31,11 @@ interface CoachWithMatch extends CoachProfile {
     locationConvenience?: number;
     valueScore?: number;
   };
-  skillGapInsights?: Array<{
+  skillGapInsights?: {
     skill: string;
     priority?: string;
     reasoning?: string;
-  }>;
+  }[];
 }
 
 type SortOption = 'compatibility' | 'rating' | 'price' | 'sessions';
@@ -47,6 +45,109 @@ const formatBreakdownLabel = (label: string) =>
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const KEYWORD_SKILL_MAP: { keyword: string; skill: string }[] = [
+  { keyword: 'start', skill: 'starts' },
+  { keyword: 'upwind', skill: 'upwind' },
+  { keyword: 'downwind', skill: 'downwind' },
+  { keyword: 'speed', skill: 'boat_speed' },
+  { keyword: 'boat handling', skill: 'boat_handling' },
+  { keyword: 'tactic', skill: 'race_tactics' },
+  { keyword: 'mental', skill: 'mental_coaching' },
+];
+
+function buildTargetSkills(goals?: string): string[] {
+  if (!goals) return [];
+  const lower = goals.toLowerCase();
+  return KEYWORD_SKILL_MAP
+    .filter((entry) => lower.includes(entry.keyword))
+    .map((entry) => entry.skill);
+}
+
+function normalizeArray(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+}
+
+function scoreCoachMatch(params: {
+  coach: CoachWithMatch;
+  sailorBoatClasses: string[];
+  sailorGoals: string;
+  sailorLocation?: string | null;
+  budgetMax?: number;
+}) {
+  const { coach, sailorBoatClasses, sailorGoals, sailorLocation, budgetMax } = params;
+  const coachSpecialties = normalizeArray((coach as any).specialties || (coach as any).specializations);
+  const targetSkills = buildTargetSkills(sailorGoals);
+  const coachBoatClasses = normalizeArray((coach as any).boat_classes);
+  const sailorClasses = sailorBoatClasses.map((entry) => entry.toLowerCase());
+  const overlappingSkills = targetSkills.filter((skill) => coachSpecialties.includes(skill));
+  const overlappingClasses = sailorClasses.filter((value) => coachBoatClasses.includes(value));
+
+  const yearsCoaching = Number((coach as any).years_coaching || 0);
+  const experienceMatch = Math.max(30, Math.min(100, Math.round((yearsCoaching / 12) * 100)));
+  const teachingStyleMatch = 72;
+  const specialtyAlignment = targetSkills.length > 0
+    ? Math.round((overlappingSkills.length / targetSkills.length) * 100)
+    : 60;
+  const successRateRelevance = Math.max(40, Math.min(100, Math.round(Number((coach as any).average_rating || coach.rating || 0) * 20)));
+  const availabilityMatch = (coach as any).is_accepting_clients === false ? 20 : 85;
+  const locationConvenience =
+    sailorLocation && (coach.location_name || '').toLowerCase().includes(sailorLocation.toLowerCase())
+      ? 90
+      : 65;
+  const hourlyRate = Number((coach as any).hourly_rate || 0);
+  const valueScore = budgetMax && hourlyRate > 0
+    ? hourlyRate <= budgetMax
+      ? 85
+      : 45
+    : 70;
+
+  const overallScore = Math.round(
+    experienceMatch * 0.2 +
+    teachingStyleMatch * 0.1 +
+    specialtyAlignment * 0.25 +
+    successRateRelevance * 0.2 +
+    availabilityMatch * 0.1 +
+    locationConvenience * 0.05 +
+    valueScore * 0.1
+  );
+
+  const breakdown = {
+    experienceMatch,
+    teachingStyleMatch,
+    specialtyAlignment,
+    successRateRelevance,
+    availabilityMatch,
+    locationConvenience,
+    valueScore,
+  };
+
+  const recommendations: string[] = [];
+  if (overlappingSkills.length > 0) {
+    recommendations.push(`Strong for ${overlappingSkills.slice(0, 2).join(' and ')}`);
+  }
+  if (overlappingClasses.length > 0) {
+    recommendations.push(`Experienced in ${overlappingClasses[0]} class racing`);
+  }
+  if (recommendations.length === 0) {
+    recommendations.push('Schedule a trial session to validate fit');
+  }
+
+  return {
+    overallScore,
+    breakdown,
+    reasoning: `Matched on ${overlappingSkills.length} target skill(s) with ${yearsCoaching || 'limited'} years coaching experience.`,
+    recommendations,
+    skillGapInsights: targetSkills
+      .filter((skill) => !coachSpecialties.includes(skill))
+      .map((skill) => ({
+        skill,
+        priority: 'medium',
+        reasoning: 'Consider supplementing this area with focused drills.',
+      })),
+  };
+}
 
 export default function EnhancedCoachDiscoveryScreen() {
   const router = useRouter();
@@ -65,7 +166,7 @@ export default function EnhancedCoachDiscoveryScreen() {
     maxHourlyRate: 0,
     specialties: [] as string[],
   });
-  const { classes, venues, performance } = sailorDashboard;
+  const { classes, performance } = sailorDashboard;
   const recentResults = useMemo(
     () => performance?.recentResults ?? [],
     [performance]
@@ -77,8 +178,6 @@ export default function EnhancedCoachDiscoveryScreen() {
         .filter((name): name is string => Boolean(name)),
     [classes]
   );
-  const currentVenueId = venues.currentVenue?.id;
-
   const loadCoachesWithMatching = useCallback(async () => {
     if (!user?.id) {
       setLoading(false);
@@ -117,88 +216,55 @@ export default function EnhancedCoachDiscoveryScreen() {
           ? (sailorProfileData?.boat_classes as string[])
           : []) || [];
 
-      const sailorProfile: MatchingSailorProfile = {
-        id: sailorProfileData?.id ?? user.id,
-        user_id: user.id,
-        sailing_experience: sailorProfileData?.sailing_experience ?? 5,
-        boat_classes:
-          profileBoatClasses.length > 0
-            ? profileBoatClasses
-            : fallbackBoatClasses,
-        goals: sailorProfileData?.goals ?? 'Improve racing performance',
-        competitive_level: sailorProfileData?.competitive_level ?? 'intermediate',
-        learning_style: sailorProfileData?.learning_style ?? undefined,
-        location: sailorProfileData?.location ?? sailorProfileData?.home_port ?? undefined,
-        budget_range: sailorProfileData?.budget_range ?? undefined,
-      };
+      const sailorGoals = sailorProfileData?.goals ?? 'Improve racing performance';
+      const sailorLocation = sailorProfileData?.location ?? sailorProfileData?.home_port ?? null;
+      const budgetMax = typeof sailorProfileData?.budget_range?.max === 'number'
+        ? sailorProfileData.budget_range.max
+        : undefined;
+      const sailorBoatClasses = profileBoatClasses.length > 0 ? profileBoatClasses : fallbackBoatClasses;
 
-      // 3. Run AI matching agent
-      const matchingAgent = new CoachMatchingAgent();
-      const matchResult = await matchingAgent.matchSailorWithCoach(
-        user.id,
-        sailorProfile,
-        {
-          boatClass:
-            sailorProfile.boat_classes[0] ||
-            user.primary_boat_class ||
-            fallbackBoatClasses[0],
-          venueId: currentVenueId,
-          goals: sailorProfile.goals,
-        }
-      );
-
-      if (matchResult.success && matchResult.result) {
-        const agentOutput = matchResult.result;
-        const scores = Array.isArray(agentOutput.scores)
-          ? agentOutput.scores
-          : [];
-        const skillGapInsights = Array.isArray(agentOutput.skillGaps)
-          ? agentOutput.skillGaps
-          : [];
-
-        const coachesWithMatches: CoachWithMatch[] = results.map((coach) => {
-          const score = scores.find((entry: any) => entry.coachId === coach.id);
-
-          return {
-            ...coach,
-            matchScore: score ? score.overallScore / 100 : undefined,
-            matchReasoning: score?.reasoning,
-            recommendations: score?.recommendations,
-            compatibilityBreakdown: score?.breakdown,
-            skillGapInsights,
-          };
+      const coachesWithMatches: CoachWithMatch[] = results.map((coach) => {
+        const scoring = scoreCoachMatch({
+          coach: coach as CoachWithMatch,
+          sailorBoatClasses,
+          sailorGoals,
+          sailorLocation,
+          budgetMax,
         });
+        return {
+          ...(coach as CoachWithMatch),
+          matchScore: scoring.overallScore / 100,
+          matchReasoning: scoring.reasoning,
+          recommendations: scoring.recommendations,
+          compatibilityBreakdown: scoring.breakdown,
+          skillGapInsights: scoring.skillGapInsights,
+        };
+      });
 
-        if (scores.length > 0) {
-          const { error: matchSaveError } = await supabase
-            .from('coach_match_scores')
-            .upsert(
-              scores.map((score: any) => ({
-                user_id: user.id,
-                coach_id: score.coachId,
-                compatibility_score: score.overallScore / 100,
-                skill_gap_analysis: skillGapInsights,
-                match_reasoning: score.reasoning ?? null,
-                score_breakdown: score.breakdown ?? null,
-                performance_data_used: {
-                  trends: agentOutput.trends ?? {},
-                  recentResults: agentOutput.recentResults ?? [],
-                  recentRaceCount: recentResults.length,
-                },
-              })),
-              { onConflict: 'user_id,coach_id' }
-            );
+      if (coachesWithMatches.length > 0) {
+        const { error: matchSaveError } = await supabase
+          .from('coach_match_scores')
+          .upsert(
+            coachesWithMatches.map((coach) => ({
+              user_id: user.id,
+              coach_id: coach.id,
+              compatibility_score: coach.matchScore ?? null,
+              skill_gap_analysis: coach.skillGapInsights ?? null,
+              match_reasoning: coach.matchReasoning ?? null,
+              score_breakdown: coach.compatibilityBreakdown ?? null,
+              performance_data_used: {
+                recentRaceCount: recentResults.length,
+              },
+            })),
+            { onConflict: 'user_id,coach_id' }
+          );
 
-          if (matchSaveError) {
-            console.warn('Failed to persist coach match scores:', matchSaveError.message);
-          }
+        if (matchSaveError) {
+          console.warn('Failed to persist coach match scores:', matchSaveError.message);
         }
-
-        setCoaches(coachesWithMatches);
-      } else {
-        // Fallback: Show coaches without match scores
-        setCoaches(results.map((coach) => ({ ...coach, matchScore: undefined })));
       }
+
+      setCoaches(coachesWithMatches);
     } catch (error) {
       console.error('Error loading coaches:', error);
     } finally {
@@ -206,7 +272,6 @@ export default function EnhancedCoachDiscoveryScreen() {
       setMatchingInProgress(false);
     }
   }, [
-    currentVenueId,
     fallbackBoatClasses,
     filters.location,
     filters.maxHourlyRate,
@@ -214,7 +279,6 @@ export default function EnhancedCoachDiscoveryScreen() {
     filters.specialties,
     recentResults.length,
     user?.id,
-    user?.primary_boat_class,
   ]);
 
   useEffect(() => {

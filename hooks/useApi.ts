@@ -61,6 +61,10 @@ export function useApi<T>(
   const onSuccessRef = useRef(onSuccess);
   const onErrorRef = useRef(onError);
   const hasFetchedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const initialDataRef = useRef(initialData);
+  const fetchDataRef = useRef<() => Promise<void>>();
 
   useEffect(() => {
     apiRef.current = apiFunction;
@@ -74,14 +78,27 @@ export function useApi<T>(
     onErrorRef.current = onError;
   }, [onError]);
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
   const fetchData = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
+
     logger.debug('fetchData called', { enabled });
 
     if (!enabled) {
       logger.debug('Skipping fetch - not enabled');
+      if (!canCommit()) return;
+      setLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setLoading(true);
     setError(null);
 
@@ -95,33 +112,44 @@ export function useApi<T>(
 
       if (normalized.error) {
         logger.error('Error in result:', normalized.error?.message || normalized.error, { name: normalized.error?.name, stack: normalized.error?.stack?.split('\n').slice(0, 3).join('\n') });
+        if (!canCommit()) return;
         setError(normalized.error);
         onErrorRef.current?.(normalized.error);
       }
 
+      if (!canCommit()) return;
       setData(normalized.data);
       onSuccessRef.current?.(normalized.data);
     } catch (err) {
       const typedError = err as Error;
       logger.error('Exception caught:', typedError?.message || String(err), { name: typedError?.name, stack: typedError?.stack?.split('\n').slice(0, 3).join('\n') });
+      if (!canCommit()) return;
       setError(typedError);
       onErrorRef.current?.(typedError);
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
   }, [enabled]); // Removed onError, onSuccess - using refs instead
+
+  // Keep fetchDataRef in sync so the effect can call it without a dep
+  fetchDataRef.current = fetchData;
 
   useEffect(() => {
     logger.debug('useEffect triggered', { enabled, hasFetched: hasFetchedRef.current });
     if (enabled && !hasFetchedRef.current) {
       hasFetchedRef.current = true;
       logger.debug('Triggering fetchData from useEffect');
-      fetchData();
+      void fetchDataRef.current?.();
     } else if (!enabled) {
       hasFetchedRef.current = false;
+      if (!isMountedRef.current) return;
+      setData(initialDataRef.current ?? null);
+      setError(null);
+      setLoading(false);
       logger.debug('Skipping fetchData - not enabled');
     }
-  }, [enabled, fetchData]);
+  }, [enabled]);
 
   const mutate = useCallback(
     async (optimisticData?: T | null) => {
@@ -170,10 +198,23 @@ export function useMutation<TData, TVariables>(
   const [data, setData] = useState<TData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const mutationRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      mutationRunIdRef.current += 1;
+    };
+  }, []);
 
   const execute = useCallback(
     async (variables: TVariables, throwOnError: boolean): Promise<TData | null> => {
+      const runId = ++mutationRunIdRef.current;
+      const canCommit = () => isMountedRef.current && runId === mutationRunIdRef.current;
+
       onMutate?.(variables);
+      if (!canCommit()) return null;
       setLoading(true);
       setError(null);
 
@@ -182,6 +223,7 @@ export function useMutation<TData, TVariables>(
         const normalized = normalizeApiResult<TData>(result);
 
         if (normalized.error) {
+          if (!canCommit()) return null;
           setError(normalized.error);
           onError?.(normalized.error);
           if (throwOnError) {
@@ -189,11 +231,13 @@ export function useMutation<TData, TVariables>(
           }
         }
 
+        if (!canCommit()) return null;
         setData(normalized.data);
         onSuccess?.(normalized.data);
         return normalized.data;
       } catch (err) {
         const typedError = err as Error;
+        if (!canCommit()) return null;
         setError(typedError);
         onError?.(typedError);
         if (throwOnError) {
@@ -201,7 +245,9 @@ export function useMutation<TData, TVariables>(
         }
         return null;
       } finally {
-        setLoading(false);
+        if (canCommit()) {
+          setLoading(false);
+        }
       }
     },
     [mutationFunction, onError, onMutate, onSuccess]
@@ -270,23 +316,38 @@ export function usePaginatedQuery<T>(
   const [error, setError] = useState<Error | null>(null);
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const fetchData = useCallback(
     async (pageNum: number, append: boolean = false) => {
+      const runId = ++fetchRunIdRef.current;
+      const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
+
+      if (!canCommit()) return;
       setLoading(true);
       setError(null);
 
       try {
         const result = await queryFunction(pageNum, pageSize);
-
+        if (!canCommit()) return;
         setData(prev => (append ? [...prev, ...result.data] : result.data));
         setHasMore(result.hasMore);
         onSuccess?.(result.data);
       } catch (err) {
         const typedError = err as Error;
+        if (!canCommit()) return;
         setError(typedError);
         onError?.(typedError);
       } finally {
+        if (!canCommit()) return;
         setLoading(false);
       }
     },
@@ -294,7 +355,7 @@ export function usePaginatedQuery<T>(
   );
 
   useEffect(() => {
-    fetchData(1, false);
+    void fetchData(1, false);
   }, [fetchData]);
 
   const fetchMore = useCallback(async () => {
@@ -330,22 +391,21 @@ export function usePaginatedQuery<T>(
 // Optimistic Update Hook
 // ============================================================================
 
-export interface UseOptimisticUpdateOptions<T> {
+export interface UseOptimisticUpdateOptions {
   rollbackOnError?: boolean;
 }
 
 export function useOptimisticUpdate<T>(
   initialData: T | null = null,
-  options: UseOptimisticUpdateOptions<T> = {}
+  options: UseOptimisticUpdateOptions = {}
 ) {
   const { rollbackOnError = true } = options;
 
   const [data, setData] = useState<T | null>(initialData);
-  const [previousData, setPreviousData] = useState<T | null>(null);
 
   const update = useCallback(
     async (optimisticData: T, mutationFn: () => Promise<ApiResult<T>>) => {
-      setPreviousData(data);
+      const rollbackSnapshot = data;
       setData(optimisticData);
 
       try {
@@ -354,7 +414,7 @@ export function useOptimisticUpdate<T>(
 
         if (normalized.error) {
           if (rollbackOnError) {
-            setData(previousData);
+            setData(rollbackSnapshot);
           }
           throw normalized.error;
         }
@@ -363,12 +423,12 @@ export function useOptimisticUpdate<T>(
         return normalized.data;
       } catch (err) {
         if (rollbackOnError) {
-          setData(previousData);
+          setData(rollbackSnapshot);
         }
         throw err;
       }
     },
-    [data, previousData, rollbackOnError]
+    [data, rollbackOnError]
   );
 
   return {
@@ -389,12 +449,26 @@ export interface UsePullToRefreshReturn {
 
 export function usePullToRefresh(refreshFunction: () => Promise<void>): UsePullToRefreshReturn {
   const [refreshing, setRefreshing] = useState(false);
+  const isMountedRef = useRef(true);
+  const refreshRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      refreshRunIdRef.current += 1;
+    };
+  }, []);
 
   const onRefresh = useCallback(async () => {
+    const runId = ++refreshRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === refreshRunIdRef.current;
+
+    if (!canCommit()) return;
     setRefreshing(true);
     try {
       await refreshFunction();
     } finally {
+      if (!canCommit()) return;
       setRefreshing(false);
     }
   }, [refreshFunction]);

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../providers/AuthProvider';
 import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { normalizePersonaParam, type PersonaRole } from '@/lib/auth/signupPersona';
 
 // Helper to get user-friendly error messages for signup
 const getSignupErrorMessage = (error: any): string => {
@@ -27,15 +28,26 @@ const getSignupErrorMessage = (error: any): string => {
   return error?.message || 'Unable to create your account. Please try again.';
 };
 
-type PersonaRole = 'sailor' | 'coach' | 'club';
+const PERSONA_LABELS: Record<PersonaRole, string> = {
+  sailor: 'Sailor',
+  coach: 'Coach',
+  club: 'Club',
+};
+
+const PERSONA_SUBTITLES: Record<PersonaRole, string> = {
+  sailor: 'Start with 14 days of full Pro access — no card required',
+  coach: 'Set up your coaching profile and start managing clients',
+  club: 'Get your club set up with race management tools',
+};
 
 export default function SignUp() {
   const { signUp, signInWithGoogle, signInWithApple, loading: authLoading, enterGuestMode } = useAuth();
+  const params = useLocalSearchParams<{ persona?: string }>();
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [persona] = useState<PersonaRole>('sailor');
+  const [persona, setPersona] = useState<PersonaRole>(normalizePersonaParam(params.persona));
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(Platform.OS === 'web');
@@ -47,6 +59,10 @@ export default function SignUp() {
       isAppleSignInAvailable().then(setAppleSignInAvailable);
     }
   }, []);
+
+  useEffect(() => {
+    setPersona(normalizePersonaParam(params.persona));
+  }, [params.persona]);
 
   const getButtonText = () => {
     if (isLoading) return 'Creating account...';
@@ -153,7 +169,32 @@ export default function SignUp() {
           </View>
 
           <Text testID="signup-title" style={styles.title}>Create your account</Text>
-          <Text style={styles.subtitle}>Start with 14 days of full Pro access — no card required</Text>
+          <Text style={styles.subtitle}>{PERSONA_SUBTITLES[persona]}</Text>
+
+          {/* Persona Picker */}
+          <View style={styles.personaPicker}>
+            {(['sailor', 'coach', 'club'] as PersonaRole[]).map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[
+                  styles.personaPill,
+                  persona === p && styles.personaPillActive,
+                ]}
+                onPress={() => setPersona(p)}
+                accessibilityRole="button"
+                accessibilityLabel={`Sign up as ${PERSONA_LABELS[p]}`}
+              >
+                <Text
+                  style={[
+                    styles.personaPillText,
+                    persona === p && styles.personaPillTextActive,
+                  ]}
+                >
+                  {PERSONA_LABELS[p]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
           {/* Error Message Banner */}
           {errorMessage && (
@@ -323,6 +364,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
     lineHeight: 22,
+  },
+
+  // Persona Picker
+  personaPicker: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  personaPill: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  personaPillActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  personaPillText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  personaPillTextActive: {
+    color: '#2563EB',
   },
 
   // Social Buttons

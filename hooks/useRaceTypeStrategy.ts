@@ -15,7 +15,7 @@ import type {
   StrategySectionMeta,
 } from '@/types/raceStrategy';
 import { FOUR_PEAKS, FOUR_PEAKS_DEFAULT_LEGS } from '@/types/multiActivitySchedule';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const logger = createLogger('useRaceTypeStrategy');
 
@@ -23,7 +23,6 @@ const logger = createLogger('useRaceTypeStrategy');
  * Four Peaks race ID (hardcoded for now, could be detected by name)
  */
 const FOUR_PEAKS_RACE_ID = 'd19657dd-722c-423b-a07b-8060e5a57f31';
-const FOUR_PEAKS_RACE_NAME = 'Four Peaks Race';
 
 interface UseRaceTypeStrategyResult {
   /** The race type (fleet, distance, match, team) */
@@ -118,15 +117,39 @@ export function useRaceTypeStrategy(
   const [raceData, setRaceData] = useState<DistanceRaceData | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeContextRef = useRef(`${raceId || ''}|${raceName || ''}`);
+
+  useEffect(() => {
+    activeContextRef.current = `${raceId || ''}|${raceName || ''}`;
+  }, [raceId, raceName]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const fetchRaceType = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const targetContext = `${raceId || ''}|${raceName || ''}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeContextRef.current === targetContext;
+
     if (!raceId) {
+      if (!canCommit()) return;
       setRaceType('fleet');
       setRaceData(undefined);
+      setError(null);
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -134,6 +157,7 @@ export function useRaceTypeStrategy(
       // First check if this is Four Peaks by ID or name (optimization)
       if (isFourPeaksRace(raceId, raceName)) {
         logger.debug('[useRaceTypeStrategy] Detected Four Peaks race');
+        if (!canCommit()) return;
         setRaceType('distance');
         setRaceData({
           legs: FOUR_PEAKS_DEFAULT_LEGS.map((leg) => ({
@@ -165,6 +189,7 @@ export function useRaceTypeStrategy(
       if (fetchError) {
         logger.warn('[useRaceTypeStrategy] Error fetching race type:', fetchError);
         // Default to fleet racing on error
+        if (!canCommit()) return;
         setRaceType('fleet');
         setRaceData(undefined);
         setIsLoading(false);
@@ -172,6 +197,7 @@ export function useRaceTypeStrategy(
       }
 
       const type = (regatta?.race_type as RaceType) || 'fleet';
+      if (!canCommit()) return;
       setRaceType(type);
 
       // Build distance race data if applicable
@@ -183,16 +209,18 @@ export function useRaceTypeStrategy(
       }
     } catch (err) {
       logger.error('[useRaceTypeStrategy] Unexpected error:', err);
+      if (!canCommit()) return;
       setError(err instanceof Error ? err : new Error('Failed to fetch race type'));
       setRaceType('fleet');
       setRaceData(undefined);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [raceId, raceName]);
 
   useEffect(() => {
-    fetchRaceType();
+    void fetchRaceType();
   }, [fetchRaceType]);
 
   // Generate phases and sections based on race type and data

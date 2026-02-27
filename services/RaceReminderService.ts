@@ -49,7 +49,7 @@ export class RaceReminderService {
         .lte('regattas.start_date', tomorrowPlus2Hours.toISOString());
 
       if (error) {
-        console.error('Failed to fetch race entries:', error);
+        logger.error('Failed to fetch race entries:', error);
         return { success: false, sent: 0, errors: 1 };
       }
 
@@ -67,7 +67,7 @@ export class RaceReminderService {
       for (const entry of entries) {
         try {
           if (!entry.users?.email || !entry.regattas) {
-            console.warn(`Skipping entry ${entry.id} - missing email or regatta data`);
+            logger.warn(`Skipping entry ${entry.id} - missing email or regatta data`);
             errors++;
             continue;
           }
@@ -100,7 +100,7 @@ export class RaceReminderService {
           }
         } catch (entryError: any) {
           errors++;
-          console.error(`Error processing entry ${entry.id}:`, entryError);
+          logger.error(`Error processing entry ${entry.id}:`, entryError);
         }
       }
 
@@ -110,7 +110,7 @@ export class RaceReminderService {
         errors,
       };
     } catch (error: any) {
-      console.error('Failed to send race reminders:', error);
+      logger.error('Failed to send race reminders:', error);
       return {
         success: false,
         sent: 0,
@@ -124,8 +124,8 @@ export class RaceReminderService {
    * TODO: Integrate with actual weather API (Open-Meteo, Weather API, etc.)
    */
   private async getWeatherForecast(
-    latitude: number,
-    longitude: number
+    _latitude: number,
+    _longitude: number
   ): Promise<{ wind_speed: number; wind_direction: string; conditions: string } | undefined> {
     try {
       // Placeholder: In production, integrate with weather API
@@ -148,7 +148,7 @@ export class RaceReminderService {
 
       return undefined;
     } catch (error) {
-      console.error('Weather fetch failed:', error);
+      logger.error('Weather fetch failed:', error);
       return undefined;
     }
   }
@@ -212,7 +212,7 @@ export class RaceReminderService {
         weather_forecast: weatherForecast,
       });
     } catch (error: any) {
-      console.error('Failed to send single reminder:', error);
+      logger.error('Failed to send single reminder:', error);
       return { success: false, error: error.message };
     }
   }

@@ -299,13 +299,13 @@ const QUICK_SKILLS: QuickSkill[] = [
 ### Issue: "AI Coach not showing"
 
 **Check:**
-- Is `EXPO_PUBLIC_ANTHROPIC_API_KEY` set in `.env`?
+- Is `ANTHROPIC_API_KEY` set in `.env`?
 - Is the component rendered? Check React DevTools
 - Are there errors in console?
 
 ```bash
 # Verify API key
-echo $EXPO_PUBLIC_ANTHROPIC_API_KEY
+echo $ANTHROPIC_API_KEY
 
 # Should output: sk-ant-api03-...
 ```

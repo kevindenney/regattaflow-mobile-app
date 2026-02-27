@@ -4,8 +4,10 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import React, { useState } from 'react';
 import {
+  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -53,9 +55,33 @@ export function UploadDocumentForm({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleSelectFile = () => {
-    // TODO: Integrate with expo-document-picker
-    alert('File picker coming soon! Will support PDF, images, and URLs.');
+  const handleSelectFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'image/*', 'text/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      const selected = result.assets[0];
+      const selectedName = selected.name || 'Untitled document';
+
+      setFormData((prev) => ({
+        ...prev,
+        fileUri: selected.uri,
+        fileName: selectedName,
+        name: prev.name?.trim() ? prev.name : selectedName.replace(/\.[^.]+$/, ''),
+      }));
+    } catch (error: any) {
+      Alert.alert(
+        'File selection failed',
+        error?.message || 'Unable to select a file right now. Please try again.'
+      );
+    }
   };
 
   const handleSubmit = () => {

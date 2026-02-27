@@ -32,8 +32,11 @@ import { IOS_ANIMATIONS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 import type { PositionedCourse } from '@/types/courses';
 import { COURSE_TEMPLATES } from '@/services/CoursePositioningService';
 import { WindDirectionIndicator } from '@/components/race-detail/map/WindDirectionIndicator';
+import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+const logger = createLogger('CourseMapTile');
 
 const isWeb = Platform.OS === 'web';
 
@@ -45,6 +48,30 @@ const MARK_COLORS: Record<string, string> = {
   wing: '#22c55e',
   offset: '#3b82f6',
 };
+
+const MAP_STYLE = {
+  version: 8,
+  sources: {
+    'raster-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#f8fafc' },
+    },
+    {
+      id: 'raster-layer',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: { 'raster-opacity': 0.88 },
+    },
+  ],
+} as const;
 
 const COLORS = {
   blue: '#007AFF',
@@ -141,10 +168,29 @@ export function CourseMapTile({
     }
 
     const initMap = async () => {
+      let mapLoadTimeout: ReturnType<typeof setTimeout> | null = null;
       try {
         setLoading(true);
-        const maplibregl = await import('maplibre-gl');
-        await import('maplibre-gl/dist/maplibre-gl.css');
+        let maplibregl: any = null;
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = (maplibreModule as any).default || maplibreModule;
+          try {
+            await import('maplibre-gl/dist/maplibre-gl.css');
+          } catch (_cssError) {
+            ensureMapLibreCss('maplibre-gl-css-course-map-tile');
+          }
+        } catch (_moduleError) {
+          ensureMapLibreCss('maplibre-gl-css-course-map-tile');
+          await ensureMapLibreScript('maplibre-gl-script-course-map-tile');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        const MapConstructor = maplibregl?.Map;
+        const Marker = maplibregl?.Marker;
+        const LngLatBounds = maplibregl?.LngLatBounds;
+        if (!MapConstructor || !Marker || !LngLatBounds) {
+          throw new Error('MapLibre constructors are unavailable');
+        }
 
         // Calculate center from course marks or coords
         let centerLat: number;
@@ -171,21 +217,50 @@ export function CourseMapTile({
           return;
         }
 
-        const map = new maplibregl.default.Map({
+        const map = new MapConstructor({
           container: mapContainerRef.current!,
-          style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+          style: MAP_STYLE,
           center: [centerLng, centerLat],
           zoom: positionedCourse ? 13 : 12,
           interactive: false, // Disable interaction for tile preview
           attributionControl: false,
         });
 
-        map.on('load', () => {
-          mapRef.current = map;
-          setMapLoaded(true);
-          setLoading(false);
+        await new Promise<void>((resolve, reject) => {
+          const onLoad = () => {
+            if (mapLoadTimeout) {
+              clearTimeout(mapLoadTimeout);
+              mapLoadTimeout = null;
+            }
+            map.off('load', onLoad);
+            map.off('error', onError);
+            resolve();
+          };
+          const onError = (event: any) => {
+            if (mapLoadTimeout) {
+              clearTimeout(mapLoadTimeout);
+              mapLoadTimeout = null;
+            }
+            map.off('load', onLoad);
+            map.off('error', onError);
+            reject(event?.error || new Error('Map failed to load'));
+          };
 
-          if (positionedCourse) {
+          mapLoadTimeout = setTimeout(() => {
+            map.off('load', onLoad);
+            map.off('error', onError);
+            reject(new Error('Map load timeout after 10 seconds'));
+          }, 10000);
+
+          map.once('load', onLoad);
+          map.once('error', onError);
+        });
+
+        mapRef.current = map;
+        setMapLoaded(true);
+        setLoading(false);
+
+        if (positionedCourse) {
             // Add course line
             map.addSource('tile-course-line', {
               type: 'geojson',
@@ -271,7 +346,7 @@ export function CourseMapTile({
                         : (index + 1).toString();
               el.textContent = label;
 
-              new maplibregl.default.Marker({
+              new Marker({
                 element: el,
                 offset: [-(size / 2), -(size / 2)],
               })
@@ -280,7 +355,7 @@ export function CourseMapTile({
             });
 
             // Fit bounds to show entire course
-            const bounds = new maplibregl.default.LngLatBounds();
+            const bounds = new LngLatBounds();
             positionedCourse.marks.forEach((m) => bounds.extend([m.longitude, m.latitude]));
             bounds.extend([positionedCourse.startLine.pin.lng, positionedCourse.startLine.pin.lat]);
             bounds.extend([positionedCourse.startLine.committee.lng, positionedCourse.startLine.committee.lat]);
@@ -289,7 +364,7 @@ export function CourseMapTile({
               padding: 30,
               maxZoom: 15,
             });
-          } else if (coords) {
+        } else if (coords) {
             // Add a simple location marker
             const el = document.createElement('div');
             el.style.cssText = `
@@ -301,13 +376,12 @@ export function CourseMapTile({
               box-shadow: 0 2px 6px rgba(0,0,0,0.3);
             `;
 
-            new maplibregl.default.Marker({ element: el })
+            new Marker({ element: el })
               .setLngLat([coords.lng, coords.lat])
               .addTo(map);
-          }
-        });
+        }
       } catch (error) {
-        console.error('[CourseMapTile] Failed to initialize map:', error);
+        logger.error('Failed to initialize map', error);
         setLoading(false);
       }
     };
@@ -321,7 +395,7 @@ export function CourseMapTile({
       }
       setMapLoaded(false);
     };
-  }, [coords?.lat, coords?.lng, positionedCourse]);
+  }, [coords, positionedCourse]);
 
   // Add marine overlays when map is loaded
   useEffect(() => {

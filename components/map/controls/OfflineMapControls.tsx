@@ -12,7 +12,7 @@
  * - Preset selection (Essential/Standard/Premium/Championship)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,17 +20,18 @@ import {
   ScrollView,
   StyleSheet,
   Platform,
-  ActivityIndicator,
   Alert
 } from 'react-native';
 import {
   VenuePackageService,
-  type VenuePackage,
   type PackageDownloadStatus,
   type PackagePreset
 } from '@/services/VenuePackageService';
 import type { SailingVenue } from '@/types/venues';
 import type { DownloadProgress } from '@/services/OfflineTileCacheService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('OfflineMapControls');
 
 interface OfflineMapControlsProps {
   /** Available venues */
@@ -51,7 +52,7 @@ interface OfflineMapControlsProps {
 
 export function OfflineMapControls({
   venues,
-  currentVenue,
+  currentVenue: _currentVenue,
   style,
   onDownloadStart,
   onDownloadComplete
@@ -59,29 +60,28 @@ export function OfflineMapControls({
   const [expanded, setExpanded] = useState(false);
   const [packageService] = useState(() => new VenuePackageService());
   const [downloadedPackages, setDownloadedPackages] = useState<PackageDownloadStatus[]>([]);
-  const [selectedVenue, setSelectedVenue] = useState<SailingVenue | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<PackagePreset>('standard');
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [storageUsageMB, setStorageUsageMB] = useState(0);
 
-  useEffect(() => {
-    initializeService();
-  }, []);
-
-  const initializeService = async () => {
-    await packageService.initialize();
-    await refreshDownloadedPackages();
-  };
-
-  const refreshDownloadedPackages = async () => {
+  const refreshDownloadedPackages = useCallback(async () => {
     const packages = await packageService.getAllPackages();
     setDownloadedPackages(packages);
 
     // Calculate total storage
     const totalStorage = packages.reduce((sum, pkg) => sum + pkg.sizeOnDiskMB, 0);
     setStorageUsageMB(totalStorage);
-  };
+  }, [packageService]);
+
+  const initializeService = useCallback(async () => {
+    await packageService.initialize();
+    await refreshDownloadedPackages();
+  }, [packageService, refreshDownloadedPackages]);
+
+  useEffect(() => {
+    void initializeService();
+  }, [initializeService]);
 
   const handleDownloadPackage = async (venue: SailingVenue, preset: PackagePreset) => {
     // Check storage
@@ -123,7 +123,7 @@ export function OfflineMapControls({
         `${venue.name} offline maps are now available.`
       );
     } catch (error) {
-      console.error('Download failed:', error);
+      logger.error('Download failed', error);
       Alert.alert(
         'Download Failed',
         `Failed to download ${venue.name}. Please try again.`

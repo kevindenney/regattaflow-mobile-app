@@ -6,7 +6,6 @@
  * topographic-wind-analyst Skill to generate strategic recommendations.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { feature } from '@turf/helpers';
 import { featureCollection } from '@turf/helpers';
 import intersect from '@turf/intersect';
@@ -35,6 +34,7 @@ import {
 } from '../types/wind';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import { createLogger } from '@/lib/utils/logger';
+import { supabase } from './supabase';
 
 /**
  * Main service for topographic and wind analysis
@@ -42,15 +42,7 @@ import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('TopographicWindService');
 export class TopographicWindService {
-  private anthropic: Anthropic;
-
-  constructor() {
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY not configured');
-    }
-    this.anthropic = new Anthropic({ apiKey });
-  }
+  constructor() {}
 
   /**
    * Perform complete wind-terrain analysis for a racing area
@@ -151,7 +143,7 @@ export class TopographicWindService {
         venue: request.venue
       };
     } catch (error) {
-      console.error('Error in analyzeWindTerrain:', error);
+      logger.error('Error in analyzeWindTerrain:', error);
       throw new Error(`Failed to analyze wind-terrain: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -858,27 +850,27 @@ Format your response as JSON:
 }`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-        // Note: Skills will be loaded via project configuration in production
+      const { data: aiData, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt,
+          max_tokens: 4096
+        }
       });
 
-      const content = response.content[0];
-      if (content.type !== 'text') {
+      if (error) {
+        throw new Error(error.message || 'race-coaching-chat invocation failed');
+      }
+      const content = typeof aiData?.text === 'string' ? aiData.text : '';
+      if (!content) {
         throw new Error('Unexpected response type from Claude API');
       }
 
       // Parse JSON response
-      const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         // Fallback: parse as structured text
         return {
-          analysis: content.text,
+          analysis: content,
           recommendations: {
             startStrategy: 'See full analysis',
             upwindStrategy: 'See full analysis',
@@ -896,7 +888,7 @@ Format your response as JSON:
       return parsed;
 
     } catch (error) {
-      console.error('Error calling Claude API:', error);
+      logger.error('Error calling Claude API:', error);
       throw new Error(`Failed to generate AI analysis: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

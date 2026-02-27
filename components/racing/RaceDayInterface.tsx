@@ -14,7 +14,8 @@ import {
   Vibration,
   Alert,
   StatusBar,
-  Platform
+  Platform,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as KeepAwake from 'expo-keep-awake';
@@ -109,6 +110,20 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alertSoundsRef = useRef<{ [key: string]: boolean }>({});
+
+  const addEmergencyAlert = (title: string, message: string, type: TacticalAlert['type']) => {
+    const emergencyAlert: TacticalAlert = {
+      id: `emergency-${Date.now()}`,
+      type,
+      priority: 'critical',
+      title,
+      message,
+      timestamp: new Date(),
+      acknowledged: false,
+      action: 'Review immediately',
+    };
+    setTacticalAlerts(prev => [emergencyAlert, ...prev].slice(0, 10));
+  };
 
   useEffect(() => {
     // Keep screen awake during race day
@@ -696,7 +711,12 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
       <View style={styles.emergencyActions}>
         <TouchableOpacity
           style={styles.emergencyButton}
-          onPress={() => Alert.alert('Emergency', 'This would trigger emergency protocols')}
+          onPress={() => {
+            addEmergencyAlert('Emergency Call Triggered', 'Initiating emergency contact workflow.', 'weather_alert');
+            onEmergencyAlert?.();
+            const emergencyNumber = Platform.OS === 'ios' ? 'tel://911' : 'tel:911';
+            void Linking.openURL(emergencyNumber);
+          }}
         >
           <Ionicons name="call" size={48} color="white" />
           <Text style={styles.emergencyButtonText}>Call Emergency</Text>
@@ -704,7 +724,11 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
 
         <TouchableOpacity
           style={styles.emergencyButton}
-          onPress={() => Alert.alert('MOB', 'This would trigger man overboard procedures')}
+          onPress={() => {
+            addEmergencyAlert('Man Overboard', 'MOB sequence initiated. Alerting crew and marking position.', 'gps_alert');
+            setActiveView('gps');
+            Vibration.vibrate([0, 400, 200, 400, 200, 400]);
+          }}
         >
           <Ionicons name="person" size={48} color="white" />
           <Text style={styles.emergencyButtonText}>Man Overboard</Text>
@@ -712,7 +736,11 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
 
         <TouchableOpacity
           style={styles.emergencyButton}
-          onPress={() => Alert.alert('Abandon', 'This would signal race abandonment')}
+          onPress={() => {
+            addEmergencyAlert('Race Abandoned', 'Race abandonment signal acknowledged. Return-to-harbor protocol enabled.', 'weather_alert');
+            Alert.alert('Race Abandoned', 'Return to overview and notify fleet communications.');
+            setActiveView('overview');
+          }}
         >
           <Ionicons name="flag" size={48} color="white" />
           <Text style={styles.emergencyButtonText}>Abandon Race</Text>

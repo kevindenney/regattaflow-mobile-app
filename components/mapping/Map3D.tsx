@@ -5,8 +5,9 @@
  */
 
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import { StyleSheet, View, Platform, Dimensions } from 'react-native';
+import { StyleSheet, View, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { MAPLIBRE_CSS_URL, MAPLIBRE_JS_URL } from '@/lib/maplibreWeb';
 import mapLibreService from '@/services/mapping/MapLibreService';
 
 interface RaceMark {
@@ -65,9 +66,9 @@ const Map3D = forwardRef<Map3DRef, Map3DProps>(({
   onMapLoad,
   onMapClick,
   onMarkClick,
-  showWeather = false,
-  showTactical = false,
-  interactive = true,
+  showWeather: _showWeather = false,
+  showTactical: _showTactical = false,
+  interactive: _interactive = true,
   className,
 }, ref) => {
   const webViewRef = useRef<WebView>(null);
@@ -171,6 +172,8 @@ const Map3D = forwardRef<Map3DRef, Map3DProps>(({
     if (Platform.OS === 'web') {
       initializeWebMap();
     }
+    // Initialize once for current container/session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -223,8 +226,8 @@ const Map3D = forwardRef<Map3DRef, Map3DProps>(({
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
         <title>RegattaFlow 3D Race Map</title>
-        <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
-        <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet">
+        <script src="${MAPLIBRE_JS_URL}"></script>
+        <link href="${MAPLIBRE_CSS_URL}" rel="stylesheet">
         <style>
             body { margin: 0; padding: 0; font-family: 'Helvetica Neue', sans-serif; }
             #map { position: absolute; top: 0; bottom: 0; width: 100%; }

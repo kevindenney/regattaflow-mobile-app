@@ -81,7 +81,7 @@ class CrewFinderServiceClass {
       return [];
     }
 
-    console.log('[CrewFinderService] searchUsers called with query:', query);
+    logger.info('[CrewFinderService] searchUsers called with query:', query);
 
     // Query profiles first (no FK join with sailor_profiles)
     const { data: profiles, error } = await supabase
@@ -113,7 +113,7 @@ class CrewFinderServiceClass {
       });
     }
 
-    console.log('[CrewFinderService] searchUsers found', profiles.length, 'profiles');
+    logger.info('[CrewFinderService] searchUsers found', profiles.length, 'profiles');
 
     return profiles.map((profile: any) => {
       const sailorProfile = sailorProfilesMap[profile.id];
@@ -132,7 +132,7 @@ class CrewFinderServiceClass {
    * Get all users (for browsing when no search query)
    */
   async getAllUsers(limit: number = 50, offset: number = 0): Promise<SailorProfileSummary[]> {
-    console.log('[CrewFinderService] getAllUsers called with limit:', limit, 'offset:', offset);
+    logger.info('[CrewFinderService] getAllUsers called with limit:', limit, 'offset:', offset);
 
     // Query profiles first (no FK join with sailor_profiles)
     const { data: profiles, error } = await supabase
@@ -165,7 +165,7 @@ class CrewFinderServiceClass {
       });
     }
 
-    console.log('[CrewFinderService] getAllUsers found', profiles.length, 'profiles');
+    logger.info('[CrewFinderService] getAllUsers found', profiles.length, 'profiles');
 
     return profiles.map((profile: any) => {
       const sailorProfile = sailorProfilesMap[profile.id];
@@ -184,7 +184,7 @@ class CrewFinderServiceClass {
    * Get fleets with members that the current user belongs to
    */
   async getFleetMatesForUser(userId: string): Promise<FleetWithMembers[]> {
-    console.log('[CrewFinderService] getFleetMatesForUser called with userId:', userId);
+    logger.info('[CrewFinderService] getFleetMatesForUser called with userId:', userId);
 
     // First get the fleet IDs the user is a member of
     const { data: userMemberships, error: membershipError } = await supabase
@@ -192,7 +192,7 @@ class CrewFinderServiceClass {
       .select('fleet_id')
       .eq('user_id', userId);
 
-    console.log('[CrewFinderService] getFleetMatesForUser - userMemberships:', userMemberships, 'error:', membershipError);
+    logger.info('[CrewFinderService] getFleetMatesForUser - userMemberships:', userMemberships, 'error:', membershipError);
 
     if (membershipError) {
       logger.error('Failed to get user fleet memberships:', membershipError);
@@ -200,7 +200,7 @@ class CrewFinderServiceClass {
     }
 
     if (!userMemberships || userMemberships.length === 0) {
-      console.log('[CrewFinderService] getFleetMatesForUser - No fleet memberships found for user');
+      logger.info('[CrewFinderService] getFleetMatesForUser - No fleet memberships found for user');
       return [];
     }
 
@@ -245,13 +245,13 @@ class CrewFinderServiceClass {
       },
     }));
 
-    console.log('[CrewFinderService] getFleetMatesForUser - querying fleet_members for fleetIds:', fleetIds);
+    logger.info('[CrewFinderService] getFleetMatesForUser - querying fleet_members for fleetIds:', fleetIds);
     const { data: memberships, error: membersError } = await supabase
       .from('fleet_members')
       .select('fleet_id, user_id')
       .in('fleet_id', fleetIds);
 
-    console.log('[CrewFinderService] getFleetMatesForUser - memberships result:', { membershipCount: memberships?.length, error: membersError });
+    logger.info('[CrewFinderService] getFleetMatesForUser - memberships result:', { membershipCount: memberships?.length, error: membersError });
 
     if (membersError) {
       logger.error('Failed to get fleet members:', membersError);
@@ -260,7 +260,7 @@ class CrewFinderServiceClass {
 
     // Get unique user IDs to fetch profiles and sailor_profiles
     const memberUserIds = [...new Set((memberships || []).map((m: any) => m.user_id))];
-    console.log('[CrewFinderService] getFleetMatesForUser - unique memberUserIds:', memberUserIds);
+    logger.info('[CrewFinderService] getFleetMatesForUser - unique memberUserIds:', memberUserIds);
     let profilesMap: Record<string, any> = {};
     let sailorProfilesMap: Record<string, any> = {};
 
@@ -317,7 +317,7 @@ class CrewFinderServiceClass {
         members: membersByFleet.get(uf.fleet_id) || [],
       }));
 
-    console.log('[CrewFinderService] getFleetMatesForUser - FINAL result:', result.map(f => ({ name: f.name, memberCount: f.members.length })));
+    logger.info('[CrewFinderService] getFleetMatesForUser - FINAL result:', result.map(f => ({ name: f.name, memberCount: f.members.length })));
     return result;
   }
 
@@ -431,7 +431,7 @@ class CrewFinderServiceClass {
     userId: string,
     regattaId: string
   ): Promise<{ members: SailorProfileSummary[]; fleetNames: string[] }> {
-    console.log('[CrewFinderService] getFleetMembersForRace called with:', { userId, regattaId });
+    logger.info('[CrewFinderService] getFleetMembersForRace called with:', { userId, regattaId });
 
     // Step 1: Try to get fleet IDs via race_participants (primary approach)
     const { data: participants, error: participantsError } = await supabase
@@ -440,7 +440,7 @@ class CrewFinderServiceClass {
       .eq('regatta_id', regattaId)
       .not('fleet_id', 'is', null);
 
-    console.log('[CrewFinderService] Step 1 (race_participants):', { participants, error: participantsError });
+    logger.info('[CrewFinderService] Step 1 (race_participants):', { participants, error: participantsError });
 
     if (participantsError) {
       logger.error('Failed to get race fleet IDs:', participantsError);
@@ -448,11 +448,11 @@ class CrewFinderServiceClass {
     }
 
     let fleetIds = [...new Set((participants || []).map((p: any) => p.fleet_id).filter(Boolean))];
-    console.log('[CrewFinderService] Fleet IDs from race_participants:', fleetIds);
+    logger.info('[CrewFinderService] Fleet IDs from race_participants:', fleetIds);
 
     // Step 2: Fallback - if no fleet associations, get fleets via regatta's club_id
     if (fleetIds.length === 0) {
-      console.log('[CrewFinderService] No fleet IDs from race_participants, trying club-based fallback');
+      logger.info('[CrewFinderService] No fleet IDs from race_participants, trying club-based fallback');
       logger.info('No fleet associations in race_participants, trying club-based fallback', { regattaId });
 
       // Get the regatta's club_id
@@ -462,21 +462,21 @@ class CrewFinderServiceClass {
         .eq('id', regattaId)
         .single();
 
-      console.log('[CrewFinderService] Regatta club_id lookup:', { regatta, error: regattaError });
+      logger.info('[CrewFinderService] Regatta club_id lookup:', { regatta, error: regattaError });
 
       if (regattaError) {
         logger.warn('Failed to get regatta club_id:', regattaError);
       }
 
       if (regatta?.club_id) {
-        console.log('[CrewFinderService] Found club_id:', regatta.club_id, '- looking up club fleets');
+        logger.info('[CrewFinderService] Found club_id:', regatta.club_id, '- looking up club fleets');
         // Find fleets belonging to this club (public or club-visible)
         const { data: clubFleets, error: clubFleetsError } = await supabase
           .from('fleets')
           .select('id')
           .eq('club_id', regatta.club_id);
 
-        console.log('[CrewFinderService] Club fleets lookup:', { clubFleets, error: clubFleetsError });
+        logger.info('[CrewFinderService] Club fleets lookup:', { clubFleets, error: clubFleetsError });
 
         if (clubFleetsError) {
           logger.warn('Failed to get club fleets:', clubFleetsError);
@@ -488,11 +488,11 @@ class CrewFinderServiceClass {
     }
 
     if (fleetIds.length === 0) {
-      console.log('[CrewFinderService] No fleetIds found, returning empty');
+      logger.info('[CrewFinderService] No fleetIds found, returning empty');
       return { members: [], fleetNames: [] };
     }
 
-    console.log('[CrewFinderService] Found fleetIds:', fleetIds);
+    logger.info('[CrewFinderService] Found fleetIds:', fleetIds);
 
     // Get fleet info for display
     const { data: fleets, error: fleetsError } = await supabase
@@ -500,15 +500,13 @@ class CrewFinderServiceClass {
       .select('id, name')
       .in('id', fleetIds);
 
-    console.log('[CrewFinderService] Fleet info lookup:', { fleets, error: fleetsError });
+    logger.info('[CrewFinderService] Fleet info lookup:', { fleets, error: fleetsError });
 
     if (fleetsError) {
       logger.error('Failed to get fleet info:', fleetsError);
     }
 
     const fleetNames = (fleets || []).map((f: any) => f.name);
-    const fleetNameMap = new Map((fleets || []).map((f: any) => [f.id, f.name]));
-
     // Get members from these fleets via fleet_members
     const { data: memberships, error: membersError } = await supabase
       .from('fleet_members')
@@ -516,7 +514,7 @@ class CrewFinderServiceClass {
       .in('fleet_id', fleetIds)
       .neq('user_id', userId);
 
-    console.log('[CrewFinderService] Fleet memberships lookup:', { memberships, memberCount: memberships?.length, error: membersError });
+    logger.info('[CrewFinderService] Fleet memberships lookup:', { memberships, memberCount: memberships?.length, error: membersError });
 
     if (membersError) {
       logger.error('Failed to get fleet members:', membersError);
@@ -585,8 +583,6 @@ class CrewFinderServiceClass {
       if (!displayName) continue;
 
       seenUsers.add(m.user_id);
-      const fleetName = fleetNameMap.get(m.fleet_id) || 'Fleet';
-
       members.push({
         userId: m.user_id,
         fullName: displayName,
@@ -597,7 +593,7 @@ class CrewFinderServiceClass {
       });
     }
 
-    console.log('[CrewFinderService] getFleetMembersForRace - FINAL result:', { memberCount: members.length, fleetNames, members: members.map(m => m.fullName) });
+    logger.info('[CrewFinderService] getFleetMembersForRace - FINAL result:', { memberCount: members.length, fleetNames, members: members.map(m => m.fullName) });
     return { members, fleetNames };
   }
 
@@ -737,7 +733,7 @@ class CrewFinderServiceClass {
     // 4. Sort by score (highest first) and return
     const suggestions = Array.from(suggestionsMap.values())
       .sort((a, b) => b.score - a.score)
-      .map(({ score, source, ...profile }) => ({
+      .map(({ score: _score, source, ...profile }) => ({
         ...profile,
         source, // Keep source for display
       }));
@@ -755,14 +751,14 @@ class CrewFinderServiceClass {
     regattaId?: string,
     regattaName?: string
   ): Promise<(SailorProfileSummary & { source?: string })[]> {
-    console.log('[CrewFinderService] getSuggestedCrewForRace called with:', { userId, regattaId, regattaName });
+    logger.info('[CrewFinderService] getSuggestedCrewForRace called with:', { userId, regattaId, regattaName });
     const suggestionsMap = new Map<string, SailorProfileSummary & { score: number; source: string }>();
 
     // 0. Get followed users to boost their scores
     let followingIds: string[] = [];
     try {
       followingIds = await this.getFollowingIds(userId);
-      console.log('[CrewFinderService] User follows:', followingIds.length, 'users');
+      logger.info('[CrewFinderService] User follows:', followingIds.length, 'users');
     } catch (error) {
       logger.warn('Error fetching following IDs:', error);
     }
@@ -771,9 +767,9 @@ class CrewFinderServiceClass {
     // 1. If regattaId provided, get fleet members for this race (highest priority)
     if (regattaId) {
       try {
-        console.log('[CrewFinderService] Step 1: Getting fleet members for race...');
+        logger.info('[CrewFinderService] Step 1: Getting fleet members for race...');
         const { members, fleetNames } = await this.getFleetMembersForRace(userId, regattaId);
-        console.log('[CrewFinderService] Step 1 result: members:', members.length, 'fleetNames:', fleetNames);
+        logger.info('[CrewFinderService] Step 1 result: members:', members.length, 'fleetNames:', fleetNames);
         const raceName = regattaName || 'this race';
 
         for (const member of members) {
@@ -786,16 +782,16 @@ class CrewFinderServiceClass {
           });
         }
       } catch (error) {
-        console.error('[CrewFinderService] Step 1 error:', error);
+        logger.error('[CrewFinderService] Step 1 error:', error);
         logger.warn('Error fetching race fleet members:', error);
       }
     }
 
     // 2. Get user's own fleet mates
     try {
-      console.log('[CrewFinderService] Step 2: Getting user fleet mates...');
+      logger.info('[CrewFinderService] Step 2: Getting user fleet mates...');
       const fleets = await this.getFleetMatesForUser(userId);
-      console.log('[CrewFinderService] Step 2 result: fleets:', fleets.length, fleets.map(f => ({ name: f.name, memberCount: f.members.length })));
+      logger.info('[CrewFinderService] Step 2 result: fleets:', fleets.length, fleets.map(f => ({ name: f.name, memberCount: f.members.length })));
       for (const fleet of fleets) {
         for (const member of fleet.members) {
           if (member.userId === userId) continue;
@@ -813,7 +809,7 @@ class CrewFinderServiceClass {
         }
       }
     } catch (error) {
-      console.error('[CrewFinderService] Step 2 error:', error);
+      logger.error('[CrewFinderService] Step 2 error:', error);
       logger.warn('Error fetching fleet mates for suggestions:', error);
     }
 
@@ -910,12 +906,12 @@ class CrewFinderServiceClass {
     // Sort by score (highest first) and return
     const suggestions = Array.from(suggestionsMap.values())
       .sort((a, b) => b.score - a.score)
-      .map(({ score, source, ...profile }) => ({
+      .map(({ score: _score, source, ...profile }) => ({
         ...profile,
         source,
       }));
 
-    console.log('[CrewFinderService] getSuggestedCrewForRace - FINAL result: suggestions count:', suggestions.length, suggestions.slice(0, 3).map(s => s.fullName));
+    logger.info('[CrewFinderService] getSuggestedCrewForRace - FINAL result: suggestions count:', suggestions.length, suggestions.slice(0, 3).map(s => s.fullName));
     return suggestions;
   }
 
@@ -932,21 +928,21 @@ class CrewFinderServiceClass {
     limit: number = 50,
     offset: number = 0
   ): Promise<{ users: DiscoverableUser[]; hasMore: boolean }> {
-    console.log('[CrewFinderService] getAllUsersForDiscovery called with userId:', userId, 'limit:', limit, 'offset:', offset);
+    logger.info('[CrewFinderService] getAllUsersForDiscovery called with userId:', userId, 'limit:', limit, 'offset:', offset);
 
     // Get the user's following list first
     let followingIds: string[] = [];
     try {
       followingIds = await this.getFollowingIds(userId);
-      console.log('[CrewFinderService] getAllUsersForDiscovery - got followingIds:', followingIds.length);
+      logger.info('[CrewFinderService] getAllUsersForDiscovery - got followingIds:', followingIds.length);
     } catch (followError) {
-      console.warn('[CrewFinderService] getAllUsersForDiscovery - getFollowingIds failed (might be new table):', followError);
+      logger.warn('[CrewFinderService] getAllUsersForDiscovery - getFollowingIds failed (might be new table):', followError);
       // Continue without following data
     }
     const followingSet = new Set(followingIds);
 
     // Query profiles (base data)
-    console.log('[CrewFinderService] getAllUsersForDiscovery - fetching profiles...');
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - fetching profiles...');
     const { data: profiles, error, count } = await supabase
       .from('profiles')
       .select('id, full_name, email', { count: 'exact' })
@@ -956,12 +952,12 @@ class CrewFinderServiceClass {
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('[CrewFinderService] getAllUsersForDiscovery - profiles query failed:', error);
+      logger.error('[CrewFinderService] getAllUsersForDiscovery - profiles query failed:', error);
       logger.error('Failed to get users for discovery:', error);
       throw error;
     }
 
-    console.log('[CrewFinderService] getAllUsersForDiscovery - got profiles:', profiles?.length, 'total count:', count);
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - got profiles:', profiles?.length, 'total count:', count);
 
     if (!profiles || profiles.length === 0) {
       return { users: [], hasMore: false };
@@ -970,14 +966,14 @@ class CrewFinderServiceClass {
     const userIds = profiles.map((p) => p.id);
 
     // Fetch sailor_profiles separately (no FK relationship)
-    console.log('[CrewFinderService] getAllUsersForDiscovery - fetching sailor_profiles...');
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - fetching sailor_profiles...');
     const { data: sailorProfiles, error: sailorError } = await supabase
       .from('sailor_profiles')
       .select('user_id, avatar_emoji, avatar_color, experience_level')
       .in('user_id', userIds);
 
     if (sailorError) {
-      console.warn('[CrewFinderService] getAllUsersForDiscovery - sailor_profiles query failed:', sailorError);
+      logger.warn('[CrewFinderService] getAllUsersForDiscovery - sailor_profiles query failed:', sailorError);
     }
 
     const sailorProfilesMap: Record<string, any> = {};
@@ -986,17 +982,17 @@ class CrewFinderServiceClass {
         sailorProfilesMap[sp.user_id] = sp;
       });
     }
-    console.log('[CrewFinderService] getAllUsersForDiscovery - got sailor_profiles:', sailorProfiles?.length || 0);
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - got sailor_profiles:', sailorProfiles?.length || 0);
 
     // Fetch club memberships separately (clubs FK exists on club_members)
-    console.log('[CrewFinderService] getAllUsersForDiscovery - fetching club_members...');
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - fetching club_members...');
     const { data: clubMemberships, error: clubError } = await supabase
       .from('club_members')
       .select('user_id, club_id')
       .in('user_id', userIds);
 
     if (clubError) {
-      console.warn('[CrewFinderService] getAllUsersForDiscovery - club_members query failed:', clubError);
+      logger.warn('[CrewFinderService] getAllUsersForDiscovery - club_members query failed:', clubError);
     }
 
     // Fetch club names separately if we have memberships
@@ -1024,17 +1020,17 @@ class CrewFinderServiceClass {
         });
       }
     }
-    console.log('[CrewFinderService] getAllUsersForDiscovery - got club mappings:', Object.keys(clubMap).length);
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - got club mappings:', Object.keys(clubMap).length);
 
     // Fetch race counts for each user (from regattas they created)
-    console.log('[CrewFinderService] getAllUsersForDiscovery - fetching race counts...');
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - fetching race counts...');
     const { data: raceCounts, error: raceCountError } = await supabase
       .from('regattas')
       .select('created_by')
       .in('created_by', userIds);
 
     if (raceCountError) {
-      console.warn('[CrewFinderService] getAllUsersForDiscovery - race count query failed:', raceCountError);
+      logger.warn('[CrewFinderService] getAllUsersForDiscovery - race count query failed:', raceCountError);
     }
 
     // Count races per user
@@ -1044,7 +1040,7 @@ class CrewFinderServiceClass {
         raceCountMap[r.created_by] = (raceCountMap[r.created_by] || 0) + 1;
       });
     }
-    console.log('[CrewFinderService] getAllUsersForDiscovery - got race counts for', Object.keys(raceCountMap).length, 'users');
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - got race counts for', Object.keys(raceCountMap).length, 'users');
 
     // Also fetch recent race names for users with races
     const usersWithRaces = Object.keys(raceCountMap);
@@ -1086,7 +1082,7 @@ class CrewFinderServiceClass {
       };
     });
 
-    console.log('[CrewFinderService] getAllUsersForDiscovery - returning', users.length, 'users, hasMore:', count !== null ? offset + limit < count : false);
+    logger.info('[CrewFinderService] getAllUsersForDiscovery - returning', users.length, 'users, hasMore:', count !== null ? offset + limit < count : false);
 
     // Sort: followed users first, then by race count (most active), then by name
     users.sort((a, b) => {
@@ -1437,7 +1433,7 @@ class CrewFinderServiceClass {
     logger.info('[CrewFinderService] getSimilarSailors called', { userId, limit });
 
     // Get current user's data for comparison
-    const { data: currentUserProfile } = await supabase
+    await supabase
       .from('profiles')
       .select('id, full_name')
       .eq('id', userId)
@@ -1515,16 +1511,42 @@ class CrewFinderServiceClass {
 
     // Score by club membership
     if (userClubIds.size > 0) {
+      const clubIds = Array.from(userClubIds);
+      const clubNamesById = new Map<string, string>();
+
+      const { data: clubsData } = await supabase
+        .from('clubs')
+        .select('id, name, club_name')
+        .in('id', clubIds);
+      (clubsData || []).forEach((club: any) => {
+        if (club?.id) {
+          clubNamesById.set(club.id, club.name || club.club_name || 'same club');
+        }
+      });
+
+      const missingClubIds = clubIds.filter((id) => !clubNamesById.has(id));
+      if (missingClubIds.length > 0) {
+        const { data: yachtClubsData } = await supabase
+          .from('yacht_clubs')
+          .select('id, name')
+          .in('id', missingClubIds);
+        (yachtClubsData || []).forEach((club: any) => {
+          if (club?.id) {
+            clubNamesById.set(club.id, club.name || 'same club');
+          }
+        });
+      }
+
       const { data: sameClubUsers } = await supabase
         .from('club_members')
-        .select('user_id, club_id, clubs(name)')
-        .in('club_id', Array.from(userClubIds))
+        .select('user_id, club_id')
+        .in('club_id', clubIds)
         .neq('user_id', userId)
         .limit(100);
 
       (sameClubUsers || []).forEach((cm: any) => {
         const existing = scoreMap.get(cm.user_id);
-        const clubName = cm.clubs?.name || 'same club';
+        const clubName = clubNamesById.get(cm.club_id) || 'same club';
         if (existing) {
           existing.score += 4;
           if (!existing.reasons.includes(`Member of ${clubName}`)) {

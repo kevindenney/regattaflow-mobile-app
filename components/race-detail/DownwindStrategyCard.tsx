@@ -8,9 +8,10 @@ import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { strategicPlanningService } from '@/services/StrategicPlanningService';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StrategyCard } from './StrategyCard';
 
 const logger = createLogger('DownwindStrategyCard');
@@ -70,12 +71,24 @@ export function DownwindStrategyCard({
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      const primary = await supabase
         .from('race_strategies')
         .select('strategy_content')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
+      let data = primary.data;
+      let fetchError = primary.error;
+      if (fetchError && isMissingIdColumn(fetchError, 'race_strategies', 'regatta_id')) {
+        const fallback = await supabase
+          .from('race_strategies')
+          .select('strategy_content')
+          .eq('race_id', raceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        data = fallback.data;
+        fetchError = fallback.error;
+      }
 
       if (fetchError) {
         console.error('[DownwindStrategyCard] Fetch error:', fetchError);
@@ -140,9 +153,14 @@ export function DownwindStrategyCard({
           event: '*',
           schema: 'public',
           table: 'race_strategies',
-          filter: `regatta_id=eq.${raceId}`,
         },
-        () => {
+        (payload) => {
+          const payloadRaceId =
+            (payload as any)?.new?.regatta_id ||
+            (payload as any)?.new?.race_id ||
+            (payload as any)?.old?.regatta_id ||
+            (payload as any)?.old?.race_id;
+          if (payloadRaceId !== raceId) return;
           // Reload strategy when it changes
           loadDownwindStrategy();
         }
@@ -268,6 +286,10 @@ export function DownwindStrategyCard({
           <Text style={styles.emptyHint}>
             Generate your tactical plan to see downwind run recommendations
           </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadDownwindStrategy} disabled={loading}>
+            <MaterialCommunityIcons name="refresh" size={16} color="#FFFFFF" />
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -424,6 +446,21 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     paddingHorizontal: 24,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   runsContainer: {
     gap: 16,

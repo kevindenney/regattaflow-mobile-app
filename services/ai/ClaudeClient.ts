@@ -1,4 +1,4 @@
-import Constants from 'expo-constants';
+import { supabase } from '../supabase';
 
 export type ClaudeModel = 'claude-3-5-sonnet-20240620' | 'claude-3-haiku-20240307';
 
@@ -23,63 +23,40 @@ export interface ClaudeResponse {
 }
 
 export class ClaudeClient {
-  protected readonly apiKey: string;
-  protected readonly apiUrl = 'https://api.anthropic.com/v1/messages';
+  protected readonly apiUrl = 'supabase.functions.race-coaching-chat';
 
-  constructor(apiKey?: string) {
-    // Try to get API key from multiple sources
-    // Priority: explicit parameter > expo-constants > env vars
-    const finalApiKey =
-      apiKey ||
-      Constants?.expoConfig?.extra?.anthropicApiKey ||
-      process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ||
-      process.env.ANTHROPIC_API_KEY;
-
-    if (!finalApiKey) {
-      throw new Error('ANTHROPIC_API_KEY is not configured. Please set EXPO_PUBLIC_ANTHROPIC_API_KEY in your .env file.');
-    }
-    this.apiKey = finalApiKey;
-  }
+  constructor(_apiKey?: string) {}
 
   async createMessage(request: ClaudeRequest): Promise<ClaudeResponse> {
     const start = Date.now();
-    const body = {
-      model: request.model,
-      system: request.system ?? undefined,
-      messages: request.messages.map(msg => ({
-        role: msg.role,
-        content: [{ type: 'text', text: msg.content }],
-      })),
-      max_tokens: request.maxTokens ?? 1024,
-      temperature: request.temperature ?? 0.4,
-    };
+    const promptSections: string[] = [];
 
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': '2023-06-01',
+    if (request.system) {
+      promptSections.push(request.system);
+    }
+    for (const msg of request.messages) {
+      promptSections.push(`[${msg.role}] ${msg.content}`);
+    }
+    const prompt = promptSections.join('\n\n').trim();
+
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: request.maxTokens ?? 1024,
       },
-      body: JSON.stringify(body),
     });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Claude API error (${response.status}): ${errorBody}`);
+    if (error) {
+      throw new Error(`Claude API error: ${error.message}`);
     }
 
-    const json = await response.json();
-    const text = Array.isArray(json.content)
-      ? json.content.map((item: any) => item.text ?? '').join('\n').trim()
-      : json.content?.text ?? '';
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
 
     const durationMs = Date.now() - start;
     return {
       text,
-      tokensIn: json?.usage?.input_tokens ?? 0,
-      tokensOut: json?.usage?.output_tokens ?? 0,
-      raw: { ...json, durationMs },
+      tokensIn: 0,
+      tokensOut: 0,
+      raw: { provider: 'race-coaching-chat', modelRequested: request.model, durationMs, response: data },
     };
   }
 }

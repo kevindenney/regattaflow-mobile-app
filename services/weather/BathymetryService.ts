@@ -9,6 +9,7 @@
  */
 
 import axios from 'axios';
+import { createLogger } from '@/lib/utils/logger';
 import type { GeoLocation } from '@/lib/types/map';
 
 // Supabase Edge Function URL for bathymetry proxy (avoids CORS)
@@ -17,6 +18,7 @@ const BATHYMETRY_PROXY_URL = `${SUPABASE_URL}/functions/v1/bathymetry-proxy`;
 
 // Cache duration - bathymetry doesn't change
 const ELEVATION_CACHE_DURATION = 365 * 24 * 60 * 60 * 1000; // 1 year
+const logger = createLogger('BathymetryService');
 
 interface CacheEntry<T> {
   data: T;
@@ -69,21 +71,21 @@ export class BathymetryService {
       const result = response.data;
 
       if (result.status !== 'OK' || !result.results || result.results.length === 0) {
-        console.warn('[Bathymetry] Invalid response:', result);
+        logger.warn('[Bathymetry] Invalid response:', result);
         return 0;
       }
 
       // Elevation is already in meters (negative = below sea level)
       const elevation = result.results[0].elevation;
 
-      console.log('[Bathymetry] Elevation fetched:', { location, elevation });
+      logger.info('[Bathymetry] Elevation fetched:', { location, elevation });
 
       // Cache for 1 year - bathymetry doesn't change
       this.setCache(cacheKey, elevation, ELEVATION_CACHE_DURATION);
 
       return elevation;
     } catch (error: any) {
-      console.error('[Bathymetry] Failed to fetch elevation:', {
+      logger.error('[Bathymetry] Failed to fetch elevation:', {
         error: error?.message || error,
         status: error?.response?.status,
         location,
@@ -98,15 +100,15 @@ export class BathymetryService {
    * Supports up to 100 locations per request
    */
   async getElevationsBatch(
-    locations: Array<{ latitude: number; longitude: number }>
-  ): Promise<Array<{ lat: number; lng: number; elevation: number }>> {
+    locations: { latitude: number; longitude: number }[]
+  ): Promise<{ lat: number; lng: number; elevation: number }[]> {
     if (locations.length === 0) {
       return [];
     }
 
     // Check cache for each location
-    const results: Array<{ lat: number; lng: number; elevation: number; cached: boolean }> = [];
-    const uncachedLocations: Array<{ lat: number; lng: number; index: number }> = [];
+    const results: { lat: number; lng: number; elevation: number; cached: boolean }[] = [];
+    const uncachedLocations: { lat: number; lng: number; index: number }[] = [];
 
     for (let i = 0; i < locations.length; i++) {
       const loc = locations[i];
@@ -139,11 +141,11 @@ export class BathymetryService {
 
     // If all locations are cached, return immediately
     if (uncachedLocations.length === 0) {
-      console.log('[Bathymetry] All', locations.length, 'locations served from cache');
+      logger.info('[Bathymetry] All', locations.length, 'locations served from cache');
       return results.map(r => ({ lat: r.lat, lng: r.lng, elevation: r.elevation }));
     }
 
-    console.log('[Bathymetry] Fetching', uncachedLocations.length, 'uncached locations (', locations.length - uncachedLocations.length, 'from cache)');
+    logger.info('[Bathymetry] Fetching', uncachedLocations.length, 'uncached locations (', locations.length - uncachedLocations.length, 'from cache)');
 
     try {
       // Call edge function with batched locations
@@ -158,7 +160,7 @@ export class BathymetryService {
       const data = response.data;
 
       if (data.status !== 'OK' || !data.results) {
-        console.warn('[Bathymetry] Batch request failed:', data.error || 'Unknown error');
+        logger.warn('[Bathymetry] Batch request failed:', data.error || 'Unknown error');
         return results.map(r => ({ lat: r.lat, lng: r.lng, elevation: r.elevation }));
       }
 
@@ -178,10 +180,10 @@ export class BathymetryService {
         this.setCache(cacheKey, elevation, ELEVATION_CACHE_DURATION);
       }
 
-      console.log('[Bathymetry] Successfully fetched', data.results.length, 'elevations');
+      logger.info('[Bathymetry] Successfully fetched', data.results.length, 'elevations');
 
     } catch (error: any) {
-      console.error('[Bathymetry] Batch request error:', {
+      logger.error('[Bathymetry] Batch request error:', {
         error: error?.message || error,
         status: error?.response?.status
       });
@@ -207,7 +209,7 @@ export class BathymetryService {
     radiusKm: number = 5,
     gridSize: number = 10
   ): Promise<{
-    points: Array<{ lat: number; lng: number; elevation: number; depth: number }>;
+    points: { lat: number; lng: number; elevation: number; depth: number }[];
     bounds: { north: number; south: number; east: number; west: number };
     center: GeoLocation;
     minDepth: number;
@@ -218,7 +220,7 @@ export class BathymetryService {
     const cached = this.getCached<any>(cacheKey);
 
     if (cached) {
-      console.log('[Bathymetry] Elevation grid served from cache');
+      logger.info('[Bathymetry] Elevation grid served from cache');
       return cached;
     }
 
@@ -240,7 +242,7 @@ export class BathymetryService {
     const latStep = (bounds.north - bounds.south) / (gridSize - 1);
     const lngStep = (bounds.east - bounds.west) / (gridSize - 1);
 
-    const gridPoints: Array<{ latitude: number; longitude: number }> = [];
+    const gridPoints: { latitude: number; longitude: number }[] = [];
 
     for (let i = 0; i < gridSize; i++) {
       for (let j = 0; j < gridSize; j++) {
@@ -251,7 +253,7 @@ export class BathymetryService {
       }
     }
 
-    console.log('[Bathymetry] Fetching elevation grid:', gridSize, 'x', gridSize, '=', gridPoints.length, 'points');
+    logger.info('[Bathymetry] Fetching elevation grid:', gridSize, 'x', gridSize, '=', gridPoints.length, 'points');
 
     // Use batched request for efficiency (1 API call for up to 100 points)
     const batchResults = await this.getElevationsBatch(gridPoints);
@@ -273,7 +275,7 @@ export class BathymetryService {
       ? Math.max(...waterPoints.map(p => p.depth))
       : 0;
 
-    console.log('[Bathymetry] Elevation grid complete:', waterPoints.length, 'water points,', 'depth range:', minDepth, '-', maxDepth, 'm');
+    logger.info('[Bathymetry] Elevation grid complete:', waterPoints.length, 'water points,', 'depth range:', minDepth, '-', maxDepth, 'm');
 
     const result = {
       points,

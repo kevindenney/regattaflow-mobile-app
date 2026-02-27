@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useClubOnboardingState');
 
 export interface ClubPaymentData {
   selectedPlan: 'starter' | 'professional' | 'enterprise';
@@ -58,38 +61,48 @@ export const useClubOnboardingState = () => {
     saving: false,
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | undefined>(user?.id);
 
-  // Load state from AsyncStorage and Supabase on mount
   useEffect(() => {
-    loadState();
-  }, [user]);
+    activeUserIdRef.current = user?.id;
+  }, [user?.id]);
 
-  // Save state to AsyncStorage whenever it changes
   useEffect(() => {
-    if (!state.loading) {
-      saveStateToStorage();
-    }
-  }, [state.payment, state.website, state.confirmation, state.currentStep]);
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
-  const loadState = async () => {
+  const loadState = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const targetUserId = user?.id;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
     try {
       // First, try to load from AsyncStorage (for partial progress)
       const storedState = await AsyncStorage.getItem(STORAGE_KEY);
       if (storedState) {
         const parsed = JSON.parse(storedState);
+        if (!canCommit()) return;
         setState(prev => ({ ...prev, ...parsed, loading: false }));
       }
 
       // Then, try to load from Supabase (if already saved)
-      if (user) {
+      if (targetUserId) {
         const { data: club } = await supabase
           .from('clubs')
           .select('*, club_subscriptions(*)')
-          .eq('user_id', user.id)
+          .eq('user_id', targetUserId)
           .single();
 
         if (club) {
           // Merge Supabase data with current state
+          if (!canCommit()) return;
           setState(prev => ({
             ...prev,
             website: {
@@ -113,14 +126,16 @@ export const useClubOnboardingState = () => {
         }
       }
 
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false }));
     } catch (error) {
-      console.error('Error loading club onboarding state:', error);
+      logger.error('Error loading club onboarding state', error);
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false, error: 'Failed to load onboarding state' }));
     }
-  };
+  }, [user?.id]);
 
-  const saveStateToStorage = async () => {
+  const saveStateToStorage = useCallback(async () => {
     try {
       // Don't save sensitive payment info to local storage
       const stateToSave = {
@@ -136,9 +151,21 @@ export const useClubOnboardingState = () => {
 
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
     } catch (error) {
-      console.error('Error saving state to storage:', error);
+      logger.error('Error saving state to storage', error);
     }
-  };
+  }, [state.payment, state.website, state.confirmation, state.currentStep]);
+
+  // Load state from AsyncStorage and Supabase on mount
+  useEffect(() => {
+    void loadState();
+  }, [loadState]);
+
+  // Save state to AsyncStorage whenever it changes
+  useEffect(() => {
+    if (!state.loading) {
+      void saveStateToStorage();
+    }
+  }, [state.loading, saveStateToStorage]);
 
   const updatePayment = useCallback((data: ClubPaymentData) => {
     setState(prev => ({ ...prev, payment: data, currentStep: Math.max(prev.currentStep, 1) }));
@@ -153,7 +180,8 @@ export const useClubOnboardingState = () => {
   }, []);
 
   const saveToSupabase = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (!user) {
+    const targetUserId = activeUserIdRef.current;
+    if (!targetUserId) {
       return { success: false, error: 'User not authenticated' };
     }
 
@@ -161,6 +189,7 @@ export const useClubOnboardingState = () => {
       return { success: false, error: 'Incomplete onboarding data' };
     }
 
+    if (!isMountedRef.current) return { success: false, error: 'Component unmounted' };
     setState(prev => ({ ...prev, saving: true, error: null }));
 
     try {
@@ -168,7 +197,7 @@ export const useClubOnboardingState = () => {
       const { data: club, error: clubError } = await supabase
         .from('clubs')
         .upsert({
-          user_id: user.id,
+          user_id: targetUserId,
           club_name: state.website.clubName,
           website: state.website.clubWebsite || null,
           description: state.website.clubDescription || null,
@@ -207,24 +236,29 @@ export const useClubOnboardingState = () => {
       const { error: userError } = await supabase
         .from('users')
         .update({ onboarding_completed: true })
-        .eq('id', user.id);
+        .eq('id', targetUserId);
 
       if (userError) throw userError;
 
       // Clear AsyncStorage after successful save
       await AsyncStorage.removeItem(STORAGE_KEY);
 
-      setState(prev => ({ ...prev, saving: false }));
+      if (isMountedRef.current && activeUserIdRef.current === targetUserId) {
+        setState(prev => ({ ...prev, saving: false }));
+      }
       return { success: true };
     } catch (error: any) {
-      console.error('Error saving club onboarding data:', error);
-      setState(prev => ({ ...prev, saving: false, error: error.message || 'Failed to save onboarding data' }));
+      logger.error('Error saving club onboarding data', error);
+      if (isMountedRef.current && activeUserIdRef.current === targetUserId) {
+        setState(prev => ({ ...prev, saving: false, error: error.message || 'Failed to save onboarding data' }));
+      }
       return { success: false, error: error.message || 'Failed to save onboarding data' };
     }
-  }, [user, state.website, state.payment]);
+  }, [state.website, state.payment]);
 
   const clearState = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
+    if (!isMountedRef.current) return;
     setState({
       payment: null,
       website: null,

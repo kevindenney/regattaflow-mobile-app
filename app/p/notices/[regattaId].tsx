@@ -16,7 +16,7 @@ import {
     FileText,
     Share2,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Linking,
@@ -67,11 +67,7 @@ export default function PublicNoticesPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedNotice, setExpandedNotice] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchNotices();
-  }, [regattaId]);
-
-  const fetchNotices = async (isRefresh = false) => {
+  const fetchNotices = useCallback(async (isRefresh = false) => {
     if (!regattaId) return;
     
     try {
@@ -96,7 +92,11 @@ export default function PublicNoticesPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [regattaId]);
+
+  useEffect(() => {
+    void fetchNotices();
+  }, [fetchNotices]);
 
   const handleShare = async () => {
     const url = `${API_BASE}/p/notices/${regattaId}`;
@@ -198,6 +198,19 @@ export default function PublicNoticesPage() {
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => fetchNotices()}>
           <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push(`/p/${regattaId}`)}>
+          <Text style={styles.secondaryButtonText}>View Regatta</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() =>
+            Linking.openURL(
+              `mailto:support@regattaflow.com?subject=${encodeURIComponent('Public Notices Unavailable')}&body=${encodeURIComponent(`Regatta: ${regattaId}\nError: ${error || 'Notices unavailable'}`)}`
+            )
+          }
+        >
+          <Text style={styles.secondaryButtonText}>Contact Support</Text>
         </TouchableOpacity>
       </View>
     );
@@ -400,6 +413,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
   },
+  secondaryButton: {
+    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryButtonText: {
+    color: '#374151',
+    fontWeight: '600',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -566,4 +592,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
-

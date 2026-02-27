@@ -31,13 +31,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SettingsScreen() {
   const { user, userProfile, clubProfile, signOut, updateUserProfile, isDemoSession } = useAuth();
-
-  // Redirect non-club users to the unified Account modal
-  // Club users continue to see the full settings screen for club administration
-  if (userProfile?.user_type !== 'club') {
-    return <Redirect href="/account" />;
-  }
-  const { settings: userSettings, updateSetting } = useUserSettings();
+  const resolvedClubId = (clubProfile as any)?.yacht_club_id || clubProfile?.id || null;
+  const { settings: userSettings } = useUserSettings();
   const [claimVisible, setClaimVisible] = useState(false);
   const [claimPassword, setClaimPassword] = useState('');
   const [claimPasswordConfirm, setClaimPasswordConfirm] = useState('');
@@ -103,6 +98,12 @@ export default function SettingsScreen() {
       isDemoSession || (userProfile?.onboarding_step ?? '').toString().startsWith('demo'),
     [isDemoSession, userProfile?.onboarding_step]
   );
+
+  // Redirect non-club users to the unified Account modal
+  // Club users continue to see the full settings screen for club administration
+  if (userProfile?.user_type !== 'club') {
+    return <Redirect href="/account" />;
+  }
 
   const handleSignOut = async () => {
     const doSignOut = async () => {
@@ -349,6 +350,7 @@ export default function SettingsScreen() {
               title="Reset Sample Data"
               subtitle="Recreate sample races for exploring the app"
               onPress={handleResetSampleData}
+              loading={resetSampleLoading}
             />
           )}
         </View>
@@ -424,7 +426,7 @@ export default function SettingsScreen() {
             Ask Claude to draft communications, plan events, or answer member questions using your club data.
           </Text>
           <ClubAiAssistant
-            clubId={clubProfile?.id ?? null}
+            clubId={resolvedClubId}
             compact
             style={styles.aiAssistantContainer}
           />
@@ -443,13 +445,13 @@ export default function SettingsScreen() {
             icon="document-text-outline"
             title="Privacy Policy"
             subtitle="Read our privacy policy"
-            onPress={() => showAlert('Coming Soon', 'Privacy policy link will be available soon!')}
+            onPress={() => router.push('/privacy')}
           />
           <SettingItem
             icon="shield-checkmark-outline"
             title="Terms of Service"
             subtitle="Read our terms of service"
-            onPress={() => showAlert('Coming Soon', 'Terms of service link will be available soon!')}
+            onPress={() => router.push('/terms')}
           />
         </View>
 

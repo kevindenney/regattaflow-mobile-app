@@ -3,21 +3,23 @@
  * Real-time countdown, GPS track recording, and tactical overlays
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Alert,
-  
-  Dimensions,
+
   Platform,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
+import { RaceTimerService } from '@/services/RaceTimerService';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // Dynamic import helper for expo-location (native only)
 let LocationModule: typeof import('expo-location') | null = null;
@@ -31,12 +33,8 @@ async function getLocationModule() {
   }
   return LocationModule;
 }
-import { RaceTimerService } from '@/services/RaceTimerService';
-import { supabase } from '@/services/supabase';
-import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('[id]');
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface RaceInfo {
   id: string;
@@ -93,46 +91,47 @@ export default function RaceTimerScreen() {
   const [currentHeading, setCurrentHeading] = useState<number>(0);
 
   // Tactical data
-  const [windData, setWindData] = useState<WindData>({ speed: 12, direction: 45 });
-  const [currentData, setCurrentData] = useState<CurrentData>({ speed: 0.5, direction: 180 });
+  const [windData, _setWindData] = useState<WindData>({ speed: 12, direction: 45 });
+  const [currentData, _setCurrentData] = useState<CurrentData>({ speed: 0.5, direction: 180 });
   const [showLaylines, setShowLaylines] = useState(true);
-  const [twaPort, setTwaPort] = useState<number>(45); // True Wind Angle Port
-  const [twaStarboard, setTwaStarboard] = useState<number>(45); // True Wind Angle Starboard
+  const [twaPort, _setTwaPort] = useState<number>(45); // True Wind Angle Port
+  const [twaStarboard, _setTwaStarboard] = useState<number>(45); // True Wind Angle Starboard
 
   // Intervals
   const countdownInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const raceTimeInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const positionInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
 
-  // Load race data
+  const cleanup = useCallback(() => {
+    if (countdownInterval.current) {
+      clearInterval(countdownInterval.current);
+      countdownInterval.current = null;
+    }
+    if (raceTimeInterval.current) {
+      clearInterval(raceTimeInterval.current);
+      raceTimeInterval.current = null;
+    }
+    if (positionInterval.current) {
+      clearInterval(positionInterval.current);
+      positionInterval.current = null;
+    }
+  }, []);
+
   useEffect(() => {
-    loadRaceData();
     return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
       cleanup();
     };
-  }, [id]);
+  }, [cleanup]);
 
-  // Update position
-  useEffect(() => {
-    if (isRacing) {
-      positionInterval.current = setInterval(() => {
-        updatePosition();
-        checkMarkRounding();
-      }, 1000);
-    } else {
-      if (positionInterval.current) {
-        clearInterval(positionInterval.current);
-      }
-    }
+  const loadRaceData = useCallback(async () => {
+    if (!id) return;
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
 
-    return () => {
-      if (positionInterval.current) {
-        clearInterval(positionInterval.current);
-      }
-    };
-  }, [isRacing]);
-
-  const loadRaceData = async () => {
     try {
       // Load race info
       const { data: raceData, error: raceError } = await supabase
@@ -142,7 +141,9 @@ export default function RaceTimerScreen() {
         .single();
 
       if (raceError) throw raceError;
+      if (!canCommit()) return;
       setRace(raceData);
+      setRaceCourse(null);
 
       // Load race course if available
       if (raceData.predicted_course_id) {
@@ -152,17 +153,26 @@ export default function RaceTimerScreen() {
           .eq('id', raceData.predicted_course_id)
           .single();
 
+        if (!canCommit()) return;
         if (!courseError && courseData) {
           setRaceCourse(courseData);
         }
       }
     } catch (error) {
       console.error('Error loading race data:', error);
-      Alert.alert('Error', 'Could not load race information');
+      if (canCommit()) {
+        Alert.alert('Error', 'Could not load race information');
+      }
     }
-  };
+  }, [id]);
 
-  const updatePosition = async () => {
+  // Load race data
+  useEffect(() => {
+    void loadRaceData();
+  }, [loadRaceData]);
+
+  async function updatePosition() {
+    if (!isMountedRef.current) return;
     const Location = await getLocationModule();
     if (!Location) return;
 
@@ -171,6 +181,7 @@ export default function RaceTimerScreen() {
         accuracy: Location.Accuracy.High,
       });
 
+      if (!isMountedRef.current) return;
       setCurrentPosition(location);
 
       // Convert m/s to knots (1 m/s = 1.94384 knots)
@@ -186,48 +197,12 @@ export default function RaceTimerScreen() {
     } catch (error) {
       console.error('Error updating position:', error);
     }
-  };
+  }
 
-  const startCountdown = async (minutes: number = 5) => {
-    const Location = await getLocationModule();
-    if (!Location) {
-      Alert.alert('Not Available', 'GPS tracking is not available on web');
-      return;
-    }
+  const startRace = useCallback(async () => {
+    if (!user || !id) return;
 
     try {
-      // Request location permission
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Location permission is required for GPS tracking');
-        return;
-      }
-
-      setSequenceTime(minutes * 60);
-      setIsCountingDown(true);
-
-      countdownInterval.current = setInterval(() => {
-        setSequenceTime((prev) => {
-          if (prev === null || prev <= 0) {
-            if (countdownInterval.current) {
-              clearInterval(countdownInterval.current);
-            }
-            startRace();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch (error) {
-      console.error('Error starting countdown:', error);
-      Alert.alert('Error', 'Could not start countdown');
-    }
-  };
-
-  const startRace = async () => {
-    try {
-      if (!user) return;
-
       setIsCountingDown(false);
       setIsRacing(true);
       setRaceTime(0);
@@ -242,8 +217,14 @@ export default function RaceTimerScreen() {
         }
       );
 
+      if (!isMountedRef.current) return;
+
       if (session) {
         setSessionId(session.id);
+      }
+
+      if (raceTimeInterval.current) {
+        clearInterval(raceTimeInterval.current);
       }
 
       // Start race timer
@@ -251,21 +232,69 @@ export default function RaceTimerScreen() {
         setRaceTime((prev) => prev + 1);
       }, 1000);
 
-      Alert.alert('Race Started', 'GPS tracking is now active');
+      Alert.alert(
+        'Race Started',
+        'Race timer is active. GPS tracks will be recorded when location services are available.'
+      );
     } catch (error) {
       console.error('Error starting race:', error);
-      Alert.alert('Error', 'Could not start race timer');
+      if (isMountedRef.current) {
+        Alert.alert('Error', 'Could not start race timer');
+      }
     }
-  };
+  }, [id, user, windData.direction, windData.speed]);
 
-  const stopRace = async () => {
+  const startCountdown = useCallback(async (minutes: number = 5) => {
+    const Location = await getLocationModule();
+
+    try {
+      if (Location) {
+        // Request location permission when GPS module is available.
+        // If denied, continue with countdown/race timing without GPS.
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'GPS Permission Denied',
+            'Race timing will continue without GPS track recording on this device.'
+          );
+        }
+      }
+
+      setSequenceTime(minutes * 60);
+      setIsCountingDown(true);
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+      }
+
+      countdownInterval.current = setInterval(() => {
+        setSequenceTime((prev) => {
+          if (prev === null || prev <= 0) {
+            if (countdownInterval.current) {
+              clearInterval(countdownInterval.current);
+              countdownInterval.current = null;
+            }
+            void startRace();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (error) {
+      console.error('Error starting countdown:', error);
+      Alert.alert('Error', 'Could not start countdown');
+    }
+  }, [startRace]);
+
+  const stopRace = useCallback(async () => {
     try {
       if (!sessionId) return;
+      const currentSessionId = sessionId;
 
       // Stop race timer
       setIsRacing(false);
       if (raceTimeInterval.current) {
         clearInterval(raceTimeInterval.current);
+        raceTimeInterval.current = null;
       }
 
       // Prompt for finishing position
@@ -277,16 +306,20 @@ export default function RaceTimerScreen() {
             text: 'Cancel',
             style: 'cancel',
             onPress: async () => {
-              await RaceTimerService.endSession(sessionId);
-              setSessionId(null);
+              await RaceTimerService.endSession(currentSessionId);
+              if (isMountedRef.current) {
+                setSessionId(null);
+              }
             },
           },
           {
             text: 'Save',
             onPress: async (position?: string) => {
               const positionNum = parseInt(position ?? '0', 10);
-              await RaceTimerService.endSession(sessionId, positionNum > 0 ? positionNum : undefined);
-              setSessionId(null);
+              await RaceTimerService.endSession(currentSessionId, positionNum > 0 ? positionNum : undefined);
+              if (isMountedRef.current) {
+                setSessionId(null);
+              }
 
               Alert.alert(
                 'Session Saved',
@@ -294,7 +327,7 @@ export default function RaceTimerScreen() {
                 [
                   {
                     text: 'View Analysis',
-                    onPress: () => router.push(`/race/analysis/${sessionId}`),
+                    onPress: () => router.push(`/race/analysis/${currentSessionId}`),
                   },
                   { text: 'OK' },
                 ]
@@ -308,9 +341,9 @@ export default function RaceTimerScreen() {
       console.error('Error stopping race:', error);
       Alert.alert('Error', 'Could not stop race timer');
     }
-  };
+  }, [router, sessionId, trackPointCount]);
 
-  const checkMarkRounding = () => {
+  const checkMarkRounding = useCallback(() => {
     if (!currentPosition || !raceCourse) return;
 
     const ROUNDING_DISTANCE = 50; // meters
@@ -328,7 +361,32 @@ export default function RaceTimerScreen() {
         logger.debug(`Rounded mark: ${mark.name}`);
       }
     });
-  };
+  }, [currentPosition, raceCourse]);
+
+  // Update position
+  useEffect(() => {
+    if (isRacing) {
+      if (positionInterval.current) {
+        clearInterval(positionInterval.current);
+      }
+      positionInterval.current = setInterval(() => {
+        void updatePosition();
+        checkMarkRounding();
+      }, 1000);
+    } else {
+      if (positionInterval.current) {
+        clearInterval(positionInterval.current);
+        positionInterval.current = null;
+      }
+    }
+
+    return () => {
+      if (positionInterval.current) {
+        clearInterval(positionInterval.current);
+        positionInterval.current = null;
+      }
+    };
+  }, [checkMarkRounding, isRacing]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371e3; // Earth's radius in meters
@@ -374,12 +432,6 @@ export default function RaceTimerScreen() {
     if (seconds <= 10) return '#EF4444';
     if (seconds <= 60) return '#F59E0B';
     return '#3B82F6';
-  };
-
-  const cleanup = () => {
-    if (countdownInterval.current) clearInterval(countdownInterval.current);
-    if (raceTimeInterval.current) clearInterval(raceTimeInterval.current);
-    if (positionInterval.current) clearInterval(positionInterval.current);
   };
 
   const laylines = calculateLaylines();
@@ -544,6 +596,7 @@ export default function RaceTimerScreen() {
               setSequenceTime(null);
               if (countdownInterval.current) {
                 clearInterval(countdownInterval.current);
+                countdownInterval.current = null;
               }
             }}
           >

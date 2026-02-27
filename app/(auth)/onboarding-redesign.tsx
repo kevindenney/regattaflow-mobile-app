@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -209,22 +208,34 @@ export default function OnboardingRedesign() {
           {selectedPersona === 'club' && (
             <View className="flex-1 items-center justify-center p-6">
               <Text className="text-xl font-bold text-gray-700 mb-2">
-                🏛️ Club Onboarding
+                Club Onboarding
               </Text>
-              <Text className="text-sm text-gray-500 text-center">
-                Club onboarding coming soon! You'll be able to manage regattas, entries, and results.
+              <Text className="text-sm text-gray-500 text-center mb-4">
+                Continue with the dedicated club flow to configure your organization.
               </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/club-onboarding')}
+                className="bg-sky-600 px-4 py-3 rounded-lg"
+              >
+                <Text className="text-white font-semibold">Continue Club Onboarding</Text>
+              </TouchableOpacity>
             </View>
           )}
 
           {selectedPersona === 'coach' && (
             <View className="flex-1 items-center justify-center p-6">
               <Text className="text-xl font-bold text-gray-700 mb-2">
-                🎓 Coach Onboarding
+                Coach Onboarding
               </Text>
-              <Text className="text-sm text-gray-500 text-center">
-                Coach onboarding coming soon! You'll be able to offer sessions and connect with sailors.
+              <Text className="text-sm text-gray-500 text-center mb-4">
+                Continue with coach onboarding to set expertise, availability, and pricing.
               </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/coach-onboarding-welcome')}
+                className="bg-sky-600 px-4 py-3 rounded-lg"
+              >
+                <Text className="text-white font-semibold">Continue Coach Onboarding</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>

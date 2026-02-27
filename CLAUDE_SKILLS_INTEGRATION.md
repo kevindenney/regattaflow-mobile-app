@@ -222,7 +222,7 @@ await skillManagementService.clearCache();
    - **TODO**: Add user-contributed local knowledge
    - **TODO**: Integrate with sailing venue APIs
 
-4. **Production Backend** - Currently uses `dangerouslyAllowBrowser: true`
+4. **Production Backend** - Currently uses `server-side Edge Function proxy`
    - **TODO**: Move to Supabase Edge Function
    - **TODO**: Implement backend caching
    - **TODO**: Add rate limiting

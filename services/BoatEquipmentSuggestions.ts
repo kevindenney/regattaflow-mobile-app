@@ -4,6 +4,10 @@
  * Based on real-world data for Hong Kong and international fleets
  */
 
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('BoatEquipmentSuggestions');
+
 export interface BoatClassSuggestion {
   name: string;
   aliases?: string[]; // Alternative names/variations
@@ -333,7 +337,7 @@ export async function searchBoatNames(
     const { data, error } = await dbQuery;
     
     if (error) {
-      console.warn('[BoatEquipmentSuggestions] Error searching boat names:', error);
+      logger.warn('[BoatEquipmentSuggestions] Error searching boat names:', error);
       return [];
     }
     
@@ -347,7 +351,7 @@ export async function searchBoatNames(
     
     return Array.from(uniqueNames).slice(0, 10);
   } catch (error) {
-    console.warn('[BoatEquipmentSuggestions] Error in searchBoatNames:', error);
+    logger.warn('[BoatEquipmentSuggestions] Error in searchBoatNames:', error);
     return [];
   }
 }
@@ -399,7 +403,7 @@ export async function searchSailNumbers(
     const { data, error } = await dbQuery;
     
     if (error) {
-      console.warn('[BoatEquipmentSuggestions] Error searching sail numbers:', error);
+      logger.warn('[BoatEquipmentSuggestions] Error searching sail numbers:', error);
       return [];
     }
     
@@ -413,8 +417,7 @@ export async function searchSailNumbers(
     
     return Array.from(uniqueNumbers).slice(0, 10);
   } catch (error) {
-    console.warn('[BoatEquipmentSuggestions] Error in searchSailNumbers:', error);
+    logger.warn('[BoatEquipmentSuggestions] Error in searchSailNumbers:', error);
     return [];
   }
 }
-

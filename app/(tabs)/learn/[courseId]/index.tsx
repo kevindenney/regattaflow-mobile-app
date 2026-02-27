@@ -22,12 +22,13 @@ import { LearningService, type LearningCourse, type LearningModule, type Learnin
 import { LessonProgressService, type LessonProgress } from '@/services/LessonProgressService';
 import { coursePaymentService } from '@/services/CoursePaymentService';
 import CourseCatalogService, { type Course as CatalogCourse } from '@/services/CourseCatalogService';
+import { getCourseWithLessons, type BetterAtCourse, type BetterAtLesson } from '@/services/BetterAtCourseService';
 import { useAuth } from '@/providers/AuthProvider';
 import { useCoachingStatus } from '@/hooks/useCoachingStatus';
 import { CourseCompletionCoachPrompt } from '@/components/learn/CoachRecruitmentBanner';
 import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
-import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
+import { showAlert, showAlertWithButtons, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 export default function CourseDetailScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
@@ -35,6 +36,7 @@ export default function CourseDetailScreen() {
   const { relationship: coachingRelationship } = useCoachingStatus();
   const insets = useSafeAreaInsets();
   const [course, setCourse] = useState<LearningCourse | null>(null);
+  const [betterAtCourse, setBetterAtCourse] = useState<BetterAtCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enrolled, setEnrolled] = useState(false);
@@ -42,6 +44,24 @@ export default function CourseDetailScreen() {
   const [courseProgress, setCourseProgress] = useState(0);
   const [hasProSubscription, setHasProSubscription] = useState(false);
   const [userSubscriptionTier, setUserSubscriptionTier] = useState<string>('free');
+
+  const showCourseUnavailable = (message: string) => {
+    showAlertWithButtons(
+      'Course Not Available',
+      message,
+      [
+        { text: 'Close', style: 'cancel' },
+        { text: 'Browse Learn', onPress: () => router.push('/(tabs)/learn') },
+        {
+          text: 'Contact Support',
+          onPress: () =>
+            Linking.openURL(
+              `mailto:support@regattaflow.com?subject=${encodeURIComponent('Course setup issue')}&body=${encodeURIComponent(`Course: ${String(courseId || '')}\n\nIssue: ${message}`)}`
+            ),
+        },
+      ]
+    );
+  };
 
   useEffect(() => {
     if (courseId) {
@@ -63,9 +83,25 @@ export default function CourseDetailScreen() {
       setLoading(true);
       setError(null);
       
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+
+      // Try BetterAt DB-backed course first (nursing, drawing, fitness)
+      if (isUUID) {
+        try {
+          const dbCourse = await getCourseWithLessons(courseId);
+          if (dbCourse && dbCourse.lessons && dbCourse.lessons.length > 0) {
+            setBetterAtCourse(dbCourse);
+            setLoading(false);
+            setEnrolled(true); // BetterAt courses are freely accessible
+            return;
+          }
+        } catch (err) {
+          // Not a BetterAt course, continue with legacy flow
+        }
+      }
+
       // First, try to load from JSON catalog (single source of truth)
       let catalogCourse: CatalogCourse | undefined;
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
       
       if (isUUID) {
         catalogCourse = CourseCatalogService.getCourseById(courseId);
@@ -432,7 +468,7 @@ export default function CourseDetailScreen() {
                 actualCourseId = createdId;
                 setCourse({ ...course, id: createdId, _catalogOnly: false } as any);
               } else {
-                showAlert('Course Not Available', 'Unable to set up this course. Please try again later.');
+                showCourseUnavailable('Unable to set up this course. Please try again later.');
                 return;
               }
             } catch (createErr) {
@@ -441,7 +477,7 @@ export default function CourseDetailScreen() {
               return;
             }
           } else {
-            showAlert('Course Not Available', 'This course could not be found. Please try again later.');
+            showCourseUnavailable('This course could not be found. Please try again later.');
             return;
           }
         }
@@ -467,7 +503,7 @@ export default function CourseDetailScreen() {
         if (dbCourse?.id) {
           actualCourseId = dbCourse.id;
         } else {
-          showAlert('Course Not Available', 'This course has not been set up in the database yet. Please try again later.');
+          showCourseUnavailable('This course has not been set up in the database yet. Please try again later.');
           return;
         }
       } catch (err) {
@@ -684,6 +720,87 @@ export default function CourseDetailScreen() {
           <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
           <Text style={styles.loadingText}>Loading course...</Text>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Render BetterAt course detail (nursing, drawing, fitness)
+  if (betterAtCourse) {
+    const lessons = betterAtCourse.lessons || [];
+    const levelColors: Record<string, string> = {
+      beginner: '#10B981', intermediate: IOS_COLORS.systemBlue, advanced: '#8B5CF6',
+    };
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color="#1E293B" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.courseInfo}>
+            <View style={styles.courseHeader}>
+              <Text style={styles.courseTitle}>{betterAtCourse.title}</Text>
+              <View style={[styles.levelBadge, { backgroundColor: levelColors[betterAtCourse.level] || '#64748B' }]}>
+                <Text style={styles.levelText}>{betterAtCourse.level}</Text>
+              </View>
+            </View>
+            {betterAtCourse.description && (
+              <Text style={styles.courseDescription}>{betterAtCourse.description}</Text>
+            )}
+            <View style={styles.courseMeta}>
+              <View style={styles.metaItem}>
+                <Ionicons name="book-outline" size={16} color="#64748B" />
+                <Text style={styles.metaText}>{lessons.length} lessons</Text>
+              </View>
+              {betterAtCourse.topic && (
+                <View style={styles.metaItem}>
+                  <Ionicons name="folder-outline" size={16} color="#64748B" />
+                  <Text style={styles.metaText}>{betterAtCourse.topic}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+          <View style={styles.modulesSection}>
+            <Text style={styles.sectionTitle}>Lessons</Text>
+            <View style={styles.moduleCard}>
+              <View style={styles.lessonsList}>
+                {lessons.map((lesson, index) => (
+                  <TouchableOpacity
+                    key={lesson.id}
+                    style={[
+                      styles.lessonItem,
+                      index < lessons.length - 1 && styles.lessonItemBorder,
+                    ]}
+                    onPress={() => {
+                      router.push({
+                        pathname: '/(tabs)/learn/[courseId]/player',
+                        params: { courseId: courseId!, lessonId: lesson.id },
+                      });
+                    }}
+                  >
+                    <View style={styles.lessonItemLeft}>
+                      <View style={styles.lessonNumber}>
+                        <Text style={styles.lessonNumberText}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.lessonItemText}>
+                        <Text style={styles.lessonTitle}>{lesson.title}</Text>
+                        {lesson.description && (
+                          <Text style={styles.lessonDescription} numberOfLines={1}>
+                            {lesson.description}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                    <Ionicons name="play-circle-outline" size={24} color={IOS_COLORS.systemBlue} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+          <View style={styles.bottomSpacing} />
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -1296,4 +1413,3 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.systemBlue,
   },
 });
-

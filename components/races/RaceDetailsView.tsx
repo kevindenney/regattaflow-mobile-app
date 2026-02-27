@@ -520,7 +520,7 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
       setEditMode(false);
       onUpdate?.();
     } catch (error: any) {
-      console.error('Error saving race details:', error);
+      logger.error('Error saving race details', error);
       Alert.alert('Error', error.message || 'Failed to save changes');
     } finally {
       setSaving(false);

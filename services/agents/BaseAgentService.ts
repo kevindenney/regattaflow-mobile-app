@@ -11,8 +11,11 @@
  * - ✅ Browser → Supabase Edge Function → Agent.run() (secure)
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('BaseAgentService');
 
 // Tool definition using Zod schemas for type safety
 export interface AgentTool {
@@ -54,11 +57,45 @@ function isBrowserEnvironment(): boolean {
   return false;
 }
 
+function normalizeApiKey(rawKey: string | undefined): string | null {
+  if (typeof rawKey !== 'string') return null;
+  const trimmed = rawKey.trim();
+  if (!trimmed || trimmed === 'placeholder') return null;
+  return trimmed;
+}
+
 export class BaseAgentService {
   protected client: Anthropic | null = null;
   protected tools: Map<string, AgentTool> = new Map();
   protected config: Required<AgentConfig>;
   private isServerSide: boolean;
+  private hasApiKey: boolean = false;
+  private static anthropicCtor: (new (config: { apiKey: string }) => Anthropic) | null = null;
+
+  private async tryInitializeClient(): Promise<void> {
+    if (!this.isServerSide || this.client) {
+      return;
+    }
+
+    const apiKey = normalizeApiKey(process.env.ANTHROPIC_API_KEY);
+    if (!apiKey) {
+      this.hasApiKey = false;
+      return;
+    }
+
+    if (!BaseAgentService.anthropicCtor) {
+      const module = await import('@anthropic-ai/sdk');
+      BaseAgentService.anthropicCtor = module.default as new (config: { apiKey: string }) => Anthropic;
+    }
+
+    this.client = new BaseAgentService.anthropicCtor({ apiKey });
+    this.hasApiKey = true;
+  }
+
+  protected async ensureClientReady(): Promise<boolean> {
+    await this.tryInitializeClient();
+    return Boolean(this.client && this.hasApiKey);
+  }
 
   constructor(config: AgentConfig = {}) {
     // Detect environment
@@ -77,15 +114,8 @@ export class BaseAgentService {
       return; // Skip Anthropic client creation
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-
-    if (!apiKey) {
-
-    }
-
-    // Server-side only - no dangerouslyAllowBrowser needed
-    this.client = new Anthropic({
-      apiKey: apiKey || 'dummy-key-for-development',
+    void this.tryInitializeClient().catch((error) => {
+      logger.error('Failed to initialize BaseAgentService Anthropic client', error);
     });
 
     this.config = {
@@ -112,7 +142,7 @@ export class BaseAgentService {
     // This is a simplified conversion - extend as needed for complex schemas
 
     if (zodSchema instanceof z.ZodObject) {
-      const shape = zodSchema._def.shape;
+      const shape = this.getObjectShape(zodSchema);
       const properties: Record<string, any> = {};
       const required: string[] = [];
 
@@ -154,7 +184,7 @@ export class BaseAgentService {
       };
     }
     if (schema instanceof z.ZodObject) {
-      const shape = schema._def.shape;
+      const shape = this.getObjectShape(schema);
       const properties: Record<string, any> = {};
       const required: string[] = [];
 
@@ -177,6 +207,18 @@ export class BaseAgentService {
 
     // Default fallback
     return { type: 'string', description: schema.description || '' };
+  }
+
+  /**
+   * Zod object shape compatibility helper.
+   * Some builds expose _def.shape as a function, others as a plain object.
+   */
+  private getObjectShape(schema: z.ZodObject<any>): Record<string, z.ZodTypeAny> {
+    const shapeDef = (schema as any)?._def?.shape;
+    if (typeof shapeDef === 'function') {
+      return shapeDef();
+    }
+    return shapeDef || {};
   }
 
   /**
@@ -208,7 +250,7 @@ export class BaseAgentService {
    */
   async run(options: AgentRunOptions): Promise<AgentRunResult> {
     // Check if running in browser
-    if (!this.isServerSide || !this.client) {
+    if (!this.isServerSide) {
       const errorMessage = `
 🚨 SECURITY ERROR: Cannot run agent in the browser!
 
@@ -230,7 +272,7 @@ Example:
 
 See: supabase/functions/extract-race-details/index.ts for an example
 `;
-      console.error(errorMessage);
+      logger.error(errorMessage);
       return {
         success: false,
         result: null,
@@ -240,12 +282,46 @@ See: supabase/functions/extract-race-details/index.ts for an example
       };
     }
 
+    // Re-attempt initialization at call time to handle environments
+    // where secrets are loaded after service construction.
+    if (!(await this.ensureClientReady())) {
+      logger.error('Missing ANTHROPIC_API_KEY in server environment for BaseAgentService');
+      return {
+        success: false,
+        result: null,
+        iterations: 0,
+        toolsUsed: [],
+        error: 'ANTHROPIC_API_KEY is missing in server environment.',
+      };
+    }
+    const client = this.client;
+    if (!client) {
+      return {
+        success: false,
+        result: null,
+        iterations: 0,
+        toolsUsed: [],
+        error: 'Failed to initialize Anthropic client.',
+      };
+    }
+
     const { userMessage, context = {}, maxIterations = 10 } = options;
+    const trimmedMessage = userMessage?.trim();
+    if (!trimmedMessage) {
+      return {
+        success: false,
+        result: null,
+        iterations: 0,
+        toolsUsed: [],
+        error: 'userMessage is required',
+      };
+    }
+    const safeMaxIterations = Math.max(1, Math.min(25, Math.floor(maxIterations)));
 
     const messages: Anthropic.MessageParam[] = [
       {
         role: 'user',
-        content: this.buildUserPrompt(userMessage, context),
+        content: this.buildUserPrompt(trimmedMessage, context),
       },
     ];
 
@@ -254,7 +330,7 @@ See: supabase/functions/extract-race-details/index.ts for an example
     const toolResults: Record<string, any> = {}; // Track tool results
 
     try {
-      while (iterations < maxIterations) {
+      while (iterations < safeMaxIterations) {
         iterations++;
 
         // Convert tools to Anthropic format
@@ -265,14 +341,18 @@ See: supabase/functions/extract-race-details/index.ts for an example
         }));
 
         // Call Claude with tools
-        const response = await this.client.messages.create({
+        const requestPayload: any = {
           model: this.config.model,
           max_tokens: this.config.maxTokens,
           temperature: this.config.temperature,
           system: this.config.systemPrompt,
           messages,
-          tools: anthropicTools,
-        });
+        };
+        if (anthropicTools.length > 0) {
+          requestPayload.tools = anthropicTools;
+        }
+
+        const response = await client.messages.create(requestPayload);
 
         // Check if agent wants to use a tool
         if (response.stop_reason === 'tool_use') {

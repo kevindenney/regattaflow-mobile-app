@@ -8,6 +8,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import type { RaceCourseExtraction } from '@/lib/types/ai-knowledge';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
+import { createLogger } from '@/lib/utils/logger';
 
 interface RaceMapViewProps {
   courseExtraction: RaceCourseExtraction;
@@ -15,6 +17,9 @@ interface RaceMapViewProps {
   showLaylines: boolean;
   onMapLoad?: () => void;
 }
+
+let maplibreNamespace: any = null;
+const logger = createLogger('RaceMapView');
 
 export function RaceMapView({
   courseExtraction,
@@ -24,7 +29,40 @@ export function RaceMapView({
 }: RaceMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const latestPropsRef = useRef({
+    activeLayer,
+    courseExtraction,
+    onMapLoad,
+  });
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+
+  useEffect(() => {
+    latestPropsRef.current = { activeLayer, courseExtraction, onMapLoad };
+  }, [activeLayer, courseExtraction, onMapLoad]);
+
+  const ensureBathymetryLayer = (map: any) => {
+    if (!map.getSource('terrain')) {
+      map.addSource('terrain', {
+        type: 'raster-dem',
+        url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
+        tileSize: 256,
+      });
+    }
+
+    if (!map.getLayer('bathymetry')) {
+      map.addLayer({
+        id: 'bathymetry',
+        type: 'line',
+        source: 'terrain',
+        paint: {
+          'line-color': '#0066cc',
+          'line-width': 1,
+          'line-opacity': 0.6,
+        },
+      });
+    }
+  };
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
@@ -32,17 +70,34 @@ export function RaceMapView({
       return;
     }
 
-    // Enable MapLibre GL for web
-    const ENABLE_MAP = true;
-
     // Web-only MapLibre GL implementation
     const initializeMap = async () => {
+      let loadTimeout: ReturnType<typeof setTimeout> | null = null;
+      let didLoad = false;
       try {
 
-        const maplibregl = await import('maplibre-gl');
+        let maplibregl: any = null;
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = (maplibreModule as any).default || maplibreModule;
+        } catch (_moduleError) {
+          await ensureMapLibreScript('maplibre-gl-script-race-map-view');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        maplibreNamespace = maplibregl;
 
-        // Import CSS dynamically
-        await import('maplibre-gl/dist/maplibre-gl.css');
+        // Import CSS dynamically. Fall back to link injection when bundler CSS import is unavailable.
+        try {
+          await import('maplibre-gl/dist/maplibre-gl.css');
+        } catch (_cssError) {
+          ensureMapLibreCss('maplibre-gl-css');
+        }
+
+        const MapConstructor = maplibregl?.Map;
+        const NavigationControl = maplibregl?.NavigationControl;
+        if (!MapConstructor) {
+          throw new Error('MapLibre Map constructor is unavailable');
+        }
 
         if (!mapContainerRef.current) {
 
@@ -55,7 +110,7 @@ export function RaceMapView({
 
         // Initialize map with nautical style
         // Using a simple style to avoid font loading issues
-        const map = new maplibregl.Map({
+        const map = new MapConstructor({
           container: mapContainerRef.current,
           style: {
             version: 8,
@@ -86,55 +141,78 @@ export function RaceMapView({
         });
 
         mapRef.current = map;
+        loadTimeout = setTimeout(() => {
+          if (!didLoad) {
+            setMapError('Map timed out while loading. Course data is still available.');
+          }
+        }, 8000);
 
         map.on('load', () => {
+          didLoad = true;
 
           setMapLoaded(true);
-          onMapLoad?.();
-
-          // Add 3D terrain
-          map.addSource('terrain', {
-            type: 'raster-dem',
-            url: 'https://demotiles.maplibre.org/terrain-tiles/tiles.json',
-            tileSize: 256,
-          });
-
-          // Add bathymetry layer (depth contours)
-          if (activeLayer === 'bathymetry') {
-            map.addLayer({
-              id: 'bathymetry',
-              type: 'line',
-              source: 'terrain',
-              paint: {
-                'line-color': '#0066cc',
-                'line-width': 1,
-                'line-opacity': 0.6,
-              },
-            });
+          setMapError(null);
+          if (loadTimeout) {
+            clearTimeout(loadTimeout);
+            loadTimeout = null;
           }
 
+          // Ensure terrain/bathymetry layers exist regardless of active layer.
+          ensureBathymetryLayer(map);
+          map.setLayoutProperty(
+            'bathymetry',
+            'visibility',
+            latestPropsRef.current.activeLayer === 'bathymetry' ? 'visible' : 'none'
+          );
+
           // Add course marks
-          addCourseMarks(map, courseExtraction);
+          addCourseMarks(map, latestPropsRef.current.courseExtraction);
 
           // Add start line
-          addStartLine(map, courseExtraction);
+          addStartLine(map, latestPropsRef.current.courseExtraction);
+
+          // Fit viewport to extracted course geometry when available.
+          fitMapToCourse(map, latestPropsRef.current.courseExtraction);
+          latestPropsRef.current.onMapLoad?.();
         });
 
-        map.on('error', (e) => {
-
+        map.on('error', (e: any) => {
+          // MapLibre emits recoverable runtime errors (tile/source/network). Don't collapse
+          // the map after successful load unless style is no longer available.
+          const mapInstance = mapRef.current;
+          const styleLoaded = typeof mapInstance?.isStyleLoaded === 'function'
+            ? mapInstance.isStyleLoaded()
+            : false;
+          if (didLoad && styleLoaded) {
+            return;
+          }
+          const detail = e?.error?.message || e?.message || 'Unknown map error';
+          setMapError(`Interactive map unavailable on web. ${detail}`);
         });
 
         // Add navigation controls
-        map.addControl(new maplibregl.NavigationControl({
-          showCompass: true,
-          showZoom: true,
-          visualizePitch: true,
-        }), 'top-right');
+        if (NavigationControl) {
+          map.addControl(new NavigationControl({
+            showCompass: true,
+            showZoom: true,
+            visualizePitch: true,
+          }), 'top-right');
+        }
 
       } catch (error) {
 
         // Set loaded to true anyway to hide the placeholder and show error state
         setMapLoaded(true);
+        setMapError(
+          `Map failed to initialize: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`
+        );
+        maplibreNamespace = null;
+      } finally {
+        if (loadTimeout && didLoad) {
+          clearTimeout(loadTimeout);
+        }
       }
     };
 
@@ -153,6 +231,7 @@ export function RaceMapView({
     if (!mapRef.current || !mapLoaded) return;
 
     const map = mapRef.current;
+    ensureBathymetryLayer(map);
 
     // Toggle layer visibility
     const layers = ['weather', 'tide', 'tactical', 'bathymetry'];
@@ -184,7 +263,21 @@ export function RaceMapView({
         map.removeSource('laylines');
       }
     }
-  }, [showLaylines, mapLoaded]);
+  }, [showLaylines, mapLoaded, courseExtraction]);
+
+  // Refresh course overlays when extraction updates after initial load
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded) return;
+
+    const map = mapRef.current;
+    addCourseMarks(map, courseExtraction);
+    addStartLine(map, courseExtraction);
+    fitMapToCourse(map, courseExtraction);
+
+    if (showLaylines) {
+      addLaylines(map, courseExtraction);
+    }
+  }, [courseExtraction, mapLoaded, showLaylines]);
 
   if (Platform.OS !== 'web') {
     return (
@@ -216,18 +309,69 @@ export function RaceMapView({
           </View>
         </View>
       )}
+      {!!mapError && (
+        <View style={styles.mapErrorOverlay}>
+          <Text style={styles.mapErrorTitle}>Map unavailable</Text>
+          <Text style={styles.mapErrorMessage}>{mapError}</Text>
+          <Text style={styles.mapErrorDetail}>
+            Marks extracted: {courseExtraction?.marks?.length || 0}
+          </Text>
+        </View>
+      )}
     </View>
   );
+}
+
+function getMarkLngLat(mark: any): [number, number] | null {
+  const latFromPosition = mark?.position?.latitude ?? mark?.position?.lat;
+  const lngFromPosition = mark?.position?.longitude ?? mark?.position?.lng;
+  if (typeof latFromPosition === 'number' && typeof lngFromPosition === 'number') {
+    return [lngFromPosition, latFromPosition];
+  }
+
+  if (typeof mark?.latitude === 'number' && typeof mark?.longitude === 'number') {
+    return [mark.longitude, mark.latitude];
+  }
+
+  if (Array.isArray(mark?.coordinates) && mark.coordinates.length >= 2) {
+    const [lng, lat] = mark.coordinates;
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      return [lng, lat];
+    }
+  }
+
+  return extractCoordinates(mark?.position?.description || mark?.description || '');
+}
+
+function getMarkType(mark: any): string {
+  return (mark?.type || mark?.mark_type || '').toString().toLowerCase();
+}
+
+function getCourseLngLats(courseExtraction: RaceCourseExtraction): [number, number][] {
+  return (courseExtraction?.marks || [])
+    .map((mark: any) => getMarkLngLat(mark))
+    .filter((coord): coord is [number, number] => Array.isArray(coord));
 }
 
 // Helper function to add course marks to map
 function addCourseMarks(map: any, courseExtraction: RaceCourseExtraction) {
   const marks = courseExtraction.marks;
+  const existingMarkers = (map as any).__courseMarkers as any[] | undefined;
+  if (existingMarkers && existingMarkers.length > 0) {
+    existingMarkers.forEach((marker) => {
+      try {
+        marker.remove();
+      } catch (_error) {
+        // no-op
+      }
+    });
+  }
+  (map as any).__courseMarkers = [];
 
   marks.forEach((mark, index) => {
-    // Extract lat/lng from mark description (basic parsing)
-    const coords = extractCoordinates(mark.position.description);
+    const coords = getMarkLngLat(mark);
     if (!coords) return;
+    const markType = getMarkType(mark) || 'unknown';
 
     // Create marker element
     const el = document.createElement('div');
@@ -235,35 +379,72 @@ function addCourseMarks(map: any, courseExtraction: RaceCourseExtraction) {
     el.style.width = '24px';
     el.style.height = '24px';
     el.style.borderRadius = '50%';
-    el.style.backgroundColor = getMarkColor(mark.type);
+    el.style.backgroundColor = getMarkColor(markType);
     el.style.border = '3px solid white';
     el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
     el.style.cursor = 'pointer';
-    el.title = mark.name;
+    el.title = mark.name || mark.mark_name || `Mark ${index + 1}`;
 
     // Add marker to map
     try {
-      const maplibregl = require('maplibre-gl');
-      new maplibregl.Marker({ element: el })
+      const Marker = maplibreNamespace?.Marker;
+      const Popup = maplibreNamespace?.Popup;
+      if (!Marker || !Popup) return;
+
+      const marker = new Marker({ element: el })
         .setLngLat(coords)
         .setPopup(
-          new maplibregl.Popup({ offset: 25 })
-            .setHTML(`<strong>${mark.name}</strong><br/>${mark.type}`)
+          new Popup({ offset: 25 })
+            .setHTML(
+              `<strong>${mark.name || mark.mark_name || `Mark ${index + 1}`}</strong><br/>${markType || 'mark'}`
+            )
         )
         .addTo(map);
+      (map as any).__courseMarkers.push(marker);
     } catch (error) {
-      console.error('Error adding marker:', error);
+      logger.error('Error adding marker', error);
     }
   });
 }
 
+function fitMapToCourse(map: any, courseExtraction: RaceCourseExtraction) {
+  const coords = getCourseLngLats(courseExtraction);
+  if (coords.length === 0) return;
+
+  try {
+    const LngLatBounds = maplibreNamespace?.LngLatBounds;
+    if (!LngLatBounds) return;
+
+    const bounds = new LngLatBounds(coords[0], coords[0]);
+    coords.slice(1).forEach((coord) => bounds.extend(coord));
+
+    map.fitBounds(bounds, {
+      padding: 48,
+      maxZoom: 15,
+      duration: 0,
+    });
+  } catch (error) {
+    logger.error('Error fitting map to course bounds', error);
+  }
+}
+
 // Helper function to add start line
 function addStartLine(map: any, courseExtraction: RaceCourseExtraction) {
-  const startMarks = courseExtraction.marks.filter(m => m.type === 'start');
+  const startMarks = courseExtraction.marks.filter((m: any) => {
+    const markType = getMarkType(m);
+    return markType === 'start' || markType === 'pin' || markType === 'committee_boat';
+  });
   if (startMarks.length < 2) return;
 
-  const coords = startMarks.map(m => extractCoordinates(m.position.description)).filter(Boolean);
+  const coords = startMarks.map((m) => getMarkLngLat(m)).filter(Boolean);
   if (coords.length < 2) return;
+
+  if (map.getLayer('start-line')) {
+    map.removeLayer('start-line');
+  }
+  if (map.getSource('start-line')) {
+    map.removeSource('start-line');
+  }
 
   map.addSource('start-line', {
     type: 'geojson',
@@ -291,11 +472,18 @@ function addStartLine(map: any, courseExtraction: RaceCourseExtraction) {
 // Helper function to add laylines
 function addLaylines(map: any, courseExtraction: RaceCourseExtraction) {
   // Find windward mark
-  const windwardMark = courseExtraction.marks.find(m => m.type === 'windward');
+  const windwardMark = courseExtraction.marks.find((m: any) => getMarkType(m) === 'windward');
   if (!windwardMark) return;
 
-  const windwardCoords = extractCoordinates(windwardMark.position.description);
+  const windwardCoords = getMarkLngLat(windwardMark);
   if (!windwardCoords) return;
+
+  if (map.getLayer('laylines')) {
+    map.removeLayer('laylines');
+  }
+  if (map.getSource('laylines')) {
+    map.removeSource('laylines');
+  }
 
   // Create layline angles (assuming 45-degree laylines)
   const laylineAngle = 45;
@@ -355,6 +543,7 @@ function addLaylines(map: any, courseExtraction: RaceCourseExtraction) {
 
 // Helper to extract coordinates from description string
 function extractCoordinates(description: string): [number, number] | null {
+  if (!description) return null;
   // Look for patterns like "22.2847°N, 114.1676°E" or "22.2847, 114.1676"
   const match = description.match(/(-?\d+\.\d+)[°]?[NS]?,\s*(-?\d+\.\d+)[°]?[EW]?/);
   if (match) {
@@ -394,6 +583,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  mapErrorOverlay: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    backgroundColor: 'rgba(248, 250, 252, 0.96)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    padding: 12,
+    gap: 4,
+  },
+  mapErrorTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  mapErrorMessage: {
+    fontSize: 12,
+    color: '#334155',
+    lineHeight: 17,
+  },
+  mapErrorDetail: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#64748b',
   },
   placeholderContent: {
     alignItems: 'center',

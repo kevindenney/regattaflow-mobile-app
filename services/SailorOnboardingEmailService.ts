@@ -5,6 +5,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SailorOnboardingEmailService');
 
 // ============================================================================
 // TYPES
@@ -66,7 +69,7 @@ class SailorOnboardingEmailService {
       const template = this.generateWelcomeEmail(data);
       return await this.send(data.sailor_email, template, 'welcome', data.sailor_id);
     } catch (error) {
-      console.error('Error sending welcome email:', error);
+      logger.error('Error sending welcome email:', error);
       return false;
     }
   }
@@ -79,7 +82,7 @@ class SailorOnboardingEmailService {
       const template = this.generateQuickStartEmail(data);
       return await this.send(data.sailor_email, template, 'quick_start', data.sailor_id);
     } catch (error) {
-      console.error('Error sending quick start email:', error);
+      logger.error('Error sending quick start email:', error);
       return false;
     }
   }
@@ -92,7 +95,7 @@ class SailorOnboardingEmailService {
       const template = this.generateFeatureTipEmail(data);
       return await this.send(data.sailor_email, template, 'feature_tip', data.sailor_id);
     } catch (error) {
-      console.error('Error sending feature tip email:', error);
+      logger.error('Error sending feature tip email:', error);
       return false;
     }
   }
@@ -105,7 +108,7 @@ class SailorOnboardingEmailService {
       const template = this.generateTrialReminderEmail(data, 5);
       return await this.send(data.sailor_email, template, 'trial_reminder_5', data.sailor_id);
     } catch (error) {
-      console.error('Error sending trial reminder email:', error);
+      logger.error('Error sending trial reminder email:', error);
       return false;
     }
   }
@@ -118,7 +121,7 @@ class SailorOnboardingEmailService {
       const template = this.generateTrialReminderEmail(data, 2);
       return await this.send(data.sailor_email, template, 'trial_reminder_2', data.sailor_id);
     } catch (error) {
-      console.error('Error sending trial reminder email:', error);
+      logger.error('Error sending trial reminder email:', error);
       return false;
     }
   }
@@ -131,7 +134,7 @@ class SailorOnboardingEmailService {
       const template = this.generateTrialEndingEmail(data);
       return await this.send(data.sailor_email, template, 'trial_ending', data.sailor_id);
     } catch (error) {
-      console.error('Error sending trial ending email:', error);
+      logger.error('Error sending trial ending email:', error);
       return false;
     }
   }
@@ -144,7 +147,7 @@ class SailorOnboardingEmailService {
       const template = this.generateTrialEndedEmail(data);
       return await this.send(data.sailor_email, template, 'trial_ended', data.sailor_id);
     } catch (error) {
-      console.error('Error sending trial ended email:', error);
+      logger.error('Error sending trial ended email:', error);
       return false;
     }
   }
@@ -157,7 +160,7 @@ class SailorOnboardingEmailService {
       const template = this.generateOnboardingCompleteEmail(data);
       return await this.send(data.sailor_email, template, 'onboarding_complete', data.sailor_id);
     } catch (error) {
-      console.error('Error sending onboarding complete email:', error);
+      logger.error('Error sending onboarding complete email:', error);
       return false;
     }
   }
@@ -170,7 +173,7 @@ class SailorOnboardingEmailService {
       const template = this.generateReEngagementEmail(data);
       return await this.send(data.sailor_email, template, 're_engagement', data.sailor_id);
     } catch (error) {
-      console.error('Error sending re-engagement email:', error);
+      logger.error('Error sending re-engagement email:', error);
       return false;
     }
   }
@@ -805,7 +808,7 @@ The ${this.APP_NAME} Team
       });
 
       if (error) {
-        console.error('Error sending email:', error);
+        logger.error('Error sending email:', error);
         return false;
       }
 
@@ -814,7 +817,7 @@ The ${this.APP_NAME} Team
       
       return true;
     } catch (error) {
-      console.error('Failed to send email:', error);
+      logger.error('Failed to send email:', error);
       return false;
     }
   }
@@ -825,7 +828,7 @@ The ${this.APP_NAME} Team
   private async logEmailSent(
     sailorId: string,
     emailType: OnboardingEmailType,
-    recipientEmail: string
+    _recipientEmail: string
   ): Promise<void> {
     try {
       await supabase.from('sailor_email_sequences').update({
@@ -837,7 +840,7 @@ The ${this.APP_NAME} Team
         status: 'pending',
       });
     } catch (error) {
-      console.error('Failed to log email:', error);
+      logger.error('Failed to log email:', error);
     }
   }
 
@@ -853,7 +856,7 @@ The ${this.APP_NAME} Team
         status: 'pending',
       }).in('email_type', ['trial_reminder_5', 'trial_reminder_2', 'trial_ending', 'trial_ended']);
     } catch (error) {
-      console.error('Failed to cancel pending emails:', error);
+      logger.error('Failed to cancel pending emails:', error);
     }
   }
 }
@@ -861,4 +864,3 @@ The ${this.APP_NAME} Team
 // Export singleton
 export const sailorOnboardingEmailService = new SailorOnboardingEmailService();
 export default SailorOnboardingEmailService;
-

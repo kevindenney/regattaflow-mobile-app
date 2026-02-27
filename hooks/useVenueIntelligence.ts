@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   SailingVenue as GlobalSailingVenue,
   VenueTransition,
@@ -22,6 +23,8 @@ import {
   type LocationUpdate,
 } from '@/services/location/VenueDetectionService';
 import { regionalIntelligenceService } from '@/services/venue/RegionalIntelligenceService';
+
+const logger = createLogger('useVenueIntelligence');
 
 /**
  * Helpers to normalize detection-service venues into the richer global schema
@@ -200,7 +203,7 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
         intelligenceError: null,
       }));
     } catch (error) {
-      console.error(`Failed to load intelligence for ${venue.name}:`, error);
+      logger.error(`Failed to load intelligence for ${venue.name}`, error);
       setState(prev => ({
         ...prev,
         isLoadingIntelligence: false,
@@ -319,7 +322,7 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
       setState(prev => ({ ...prev, isDetecting: false }));
       return true;
     } catch (error) {
-      console.error('Failed to initialize venue intelligence:', error);
+      logger.error('Failed to initialize venue intelligence', error);
       setState(prev => ({
         ...prev,
         isDetecting: false,
@@ -421,16 +424,22 @@ export function useVenueIntelligence(): VenueIntelligenceState & VenueIntelligen
 export function useCurrentVenue() {
   const [currentVenue, setCurrentVenue] = useState<GlobalSailingVenue | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    let isMounted = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
+  useEffect(() => {
     const listener = (update: LocationUpdate) => {
-      if (!isMounted) return;
+      if (!isMountedRef.current) return;
       setCurrentVenue(update.venue ? mapDetectionVenueToGlobal(update.venue) : null);
     };
 
     const initializeSimple = async () => {
+      if (!isMountedRef.current) return;
       setIsDetecting(true);
 
       venueDetectionService.addLocationListener(listener);
@@ -439,18 +448,18 @@ export function useCurrentVenue() {
 
       if (success) {
         const detectedVenue = venueDetectionService.getCurrentVenue();
-        if (detectedVenue && isMounted) {
+        if (detectedVenue && isMountedRef.current) {
           setCurrentVenue(mapDetectionVenueToGlobal(detectedVenue));
         }
       }
 
+      if (!isMountedRef.current) return;
       setIsDetecting(false);
     };
 
-    initializeSimple();
+    void initializeSimple();
 
     return () => {
-      isMounted = false;
       venueDetectionService.removeLocationListener(listener);
     };
   }, []);
@@ -461,23 +470,33 @@ export function useCurrentVenue() {
 export function useVenueWeather(venueId?: string) {
   const [weatherIntelligence, setWeatherIntelligence] = useState<Awaited<ReturnType<typeof regionalIntelligenceService.getWeatherIntelligence>> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!venueId) return;
 
     const loadWeather = async () => {
+      if (!isMountedRef.current) return;
       setIsLoading(true);
       try {
         const weather = await regionalIntelligenceService.getWeatherIntelligence(venueId);
+        if (!isMountedRef.current) return;
         setWeatherIntelligence(weather);
       } catch (error) {
-        console.error('Failed to load weather intelligence:', error);
+        logger.error('Failed to load weather intelligence', error);
       } finally {
+        if (!isMountedRef.current) return;
         setIsLoading(false);
       }
     };
 
-    loadWeather();
+    void loadWeather();
   }, [venueId]);
 
   return { weatherIntelligence, isLoading };
@@ -486,23 +505,33 @@ export function useVenueWeather(venueId?: string) {
 export function useVenueTactics(venueId?: string) {
   const [tacticalIntelligence, setTacticalIntelligence] = useState<Awaited<ReturnType<typeof regionalIntelligenceService.getTacticalIntelligence>> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!venueId) return;
 
     const loadTactics = async () => {
+      if (!isMountedRef.current) return;
       setIsLoading(true);
       try {
         const tactics = await regionalIntelligenceService.getTacticalIntelligence(venueId);
+        if (!isMountedRef.current) return;
         setTacticalIntelligence(tactics);
       } catch (error) {
-        console.error('Failed to load tactical intelligence:', error);
+        logger.error('Failed to load tactical intelligence', error);
       } finally {
+        if (!isMountedRef.current) return;
         setIsLoading(false);
       }
     };
 
-    loadTactics();
+    void loadTactics();
   }, [venueId]);
 
   return { tacticalIntelligence, isLoading };
@@ -511,23 +540,33 @@ export function useVenueTactics(venueId?: string) {
 export function useVenueCulture(venueId?: string) {
   const [culturalIntelligence, setCulturalIntelligence] = useState<Awaited<ReturnType<typeof regionalIntelligenceService.getCulturalIntelligence>> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!venueId) return;
 
     const loadCulture = async () => {
+      if (!isMountedRef.current) return;
       setIsLoading(true);
       try {
         const culture = await regionalIntelligenceService.getCulturalIntelligence(venueId);
+        if (!isMountedRef.current) return;
         setCulturalIntelligence(culture);
       } catch (error) {
-        console.error('Failed to load cultural intelligence:', error);
+        logger.error('Failed to load cultural intelligence', error);
       } finally {
+        if (!isMountedRef.current) return;
         setIsLoading(false);
       }
     };
 
-    loadCulture();
+    void loadCulture();
   }, [venueId]);
 
   return { culturalIntelligence, isLoading };

@@ -34,6 +34,7 @@ import {
   getNavItemsForUserType,
   isRouteActive,
 } from '@/lib/navigation-config';
+import { useVocabulary, type VocabularyMap } from '@/hooks/useVocabulary';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
@@ -74,6 +75,7 @@ export function NavigationDrawerContent({
 }: NavigationDrawerContentProps) {
   const { userType, userProfile, user, signOut, isGuest } = useAuth();
   const { isFree } = useFeatureGate();
+  const { vocabulary } = useVocabulary();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -174,19 +176,7 @@ export function NavigationDrawerContent({
     }
   };
 
-  const getNavItems = (): { primary: NavItem[]; secondary: NavItem[] } => {
-    switch (userType) {
-      case 'coach':
-        return { primary: COACH_NAV_ITEMS, secondary: [] };
-      case 'club':
-        return { primary: CLUB_NAV_ITEMS, secondary: [] };
-      case 'sailor':
-      default:
-        return { primary: SAILOR_NAV_ITEMS, secondary: SAILOR_SECONDARY_ITEMS };
-    }
-  };
-
-  const { primary, secondary } = getNavItems();
+  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary);
 
   const isActive = (route: string) => {
     const normalizedRoute = route.replace('/(tabs)/', '/').replace('/index', '');
@@ -440,6 +430,7 @@ export function NavigationDrawer({
 }: NavigationDrawerProps) {
   const { userType, userProfile, user, signOut, isGuest } = useAuth();
   const { isFree, tierName } = useFeatureGate();
+  const { vocabulary } = useVocabulary();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -521,19 +512,7 @@ export function NavigationDrawer({
   };
 
   // Get navigation items based on persona
-  const getNavItems = (): { primary: NavItem[]; secondary: NavItem[] } => {
-    switch (userType) {
-      case 'coach':
-        return { primary: COACH_NAV_ITEMS, secondary: [] };
-      case 'club':
-        return { primary: CLUB_NAV_ITEMS, secondary: [] };
-      case 'sailor':
-      default:
-        return { primary: SAILOR_NAV_ITEMS, secondary: SAILOR_SECONDARY_ITEMS };
-    }
-  };
-
-  const { primary, secondary } = getNavItems();
+  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary);
 
   // Check if route is active
   const isActive = (route: string) => {
@@ -795,12 +774,11 @@ export function NavigationDrawer({
 }
 
 // Helper to get current section name (exported for header use)
-export function getCurrentSectionName(pathname: string, userType: string | null): string {
+export function getCurrentSectionName(pathname: string, userType: string | null, vocabulary?: VocabularyMap): string {
+  const { primary, secondary } = getNavItemsForUserType(userType, vocabulary);
   const allItems = [
-    ...SAILOR_NAV_ITEMS,
-    ...SAILOR_SECONDARY_ITEMS,
-    ...COACH_NAV_ITEMS,
-    ...CLUB_NAV_ITEMS,
+    ...primary,
+    ...secondary,
     ...COMMON_FOOTER_ITEMS,
   ];
 
@@ -813,7 +791,7 @@ export function getCurrentSectionName(pathname: string, userType: string | null)
     }
   }
 
-  return 'RegattaFlow';
+  return 'BetterAt';
 }
 
 const styles = StyleSheet.create({

@@ -22,6 +22,9 @@ import {
 import { StormGlassService } from './weather/StormGlassService';
 import { OpenMeteoService } from './weather/OpenMeteoService';
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('WeatherAggregationService');
 
 // Regional weather provider configuration
 // OpenMeteo is FREE and primary for weather/waves
@@ -81,7 +84,7 @@ export class WeatherAggregationService {
         alerts
       };
     } catch (error) {
-      console.error('Error getting environmental intelligence:', error);
+      logger.error('Error getting environmental intelligence:', error);
       throw error;
     }
   }
@@ -106,7 +109,7 @@ export class WeatherAggregationService {
           return this.forecastToSnapshot(data);
         }
       } catch (error) {
-        console.warn(`Provider ${provider} failed:`, error);
+        logger.warn(`Provider ${provider} failed:`, error);
         continue;
       }
     }
@@ -155,7 +158,7 @@ export class WeatherAggregationService {
             break;
           }
         } catch (error) {
-          console.warn(`Provider ${provider} failed for ${time}:`, error);
+          logger.warn(`Provider ${provider} failed for ${time.toISOString()}:`, error);
           continue;
         }
       }
@@ -207,7 +210,7 @@ export class WeatherAggregationService {
   private createStormGlassService(): StormGlassService | null {
     const apiKey = process.env.EXPO_PUBLIC_STORMGLASS_API_KEY || process.env.STORMGLASS_API_KEY;
     if (!apiKey) {
-      console.warn('[WeatherAggregationService] No Storm Glass API key configured');
+      logger.warn('No Storm Glass API key configured');
       return null;
     }
 
@@ -234,7 +237,7 @@ export class WeatherAggregationService {
 
       return this.transformOpenMeteoForecast(weather);
     } catch (error) {
-      console.warn('[WeatherAggregationService] Open-Meteo provider failed', error);
+      logger.warn('Open-Meteo provider failed', error);
       return null;
     }
   }
@@ -368,7 +371,7 @@ export class WeatherAggregationService {
 
       return forecast;
     } catch (error) {
-      console.error('HKO API error:', error);
+      logger.error('HKO API error:', error);
       return null;
     }
   }
@@ -410,7 +413,7 @@ export class WeatherAggregationService {
 
       return forecast;
     } catch (error) {
-      console.error('NOAA API error:', error);
+      logger.error('NOAA API error:', error);
       return null;
     }
   }
@@ -446,9 +449,9 @@ export class WeatherAggregationService {
   /**
    * ECMWF API (placeholder - requires subscription)
    */
-  private async fetchECMWF(lat: number, lng: number, time: Date): Promise<WeatherForecast | null> {
+  private async fetchECMWF(_lat: number, _lng: number, _time: Date): Promise<WeatherForecast | null> {
     // TODO: Implement ECMWF API when subscription is available
-    console.warn('ECMWF API not yet implemented');
+    logger.warn('ECMWF API not yet implemented');
     return null;
   }
 
@@ -463,7 +466,7 @@ export class WeatherAggregationService {
       const forecast = await owmProvider.getForecast(lat, lng, time);
       return forecast;
     } catch (error) {
-      console.error('OpenWeatherMap API error:', error);
+      logger.error('OpenWeatherMap API error:', error);
       return null;
     }
   }
@@ -494,7 +497,7 @@ export class WeatherAggregationService {
         confidence_level: forecast.confidence
       });
     } catch (error) {
-      console.warn('Failed to cache forecast:', error);
+      logger.warn('Failed to cache forecast:', error);
     }
   }
 
@@ -546,7 +549,7 @@ export class WeatherAggregationService {
         provider: data.provider
       };
     } catch (error) {
-      console.error('Error fetching cached forecast:', error);
+      logger.error('Error fetching cached forecast:', error);
       return null;
     }
   }

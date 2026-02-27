@@ -1,11 +1,12 @@
-import maplibregl from 'maplibre-gl';
+import type { GeoJSONSource as MapLibreGeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 interface RaceCourse3D {
   course_id: string;
   course_data: CourseExtraction;
   venue_coordinates: [number, number];
-  map_instance?: maplibregl.Map;
+  map_instance?: MapLibreMap;
   visualization_config: VisualizationConfig;
 }
 
@@ -18,22 +19,6 @@ interface VisualizationConfig {
   show_tactical_grid: boolean;
   animation_enabled: boolean;
   performance_mode: 'high' | 'medium' | 'low';
-}
-
-interface TacticalLayer {
-  id: string;
-  type: 'wind_shift_zones' | 'current_vectors' | 'pressure_gradients' | 'tactical_grid';
-  data: GeoJSON.FeatureCollection;
-  style: LayerStyle;
-  interactive: boolean;
-}
-
-interface LayerStyle {
-  color: string;
-  opacity: number;
-  stroke_width: number;
-  fill_opacity?: number;
-  pattern?: string;
 }
 
 interface WindVisualization {
@@ -119,45 +104,6 @@ interface LaylineEffect {
   strategic_advice: string[];
 }
 
-interface BathymetryVisualization {
-  depth_contours: DepthContour[];
-  shallow_areas: ShallowArea[];
-  deep_channels: DeepChannel[];
-  navigation_hazards: NavigationHazard[];
-}
-
-interface DepthContour {
-  depth_meters: number;
-  coordinates: [number, number][];
-  tactical_relevance: 'high' | 'medium' | 'low';
-}
-
-interface ShallowArea {
-  id: string;
-  coordinates: [number, number][];
-  min_depth: number;
-  max_depth: number;
-  bottom_type: 'sand' | 'mud' | 'rock' | 'coral';
-  racing_impact: string[];
-}
-
-interface DeepChannel {
-  id: string;
-  centerline: [number, number][];
-  width_meters: number;
-  depth_meters: number;
-  current_effects: string[];
-}
-
-interface NavigationHazard {
-  id: string;
-  type: 'rock' | 'wreck' | 'shallow' | 'structure';
-  coordinates: [number, number];
-  radius_meters: number;
-  description: string;
-  avoidance_advice: string[];
-}
-
 interface Course3DOptions {
   container: string | HTMLElement;
   course_extraction: CourseExtraction;
@@ -179,6 +125,29 @@ interface InteractiveFeatures {
 const logger = createLogger('RaceCourseVisualizationService');
 export class RaceCourseVisualizationService {
   private static mapInstances: Map<string, RaceCourse3D> = new Map();
+  private static maplibreNs: any = null;
+
+  private static async getMapLibreNamespace(): Promise<any> {
+    if (this.maplibreNs) {
+      return this.maplibreNs;
+    }
+
+    try {
+      const maplibreModule = await import('maplibre-gl');
+      this.maplibreNs = (maplibreModule as any).default || maplibreModule;
+    } catch (_moduleError) {
+      if (typeof window !== 'undefined') {
+        await ensureMapLibreScript('maplibre-gl-script-race-course-viz-service');
+        this.maplibreNs = (window as any).maplibregl || null;
+      }
+    }
+
+    if (!this.maplibreNs) {
+      throw new Error('MapLibre namespace is unavailable');
+    }
+
+    return this.maplibreNs;
+  }
 
   /**
    * Initialize 3D race course visualization
@@ -204,7 +173,12 @@ export class RaceCourseVisualizationService {
       };
 
       // Initialize MapLibre GL map
-      const map = new maplibregl.Map({
+      const maplibregl = await this.getMapLibreNamespace();
+      const MapConstructor = maplibregl?.Map;
+      if (!MapConstructor) {
+        throw new Error('MapLibre constructor is unavailable');
+      }
+      const map = new MapConstructor({
         container: options.container,
         style: await this.getMapStyle(defaultConfig.theme),
         center: courseCenter,
@@ -251,7 +225,7 @@ export class RaceCourseVisualizationService {
 
       return courseId;
     } catch (error) {
-      console.error('Error initializing 3D course:', error);
+      logger.error('Error initializing 3D course:', error);
       throw error;
     }
   }
@@ -338,7 +312,7 @@ export class RaceCourseVisualizationService {
       });
 
     } catch (error) {
-      console.error('Error adding wind visualization:', error);
+      logger.error('Error adding wind visualization:', error);
       throw error;
     }
   }
@@ -420,7 +394,7 @@ export class RaceCourseVisualizationService {
       });
 
     } catch (error) {
-      console.error('Error adding current visualization:', error);
+      logger.error('Error adding current visualization:', error);
       throw error;
     }
   }
@@ -446,7 +420,7 @@ export class RaceCourseVisualizationService {
       const boatGeoJSON = this.createBoatPositionGeoJSON(boatPositions);
 
       if (map.getSource('boat-positions')) {
-        (map.getSource('boat-positions') as maplibregl.GeoJSONSource).setData(boatGeoJSON);
+        (map.getSource('boat-positions') as MapLibreGeoJSONSource).setData(boatGeoJSON);
       } else {
         map.addSource('boat-positions', {
           type: 'geojson',
@@ -485,7 +459,7 @@ export class RaceCourseVisualizationService {
       }
 
     } catch (error) {
-      console.error('Error updating real-time tracking:', error);
+      logger.error('Error updating real-time tracking:', error);
       throw error;
     }
   }
@@ -524,7 +498,7 @@ export class RaceCourseVisualizationService {
       return canvas.toDataURL(`image/${options.format}`, options.quality || 0.9);
 
     } catch (error) {
-      console.error('Error exporting course image:', error);
+      logger.error('Error exporting course image:', error);
       throw error;
     }
   }
@@ -540,7 +514,7 @@ export class RaceCourseVisualizationService {
       }
       this.mapInstances.delete(courseId);
     } catch (error) {
-      console.error('Error destroying course:', error);
+      logger.error('Error destroying course:', error);
     }
   }
 
@@ -604,7 +578,7 @@ export class RaceCourseVisualizationService {
     }
   }
 
-  private static async add3DTerrain(map: maplibregl.Map): Promise<void> {
+  private static async add3DTerrain(map: MapLibreMap): Promise<void> {
     // Add 3D terrain source and layer
     map.addSource('terrain', {
       type: 'raster-dem',
@@ -618,7 +592,7 @@ export class RaceCourseVisualizationService {
   }
 
   private static async addCourseGeometry(
-    map: maplibregl.Map,
+    map: MapLibreMap,
     courseData: CourseExtraction
   ): Promise<void> {
     // Add course marks
@@ -701,7 +675,7 @@ export class RaceCourseVisualizationService {
   }
 
   private static async addTacticalLayers(
-    map: maplibregl.Map,
+    map: MapLibreMap,
     intelligence: VenueIntelligence,
     config: VisualizationConfig
   ): Promise<void> {
@@ -717,7 +691,7 @@ export class RaceCourseVisualizationService {
   }
 
   private static addInteractiveFeatures(
-    map: maplibregl.Map,
+    map: MapLibreMap,
     features: InteractiveFeatures
   ): void {
     if (features.mark_selection) {
@@ -930,33 +904,33 @@ export class RaceCourseVisualizationService {
     };
   }
 
-  private static async updateWindData(map: maplibregl.Map, windUpdate: WindVisualization): Promise<void> {
+  private static async updateWindData(map: MapLibreMap, windUpdate: WindVisualization): Promise<void> {
     // Update wind vector data
     if (map.getSource('wind-vectors')) {
-      (map.getSource('wind-vectors') as maplibregl.GeoJSONSource).setData(
+      (map.getSource('wind-vectors') as MapLibreGeoJSONSource).setData(
         this.createWindVectorGeoJSON(windUpdate.vectors)
       );
     }
 
     // Update shift zones
     if (map.getSource('wind-shifts')) {
-      (map.getSource('wind-shifts') as maplibregl.GeoJSONSource).setData(
+      (map.getSource('wind-shifts') as MapLibreGeoJSONSource).setData(
         this.createShiftZoneGeoJSON(windUpdate.shift_zones)
       );
     }
   }
 
-  private static async updateCurrentData(map: maplibregl.Map, currentUpdate: CurrentVisualization): Promise<void> {
+  private static async updateCurrentData(map: MapLibreMap, currentUpdate: CurrentVisualization): Promise<void> {
     // Update current vector data
     if (map.getSource('current-vectors')) {
-      (map.getSource('current-vectors') as maplibregl.GeoJSONSource).setData(
+      (map.getSource('current-vectors') as MapLibreGeoJSONSource).setData(
         this.createCurrentVectorGeoJSON(currentUpdate.vectors)
       );
     }
 
     // Update tidal streams
     if (map.getSource('tidal-streams')) {
-      (map.getSource('tidal-streams') as maplibregl.GeoJSONSource).setData(
+      (map.getSource('tidal-streams') as MapLibreGeoJSONSource).setData(
         this.createTidalStreamGeoJSON(currentUpdate.tidal_streams)
       );
     }

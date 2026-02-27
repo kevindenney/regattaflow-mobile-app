@@ -1,9 +1,10 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   ScrollView,
   StyleSheet,
@@ -36,7 +37,7 @@ const membershipTypeOptions = [
 ];
 
 const statusOptions = ['active', 'pending', 'inactive', 'expired', 'suspended'];
-const roleOptions = ['admin', 'race_officer', 'scorer', 'communications', 'member'];
+const roleOptions = ['admin', 'race_admin', 'volunteer_results', 'member', 'guest'];
 const paymentStatusOptions = ['paid', 'unpaid', 'partial', 'waived', 'overdue'];
 
 const formatLabel = (value: string) =>
@@ -88,17 +89,7 @@ export default function MembersScreen() {
     search: '',
   });
 
-  useEffect(() => {
-    loadClubContext();
-  }, []);
-
-  useEffect(() => {
-    if (clubId) {
-      loadMembers();
-    }
-  }, [clubId, filters]);
-
-  const loadClubContext = async () => {
+  const loadClubContext = useCallback(async () => {
     try {
       const {
         data: { user },
@@ -107,19 +98,37 @@ export default function MembersScreen() {
 
       const { data: clubProfile } = await supabase
         .from('club_profiles')
-        .select('id')
+        .select('id, yacht_club_id')
         .eq('user_id', user.id)
         .maybeSingle();
 
+      if (clubProfile?.yacht_club_id) {
+        setClubId(clubProfile.yacht_club_id);
+        return;
+      }
+
+      // Fallback: if a profile exists but legacy linkage is missing, use profile id.
       if (clubProfile?.id) {
         setClubId(clubProfile.id);
+        return;
+      }
+
+      // Additional fallback: resolve club by creator ownership.
+      const { data: ownedClub } = await supabase
+        .from('clubs')
+        .select('id')
+        .eq('created_by', user.id)
+        .maybeSingle();
+
+      if (ownedClub?.id) {
+        setClubId(ownedClub.id);
       }
     } catch (error) {
       console.error('Error loading club context:', error);
     }
-  };
+  }, []);
 
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     if (!clubId) return;
 
     try {
@@ -140,7 +149,17 @@ export default function MembersScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clubId, filters, searchText]);
+
+  useEffect(() => {
+    void loadClubContext();
+  }, [loadClubContext]);
+
+  useEffect(() => {
+    if (clubId) {
+      void loadMembers();
+    }
+  }, [clubId, filters, loadMembers]);
 
   const handleSearch = () => {
     loadMembers();
@@ -150,7 +169,6 @@ export default function MembersScreen() {
     if (!clubId) return;
 
     try {
-      Alert.alert('Export members', 'Preparing member list...');
       await clubMemberService.shareExportedMembers(clubId, 'Club');
     } catch (error) {
       console.error('Error exporting members:', error);
@@ -160,6 +178,20 @@ export default function MembersScreen() {
 
   const handleViewPendingRequests = () => {
     router.push('/members/requests');
+  };
+
+  const handleInviteMembers = () => {
+    void Linking.openURL(
+      'mailto:?subject=Join%20our%20club%20on%20RegattaFlow&body=We%20would%20love%20to%20have%20you%20join%20our%20club%20workspace%20on%20RegattaFlow.'
+    );
+  };
+
+  const handleSendGroupMessage = () => {
+    router.push('/(tabs)/community');
+  };
+
+  const handleImportRoster = () => {
+    router.push('/club/entries');
   };
 
   const handleViewMemberDetail = (memberId: string) => {
@@ -229,7 +261,7 @@ export default function MembersScreen() {
   }, [stats]);
 
   const membershipBreakdown = useMemo(() => {
-    if (!members.length) return [] as Array<{ type: string; count: number }>;
+    if (!members.length) return [] as { type: string; count: number }[];
 
     const counts: Record<string, number> = {};
     members.forEach((member) => {
@@ -247,7 +279,7 @@ export default function MembersScreen() {
       key: 'invite',
       label: 'Invite member',
       icon: 'person-add-outline',
-      action: () => Alert.alert('Invite members', 'Member invitations are coming soon.'),
+      action: handleInviteMembers,
     },
     {
       key: 'requests',
@@ -266,7 +298,7 @@ export default function MembersScreen() {
       key: 'email',
       label: 'Send message',
       icon: 'mail-outline',
-      action: () => Alert.alert('Send message', 'Bulk messaging is coming soon.'),
+      action: handleSendGroupMessage,
     },
   ] as const;
 
@@ -368,7 +400,7 @@ export default function MembersScreen() {
           </View>
           <TouchableOpacity
             style={styles.heroButton}
-            onPress={() => Alert.alert('Invite members', 'Member invitations are coming soon.')}
+            onPress={handleInviteMembers}
           >
             <Ionicons name="add-circle" size={22} color="#FFFFFF" />
             <ThemedText style={styles.heroButtonText}>Invite Members</ThemedText>
@@ -512,14 +544,14 @@ export default function MembersScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.operationButton}
-              onPress={() => Alert.alert('Group messaging', 'Bulk messaging is coming soon.')}
+              onPress={handleSendGroupMessage}
             >
               <Ionicons name="chatbubble-ellipses-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationButtonText}>Group message</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.operationButton}
-              onPress={() => Alert.alert('Import members', 'CSV import is coming soon.')}
+              onPress={handleImportRoster}
             >
               <Ionicons name="cloud-upload-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationButtonText}>Import roster</ThemedText>

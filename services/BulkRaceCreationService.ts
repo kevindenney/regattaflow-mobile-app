@@ -21,13 +21,13 @@ export interface BulkCreationResult {
   created: number;
   skipped: number;
   failed: number;
-  races: Array<{
+  races: {
     id?: string;
     name: string;
     date: string;
     status: 'created' | 'skipped' | 'failed';
     reason?: string;
-  }>;
+  }[];
   error?: string;
 }
 
@@ -74,7 +74,7 @@ export class BulkRaceCreationService {
           logger.debug(`[BulkRaceCreationService] Found ${existingRaces.size} existing races to skip`);
         }
       } catch (error) {
-        console.error('[BulkRaceCreationService] Error checking existing races:', error);
+        logger.error('[BulkRaceCreationService] Error checking existing races:', error);
         // Continue anyway - we'll handle duplicates individually
       }
     }
@@ -146,7 +146,7 @@ export class BulkRaceCreationService {
           .single();
 
         if (error) {
-          console.error(`[BulkRaceCreationService] Error creating race "${raceName}":`, error);
+          logger.error(`[BulkRaceCreationService] Error creating race "${raceName}":`, error);
           results.push({
             name: raceName,
             date: raceDate,
@@ -167,7 +167,7 @@ export class BulkRaceCreationService {
         created++;
 
       } catch (error: any) {
-        console.error('[BulkRaceCreationService] Unexpected error creating race:', error);
+        logger.error('[BulkRaceCreationService] Unexpected error creating race:', error);
         results.push({
           name: calendarRace.subject,
           date: calendarRace.startDate,
@@ -198,10 +198,10 @@ export class BulkRaceCreationService {
     options: BulkCreationOptions
   ): Promise<{
     willCreate: CalendarRace[];
-    willSkip: Array<{ race: CalendarRace; reason: string }>;
+    willSkip: { race: CalendarRace; reason: string }[];
   }> {
     const willCreate: CalendarRace[] = [];
-    const willSkip: Array<{ race: CalendarRace; reason: string }> = [];
+    const willSkip: { race: CalendarRace; reason: string }[] = [];
 
     // Check for existing races
     let existingRaces: Set<string> = new Set();
@@ -218,7 +218,7 @@ export class BulkRaceCreationService {
           );
         }
       } catch (error) {
-        console.error('[BulkRaceCreationService] Error checking existing races:', error);
+        logger.error('[BulkRaceCreationService] Error checking existing races:', error);
       }
     }
 

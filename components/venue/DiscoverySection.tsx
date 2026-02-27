@@ -3,7 +3,7 @@
  * Discover and save new sailing places in a location
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -40,26 +40,30 @@ export function DiscoverySection({
   const [selectedTypes, setSelectedTypes] = useState<ServiceType[]>([]);
   const [discoveredPlaces, setDiscoveredPlaces] = useState<NetworkPlace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch discovered places when location or filters change
-  useEffect(() => {
-    discoverPlaces();
-  }, [locationName, selectedTypes, searchQuery]);
-
-  const discoverPlaces = async () => {
+  const discoverPlaces = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const places = await SailingNetworkService.discoverInLocation(locationName, {
         serviceTypes: selectedTypes.length > 0 ? selectedTypes : undefined,
         searchQuery: searchQuery || undefined,
       });
       setDiscoveredPlaces(places);
-    } catch (error) {
-      console.error('Failed to discover places:', error);
+    } catch (err: any) {
+      console.error('Failed to discover places:', err);
+      setError(err?.message || 'Failed to discover places.');
+      setDiscoveredPlaces([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [locationName, searchQuery, selectedTypes]);
+
+  useEffect(() => {
+    void discoverPlaces();
+  }, [discoverPlaces]);
 
   const toggleTypeFilter = (type: ServiceType) => {
     setSelectedTypes((prev) =>
@@ -152,6 +156,11 @@ export function DiscoverySection({
       </ScrollView>
 
       {/* Results */}
+      {error ? (
+        <View style={styles.errorBanner}>
+          <ThemedText style={styles.errorBannerText}>{error}</ThemedText>
+        </View>
+      ) : null}
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#007AFF" />
@@ -233,6 +242,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 12,
     height: 40,
+  },
+  errorBanner: {
+    marginTop: 10,
+    marginBottom: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEE2E2',
+  },
+  errorBannerText: {
+    color: '#B91C1C',
+    fontSize: 12,
+    fontWeight: '600',
   },
   searchIcon: {
     marginRight: 8,

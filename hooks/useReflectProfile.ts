@@ -1237,7 +1237,7 @@ export function useReflectProfile() {
         .limit(20);
 
       if (photosError) {
-        console.log('[ReflectProfile] sailor_media query unavailable:', photosError.message);
+        logger.debug('sailor_media query unavailable', photosError.message);
       }
 
       const racePhotos: RacePhoto[] = (photosData || []).map((p: any) => ({

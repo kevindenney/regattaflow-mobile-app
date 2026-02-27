@@ -7,13 +7,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { postRaceLearningService } from '@/services/PostRaceLearningService';
-import type { PerformancePattern, PerformanceTrend } from '@/types/raceLearning';
+import { createLogger } from '@/lib/utils/logger';
+import type { PerformancePattern } from '@/types/raceLearning';
 import type {
   StrategySectionNote,
   StrategySectionId,
   StrategyPhase,
-  STRATEGY_SECTIONS,
-  RaceStrategyNotes,
   SectionPerformance,
 } from '@/types/raceStrategy';
 
@@ -64,6 +63,8 @@ interface UseStrategyRecommendationsResult {
   /** Refresh recommendations */
   refresh: () => Promise<void>;
 }
+
+const logger = createLogger('useStrategyRecommendations');
 
 /**
  * Maps PostRaceLearningService phase keys to our strategy phases
@@ -297,7 +298,7 @@ export function useStrategyRecommendations(
       }
 
     } catch (err) {
-      console.error('useStrategyRecommendations: Failed to fetch recommendations', err);
+      logger.error('Failed to fetch recommendations', err);
       setError(err instanceof Error ? err.message : 'Failed to load recommendations');
     } finally {
       setIsLoading(false);

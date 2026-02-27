@@ -16,7 +16,7 @@ import { View, Text, StyleSheet, Pressable, TouchableOpacity } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { IOS_COLORS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
-import { useCoachingInsights, type CoachingInsightData, type CoachingVariant } from '@/hooks/useCoachingInsights';
+import { useCoachingInsights, type CoachingInsightData } from '@/hooks/useCoachingInsights';
 import { useCoachingInsightDismissals } from '@/hooks/useCoachingInsightDismissals';
 import { supabase } from '@/services/supabase';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
@@ -51,13 +51,26 @@ const PHASE_COLORS: Record<string, string> = {
 };
 
 export function CoachingInsightCard({ sailorId }: CoachingInsightCardProps) {
-  const router = useRouter();
-  const { coachingData, loading } = useCoachingInsights(sailorId);
+  const { coachingData, loading, error } = useCoachingInsights(sailorId);
   const { isDismissed, dismiss, loaded: dismissalsLoaded } = useCoachingInsightDismissals();
 
   // Don't render until both data and dismissals are loaded
   if (loading || !dismissalsLoaded) {
     return null;
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.errorContainer]}>
+        <View style={styles.errorHeader}>
+          <Ionicons name="warning-outline" size={18} color={IOS_COLORS.systemOrange} />
+          <Text style={styles.errorTitle}>Coaching insights unavailable</Text>
+        </View>
+        <Text style={styles.errorText}>
+          {error.message || 'Unable to load coaching trend analysis right now.'}
+        </Text>
+      </View>
+    );
   }
 
   // Filter out dismissed insights
@@ -367,6 +380,26 @@ const styles = StyleSheet.create({
   },
   ctaPressed: {
     opacity: 0.8,
+  },
+  errorContainer: {
+    borderColor: IOS_COLORS.systemOrange + '33',
+    borderWidth: 1,
+  },
+  errorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  errorTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  errorText: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
   },
 });
 

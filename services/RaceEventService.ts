@@ -10,6 +10,7 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 import {
   RaceEvent,
   RaceEventInsert,
@@ -20,11 +21,12 @@ import {
   CourseMarkInsert,
   CreateRaceEventParams,
   ProcessDocumentsParams,
-  SourceDocument,
   ExtractionStatus,
   ExtractionMethod,
   CourseGeoJSON
 } from '../types/raceEvents';
+
+const logger = createLogger('RaceEventService');
 
 export class RaceEventService {
   /**
@@ -101,7 +103,7 @@ export class RaceEventService {
 
       return { data, error: null };
     } catch (error) {
-      console.error('Error creating race event:', error);
+      logger.error('Error creating race event:', error);
       return { data: null, error: error as Error };
     }
   }
@@ -163,7 +165,7 @@ export class RaceEventService {
 
       return { data: result, error: null };
     } catch (error) {
-      console.error('Error fetching race event:', error);
+      logger.error('Error fetching race event:', error);
       return { data: null, error: error as Error };
     }
   }
@@ -187,7 +189,7 @@ export class RaceEventService {
 
       return { data: data || [], error: null };
     } catch (error) {
-      console.error('Error fetching upcoming races:', error);
+      logger.error('Error fetching upcoming races:', error);
       return { data: [], error: error as Error };
     }
   }
@@ -237,7 +239,7 @@ export class RaceEventService {
 
       return { data: data || [], error: null };
     } catch (error) {
-      console.error('Error fetching user races:', error);
+      logger.error('Error fetching user races:', error);
       return { data: [], error: error as Error };
     }
   }
@@ -261,7 +263,7 @@ export class RaceEventService {
 
       return { data, error: null };
     } catch (error) {
-      console.error('Error updating race event:', error);
+      logger.error('Error updating race event:', error);
       return { data: null, error: error as Error };
     }
   }
@@ -280,7 +282,7 @@ export class RaceEventService {
 
       return { error: null };
     } catch (error) {
-      console.error('Error deleting race event:', error);
+      logger.error('Error deleting race event:', error);
       return { error: error as Error };
     }
   }
@@ -307,7 +309,7 @@ export class RaceEventService {
 
       return { data, error: null };
     } catch (error) {
-      console.error('Error adding course marks:', error);
+      logger.error('Error adding course marks:', error);
       return { data: null, error: error as Error };
     }
   }
@@ -327,7 +329,7 @@ export class RaceEventService {
         .eq('race_id', raceEventId);
 
       // Insert new marks
-      const marksToInsert = marks.map(({ id, created_at, updated_at, ...mark }) => ({
+      const marksToInsert = marks.map(({ id: _id, created_at: _createdAt, updated_at: _updatedAt, ...mark }) => ({
         ...mark,
         race_id: raceEventId
       }));
@@ -341,7 +343,7 @@ export class RaceEventService {
 
       return { data, error: null };
     } catch (error) {
-      console.error('Error updating course marks:', error);
+      logger.error('Error updating course marks:', error);
       return { data: null, error: error as Error };
     }
   }
@@ -359,7 +361,7 @@ export class RaceEventService {
 
       return { data: data as CourseGeoJSON, error: null };
     } catch (error) {
-      console.error('Error fetching course marks GeoJSON:', error);
+      logger.error('Error fetching course marks GeoJSON:', error);
       return { data: null, error: error as Error };
     }
   }
@@ -386,9 +388,10 @@ export class RaceEventService {
         status: 'pending'
       }));
 
-      const { error: jobsError } = await supabase
+      const { data: insertedJobs, error: jobsError } = await supabase
         .from('document_processing_jobs')
-        .insert(jobs);
+        .insert(jobs)
+        .select('id, document_url, document_content, document_type');
 
       if (jobsError) throw jobsError;
 
@@ -397,12 +400,113 @@ export class RaceEventService {
         extraction_status: ExtractionStatus.PROCESSING
       });
 
-      // TODO: Trigger DocumentProcessingAgent via Edge Function or background job
-      // For now, return success - the agent will be triggered in the next phase
+      // Process each job immediately via edge-function extraction.
+      // This replaces the old TODO placeholder and keeps job/race status in sync.
+      let completedCount = 0;
+      let failedCount = 0;
+
+      const typedJobs = Array.isArray(insertedJobs) ? insertedJobs : jobs;
+
+      for (let i = 0; i < typedJobs.length; i += 1) {
+        const job = typedJobs[i] as any;
+        const jobId = job?.id;
+        const payload = (job?.document_content && String(job.document_content).trim().length > 0)
+          ? { text: String(job.document_content).trim() }
+          : (job?.document_url ? { url: job.document_url } : null);
+
+        if (jobId) {
+          await supabase
+            .from('document_processing_jobs')
+            .update({
+              status: 'processing',
+              progress_percentage: 20,
+              metadata: {
+                startedAt: new Date().toISOString(),
+                processor: 'extract-race-details',
+              },
+            })
+            .eq('id', jobId);
+        }
+
+        if (!payload) {
+          failedCount += 1;
+          if (jobId) {
+            await supabase
+              .from('document_processing_jobs')
+              .update({
+                status: 'failed',
+                progress_percentage: 100,
+                metadata: {
+                  error: 'Document job missing both document_url and document_content',
+                  finishedAt: new Date().toISOString(),
+                },
+              })
+              .eq('id', jobId);
+          }
+          continue;
+        }
+
+        try {
+          const { data: extractionData, error: extractionError } = await supabase.functions.invoke(
+            'extract-race-details',
+            { body: payload }
+          );
+
+          if (extractionError) {
+            throw extractionError;
+          }
+
+          const extractedRace =
+            extractionData?.races?.[0] ||
+            extractionData?.data ||
+            null;
+
+          completedCount += 1;
+
+          if (jobId) {
+            await supabase
+              .from('document_processing_jobs')
+              .update({
+                status: 'completed',
+                progress_percentage: 100,
+                metadata: {
+                  finishedAt: new Date().toISOString(),
+                  overallConfidence: extractionData?.overallConfidence ?? null,
+                  extractedFields: extractedRace ? Object.keys(extractedRace) : [],
+                },
+              })
+              .eq('id', jobId);
+          }
+        } catch (jobError: any) {
+          failedCount += 1;
+
+          if (jobId) {
+            await supabase
+              .from('document_processing_jobs')
+              .update({
+                status: 'failed',
+                progress_percentage: 100,
+                metadata: {
+                  error: jobError?.message || 'Document extraction failed',
+                  finishedAt: new Date().toISOString(),
+                },
+              })
+              .eq('id', jobId);
+          }
+        }
+      }
+
+      await this.updateRaceEvent(params.race_event_id, {
+        extraction_status: completedCount > 0 ? ExtractionStatus.COMPLETED : ExtractionStatus.FAILED
+      });
+
+      if (completedCount === 0 && failedCount > 0) {
+        return { success: false, error: new Error('All document processing jobs failed') };
+      }
 
       return { success: true, error: null };
     } catch (error) {
-      console.error('Error processing documents:', error);
+      logger.error('Error processing documents:', error);
       return { success: false, error: error as Error };
     }
   }
@@ -443,7 +547,7 @@ export class RaceEventService {
 
       return { data: marks, error: null };
     } catch (error) {
-      console.error('Error fetching venue course template:', error);
+      logger.error('Error fetching venue course template:', error);
       return { data: null, error: error as Error };
     }
   }
@@ -470,7 +574,7 @@ export class RaceEventService {
 
       return { data: data || [], error: null };
     } catch (error) {
-      console.error('Error fetching race series:', error);
+      logger.error('Error fetching race series:', error);
       return { data: [], error: error as Error };
     }
   }
@@ -506,7 +610,7 @@ export class RaceEventService {
 
       return { error: null };
     } catch (error) {
-      console.error('Error updating race status:', error);
+      logger.error('Error updating race status:', error);
       return { error: error as Error };
     }
   }
@@ -533,7 +637,7 @@ export class RaceEventService {
 
       return { data: data || [], error: null };
     } catch (error) {
-      console.error('Error searching races:', error);
+      logger.error('Error searching races:', error);
       return { data: [], error: error as Error };
     }
   }

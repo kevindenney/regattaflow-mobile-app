@@ -6,7 +6,8 @@
  * notes, and debrief entries for a specific race.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createLogger } from '@/lib/utils/logger';
 import {
   DemoStateService,
   type DemoChecklistItem,
@@ -17,6 +18,8 @@ import {
   type DemoRaceState,
 } from '@/services/DemoStateService';
 import { DemoRaceService } from '@/services/DemoRaceService';
+
+const logger = createLogger('useDemoState');
 
 export interface UseDemoStateResult {
   // State
@@ -69,6 +72,8 @@ export function useDemoState(
 
   const [isLoading, setIsLoading] = useState(true);
   const [state, setState] = useState<DemoRaceState | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
 
   // Check if this is a demo race
   const isDemo = useMemo(() => {
@@ -76,21 +81,35 @@ export function useDemoState(
     return DemoRaceService.isDemoRace(raceId);
   }, [raceId]);
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
+
   // Load state
   const loadState = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
     if (!raceId || !isDemo) {
+      if (!canCommit()) return;
       setState(null);
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     try {
       const raceState = await DemoStateService.getDemoRaceState(raceId);
+      if (!canCommit()) return;
       setState(raceState);
     } catch (error) {
-      console.error('[useDemoState] Failed to load state:', error);
+      logger.error('Failed to load state', error);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [raceId, isDemo]);
@@ -98,7 +117,7 @@ export function useDemoState(
   // Auto-load on mount
   useEffect(() => {
     if (autoLoad) {
-      loadState();
+      void loadState();
     }
   }, [autoLoad, loadState]);
 
@@ -107,6 +126,7 @@ export function useDemoState(
     if (!raceId || !isDemo) return;
 
     const updatedItems = await DemoStateService.toggleChecklistItem(raceId, itemId);
+    if (!isMountedRef.current) return;
     setState(prev => prev ? { ...prev, checklist: updatedItems } : null);
   }, [raceId, isDemo]);
 
@@ -121,6 +141,7 @@ export function useDemoState(
     if (!raceId || !isDemo) return;
 
     await DemoStateService.saveDemoNotes(raceId, notes);
+    if (!isMountedRef.current) return;
     setState(prev => prev ? { ...prev, notes } : null);
   }, [raceId, isDemo]);
 
@@ -129,6 +150,7 @@ export function useDemoState(
     if (!raceId || !isDemo) return;
 
     const updatedEntries = await DemoStateService.addDebriefEntry(raceId, question, answer);
+    if (!isMountedRef.current) return;
     setState(prev => prev ? { ...prev, debrief: updatedEntries } : null);
   }, [raceId, isDemo]);
 
@@ -137,6 +159,7 @@ export function useDemoState(
     if (!raceId || !isDemo) return;
 
     await DemoStateService.saveDemoStrategy(raceId, strategy);
+    if (!isMountedRef.current) return;
     setState(prev => prev ? { ...prev, strategy } : null);
   }, [raceId, isDemo]);
 
@@ -145,6 +168,7 @@ export function useDemoState(
     if (!raceId || !isDemo) return;
 
     await DemoStateService.saveDemoSailSelection(raceId, selection);
+    if (!isMountedRef.current) return;
     setState(prev => prev ? { ...prev, sailSelection: selection } : null);
   }, [raceId, isDemo]);
 
@@ -153,6 +177,7 @@ export function useDemoState(
     if (!raceId || !isDemo) return;
 
     await DemoStateService.saveDemoRigSettings(raceId, settings);
+    if (!isMountedRef.current) return;
     setState(prev => prev ? { ...prev, rigSettings: settings } : null);
   }, [raceId, isDemo]);
 
@@ -186,20 +211,34 @@ export function useDemoState(
 export function useDemoVisibility() {
   const [shouldHideDemo, setShouldHideDemo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const isMountedRef = useRef(true);
+  const checkRunIdRef = useRef(0);
 
   useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      checkRunIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    const runId = ++checkRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === checkRunIdRef.current;
+
     const checkVisibility = async () => {
       try {
         const hasRealRace = await DemoStateService.hasAddedRealRace();
+        if (!canCommit()) return;
         setShouldHideDemo(hasRealRace);
       } catch (error) {
-        console.error('[useDemoVisibility] Failed to check visibility:', error);
+        logger.error('Failed to check visibility', error);
       } finally {
+        if (!canCommit()) return;
         setIsLoading(false);
       }
     };
 
-    checkVisibility();
+    void checkVisibility();
   }, []);
 
   const markRealRaceAdded = useCallback(async () => {

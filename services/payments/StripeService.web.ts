@@ -114,7 +114,7 @@ export class StripeService {
       return { url: data.url };
 
     } catch (error: unknown) {
-      console.error('Checkout session error:', error);
+      logger.error('Checkout session error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { error: message };
     }
@@ -151,7 +151,7 @@ export class StripeService {
       return { url: data.url };
 
     } catch (error: unknown) {
-      console.error('Portal session error:', error);
+      logger.error('Portal session error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { error: message };
     }
@@ -182,7 +182,7 @@ export class StripeService {
       };
 
     } catch (error: unknown) {
-      console.error('Failed to get subscription status:', error);
+      logger.error('Failed to get subscription status:', error);
       return { active: false };
     }
   }
@@ -215,7 +215,7 @@ export class StripeService {
       return { success: true };
 
     } catch (error: unknown) {
-      console.error('Cancel subscription error:', error);
+      logger.error('Cancel subscription error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: message };
     }
@@ -249,7 +249,7 @@ export class StripeService {
       return { success: true };
 
     } catch (error: unknown) {
-      console.error('Resume subscription error:', error);
+      logger.error('Resume subscription error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: message };
     }
@@ -341,7 +341,7 @@ export class StripeService {
       return { success: true };
 
     } catch (error: unknown) {
-      console.error('Payment error:', error);
+      logger.error('Payment error:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: message };
     }

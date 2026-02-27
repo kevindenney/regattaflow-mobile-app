@@ -6,31 +6,35 @@
  * Implements the core document parsing and course extraction system from the master plan
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   RaceCourseExtraction,
-  CoordinateValidation,
-  DocumentUpload,
-  DocumentAnalysis
+  CoordinateValidation
 } from '@/lib/types/ai-knowledge';
 
-export class RaceCourseExtractor {
-  // private anthropic: Anthropic; // Disabled for web compatibility
+const logger = createLogger('RaceCourseExtractor');
 
-  constructor() {
-    // NOTE: Anthropic SDK disabled for web compatibility
-    // Requires backend API endpoint for production
-    /*
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error('Anthropic API key not found. Set EXPO_PUBLIC_ANTHROPIC_API_KEY environment variable.');
-    }
-    // TODO: Move to Supabase Edge Function for production to protect API key
-        // this.anthropic = new Anthropic({
-      apiKey,
-      dangerouslyAllowBrowser: true // Development only - move to backend for production
+export class RaceCourseExtractor {
+  private async invokeExtractionChat(prompt: string): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: 4096,
+        temperature: 0.1
+      }
     });
-    */
+
+    if (error) {
+      throw new Error(error.message || 'race-coaching-chat invocation failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    if (!text) {
+      throw new Error('race-coaching-chat returned no text');
+    }
+
+    return text;
   }
 
   /**
@@ -49,23 +53,8 @@ export class RaceCourseExtractor {
     try {
       const prompt = this.buildCourseExtractionPrompt(documentText, metadata);
 
-      // Using Claude 3.5 Haiku for cost optimization (12x cheaper)
-      // Excellent for structured extraction tasks
-      // Upgrade to 'claude-3-5-sonnet-latest' if quality issues emerge
-      const message = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.1, // Low temperature for factual extraction
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      // Extract text from Claude's response
-      const response = message.content[0].type === 'text'
-        ? message.content[0].text
-        : '';
+      // Route extraction through Edge Function to avoid client-side API key usage.
+      const response = await this.invokeExtractionChat(prompt);
 
       // Parse the structured JSON response
       const extraction = this.parseExtractionResponse(response, metadata);
@@ -79,7 +68,7 @@ export class RaceCourseExtractor {
       return extraction;
 
     } catch (error: any) {
-
+      logger.warn('Race course extraction failed; returning fallback extraction', error);
       // Return fallback extraction with low confidence
       return this.createFallbackExtraction(metadata, error.message);
     }
@@ -91,7 +80,7 @@ export class RaceCourseExtractor {
   async validateCoordinates(
     latitude: number,
     longitude: number,
-    context?: string
+    _context?: string
   ): Promise<CoordinateValidation> {
     // Basic coordinate validation
     const isValidLat = latitude >= -90 && latitude <= 90;
@@ -340,7 +329,7 @@ CRITICAL: Return ONLY the JSON object above. No explanations, no apologies, no a
       return extraction;
 
     } catch (error) {
-      console.error('Failed to parse extraction response:', error);
+      logger.warn('Failed to parse extraction response; using fallback extraction', error);
       return this.createFallbackExtraction(metadata, `JSON parsing failed: ${error}`);
     }
   }

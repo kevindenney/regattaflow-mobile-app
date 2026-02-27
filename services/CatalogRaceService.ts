@@ -7,6 +7,9 @@
 
 import { supabase } from '@/services/supabase';
 import type { CatalogRace } from '@/types/catalog-race';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CatalogRaceService');
 
 interface GetAllRacesOptions {
   limit?: number;
@@ -48,7 +51,7 @@ class CatalogRaceServiceClass {
     const { data, error } = await query;
 
     if (error) {
-      console.error('[CatalogRaceService] Error fetching races:', error);
+      logger.error('Error fetching races:', error);
       throw error;
     }
 
@@ -76,7 +79,7 @@ class CatalogRaceServiceClass {
       .limit(30);
 
     if (error) {
-      console.error('[CatalogRaceService] Error searching races:', error);
+      logger.error('Error searching races:', error);
       throw error;
     }
 
@@ -98,7 +101,7 @@ class CatalogRaceServiceClass {
       .single();
 
     if (error) {
-      console.error('[CatalogRaceService] Error fetching race by slug:', error);
+      logger.error('Error fetching race by slug:', error);
       return null;
     }
 
@@ -116,7 +119,7 @@ class CatalogRaceServiceClass {
       .single();
 
     if (error) {
-      console.error('[CatalogRaceService] Error fetching race by id:', error);
+      logger.error('Error fetching race by id:', error);
       return null;
     }
 
@@ -138,7 +141,7 @@ class CatalogRaceServiceClass {
       .order('follower_count', { ascending: false });
 
     if (error) {
-      console.error('[CatalogRaceService] Error fetching featured races:', error);
+      logger.error('Error fetching featured races:', error);
       return [];
     }
 
@@ -156,7 +159,7 @@ class CatalogRaceServiceClass {
       .order('name', { ascending: true });
 
     if (error) {
-      console.error('[CatalogRaceService] Error fetching races by venue:', error);
+      logger.error('Error fetching races by venue:', error);
       return [];
     }
 
@@ -182,7 +185,7 @@ class CatalogRaceServiceClass {
       );
 
     if (error) {
-      console.error('[CatalogRaceService] Error following race:', error);
+      logger.error('Error following race:', error);
       throw error;
     }
   }
@@ -201,7 +204,7 @@ class CatalogRaceServiceClass {
       .eq('catalog_race_id', raceId);
 
     if (error) {
-      console.error('[CatalogRaceService] Error unfollowing race:', error);
+      logger.error('Error unfollowing race:', error);
       throw error;
     }
   }
@@ -219,7 +222,7 @@ class CatalogRaceServiceClass {
       .eq('user_id', user.id);
 
     if (error) {
-      console.error('[CatalogRaceService] Error fetching followed races:', error);
+      logger.error('Error fetching followed races:', error);
       return new Set();
     }
 
@@ -253,7 +256,7 @@ class CatalogRaceServiceClass {
       .limit(100);
 
     if (error || !data) {
-      console.error('[CatalogRaceService] Error fetching matches:', error);
+      logger.error('Error fetching matches:', error);
       return [];
     }
 
@@ -299,7 +302,7 @@ class CatalogRaceServiceClass {
       .in('id', raceIds);
 
     if (error) {
-      console.error('[CatalogRaceService] Error fetching discussion counts:', error);
+      logger.error('Error fetching discussion counts:', error);
       return new Map();
     }
 

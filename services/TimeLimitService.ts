@@ -4,6 +4,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('TimeLimitService');
 
 // ============================================================================
 // TYPES
@@ -525,7 +528,7 @@ class TimeLimitService {
           }
         }
       } catch (error) {
-        console.error('Error checking time limits:', error);
+        logger.error('Error checking time limits:', error);
       }
     }, checkIntervalMs);
   }
@@ -634,4 +637,3 @@ class TimeLimitService {
 // Export singleton
 export const timeLimitService = new TimeLimitService();
 export default TimeLimitService;
-

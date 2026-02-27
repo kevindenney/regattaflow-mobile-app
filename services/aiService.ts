@@ -4,14 +4,23 @@
  * Integrates Anthropic Claude for document parsing and autonomous agent workflows
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { supabase } from '@/services/supabase';
-import type { SailingVenue } from '@/lib/types/global-venues';
+import { getModelForTask } from '@/lib/config/aiModels';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('AIService');
+
+const toConfidencePercent = (score: unknown): number => {
+  const value = Number(score || 0);
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const normalized = value <= 2 ? value * 100 : value;
+  return Math.max(0, Math.min(100, Math.round(normalized)));
+};
 
 // ==================== Type Definitions ====================
 
@@ -140,6 +149,7 @@ export interface RaceStrategy {
 export interface StrategyOptions {
   tier: 'basic' | 'pro' | 'championship';
   venueId?: string;
+  regattaId?: string;
   weatherForecast?: any;
   competitorData?: any;
   userPreferences?: {
@@ -151,7 +161,14 @@ export interface StrategyOptions {
 // ==================== AI Strategy Service ====================
 
 export class AIStrategyService {
-  private static genAI = new Anthropic({ apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '', dangerouslyAllowBrowser: true });
+  private static createTaggedError(code: string, message: string, cause?: unknown): Error {
+    const tagged = new Error(`[${code}] ${message}`);
+    (tagged as any).code = code;
+    if (cause !== undefined) {
+      (tagged as any).cause = cause;
+    }
+    return tagged;
+  }
 
   // ==================== Document Processing ====================
 
@@ -160,123 +177,138 @@ export class AIStrategyService {
    */
   static async parseSailingInstructions(
     documentUri: string,
-    venueId?: string
+    venueId?: string,
+    documentMeta?: { fileName?: string; mimeType?: string | null }
   ): Promise<CourseExtraction> {
     try {
       logger.debug('Parsing sailing instructions');
 
       const documentContent = await this.readDocumentContent(documentUri);
+      const mimeType = this.getMimeType(documentUri, documentMeta?.mimeType);
+      const fileName =
+        documentMeta?.fileName ||
+        documentUri.split('/').pop() ||
+        'race-document';
+      const fileContentWithPrefix = `data:${mimeType};base64,${documentContent}`;
 
-      const prompt = `
-Analyze this sailing instruction document and extract detailed race course information.
-
-VENUE: ${venueId || 'Extract from document'}
-
-Extract with maximum precision:
-
-1. COURSE IDENTIFICATION
-2. MARK POSITIONS (with coordinates in decimal degrees)
-3. START/FINISH LINES (coordinates, bearings, lengths)
-4. COURSE CONFIGURATIONS (sequences, distances, durations)
-5. RESTRICTIONS (boundaries, obstructions, penalties)
-6. ENVIRONMENTAL CONDITIONS (wind, tide, current)
-7. SAFETY & PROCEDURES
-
-Coordinate formats to look for:
-- Decimal: 22.2854, 114.1577
-- DMS: 22°17.124'N, 114°09.462'E
-- GPS waypoints
-- Distance/bearing from known points
-
-Return ONLY valid JSON matching this structure:
-{
-  "course_name": "Course Alpha",
-  "racing_area": "Main Area",
-  "marks": [
-    {
-      "id": "M1",
-      "name": "Start/Finish",
-      "type": "start",
-      "coordinates": [22.2854, 114.1577],
-      "rounding_direction": "port",
-      "description": "Orange inflatable"
-    }
-  ],
-  "start_line": {
-    "coordinates": [[22.2854, 114.1577], [22.2860, 114.1580]],
-    "bearing": 90,
-    "length_meters": 100
-  },
-  "finish_line": {
-    "coordinates": [[22.2854, 114.1577], [22.2860, 114.1580]],
-    "bearing": 90,
-    "length_meters": 100
-  },
-  "course_configurations": [
-    {
-      "name": "W/L",
-      "sequence": ["Start", "M1", "M2", "Finish"],
-      "distance_nm": 2.5,
-      "estimated_duration": 45,
-      "wind_range": [8, 15],
-      "description": "Windward-leeward"
-    }
-  ],
-  "restrictions": [],
-  "wind_conditions": {
-    "expected_direction": 90,
-    "expected_speed_range": [8, 15],
-    "shift_probability": 0.3
-  },
-  "tide_information": {
-    "high_tide": "14:30",
-    "low_tide": "08:15",
-    "current_direction": 180,
-    "max_speed_knots": 1.2
-  },
-  "safety_information": ["VHF Ch 72"],
-  "protest_procedures": ["60 min filing window"]
-}
-`;
-
-      const mimeType = this.getMimeType(documentUri);
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: mimeType.includes('image') ? 'image' : 'document',
-              source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: documentContent
-              }
-            },
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
-        }]
+      const { data, error } = await supabase.functions.invoke('extract-course-from-document', {
+        body: {
+          fileContent: fileContentWithPrefix,
+          fileName,
+          fileType: mimeType,
+          raceType: 'fleet',
+        },
       });
 
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-
-      if (jsonMatch) {
-        const extraction = JSON.parse(jsonMatch[0]) as CourseExtraction;
-        extraction.extracted_at = new Date();
-        extraction.confidence_score = this.calculateConfidenceScore(extraction);
-        extraction.venue_id = venueId;
-
-        logger.debug(`Course extracted with confidence: ${extraction.confidence_score}`);
-        return extraction;
+      if (error) {
+        throw this.createTaggedError(
+          'AI_STRATEGY_EXTRACTION_FAILED',
+          error.message || 'Course extraction failed',
+          error
+        );
       }
 
-      throw new Error('No valid JSON found in AI response');
+      const waypoints = Array.isArray(data?.waypoints) ? data.waypoints : [];
+      if (waypoints.length === 0) {
+        throw this.createTaggedError('AI_STRATEGY_NO_WAYPOINTS', 'No valid waypoints extracted from document');
+      }
+
+      const marks: CourseMark[] = waypoints.map((wp: any, index: number) => {
+        const mappedType: CourseMark['type'] =
+          wp?.type === 'start' || wp?.type === 'finish' || wp?.type === 'gate'
+            ? wp.type
+            : wp?.type === 'mark'
+            ? 'windward'
+            : 'reach';
+
+        return {
+          id: `M${index + 1}`,
+          name: wp?.name || `Mark ${index + 1}`,
+          type: mappedType,
+          coordinates: [wp.latitude, wp.longitude],
+          rounding_direction: wp?.passingSide === 'port' || wp?.passingSide === 'starboard' ? wp.passingSide : 'either',
+          description: wp?.notes || '',
+        };
+      });
+
+      const startMarks = marks.filter((m) => m.type === 'start');
+      const finishMarks = marks.filter((m) => m.type === 'finish');
+      const fallbackLinePoint: [number, number] = marks[0]?.coordinates || [0, 0];
+
+      const startLinePoints: [number, number][] =
+        startMarks.length >= 2
+          ? [startMarks[0].coordinates, startMarks[1].coordinates]
+          : startMarks.length === 1
+          ? [startMarks[0].coordinates, startMarks[0].coordinates]
+          : [fallbackLinePoint, fallbackLinePoint];
+
+      const finishLinePoints: [number, number][] =
+        finishMarks.length >= 2
+          ? [finishMarks[0].coordinates, finishMarks[1].coordinates]
+          : finishMarks.length === 1
+          ? [finishMarks[0].coordinates, finishMarks[0].coordinates]
+          : [fallbackLinePoint, fallbackLinePoint];
+
+      const extraction: CourseExtraction = {
+        course_name: data?.courseName || fileName.replace(/\.[^.]+$/, ''),
+        racing_area: data?.courseDescription || 'Extracted Race Area',
+        venue_id: venueId,
+        marks,
+        start_line: {
+          coordinates: startLinePoints,
+          bearing: 0,
+          length_meters: 100,
+        },
+        finish_line: {
+          coordinates: finishLinePoints,
+          bearing: 0,
+          length_meters: 100,
+        },
+        course_configurations: [
+          {
+            name: data?.courseName || 'Primary Course',
+            sequence: marks.map((m) => m.name),
+            distance_nm: typeof data?.totalDistanceNm === 'number' ? data.totalDistanceNm : 0,
+            estimated_duration: 60,
+            wind_range: [8, 15],
+            description: data?.courseDescription || 'Extracted from uploaded document',
+          },
+        ],
+        restrictions: [],
+        wind_conditions: {
+          expected_direction: 0,
+          expected_speed_range: [8, 15],
+          shift_probability: 0.3,
+        },
+        tide_information: {
+          high_tide: 'N/A',
+          low_tide: 'N/A',
+          current_direction: 0,
+          max_speed_knots: 0,
+        },
+        safety_information: [],
+        protest_procedures: [],
+        extracted_at: new Date(),
+        confidence_score: typeof data?.confidence === 'number'
+          ? Math.max(0, Math.min(100, data.confidence))
+          : this.calculateConfidenceScore({
+              course_name: data?.courseName || '',
+              racing_area: data?.courseDescription || '',
+              marks,
+              start_line: { coordinates: startLinePoints, bearing: 0, length_meters: 100 },
+              finish_line: { coordinates: finishLinePoints, bearing: 0, length_meters: 100 },
+              course_configurations: [],
+              restrictions: [],
+              wind_conditions: { expected_direction: 0, expected_speed_range: [8, 15], shift_probability: 0.3 },
+              tide_information: { high_tide: '', low_tide: '', current_direction: 0, max_speed_knots: 0 },
+              safety_information: [],
+              protest_procedures: [],
+              extracted_at: new Date(),
+            } as CourseExtraction),
+      };
+
+      logger.debug(`Course extracted with confidence: ${extraction.confidence_score}`);
+      return extraction;
     } catch (error) {
       logger.error('Failed to parse sailing instructions:', error);
       throw error;
@@ -293,134 +325,95 @@ Return ONLY valid JSON matching this structure:
   ): Promise<RaceStrategy> {
     try {
       logger.debug(`Generating ${options.tier} race strategy`);
-
-
-      const prompt = `
-Generate a comprehensive race strategy for this course:
-
-COURSE: ${course.course_name}
-AREA: ${course.racing_area}
-TIER: ${options.tier}
-
-COURSE MARKS:
-${course.marks.map(m => `- ${m.name} (${m.type}): [${m.coordinates}]`).join('\n')}
-
-CONFIGURATIONS:
-${course.course_configurations.map(c => `- ${c.name}: ${c.sequence.join(' → ')}`).join('\n')}
-
-WIND: ${course.wind_conditions.expected_direction}° @ ${course.wind_conditions.expected_speed_range[0]}-${course.wind_conditions.expected_speed_range[1]} kts
-TIDE: High ${course.tide_information.high_tide}, Low ${course.tide_information.low_tide}
-CURRENT: ${course.tide_information.current_direction}° @ ${course.tide_information.max_speed_knots} kts
-
-${options.userPreferences ? `
-USER PREFERENCES:
-- Risk Tolerance: ${options.userPreferences.risk_tolerance}
-- Focus: ${options.userPreferences.focus_areas.join(', ')}
-` : ''}
-
-Create a ${options.tier} tier strategy including:
-
-1. PRE-START PLAN
-   - Positioning strategy
-   - Timing approach
-   - Risk assessment
-   - Alternative plans
-
-2. UPWIND STRATEGY
-   - Favored side analysis
-   - Tack planning
-   - Layline approach
-   - Shift management
-
-3. DOWNWIND STRATEGY
-   - Gybe planning
-   - Pressure seeking
-   - Wave sailing tactics
-
-4. MARK ROUNDINGS
-   - Approach & exit for each mark
-   - Traffic management
-   - Tactical positioning
-
-5. CONTINGENCY PLANS
-   - Wind shift scenarios
-   - Current changes
-   - Traffic conflicts
-   - Equipment issues
-
-6. EQUIPMENT RECOMMENDATIONS
-   - Sail selection
-   - Boat setup
-   - Crew assignments
-
-${options.tier === 'championship' ? `
-7. MONTE CARLO SIMULATION (Championship Tier)
-   - Analyze 1000+ race scenarios
-   - Calculate optimal path
-   - Identify risk zones
-   - Win probability estimation
-` : ''}
-
-Return ONLY valid JSON matching this structure:
-{
-  "pre_start_plan": {
-    "positioning": "Detailed positioning strategy",
-    "timing": "Timing approach",
-    "risk_assessment": "Risk analysis",
-    "alternatives": ["Alternative plan 1", "Alternative plan 2"]
-  },
-  "upwind_strategy": {
-    "favored_side": "right",
-    "tack_plan": "Tack planning details",
-    "layline_approach": "Layline strategy",
-    "shift_management": "How to handle shifts"
-  },
-  "downwind_strategy": {
-    "gybe_plan": "Gybe planning",
-    "pressure_seeking": "Finding pressure",
-    "wave_sailing": "Wave tactics"
-  },
-  "mark_roundings": [
-    {
-      "mark_id": "M1",
-      "approach": "Approach strategy",
-      "exit": "Exit strategy",
-      "traffic_management": "Traffic handling"
-    }
-  ],
-  "contingency_plans": [
-    {
-      "scenario": "Wind shift right",
-      "response": "Response plan",
-      "priority": "high"
-    }
-  ],
-  "equipment_recommendations": {
-    "sail_selection": ["Main", "Jib"],
-    "boat_setup": ["Mast rake 28°", "Spreaders 380mm"],
-    "crew_assignments": ["Helmsman: Start line", "Tactician: Weather side"]
-  }
-}
-`;
-
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
+      const { data, error } = await supabase.functions.invoke('generate-race-briefing', {
+        body: {
+          race: {
+            name: course.course_name,
+            start_date: new Date().toISOString(),
+            warning_signal_time: null,
+            metadata: {
+              venue_name: course.racing_area,
+              wind: {
+                direction: course.wind_conditions.expected_direction,
+                speedMin: course.wind_conditions.expected_speed_range[0],
+                speedMax: course.wind_conditions.expected_speed_range[1],
+              },
+              tide: {
+                direction: course.tide_information.current_direction,
+                speed: course.tide_information.max_speed_knots,
+              },
+            },
+          },
+          weather: options.weatherForecast ?? null,
+          raceType: 'fleet',
+        },
       });
 
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-
-      if (!jsonMatch) {
-        throw new Error('No valid JSON in strategy response');
+      if (error) {
+        throw this.createTaggedError(
+          'AI_STRATEGY_GENERATION_FAILED',
+          error.message || 'Strategy generation failed',
+          error
+        );
       }
 
-      const strategyData = JSON.parse(jsonMatch[0]);
+      const briefing = data?.strategy;
+      if (!briefing) {
+        throw this.createTaggedError('AI_STRATEGY_EMPTY_RESPONSE', 'No strategy returned from edge function');
+      }
+
+      const keyPoints: { title?: string; content?: string; priority?: string }[] = Array.isArray(briefing.keyPoints)
+        ? briefing.keyPoints
+        : [];
+      const decisionPoints: { question?: string; options?: string[] }[] = Array.isArray(briefing.decisionPoints)
+        ? briefing.decisionPoints
+        : [];
+      const warnings: string[] = Array.isArray(briefing.warnings) ? briefing.warnings : [];
+
+      const strategyData = {
+        pre_start_plan: {
+          positioning: keyPoints[0]?.content || 'Prioritize clean air and line position.',
+          timing: decisionPoints[0]?.question || 'Build final approach in the last 90 seconds.',
+          risk_assessment: warnings.join(' ') || 'Manage fleet density and avoid high-risk congestion.',
+          alternatives: (decisionPoints[0]?.options || []).slice(0, 3),
+        },
+        upwind_strategy: {
+          favored_side: 'middle' as const,
+          tack_plan: keyPoints[1]?.content || 'Tack on persistent shifts and protect lane.',
+          layline_approach: 'Avoid overstanding; build to layline with exit speed.',
+          shift_management: 'Prioritize persistent shifts, limit reactive tacks in traffic.',
+        },
+        downwind_strategy: {
+          gybe_plan: keyPoints[2]?.content || 'Gybe on pressure lines and mark transitions.',
+          pressure_seeking: 'Sail for pressure and leverage current lanes.',
+          wave_sailing: 'Preserve angle and speed through wave sets.',
+        },
+        mark_roundings: course.marks.map((mark) => ({
+          mark_id: mark.id,
+          approach: `Set up outside-in approach for ${mark.name}.`,
+          exit: `Accelerate early after ${mark.name} rounding.`,
+          traffic_management: 'Protect inside overlap rules and keep clear-air exits.',
+        })),
+        contingency_plans: [
+          ...warnings.slice(0, 2).map((warning) => ({
+            scenario: warning,
+            response: 'Reduce risk, prioritize position over marginal gain.',
+            priority: 'high' as const,
+          })),
+          ...decisionPoints.slice(0, 2).map((decision) => ({
+            scenario: decision.question || 'Key tactical decision',
+            response: Array.isArray(decision.options) && decision.options.length > 0
+              ? `Evaluate: ${decision.options.join(', ')}`
+              : 'Reassess wind/current trend before committing.',
+            priority: 'medium' as const,
+          })),
+        ],
+        equipment_recommendations: {
+          sail_selection: ['Race mainsail', 'Primary headsail'],
+          boat_setup: ['Confirm rig tune for forecast range', 'Verify baseline control settings'],
+          crew_assignments: ['Helm: lane/boat speed', 'Tactician: pressure and shifts'],
+        },
+      };
 
       // Generate Monte Carlo simulation for Championship tier
       let monte_carlo_simulation;
@@ -453,12 +446,18 @@ Return ONLY valid JSON matching this structure:
    */
   static async selectDocumentAndGenerateStrategy(
     options: StrategyOptions,
-    userId: string
+    userId: string,
+    config?: {
+      onProgress?: (message: string) => void;
+    }
   ): Promise<{
     course: CourseExtraction;
     strategy: RaceStrategy;
   }> {
     try {
+      const onProgress = config?.onProgress;
+      onProgress?.('Selecting document...');
+
       // Step 1: Select document
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'image/*'],
@@ -466,67 +465,157 @@ Return ONLY valid JSON matching this structure:
       });
 
       if (result.canceled || !result.assets?.[0]) {
-        throw new Error('Document selection canceled');
+        throw this.createTaggedError('AI_STRATEGY_DOCUMENT_CANCELLED', 'Document selection canceled');
       }
 
       const documentUri = result.assets[0].uri;
+      const documentName = result.assets[0].name || undefined;
+      const documentMimeType = result.assets[0].mimeType || undefined;
 
       // Step 2: Parse course
-      const course = await this.parseSailingInstructions(documentUri, options.venueId);
+      onProgress?.('Extracting course details...');
+      const course = await this.parseSailingInstructions(
+        documentUri,
+        options.venueId,
+        {
+          fileName: documentName,
+          mimeType: documentMimeType,
+        }
+      );
 
-      // Step 3: Save course to database
-      const { data: savedCourse, error: courseError } = await supabase
-        .from('race_courses')
-        .insert({
-          course_name: course.course_name,
-          racing_area: course.racing_area,
-          venue_id: course.venue_id,
-          marks: course.marks,
-          start_line: course.start_line,
-          finish_line: course.finish_line,
-          configurations: course.course_configurations,
-          restrictions: course.restrictions,
-          wind_conditions: course.wind_conditions,
-          tide_information: course.tide_information,
-          safety_info: course.safety_information,
-          protest_procedures: course.protest_procedures,
-          confidence_score: course.confidence_score,
-          user_id: userId
-        })
-        .select()
-        .single();
+      // Step 3: Save course to database (best-effort; continue if schema differs)
+      try {
+        onProgress?.('Saving extracted course...');
+        const { data: savedCourse, error: courseError } = await supabase
+          .from('race_courses')
+          .insert({
+            course_name: course.course_name,
+            racing_area: course.racing_area,
+            venue_id: course.venue_id,
+            marks: course.marks,
+            start_line: course.start_line,
+            finish_line: course.finish_line,
+            configurations: course.course_configurations,
+            restrictions: course.restrictions,
+            wind_conditions: course.wind_conditions,
+            tide_information: course.tide_information,
+            safety_info: course.safety_information,
+            protest_procedures: course.protest_procedures,
+            confidence_score: course.confidence_score,
+            user_id: userId
+          })
+          .select()
+          .single();
 
-      if (courseError) throw courseError;
-
-      course.id = savedCourse.id;
+        if (courseError) {
+          logger.warn('Unable to persist race course, continuing with generated data', courseError);
+        } else if (savedCourse?.id) {
+          course.id = savedCourse.id;
+        }
+      } catch (saveCourseError) {
+        logger.warn('Course persistence failed, continuing with generated data', saveCourseError);
+      }
 
       // Step 4: Generate strategy
+      onProgress?.('Generating race strategy...');
       const strategy = await this.generateRaceStrategy(course, options, userId);
 
-      // Step 5: Save strategy to database
-      const { data: savedStrategy, error: strategyError } = await supabase
-        .from('race_strategies')
-        .insert({
-          course_id: strategy.course_id,
-          venue_id: strategy.venue_id,
+      // Step 5: Save strategy to database (best-effort)
+      try {
+        onProgress?.('Saving strategy...');
+        const confidencePercent = toConfidencePercent(strategy.confidence_score);
+        const taskType =
+          options.tier === 'championship' ? 'detailed-analysis' : 'race-strategy';
+        const strategyPayload = {
+          regatta_id: options.regattaId,
           user_id: strategy.user_id,
-          strategy_type: strategy.strategy_type,
-          pre_start_plan: strategy.pre_start_plan,
-          upwind_strategy: strategy.upwind_strategy,
-          downwind_strategy: strategy.downwind_strategy,
-          mark_roundings: strategy.mark_roundings,
-          contingency_plans: strategy.contingency_plans,
-          equipment_recommendations: strategy.equipment_recommendations,
-          monte_carlo_simulation: strategy.monte_carlo_simulation,
-          confidence_score: strategy.confidence_score
-        })
-        .select()
-        .single();
+          strategy_type: 'pre_race',
+          confidence_score: Math.max(0, Math.min(100, confidencePercent)),
+          strategy_content: {
+            strategy_type: strategy.strategy_type,
+            venue_id: strategy.venue_id,
+            course_id: strategy.course_id,
+            pre_start_plan: strategy.pre_start_plan,
+            upwind_strategy: strategy.upwind_strategy,
+            downwind_strategy: strategy.downwind_strategy,
+            mark_roundings: strategy.mark_roundings,
+            contingency_plans: strategy.contingency_plans,
+            equipment_recommendations: strategy.equipment_recommendations,
+            monte_carlo_simulation: strategy.monte_carlo_simulation,
+          },
+          ai_generated: true,
+          ai_model: getModelForTask(taskType),
+          generated_at: new Date().toISOString(),
+        };
 
-      if (strategyError) throw strategyError;
+        let savedStrategy: { id?: string } | null = null;
+        let strategyError: any = null;
 
-      strategy.id = savedStrategy.id;
+        if (options.regattaId) {
+          const primary = await supabase
+            .from('race_strategies')
+            .upsert(
+              strategyPayload,
+              { onConflict: 'regatta_id,user_id' }
+            )
+            .select('id')
+            .single();
+          savedStrategy = primary.data as any;
+          strategyError = primary.error;
 
+          if (strategyError && isMissingIdColumn(strategyError, 'race_strategies', 'regatta_id')) {
+            const fallbackPayload = {
+              ...strategyPayload,
+              race_id: options.regattaId,
+              regatta_id: undefined,
+            } as any;
+            const fallback = await supabase
+              .from('race_strategies')
+              .upsert(fallbackPayload, { onConflict: 'race_id,user_id' })
+              .select('id')
+              .single();
+            savedStrategy = fallback.data as any;
+            strategyError = fallback.error;
+          }
+        } else {
+          const insertPayload = {
+            ...strategyPayload,
+            regatta_id: undefined,
+          } as any;
+
+          const inserted = await supabase
+            .from('race_strategies')
+            .insert(insertPayload)
+            .select('id')
+            .single();
+          savedStrategy = inserted.data as any;
+          strategyError = inserted.error;
+
+          if (strategyError && isMissingIdColumn(strategyError, 'race_strategies', 'regatta_id')) {
+            const fallbackPayload = {
+              ...insertPayload,
+              race_id: null,
+            };
+            const fallback = await supabase
+              .from('race_strategies')
+              .insert(fallbackPayload)
+              .select('id')
+              .single();
+            savedStrategy = fallback.data as any;
+            strategyError = fallback.error;
+          }
+        }
+
+        if (strategyError) {
+          logger.warn('Unable to persist race strategy, continuing with generated output', strategyError);
+        } else if (savedStrategy?.id) {
+          strategy.id = savedStrategy.id;
+        }
+      } catch (saveStrategyError) {
+        logger.warn('Strategy persistence failed, continuing with generated output', saveStrategyError);
+      }
+
+      onProgress?.('Done');
       logger.debug('Complete strategy workflow finished');
       return { course, strategy };
     } catch (error) {
@@ -540,59 +629,10 @@ Return ONLY valid JSON matching this structure:
    */
   private static async runMonteCarloSimulation(
     course: CourseExtraction,
-    strategy: any
+    _strategy: any
   ): Promise<RaceStrategy['monte_carlo_simulation']> {
     try {
-
-      const prompt = `
-Run Monte Carlo simulation for this race:
-
-COURSE: ${JSON.stringify(course.marks)}
-STRATEGY: ${JSON.stringify(strategy)}
-
-Simulate 1000 race scenarios considering:
-- Wind shifts and variations
-- Current changes
-- Competitor positioning
-- Tactical decision points
-
-Calculate:
-1. Optimal sailing path (coordinates)
-2. Win probability
-3. Risk zones to avoid
-
-Return JSON:
-{
-  "scenarios_analyzed": 1000,
-  "optimal_path": [[22.28, 114.15], [22.29, 114.16]],
-  "win_probability": 0.75,
-  "risk_zones": [
-    {
-      "coordinates": [[22.28, 114.15], [22.29, 114.16]],
-      "risk_level": 0.8
-    }
-  ]
-}
-`;
-
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-
-      // Fallback simulation
+      // Local fallback simulation (keeps the championship flow functional without client-side AI keys)
       return {
         scenarios_analyzed: 1000,
         optimal_path: course.marks.map(m => m.coordinates),
@@ -614,15 +654,27 @@ Return JSON:
       });
     } catch (error) {
       logger.error('Error reading document:', error);
-      throw error;
+      throw this.createTaggedError(
+        'AI_STRATEGY_DOCUMENT_READ_FAILED',
+        'Unable to read the selected document.',
+        error
+      );
     }
   }
 
-  private static getMimeType(uri: string): string {
+  private static getMimeType(uri: string, pickerMimeType?: string | null): string {
+    const normalizedPickerMime = (pickerMimeType || '').toLowerCase();
+    if (normalizedPickerMime.startsWith('application/pdf')) return 'application/pdf';
+    if (normalizedPickerMime.startsWith('image/jpeg')) return 'image/jpeg';
+    if (normalizedPickerMime.startsWith('image/jpg')) return 'image/jpeg';
+    if (normalizedPickerMime.startsWith('image/png')) return 'image/png';
+    if (normalizedPickerMime.startsWith('image/webp')) return 'image/webp';
+
     const lower = uri.toLowerCase();
     if (lower.includes('.pdf')) return 'application/pdf';
     if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg';
     if (lower.includes('.png')) return 'image/png';
+    if (lower.includes('.webp')) return 'image/webp';
     return 'application/pdf';
   }
 

@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/services/supabase';
 import {
   ClubEntryRow,
-  ClubEntryStatus,
-  ClubPaymentStatus,
 } from '@/types/entries';
 
 export interface ClubEntryCurrencySummary {
@@ -59,9 +57,31 @@ export function useClubEntries(
   const [summary, setSummary] = useState<ClubEntrySummary>(createEmptySummary);
   const [loading, setLoading] = useState<boolean>(Boolean(enabled && clubId));
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeContextRef = useRef(`${clubId || ''}|${enabled}`);
+
+  useEffect(() => {
+    activeContextRef.current = `${clubId || ''}|${enabled}`;
+  }, [clubId, enabled]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const fetchEntries = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const targetContext = `${clubId || ''}|${enabled}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeContextRef.current === targetContext;
+
     if (!clubId || !enabled) {
+      if (!canCommit()) return;
       setEntries([]);
       setSummary(createEmptySummary());
       setLoading(false);
@@ -97,6 +117,7 @@ export function useClubEntries(
       });
 
       if (regattaIds.length === 0) {
+        if (!canCommit()) return;
         setEntries([]);
         setSummary(createEmptySummary());
         setLoading(false);
@@ -208,19 +229,22 @@ export function useClubEntries(
         })
       );
 
+      if (!canCommit()) return;
       setEntries(normalizedEntries);
       setSummary(totals);
     } catch (err) {
+      if (!canCommit()) return;
       setError(err as Error);
       setEntries([]);
       setSummary(createEmptySummary());
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
   }, [clubId, enabled]);
 
   useEffect(() => {
-    fetchEntries();
+    void fetchEntries();
   }, [fetchEntries]);
 
   return {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createLogger } from '@/lib/utils/logger';
 import {
   FleetActivityEntry,
@@ -20,25 +20,47 @@ export function useUserFleets(userId?: string | null) {
     loading: Boolean(userId),
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null | undefined>(userId);
+
+  useEffect(() => {
+    activeUserIdRef.current = userId;
+  }, [userId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = userId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
     const refreshStartTime = Date.now();
     logger.debug(`[useUserFleets] ========== REFRESH STARTED at ${new Date().toISOString()} ==========`);
     logger.debug('[useUserFleets] Refresh start timestamp:', refreshStartTime);
-    logger.debug('[useUserFleets] User ID:', userId);
+    logger.debug('[useUserFleets] User ID:', targetUserId);
 
-    if (!userId) {
+    if (!targetUserId) {
       logger.debug('[useUserFleets] No userId, setting loading to false');
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false }));
       return;
     }
 
     logger.debug('[useUserFleets] Setting loading to true, calling fleetService.getFleetsForUser()...');
+    if (!canCommit()) return;
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
       const serviceCallStart = Date.now();
-      const fleets = await fleetService.getFleetsForUser(userId);
+      const fleets = await fleetService.getFleetsForUser(targetUserId);
       const serviceCallEnd = Date.now();
       const serviceCallDuration = serviceCallEnd - serviceCallStart;
 
@@ -49,6 +71,7 @@ export function useUserFleets(userId?: string | null) {
       logger.debug('[useUserFleets] Fleet names:', fleets.map(f => f.fleet.name));
       logger.debug('[useUserFleets] Fleet data:', fleets);
 
+      if (!canCommit()) return;
       setState({ data: fleets, loading: false, error: null });
 
       const refreshEndTime = Date.now();
@@ -61,13 +84,14 @@ export function useUserFleets(userId?: string | null) {
       logger.error('[useUserFleets] ========== REFRESH FAILED ==========');
       logger.error('[useUserFleets] Error timestamp:', errorTime);
       logger.error('[useUserFleets] Error fetching fleets:', error);
+      if (!canCommit()) return;
       setState({ data: null, loading: false, error: error as Error });
     }
   }, [userId]);
 
   useEffect(() => {
     logger.debug('[useUserFleets] useEffect triggered, calling refresh');
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const result = useMemo(() => ({
@@ -88,25 +112,50 @@ export function useFleetOverview(fleetId?: string | null) {
     loading: Boolean(fleetId),
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeFleetIdRef = useRef<string | null | undefined>(fleetId);
+
+  useEffect(() => {
+    activeFleetIdRef.current = fleetId;
+  }, [fleetId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
-    if (!fleetId) {
+    const runId = ++fetchRunIdRef.current;
+    const targetFleetId = fleetId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeFleetIdRef.current === targetFleetId;
+
+    if (!targetFleetId) {
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false }));
       return;
     }
 
+    if (!canCommit()) return;
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const overview = await fleetService.getFleetOverview(fleetId);
+      const overview = await fleetService.getFleetOverview(targetFleetId);
+      if (!canCommit()) return;
       setState({ data: overview, loading: false, error: null });
     } catch (error) {
+      if (!canCommit()) return;
       setState({ data: null, loading: false, error: error as Error });
     }
   }, [fleetId]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   return useMemo(() => ({
@@ -123,25 +172,54 @@ export function useFleetActivity(fleetId?: string | null, options?: { limit?: nu
     loading: Boolean(fleetId),
     error: null,
   });
+  const requestOptions = useMemo(
+    () => (options?.limit != null ? { limit: options.limit } : undefined),
+    [options?.limit]
+  );
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeFleetIdRef = useRef<string | null | undefined>(fleetId);
+
+  useEffect(() => {
+    activeFleetIdRef.current = fleetId;
+  }, [fleetId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
-    if (!fleetId) {
+    const runId = ++fetchRunIdRef.current;
+    const targetFleetId = fleetId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeFleetIdRef.current === targetFleetId;
+
+    if (!targetFleetId) {
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false }));
       return;
     }
 
+    if (!canCommit()) return;
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
-      const activity = await fleetService.getFleetActivity(fleetId, options);
+      const activity = await fleetService.getFleetActivity(targetFleetId, requestOptions);
+      if (!canCommit()) return;
       setState({ data: activity, loading: false, error: null });
     } catch (error) {
+      if (!canCommit()) return;
       setState({ data: null, loading: false, error: error as Error });
     }
-  }, [fleetId, options?.limit]);
+  }, [fleetId, requestOptions]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   return useMemo(() => ({

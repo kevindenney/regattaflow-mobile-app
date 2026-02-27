@@ -6,14 +6,12 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
   Dimensions,
   Platform,
-  Animated,
   Modal,
   Pressable,
 } from 'react-native';
@@ -25,7 +23,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { ClubEvent, EventRegistrationStats } from '@/services/eventService';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
-import { useAuth } from '@/providers/AuthProvider';
 import { Toast, ToastTitle, ToastDescription, useToast } from '@/components/ui/toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -217,8 +214,7 @@ type QuickAction = {
 export default function EventsScreen() {
   const router = useRouter();
   const toast = useToast();
-  const { clubProfile, loading: workspaceLoading } = useClubWorkspace();
-  const { userProfile } = useAuth();
+  const { clubProfile } = useClubWorkspace();
   
   const [events, setEvents] = useState<ClubEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -226,7 +222,7 @@ export default function EventsScreen() {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(true);
-  const [useMockData, setUseMockData] = useState(true);
+  const useMockData = true;
 
   // Use mock data for demo purposes
   const effectiveClubProfile = useMockData ? MOCK_CLUB_PROFILE : clubProfile;
@@ -254,11 +250,7 @@ export default function EventsScreen() {
     });
   }, [toast]);
 
-  useEffect(() => {
-    loadEvents();
-  }, []);
-
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -295,7 +287,11 @@ export default function EventsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [useMockData]);
+
+  useEffect(() => {
+    void loadEvents();
+  }, [loadEvents]);
 
   const getStatusConfig = (status: string) => {
     switch (status) {
@@ -344,13 +340,16 @@ export default function EventsScreen() {
     return `${format(start, 'MMM d')} – ${format(end, 'MMM d')}`;
   };
 
-  const now = new Date();
   const upcomingEvents = useMemo(
-    () =>
+    () => {
+      const now = new Date();
+      return (
       events
         .filter((event) => new Date(event.start_date) >= now)
-        .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()),
-    [events, now]
+        .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
+      );
+    },
+    [events]
   );
 
   const highlightEvent = upcomingEvents[0];
@@ -1051,14 +1050,20 @@ export default function EventsScreen() {
                 <View style={styles.modalActions}>
             <TouchableOpacity
                     style={styles.modalActionButton}
-                    onPress={() => showToast('Coming Soon', 'Entry management will be available here.', 'info')}
+                    onPress={() => {
+                      closeEventPreview();
+                      router.push(`/club/event/${selectedEvent.id}/entries` as any);
+                    }}
                   >
                     <Ionicons name="list-outline" size={18} color="#3B82F6" />
                     <ThemedText style={styles.modalActionText}>Manage Entries</ThemedText>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.modalActionButton, styles.modalActionPrimary]}
-                    onPress={() => showToast('Coming Soon', 'Event editing will be available here.', 'info')}
+                    onPress={() => {
+                      closeEventPreview();
+                      router.push(`/club/event/${selectedEvent.id}` as any);
+                    }}
                   >
                     <Ionicons name="create-outline" size={18} color="#FFF" />
                     <ThemedText style={styles.modalActionTextPrimary}>Edit Event</ThemedText>

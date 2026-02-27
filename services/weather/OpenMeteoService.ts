@@ -7,9 +7,11 @@
 
 import type { GeoLocation } from '@/lib/types/map';
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
+import { createLogger } from '@/lib/utils/logger';
 
 const WEATHER_API_URL = 'https://api.open-meteo.com/v1/forecast';
 const MARINE_API_URL = 'https://marine-api.open-meteo.com/v1/marine';
+const logger = createLogger('OpenMeteoService');
 
 // Cache duration in milliseconds
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
@@ -18,33 +20,6 @@ interface CacheEntry<T> {
   data: T;
   timestamp: number;
   expiresAt: number;
-}
-
-interface OpenMeteoWeatherHour {
-  time: string;
-  temperature_2m: number;
-  relative_humidity_2m: number;
-  apparent_temperature: number;
-  precipitation: number;
-  cloud_cover: number;
-  pressure_msl: number;
-  wind_speed_10m: number;
-  wind_direction_10m: number;
-  wind_gusts_10m: number;
-  visibility?: number;
-}
-
-interface OpenMeteoMarineHour {
-  time: string;
-  wave_height?: number;
-  wave_direction?: number;
-  wave_period?: number;
-  swell_wave_height?: number;
-  swell_wave_direction?: number;
-  swell_wave_period?: number;
-  wind_wave_height?: number;
-  wind_wave_direction?: number;
-  wind_wave_period?: number;
 }
 
 interface OpenMeteoWeatherResponse {
@@ -86,7 +61,7 @@ export class OpenMeteoService {
   private cache: Map<string, CacheEntry<any>> = new Map();
 
   constructor() {
-    console.info('[OpenMeteoService] Initialized - FREE weather API, no key required');
+    logger.info('[OpenMeteoService] Initialized - FREE weather API, no key required');
   }
 
   /**
@@ -98,7 +73,7 @@ export class OpenMeteoService {
     const cached = this.getCached<AdvancedWeatherConditions[]>(cacheKey);
 
     if (cached) {
-      console.info('[OpenMeteoService] Returning cached weather data');
+      logger.info('[OpenMeteoService] Returning cached weather data');
       return cached;
     }
 
@@ -113,11 +88,11 @@ export class OpenMeteoService {
       const forecasts = this.mergeWeatherAndMarine(weatherData, marineData, location);
 
       this.setCache(cacheKey, forecasts, CACHE_DURATION);
-      console.info(`[OpenMeteoService] Fetched ${forecasts.length} hours of forecast data`);
+      logger.info(`[OpenMeteoService] Fetched ${forecasts.length} hours of forecast data`);
 
       return forecasts;
     } catch (error) {
-      console.error('[OpenMeteoService] Marine weather error:', error);
+      logger.error('[OpenMeteoService] Marine weather error:', error);
       throw error;
     }
   }
@@ -144,7 +119,7 @@ export class OpenMeteoService {
 
       return closest;
     } catch (error) {
-      console.error('[OpenMeteoService] Weather at time error:', error);
+      logger.error('[OpenMeteoService] Weather at time error:', error);
       return null;
     }
   }
@@ -206,7 +181,7 @@ export class OpenMeteoService {
     
     if (!response.ok) {
       // Marine data might not be available for all locations (inland areas)
-      console.warn('[OpenMeteoService] Marine API not available for this location, using defaults');
+      logger.warn('[OpenMeteoService] Marine API not available for this location, using defaults');
       return {
         latitude: location.latitude,
         longitude: location.longitude,
@@ -440,4 +415,3 @@ export function getOpenMeteoService(): OpenMeteoService {
 }
 
 export default OpenMeteoService;
-

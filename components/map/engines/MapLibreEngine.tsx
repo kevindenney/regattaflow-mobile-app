@@ -1,5 +1,4 @@
 // import mapboxgl from 'mapbox-gl';
-// import maplibregl from 'maplibre-gl'; // TODO: Fix import.meta issue
 import {
   MapEngine,
   AdvancedMapConfig,
@@ -11,9 +10,14 @@ import {
   FlyToOptions,
   PerformanceMetrics
 } from '@/lib/types/advanced-map';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('MapLibreEngine');
 
 export class MapLibreEngine implements MapEngine {
   private map: any | null = null; // TODO: Fix maplibregl type
+  private maplibreNs: any = null;
   private container: HTMLElement | null = null;
   private config: AdvancedMapConfig | null = null;
   private performanceMonitor: PerformanceMonitor;
@@ -26,33 +30,101 @@ export class MapLibreEngine implements MapEngine {
     this.container = container;
     this.config = config;
 
-    // TODO: Re-enable when import.meta issue is fixed
-    // Create MapLibre GL map with optimized settings
-    // this.map = new maplibregl.Map({
-    //   container,
-    //   style: this.getInitialStyle(config),
-    //   center: [-122.4, 37.8], // San Francisco Bay default
-    //   zoom: config.camera.zoom,
-    //   pitch: config.camera.pitch,
-    //   bearing: config.camera.bearing,
-    //   antialias: config.rendering.antiAliasing,
-    //   maxZoom: 22,
-    //   maxPitch: 85,
-    //   preserveDrawingBuffer: true, // For screenshots
-    //   trackResize: true,
-    //   transformRequest: this.transformRequest.bind(this)
-    // });
+    let usingRealMap = false;
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      try {
+        ensureMapLibreCss('maplibre-gl-css-advanced-engine');
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          this.maplibreNs = (maplibreModule as any).default || maplibreModule;
+        } catch (_moduleError) {
+          await ensureMapLibreScript('maplibre-gl-script-advanced-engine');
+          this.maplibreNs = (window as any).maplibregl || null;
+        }
+        const MapConstructor = this.maplibreNs?.Map;
+        if (MapConstructor) {
+          this.map = new MapConstructor({
+            container,
+            style: this.getInitialStyle(config),
+            center: [-122.4, 37.8], // San Francisco Bay default
+            zoom: config.camera.zoom,
+            pitch: config.camera.pitch,
+            bearing: config.camera.bearing,
+            antialias: config.rendering.antiAliasing,
+            maxZoom: 22,
+            maxPitch: 85,
+            preserveDrawingBuffer: true, // For screenshots
+            trackResize: true,
+            transformRequest: this.transformRequest.bind(this)
+          });
 
-    // Temporary mock implementation for development
-    this.map = this.createMockMap(container, config);
+          await new Promise<void>((resolve, reject) => {
+            let settled = false;
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+            const mapRef = this.map;
+            if (!mapRef) {
+              reject(new Error('Map instance unavailable after constructor'));
+              return;
+            }
 
-    // Simulate map loading
-    await new Promise<void>((resolve) => {
-      setTimeout(() => {
+            const cleanup = () => {
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+              }
+              if (typeof mapRef.off === 'function') {
+                mapRef.off('load', onLoad);
+                mapRef.off('error', onError);
+              }
+            };
 
-        resolve();
-      }, 100);
-    });
+            const settleResolve = () => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              resolve();
+            };
+
+            const settleReject = (error: Error) => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              reject(error);
+            };
+
+            const onLoad = () => settleResolve();
+            const onError = (event: any) => {
+              const message =
+                event?.error?.message ||
+                event?.message ||
+                'MapLibre initialization error';
+              settleReject(new Error(message));
+            };
+
+            timeoutId = setTimeout(() => {
+              settleReject(new Error('Map initialization timed out'));
+            }, 10000);
+
+            mapRef.on('load', onLoad);
+            mapRef.on('error', onError);
+          });
+          usingRealMap = true;
+        }
+      } catch (error) {
+        logger.warn('Failed to initialize real MapLibre instance; using mock fallback', error);
+        usingRealMap = false;
+      }
+    }
+
+    // Fallback for environments where MapLibre cannot initialize.
+    if (!usingRealMap) {
+      this.map = this.createMockMap(container, config);
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          resolve();
+        }, 100);
+      });
+    }
 
     // Set up performance monitoring
     this.setupPerformanceMonitoring();
@@ -72,7 +144,7 @@ export class MapLibreEngine implements MapEngine {
       this.map = null;
     }
     this.performanceMonitor.stop();
-
+    logger.debug('Map engine destroyed');
   }
 
   setStyle(styleUrl: string): void {
@@ -139,6 +211,7 @@ export class MapLibreEngine implements MapEngine {
       // Add the layer
       this.map.addLayer(maplibreLayer);
     } catch (error) {
+      logger.warn('Failed to add layer', { layerId: layer.id, error });
     }
   }
 
@@ -174,7 +247,7 @@ export class MapLibreEngine implements MapEngine {
     try {
       this.map.setTerrain(terrainConfig);
     } catch (error) {
-      console.error('Failed to enable 3D terrain:', error);
+      logger.warn('Failed to enable bathymetric terrain', error);
     }
   }
 
@@ -187,7 +260,7 @@ export class MapLibreEngine implements MapEngine {
     try {
       this.map.setTerrain(null);
     } catch (error) {
-      console.error('Failed to disable 3D terrain:', error);
+      logger.warn('Failed to disable bathymetric terrain', error);
     }
   }
 
@@ -370,7 +443,7 @@ export class MapLibreEngine implements MapEngine {
     const isLowEndDevice = this.detectLowEndDevice();
 
     if (isLowEndDevice) {
-
+      logger.info('Detected low-end device; applying reduced rendering profile');
       // Reduce quality settings
       this.config.rendering.quality = 'medium';
       this.config.performance.lodStrategy = 'aggressive';
@@ -464,7 +537,7 @@ export class MapLibreEngine implements MapEngine {
         };
         break;
       default:
-
+        logger.debug('No supported terrain source configured');
         return;
     }
 
@@ -495,11 +568,24 @@ export class MapLibreEngine implements MapEngine {
     return maplibreLayer;
   }
 
-  private createMockMap(container: HTMLElement, config: AdvancedMapConfig): any {
+  private createMockMap(container: HTMLElement, _config: AdvancedMapConfig): any {
     // Create a mock map object that provides the interface expected by the components
     const mockMap = {
       // Mock event system
       _events: {} as { [key: string]: Function[] },
+      _sources: {} as Record<string, any>,
+      _layers: {} as Record<string, any>,
+      _terrain: null as any,
+      _center: { lng: -122.4, lat: 37.8 },
+      _zoom: 12,
+      _bearing: 0,
+      _pitch: 45,
+      _style: { layers: [] as any[], sources: {} as Record<string, any> },
+
+      _emit(event: string, payload?: any) {
+        const listeners = this._events[event] || [];
+        listeners.forEach((cb) => cb(payload));
+      },
 
       once(event: string, callback: Function) {
         if (!this._events[event]) this._events[event] = [];
@@ -511,7 +597,7 @@ export class MapLibreEngine implements MapEngine {
 
         // Immediately trigger load event for development
         if (event === 'load') {
-          setTimeout(() => callback(), 10);
+          setTimeout(() => this._emit('load'), 10);
         }
       },
 
@@ -531,47 +617,120 @@ export class MapLibreEngine implements MapEngine {
 
       // Mock camera methods
       setCamera(options: any) {
+        if (options?.center) {
+          this._center = { lng: options.center[0], lat: options.center[1] };
+        }
+        if (typeof options?.zoom === 'number') this._zoom = options.zoom;
+        if (typeof options?.bearing === 'number') this._bearing = options.bearing;
+        if (typeof options?.pitch === 'number') this._pitch = options.pitch;
       },
 
       easeTo(options: any) {
-
+        this.setCamera(options);
+        this._emit('moveend');
       },
 
       flyTo(options: any) {
+        this.setCamera(options);
+        this._emit('moveend');
       },
 
       // Mock layer methods
       addLayer(layer: any) {
+        this._layers[layer.id] = layer;
+        this._style.layers = Object.values(this._layers);
       },
 
       removeLayer(layerId: string) {
-
+        delete this._layers[layerId];
+        this._style.layers = Object.values(this._layers);
       },
 
       addSource(sourceId: string, source: any) {
+        this._sources[sourceId] = source;
+        this._style.sources[sourceId] = source;
       },
 
       removeSource(sourceId: string) {
+        delete this._sources[sourceId];
+        delete this._style.sources[sourceId];
       },
+
+      getSource(sourceId: string) {
+        return this._sources[sourceId] || null;
+      },
+
+      getLayer(layerId: string) {
+        return this._layers[layerId] || null;
+      },
+
+      setLayoutProperty(_layerId: string, _property: string, _value: any) {},
+      setPaintProperty(_layerId: string, _property: string, _value: any) {},
+      setFilter(_layerId: string, _filter: any) {},
 
       // Mock utility methods
       getStyle() {
-        return { layers: [], sources: {} };
+        return this._style;
       },
 
       setStyle(style: any) {
-
+        this._style = typeof style === 'object' && style
+          ? {
+              ...style,
+              layers: Array.isArray(style.layers) ? style.layers : [],
+              sources: style.sources || {},
+            }
+          : this._style;
+        this._sources = { ...(this._style.sources || {}) };
+        this._layers = {};
+        (this._style.layers || []).forEach((layer: any) => {
+          if (layer?.id) this._layers[layer.id] = layer;
+        });
+        this._emit('styledata');
       },
 
-      getBearing() { return 0; },
-      setZoom(zoom: number) {},
+      getBearing() { return this._bearing; },
+      getPitch() { return this._pitch; },
+      getZoom() { return this._zoom; },
+      setZoom(zoom: number) { this._zoom = zoom; },
 
-      getCenter() { return { lng: -122.4, lat: 37.8 }; },
-      setCenter(center: any) {},
+      getCenter() { return this._center; },
+      setCenter(center: any) {
+        if (Array.isArray(center) && center.length >= 2) {
+          this._center = { lng: center[0], lat: center[1] };
+        } else if (center?.lng !== undefined && center?.lat !== undefined) {
+          this._center = { lng: center.lng, lat: center.lat };
+        }
+      },
+      fitBounds(_bounds: any, _options?: any) {
+        this._emit('moveend');
+      },
+      queryRenderedFeatures() {
+        return [];
+      },
+      isStyleLoaded() {
+        return true;
+      },
+      getCanvas() {
+        return container;
+      },
+      addControl(_control: any, _position?: string) {},
+      setTerrain(terrain: any) {
+        this._terrain = terrain;
+      },
+      getTerrain() {
+        return this._terrain;
+      },
 
       // Mock performance methods
       setRenderWorldCopies() {},
       setMaxTileCacheSize() {},
+      remove() {
+        this._events = {};
+        this._sources = {};
+        this._layers = {};
+        this._terrain = null;
+      },
 
       // Mock container
       getContainer() { return container; }
@@ -598,7 +757,7 @@ export class MapLibreEngine implements MapEngine {
     return mockMap;
   }
 
-  private transformRequest(url: string, resourceType: string): any {
+  private transformRequest(url: string, _resourceType: string): any {
     // Add authentication headers if needed
     return {
       url,
@@ -620,13 +779,14 @@ export class MapLibreEngine implements MapEngine {
     });
 
     // Error handling
-    this.map.on('error', (e) => {
-
+    this.map.on('error', (_e) => {
+      logger.warn('Map runtime error event', _e);
     });
 
     // Source events
     this.map.on('sourcedata', (e) => {
       if (e.sourceId === 'terrain' && e.isSourceLoaded) {
+        logger.debug('Terrain source loaded');
       }
     });
   }
@@ -636,6 +796,10 @@ export class MapLibreEngine implements MapEngine {
   }
 
   private detectLowEndDevice(): boolean {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      return false;
+    }
+
     // Simple device capability detection
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl');
@@ -677,8 +841,6 @@ export class MapLibreEngine implements MapEngine {
     if (!this.map) throw new Error('Map not initialized');
 
     const exaggeration = options?.exaggeration ?? 3.0;
-    const opacity = options?.opacity ?? 1.0;
-
     // Add bathymetry tile source
     this.map.addSource('bathymetry', {
       type: 'raster-dem',

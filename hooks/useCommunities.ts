@@ -13,15 +13,17 @@ import {
 } from '@tanstack/react-query';
 import { CommunityService } from '@/services/community/CommunityService';
 import { useAuth } from '@/providers/AuthProvider';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   Community,
-  CommunityCategory,
   CommunityType,
   CommunityMemberRole,
   CreateCommunityParams,
   UpdateCommunityParams,
   CommunitiesListParams,
 } from '@/types/community';
+
+const logger = createLogger('useCommunities');
 
 // ============================================================================
 // QUERY KEYS
@@ -244,25 +246,25 @@ export function useJoinCommunity() {
       communityId: string;
       role?: CommunityMemberRole;
     }) => {
-      console.log('[useJoinCommunity] mutationFn called, communityId:', communityId, 'role:', role);
+      logger.debug('useJoinCommunity mutationFn called', { communityId, role });
       try {
         const result = await CommunityService.joinCommunity(communityId, role);
-        console.log('[useJoinCommunity] joinCommunity success');
+        logger.debug('useJoinCommunity success');
         return result;
       } catch (error) {
-        console.error('[useJoinCommunity] joinCommunity error:', error);
+        logger.error('useJoinCommunity error', error);
         throw error;
       }
     },
     onMutate: async ({ communityId }) => {
-      console.log('[useJoinCommunity] onMutate called, communityId:', communityId);
+      logger.debug('useJoinCommunity onMutate', { communityId });
       // Optimistic update
       await queryClient.cancelQueries({ queryKey: communityKeys.detail(communityId) });
 
       const previousCommunity = queryClient.getQueryData<Community>(
         communityKeys.detail(communityId)
       );
-      console.log('[useJoinCommunity] previousCommunity:', previousCommunity?.id);
+      logger.debug('useJoinCommunity previousCommunity', { id: previousCommunity?.id });
 
       if (previousCommunity) {
         queryClient.setQueryData<Community>(communityKeys.detail(communityId), {
@@ -276,7 +278,7 @@ export function useJoinCommunity() {
       return { previousCommunity };
     },
     onError: (err, { communityId }, context) => {
-      console.error('[useJoinCommunity] onError:', err);
+      logger.error('useJoinCommunity onError', err);
       if (context?.previousCommunity) {
         queryClient.setQueryData(
           communityKeys.detail(communityId),
@@ -285,10 +287,10 @@ export function useJoinCommunity() {
       }
     },
     onSuccess: (data, { communityId }) => {
-      console.log('[useJoinCommunity] onSuccess, communityId:', communityId);
+      logger.debug('useJoinCommunity onSuccess', { communityId });
     },
     onSettled: (_data, error, { communityId }) => {
-      console.log('[useJoinCommunity] onSettled, communityId:', communityId, 'error:', error);
+      logger.debug('useJoinCommunity onSettled', { communityId, error });
       queryClient.invalidateQueries({ queryKey: communityKeys.detail(communityId) });
       queryClient.invalidateQueries({ queryKey: communityKeys.userCommunities() });
       queryClient.invalidateQueries({ queryKey: communityKeys.lists() });

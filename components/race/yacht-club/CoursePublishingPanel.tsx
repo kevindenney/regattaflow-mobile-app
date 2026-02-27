@@ -33,7 +33,6 @@ export function CoursePublishingPanel({
   onCoursePublish,
   onCourseUpdate
 }: CoursePublishingPanelProps) {
-  const [selectedCourse, setSelectedCourse] = useState<OfficialRaceCourse | null>(null);
   const [publishingTargets] = useState<PublicationTarget[]>([
     {
       id: 'club_members',
@@ -125,7 +124,12 @@ export function CoursePublishingPanel({
         {
           text: 'Amend',
           onPress: () => {
-            // TODO: Implement course amendment logic
+            const amendedCourse: OfficialRaceCourse = {
+              ...course,
+              status: course.status === 'active' ? 'active' : 'published',
+              publishedAt: new Date(),
+            };
+            onCourseUpdate(amendedCourse);
             Alert.alert('Amendment Sent', 'Course amendment distributed to all participants.');
           }
         }
@@ -223,7 +227,7 @@ export function CoursePublishingPanel({
             </Button>
             <Button
               variant="outline"
-              onPress={() => setSelectedCourse(course)}
+              onPress={() => onCourseUpdate(course)}
               style={styles.actionButton}
             >
               <ThemedText style={styles.outlineButtonText}>✏️ Edit</ThemedText>
@@ -242,7 +246,7 @@ export function CoursePublishingPanel({
             </Button>
             <Button
               variant="outline"
-              onPress={() => setSelectedCourse(course)}
+              onPress={() => onCourseUpdate(course)}
               style={styles.actionButton}
             >
               <ThemedText style={styles.outlineButtonText}>👁️ View</ThemedText>

@@ -6,17 +6,19 @@
  * Core of the "OnX Maps for Sailing" user experience
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { globalVenueDatabase } from '@/services/venue/GlobalVenueDatabase';
 import { VenueDetectionService } from '@/services/venue/VenueDetectionService';
 import { useRegionalWeather } from './useRegionalWeather';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   SailingVenue,
   VenueTransition,
-  LocationDetection,
   CulturalBriefing,
   Coordinates
 } from '@/lib/types/global-venues';
+
+const logger = createLogger('useGlobalVenueIntelligence');
 
 export interface VenueIntelligenceState {
   // Current venue context
@@ -74,14 +76,39 @@ export function useGlobalVenueIntelligence() {
   });
 
   const [venueDetector] = useState(() => new VenueDetectionService());
+  const isMountedRef = useRef(true);
+  const detectionRunIdRef = useRef(0);
+  const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadVenueIntelligenceRef = useRef<(venue: SailingVenue) => Promise<void>>(async () => {});
+  const handleVenueTransitionRef = useRef<(transition: VenueTransition) => Promise<void>>(async () => {});
+  const setupVenueDetectionCallbacksRef = useRef<() => void>(() => {});
+
+  const canCommit = useCallback(
+    (runId?: number) =>
+      isMountedRef.current && (runId === undefined || runId === detectionRunIdRef.current),
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      detectionRunIdRef.current += 1;
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /**
    * Initialize venue intelligence system
    */
   const initialize = useCallback(async () => {
+    const runId = ++detectionRunIdRef.current;
 
     try {
-      setState(prev => ({ ...prev, isDetecting: true, error: null }));
+      if (canCommit(runId)) {
+        setState(prev => ({ ...prev, isDetecting: true, error: null }));
+      }
 
       // Initialize global venue database
       await globalVenueDatabase.initialize();
@@ -89,6 +116,7 @@ export function useGlobalVenueIntelligence() {
       // Initialize venue detection
       const hasPermission = await venueDetector.initialize();
 
+      if (!canCommit(runId)) return;
       setState(prev => ({
         ...prev,
         isDetecting: false,
@@ -98,17 +126,19 @@ export function useGlobalVenueIntelligence() {
 
       // Always set up callbacks, regardless of permission status
       // because we have timezone-based fallback detection
-      setupVenueDetectionCallbacks();
+      if (!canCommit(runId)) return;
+      setupVenueDetectionCallbacksRef.current();
 
     } catch (error: any) {
-      console.error('Failed to initialize venue intelligence:', error);
+      logger.error('Failed to initialize venue intelligence', error);
+      if (!canCommit(runId)) return;
       setState(prev => ({
         ...prev,
         isDetecting: false,
         error: error.message
       }));
     }
-  }, [venueDetector]);
+  }, [venueDetector, canCommit]);
 
   /**
    * Force venue detection to run (useful for testing)
@@ -125,6 +155,7 @@ export function useGlobalVenueIntelligence() {
   const setupVenueDetectionCallbacks = useCallback(() => {
     // Listen for venue detection
     venueDetector.onVenueDetected((venue: SailingVenue | null) => {
+      if (!canCommit()) return;
 
       setState(prev => {
         const isNewVenue = venue?.id !== prev.currentVenue?.id;
@@ -141,14 +172,15 @@ export function useGlobalVenueIntelligence() {
       });
 
       if (venue) {
-        loadVenueIntelligence(venue);
+        void loadVenueIntelligenceRef.current(venue);
         // Load weather data for the new venue
-        weather.loadVenueWeather(venue);
+        void weather.loadVenueWeather(venue);
       }
     });
 
     // Listen for venue transitions
     venueDetector.onVenueTransition((transition: VenueTransition) => {
+      if (!canCommit()) return;
 
       setState(prev => ({
         ...prev,
@@ -157,14 +189,15 @@ export function useGlobalVenueIntelligence() {
         adaptationRequired: true
       }));
 
-      handleVenueTransition(transition);
+      void handleVenueTransitionRef.current(transition);
     });
-  }, [venueDetector]);
+  }, [venueDetector, canCommit, weather]);
 
   /**
    * Load comprehensive intelligence for a venue
    */
   const loadVenueIntelligence = useCallback(async (venue: SailingVenue) => {
+    const runId = detectionRunIdRef.current;
 
     try {
       // Get nearby venues for circuit planning
@@ -181,6 +214,7 @@ export function useGlobalVenueIntelligence() {
         weather.loadNearbyWeather(nearby.slice(0, 5));
       }
 
+      if (!canCommit(runId)) return;
       setState(prev => ({
         ...prev,
         nearbyVenues: nearby,
@@ -190,15 +224,17 @@ export function useGlobalVenueIntelligence() {
       }));
 
     } catch (error: any) {
+      if (!canCommit(runId)) return;
 
       setState(prev => ({ ...prev, error: error.message }));
     }
-  }, []);
+  }, [canCommit, weather]);
 
   /**
    * Handle venue transition with cultural adaptation
    */
   const handleVenueTransition = useCallback(async (transition: VenueTransition) => {
+    if (!canCommit()) return;
 
     // Mark venue as visited
     setState(prev => {
@@ -212,17 +248,33 @@ export function useGlobalVenueIntelligence() {
     });
 
     // Generate adaptation requirements
-    const adaptations = generateAdaptationRequirements(transition);
+    void generateAdaptationRequirements(transition);
 
     // Complete transition
-    setTimeout(() => {
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+    transitionTimeoutRef.current = setTimeout(() => {
+      if (!canCommit()) return;
       setState(prev => ({
         ...prev,
         isTransitioning: false,
         adaptationRequired: false
       }));
     }, 2000);
-  }, []);
+  }, [canCommit]);
+
+  useEffect(() => {
+    loadVenueIntelligenceRef.current = loadVenueIntelligence;
+  }, [loadVenueIntelligence]);
+
+  useEffect(() => {
+    handleVenueTransitionRef.current = handleVenueTransition;
+  }, [handleVenueTransition]);
+
+  useEffect(() => {
+    setupVenueDetectionCallbacksRef.current = setupVenueDetectionCallbacks;
+  }, [setupVenueDetectionCallbacks]);
 
   /**
    * Manually select a venue (when GPS detection is not available)
@@ -231,10 +283,12 @@ export function useGlobalVenueIntelligence() {
 
     const venue = globalVenueDatabase.getVenueById(venueId);
     if (!venue) {
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, error: `Venue ${venueId} not found` }));
       return;
     }
 
+    if (!canCommit()) return;
     setState(prev => ({
       ...prev,
       currentVenue: venue,
@@ -248,8 +302,8 @@ export function useGlobalVenueIntelligence() {
     await loadVenueIntelligence(venue);
 
     // Load weather data for manually selected venue
-    weather.loadVenueWeather(venue);
-  }, [loadVenueIntelligence, weather]);
+    await weather.loadVenueWeather(venue);
+  }, [loadVenueIntelligence, weather, canCommit]);
 
   /**
    * Search venues globally

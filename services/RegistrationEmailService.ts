@@ -5,6 +5,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RegistrationEmailService');
 
 // ============================================================================
 // TYPES
@@ -84,7 +87,7 @@ class RegistrationEmailService {
       });
 
       if (error) {
-        console.error('Error sending confirmation email:', error);
+        logger.error('Error sending confirmation email:', error);
         return false;
       }
 
@@ -93,7 +96,7 @@ class RegistrationEmailService {
       
       return true;
     } catch (error) {
-      console.error('Failed to send confirmation email:', error);
+      logger.error('Failed to send confirmation email:', error);
       return false;
     }
   }
@@ -760,4 +763,3 @@ Powered by RegattaFlow
 // Export singleton
 export const registrationEmailService = new RegistrationEmailService();
 export default RegistrationEmailService;
-

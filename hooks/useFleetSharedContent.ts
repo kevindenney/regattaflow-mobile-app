@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createLogger } from '@/lib/utils/logger';
 import {
   fleetService,
@@ -22,13 +22,36 @@ export function useFleetSharedContent(params: { clubId?: string | null; classId?
     loading: Boolean(params.clubId || params.classId),
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const refreshRunIdRef = useRef(0);
+  const activeContextRef = useRef(`${params.clubId ?? ''}|${params.classId ?? ''}`);
+
+  useEffect(() => {
+    activeContextRef.current = `${params.clubId ?? ''}|${params.classId ?? ''}`;
+  }, [params.clubId, params.classId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      refreshRunIdRef.current += 1;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
+    const runId = ++refreshRunIdRef.current;
+    const contextKey = `${params.clubId ?? ''}|${params.classId ?? ''}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === refreshRunIdRef.current &&
+      activeContextRef.current === contextKey;
+
     if (!params.clubId && !params.classId) {
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false, courses: [], races: [] }));
       return;
     }
 
+    if (!canCommit()) return;
     setState(prev => ({ ...prev, loading: true, error: null }));
 
     try {
@@ -37,6 +60,7 @@ export function useFleetSharedContent(params: { clubId?: string | null; classId?
         fleetService.getFleetUpcomingRaces({ classId: params.classId, limit: 6 }),
       ]);
 
+      if (!canCommit()) return;
       setState({
         courses,
         races,
@@ -45,6 +69,7 @@ export function useFleetSharedContent(params: { clubId?: string | null; classId?
       });
     } catch (error) {
       logger.error('[useFleetSharedContent] Failed to load shared items', error);
+      if (!canCommit()) return;
       setState({
         courses: [],
         races: [],
@@ -55,7 +80,7 @@ export function useFleetSharedContent(params: { clubId?: string | null; classId?
   }, [params.clubId, params.classId]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   return useMemo(() => ({

@@ -384,3 +384,95 @@ export interface RaceAnalysisState {
   coachAnnotations: CoachAnnotation[];
   hasUnreadCoachFeedback: boolean;
 }
+
+// =============================================================================
+// UNIVERSAL AI EVENT ANALYSIS (Multi-Interest)
+// =============================================================================
+
+/**
+ * A single AI analysis section (interest-agnostic).
+ * Section IDs are defined per interest in InterestEventConfig.aiAnalysisSections.
+ */
+export interface AiAnalysisSection {
+  /** Section ID from the interest config (e.g., 'start_analysis', 'clinical_reasoning') */
+  sectionId: string;
+  /** Section content (markdown or plain text) */
+  content: string | null;
+}
+
+/**
+ * Universal AI event analysis that works across all interests.
+ * Stores analysis as dynamic sections keyed by the interest's aiAnalysisSections config.
+ *
+ * For sailing, this wraps the existing AiCoachAnalysisSummary fields.
+ * For nursing/drawing/fitness, sections are defined by the interest config.
+ */
+export interface AiEventAnalysis {
+  /** Timer session or event ID */
+  eventSessionId: string;
+  /** Interest slug for context */
+  interestSlug?: string;
+  /** AI confidence in the analysis (0-100) */
+  confidenceScore?: number | null;
+  /** Overall summary across all sections */
+  overallSummary?: string | null;
+  /** Interest-specific analysis sections */
+  sections: Record<string, string | null>;
+  /** Actionable recommendations */
+  recommendations?: string[] | null;
+  /** Plan vs execution comparison */
+  planVsExecution?: string | null;
+  /** Interest-specific framework scores (keyed by framework ID from config) */
+  frameworkScores?: Record<string, number | null>;
+  /** Timestamp */
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Maps a sailing-specific AiCoachAnalysisSummary to the universal AiEventAnalysis format.
+ */
+export function mapSailingAnalysisToUniversal(
+  sailing: AiCoachAnalysisSummary,
+): AiEventAnalysis {
+  return {
+    eventSessionId: sailing.timer_session_id,
+    interestSlug: 'sail-racing',
+    confidenceScore: sailing.confidence_score,
+    overallSummary: sailing.overall_summary,
+    sections: {
+      start_analysis: sailing.start_analysis ?? null,
+      upwind_analysis: sailing.upwind_analysis ?? null,
+      downwind_analysis: sailing.downwind_analysis ?? null,
+      tactical_decisions: sailing.tactical_decisions ?? null,
+      boat_handling: sailing.boat_handling ?? null,
+    },
+    recommendations: sailing.recommendations,
+    planVsExecution: sailing.plan_vs_execution,
+    createdAt: sailing.created_at,
+    updatedAt: sailing.updated_at,
+  };
+}
+
+/**
+ * Maps a universal AiEventAnalysis back to the sailing-specific format.
+ * Used when writing to the existing ai_coach_analysis table.
+ */
+export function mapUniversalToSailingAnalysis(
+  universal: AiEventAnalysis,
+): AiCoachAnalysisSummary {
+  return {
+    timer_session_id: universal.eventSessionId,
+    confidence_score: universal.confidenceScore,
+    overall_summary: universal.overallSummary,
+    start_analysis: universal.sections.start_analysis,
+    upwind_analysis: universal.sections.upwind_analysis,
+    downwind_analysis: universal.sections.downwind_analysis,
+    tactical_decisions: universal.sections.tactical_decisions,
+    boat_handling: universal.sections.boat_handling,
+    recommendations: universal.recommendations,
+    plan_vs_execution: universal.planVsExecution,
+    created_at: universal.createdAt,
+    updated_at: universal.updatedAt,
+  };
+}

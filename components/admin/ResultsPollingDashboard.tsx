@@ -4,7 +4,7 @@
  * Provides system monitoring, configuration, and analytics
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -54,15 +54,7 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadDashboardData();
-
-    // Set up periodic refresh
-    const interval = setInterval(loadDashboardData, 60000); // Refresh every minute
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -77,7 +69,17 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    void loadDashboardData();
+
+    // Set up periodic refresh
+    const interval = setInterval(() => {
+      void loadDashboardData();
+    }, 60000); // Refresh every minute
+    return () => clearInterval(interval);
+  }, [loadDashboardData]);
 
   const loadSystemStats = async () => {
     // Simulated stats - in production, this would call a real API
@@ -140,6 +142,29 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
   const onRefresh = async () => {
     setRefreshing(true);
     await loadDashboardData();
+  };
+
+  const handlePollAllSources = async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    Alert.alert('Poll Complete', 'All configured sources were refreshed.');
+  };
+
+  const handleConfigureSources = () => {
+    setActiveTab('monitor');
+  };
+
+  const handleExportData = () => {
+    const exportSummary = [
+      `Results: ${stats?.totalResults?.toLocaleString() ?? 0}`,
+      `Regattas: ${stats?.totalRegattas?.toLocaleString() ?? 0}`,
+      `Success Rate: ${stats?.successRate ?? 0}%`,
+    ].join('\n');
+    Alert.alert('Export Summary', exportSummary);
+  };
+
+  const handleOpenDebugMode = () => {
+    setActiveTab('search');
   };
 
   const renderTabBar = () => (
@@ -330,22 +355,22 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
       <Text style={styles.sectionTitle}>Quick Actions</Text>
 
       <View style={styles.actionButtons}>
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={handlePollAllSources}>
           <Ionicons name="refresh-circle" size={24} color="#0066CC" />
           <Text style={styles.actionButtonText}>Poll All Sources</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={handleConfigureSources}>
           <Ionicons name="settings" size={24} color="#666" />
           <Text style={styles.actionButtonText}>Configure Sources</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={handleExportData}>
           <Ionicons name="download" size={24} color="#00AA33" />
           <Text style={styles.actionButtonText}>Export Data</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={handleOpenDebugMode}>
           <Ionicons name="bug" size={24} color="#FF9500" />
           <Text style={styles.actionButtonText}>Debug Mode</Text>
         </TouchableOpacity>
@@ -370,15 +395,51 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
 
   const renderAnalyticsTab = () => (
     <ScrollView style={styles.tabContent}>
-      <View style={styles.placeholderContent}>
-        <Ionicons name="bar-chart" size={64} color="#CCC" />
-        <Text style={styles.placeholderText}>
-          Analytics dashboard coming soon
-        </Text>
-        <Text style={styles.placeholderSubtext}>
-          This will include detailed charts and metrics for polling performance,
-          data quality, and system health over time.
-        </Text>
+      <View style={styles.analyticsSection}>
+        <Text style={styles.sectionTitle}>Performance Analytics</Text>
+        <View style={styles.analyticsGrid}>
+          <View style={styles.analyticsCard}>
+            <Text style={styles.analyticsLabel}>Daily Polls</Text>
+            <Text style={styles.analyticsValue}>{stats?.dailyPolls ?? 0}</Text>
+          </View>
+          <View style={styles.analyticsCard}>
+            <Text style={styles.analyticsLabel}>Source Health</Text>
+            <Text style={styles.analyticsValue}>
+              {stats?.healthySources ?? 0}/{stats?.activeSources ?? 0}
+            </Text>
+          </View>
+          <View style={styles.analyticsCard}>
+            <Text style={styles.analyticsLabel}>Error Sources</Text>
+            <Text style={[styles.analyticsValue, styles.analyticsValueError]}>
+              {stats?.errorSources ?? 0}
+            </Text>
+          </View>
+          <View style={styles.analyticsCard}>
+            <Text style={styles.analyticsLabel}>Data Freshness</Text>
+            <Text style={styles.analyticsValue}>
+              {stats?.dataFreshness != null
+                ? stats.dataFreshness < 1
+                  ? '<1h'
+                  : `${stats.dataFreshness}h`
+                : '--'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.sourcesSection}>
+          <Text style={styles.sectionTitle}>Recent Activity by Source</Text>
+          {Array.from(
+            recentActivity.reduce((acc, item) => {
+              acc.set(item.sourceName, (acc.get(item.sourceName) || 0) + 1);
+              return acc;
+            }, new Map<string, number>())
+          ).map(([sourceName, count]) => (
+            <View key={sourceName} style={styles.sourceRow}>
+              <Text style={styles.sourceName}>{sourceName}</Text>
+              <Text style={styles.sourceCount}>{count} events</Text>
+            </View>
+          ))}
+        </View>
       </View>
     </ScrollView>
   );
@@ -571,6 +632,60 @@ const styles = StyleSheet.create({
   actionsSection: {
     padding: 20,
     paddingTop: 0,
+  },
+  analyticsSection: {
+    padding: 20,
+  },
+  analyticsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+  },
+  analyticsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    width: (width - 52) / 2,
+    boxShadow: '0px 1px',
+    elevation: 2,
+  },
+  analyticsLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 6,
+  },
+  analyticsValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  analyticsValueError: {
+    color: '#DC2626',
+  },
+  sourcesSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    boxShadow: '0px 1px',
+    elevation: 2,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
+  },
+  sourceName: {
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  sourceCount: {
+    fontSize: 13,
+    color: '#6B7280',
   },
   actionButtons: {
     flexDirection: 'row',

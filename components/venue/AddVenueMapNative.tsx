@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TurboModuleRegistry } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, TurboModuleRegistry, TouchableOpacity, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
@@ -166,6 +166,22 @@ export function AddVenueMapNative({
           Native maps require a development build.{'\n'}
           Use web version or run with EAS Build.
         </Text>
+        <TouchableOpacity
+          style={styles.fallbackButtonPrimary}
+          onPress={() => onLocationSelect(22.2793, 114.1628)}
+        >
+          <Text style={styles.fallbackButtonPrimaryText}>Use Default Coordinates</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.fallbackButtonSecondary}
+          onPress={() =>
+            Linking.openURL(
+              'mailto:support@regattaflow.com?subject=Native%20Map%20Setup&body=Please%20help%20me%20enable%20native%20maps%20for%20venue%20selection.'
+            )
+          }
+        >
+          <Text style={styles.fallbackButtonSecondaryText}>Contact Support</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -273,6 +289,30 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  fallbackButtonPrimary: {
+    marginTop: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: IOS_COLORS.systemBlue,
+  },
+  fallbackButtonPrimaryText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  fallbackButtonSecondary: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  fallbackButtonSecondaryText: {
+    color: '#334155',
+    fontWeight: '600',
   },
   newVenueMarker: {
     width: 44,

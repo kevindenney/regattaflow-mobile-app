@@ -1,13 +1,9 @@
-import Anthropic from '@anthropic-ai/sdk';
-
 import { skillManagementService } from './SkillManagementService';
 import { createLogger } from '@/lib/utils/logger';
 import { cachedAICall } from '@/lib/utils/aiCache';
 import {
-  withAIFallback,
   generateMockRigTuning,
   isAIInFallbackMode,
-  isCreditExhaustedError,
   isAPIOverloadError,
   shouldTriggerFallback,
   activateFallbackMode
@@ -18,8 +14,8 @@ import type {
   RaceTuningRecommendation,
   RaceTuningSetting
 } from '@/services/RaceTuningService';
-import { resolveAnthropicApiKey } from '@/lib/config/anthropic';
 import type { ExtractedSection } from '@/services/TuningGuideExtractionService';
+import { supabase, SUPABASE_CONFIG_ERROR } from '@/services/supabase';
 
 const logger = createLogger('RaceTuningEngine');
 
@@ -69,39 +65,70 @@ interface SkillRecommendation {
 }
 
 class RaceTuningEngine {
-  private anthropic: Anthropic;
-  private hasValidApiKey = false;
   private customSkillId: string | null = null;
   private skillInitialized = false;
   private skillInitializationPromise: Promise<void> | null = null;
+  private skillInitializationError: string | null = null;
 
   constructor() {
-    const resolvedApiKey = resolveAnthropicApiKey();
-
-    this.hasValidApiKey = Boolean(resolvedApiKey);
-
-    if (!this.hasValidApiKey) {
-      logger.debug('Boat tuning engine running in fallback mode (no Anthropic API key configured)');
-    } else {
-      logger.debug('Boat tuning engine ready with Anthropic API key');
-    }
-
-    this.anthropic = new Anthropic({
-      apiKey: resolvedApiKey || 'placeholder',
-      dangerouslyAllowBrowser: true
-    });
-
-    if (this.hasValidApiKey) {
+    if (this.isAvailable()) {
+      logger.debug('Boat tuning engine ready with secure edge-function AI');
       void this.ensureSkillInitialized();
+    } else {
+      logger.debug('Boat tuning engine running in fallback mode (Supabase configuration missing)');
     }
   }
 
+  private createTaggedError(code: string, message: string, cause?: unknown): Error {
+    const tagged = new Error(`[${code}] ${message}`);
+    (tagged as any).code = code;
+    if (cause !== undefined) {
+      (tagged as any).cause = cause;
+    }
+    return tagged;
+  }
+
+  private async invokeTuningChat(
+    prompt: string,
+    maxTokens: number,
+    temperature: number,
+    system?: string
+  ): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+        temperature,
+        system
+      }
+    });
+
+    if (error) {
+      throw this.createTaggedError(
+        'AI_TUNING_CHAT_FAILED',
+        error.message || 'race-coaching-chat invocation failed',
+        error
+      );
+    }
+
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    if (!text) {
+      throw this.createTaggedError('AI_TUNING_EMPTY_RESPONSE', 'race-coaching-chat returned no text');
+    }
+
+    return text;
+  }
+
   isAvailable(): boolean {
-    return this.hasValidApiKey;
+    return !SUPABASE_CONFIG_ERROR;
   }
 
   isSkillReady(): boolean {
     return this.skillInitialized;
+  }
+
+  getSkillInitializationError(): string | null {
+    return this.skillInitializationError;
   }
 
   /**
@@ -111,7 +138,7 @@ class RaceTuningEngine {
    */
   async generateAIOnlyRecommendations(request: RaceTuningRequest): Promise<RaceTuningRecommendation[]> {
     logger.debug('generateAIOnlyRecommendations invoked', {
-      hasValidApiKey: this.hasValidApiKey,
+      available: this.isAvailable(),
     });
 
     // Check if we're in fallback mode due to credit exhaustion
@@ -124,9 +151,13 @@ class RaceTuningEngine {
       return [this.transformAIOnlyRecommendation(mockRec)];
     }
 
-    if (!this.hasValidApiKey) {
-      logger.warn('AI rig tuning unavailable: No Anthropic API key configured');
-      return [];
+    if (!this.isAvailable()) {
+      throw this.createTaggedError(
+        'AI_TUNING_UNAVAILABLE',
+        SUPABASE_CONFIG_ERROR
+          ? `AI rig tuning unavailable: ${SUPABASE_CONFIG_ERROR}`
+          : 'AI rig tuning unavailable: Supabase configuration is missing'
+      );
     }
 
     await this.ensureSkillInitialized();
@@ -142,8 +173,7 @@ class RaceTuningEngine {
       waveHeight,
       currentSpeed,
       currentDirection,
-      pointsOfSail = 'all',
-      limit = 1
+      pointsOfSail = 'all'
     } = request;
 
     const weatherContext = {
@@ -197,27 +227,14 @@ class RaceTuningEngine {
 Return JSON array with ONE recommendation. No guides uploaded - use physics-based reasoning.`;
 
     try {
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2000,
-        temperature: 0.5,
-        // Use skill content as system prompt - reduces user prompt by ~60%
-        system: BOAT_TUNING_SKILL_CONTENT,
-        messages: [{
-          role: 'user',
-          content: userPrompt
-        }]
-      });
-
-      const textBlocks = (response.content as Array<{ type: string; text?: string }>)
-        .filter(block => block.type === 'text' && typeof block.text === 'string')
-        .map(block => block.text!.trim())
-        .filter(Boolean);
-
-      const combinedText = textBlocks.join('\n').trim();
+      const combinedText = await this.invokeTuningChat(
+        userPrompt,
+        2000,
+        0.5,
+        BOAT_TUNING_SKILL_CONTENT
+      );
 
       logger.debug('AI response text', {
-        textBlockCount: textBlocks.length,
         combinedTextLength: combinedText.length,
         combinedTextPreview: combinedText.substring(0, 500),
         hasOpenBracket: combinedText.includes('['),
@@ -261,9 +278,12 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
               lowerResponse.includes('no data') ||
               lowerResponse.includes('not available') ||
               lowerResponse.includes('unfortunately')) {
-            throw new Error(`AI declined to generate tuning: ${combinedText.substring(0, 300)}`);
+            throw this.createTaggedError(
+              'AI_TUNING_DECLINED',
+              `AI declined to generate tuning: ${combinedText.substring(0, 300)}`
+            );
           }
-          throw new Error('Unable to find JSON in AI rig tuning response');
+          throw this.createTaggedError('AI_TUNING_INVALID_RESPONSE', 'Unable to find JSON in AI rig tuning response');
         }
 
         // Use whichever comes first (or the one that exists)
@@ -295,7 +315,7 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
       }
 
       if (lastValidIndex === -1) {
-        throw new Error('Unable to find valid JSON structure in AI response');
+        throw this.createTaggedError('AI_TUNING_INVALID_RESPONSE', 'Unable to find valid JSON structure in AI response');
       }
 
       const cleanedJson = jsonText.substring(0, lastValidIndex + 1);
@@ -310,7 +330,7 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
           jsonPreview: cleanedJson.substring(0, 200),
           fullResponse: combinedText.substring(0, 500),
         });
-        throw new Error(`Failed to parse JSON: ${parseError.message}`);
+        throw this.createTaggedError('AI_TUNING_PARSE_ERROR', `Failed to parse JSON: ${parseError.message}`, parseError);
       }
 
       // Wrap single object in array for consistent processing
@@ -318,7 +338,7 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
         if (typeof parsed === 'object' && parsed !== null) {
           parsed = [parsed];
         } else {
-          throw new Error('AI rig tuning response was not a valid JSON object or array');
+          throw this.createTaggedError('AI_TUNING_INVALID_RESPONSE', 'AI rig tuning response was not a valid JSON object or array');
         }
       }
 
@@ -340,7 +360,11 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
 
       // AI declining is expected when no tuning guides exist - not an error
       logger.debug('AI rig tuning generation did not produce results', { message: (error as Error)?.message?.substring(0, 100) });
-      throw error;
+      const message = (error as Error)?.message || 'Unknown rig tuning generation error';
+      if (message.includes('[AI_TUNING_')) {
+        throw error;
+      }
+      throw this.createTaggedError('AI_TUNING_GENERATION_FAILED', message, error);
     }
   }
 
@@ -357,13 +381,24 @@ Return JSON array with ONE recommendation. No guides uploaded - use physics-base
       return [this.transformAIOnlyRecommendation(mockRec)];
     }
 
-    if (!this.hasValidApiKey) {
-      return [];
+    if (!this.isAvailable()) {
+      throw new Error(
+        SUPABASE_CONFIG_ERROR
+          ? `Boat tuning recommendations unavailable: ${SUPABASE_CONFIG_ERROR}`
+          : 'Boat tuning recommendations unavailable: Supabase configuration is missing'
+      );
     }
 
     await this.ensureSkillInitialized();
     if (!candidates || candidates.length === 0) {
-      return [];
+      logger.debug('No tuning guide candidates available; falling back to AI-only recommendation');
+      return this.generateAIOnlyRecommendations({
+        classId,
+        className,
+        averageWindSpeed,
+        pointsOfSail,
+        limit,
+      });
     }
 
     const trimmedCandidates = candidates.slice(0, Math.max(limit, 3));
@@ -412,23 +447,7 @@ Context:
 ${JSON.stringify(payload, null, 2)}`;
 
     try {
-      // claude-3-haiku-20240307 does not support skills or code_execution betas
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2000,
-        temperature: 0.5,
-        messages: [{
-          role: 'user',
-          content: instruction
-        }]
-      });
-
-      const textBlocks = (response.content as Array<{ type: string; text?: string }>)
-        .filter(block => block.type === 'text' && typeof block.text === 'string')
-        .map(block => block.text!.trim())
-        .filter(Boolean);
-
-      const combinedText = textBlocks.join('\n').trim();
+      const combinedText = await this.invokeTuningChat(instruction, 2000, 0.5);
       if (!combinedText) {
         throw new Error('Boat tuning skill returned no text content');
       }
@@ -530,12 +549,16 @@ ${JSON.stringify(payload, null, 2)}`;
       }
 
       logger.error('Boat tuning skill generation failed', error);
-      throw error;
+      const message = (error as Error)?.message || 'Unknown guide-based tuning generation error';
+      if (message.includes('[AI_TUNING_')) {
+        throw error;
+      }
+      throw this.createTaggedError('AI_TUNING_GUIDE_GENERATION_FAILED', message, error);
     }
   }
 
   private async ensureSkillInitialized(): Promise<void> {
-    if (this.skillInitialized || !this.hasValidApiKey) {
+    if (this.skillInitialized || !this.isAvailable()) {
       return;
     }
 
@@ -558,11 +581,15 @@ ${JSON.stringify(payload, null, 2)}`;
       if (skillId) {
         this.customSkillId = skillId;
         this.skillInitialized = true;
+        this.skillInitializationError = null;
         logger.debug(`Boat tuning skill initialized: ${skillId}`);
       } else {
+        this.skillInitializationError = 'Boat tuning skill unavailable; using fallback prompt mode';
         logger.debug('Boat tuning skill not available, continuing without custom skill container');
       }
     } catch (error) {
+      this.skillInitializationError =
+        error instanceof Error ? error.message : 'Unknown skill initialization error';
       logger.error('Failed to initialize boat tuning skill', error);
     }
   }

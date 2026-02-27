@@ -6,10 +6,11 @@
  */
 
 import { supabase } from './supabase';
-import { stripeService } from './payments/StripeService';
 import MutationQueueService from './MutationQueueService';
+import { createLogger } from '@/lib/utils/logger';
 
 const RACE_ENTRY_COLLECTION = 'race_entries';
+const logger = createLogger('RaceRegistrationService');
 
 export interface RaceEntry {
   id: string;
@@ -86,16 +87,36 @@ export class RaceRegistrationService {
           entry_fee,
           currency,
           event_name,
-          club_id,
-          clubs (
-            name,
-            contact_email
-          )
+          club_id
         `)
       .eq('id', formData.regatta_id)
       .single();
 
     if (regattaError) throw regattaError;
+
+    let clubName: string | undefined;
+    let clubEmail: string | undefined;
+    if (regatta?.club_id) {
+      const { data: clubData } = await supabase
+        .from('clubs')
+        .select('id, name, club_name, contact_email, email')
+        .eq('id', regatta.club_id)
+        .single();
+
+      clubName = clubData?.name || (clubData as any)?.club_name;
+      clubEmail = (clubData as any)?.contact_email || clubData?.email;
+
+      if (!clubName || !clubEmail) {
+        const { data: yachtClubData } = await supabase
+          .from('yacht_clubs')
+          .select('id, name, contact_email, email')
+          .eq('id', regatta.club_id)
+          .single();
+
+        clubName = clubName || yachtClubData?.name;
+        clubEmail = clubEmail || (yachtClubData as any)?.contact_email || yachtClubData?.email;
+      }
+    }
 
     // Get document requirements
     const { data: docRequirements } = await supabase
@@ -142,11 +163,11 @@ export class RaceRegistrationService {
       .single();
 
     // Send new registration notification to club
-    if (regatta?.clubs?.contact_email) {
+    if (clubEmail) {
       const { emailService } = await import('./EmailService');
       await emailService.sendClubNotification({
-        club_name: regatta.clubs.name || 'Club',
-        club_email: regatta.clubs.contact_email,
+        club_name: clubName || 'Club',
+        club_email: clubEmail,
         notification_type: 'new_registration',
         sailor_name: sailor?.name || 'Sailor',
         regatta_name: regatta.event_name || 'Event',
@@ -168,7 +189,7 @@ export class RaceRegistrationService {
       const entry = await this.createEntryDirect(userId, formData);
       return { success: true, entry };
     } catch (error: any) {
-      console.error('Failed to create race entry:', error);
+      logger.error('Failed to create race entry:', error);
       await MutationQueueService.enqueueMutation(RACE_ENTRY_COLLECTION, 'upsert', {
         action: 'create',
         userId,
@@ -244,7 +265,7 @@ export class RaceRegistrationService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Failed to assign crew members:', error);
+      logger.error('Failed to assign crew members:', error);
       return { success: false, error: error.message };
     }
   }
@@ -280,7 +301,7 @@ export class RaceRegistrationService {
         conflicts: conflicts || [],
       };
     } catch (error) {
-      console.error('Failed to check crew availability:', error);
+      logger.error('Failed to check crew availability:', error);
       return { available: true, conflicts: [] };
     }
   }
@@ -360,7 +381,7 @@ export class RaceRegistrationService {
         currency: entry.entry_fee_currency
       };
     } catch (error: any) {
-      console.error('Payment intent creation error:', error);
+      logger.error('Payment intent creation error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -373,28 +394,57 @@ export class RaceRegistrationService {
     paymentIntentId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Get entry details for club notification
+      // Get entry base details first (avoid nested FK-dependent joins).
       const { data: entry } = await supabase
         .from('race_entries')
-        .select(`
-          *,
-          regattas (
-            event_name,
-            club_race_calendar (
-              club_id,
-              clubs (
-                name,
-                contact_email
-              )
-            )
-          ),
-          users!sailor_id (
-            name,
-            email
-          )
-        `)
+        .select('*')
         .eq('id', entryId)
         .single();
+
+      let regattaName: string | undefined;
+      let sailorName: string | undefined;
+      let clubName: string | undefined;
+      let clubEmail: string | undefined;
+
+      if (entry?.regatta_id) {
+        const { data: regatta } = await supabase
+          .from('regattas')
+          .select('id, event_name, club_id')
+          .eq('id', entry.regatta_id)
+          .single();
+        regattaName = regatta?.event_name;
+
+        const clubId = (regatta as any)?.club_id;
+        if (clubId) {
+          const { data: club } = await supabase
+            .from('clubs')
+            .select('id, name, club_name, contact_email, email')
+            .eq('id', clubId)
+            .single();
+
+          clubName = club?.name || (club as any)?.club_name;
+          clubEmail = (club as any)?.contact_email || club?.email;
+
+          if (!clubName || !clubEmail) {
+            const { data: yachtClub } = await supabase
+              .from('yacht_clubs')
+              .select('id, name, contact_email, email')
+              .eq('id', clubId)
+              .single();
+            clubName = clubName || yachtClub?.name;
+            clubEmail = clubEmail || (yachtClub as any)?.contact_email || yachtClub?.email;
+          }
+        }
+      }
+
+      if (entry?.sailor_id) {
+        const { data: sailor } = await supabase
+          .from('users')
+          .select('id, name, full_name, email')
+          .eq('id', entry.sailor_id)
+          .single();
+        sailorName = sailor?.name || (sailor as any)?.full_name;
+      }
 
       // Update entry with payment confirmation
       const { error: updateError } = await supabase
@@ -413,14 +463,14 @@ export class RaceRegistrationService {
       await this.sendConfirmationEmail(entryId);
 
       // Send payment notification to club
-      if (entry?.regattas?.club_race_calendar?.clubs?.contact_email) {
+      if (clubEmail) {
         const { emailService } = await import('./EmailService');
         await emailService.sendClubNotification({
-          club_name: entry.regattas.club_race_calendar.clubs.name || 'Club',
-          club_email: entry.regattas.club_race_calendar.clubs.contact_email,
+          club_name: clubName || 'Club',
+          club_email: clubEmail,
           notification_type: 'payment_received',
-          sailor_name: entry.users?.name || 'Sailor',
-          regatta_name: entry.regattas?.event_name || 'Event',
+          sailor_name: sailorName || 'Sailor',
+          regatta_name: regattaName || 'Event',
           entry_number: entry.entry_number || 'TBD',
           amount: entry.entry_fee_amount,
           currency: entry.entry_fee_currency,
@@ -429,7 +479,7 @@ export class RaceRegistrationService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Payment confirmation error:', error);
+      logger.error('Payment confirmation error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -439,7 +489,7 @@ export class RaceRegistrationService {
    */
   async processPayment(
     entryId: string,
-    userId: string
+    _userId: string
   ): Promise<{ success: boolean; paymentUrl?: string; error?: string }> {
     try {
       const result = await this.createPaymentIntent(entryId);
@@ -448,7 +498,7 @@ export class RaceRegistrationService {
       }
       return { success: true };
     } catch (error: any) {
-      console.error('Payment processing error:', error);
+      logger.error('Payment processing error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -488,7 +538,7 @@ export class RaceRegistrationService {
 
       return data;
     } catch (error) {
-      console.error('Failed to get entry:', error);
+      logger.error('Failed to get entry:', error);
       return null;
     }
   }
@@ -520,7 +570,7 @@ export class RaceRegistrationService {
 
       return data || [];
     } catch (error) {
-      console.error('Failed to get sailor entries:', error);
+      logger.error('Failed to get sailor entries:', error);
       return [];
     }
   }
@@ -550,7 +600,7 @@ export class RaceRegistrationService {
 
       return data || [];
     } catch (error) {
-      console.error('Failed to get regatta entries:', error);
+      logger.error('Failed to get regatta entries:', error);
       return [];
     }
   }
@@ -568,7 +618,7 @@ export class RaceRegistrationService {
       // Upload to Supabase Storage
       const filePath = `race-entries/${entryId}/${documentType}/${filename}`;
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(filePath, file);
 
@@ -601,7 +651,7 @@ export class RaceRegistrationService {
 
       return { success: true, url: urlData.publicUrl };
     } catch (error: any) {
-      console.error('Document upload error:', error);
+      logger.error('Document upload error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -627,7 +677,7 @@ export class RaceRegistrationService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('Failed to withdraw entry:', error);
+      logger.error('Failed to withdraw entry:', error);
       return { success: false, error: error.message };
     }
   }
@@ -697,7 +747,7 @@ export class RaceRegistrationService {
       // Send confirmation email
       return await emailService.sendRaceEntryConfirmation(emailData);
     } catch (error: any) {
-      console.error('Failed to send confirmation email:', error);
+      logger.error('Failed to send confirmation email:', error);
       return { success: false, error: error.message };
     }
   }
@@ -711,7 +761,7 @@ export function initializeRaceRegistrationMutationHandlers() {
       if (payload?.action === 'create') {
         await raceRegistrationService.createEntryDirect(payload.userId, payload.formData);
       } else {
-        console.warn('Unhandled race entry action', payload?.action);
+        logger.warn('Unhandled race entry action', payload?.action);
       }
     },
   });

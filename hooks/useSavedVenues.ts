@@ -3,7 +3,7 @@
  * Manages user's saved/favorite sailing venues
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SavedVenueService, type SavedVenueWithDetails } from '@/services/SavedVenueService';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -37,12 +37,34 @@ export function useSavedVenues(): UseSavedVenuesReturn {
     isLoading: true,
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+
+  useEffect(() => {
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   /**
    * Fetch saved venues for current user
    */
   const fetchSavedVenues = useCallback(async (): Promise<void> => {
-    if (!user) {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = user?.id ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId) {
+      if (!canCommit()) return;
       setState({
         savedVenues: [],
         savedVenueIds: new Set(),
@@ -53,6 +75,7 @@ export function useSavedVenues(): UseSavedVenuesReturn {
       return;
     }
 
+    if (!canCommit()) return;
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
@@ -63,6 +86,7 @@ export function useSavedVenues(): UseSavedVenuesReturn {
 
       const venueIds = new Set(venues.map((venue) => venue.id));
 
+      if (!canCommit()) return;
       setState({
         savedVenues: venues,
         savedVenueIds: venueIds,
@@ -78,6 +102,7 @@ export function useSavedVenues(): UseSavedVenuesReturn {
         typeof (error as { message?: unknown }).message === 'string'
           ? (error as { message: string }).message
           : 'Failed to fetch saved venues';
+      if (!canCommit()) return;
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -147,7 +172,7 @@ export function useSavedVenues(): UseSavedVenuesReturn {
 
   // Fetch saved venues on mount and when user changes
   useEffect(() => {
-    fetchSavedVenues();
+    void fetchSavedVenues();
   }, [fetchSavedVenues]);
 
   return {

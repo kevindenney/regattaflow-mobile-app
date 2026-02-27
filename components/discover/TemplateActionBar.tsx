@@ -15,12 +15,11 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { Copy, Download, Sparkles } from 'lucide-react-native';
+import { Copy, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { templateService } from '@/services/TemplateService';
 import { RaceData } from '@/hooks/usePublicSailorRaceJourney';
@@ -47,7 +46,6 @@ export function TemplateActionBar({
   const router = useRouter();
   const queryClient = useQueryClient();
   const { user, isGuest } = useAuth();
-  const [isApplying, setIsApplying] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
 
   // Handle "Use as Template" - apply setup to existing race
@@ -70,18 +68,15 @@ export function TemplateActionBar({
         {
           text: 'Choose Race',
           onPress: () => {
-            // Navigate to race picker (could be a modal or separate screen)
-            // For simplicity, navigate back to races tab where user can select
-            Alert.alert(
-              'Coming Soon',
-              'Race picker integration coming soon. For now, copy the race with prep to get started.',
-              [{ text: 'OK' }]
-            );
+            router.push({
+              pathname: '/(tabs)/races',
+              params: { templateSourceRaceId: raceId },
+            });
           },
         },
       ]
     );
-  }, [user, isGuest]);
+  }, [user, isGuest, raceId, router]);
 
   // Handle "Copy Race & Prep" - create new race with all data
   const handleCopyRace = useCallback(async () => {
@@ -152,10 +147,10 @@ export function TemplateActionBar({
         <TouchableOpacity
           style={[
             styles.primaryButton,
-            (isCopying || isApplying) && styles.buttonDisabled,
+            isCopying && styles.buttonDisabled,
           ]}
           onPress={handleCopyRace}
-          disabled={isCopying || isApplying}
+          disabled={isCopying}
           activeOpacity={0.8}
         >
           {isCopying ? (
@@ -173,20 +168,16 @@ export function TemplateActionBar({
           <TouchableOpacity
             style={[
               styles.secondaryButton,
-              (isCopying || isApplying) && styles.buttonDisabled,
+              isCopying && styles.buttonDisabled,
             ]}
             onPress={handleUseAsTemplate}
-            disabled={isCopying || isApplying}
+            disabled={isCopying}
             activeOpacity={0.8}
           >
-            {isApplying ? (
-              <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
-            ) : (
-              <>
-                <Sparkles size={18} color={IOS_COLORS.systemBlue} />
-                <Text style={styles.secondaryButtonText}>Use Setup</Text>
-              </>
-            )}
+            <>
+              <Sparkles size={18} color={IOS_COLORS.systemBlue} />
+              <Text style={styles.secondaryButtonText}>Use Setup</Text>
+            </>
           </TouchableOpacity>
         )}
       </View>

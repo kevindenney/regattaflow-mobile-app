@@ -7,6 +7,9 @@
 
 import { z } from 'zod';
 import { AgentTool } from './BaseAgentService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('WebScrapingTools');
 
 /**
  * Extract date from text with multiple format support
@@ -114,7 +117,7 @@ function extractLocation(text: string): string | null {
 /**
  * Extract all links from HTML
  */
-function extractLinksFromHTML(html: string): Array<{ url: string; text: string }> {
+function extractLinksFromHTML(html: string): { url: string; text: string }[] {
   const linkRegex = /<a[^>]*href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi;
   const links: { url: string; text: string }[] = [];
   let match;
@@ -189,13 +192,13 @@ function parseHTMLTable(html: string): string[][] {
  * Extract fleet members from HTML tables
  * Looks for tables with columns: [Boat Name, Sail #, Owner]
  */
-function extractFleetMembers(html: string, boatClass: string): Array<{
+function extractFleetMembers(html: string, _boatClass: string): {
   boat_name: string;
   sail_number: string;
   owner_name: string;
-}> {
+}[] {
   const tables = parseHTMLTable(html);
-  const fleetMembers: Array<{ boat_name: string; sail_number: string; owner_name: string }> = [];
+  const fleetMembers: { boat_name: string; sail_number: string; owner_name: string }[] = [];
 
   // Look for tables that have boat/sail/owner pattern
   for (const row of tables) {
@@ -224,14 +227,14 @@ function extractFleetMembers(html: string, boatClass: string): Array<{
  * Parse CSV content into structured race events
  * Handles multiple CSV formats intelligently
  */
-function parseCSVCalendar(csvText: string): Array<{
+function parseCSVCalendar(csvText: string): {
   name: string;
   date: string;
   startTime?: string;
   location?: string;
   type: string;
-}> {
-  const events: Array<any> = [];
+}[] {
+  const events: any[] = [];
   const lines = csvText.trim().split('\n').filter(line => line.trim());
 
   if (lines.length < 2) {
@@ -296,14 +299,14 @@ function parseCSVCalendar(csvText: string): Array<{
 /**
  * Parse ICS (iCalendar) content into structured race events
  */
-function parseICSCalendar(icsText: string): Array<{
+function parseICSCalendar(icsText: string): {
   name: string;
   date: string;
   startTime?: string;
   location?: string;
   type: string;
-}> {
-  const events: Array<any> = [];
+}[] {
+  const events: any[] = [];
 
   // Split into individual VEVENT blocks
   const eventBlocks = icsText.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/gi) || [];
@@ -378,7 +381,7 @@ async function fetchAndParseWebsite(url: string, options: {
     }
 
     // NEW: Multi-level calendar discovery
-    const calendarData: Array<any> = [];
+    const calendarData: any[] = [];
 
     if (followCalendarLinks && currentDepth < maxDepth) {
 
@@ -445,13 +448,13 @@ async function fetchAndParseWebsite(url: string, options: {
 
     return { textContent, links, html, calendarData };
   } catch (error: any) {
-    console.error('Failed to fetch website:', error);
+    logger.error('Failed to fetch website', error);
     throw error;
   }
 }
 
 // Schema for scraped race calendar event
-const RaceEventSchema = z.object({
+const _RaceEventSchema = z.object({
   name: z.string(),
   date: z.string(),
   type: z.enum(['club_race', 'regatta', 'championship', 'series']),
@@ -460,7 +463,7 @@ const RaceEventSchema = z.object({
 });
 
 // Schema for scraped boat/sailor
-const BoatSchema = z.object({
+const _BoatSchema = z.object({
   sail_number: z.string(),
   boat_name: z.string().optional(),
   owner: z.string().optional(),
@@ -468,7 +471,7 @@ const BoatSchema = z.object({
 });
 
 // Schema for scraped member
-const MemberSchema = z.object({
+const _MemberSchema = z.object({
   name: z.string(),
   email: z.string().optional(),
   phone: z.string().optional(),
@@ -476,7 +479,7 @@ const MemberSchema = z.object({
 });
 
 // Schema for scraped document
-const DocumentSchema = z.object({
+const _DocumentSchema = z.object({
   title: z.string(),
   url: z.string(),
   type: z.enum(['sailing_instructions', 'notice_of_race', 'results', 'newsletter', 'other']),
@@ -658,7 +661,7 @@ export function createScrapeClassWebsiteTool(): AgentTool {
     execute: async (input) => {
 
       try {
-        const { textContent, links, html } = await fetchAndParseWebsite(input.url);
+        const { links, html } = await fetchAndParseWebsite(input.url);
 
         // Extract fleet members from HTML tables
         const fleetMembers = extractFleetMembers(html, input.boat_class);
@@ -812,13 +815,13 @@ export function createScrapeClassWebsiteTool(): AgentTool {
  * Categorizes races by relevance to a specific boat class
  */
 interface RaceCategory {
-  class_specific: Array<{ name: string; url?: string; source?: string }>;
-  multi_class: Array<{ name: string; url?: string; source?: string }>;
-  other_races: Array<{ name: string; url?: string; source?: string }>;
+  class_specific: { name: string; url?: string; source?: string }[];
+  multi_class: { name: string; url?: string; source?: string }[];
+  other_races: { name: string; url?: string; source?: string }[];
 }
 
 function filterRacesByClass(
-  events: Array<{ name: string; url?: string; source?: string }>,
+  events: { name: string; url?: string; source?: string }[],
   boatClass: string
 ): RaceCategory {
   const result: RaceCategory = {
@@ -964,14 +967,12 @@ function categorizePDFDocument(title: string, url: string): {
 export async function scrapeClubWebsite(url: string) {
 
   try {
-    const { textContent, links, html, calendarData } = await fetchAndParseWebsite(url, {
+    const { links, html, calendarData } = await fetchAndParseWebsite(url, {
       followCalendarLinks: true,
       maxDepth: 2
     });
 
     // Parse HTML tables for fleet data AND race schedules
-    const tables = parseHTMLTable(html);
-
     // Simple pattern matching for racing data
     const upcoming_events: any[] = [];
     const documents: any[] = [];
@@ -1089,7 +1090,7 @@ export async function scrapeClubWebsite(url: string) {
       fleet_members,
     };
   } catch (error: any) {
-    console.error('Failed to scrape club website:', error);
+    logger.error('Failed to scrape club website', error);
     throw error;
   }
 }
@@ -1097,10 +1098,9 @@ export async function scrapeClubWebsite(url: string) {
 export async function scrapeClassWebsite(url: string, boatClass: string) {
 
   try {
-    const { textContent, links, html } = await fetchAndParseWebsite(url);
+    const { links, html } = await fetchAndParseWebsite(url);
 
     // Parse HTML tables for fleet data
-    const tables = parseHTMLTable(html);
     const fleet_members = extractFleetMembers(html, boatClass);
 
     // Simple pattern matching for racing data
@@ -1301,7 +1301,7 @@ export async function scrapeClassWebsite(url: string, boatClass: string) {
       csv_calendars,
     };
   } catch (error: any) {
-    console.error('Failed to scrape class website:', error);
+    logger.error('Failed to scrape class website', error);
     throw error;
   }
 }

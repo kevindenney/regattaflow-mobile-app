@@ -20,7 +20,7 @@
  * "Above all else show the data" - Edward Tufte
  */
 
-import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Animated,
   LayoutChangeEvent,
@@ -31,7 +31,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Pressable,
 } from 'react-native';
 import { SafeAreaView } from '@/components/ui/safe-area-view';
 import { TUFTE_BACKGROUND } from '@/components/cards/constants';
@@ -46,8 +45,6 @@ import {
   type RaceType,
   type PhaseInfo,
   type StrategySectionMeta,
-  type DynamicPhaseKey,
-  type StrategyPhase,
 } from '@/types/raceStrategy';
 import { getSectionsForPhaseFromList } from '@/lib/strategy';
 import { useAuth } from '@/providers/AuthProvider';
@@ -56,6 +53,7 @@ import { useRaceStrategyNotes } from '@/hooks/useRaceStrategyNotes';
 import { useRaceTypeStrategy } from '@/hooks/useRaceTypeStrategy';
 import { TufteAccordionPhaseHeader } from './TufteAccordionPhaseHeader';
 import { TufteStrategySection } from './TufteStrategySection';
+import { createLogger } from '@/lib/utils/logger';
 
 // Tufte-inspired colors
 const COLORS = {
@@ -63,6 +61,7 @@ const COLORS = {
   secondaryText: '#6B7280',
   tertiaryText: '#9CA3AF',
 };
+const logger = createLogger('TufteStrategyScreen');
 
 export interface TufteStrategyScreenProps {
   /** Race ID for persisting strategy plans */
@@ -251,21 +250,18 @@ export function TufteStrategyScreen({
   onUpdateSection,
   venueName,
   windSpeed,
-  raceType: propRaceType,
+  raceType: _propRaceType,
 }: TufteStrategyScreenProps) {
   // Get current user for recommendations
   const { user } = useAuth();
 
   // Fetch race type and generate phases/sections
   const {
-    raceType,
+    raceType: _raceType,
     phases,
     sections,
     isLoading: isLoadingRaceType,
   } = useRaceTypeStrategy(raceId, raceName);
-
-  // Use prop race type if provided, otherwise use fetched type
-  const effectiveRaceType = propRaceType || raceType;
 
   // Fetch personalized recommendations based on past race performance
   const { sectionData: recommendationData } = useStrategyRecommendations(
@@ -281,7 +277,7 @@ export function TufteStrategyScreen({
   const {
     plans: savedPlans,
     updatePlan: persistPlan,
-    isLoading: isLoadingPlans,
+    isLoading: _isLoadingPlans,
   } = useRaceStrategyNotes(raceId);
 
   // Local state for immediate UI feedback (before debounced save completes)
@@ -289,7 +285,7 @@ export function TufteStrategyScreen({
 
   // Positioned course for map overlay
   const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
-  const [positionedCourseLoading, setPositionedCourseLoading] = useState(false);
+  const [, setPositionedCourseLoading] = useState(false);
 
   // Fetch positioned course if available
   useEffect(() => {
@@ -344,7 +340,7 @@ export function TufteStrategyScreen({
           });
         }
       } catch (err) {
-        console.error('Error fetching positioned course:', err);
+        logger.error('Error fetching positioned course', err);
       } finally {
         setPositionedCourseLoading(false);
       }

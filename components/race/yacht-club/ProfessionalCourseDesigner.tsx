@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { OfficialRaceCourse, OfficialMark } from './YachtClubRaceBuilder';
@@ -17,8 +17,8 @@ export function ProfessionalCourseDesigner({
   savedCourses,
   onCourseSelect
 }: ProfessionalCourseDesignerProps) {
-  const [selectedMarkType, setSelectedMarkType] = useState<OfficialMark['type'] | null>(null);
-  const [showMarkLibrary, setShowMarkLibrary] = useState(false);
+  const [_selectedMarkType, _setSelectedMarkType] = useState<OfficialMark['type'] | null>(null);
+  const [_showMarkLibrary, _setShowMarkLibrary] = useState(false);
 
   const validateCourse = (courseToValidate: OfficialRaceCourse) => {
     const errors: string[] = [];
@@ -296,7 +296,7 @@ export function ProfessionalCourseDesigner({
             <View style={styles.canvasArea}>
               <ThemedText style={styles.canvasPlaceholder}>
                 Professional 3D Course Visualization
-                (MapLibre GL integration coming soon)
+                (Use Course Designer for interactive map editing)
               </ThemedText>
               <ThemedText style={styles.canvasInfo}>
                 {course.marks.length} marks • {course.sequence.length} sequence points

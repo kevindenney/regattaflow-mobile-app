@@ -8,6 +8,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('useRaceSelection');
 
@@ -133,11 +134,22 @@ export function useRaceSelection(
         setSelectedRaceData(data);
 
         // Try to find associated race_event for marks
-        const { data: raceEvent } = await supabase
+        let raceEvent: { id: string } | null = null;
+        const primaryRaceEvent = await supabase
           .from('race_events')
           .select('id')
           .eq('regatta_id', selectedRaceId)
           .maybeSingle();
+        raceEvent = primaryRaceEvent.data;
+
+        if (isMissingIdColumn(primaryRaceEvent.error, 'race_events', 'regatta_id')) {
+          const fallbackRaceEvent = await supabase
+            .from('race_events')
+            .select('id')
+            .eq('race_id', selectedRaceId)
+            .maybeSingle();
+          raceEvent = fallbackRaceEvent.data;
+        }
 
         if (raceEvent) {
           const { data: marksData, error: marksError } = await supabase

@@ -17,6 +17,7 @@ import {
   Animated,
   StyleSheet,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, User, Users, Sailboat, Trophy } from 'lucide-react-native';
 import { ContactPicker } from './ContactPicker';
@@ -37,7 +38,7 @@ interface NewChatSheetProps {
   onThreadCreated: (threadId: string) => void;
 }
 
-type SheetMode = 'menu' | 'direct' | 'group' | 'fleet' | 'crew';
+type SheetMode = 'menu' | 'direct' | 'group';
 
 // =============================================================================
 // MENU OPTION
@@ -160,20 +161,6 @@ export function NewChatSheet({ isOpen, onClose, onThreadCreated }: NewChatSheetP
             onClose={handleClose}
           />
         );
-      case 'fleet':
-      case 'crew':
-        // TODO: Implement fleet/crew selection
-        return (
-          <View style={styles.comingSoon}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
-            <Text style={styles.comingSoonSubtext}>
-              Fleet and crew messaging will be available soon
-            </Text>
-            <Pressable style={styles.comingSoonButton} onPress={handleBack}>
-              <Text style={styles.comingSoonButtonText}>Go Back</Text>
-            </Pressable>
-          </View>
-        );
       default:
         return (
           <>
@@ -215,15 +202,19 @@ export function NewChatSheet({ isOpen, onClose, onThreadCreated }: NewChatSheetP
                 icon={<Sailboat size={22} color={IOS_COLORS.secondaryLabel} strokeWidth={1.5} />}
                 label="Your Fleets"
                 description="Message your fleet members"
-                onPress={() => setMode('fleet')}
-                disabled
+                onPress={() => {
+                  handleClose();
+                  router.push('/(tabs)/fleet');
+                }}
               />
               <MenuOption
                 icon={<Trophy size={22} color={IOS_COLORS.secondaryLabel} strokeWidth={1.5} />}
                 label="Your Crews"
                 description="Message your racing crews"
-                onPress={() => setMode('crew')}
-                disabled
+                onPress={() => {
+                  handleClose();
+                  router.push('/(tabs)/crew');
+                }}
               />
             </View>
           </>

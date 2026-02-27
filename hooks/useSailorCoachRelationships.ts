@@ -36,6 +36,7 @@ export function useSailorCoachRelationships() {
     coachCount: relationships.length,
     isLoading: query.isLoading,
     isError: query.isError,
+    error: query.error as Error | null,
     refetch: query.refetch,
   };
 }

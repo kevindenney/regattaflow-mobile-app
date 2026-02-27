@@ -17,11 +17,13 @@ import {
     generateWaveDataPoints,
     getPredictiveCurrentsLayerSpec,
     getSeaTemperatureGradientLayerSpec,
+    getSwellLayerSpec,
     getWaveHeightHeatmapLayerSpec,
     type CurrentPrediction,
     type TemperatureDataPoint,
 } from '@/components/map/overlays';
 import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 import { BathymetryTileService, getBathymetryColorScale } from '@/services/BathymetryTileService';
 import type { OverlayPolygon, ParticleData, VisualizationLayers } from '@/services/visualization/EnvironmentalVisualizationService';
 import type { WeatherData } from '@/services/weather/RegionalWeatherService';
@@ -43,6 +45,9 @@ const logger = createLogger('TacticalRaceMap');
 const BATHYMETRY_LAYER_IDS = ['bathymetry-raster', 'bathymetry-fill', 'bathymetry-contours', 'bathymetry-labels'];
 const CURRENT_ACCELERATION_COLOR = '#0284c7';
 const CURRENT_EDDY_COLOR = '#0ea5e9';
+
+const getMapLibreNamespace = (maplibreModule: any) =>
+  (maplibreModule?.default || maplibreModule) as any;
 
 function inferRegionFromCoordinates(lat: number, lng: number): string {
   if (lat >= 22 && lat <= 23 && lng >= 113.5 && lng <= 114.5) {
@@ -77,7 +82,7 @@ interface TacticalRaceMapProps {
   showControls?: boolean;
   allowAreaSelection?: boolean;
   isDrawing?: boolean; // External control of drawing state
-  initialRacingArea?: Array<{ lat: number; lng: number }>; // Existing prop for initial area
+  initialRacingArea?: { lat: number; lng: number }[]; // Existing prop for initial area
   onUndoPoint?: () => void; // Callback to undo last point
   onClearPoints?: () => void; // Callback to clear all points
   toggle2D3D?: number; // Trigger value that changes to toggle 2D/3D mode
@@ -99,7 +104,7 @@ interface TacticalRaceMapProps {
   onMarkAdded?: (mark: Omit<CourseMark, 'id'>) => void; // Callback when new mark is placed
   onMarkUpdated?: (mark: CourseMark) => void; // Callback when mark position changes
   onMarkDeleted?: (markId: string) => void; // Callback when mark is deleted
-  racingAreaPolygon?: Array<{ lat: number; lng: number }>; // Current racing area for auto-regeneration
+  racingAreaPolygon?: { lat: number; lng: number }[]; // Current racing area for auto-regeneration
   waterAnalysis?: UnderwaterAnalysis;
   stormGlassWeather?: WeatherData | null;
 }
@@ -143,6 +148,7 @@ export default function TacticalRaceMap({
   stormGlassWeather
 }: TacticalRaceMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const maplibreNsRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
   const lastCenterRef = useRef<[number, number] | null>(null);
   const deckOverlayRef = useRef<MapboxOverlay | null>(null);
@@ -152,7 +158,7 @@ export default function TacticalRaceMap({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapRetryCount, setMapRetryCount] = useState(0);
-  const [selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
+  const [_selectedMarkId, setSelectedMarkId] = useState<string | null>(null);
   const [is3D, setIs3D] = useState(false); // Default to 2D
   const [showGlobalBathymetry, setShowGlobalBathymetry] = useState(false);
 
@@ -224,8 +230,8 @@ export default function TacticalRaceMap({
   }, [marks, getMarkCoordinate]);
 
   const predictiveCurrentSet = useMemo(
-    () => buildPredictiveCurrentSet(stormGlassWeather, courseHeading),
-    [stormGlassWeather, courseHeading]
+    () => buildPredictiveCurrentSet(stormGlassWeather),
+    [stormGlassWeather]
   );
 
   const bathymetryVenue = useMemo(() => {
@@ -254,16 +260,7 @@ export default function TacticalRaceMap({
       region,
       coordinates: [lng, lat],
     } as any;
-  }, [
-    raceEvent?.id,
-    raceEvent?.venue?.name,
-    raceEvent?.venue?.coordinates_lat,
-    raceEvent?.venue?.coordinates_lng,
-    (raceEvent?.venue as any)?.latitude,
-    (raceEvent?.venue as any)?.longitude,
-    (raceEvent?.venue as any)?.region,
-    (raceEvent?.venue as any)?.country,
-  ]);
+  }, [raceEvent?.id, raceEvent?.venue]);
 
   const bathymetrySources = useMemo(() => {
     if (!bathymetryVenue) {
@@ -496,8 +493,8 @@ export default function TacticalRaceMap({
   const [racingAreaPoints, setRacingAreaPoints] = useState<[number, number][]>([]);
 
   // Draggable points state (for racing area)
-  const [isDraggingPoint, setIsDraggingPoint] = useState(false);
-  const [draggedPointIndex, setDraggedPointIndex] = useState<number | null>(null);
+  const [_isDraggingPoint, setIsDraggingPoint] = useState(false);
+  const [_draggedPointIndex, setDraggedPointIndex] = useState<number | null>(null);
 
   const lastRacingAreaSignatureRef = useRef<string | null>(null);
   const lastDrawingModeRef = useRef<boolean>(false);
@@ -505,23 +502,22 @@ export default function TacticalRaceMap({
   const lastRecenterTsRef = useRef<number>(0);
 
   // Draggable marks state
-  const [isDraggingMark, setIsDraggingMark] = useState(false);
-  const [draggedMarkId, setDraggedMarkId] = useState<string | null>(null);
-  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [_isDraggingMark, setIsDraggingMark] = useState(false);
+  const [_draggedMarkId, setDraggedMarkId] = useState<string | null>(null);
 
   // Sync external isDrawing prop with internal isDrawingArea state
   useEffect(() => {
     if (isDrawing !== isDrawingArea) {
       setIsDrawingArea(isDrawing);
     }
-  }, [isDrawing]);
+  }, [isDrawing, isDrawingArea]);
 
   // Handle external 2D/3D toggle trigger
   useEffect(() => {
     if (toggle2D3DTrigger && toggle2D3DTrigger > 0) {
       toggle2D3D();
     }
-  }, [toggle2D3DTrigger]);
+  }, [toggle2D3DTrigger, toggle2D3D]);
 
   // Handle wind orientation trigger
   useEffect(() => {
@@ -597,12 +593,12 @@ export default function TacticalRaceMap({
     if (isDifferent) {
       setRacingAreaPoints(coordinates);
     }
-  }, [normalizedInitialArea, racingAreaPointsSignature]);
+  }, [normalizedInitialArea, racingAreaPoints, racingAreaPointsSignature]);
 
   // Notify parent of point count changes
   useEffect(() => {
     onPointsChanged?.(racingAreaPoints.length);
-  }, [racingAreaPoints.length, racingAreaPoints]);
+  }, [racingAreaPoints.length, onPointsChanged]);
   // Note: Intentionally omitting onPointsChanged from deps to avoid infinite loops
   // The callback reference may change on every render, but we only care about point changes
 
@@ -616,6 +612,7 @@ export default function TacticalRaceMap({
       { id: 'laylines', name: 'Laylines', icon: 'git-branch-outline', enabled: externalLayers?.laylines ?? false, category: 'tactical', description: 'Upwind laylines' },
       { id: 'strategy', name: 'Strategy', icon: 'analytics-outline', enabled: externalLayers?.strategy ?? false, category: 'tactical', description: 'Tactical analysis' },
       { id: 'waveHeatmap', name: 'Wave Heatmap', icon: 'color-filter-outline', enabled: false, category: 'professional', description: 'Storm-driven wave height heatmap' },
+      { id: 'swell', name: 'Swell', icon: 'navigate-outline', enabled: false, category: 'professional', description: 'Primary/secondary swell direction and period' },
       { id: 'seaTemperature', name: 'Sea Temp', icon: 'thermometer-outline', enabled: false, category: 'professional', description: 'Sea surface temperature gradient' },
       { id: 'predictiveCurrents', name: 'Currents Forecast', icon: 'refresh-circle-outline', enabled: false, category: 'professional', description: '6-hour current forecast vectors' },
     ];
@@ -725,6 +722,8 @@ export default function TacticalRaceMap({
     } catch (err) {
       console.warn('Failed to update deck.gl layers:', err);
     }
+  // createWindParticles/createCurrentParticles are local pure helpers and intentionally omitted.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [environmental, layers, mapLoaded, waterAnalysis]);
 
   const getLayerInsertionReference = useCallback(() => {
@@ -946,6 +945,99 @@ export default function TacticalRaceMap({
     [mapLoaded, stormGlassWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
   );
 
+  const addSwellOverlay = useCallback(
+    (force = false) => {
+      if (!isWeb || !mapLoaded || !stormGlassWeather) {
+        return false;
+      }
+
+      const map = mapRef.current;
+      if (!map || !Array.isArray(stormGlassWeather.coordinates)) {
+        return false;
+      }
+
+      const forecast = stormGlassWeather.forecast?.[0];
+      const primaryHeight = forecast?.waveHeight ?? stormGlassWeather.marineConditions?.swellHeight ?? 0;
+      const primaryDirection = forecast?.waveDirection ?? stormGlassWeather.marineConditions?.swellDirection ?? 0;
+      const primaryPeriod = forecast?.wavePeriod ?? stormGlassWeather.marineConditions?.swellPeriod ?? 0;
+      if (!primaryHeight || primaryHeight < 0.2) {
+        removeOverlay('swell');
+        return false;
+      }
+
+      const secondaryHeight = stormGlassWeather.marineConditions?.swellHeight;
+      const secondaryDirection = stormGlassWeather.marineConditions?.swellDirection;
+      const secondaryPeriod = stormGlassWeather.marineConditions?.swellPeriod;
+      const signature = [
+        forecast?.timestamp?.toISOString?.() ?? '',
+        primaryHeight,
+        primaryDirection,
+        primaryPeriod,
+        secondaryHeight ?? 'na',
+        secondaryDirection ?? 'na',
+        secondaryPeriod ?? 'na',
+      ].join('-');
+
+      if (!force && overlayRegistryRef.current.swell && overlaySignatureRef.current.swell === signature) {
+        return true;
+      }
+
+      if (force || overlayRegistryRef.current.swell) {
+        removeOverlay('swell');
+      }
+
+      const bounds = map.getBounds?.();
+      if (!bounds) {
+        return false;
+      }
+
+      const specs = getSwellLayerSpec(
+        {
+          primarySwell: {
+            height: primaryHeight,
+            direction: primaryDirection,
+            period: primaryPeriod,
+          },
+          secondarySwell:
+            secondaryHeight && secondaryHeight > 0.3
+              ? {
+                  height: secondaryHeight,
+                  direction: secondaryDirection ?? primaryDirection,
+                  period: secondaryPeriod ?? primaryPeriod,
+                }
+              : undefined,
+        },
+        {
+          latitude: (bounds.getNorth() + bounds.getSouth()) / 2,
+          longitude: (bounds.getEast() + bounds.getWest()) / 2,
+          latitudeDelta: Math.max(0.02, bounds.getNorth() - bounds.getSouth()),
+          longitudeDelta: Math.max(0.02, bounds.getEast() - bounds.getWest()),
+        },
+        true
+      );
+      const specsArray = Array.isArray(specs) ? specs : [specs];
+      const beforeId = getLayerInsertionReference();
+
+      const entry = { layers: [] as string[], sources: [] as string[] };
+      specsArray.forEach(spec => {
+        const added = addLayerWithSource(spec, beforeId);
+        if (added) {
+          entry.layers.push(added.layerId);
+          entry.sources.push(added.sourceId);
+        }
+      });
+
+      if (!entry.layers.length) {
+        return false;
+      }
+
+      overlayRegistryRef.current.swell = entry;
+      overlaySignatureRef.current.swell = signature;
+      return true;
+    },
+    [mapLoaded, stormGlassWeather, addLayerWithSource, getLayerInsertionReference, removeOverlay]
+  );
+
   const ensureCurrentArrowImage = useCallback(() => {
     if (!isWeb || !mapLoaded) {
       return;
@@ -1072,16 +1164,24 @@ export default function TacticalRaceMap({
           return;
         }
 
-        const maplibregl = await import('maplibre-gl');
+        let maplibregl: any = null;
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = getMapLibreNamespace(maplibreModule);
+        } catch (_moduleError) {
+          await ensureMapLibreScript('maplibre-gl-script-tactical-race-map');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        maplibreNsRef.current = maplibregl;
+        const MapConstructor = maplibregl?.Map;
+        const NavigationControl = maplibregl?.NavigationControl;
+        const ScaleControl = maplibregl?.ScaleControl;
+        if (!MapConstructor || !NavigationControl) {
+          throw new Error('MapLibre constructors are unavailable');
+        }
 
         // Load CSS dynamically for web
-        if (typeof document !== 'undefined' && !document.getElementById('maplibre-gl-css')) {
-          const link = document.createElement('link');
-          link.id = 'maplibre-gl-css';
-          link.rel = 'stylesheet';
-          link.href = 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css';
-          document.head.appendChild(link);
-        }
+        ensureMapLibreCss('maplibre-gl-css');
 
         if (!mapContainerRef.current) {
           return;
@@ -1090,7 +1190,7 @@ export default function TacticalRaceMap({
         const container = mapContainerRef.current;
 
         // Log container dimensions before cleanup
-        const rect = container.getBoundingClientRect();
+        container.getBoundingClientRect();
         if (container.children.length > 0) {
           while (container.firstChild) {
             container.removeChild(container.firstChild);
@@ -1105,7 +1205,7 @@ export default function TacticalRaceMap({
       );
 
         // Initialize map
-        const map = new maplibregl.Map({
+        const map = new MapConstructor({
           container: mapContainerRef.current,
           style: createNauticalStyle(),
           center,
@@ -1161,7 +1261,7 @@ export default function TacticalRaceMap({
 
         // Add controls
         map.addControl(
-          new maplibregl.NavigationControl({
+          new NavigationControl({
             showCompass: true,
             showZoom: true,
             visualizePitch: true,
@@ -1169,13 +1269,15 @@ export default function TacticalRaceMap({
           'top-left'
         );
 
-        map.addControl(
-          new maplibregl.ScaleControl({
-            maxWidth: 100,
-            unit: 'nautical',
-          }),
-          'bottom-left'
-        );
+        if (ScaleControl) {
+          map.addControl(
+            new ScaleControl({
+              maxWidth: 100,
+              unit: 'nautical',
+            }),
+            'bottom-left'
+          );
+        }
 
         // Map load handler
         map.on('load', async () => {
@@ -1295,6 +1397,8 @@ export default function TacticalRaceMap({
         deckOverlayRef.current = null;
       }
     };
+  // Intentionally keyed to explicit remount trigger to avoid unnecessary map re-initialization churn.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapRetryCount]); // Re-run when retry is clicked
 
   // Recenter map when race venue or marks update (e.g., user selects a location)
@@ -1339,7 +1443,9 @@ export default function TacticalRaceMap({
     }
   }, [
     mapLoaded,
+    marks,
     marksSignature,
+    raceEvent?.venue,
     raceEvent?.venue?.coordinates_lat,
     raceEvent?.venue?.coordinates_lng,
   ]);
@@ -1365,8 +1471,10 @@ export default function TacticalRaceMap({
     addRaceCourse(map, marks).then(() => {
       // Re-fit map to new course
       fitMapToCourse(map, marks);
-    }).catch((error) => {
+    }).catch((_error) => {
     });
+  // addRaceCourse is intentionally omitted; this effect should only react to mark payload changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marksSignature, mapLoaded, marks]);
 
   // ============================================================================
@@ -1410,6 +1518,8 @@ export default function TacticalRaceMap({
     };
 
     ensureEnvironmentalLayers();
+  // Layer helpers are intentionally omitted to avoid retrigger loops from non-memoized function identities.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [environmental, mapLoaded, layers, depthLayerEnabled, updateDeckOverlay]);
 
   useEffect(() => {
@@ -1547,6 +1657,8 @@ export default function TacticalRaceMap({
       } catch (error) {
       }
     });
+  // Layer helpers are intentionally omitted to avoid retrigger loops from non-memoized function identities.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layers, mapLoaded, environmental, marks, updateDeckOverlay]);
 
   useEffect(() => {
@@ -1556,6 +1668,7 @@ export default function TacticalRaceMap({
 
     const overlayHandlers: Record<string, (force?: boolean) => boolean> = {
       waveHeatmap: addWaveHeatmapOverlay,
+      swell: addSwellOverlay,
       seaTemperature: addSeaTemperatureOverlay,
       predictiveCurrents: addPredictiveCurrentsOverlay,
     };
@@ -1574,6 +1687,7 @@ export default function TacticalRaceMap({
     layers,
     mapLoaded,
     addWaveHeatmapOverlay,
+    addSwellOverlay,
     addSeaTemperatureOverlay,
     addPredictiveCurrentsOverlay,
     removeOverlay
@@ -1587,6 +1701,9 @@ export default function TacticalRaceMap({
     if (layers.find(layer => layer.id === 'waveHeatmap')?.enabled) {
       addWaveHeatmapOverlay(true);
     }
+    if (layers.find(layer => layer.id === 'swell')?.enabled) {
+      addSwellOverlay(true);
+    }
     if (layers.find(layer => layer.id === 'seaTemperature')?.enabled) {
       addSeaTemperatureOverlay(true);
     }
@@ -1599,6 +1716,7 @@ export default function TacticalRaceMap({
     predictiveCurrentSet,
     layers,
     addWaveHeatmapOverlay,
+    addSwellOverlay,
     addSeaTemperatureOverlay,
     addPredictiveCurrentsOverlay
   ]);
@@ -1606,6 +1724,7 @@ export default function TacticalRaceMap({
   useEffect(() => {
     return () => {
       removeOverlay('waveHeatmap');
+      removeOverlay('swell');
       removeOverlay('seaTemperature');
       removeOverlay('predictiveCurrents');
     };
@@ -1875,7 +1994,9 @@ export default function TacticalRaceMap({
       });
     }
 
-  }, [racingAreaPoints, mapLoaded, isDrawingArea, environmental, marks, layers, addBathymetryLayers]);
+  // Layer helpers are intentionally omitted; map redraw should key off input/state changes only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [racingAreaPoints, mapLoaded, isDrawingArea, environmental, marks, layers, depthLayerEnabled]);
 
   // ============================================================================
   // DRAGGABLE RACING AREA POINTS
@@ -2188,7 +2309,7 @@ export default function TacticalRaceMap({
         onMarkAdded?.(mark);
       });
     });
-  }, [racingAreaPolygon, environmental?.current?.wind, raceEvent.boat_class, marks.length]);
+  }, [racingAreaPolygon, environmental, environmental?.current?.wind, raceEvent.boat_class, marks.length, onMarkAdded]);
   // Including marks.length to prevent generation when marks already exist
 
   // ============================================================================
@@ -2515,7 +2636,11 @@ export default function TacticalRaceMap({
     }
 
     // Add mark labels as DOM overlays
-    const maplibregl = require('maplibre-gl');
+    const MarkerConstructor = maplibreNsRef.current?.Marker;
+    if (!MarkerConstructor) {
+      logger.warn('MapLibre Marker constructor unavailable; skipping mark labels');
+      return;
+    }
     marks.forEach((mark) => {
       const lat = (mark as any).coordinates_lat || (mark as any).latitude || 0;
       const lng = (mark as any).coordinates_lng || (mark as any).longitude || 0;
@@ -2542,7 +2667,7 @@ export default function TacticalRaceMap({
       `;
 
       // Create marker
-      new maplibregl.Marker({
+      new MarkerConstructor({
         element: labelEl,
         anchor: 'bottom',
       })
@@ -2579,7 +2704,7 @@ export default function TacticalRaceMap({
     });
   };
 
-  const addRacingAreaBoundary = (map: any, bounds: any) => {
+  const addRacingAreaBoundary = (map: any, _bounds: any) => {
     // Parse racing area bounds (format depends on database schema)
     // For now, create a simple polygon around the course
     const markCoords = marks.map((m) => {
@@ -2627,7 +2752,7 @@ export default function TacticalRaceMap({
   // WIND LAYER
   // ============================================================================
 
-  const addWindLayer = async (map: any, marks: CourseMark[], env?: EnvironmentalIntelligence) => {
+  const addWindLayer = async (map: any, _marks: CourseMark[], env?: EnvironmentalIntelligence) => {
     if (isWeb) return;
     if (!env || !env.current.wind) return;
 
@@ -2736,7 +2861,7 @@ export default function TacticalRaceMap({
   // CURRENT/TIDE LAYER
   // ============================================================================
 
-  const addCurrentLayer = async (map: any, marks: CourseMark[], env?: EnvironmentalIntelligence) => {
+  const addCurrentLayer = async (map: any, _marks: CourseMark[], env?: EnvironmentalIntelligence) => {
     if (isWeb) return;
     if (!env || !env.current.tide?.current_speed) return;
 
@@ -2841,7 +2966,7 @@ export default function TacticalRaceMap({
   // WAVE LAYER
   // ============================================================================
 
-  const addWaveLayer = async (map: any, marks: CourseMark[], env?: EnvironmentalIntelligence) => {
+  const addWaveLayer = async (map: any, _marks: CourseMark[], env?: EnvironmentalIntelligence) => {
     if (!env || !env.current.wave) return;
 
     const wave = env.current.wave;
@@ -3016,7 +3141,7 @@ export default function TacticalRaceMap({
     });
   };
 
-  const addStrategyLayer = async (map: any, marks: CourseMark[], env?: EnvironmentalIntelligence) => {
+  const addStrategyLayer = async (_map: any, _marks: CourseMark[], _env?: EnvironmentalIntelligence) => {
     // Strategic analysis visualization
     // - Favored side highlighting
     // - Start line bias
@@ -3054,8 +3179,12 @@ export default function TacticalRaceMap({
       Math.max(...lats) + 0.005,
     ];
 
-    const maplibregl = require('maplibre-gl');
-    const lngLatBounds = new maplibregl.LngLatBounds(
+    const LngLatBounds = maplibreNsRef.current?.LngLatBounds;
+    if (!LngLatBounds) {
+      logger.warn('MapLibre LngLatBounds constructor unavailable; skipping fitBounds');
+      return;
+    }
+    const lngLatBounds = new LngLatBounds(
       [bounds[0], bounds[1]],
       [bounds[2], bounds[3]]
     );
@@ -3217,7 +3346,7 @@ function createParticleGrid(
   return particles;
 }
 
-function createParticlesFromSamples(samples?: Array<{ lat: number; lng: number; speed: number; direction: number }>): ParticleData[] {
+function createParticlesFromSamples(samples?: { lat: number; lng: number; speed: number; direction: number }[]): ParticleData[] {
   if (!samples || samples.length === 0) {
     return [];
   }
@@ -3275,8 +3404,7 @@ function generateTemperatureDataPoints(
 }
 
 function buildPredictiveCurrentSet(
-  weather: WeatherData | null | undefined,
-  courseHeading: number
+  weather: WeatherData | null | undefined
 ): CurrentPrediction[] {
   if (!weather || !Array.isArray(weather.forecast) || !weather.forecast.length || !weather.coordinates) {
     return [];
@@ -3366,11 +3494,9 @@ function convertStrategicZonesToOverlay(
 
   const toggleLayer = (layerId: string) => {
     setLayers((prev) => {
-      const oldLayer = prev.find(l => l.id === layerId);
       const updated = prev.map((layer) =>
         layer.id === layerId ? { ...layer, enabled: !layer.enabled } : layer
       );
-      const newLayer = updated.find(l => l.id === layerId);
 
       // Notify parent of layer changes
       if (onLayersChange) {
@@ -3385,7 +3511,7 @@ function convertStrategicZonesToOverlay(
     });
   };
 
-  const toggle2D3D = () => {
+  const toggle2D3D = useCallback(() => {
     if (!mapRef.current) return;
 
     const newIs3D = !is3D;
@@ -3395,7 +3521,7 @@ function convertStrategicZonesToOverlay(
       pitch: newIs3D ? 45 : 0,
       duration: 800,
     });
-  };
+  }, [is3D]);
 
   const startDrawingArea = () => {
     setIsDrawingArea(true);
@@ -3416,17 +3542,6 @@ function convertStrategicZonesToOverlay(
 
   const cancelDrawingArea = () => {
     setIsDrawingArea(false);
-    setRacingAreaPoints([]);
-  };
-
-  const undoLastPoint = () => {
-    setRacingAreaPoints(prev => {
-      if (prev.length === 0) return prev;
-      return prev.slice(0, -1);
-    });
-  };
-
-  const clearAllPoints = () => {
     setRacingAreaPoints([]);
   };
 

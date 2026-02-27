@@ -8,7 +8,7 @@
  * - Actions (invite, remove, send message)
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import {
   RaceCollaborator,
@@ -52,11 +52,44 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
   const [userAccess, setUserAccess] = useState<AccessLevel | null>(null);
   const [isOwner, setIsOwner] = useState(false);
   const [currentCollaboratorId, setCurrentCollaboratorId] = useState<string | null>(null);
+  const messagesRef = useRef<RaceMessage[]>([]);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const realtimeRunIdRef = useRef(0);
+  const activeRegattaIdRef = useRef<string | null>(regattaId);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    activeRegattaIdRef.current = regattaId;
+  }, [regattaId]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Fetch all data
   const fetchData = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const targetRegattaId = regattaId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeRegattaIdRef.current === targetRegattaId;
+
     // Skip for null/undefined or non-UUID regattaIds (e.g., demo-race)
-    if (!regattaId || !isUuid(regattaId)) {
+    if (!targetRegattaId || !isUuid(targetRegattaId)) {
+      if (!canCommit()) return;
+      setCollaborators([]);
+      setMessages([]);
+      setUserAccess(null);
+      setIsOwner(false);
+      setCurrentCollaboratorId(null);
+      setError(null);
       setIsLoading(false);
       return;
     }
@@ -66,56 +99,73 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
 
     try {
       // Fetch access first - this determines if user can see anything
-      const accessData = await RaceCollaborationService.checkAccess(regattaId);
+      const accessData = await RaceCollaborationService.checkAccess(targetRegattaId);
+      if (!canCommit()) return;
       setUserAccess(accessData.accessLevel || null);
       setIsOwner(accessData.isOwner);
       setCurrentCollaboratorId(accessData.collaboratorId || null);
 
       // Then fetch collaborators and messages (these might fail due to RLS if not owner/collaborator)
       const [collaboratorsResult, messagesResult] = await Promise.allSettled([
-        RaceCollaborationService.getCollaborators(regattaId),
-        RaceCollaborationService.getMessages(regattaId),
+        RaceCollaborationService.getCollaborators(targetRegattaId),
+        RaceCollaborationService.getMessages(targetRegattaId),
       ]);
 
       if (collaboratorsResult.status === 'fulfilled') {
+        if (!canCommit()) return;
         setCollaborators(collaboratorsResult.value);
       } else {
         logger.warn('Failed to fetch collaborators:', collaboratorsResult.reason);
+        if (!canCommit()) return;
         setCollaborators([]);
       }
 
       if (messagesResult.status === 'fulfilled') {
+        if (!canCommit()) return;
         setMessages(messagesResult.value);
       } else {
         logger.warn('Failed to fetch messages:', messagesResult.reason);
+        if (!canCommit()) return;
         setMessages([]);
       }
     } catch (err) {
       logger.error('Failed to fetch collaboration data:', err);
+      if (!canCommit()) return;
       setError(err instanceof Error ? err : new Error('Failed to fetch data'));
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [regattaId]);
 
   // Initial fetch and subscribe to changes
   useEffect(() => {
-    // Skip for null/undefined or non-UUID regattaIds (e.g., demo-race)
-    if (!regattaId || !isUuid(regattaId)) return;
+    // Always fetch so invalid IDs can actively reset state.
+    void fetchData();
 
-    fetchData();
+    // Skip realtime subscriptions for null/undefined or non-UUID regattaIds (e.g., demo-race)
+    if (!regattaId || !isUuid(regattaId)) return;
+    const runId = ++realtimeRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === realtimeRunIdRef.current;
 
     // Subscribe to real-time changes
     const unsubCollaborators = RaceCollaborationService.subscribeToCollaborators(
       regattaId,
-      setCollaborators
+      (value) => {
+        if (!canCommit()) return;
+        setCollaborators(value);
+      }
     );
     const unsubMessages = RaceCollaborationService.subscribeToMessages(
       regattaId,
-      setMessages
+      (value) => {
+        if (!canCommit()) return;
+        setMessages(value);
+      }
     );
 
     return () => {
+      realtimeRunIdRef.current += 1;
       unsubCollaborators();
       unsubMessages();
     };
@@ -139,7 +189,10 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
 
   const sendMessage = useCallback(
     async (message: string, type: MessageType = 'text'): Promise<void> => {
-      if (!regattaId) throw new Error('No regatta ID');
+      const targetRegattaId = regattaId;
+      if (!targetRegattaId) throw new Error('No regatta ID');
+      if (!isMountedRef.current) return;
+      if (activeRegattaIdRef.current !== targetRegattaId) return;
 
       // Get current user for optimistic update
       const { data: { user } } = await supabase.auth.getUser();
@@ -149,7 +202,7 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
       if (user) {
         const optimisticMessage: RaceMessage = {
           id: optimisticId,
-          regattaId,
+          regattaId: targetRegattaId,
           userId: user.id,
           message,
           messageType: type,
@@ -158,17 +211,23 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
             fullName: user.user_metadata?.full_name || user.email || 'You',
           },
         };
+        if (!isMountedRef.current) return;
+        if (activeRegattaIdRef.current !== targetRegattaId) return;
         setMessages((prev) => [...prev, optimisticMessage]);
       }
 
       try {
-        const sentMessage = await RaceCollaborationService.sendMessage(regattaId, message, type);
+        const sentMessage = await RaceCollaborationService.sendMessage(targetRegattaId, message, type);
         // Replace optimistic message with real one
+        if (!isMountedRef.current) return;
+        if (activeRegattaIdRef.current !== targetRegattaId) return;
         setMessages((prev) =>
           prev.map((m) => (m.id === optimisticId ? sentMessage : m))
         );
       } catch (err) {
         // Remove optimistic message on failure
+        if (!isMountedRef.current) throw err;
+        if (activeRegattaIdRef.current !== targetRegattaId) throw err;
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         throw err;
       }
@@ -179,7 +238,8 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
   const deleteMessage = useCallback(
     async (messageId: string): Promise<void> => {
       // Optimistic: remove from local state immediately
-      const removed = messages.find((m) => m.id === messageId);
+      const removed = messagesRef.current.find((m) => m.id === messageId);
+      if (!isMountedRef.current) return;
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
 
       try {
@@ -187,6 +247,7 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
       } catch (err) {
         // Restore on failure
         if (removed) {
+          if (!isMountedRef.current) throw err;
           setMessages((prev) => {
             const restored = [...prev, removed];
             restored.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -196,12 +257,14 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
         throw err;
       }
     },
-    [messages]
+    []
   );
 
   const removeCollaborator = useCallback(
     async (collaboratorId: string): Promise<void> => {
       await RaceCollaborationService.removeCollaborator(collaboratorId);
+      if (!isMountedRef.current) return;
+      setCollaborators((prev) => prev.filter((collaborator) => collaborator.id !== collaboratorId));
     },
     []
   );
@@ -209,6 +272,14 @@ export function useRaceCollaboration(regattaId: string | null): UseRaceCollabora
   const updateAccessLevel = useCallback(
     async (collaboratorId: string, level: AccessLevel): Promise<void> => {
       await RaceCollaborationService.updateAccessLevel(collaboratorId, level);
+      if (!isMountedRef.current) return;
+      setCollaborators((prev) =>
+        prev.map((collaborator) =>
+          collaborator.id === collaboratorId
+            ? { ...collaborator, accessLevel: level }
+            : collaborator
+        )
+      );
     },
     []
   );

@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, View, Alert, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Alert, TouchableOpacity, Linking } from 'react-native';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 // import { Canvas, useThree, useFrame } from '@react-three/fiber'; // TODO: Re-enable with ES module fix
@@ -231,7 +231,22 @@ export function ProfessionalMapScreen({
         onResetNorth={handleResetNorth}
         onCenterOnLocation={handleCenterOnLocation}
         onOpenLayerMenu={() => setShowLayerMenu(true)}
-        onOpenOfflineManager={() => Alert.alert('Offline Maps', 'Coming soon - Download maps for offline use')}
+        onOpenOfflineManager={() =>
+          Alert.alert(
+            'Offline Maps',
+            'Offline map packs are managed by support right now.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Contact Support',
+                onPress: () =>
+                  Linking.openURL(
+                    'mailto:support@regattaflow.com?subject=Offline%20Map%20Pack%20Request'
+                  ),
+              },
+            ]
+          )
+        }
         onOpenMeasurementTools={() => setShowMeasurementTools(true)}
         onOpenWeatherAnalysis={() => setShowWeatherAnalysis(true)}
       />

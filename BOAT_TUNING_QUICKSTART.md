@@ -67,7 +67,7 @@ grep -r "j70\|J/70" data/default-tuning-guides.ts
 ### AI not working?
 ```bash
 # Check API key
-echo $EXPO_PUBLIC_ANTHROPIC_API_KEY
+echo $ANTHROPIC_API_KEY
 
 # Test the skill directly
 node scripts/test-boat-tuning-simple.mjs J/70 12

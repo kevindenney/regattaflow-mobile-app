@@ -12,3 +12,4 @@ export { DaysBeforeContent } from './DaysBeforeContent';
 export { OnWaterContent } from './OnWaterContent';
 export { AfterRaceContent } from './AfterRaceContent';
 export { StrategyBrief } from './StrategyBrief';
+export { ConfigDrivenPhaseContent } from './ConfigDrivenPhaseContent';

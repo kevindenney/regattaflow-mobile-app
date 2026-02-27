@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import { logger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import type {
   FocusIntent,
   FocusIntentRow,
@@ -297,12 +298,24 @@ export class FocusIntentService {
   static async generateSuggestions(sailorId: string, raceId: string): Promise<FocusSuggestion[]> {
     try {
       // Step 1: Get timer_session_id from race_timer_sessions (uses regatta_id to link to races)
-      const { data: timerSession } = await supabase
+      let timerSession: { id: string } | null = null;
+      const timerPrimary = await supabase
         .from('race_timer_sessions')
         .select('id')
         .eq('regatta_id', raceId)
         .eq('sailor_id', sailorId)
         .maybeSingle();
+      timerSession = timerPrimary.data;
+
+      if (isMissingIdColumn(timerPrimary.error, 'race_timer_sessions', 'regatta_id')) {
+        const timerFallback = await supabase
+          .from('race_timer_sessions')
+          .select('id')
+          .eq('race_id', raceId)
+          .eq('sailor_id', sailorId)
+          .maybeSingle();
+        timerSession = timerFallback.data;
+      }
 
       // Step 2: If timer session exists, get AI analysis recommendations
       if (timerSession?.id) {

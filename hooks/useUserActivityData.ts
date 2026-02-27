@@ -7,7 +7,7 @@
 
 import { useAuth } from '@/providers/AuthProvider';
 import api from '@/services/apiService';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface UserActivityData {
   upcomingRacesCount: number;
@@ -30,10 +30,40 @@ export function useUserActivityData(): UserActivityData {
     loading: true,
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
 
   useEffect(() => {
-    if (!user?.id) {
-      setData(prev => ({ ...prev, loading: false }));
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = user?.id ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId) {
+      if (!canCommit()) return;
+      setData({
+        upcomingRacesCount: 0,
+        trainingSessionsThisWeek: 0,
+        activityData: [],
+        monthlyTotal: 0,
+        monthlyVsAvg: 0,
+        loading: false,
+        error: null,
+      });
       return;
     }
 
@@ -54,19 +84,19 @@ export function useUserActivityData(): UserActivityData {
         const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
 
         // Fetch upcoming races count
-        const { data: racesData, error: racesError } = await api.supabase
+        const { count: upcomingRacesCount, error: racesError } = await api.supabase
           .from('regattas')
-          .select('id', { count: 'exact' })
-          .eq('created_by', user.id)
+          .select('id', { count: 'exact', head: true })
+          .eq('created_by', targetUserId)
           .gte('start_date', today.toISOString());
 
         if (racesError) throw racesError;
 
         // Fetch training sessions this week
-        const { data: weekSessions, error: weekError } = await api.supabase
+        const { count: weekSessionsCount, error: weekError } = await api.supabase
           .from('race_timer_sessions')
-          .select('id', { count: 'exact' })
-          .eq('sailor_id', user.id)
+          .select('id', { count: 'exact', head: true })
+          .eq('sailor_id', targetUserId)
           .gte('start_time', weekAgo.toISOString());
 
         if (weekError) throw weekError;
@@ -75,7 +105,7 @@ export function useUserActivityData(): UserActivityData {
         const { data: recentSessions, error: recentError } = await api.supabase
           .from('race_timer_sessions')
           .select('start_time')
-          .eq('sailor_id', user.id)
+          .eq('sailor_id', targetUserId)
           .gte('start_time', twoWeeksAgo.toISOString())
           .order('start_time', { ascending: true });
 
@@ -94,26 +124,26 @@ export function useUserActivityData(): UserActivityData {
         });
 
         // Fetch this month's total
-        const { data: monthSessions, error: monthError } = await api.supabase
+        const { count: monthSessionsCount, error: monthError } = await api.supabase
           .from('race_timer_sessions')
-          .select('id', { count: 'exact' })
-          .eq('sailor_id', user.id)
+          .select('id', { count: 'exact', head: true })
+          .eq('sailor_id', targetUserId)
           .gte('start_time', monthStart.toISOString());
 
         if (monthError) throw monthError;
 
         // Fetch last month's total for comparison
-        const { data: lastMonthSessions, error: lastMonthError } = await api.supabase
+        const { count: lastMonthSessionsCount, error: lastMonthError } = await api.supabase
           .from('race_timer_sessions')
-          .select('id', { count: 'exact' })
-          .eq('sailor_id', user.id)
+          .select('id', { count: 'exact', head: true })
+          .eq('sailor_id', targetUserId)
           .gte('start_time', lastMonthStart.toISOString())
-          .lt('start_time', lastMonthEnd.toISOString());
+          .lt('start_time', monthStart.toISOString());
 
         if (lastMonthError) throw lastMonthError;
 
-        const monthlyTotal = monthSessions?.length || 0;
-        const lastMonthTotal = lastMonthSessions?.length || 0;
+        const monthlyTotal = monthSessionsCount || 0;
+        const lastMonthTotal = lastMonthSessionsCount || 0;
 
         // Calculate days elapsed in current month for fair comparison
         const daysInMonth = today.getDate();
@@ -121,9 +151,10 @@ export function useUserActivityData(): UserActivityData {
         const normalizedLastMonth = Math.round((lastMonthTotal / daysInLastMonth) * daysInMonth);
         const monthlyVsAvg = monthlyTotal - normalizedLastMonth;
 
+        if (!canCommit()) return;
         setData({
-          upcomingRacesCount: racesData?.length || 0,
-          trainingSessionsThisWeek: weekSessions?.length || 0,
+          upcomingRacesCount: upcomingRacesCount || 0,
+          trainingSessionsThisWeek: weekSessionsCount || 0,
           activityData: dailyCounts,
           monthlyTotal,
           monthlyVsAvg,
@@ -131,6 +162,7 @@ export function useUserActivityData(): UserActivityData {
           error: null,
         });
       } catch (err) {
+        if (!canCommit()) return;
         setData(prev => ({
           ...prev,
           loading: false,
@@ -139,7 +171,7 @@ export function useUserActivityData(): UserActivityData {
       }
     };
 
-    fetchActivityData();
+    void fetchActivityData();
   }, [user?.id]);
 
   return data;

@@ -5,8 +5,9 @@
  * Uses AsyncStorage for persistence.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createLogger } from '@/lib/utils/logger';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const logger = createLogger('useUserSettings');
 
@@ -57,26 +58,47 @@ export interface UseUserSettingsReturn {
 export function useUserSettings(): UseUserSettingsReturn {
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
+  const settingsRef = useRef<UserSettings>(DEFAULT_SETTINGS);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
   /**
    * Load settings from AsyncStorage
    */
   const loadSettings = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
 
       if (stored) {
         const parsed = JSON.parse(stored) as Partial<UserSettings>;
         // Merge with defaults to handle new settings added over time
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+        const merged = { ...DEFAULT_SETTINGS, ...parsed };
+        if (!canCommit()) return;
+        setSettings(merged);
       } else {
+        if (!canCommit()) return;
         setSettings(DEFAULT_SETTINGS);
       }
     } catch (error) {
       logger.warn('Failed to load user settings', { error });
+      if (!canCommit()) return;
       setSettings(DEFAULT_SETTINGS);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, []);
@@ -86,7 +108,6 @@ export function useUserSettings(): UseUserSettingsReturn {
    */
   const saveSettings = useCallback(async (newSettings: UserSettings) => {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newSettings));
     } catch (error) {
       logger.warn('Failed to save user settings', { error });
@@ -98,11 +119,11 @@ export function useUserSettings(): UseUserSettingsReturn {
    */
   const updateSetting = useCallback(
     async <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
-      const newSettings = { ...settings, [key]: value };
+      const newSettings = { ...settingsRef.current, [key]: value };
       setSettings(newSettings);
       await saveSettings(newSettings);
     },
-    [settings, saveSettings]
+    [saveSettings]
   );
 
   /**
@@ -115,7 +136,7 @@ export function useUserSettings(): UseUserSettingsReturn {
 
   // Load settings on mount
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, [loadSettings]);
 
   return {

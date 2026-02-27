@@ -161,9 +161,9 @@ Shows pre-race reminder on race detail screens:
 ## Configuration
 
 ### **Enable AI Summaries**
-Requires `EXPO_PUBLIC_ANTHROPIC_API_KEY` in `.env`:
+Requires `ANTHROPIC_API_KEY` in `.env`:
 ```bash
-EXPO_PUBLIC_ANTHROPIC_API_KEY=sk-ant-api03-...
+ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
 
 ### **Skill Initialization**
@@ -219,7 +219,7 @@ node test-race-learning-fixed.mjs
 
 ### **No insights showing**
 - Check if sailor has completed races with post-race analysis
-- Verify `EXPO_PUBLIC_ANTHROPIC_API_KEY` is set
+- Verify `ANTHROPIC_API_KEY` is set
 - Check console for skill initialization errors
 
 ### **Skill not found**

@@ -6,7 +6,7 @@
  * allows reviewing/confirming understanding of the course.
  */
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,6 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
-  Dimensions,
   TextInput,
   KeyboardAvoidingView,
   Image,
@@ -144,11 +143,11 @@ interface CourseMapWizardProps extends ChecklistToolProps {
 export function CourseMapWizard({
   item,
   regattaId,
-  boatId,
+  boatId: _boatId,
   onComplete,
   onCancel,
   course,
-  venue,
+  venue: _venue,
 }: CourseMapWizardProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -156,7 +155,7 @@ export function CourseMapWizard({
   // State
   const [step, setStep] = useState<WizardStep>('overview');
   const [completedChecks, setCompletedChecks] = useState<Set<string>>(new Set());
-  const [selectedMark, setSelectedMark] = useState<CourseMark | null>(null);
+  const [_selectedMark, setSelectedMark] = useState<CourseMark | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlValue, setUrlValue] = useState('');
   const [isSubmittingUrl, setIsSubmittingUrl] = useState(false);
@@ -175,7 +174,7 @@ export function CourseMapWizard({
   // Load documents to check for course diagrams
   const {
     documentsForDisplay,
-    loading: docsLoading,
+    loading: _docsLoading,
     upload,
     addFromUrl,
     isExtracting: siIsExtracting,
@@ -567,10 +566,13 @@ export function CourseMapWizard({
   const renderMapView = () => (
     <View style={styles.mapContainer}>
       <Text style={styles.mapPlaceholder}>
-        Map view coming soon...
+        Map preview is unavailable in this mode.
         {'\n\n'}
-        Course data will be displayed on an interactive map.
+        Review course marks and sequence in the Marks step.
       </Text>
+      <Pressable style={styles.mapFallbackButton} onPress={() => setStep('marks')}>
+        <Text style={styles.mapFallbackButtonText}>Go To Marks</Text>
+      </Pressable>
     </View>
   );
 
@@ -1702,6 +1704,18 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     textAlign: 'center',
     lineHeight: 24,
+    marginBottom: 16,
+  },
+  mapFallbackButton: {
+    backgroundColor: IOS_COLORS.blue,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  mapFallbackButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   // Bottom action
   bottomAction: {

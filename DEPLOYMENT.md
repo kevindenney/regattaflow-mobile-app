@@ -58,7 +58,7 @@ Set these in Vercel Dashboard → Project Settings → Environment Variables:
 EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_key
-EXPO_PUBLIC_ANTHROPIC_API_KEY=your_anthropic_key
+ANTHROPIC_API_KEY=your_anthropic_key
 ```
 
 ### Custom Domain (Optional)
@@ -303,7 +303,7 @@ Users get updates automatically without app store approval!
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 - `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` (separate for iOS/Android/Web)
-- `EXPO_PUBLIC_ANTHROPIC_API_KEY`
+- `ANTHROPIC_API_KEY`
 - `EXPO_PUBLIC_GEMINI_API_KEY`
 
 ---

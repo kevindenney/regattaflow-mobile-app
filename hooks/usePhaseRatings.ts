@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('usePhaseRatings');
 
@@ -97,45 +98,90 @@ export function usePhaseRatings({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   // Track if we have unsaved changes
   const pendingChangesRef = useRef<PhaseRatings | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const saveRunIdRef = useRef(0);
+  const activeRaceIdRef = useRef<string | null | undefined>(raceId);
+  const activeUserIdRef = useRef<string | null | undefined>(userId);
+
+  useEffect(() => {
+    activeRaceIdRef.current = raceId;
+    activeUserIdRef.current = userId;
+  }, [raceId, userId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      saveRunIdRef.current += 1;
+    };
+  }, []);
 
   // ==========================================================================
   // Load existing ratings
   // ==========================================================================
 
   useEffect(() => {
-    let isMounted = true;
-
     async function loadRatings() {
+      const runId = ++loadRunIdRef.current;
+      const targetRaceId = raceId;
+      const targetUserId = userId;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === loadRunIdRef.current &&
+        activeRaceIdRef.current === targetRaceId &&
+        activeUserIdRef.current === targetUserId;
       // Skip for demo races or missing params
-      if (!raceId || !userId || raceId.startsWith('demo-')) {
+      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
+        if (!canCommit()) return;
         setRatings({});
         setSessionId(null);
+        setIsLoading(false);
+        setError(null);
         return;
       }
 
+      if (!canCommit()) return;
       setIsLoading(true);
       setError(null);
 
       try {
         // Find existing timer session for this race
-        const { data: session, error: sessionError } = await supabase
+        let session: any = null;
+        let sessionError: any = null;
+        const primarySession = await supabase
           .from('race_timer_sessions')
           .select('id, phase_ratings')
-          .eq('regatta_id', raceId)
-          .eq('sailor_id', userId)
+          .eq('regatta_id', targetRaceId)
+          .eq('sailor_id', targetUserId)
           .order('end_time', { ascending: false })
           .limit(1)
           .maybeSingle();
+        session = primarySession.data;
+        sessionError = primarySession.error;
+
+        if (isMissingIdColumn(sessionError, 'race_timer_sessions', 'regatta_id')) {
+          const fallbackSession = await supabase
+            .from('race_timer_sessions')
+            .select('id, phase_ratings')
+            .eq('race_id', targetRaceId)
+            .eq('sailor_id', targetUserId)
+            .order('end_time', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          session = fallbackSession.data;
+          sessionError = fallbackSession.error;
+        }
 
         if (sessionError) {
           logger.warn('[usePhaseRatings] Session query error:', sessionError);
-          if (isMounted) {
+          if (canCommit()) {
             setError('Failed to load ratings');
           }
           return;
         }
 
-        if (isMounted) {
+        if (canCommit()) {
           if (session) {
             setSessionId(session.id);
             // Parse phase_ratings JSONB
@@ -149,21 +195,17 @@ export function usePhaseRatings({
         }
       } catch (err) {
         logger.error('[usePhaseRatings] Unexpected error:', err);
-        if (isMounted) {
+        if (canCommit()) {
           setError('Unexpected error loading ratings');
         }
       } finally {
-        if (isMounted) {
+        if (canCommit()) {
           setIsLoading(false);
         }
       }
     }
 
-    loadRatings();
-
-    return () => {
-      isMounted = false;
-    };
+    void loadRatings();
   }, [raceId, userId, refetchTrigger]);
 
   // ==========================================================================
@@ -172,11 +214,21 @@ export function usePhaseRatings({
 
   const saveRatings = useCallback(
     async (ratingsToSave: PhaseRatings) => {
-      if (!raceId || !userId || raceId.startsWith('demo-')) {
+      const runId = ++saveRunIdRef.current;
+      const targetRaceId = raceId;
+      const targetUserId = userId;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === saveRunIdRef.current &&
+        activeRaceIdRef.current === targetRaceId &&
+        activeUserIdRef.current === targetUserId;
+
+      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
         logger.warn('[usePhaseRatings] Cannot save: missing raceId or userId');
         return;
       }
 
+      if (!canCommit()) return;
       setIsSaving(true);
       setError(null);
 
@@ -186,11 +238,11 @@ export function usePhaseRatings({
         // Create session if it doesn't exist
         if (!currentSessionId) {
           const nowIso = new Date().toISOString();
-          const { data: newSession, error: createError } = await supabase
+          const primaryCreate = await supabase
             .from('race_timer_sessions')
             .insert({
               sailor_id: userId,
-              regatta_id: raceId,
+              regatta_id: targetRaceId,
               start_time: nowIso,
               end_time: nowIso,
               duration_seconds: 0,
@@ -198,13 +250,34 @@ export function usePhaseRatings({
             })
             .select('id')
             .single();
+          let newSession = primaryCreate.data;
+          let createError = primaryCreate.error;
+
+          if (isMissingIdColumn(createError, 'race_timer_sessions', 'regatta_id')) {
+            const fallbackCreate = await supabase
+              .from('race_timer_sessions')
+              .insert({
+                sailor_id: userId,
+                race_id: targetRaceId,
+                start_time: nowIso,
+                end_time: nowIso,
+                duration_seconds: 0,
+                phase_ratings: ratingsToSave,
+              })
+              .select('id')
+              .single();
+            newSession = fallbackCreate.data;
+            createError = fallbackCreate.error;
+          }
 
           if (createError) {
             throw createError;
           }
 
           currentSessionId = newSession.id;
-          setSessionId(currentSessionId);
+          if (canCommit()) {
+            setSessionId(currentSessionId);
+          }
           logger.debug('[usePhaseRatings] Created new session:', currentSessionId);
         } else {
           // Update existing session
@@ -223,9 +296,13 @@ export function usePhaseRatings({
         pendingChangesRef.current = null;
       } catch (err) {
         logger.error('[usePhaseRatings] Save error:', err);
-        setError('Failed to save ratings');
+        if (canCommit()) {
+          setError('Failed to save ratings');
+        }
       } finally {
-        setIsSaving(false);
+        if (canCommit()) {
+          setIsSaving(false);
+        }
       }
     },
     [raceId, userId, sessionId]
@@ -244,7 +321,7 @@ export function usePhaseRatings({
       // Set new timeout
       saveTimeoutRef.current = setTimeout(() => {
         if (pendingChangesRef.current) {
-          saveRatings(pendingChangesRef.current);
+          void saveRatings(pendingChangesRef.current);
         }
       }, debounceMs);
     },

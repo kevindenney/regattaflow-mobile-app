@@ -5,7 +5,7 @@
  * Uses Supabase Realtime for instant updates across teammates.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { teamRaceEntryService } from '@/services/TeamRaceEntryService';
 import {
@@ -15,6 +15,7 @@ import {
 import { getChecklistItems } from '@/lib/checklists';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import type { ChecklistItem, RacePhase } from '@/types/checklists';
 import type { RaceType } from '@/types/raceEvents';
 import { createLogger } from '@/lib/utils/logger';
@@ -75,6 +76,15 @@ export function useTeamChecklist({
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const realtimeRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Get base checklist items for this race type and phase
   const baseItems = useMemo(() => {
@@ -107,22 +117,32 @@ export function useTeamChecklist({
    * Load initial checklist state
    */
   const loadChecklistState = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
     if (!teamEntryId) {
+      if (!canCommit()) return;
       setChecklistState(null);
+      setError(null);
+      setIsSyncing(false);
       setIsLoading(false);
       return;
     }
 
     try {
+      if (!canCommit()) return;
       setIsLoading(true);
       setError(null);
 
       const state = await teamRaceEntryService.getChecklistState(teamEntryId);
+      if (!canCommit()) return;
       setChecklistState(state);
     } catch (err) {
       logger.error('Failed to load checklist state:', err);
+      if (!canCommit()) return;
       setError(err instanceof Error ? err : new Error('Failed to load checklist'));
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [teamEntryId]);
@@ -143,6 +163,7 @@ export function useTeamChecklist({
       };
 
       // Optimistic update
+      if (!isMountedRef.current) return;
       setChecklistState((prev) => {
         if (!prev) return prev;
         return {
@@ -155,6 +176,7 @@ export function useTeamChecklist({
       });
 
       try {
+        if (!isMountedRef.current) return;
         setIsSyncing(true);
         await teamRaceEntryService.updateChecklistItem(teamEntryId, itemId, completion);
         logger.info('Completed team checklist item', { teamEntryId, itemId });
@@ -173,9 +195,21 @@ export function useTeamChecklist({
               message: systemMsg,
               message_type: 'checklist',
             })
-            .then(({ error: msgError }) => {
-              if (msgError) {
-                logger.warn('Failed to post checklist system message:', msgError.message);
+            .then(async ({ error: msgError }) => {
+              let resolvedError = msgError;
+              if (isMissingIdColumn(resolvedError, 'race_messages', 'regatta_id')) {
+                const fallback = await supabase
+                  .from('race_messages')
+                  .insert({
+                    race_id: regattaId,
+                    user_id: user.id,
+                    message: systemMsg,
+                    message_type: 'checklist',
+                  });
+                resolvedError = fallback.error;
+              }
+              if (resolvedError) {
+                logger.warn('Failed to post checklist system message:', resolvedError?.message);
               }
             });
         }
@@ -185,10 +219,11 @@ export function useTeamChecklist({
         logger.error('Failed to complete item:', err);
         throw err;
       } finally {
+        if (!isMountedRef.current) return;
         setIsSyncing(false);
       }
     },
-    [teamEntryId, user, loadChecklistState]
+    [teamEntryId, user, loadChecklistState, regattaId, baseItems]
   );
 
   /**
@@ -199,6 +234,7 @@ export function useTeamChecklist({
       if (!teamEntryId) return;
 
       // Optimistic update
+      if (!isMountedRef.current) return;
       setChecklistState((prev) => {
         if (!prev) return prev;
         const newState = { ...prev.checklistState };
@@ -210,6 +246,7 @@ export function useTeamChecklist({
       });
 
       try {
+        if (!isMountedRef.current) return;
         setIsSyncing(true);
         await teamRaceEntryService.updateChecklistItem(teamEntryId, itemId, null);
         logger.info('Uncompleted team checklist item', { teamEntryId, itemId });
@@ -219,6 +256,7 @@ export function useTeamChecklist({
         logger.error('Failed to uncomplete item:', err);
         throw err;
       } finally {
+        if (!isMountedRef.current) return;
         setIsSyncing(false);
       }
     },
@@ -246,8 +284,10 @@ export function useTeamChecklist({
     if (!teamEntryId) return;
 
     try {
+      if (!isMountedRef.current) return;
       setIsSyncing(true);
       await teamRaceEntryService.resetChecklist(teamEntryId);
+      if (!isMountedRef.current) return;
       setChecklistState((prev) =>
         prev ? { ...prev, checklistState: {} } : null
       );
@@ -256,6 +296,7 @@ export function useTeamChecklist({
       logger.error('Failed to reset checklist:', err);
       throw err;
     } finally {
+      if (!isMountedRef.current) return;
       setIsSyncing(false);
     }
   }, [teamEntryId]);
@@ -268,16 +309,22 @@ export function useTeamChecklist({
   // Subscribe to real-time changes
   useEffect(() => {
     if (!teamEntryId) return;
+    const runId = ++realtimeRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === realtimeRunIdRef.current;
 
     const unsubscribe = teamRaceEntryService.subscribeToChecklistChanges(
       teamEntryId,
       (state) => {
+        if (!canCommit()) return;
         setChecklistState(state);
         logger.info('Received real-time checklist update', { teamEntryId });
       }
     );
 
-    return unsubscribe;
+    return () => {
+      realtimeRunIdRef.current += 1;
+      unsubscribe();
+    };
   }, [teamEntryId]);
 
   return {

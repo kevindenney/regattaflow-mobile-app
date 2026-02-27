@@ -72,6 +72,8 @@ export interface NotificationStats {
 
 class NotificationServiceClass {
   private realtimeChannel: RealtimeChannel | null = null;
+  private realtimeUserId: string | null = null;
+  private realtimeChannelRunId = 0;
   private listeners: Set<(notification: SocialNotification) => void> =
     new Set();
 
@@ -442,8 +444,20 @@ class NotificationServiceClass {
     // Add listener
     this.listeners.add(callback);
 
+    // If the active realtime channel is bound to a different user,
+    // rotate it to avoid cross-account notification streams.
+    if (this.realtimeChannel && this.realtimeUserId && this.realtimeUserId !== userId) {
+      void supabase.removeChannel(this.realtimeChannel);
+      this.realtimeChannel = null;
+      this.realtimeUserId = null;
+      this.realtimeChannelRunId += 1;
+    }
+
     // Set up Supabase realtime channel if not already done
     if (!this.realtimeChannel) {
+      const channelRunId = ++this.realtimeChannelRunId;
+      const channelUserId = userId;
+      this.realtimeUserId = userId;
       this.realtimeChannel = supabase
         .channel(`notifications:${userId}`)
         .on(
@@ -455,6 +469,12 @@ class NotificationServiceClass {
             filter: `user_id=eq.${userId}`,
           },
           async (payload) => {
+            if (
+              this.realtimeChannelRunId !== channelRunId ||
+              this.realtimeUserId !== channelUserId
+            ) {
+              return;
+            }
             logger.info('Received realtime notification', { payload });
 
             const n = payload.new as any;
@@ -503,6 +523,12 @@ class NotificationServiceClass {
             };
 
             // Notify all listeners
+            if (
+              this.realtimeChannelRunId !== channelRunId ||
+              this.realtimeUserId !== channelUserId
+            ) {
+              return;
+            }
             this.listeners.forEach((listener) => {
               try {
                 listener(notification);
@@ -521,8 +547,10 @@ class NotificationServiceClass {
 
       // Unsubscribe from realtime if no more listeners
       if (this.listeners.size === 0 && this.realtimeChannel) {
-        this.realtimeChannel.unsubscribe();
+        void supabase.removeChannel(this.realtimeChannel);
         this.realtimeChannel = null;
+        this.realtimeUserId = null;
+        this.realtimeChannelRunId += 1;
       }
     };
   }
@@ -533,8 +561,10 @@ class NotificationServiceClass {
   unsubscribeAll(): void {
     this.listeners.clear();
     if (this.realtimeChannel) {
-      this.realtimeChannel.unsubscribe();
+      void supabase.removeChannel(this.realtimeChannel);
       this.realtimeChannel = null;
+      this.realtimeUserId = null;
+      this.realtimeChannelRunId += 1;
     }
     logger.info('Unsubscribed from all notifications');
   }

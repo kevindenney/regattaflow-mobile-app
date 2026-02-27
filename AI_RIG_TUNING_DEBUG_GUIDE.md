@@ -42,7 +42,7 @@ TypeError: Failed to fetch
 Access to fetch at 'https://api.anthropic.com/...' blocked by CORS
 ```
 
-**Fix:** Check that `dangerouslyAllowBrowser: true` is set in RaceTuningEngine constructor
+**Fix:** Check that `server-side Edge Function proxy` is set in RaceTuningEngine constructor
 
 #### Error 3: API Rate Limit
 ```
@@ -79,7 +79,7 @@ In DevTools → Network tab, look for:
 # Check .env file
 cat .env | grep ANTHROPIC_API_KEY
 
-# Should show: EXPO_PUBLIC_ANTHROPIC_API_KEY=sk-ant-api03-...
+# Should show: ANTHROPIC_API_KEY=sk-ant-api03-...
 
 # Restart dev server to load environment variables
 npm start
@@ -258,7 +258,7 @@ This will confirm the UI rendering works, isolating the issue to AI generation.
 
 - [ ] Browser console shows AI generation attempt
 - [ ] Network tab shows 200 response from Anthropic API
-- [ ] `.env` has valid `EXPO_PUBLIC_ANTHROPIC_API_KEY`
+- [ ] `.env` has valid `ANTHROPIC_API_KEY`
 - [ ] Dev server restarted after `.env` changes
 - [ ] Weather data is available (check console logs)
 - [ ] Test script runs successfully: `npx tsx test-ai-rig-tuning.ts`

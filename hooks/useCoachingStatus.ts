@@ -24,23 +24,28 @@ interface CoachingStatus {
   seasonCount: number;
   /** Whether data is still loading */
   isLoading: boolean;
+  /** Query error if any */
+  error: Error | null;
 }
 
 export function useCoachingStatus(): CoachingStatus {
   const { user, capabilities } = useAuth();
 
   // Check if user is being coached (has an active coaching_clients record)
-  const { data: coachingClient, isLoading: loadingClient } = useQuery({
+  const { data: coachingClient, isLoading: loadingClient, error: coachingClientError } = useQuery({
     queryKey: ['coaching-status', 'has-coach', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('coaching_clients')
         .select('id')
         .eq('sailor_id', user.id)
         .eq('status', 'active')
         .limit(1)
         .maybeSingle();
+      if (error) {
+        throw new Error(error.message || 'Failed to load coaching status');
+      }
       return data;
     },
     enabled: !!user?.id && !capabilities?.hasCoaching,
@@ -60,5 +65,10 @@ export function useCoachingStatus(): CoachingStatus {
     relationship = 'HAS_COACH';
   }
 
-  return { relationship, seasonCount, isLoading };
+  return {
+    relationship,
+    seasonCount,
+    isLoading,
+    error: coachingClientError as Error | null,
+  };
 }

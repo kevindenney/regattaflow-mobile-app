@@ -143,9 +143,27 @@ This is typically the FIRST tool to call.`,
           // Query nearby clubs for benchmarking
           const { data: nearbyClubs } = await supabase
             .from('sailing_venues')
-            .select('name, yacht_clubs(*)')
+            .select('id, name')
             .neq('id', primaryVenue.id)
             .limit(5);
+
+          const nearbyVenueIds = (nearbyClubs || []).map((club: any) => club.id).filter(Boolean);
+          const memberCountByVenueId = new Map<string, number>();
+          if (nearbyVenueIds.length > 0) {
+            const { data: venueClubs } = await supabase
+              .from('yacht_clubs')
+              .select('venue_id, member_count')
+              .in('venue_id', nearbyVenueIds);
+
+            (venueClubs || []).forEach((club: any) => {
+              if (!club?.venue_id) return;
+              const existing = memberCountByVenueId.get(club.venue_id) || 0;
+              const memberCount = Number(club.member_count || 0);
+              if (memberCount > existing) {
+                memberCountByVenueId.set(club.venue_id, memberCount);
+              }
+            });
+          }
 
           // Determine weather provider based on region
           let weatherProvider: 'HKO' | 'NOAA' | 'ECMWF' | 'WeatherAPI' = 'WeatherAPI';
@@ -182,7 +200,7 @@ This is typically the FIRST tool to call.`,
               popularBoatClasses,
               nearbyClubs: (nearbyClubs || []).slice(0, 3).map(club => ({
                 name: club.name,
-                memberCount: club.yacht_clubs?.[0]?.member_count || 0,
+                memberCount: memberCountByVenueId.get(club.id) || 0,
               })),
               culturalNotes: culturalProfile?.cultural_notes || [],
             },

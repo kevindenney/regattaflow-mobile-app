@@ -24,15 +24,16 @@ export function FinalCtaSection() {
 
   return (
     <LinearGradient
-      colors={['#0A2463', '#1E3A6E']}
+      colors={['#1A1A1A', '#2D3748']}
       style={styles.container}
     >
       <View style={styles.content}>
         <Text style={[styles.headline, isDesktop && styles.headlineDesktop]}>
-          Ready to Race Smarter?
+
+          Ready to get better?
         </Text>
         <Text style={styles.subtitle}>
-          Join competitive sailors using AI to prepare, race, and improve.
+          Pick your interest. Start with Plan, Do, Review. Improve at what matters to you.
         </Text>
 
         <View style={[styles.ctaRow, isDesktop && styles.ctaRowDesktop]}>
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
   primaryCtaText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0A2463',
+    color: '#1A1A1A',
   },
 
   secondaryCta: {

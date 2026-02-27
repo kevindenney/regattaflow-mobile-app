@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, FlatList, Alert } from 'react-native';
 import { Check, X, Plus, Edit3, Trash2, Calendar, ChevronLeft } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 // Mock data for race series extracted from website
 const initialRaceSeries = [
@@ -34,6 +35,7 @@ const initialRaceSeries = [
 ];
 
 export default function RaceSeriesVerificationScreen() {
+  const router = useRouter();
   const [raceSeries, setRaceSeries] = useState(initialRaceSeries);
   const [newSeriesName, setNewSeriesName] = useState('');
   const [newSeriesDescription, setNewSeriesDescription] = useState('');
@@ -235,7 +237,7 @@ export default function RaceSeriesVerificationScreen() {
       {/* Header with Blue Banner */}
       <View className="bg-blue-600 pt-12 pb-6 px-4">
         <View className="flex-row items-center mb-4">
-          <TouchableOpacity className="p-2 -ml-2">
+          <TouchableOpacity className="p-2 -ml-2" onPress={() => router.push('/fleet-verification')}>
             <ChevronLeft size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text className="text-white text-lg font-bold flex-1 text-center">Club Setup</Text>
@@ -339,13 +341,13 @@ export default function RaceSeriesVerificationScreen() {
         <View className="flex-row space-x-3">
           <TouchableOpacity 
             className="flex-1 bg-gray-200 py-4 rounded-xl items-center"
-            onPress={() => Alert.alert('Skip', 'Your progress will be saved')}
+            onPress={() => router.push('/club-dashboard')}
           >
             <Text className="text-gray-700 font-bold">Complete later</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             className="flex-1 bg-blue-600 py-4 rounded-xl items-center"
-            onPress={() => Alert.alert('Success', 'Race series verified successfully!')}
+            onPress={() => router.push('/(auth)/club-onboarding-payment')}
           >
             <Text className="text-white font-bold">Continue</Text>
           </TouchableOpacity>

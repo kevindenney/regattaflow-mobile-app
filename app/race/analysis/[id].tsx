@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Share } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  TrendingUp,
-  TrendingDown,
   Share2,
   FileText,
   Users,
@@ -23,6 +21,7 @@ import {
 import { LineChart } from 'react-native-chart-kit';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn, isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('PostRaceAnalysis');
 
@@ -86,16 +85,32 @@ export default function PostRaceAnalysisScreen() {
   const [isReplaying, setIsReplaying] = useState(false);
   const [replayProgress, setReplayProgress] = useState(0);
   const [replaySpeed, setReplaySpeed] = useState(1);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const replayIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    loadRaceAnalysisData();
-  }, [id]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      if (replayIntervalRef.current) {
+        clearInterval(replayIntervalRef.current);
+        replayIntervalRef.current = null;
+      }
+    };
+  }, []);
 
-  const loadRaceAnalysisData = async () => {
+  const loadRaceAnalysisData = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && loadRunIdRef.current === runId;
+
     if (!id) return;
 
     try {
-      setLoading(true);
+      if (canCommit()) {
+        setLoading(true);
+      }
 
       // Load race result
       const { data: resultData, error: resultError } = await supabase
@@ -105,6 +120,7 @@ export default function PostRaceAnalysisScreen() {
         .single();
 
       if (resultError) throw resultError;
+      if (!canCommit()) return;
       setRaceResult(resultData);
 
       // Load GPS track if available
@@ -115,18 +131,41 @@ export default function PostRaceAnalysisScreen() {
         .single();
 
       if (!trackError && trackData) {
+        if (!canCommit()) return;
         setGPSTrack(trackData);
       }
 
       // Load tactical decisions (from race_strategies table)
-      const { data: strategyData } = await supabase
-        .from('race_strategies')
-        .select('tactical_recommendations')
-        .eq('race_id', resultData.race_id)
-        .single();
+      let strategyData: any = null;
+      const strategyRegattaId = resultData?.regatta_id || resultData?.race_id;
+      if (strategyRegattaId) {
+        const primaryStrategy = await supabase
+          .from('race_strategies')
+          .select('strategy_content')
+          .eq('regatta_id', strategyRegattaId)
+          .maybeSingle();
 
-      if (strategyData?.tactical_recommendations) {
-        setTacticalDecisions(generateTacticalDecisions(strategyData.tactical_recommendations));
+        if (!primaryStrategy.error) {
+          strategyData = primaryStrategy.data;
+        } else if (isMissingIdColumn(primaryStrategy.error, 'race_strategies', 'regatta_id')) {
+          // Backward-compat fallback for older schema versions
+          const legacyStrategy = await supabase
+            .from('race_strategies')
+            .select('tactical_recommendations')
+            .eq('race_id', strategyRegattaId)
+            .maybeSingle();
+          strategyData = legacyStrategy.data;
+        }
+      }
+
+      const tacticalRecommendations =
+        strategyData?.tactical_recommendations ||
+        strategyData?.strategy_content?.tactical_recommendations ||
+        strategyData?.strategy_content?.key_tactical_points;
+
+      if (tacticalRecommendations) {
+        if (!canCommit()) return;
+        setTacticalDecisions(generateTacticalDecisions(tacticalRecommendations));
       }
 
       // Load equipment setup
@@ -137,17 +176,29 @@ export default function PostRaceAnalysisScreen() {
         .single();
 
       if (equipmentData) {
+        if (!canCommit()) return;
         setEquipmentSetup(parseEquipmentSetup(equipmentData.setup_notes));
       }
 
       // Load venue statistics
       if (resultData.sailing_venue_id) {
-        const { data: venueRaces } = await supabase
+        let venueRaces: any[] | null = null;
+        const primaryVenue = await supabase
           .from('race_results')
           .select('position, conditions')
           .eq('sailing_venue_id', resultData.sailing_venue_id);
+        venueRaces = primaryVenue.data;
+
+        if (isMissingSupabaseColumn(primaryVenue.error, 'race_results.conditions')) {
+          const fallbackVenue = await supabase
+            .from('race_results')
+            .select('position')
+            .eq('sailing_venue_id', resultData.sailing_venue_id);
+          venueRaces = fallbackVenue.data;
+        }
 
         if (venueRaces) {
+          if (!canCommit()) return;
           setVenueStats(calculateVenueStats(venueRaces));
         }
       }
@@ -155,11 +206,17 @@ export default function PostRaceAnalysisScreen() {
     } catch (error) {
       console.error('Error loading race analysis:', error);
     } finally {
-      setLoading(false);
+      if (canCommit()) {
+        setLoading(false);
+      }
     }
-  };
+  }, [id]);
 
-  const generateTacticalDecisions = (recommendations: any): TacticalDecision[] => {
+  useEffect(() => {
+    void loadRaceAnalysisData();
+  }, [loadRaceAnalysisData]);
+
+  const generateTacticalDecisions = (_recommendations: any): TacticalDecision[] => {
     // Mock tactical decisions based on strategy recommendations
     return [
       {
@@ -189,7 +246,7 @@ export default function PostRaceAnalysisScreen() {
     ];
   };
 
-  const parseEquipmentSetup = (setupNotes: string): EquipmentSetup => {
+  const parseEquipmentSetup = (_setupNotes: string): EquipmentSetup => {
     // Parse equipment setup from notes
     return {
       mast_rake: '4.5"',
@@ -217,41 +274,106 @@ export default function PostRaceAnalysisScreen() {
     };
   };
 
-  const toggleReplay = () => {
-    setIsReplaying(!isReplaying);
-    if (!isReplaying) {
-      // Start replay animation
-      const interval = setInterval(() => {
-        setReplayProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setIsReplaying(false);
-            return 0;
+  const toggleReplay = useCallback(() => {
+    if (isReplaying) {
+      if (replayIntervalRef.current) {
+        clearInterval(replayIntervalRef.current);
+        replayIntervalRef.current = null;
+      }
+      setIsReplaying(false);
+      return;
+    }
+
+    // Start replay animation
+    setIsReplaying(true);
+    if (replayIntervalRef.current) {
+      clearInterval(replayIntervalRef.current);
+    }
+    replayIntervalRef.current = setInterval(() => {
+      setReplayProgress(prev => {
+        if (prev >= 100) {
+          if (replayIntervalRef.current) {
+            clearInterval(replayIntervalRef.current);
+            replayIntervalRef.current = null;
           }
-          return prev + (1 * replaySpeed);
-        });
-      }, 100);
+          setIsReplaying(false);
+          return 0;
+        }
+        return prev + (1 * replaySpeed);
+      });
+    }, 100);
+  }, [isReplaying, replaySpeed]);
+
+  const resetReplay = useCallback(() => {
+    if (replayIntervalRef.current) {
+      clearInterval(replayIntervalRef.current);
+      replayIntervalRef.current = null;
+    }
+    setReplayProgress(0);
+    setIsReplaying(false);
+  }, []);
+
+  const shareAnalysis = async () => {
+    if (!raceResult) return;
+    try {
+      const summary = [
+        `Race Analysis #${id}`,
+        `Position: ${raceResult.position}`,
+        `Elapsed: ${Math.floor(raceResult.elapsed_time / 60)}m`,
+        `Average Speed: ${raceResult.average_speed.toFixed(1)}kt`,
+        `Distance: ${raceResult.distance_sailed.toFixed(1)} NM`,
+        `Tacks/Gybes: ${raceResult.tacks_count}/${raceResult.gybes_count}`,
+        `Strategy Execution: ${raceResult.strategy_execution}%`,
+      ].join('\n');
+
+      await Share.share({
+        message: summary,
+        title: `Race Analysis #${id}`,
+      });
+    } catch (error) {
+      logger.error('Failed to share analysis', error);
     }
   };
 
-  const resetReplay = () => {
-    setReplayProgress(0);
-    setIsReplaying(false);
-  };
-
-  const shareAnalysis = async () => {
-    // TODO: Implement share functionality
-    logger.debug('Share analysis');
-  };
-
   const saveToNotes = async () => {
-    // TODO: Implement save to notes
-    logger.debug('Save to notes');
+    if (!raceResult) return;
+    try {
+      const note = [
+        `Post-race summary (${new Date().toLocaleDateString()})`,
+        `Position ${raceResult.position}, strategy ${raceResult.strategy_execution}%`,
+        `Speed ${raceResult.average_speed.toFixed(1)}kt over ${raceResult.distance_sailed.toFixed(1)}nm`,
+        `Maneuvers: ${raceResult.tacks_count} tacks, ${raceResult.gybes_count} gybes`,
+      ].join(' • ');
+
+      const raceTargetId = raceResult.race_id;
+      if (!raceTargetId) {
+        throw new Error('Race reference missing');
+      }
+
+      const { error } = await supabase
+        .from('regattas')
+        .update({
+          post_race_notes: note,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', raceTargetId);
+
+      if (error) {
+        throw error;
+      }
+
+      logger.debug('Saved analysis summary to regatta notes', { raceTargetId });
+    } catch (error) {
+      logger.error('Failed to save analysis notes', error);
+    }
   };
 
   const compareToFleet = () => {
-    // TODO: Navigate to fleet comparison
-    logger.debug('Compare to fleet');
+    if (raceResult?.race_id) {
+      router.push(`/club/results/${raceResult.race_id}` as any);
+      return;
+    }
+    router.push('/(tabs)/events');
   };
 
   if (loading) {

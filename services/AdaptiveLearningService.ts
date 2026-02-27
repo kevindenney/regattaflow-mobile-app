@@ -7,7 +7,6 @@
 
 import { supabase } from './supabase';
 import { logger, serializeError } from '@/lib/utils/logger';
-import { skillManagementService } from './ai/SkillManagementService';
 import {
   isAIInFallbackMode,
   shouldTriggerFallback,
@@ -41,9 +40,6 @@ import {
   mapRowToNudgeDelivery,
 } from '@/types/adaptiveLearning';
 import type { RacePhase, ChecklistCategory } from '@/types/excellenceFramework';
-
-// Anthropic client for AI extraction
-const ANTHROPIC_API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
 
 export class AdaptiveLearningService {
   // ============================================
@@ -98,53 +94,23 @@ export class AdaptiveLearningService {
         return { events: [], extractionNotes: 'AI service temporarily unavailable' };
       }
 
-      if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'placeholder') {
-        logger.debug('No Anthropic API key configured - extraction skipped');
-        return { events: [], extractionNotes: 'API key not configured' };
-      }
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+      const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt: `${LEARNING_EVENT_EXTRACTOR_SKILL_CONTENT}\n\n${prompt}`,
           max_tokens: 2000,
-          system: LEARNING_EVENT_EXTRACTOR_SKILL_CONTENT,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-        }),
+        },
       });
 
-      // FIX 3: Handle credit exhaustion and API overload status codes
-      if (response.status === 529 || response.status === 503 || response.status === 402) {
-        const reason = response.status === 529 ? 'API overloaded' :
-                      response.status === 402 ? 'Credit exhaustion' : 'Service unavailable';
-        logger.warn('Claude API unavailable', { status: response.status, reason });
-        activateFallbackMode(reason);
-        return { events: [], extractionNotes: reason };
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        // FIX 3: Check if error message indicates credit issues
-        if (shouldTriggerFallback({ message: errorText, status: response.status })) {
-          activateFallbackMode('API error indicates credit or capacity issue');
+      if (error) {
+        if (shouldTriggerFallback({ message: error.message })) {
+          activateFallbackMode('AI service temporarily unavailable');
           return { events: [], extractionNotes: 'AI service temporarily unavailable' };
         }
-        logger.warn('Claude API error', { status: response.status });
+        logger.warn('Claude API error', { error: error.message });
         return null;
       }
 
-      const data = await response.json();
-      const content = data.content?.[0]?.text;
+      const content = typeof data?.text === 'string' ? data.text : '';
 
       if (!content) {
         logger.warn('Empty response from Claude');

@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useSailorOnboardingState');
 
 export interface SailorVenueData {
   venueId: string;
@@ -69,39 +72,48 @@ export const useSailorOnboardingState = () => {
     saving: false,
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | undefined>(user?.id);
 
-  // Load state from AsyncStorage and Supabase on mount
   useEffect(() => {
-    loadState();
-  }, [user]);
+    activeUserIdRef.current = user?.id;
+  }, [user?.id]);
 
-  // Save state to AsyncStorage whenever it changes
   useEffect(() => {
-    if (!state.loading) {
-      saveStateToStorage();
-    }
-  }, [state.venue, state.boat, state.crew, state.coaches, state.currentStep]);
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
-  const loadState = async () => {
+  const loadState = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const targetUserId = user?.id;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
     try {
       // First, try to load from AsyncStorage (for partial progress)
       const storedState = await AsyncStorage.getItem(STORAGE_KEY);
       if (storedState) {
         const parsed = JSON.parse(storedState);
+        if (!canCommit()) return;
         setState(prev => ({ ...prev, ...parsed, loading: false }));
       }
 
       // Then, try to load from Supabase (if already saved)
-      if (user) {
+      if (targetUserId) {
         const { data: profile } = await supabase
           .from('sailor_profiles')
           .select('*, sailor_boats(*), sailor_crew_preferences(*)')
-          .eq('user_id', user.id)
+          .eq('user_id', targetUserId)
           .maybeSingle();  // Use maybeSingle() to return null instead of throwing on 0 rows
 
         if (profile) {
           const normalizeCrewMembers = (
-            members: Array<Partial<SailorCrewMember>> | null | undefined
+            members: Partial<SailorCrewMember>[] | null | undefined
           ): SailorCrewMember[] => {
             if (!Array.isArray(members)) return [];
 
@@ -121,6 +133,7 @@ export const useSailorOnboardingState = () => {
           };
 
           // Merge Supabase data with current state
+          if (!canCommit()) return;
           setState(prev => ({
             ...prev,
             venue: profile.home_venue_id ? {
@@ -146,14 +159,16 @@ export const useSailorOnboardingState = () => {
         }
       }
 
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false }));
     } catch (error) {
-      console.error('Error loading sailor onboarding state:', error);
+      logger.error('Error loading sailor onboarding state', error);
+      if (!canCommit()) return;
       setState(prev => ({ ...prev, loading: false, error: 'Failed to load onboarding state' }));
     }
-  };
+  }, [user?.id]);
 
-  const saveStateToStorage = async () => {
+  const saveStateToStorage = useCallback(async () => {
     try {
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
         venue: state.venue,
@@ -163,9 +178,21 @@ export const useSailorOnboardingState = () => {
         currentStep: state.currentStep,
       }));
     } catch (error) {
-      console.error('Error saving state to storage:', error);
+      logger.error('Error saving state to storage', error);
     }
-  };
+  }, [state.venue, state.boat, state.crew, state.coaches, state.currentStep]);
+
+  // Load state from AsyncStorage and Supabase on mount
+  useEffect(() => {
+    void loadState();
+  }, [loadState]);
+
+  // Save state to AsyncStorage whenever it changes
+  useEffect(() => {
+    if (!state.loading) {
+      void saveStateToStorage();
+    }
+  }, [state.loading, saveStateToStorage]);
 
   const updateVenue = useCallback((data: SailorVenueData) => {
     setState(prev => ({ ...prev, venue: data, currentStep: Math.max(prev.currentStep, 1) }));
@@ -184,7 +211,8 @@ export const useSailorOnboardingState = () => {
   }, []);
 
   const saveToSupabase = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    if (!user) {
+    const targetUserId = activeUserIdRef.current;
+    if (!targetUserId) {
       return { success: false, error: 'User not authenticated' };
     }
 
@@ -192,6 +220,7 @@ export const useSailorOnboardingState = () => {
       return { success: false, error: 'Venue selection required' };
     }
 
+    if (!isMountedRef.current) return { success: false, error: 'Component unmounted' };
     setState(prev => ({ ...prev, saving: true, error: null }));
 
     try {
@@ -199,7 +228,7 @@ export const useSailorOnboardingState = () => {
       const { data: profile, error: profileError } = await supabase
         .from('sailor_profiles')
         .upsert({
-          user_id: user.id,
+          user_id: targetUserId,
           home_venue_id: state.venue.venueId,
           home_venue_name: state.venue.venueName,
           home_venue_address: state.venue.venueAddress,
@@ -249,24 +278,29 @@ export const useSailorOnboardingState = () => {
       const { error: userError } = await supabase
         .from('users')
         .update({ onboarding_completed: true })
-        .eq('id', user.id);
+        .eq('id', targetUserId);
 
       if (userError) throw userError;
 
       // Clear AsyncStorage after successful save
       await AsyncStorage.removeItem(STORAGE_KEY);
 
-      setState(prev => ({ ...prev, saving: false }));
+      if (isMountedRef.current && activeUserIdRef.current === targetUserId) {
+        setState(prev => ({ ...prev, saving: false }));
+      }
       return { success: true };
     } catch (error: any) {
-      console.error('Error saving sailor onboarding data:', error);
-      setState(prev => ({ ...prev, saving: false, error: error.message || 'Failed to save onboarding data' }));
+      logger.error('Error saving sailor onboarding data', error);
+      if (isMountedRef.current && activeUserIdRef.current === targetUserId) {
+        setState(prev => ({ ...prev, saving: false, error: error.message || 'Failed to save onboarding data' }));
+      }
       return { success: false, error: error.message || 'Failed to save onboarding data' };
     }
-  }, [user, state.venue, state.boat, state.crew]);
+  }, [state.venue, state.boat, state.crew]);
 
   const clearState = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
+    if (!isMountedRef.current) return;
     setState({
       venue: null,
       boat: null,

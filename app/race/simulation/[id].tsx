@@ -11,7 +11,7 @@
  * TIER GATING: Championship subscribers only
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { VStack } from '@/components/ui/vstack';
@@ -36,15 +36,33 @@ export default function SimulationResultsScreen() {
   const [simulating, setSimulating] = useState(false);
   const [results, setResults] = useState<SimulationResults | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
 
   useEffect(() => {
-    loadData();
-  }, [strategyId]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
-  const loadData = async () => {
-    if (!user || !strategyId) return;
+  const loadData = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && loadRunIdRef.current === runId;
 
-    setLoading(true);
+    if (!user || !strategyId) {
+      if (canCommit()) {
+        setSubscription(null);
+        setResults(null);
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (canCommit()) {
+      setLoading(true);
+    }
 
     try {
       // Check subscription tier
@@ -55,11 +73,14 @@ export default function SimulationResultsScreen() {
         .eq('status', 'active')
         .single();
 
+      if (!canCommit()) return;
       setSubscription(subData);
 
       // Championship tier required
       if (subData?.tier !== 'championship') {
-        setLoading(false);
+        if (canCommit()) {
+          setLoading(false);
+        }
         return;
       }
 
@@ -74,18 +95,26 @@ export default function SimulationResultsScreen() {
         .single();
 
       if (simData?.results) {
+        if (!canCommit()) return;
         setResults(simData.results as SimulationResults);
       }
     } catch (error) {
       console.error('Error loading simulation:', error);
     } finally {
-      setLoading(false);
+      if (canCommit()) {
+        setLoading(false);
+      }
     }
-  };
+  }, [user, strategyId]);
 
-  const runSimulation = async () => {
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  const runSimulation = useCallback(async () => {
     if (!user || !strategyId) return;
 
+    if (!isMountedRef.current) return;
     setSimulating(true);
 
     try {
@@ -102,6 +131,7 @@ export default function SimulationResultsScreen() {
         user.id
       );
 
+      if (!isMountedRef.current) return;
       setResults(simulationResults);
 
       Alert.alert(
@@ -112,9 +142,11 @@ export default function SimulationResultsScreen() {
       console.error('Error running simulation:', error);
       Alert.alert('Error', 'Failed to run simulation. Please try again.');
     } finally {
-      setSimulating(false);
+      if (isMountedRef.current) {
+        setSimulating(false);
+      }
     }
-  };
+  }, [user, strategyId]);
 
   // Paywall for non-Championship users
   if (!loading && subscription?.tier !== 'championship') {

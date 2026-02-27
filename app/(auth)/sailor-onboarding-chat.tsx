@@ -16,9 +16,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Send, FileText, Sparkles, ChevronRight, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react-native';
+import { Send, FileText, Sparkles, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { ConversationalOnboardingAgent } from '@/services/agents/ConversationalOnboardingAgent';
+import { supabase } from '@/services/supabase';
 
 interface Message {
   id: string;
@@ -29,11 +30,11 @@ interface Message {
 
 interface ExtractedData {
   sailorRole?: 'owner' | 'crew' | 'both';
-  boats?: Array<{ className: string; sailNumber: string; boatName?: string }>;
-  clubs?: Array<{ name: string; url?: string }>;
-  venues?: Array<{ name: string }>;
-  crew?: Array<{ name: string; role?: string }>;
-  documents?: Array<{ url: string; type: string }>;
+  boats?: { className: string; sailNumber: string; boatName?: string }[];
+  clubs?: { name: string; url?: string }[];
+  venues?: { name: string }[];
+  crew?: { name: string; role?: string }[];
+  documents?: { url: string; type: string }[];
 }
 
 export default function SailorOnboardingChat() {
@@ -52,6 +53,7 @@ export default function SailorOnboardingChat() {
 
   const [inputText, setInputText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractedData>({});
   const [agent] = useState(() => new ConversationalOnboardingAgent());
   const [showHelp, setShowHelp] = useState(false);
@@ -129,6 +131,29 @@ export default function SailorOnboardingChat() {
     return !!data.sailorRole;
   };
 
+  const handleFinishQuickStart = async () => {
+    if (!user?.id || isFinishing) return;
+
+    setIsFinishing(true);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          onboarding_completed: true,
+          user_type: 'sailor',
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      router.replace('/(tabs)/races');
+    } catch (error) {
+      console.error('Failed to finish quick onboarding:', error);
+    } finally {
+      setIsFinishing(false);
+    }
+  };
+
   const handleSwitchToForm = () => {
     router.push({
       pathname: '/(auth)/sailor-onboarding-comprehensive',
@@ -177,13 +202,28 @@ export default function SailorOnboardingChat() {
                 Collected: {getDataSummary()}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={handleSwitchToForm}
-              className="bg-sky-600 px-4 py-2 rounded-lg flex-row items-center gap-1"
-            >
-              <FileText size={16} color="white" />
-              <Text className="text-white font-semibold text-sm">Switch to Form</Text>
-            </TouchableOpacity>
+            <View className="flex-row items-center gap-2">
+              {hasMinimumRequiredData(extractedData) && (
+                <TouchableOpacity
+                  onPress={handleFinishQuickStart}
+                  disabled={isFinishing}
+                  className={`px-4 py-2 rounded-lg ${isFinishing ? 'bg-emerald-400' : 'bg-emerald-600'}`}
+                >
+                  {isFinishing ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text className="text-white font-semibold text-sm">Finish Setup</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={handleSwitchToForm}
+                className="bg-sky-600 px-4 py-2 rounded-lg flex-row items-center gap-1"
+              >
+                <FileText size={16} color="white" />
+                <Text className="text-white font-semibold text-sm">Switch to Form</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 

@@ -32,7 +32,10 @@ import {
   DaysBeforeContent,
   OnWaterContent,
   AfterRaceContent,
+  ConfigDrivenPhaseContent,
 } from '@/components/cards/content/phases';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useInterest } from '@/providers/InterestProvider';
 import { usePhaseCompletionCounts } from '@/hooks/usePhaseCompletionCounts';
 import { useRaceCollaborators } from '@/hooks/useRaceCollaborators';
 import { useRaceMessages } from '@/hooks/useRaceMessages';
@@ -51,12 +54,6 @@ const logger = createLogger('RaceDetailContent');
 
 type PhaseTab = 'prep' | 'race' | 'review';
 
-const PHASE_SEGMENTS: { value: PhaseTab; label: string }[] = [
-  { value: 'prep', label: 'Prep' },
-  { value: 'race', label: 'Race' },
-  { value: 'review', label: 'Review' },
-];
-
 // =============================================================================
 // PROPS
 // =============================================================================
@@ -72,6 +69,16 @@ interface RaceDetailContentProps {
 
 export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
   const { user } = useAuth();
+  const { currentInterest } = useInterest();
+  const eventConfig = useInterestEventConfig();
+  const isSailing = currentInterest?.slug === 'sail-racing';
+
+  // Dynamic phase segments from config
+  const PHASE_SEGMENTS: { value: PhaseTab; label: string }[] = [
+    { value: 'prep', label: eventConfig.phaseLabels.days_before?.short ?? 'Prep' },
+    { value: 'race', label: eventConfig.phaseLabels.on_water?.short ?? 'Race' },
+    { value: 'review', label: eventConfig.phaseLabels.after_race?.short ?? 'Review' },
+  ];
 
   const [raceData, setRaceData] = useState<CardRaceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -279,23 +286,42 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
 
         {/* Phase Content */}
         <View style={styles.phaseContent}>
-          {selectedPhase === 'prep' && (
-            <DaysBeforeContent
+          {isSailing ? (
+            <>
+              {selectedPhase === 'prep' && (
+                <DaysBeforeContent
+                  race={raceData}
+                  isExpanded={true}
+                />
+              )}
+              {selectedPhase === 'race' && (
+                <OnWaterContent
+                  race={raceData}
+                  isExpanded={true}
+                />
+              )}
+              {selectedPhase === 'review' && (
+                <AfterRaceContent
+                  race={raceData}
+                  userId={user?.id}
+                  isExpanded={true}
+                />
+              )}
+            </>
+          ) : (
+            <ConfigDrivenPhaseContent
+              phase={
+                selectedPhase === 'prep'
+                  ? 'days_before'
+                  : selectedPhase === 'race'
+                    ? 'on_water'
+                    : 'after_race'
+              }
+              config={eventConfig}
               race={raceData}
-              isExpanded={true}
-            />
-          )}
-          {selectedPhase === 'race' && (
-            <OnWaterContent
-              race={raceData}
-              isExpanded={true}
-            />
-          )}
-          {selectedPhase === 'review' && (
-            <AfterRaceContent
-              race={raceData}
-              userId={user?.id}
-              isExpanded={true}
+              onModulePress={(moduleId) => {
+                logger.info('[RaceDetailContent] Module pressed:', moduleId);
+              }}
             />
           )}
         </View>

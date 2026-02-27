@@ -7,6 +7,8 @@ import { ProfessionalCourseDesigner } from './ProfessionalCourseDesigner';
 import { RaceManagementPanel } from './RaceManagementPanel';
 import { CoursePublishingPanel } from './CoursePublishingPanel';
 import { RaceSeriesManager } from './RaceSeriesManager';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface OfficialRaceCourse {
   id: string;
@@ -72,6 +74,7 @@ interface RaceDivision {
 }
 
 export function YachtClubRaceBuilder() {
+  const logger = createLogger('YachtClubRaceBuilder');
   const [activeTab, setActiveTab] = useState<'courses' | 'management' | 'publishing' | 'series'>('courses');
   const [currentCourse, setCurrentCourse] = useState<OfficialRaceCourse | null>(null);
   const [savedCourses, setSavedCourses] = useState<OfficialRaceCourse[]>([]);
@@ -124,12 +127,57 @@ export function YachtClubRaceBuilder() {
 
     handleCourseUpdate(publishedCourse);
 
-    // TODO: Implement actual publishing to Supabase and sailor distribution
-    Alert.alert(
-      'Course Published Successfully',
-      `${course.name} has been published and distributed to registered sailors.`,
-      [{ text: 'OK' }]
-    );
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.id) {
+        throw new Error('Please sign in to publish courses');
+      }
+
+      const payload = {
+        name: publishedCourse.name,
+        description: `Published by yacht club workflow (${publishedCourse.type})`,
+        course_type: publishedCourse.type === 'windward-leeward'
+          ? 'windward_leeward'
+          : publishedCourse.type === 'triangle'
+          ? 'triangle'
+          : 'custom',
+        marks: (publishedCourse.marks || []).map((mark) => ({
+          name: mark.name,
+          type: mark.type === 'reaching' ? 'wing' : mark.type,
+          latitude: mark.coordinates[1],
+          longitude: mark.coordinates[0],
+        })),
+        layout: {
+          sequence: publishedCourse.sequence || [],
+        },
+        created_by: user.id,
+      };
+
+      const { data, error } = await supabase
+        .from('race_courses')
+        .insert(payload)
+        .select('id')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      logger.debug('Published yacht-club course', {
+        localCourseId: course.id,
+        raceCourseId: data?.id,
+      });
+      Alert.alert(
+        'Course Published Successfully',
+        `${course.name} has been published and distributed to registered sailors.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error: any) {
+      logger.error('Failed to publish yacht-club course', error);
+      Alert.alert('Publish failed', error?.message || 'Unable to publish course right now.');
+    }
   };
 
   const TabButton = ({
@@ -229,7 +277,6 @@ export function YachtClubRaceBuilder() {
         {activeTab === 'management' && (
           <RaceManagementPanel
             course={currentCourse}
-            onCourseUpdate={handleCourseUpdate}
           />
         )}
 
@@ -244,7 +291,6 @@ export function YachtClubRaceBuilder() {
         {activeTab === 'series' && (
           <RaceSeriesManager
             courses={savedCourses}
-            onCourseUpdate={handleCourseUpdate}
           />
         )}
       </View>

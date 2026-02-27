@@ -15,7 +15,7 @@ import { supabase } from './supabase';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform, Share } from 'react-native';
 import { createLogger } from '@/lib/utils/logger';
-import { ClubRole } from '@/types/club';
+import { ClubRole, getRoleAliases, normalizeClubRole } from '@/types/club';
 
 export interface ClubMember {
   id: string;
@@ -161,7 +161,10 @@ class ClubMemberService {
     }
 
     if (filters?.role && filters.role.length > 0) {
-      query = query.in('role', filters.role);
+      const rawRoles = Array.from(
+        new Set(filters.role.flatMap((role) => getRoleAliases(role)))
+      );
+      query = query.in('role', rawRoles);
     }
 
     if (filters?.payment_status && filters.payment_status.length > 0) {
@@ -171,7 +174,7 @@ class ClubMemberService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching club members:', error);
+      logger.error('Error fetching club members:', error);
       throw error;
     }
 
@@ -191,7 +194,10 @@ class ClubMemberService {
       });
     }
 
-    return results;
+    return results.map((member) => ({
+      ...member,
+      role: normalizeClubRole(member.role),
+    }));
   }
 
   /**
@@ -208,7 +214,7 @@ class ClubMemberService {
       .single();
 
     if (error) {
-      console.error('Error fetching member:', error);
+      logger.error('Error fetching member:', error);
       return null;
     }
 
@@ -224,7 +230,7 @@ class ClubMemberService {
     });
 
     if (error) {
-      console.error('Error fetching member stats:', error);
+      logger.error('Error fetching member stats:', error);
       throw error;
     }
 
@@ -250,7 +256,7 @@ class ClubMemberService {
       .single();
 
     if (error) {
-      console.error('Error updating member:', error);
+      logger.error('Error updating member:', error);
       throw error;
     }
 
@@ -267,7 +273,7 @@ class ClubMemberService {
       .eq('id', memberId);
 
     if (error) {
-      console.error('Error deleting member:', error);
+      logger.error('Error deleting member:', error);
       throw error;
     }
   }
@@ -291,7 +297,7 @@ class ClubMemberService {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching pending requests:', error);
+      logger.error('Error fetching pending requests:', error);
       throw error;
     }
 
@@ -312,7 +318,7 @@ class ClubMemberService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching requests:', error);
+      logger.error('Error fetching requests:', error);
       throw error;
     }
 
@@ -334,7 +340,7 @@ class ClubMemberService {
     });
 
     if (error) {
-      console.error('Error approving request:', error);
+      logger.error('Error approving request:', error);
       throw error;
     }
 
@@ -359,7 +365,7 @@ class ClubMemberService {
     });
 
     if (error) {
-      console.error('Error rejecting request:', error);
+      logger.error('Error rejecting request:', error);
       throw error;
     }
 
@@ -390,7 +396,7 @@ class ClubMemberService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching payment history:', error);
+      logger.error('Error fetching payment history:', error);
       throw error;
     }
 
@@ -408,7 +414,7 @@ class ClubMemberService {
       .single();
 
     if (error) {
-      console.error('Error recording payment:', error);
+      logger.error('Error recording payment:', error);
       throw error;
     }
 
@@ -443,7 +449,7 @@ class ClubMemberService {
       .limit(50);
 
     if (error) {
-      console.error('Error fetching member activity:', error);
+      logger.error('Error fetching member activity:', error);
       throw error;
     }
 
@@ -461,7 +467,7 @@ class ClubMemberService {
       .single();
 
     if (error) {
-      console.error('Error logging activity:', error);
+      logger.error('Error logging activity:', error);
       throw error;
     }
 
@@ -544,7 +550,7 @@ class ClubMemberService {
         });
       }
     } catch (error) {
-      console.error('Error sharing exported members:', error);
+      logger.error('Error sharing exported members:', error);
       throw error;
     }
   }
@@ -555,14 +561,14 @@ class ClubMemberService {
    */
   async importMembersFromCSV(clubId: string, csvContent: string): Promise<{
     success: number;
-    errors: Array<{ row: number; error: string }>;
+    errors: { row: number; error: string }[];
   }> {
     const lines = csvContent.trim().split('\n');
     const headers = lines[0].split(',');
 
     const results = {
       success: 0,
-      errors: [] as Array<{ row: number; error: string }>,
+      errors: [] as { row: number; error: string }[],
     };
 
     for (let i = 1; i < lines.length; i++) {

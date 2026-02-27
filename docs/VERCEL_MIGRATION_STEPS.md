@@ -73,7 +73,7 @@ Go to **Settings** → **Environment Variables** and add all required variables 
 
 **AI Services**:
 - `ANTHROPIC_API_KEY`
-- `EXPO_PUBLIC_ANTHROPIC_API_KEY`
+- `ANTHROPIC_API_KEY`
 - `GOOGLE_AI_API_KEY`
 - `EXPO_PUBLIC_GEMINI_API_KEY`
 

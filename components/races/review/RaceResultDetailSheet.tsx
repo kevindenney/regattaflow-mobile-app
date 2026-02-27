@@ -11,7 +11,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, TextInput, Pressable, Platform, ActivityIndicator, Modal, ScrollView } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Polyline, Circle, Line } from 'react-native-svg';
 import { X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -21,6 +21,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { AdaptiveLearningService } from '@/services/AdaptiveLearningService';
 import type { RaceAnalysisData } from '@/hooks/useRaceAnalysisData';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RaceResultDetailSheet');
 
 // iOS System Colors
 const COLORS = {
@@ -189,7 +192,7 @@ export function RaceResultDetailSheet({
   isOpen,
   onClose,
   raceId,
-  raceName,
+  raceName: _raceName,
   raceDate,
   userId,
   analysisData,
@@ -276,7 +279,7 @@ export function RaceResultDetailSheet({
           .limit(1);
 
         if (fetchError) {
-          console.warn('[RaceResultDetailSheet] Fetch session error:', fetchError);
+          logger.warn('Fetch session error', fetchError);
         }
 
         if (existing && existing.length > 0) {
@@ -299,13 +302,13 @@ export function RaceResultDetailSheet({
           .single();
 
         if (createError) {
-          console.error('[RaceResultDetailSheet] Create session error:', createError);
+          logger.error('Create session error', createError);
           return;
         }
 
         setSessionId(created.id);
       } catch (err) {
-        console.error('[RaceResultDetailSheet] Session error:', err);
+        logger.error('Session error', err);
       } finally {
         setIsCreatingSession(false);
       }
@@ -434,7 +437,7 @@ export function RaceResultDetailSheet({
           narrative: narrative || undefined,
           keyMoments: keyMoments.length > 0 ? keyMoments : undefined,
         }).catch((err) => {
-          console.warn('[RaceResultDetailSheet] Learning extraction failed (non-critical):', err);
+          logger.warn('Learning extraction failed (non-critical)', err);
         });
       }
 
@@ -445,7 +448,7 @@ export function RaceResultDetailSheet({
       onSaveComplete();
       onClose();
     } catch (err) {
-      console.error('[RaceResultDetailSheet] Save error:', err);
+      logger.error('Save error', err);
       setValidationError('Failed to save. Please try again.');
     } finally {
       setIsSaving(false);

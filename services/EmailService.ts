@@ -157,7 +157,7 @@ export class EmailService {
 
       return { success: true };
     } catch (error: any) {
-      console.error(`Failed to send ${params.emailType} email:`, error);
+      logger.error(`Failed to send ${params.emailType} email:`, error);
 
       // Log failed email
       await supabase.from('email_logs').insert({

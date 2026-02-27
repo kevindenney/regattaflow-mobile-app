@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // ============================================
 // TYPES
@@ -16,6 +17,8 @@ export interface RacingAreaGeometry {
   type: 'Point' | 'LineString' | 'Polygon';
   coordinates: number[] | number[][] | number[][][];
 }
+
+const logger = createLogger('useVenueRacingAreas');
 
 export interface VenueRacingArea {
   id: string;
@@ -134,7 +137,7 @@ export function useVenueRacingAreas(venueId?: string): UseVenueRacingAreasResult
 
       setAreas(transformedAreas);
     } catch (err: any) {
-      console.error('[useVenueRacingAreas] Error loading areas:', err);
+      logger.error('Error loading areas', err);
       setError(err.message || 'Failed to load racing areas');
     } finally {
       setIsLoading(false);
@@ -328,4 +331,3 @@ export function getRaceTypeLabel(type: RaceRouteType): string {
   };
   return labels[type];
 }
-

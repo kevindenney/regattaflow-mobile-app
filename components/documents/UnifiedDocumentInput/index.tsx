@@ -12,7 +12,7 @@
  * - Support for incremental document addition
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,6 @@ import {
 } from 'react-native';
 import { ChevronRight, ChevronDown, Sparkles, CheckCircle } from 'lucide-react-native';
 import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from '@/components/races/AddRaceDialog/tufteFormStyles';
-import { IOS_COLORS } from '@/components/cards/constants';
 
 import { InputMethodTabs, type InputMethod } from './InputMethodTabs';
 import { URLInput, type InputContentType } from './URLInput';
@@ -32,14 +31,14 @@ import { DocumentTypeSelector, type DocumentType } from './DocumentTypeSelector'
 import { ExtractionProgress, type ExtractionStatus, type BatchProgress, type BatchUrlResult } from './ExtractionProgress';
 import { DuplicateWarning } from './DuplicateWarning';
 
-import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
+import { extractRaceDetailsFromText } from '@/lib/utils/raceExtraction';
 import {
   UnifiedDocumentService,
   type RaceSourceDocument as ServiceRaceSourceDocument,
 } from '@/services/UnifiedDocumentService';
 import type { ExtractedRaceData } from '@/components/races/ExtractionResults';
-import type { MultiRaceExtractedData, ExtractedData } from '@/components/races/AIValidationScreen';
+import type { MultiRaceExtractedData } from '@/components/races/AIValidationScreen';
 
 // =============================================================================
 // TYPES
@@ -156,6 +155,8 @@ async function hashContent(content: string): Promise<string> {
 
 // Document types that need COURSE extraction (marks, sequence, not race details)
 const COURSE_DOCUMENT_TYPES = ['course_diagram', 'courses'];
+// Document types that don't need any extraction - just save the document
+const NON_RACE_DOCUMENT_TYPES = ['appendix', 'other'];
 
 // Helper function to count extracted course fields
 function countCourseFields(data: any): number {
@@ -225,9 +226,6 @@ export function UnifiedDocumentInput({
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const [extractionComplete, setExtractionComplete] = useState(false);
   const [extractedFieldCount, setExtractedFieldCount] = useState<number | undefined>();
-
-  // Document source for provenance
-  const [currentSource, setCurrentSource] = useState<DocumentSource | null>(null);
 
   // Duplicate detection state
   const [duplicateDocument, setDuplicateDocument] = useState<ServiceRaceSourceDocument | null>(null);
@@ -472,7 +470,7 @@ export function UnifiedDocumentInput({
           });
         } else {
           // Native - use expo-file-system
-          const FileSystem = require('expo-file-system/legacy');
+          const FileSystem = await import('expo-file-system/legacy');
           base64Data = await FileSystem.readAsStringAsync(source.file.uri, {
             encoding: FileSystem.EncodingType.Base64,
           });
@@ -513,9 +511,6 @@ export function UnifiedDocumentInput({
       const fieldCount = countCourseFields(result.data);
       setExtractedFieldCount(fieldCount);
 
-      // Store the source for provenance
-      setCurrentSource(source);
-
       // Notify parent with course data
       if (onDocumentAdded) {
         onDocumentAdded({
@@ -539,9 +534,6 @@ export function UnifiedDocumentInput({
       setExtractionError(err instanceof Error ? err.message : 'Course extraction failed');
     }
   }, [regattaId, documentType, onDocumentAdded]);
-
-  // Document types that don't need any extraction - just save the document
-  const NON_RACE_DOCUMENT_TYPES = ['appendix', 'other'];
 
   // Main extraction handler
   const handleExtract = useCallback(async (skipDuplicateCheck = false) => {
@@ -585,7 +577,6 @@ export function UnifiedDocumentInput({
         return;
       }
 
-      setCurrentSource(source);
       setExtractionStatus('completed');
       setExtractionComplete(true);
       setExtractedFieldCount(0);
@@ -627,11 +618,9 @@ export function UnifiedDocumentInput({
       setExtractionStatus('extracting');
       setExtractionError(null);
       setBatchProgress(null);
-      setCurrentSource(source);
 
       try {
-        const agent = new ComprehensiveRaceExtractionAgent();
-        const result = await agent.extractRaceDetails(textContent);
+        const result = await extractRaceDetailsFromText(textContent);
 
         if (!result.success || !result.data) {
           throw new Error(result.error || 'Failed to extract race details');
@@ -724,8 +713,7 @@ export function UnifiedDocumentInput({
 
         // AI extraction
         try {
-          const agent = new ComprehensiveRaceExtractionAgent();
-          const result = await agent.extractRaceDetails(fetchResult.textContent);
+          const result = await extractRaceDetailsFromText(fetchResult.textContent);
 
           if (!result.success || !result.data) {
             results.push({ url, success: false, error: result.error || 'Extraction failed' });
@@ -763,7 +751,6 @@ export function UnifiedDocumentInput({
           // Call the callback for each successful extraction
           if (onExtractionComplete) {
             const source: DocumentSource = { type: 'url', url };
-            setCurrentSource(source);
             onExtractionComplete(extractedData, {
               ...raceData,
               sourceTracking: {
@@ -868,14 +855,10 @@ export function UnifiedDocumentInput({
         throw new Error('Not enough content to extract race details');
       }
 
-      // Store the source for provenance
-      setCurrentSource(source);
-
       // Now do AI extraction
       setExtractionStatus('extracting');
 
-      const agent = new ComprehensiveRaceExtractionAgent();
-      const result = await agent.extractRaceDetails(textContent);
+      const result = await extractRaceDetailsFromText(textContent);
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to extract race details');
@@ -962,7 +945,6 @@ export function UnifiedDocumentInput({
     setExtractionError(null);
     setExtractionComplete(false);
     setExtractedFieldCount(undefined);
-    setCurrentSource(null);
     setDuplicateDocument(null);
     setPendingSource(null);
     setBatchProgress(null);

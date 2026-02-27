@@ -40,6 +40,8 @@ import {
   IOS_ANIMATIONS,
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useVocabulary } from '@/hooks/useVocabulary';
 import type { LayoutRectangle } from 'react-native';
 
 export type RaceFilterSegment = 'upcoming' | 'past' | 'progress';
@@ -114,6 +116,8 @@ export function RacesFloatingHeader({
   hidden,
 }: RacesFloatingHeaderProps) {
   const [menuVisible, setMenuVisible] = useState(false);
+  const config = useInterestEventConfig();
+  const { vocab } = useVocabulary();
 
   // Animation values
   const menuFadeAnim = useSharedValue(0);
@@ -242,7 +246,7 @@ export function RacesFloatingHeader({
   return (
     <>
       <TabScreenToolbar
-        title="Race"
+        title={config.eventNoun}
         subtitle={subtitle}
         onSubtitlePress={hasUpcoming ? onUpcomingPress : undefined}
         topInset={topInset}
@@ -294,9 +298,9 @@ export function RacesFloatingHeader({
                   <MaterialCommunityIcons name="flag-checkered" size={24} color={IOS_COLORS.systemBlue} />
                 </View>
                 <View style={styles.menuOptionContent}>
-                  <Text style={styles.menuOptionTitle}>Add Race</Text>
+                  <Text style={styles.menuOptionTitle}>{config.addEventLabel}</Text>
                   <Text style={styles.menuOptionSubtitle}>
-                    Regatta, series race, or single event
+                    {config.eventSubtypes?.[0]?.description || `Add a new ${config.eventNoun.toLowerCase()}`}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
@@ -316,9 +320,9 @@ export function RacesFloatingHeader({
                     <MaterialCommunityIcons name="sail-boat" size={24} color={IOS_COLORS.systemGreen} />
                   </View>
                   <View style={styles.menuOptionContent}>
-                    <Text style={styles.menuOptionTitle}>Add Practice</Text>
+                    <Text style={styles.menuOptionTitle}>Add {vocab('Practice')}</Text>
                     <Text style={styles.menuOptionSubtitle}>
-                      Drills, boat handling, or training
+                      {vocab('Practice')} session or training
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
@@ -338,9 +342,9 @@ export function RacesFloatingHeader({
                       <MaterialCommunityIcons name="calendar-plus" size={24} color={IOS_COLORS.systemOrange} />
                     </View>
                     <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>New Season</Text>
+                      <Text style={styles.menuOptionTitle}>New {vocab('Period')}</Text>
                       <Text style={styles.menuOptionSubtitle}>
-                        Start a new racing season
+                        Start a new {vocab('Period').toLowerCase()}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
@@ -361,9 +365,9 @@ export function RacesFloatingHeader({
                       <MaterialCommunityIcons name="trophy-outline" size={24} color={IOS_COLORS.systemPurple} />
                     </View>
                     <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>Browse Race Catalog</Text>
+                      <Text style={styles.menuOptionTitle}>Browse {config.eventNoun} Catalog</Text>
                       <Text style={styles.menuOptionSubtitle}>
-                        Find and follow major regattas
+                        Find and follow {config.eventNoun.toLowerCase()}s
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />

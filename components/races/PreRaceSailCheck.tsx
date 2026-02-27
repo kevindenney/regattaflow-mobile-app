@@ -19,11 +19,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronRight,
-  X,
 } from 'lucide-react-native';
 import { SailInspectionService, SailAlert } from '@/services/SailInspectionService';
 import { SailInspectionWizard } from '@/components/sail-inspection/SailInspectionWizard';
 import { IOS_COLORS } from '@/components/cards/constants';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('PreRaceSailCheck');
 
 // =============================================================================
 // Types
@@ -55,7 +57,7 @@ export function PreRaceSailCheck({ boatId, raceId, onComplete }: PreRaceSailChec
       const data = await SailInspectionService.getPreRaceInspectionAlerts(boatId, raceId);
       setAlerts(data);
     } catch (error) {
-      console.error('Failed to load sail alerts:', error);
+      logger.error('Failed to load sail alerts', error);
     } finally {
       setLoading(false);
     }

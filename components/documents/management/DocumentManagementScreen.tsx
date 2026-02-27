@@ -29,24 +29,29 @@ import { IOS_COLORS } from '@/components/cards/constants';
 interface DocumentManagementScreenProps {
   regattaId: string;
   regattaName?: string;
+  initialDocumentId?: string;
   onBack?: () => void;
 }
 
 export function DocumentManagementScreen({
   regattaId,
   regattaName,
+  initialDocumentId,
   onBack,
 }: DocumentManagementScreenProps) {
   // State
   const [documents, setDocuments] = useState<RaceSourceDocument[]>([]);
   const [provenance, setProvenance] = useState<Map<string, FieldProvenance>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showProvenanceModal, setShowProvenanceModal] = useState(false);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | undefined>(initialDocumentId);
 
   // Load documents
   const loadDocuments = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [docs, prov] = await Promise.all([
         UnifiedDocumentService.getRaceDocuments(regattaId),
@@ -56,6 +61,8 @@ export function DocumentManagementScreen({
       setProvenance(prov);
     } catch (error) {
       console.error('[DocumentManagementScreen] Failed to load documents:', error);
+      const message = error instanceof Error ? error.message : 'Failed to load documents';
+      setLoadError(message);
     } finally {
       setIsLoading(false);
     }
@@ -64,6 +71,10 @@ export function DocumentManagementScreen({
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
+
+  useEffect(() => {
+    setSelectedDocumentId(initialDocumentId);
+  }, [initialDocumentId]);
 
   // Handlers
   const handleAddDocument = useCallback(() => {
@@ -100,8 +111,16 @@ export function DocumentManagementScreen({
 
   const handleViewSource = useCallback((document: RaceSourceDocument) => {
     if (document.sourceUrl) {
-      Linking.openURL(document.sourceUrl);
+      Linking.openURL(document.sourceUrl).catch((error) => {
+        console.error('[DocumentManagementScreen] Failed to open source URL:', error);
+        Alert.alert(
+          'Unable to open link',
+          'The source URL could not be opened. Please verify the document source and try again.'
+        );
+      });
+      return;
     }
+    Alert.alert('No source URL', 'This document does not have a source link.');
   }, []);
 
   const handleToggleShare = useCallback(async (document: RaceSourceDocument) => {
@@ -110,6 +129,10 @@ export function DocumentManagementScreen({
       loadDocuments();
     } catch (error) {
       console.error('[DocumentManagementScreen] Failed to toggle share:', error);
+      Alert.alert(
+        'Unable to update sharing',
+        'The document sharing status could not be updated. Please try again.'
+      );
     }
   }, [loadDocuments]);
 
@@ -161,11 +184,24 @@ export function DocumentManagementScreen({
         </View>
       </View>
 
+      {loadError ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText} numberOfLines={2}>
+            {loadError}
+          </Text>
+          <Pressable style={styles.errorRetryButton} onPress={loadDocuments}>
+            <Text style={styles.errorRetryText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {/* Document List */}
       <DocumentList
         documents={documents}
         isLoading={isLoading}
         onRefresh={loadDocuments}
+        selectedDocumentId={selectedDocumentId}
+        onDocumentPress={(document) => setSelectedDocumentId(document.id)}
         onDocumentDelete={handleDeleteDocument}
         onViewSource={handleViewSource}
         onToggleShare={handleToggleShare}
@@ -327,6 +363,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: '#FEF2F2',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#FECACA',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#991B1B',
+    fontWeight: '500',
+  },
+  errorRetryButton: {
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  errorRetryText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
   stat: {
     flex: 1,

@@ -21,6 +21,9 @@ export { OnboardingSummary } from './OnboardingSummary';
 // Sailor onboarding components
 export { SailorSubscriptionChoice } from './SailorSubscriptionChoice';
 
+// Interest selection (first-time onboarding)
+export { InterestSelection, type InterestSelectionProps } from './InterestSelection';
+
 // Feature Tour components
 export { ContextualHint } from './ContextualHint';
 export { TourStep, TourStepIndicator } from './TourStep';

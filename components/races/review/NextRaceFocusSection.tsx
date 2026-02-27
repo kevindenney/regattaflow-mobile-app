@@ -22,6 +22,9 @@ import {
   useEvaluateFocusIntent,
 } from '@/hooks/useFocusIntent';
 import type { FocusSuggestion, FocusIntent } from '@/types/focusIntent';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('NextRaceFocusSection');
 
 // iOS System Colors - matching AfterRaceContent
 const IOS_COLORS = {
@@ -118,14 +121,14 @@ function SuggestionItem({
 
 export function NextRaceFocusSection({
   raceId,
-  userId,
+  userId: _userId,
   isExpanded = true,
 }: NextRaceFocusSectionProps) {
   // Hooks
   const { activeIntent, isLoading: isLoadingActive } = useActiveFocusIntent();
   const { intent: intentFromThisRace, isLoading: isLoadingFromRace } = useFocusIntentFromRace(raceId);
   const { suggestions, isLoading: isLoadingSuggestions } = useFocusSuggestions(raceId);
-  const { progress, isLoading: isLoadingProgress } = useFocusProgress();
+  const { progress, isLoading: _isLoadingProgress } = useFocusProgress();
   const { history, isLoading: isLoadingHistory } = useFocusHistory(10);
   const { setFocus, isPending: isSettingFocus } = useSetFocusIntent();
   const { evaluate, isPending: isEvaluating } = useEvaluateFocusIntent();
@@ -154,7 +157,7 @@ export function NextRaceFocusSection({
       await evaluate({ intentId: activeIntent.id, rating });
       setHasEvaluated(true);
     } catch (err) {
-      console.error('[NextRaceFocusSection] Failed to evaluate:', err);
+      logger.error('Failed to evaluate focus', err);
       setEvaluationRating(null);
     }
   }, [activeIntent, evaluate]);
@@ -173,7 +176,7 @@ export function NextRaceFocusSection({
       });
       setHasSetFocus(true);
     } catch (err) {
-      console.error('[NextRaceFocusSection] Failed to set focus:', err);
+      logger.error('Failed to set focus', err);
       setSelectedSuggestionIndex(null);
     }
   }, [suggestions, raceId, setFocus]);
@@ -191,7 +194,7 @@ export function NextRaceFocusSection({
       setHasSetFocus(true);
       setShowCustomInput(false);
     } catch (err) {
-      console.error('[NextRaceFocusSection] Failed to set custom focus:', err);
+      logger.error('Failed to set custom focus', err);
     }
   }, [customFocusText, raceId, setFocus]);
 
@@ -215,7 +218,7 @@ export function NextRaceFocusSection({
       setHasSetFocus(true);
       setIsEditing(false);
     } catch (err) {
-      console.error('[NextRaceFocusSection] Failed to update focus:', err);
+      logger.error('Failed to update focus', err);
     }
   }, [editingFocusText, raceId, setFocus]);
 
@@ -491,7 +494,7 @@ export function NextRaceFocusSection({
 
                 {/* History list */}
                 <Text style={historyStyles.sectionTitle}>Past Focus Areas</Text>
-                {history.map((intent: FocusIntent, index: number) => (
+                {history.map((intent: FocusIntent) => (
                   <View key={intent.id} style={historyStyles.historyItem}>
                     <View style={historyStyles.historyHeader}>
                       <Text style={historyStyles.historyFocus} numberOfLines={2}>

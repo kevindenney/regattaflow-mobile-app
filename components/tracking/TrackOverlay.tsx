@@ -10,12 +10,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, StyleSheet, Platform, Text, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Track, TrackPoint } from '@/services/tracking/types';
-
-// MapLibre GL for web
-let maplibregl: any = null;
-if (Platform.OS === 'web') {
-  maplibregl = require('maplibre-gl');
-}
+import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 // ============================================================================
 // Types
@@ -42,12 +38,6 @@ export interface TrackOverlayProps {
   trailLength?: number;
 }
 
-interface TrackStyle {
-  color: string;
-  width: number;
-  opacity: number;
-}
-
 // ============================================================================
 // Constants
 // ============================================================================
@@ -71,6 +61,8 @@ const SPEED_GRADIENT = [
   { speed: 10, color: '#7C3AED' },  // Purple - very fast
 ];
 
+const logger = createLogger('TrackOverlay');
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -84,14 +76,41 @@ export function TrackOverlay({
   selectedTrackId,
   onTrackSelect,
   showBoatMarkers = true,
-  trailLength = 50,
+  trailLength: _trailLength = 50,
 }: TrackOverlayProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackTime, setPlaybackTime] = useState(0);
-  const [currentPositions, setCurrentPositions] = useState<Map<string, TrackPoint>>(new Map());
+  const maplibreRef = useRef<any>(null);
+  const maplibreLoadedRef = useRef(false);
   const animationRef = useRef<number | null>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const sourcesAdded = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    const loadMapLibre = async () => {
+      try {
+        ensureMapLibreCss('maplibre-gl-css-track-overlay');
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibreRef.current = (maplibreModule as any).default || maplibreModule;
+        } catch (_moduleError) {
+          await ensureMapLibreScript('maplibre-gl-script-track-overlay');
+          maplibreRef.current = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        maplibreLoadedRef.current = true;
+      } catch (error) {
+        logger.warn('Unable to load maplibre-gl for TrackOverlay', error);
+        maplibreLoadedRef.current = false;
+      }
+    };
+
+    void loadMapLibre();
+    return () => {
+      maplibreLoadedRef.current = false;
+    };
+  }, []);
 
   // Calculate time bounds across all tracks
   const timeBounds = React.useMemo(() => {
@@ -106,34 +125,55 @@ export function TrackOverlay({
     return { minTime, maxTime, duration: maxTime - minTime };
   }, [tracks]);
 
-  // Add track layers to map
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !mapRef?.current || tracks.length === 0) return;
+  const getSpeedColor = useCallback((speed: number): string => {
+    for (let i = SPEED_GRADIENT.length - 1; i >= 0; i--) {
+      if (speed >= SPEED_GRADIENT[i].speed) {
+        return SPEED_GRADIENT[i].color;
+      }
+    }
+    return SPEED_GRADIENT[0].color;
+  }, []);
 
-    const map = mapRef.current;
-    if (!map.isStyleLoaded()) {
-      map.on('load', () => addTrackLayers(map));
-    } else {
-      addTrackLayers(map);
+  const createTrackGeoJSON = useCallback((track: Track, withSpeed: boolean): GeoJSON.FeatureCollection => {
+    if (withSpeed) {
+      // Create line segments with speed-based colors
+      const features: GeoJSON.Feature[] = [];
+
+      for (let i = 1; i < track.points.length; i++) {
+        const p1 = track.points[i - 1];
+        const p2 = track.points[i];
+        const speed = p2.speed ?? 0;
+        const color = getSpeedColor(speed);
+
+        features.push({
+          type: 'Feature',
+          properties: { color, speed },
+          geometry: {
+            type: 'LineString',
+            coordinates: [[p1.lng, p1.lat], [p2.lng, p2.lat]],
+          },
+        });
+      }
+
+      return { type: 'FeatureCollection', features };
     }
 
-    return () => {
-      // Cleanup
-      tracks.forEach((track, index) => {
-        const sourceId = `track-${track.id}`;
-        if (map.getSource(sourceId)) {
-          if (map.getLayer(`${sourceId}-line`)) {
-            map.removeLayer(`${sourceId}-line`);
-          }
-          map.removeSource(sourceId);
-        }
-      });
-      sourcesAdded.current.clear();
+    // Single line for solid color
+    return {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: track.points.map(p => [p.lng, p.lat]),
+        },
+      }],
     };
-  }, [tracks, mapRef, showSpeedGradient]);
+  }, [getSpeedColor]);
 
   // Add track layers
-  const addTrackLayers = useCallback((map: any) => {
+  function addTrackLayers(map: any) {
     tracks.forEach((track, index) => {
       const sourceId = `track-${track.id}`;
       
@@ -214,60 +254,13 @@ export function TrackOverlay({
 
     // Fit map to tracks
     fitMapToTracks(map);
-  }, [tracks, showSpeedGradient, selectedTrackId, onTrackSelect, showBoatMarkers]);
-
-  // Create GeoJSON from track
-  const createTrackGeoJSON = (track: Track, withSpeed: boolean): GeoJSON.FeatureCollection => {
-    if (withSpeed) {
-      // Create line segments with speed-based colors
-      const features: GeoJSON.Feature[] = [];
-      
-      for (let i = 1; i < track.points.length; i++) {
-        const p1 = track.points[i - 1];
-        const p2 = track.points[i];
-        const speed = p2.speed ?? 0;
-        const color = getSpeedColor(speed);
-
-        features.push({
-          type: 'Feature',
-          properties: { color, speed },
-          geometry: {
-            type: 'LineString',
-            coordinates: [[p1.lng, p1.lat], [p2.lng, p2.lat]],
-          },
-        });
-      }
-
-      return { type: 'FeatureCollection', features };
-    }
-
-    // Single line for solid color
-    return {
-      type: 'FeatureCollection',
-      features: [{
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates: track.points.map(p => [p.lng, p.lat]),
-        },
-      }],
-    };
-  };
-
-  // Get color for speed value
-  const getSpeedColor = (speed: number): string => {
-    for (let i = SPEED_GRADIENT.length - 1; i >= 0; i--) {
-      if (speed >= SPEED_GRADIENT[i].speed) {
-        return SPEED_GRADIENT[i].color;
-      }
-    }
-    return SPEED_GRADIENT[0].color;
-  };
+  }
 
   // Add boat markers
   const addBoatMarkers = useCallback((map: any) => {
-    if (!maplibregl) return;
+    if (!maplibreLoadedRef.current) return;
+    const MarkerConstructor = maplibreRef.current?.Marker;
+    if (!MarkerConstructor) return;
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.remove());
@@ -301,7 +294,7 @@ export function TrackOverlay({
         </div>
       `;
 
-      const marker = new maplibregl.Marker({ element: el })
+      const marker = new MarkerConstructor({ element: el })
         .setLngLat([lastPoint.lng, lastPoint.lat])
         .addTo(map);
 
@@ -310,10 +303,12 @@ export function TrackOverlay({
   }, [tracks]);
 
   // Fit map bounds to all tracks
-  const fitMapToTracks = (map: any) => {
-    if (!maplibregl || tracks.length === 0) return;
+  const fitMapToTracks = useCallback((map: any) => {
+    if (!maplibreLoadedRef.current || tracks.length === 0) return;
+    const LngLatBounds = maplibreRef.current?.LngLatBounds;
+    if (!LngLatBounds) return;
 
-    const bounds = new maplibregl.LngLatBounds();
+    const bounds = new LngLatBounds();
 
     tracks.forEach(track => {
       track.points.forEach(p => {
@@ -322,7 +317,42 @@ export function TrackOverlay({
     });
 
     map.fitBounds(bounds, { padding: 50 });
-  };
+  }, [tracks]);
+
+  // Add track layers to map
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !mapRef?.current || tracks.length === 0) return;
+
+    const map = mapRef.current;
+    const trackedSources = sourcesAdded.current;
+    const trackedMarkers = markersRef.current;
+    const onLoad = () => addTrackLayers(map);
+    if (!map.isStyleLoaded()) {
+      map.once('load', onLoad);
+    } else {
+      addTrackLayers(map);
+    }
+
+    return () => {
+      if (typeof map.off === 'function') {
+        map.off('load', onLoad);
+      }
+      tracks.forEach((track) => {
+        const sourceId = `track-${track.id}`;
+        if (map.getSource(sourceId)) {
+          if (map.getLayer(`${sourceId}-line`)) {
+            map.removeLayer(`${sourceId}-line`);
+          }
+          map.removeSource(sourceId);
+        }
+      });
+      trackedSources.clear();
+      trackedMarkers.forEach((marker) => marker.remove());
+      trackedMarkers.clear();
+    };
+    // addTrackLayers is intentionally recreated from current props to refresh layers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapRef, tracks]);
 
   // Animation playback
   useEffect(() => {
@@ -388,11 +418,12 @@ export function TrackOverlay({
       }
     });
 
-    setCurrentPositions(positions);
-  }, [playbackTime, tracks, timeBounds.minTime, animated, mapRef]);
+    // getPointAtTime is intentionally used from current render state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animated, mapRef, playbackTime, timeBounds.minTime, tracks]);
 
   // Get track point at specific time
-  const getPointAtTime = (track: Track, time: number): TrackPoint | null => {
+  function getPointAtTime(track: Track, time: number): TrackPoint | null {
     if (time < track.startTime || time > track.endTime) return null;
 
     // Binary search for closest point
@@ -428,15 +459,15 @@ export function TrackOverlay({
         ? interpolateAngle(p1.heading, p2.heading, t)
         : undefined,
     };
-  };
+  }
 
   // Interpolate between angles (handle wrap-around)
-  const interpolateAngle = (a1: number, a2: number, t: number): number => {
+  function interpolateAngle(a1: number, a2: number, t: number): number {
     let diff = a2 - a1;
     if (diff > 180) diff -= 360;
     if (diff < -180) diff += 360;
     return (a1 + diff * t + 360) % 360;
-  };
+  }
 
   // Playback controls (only shown when animated)
   if (!animated) return null;
@@ -548,4 +579,3 @@ const styles = StyleSheet.create({
 });
 
 export default TrackOverlay;
-

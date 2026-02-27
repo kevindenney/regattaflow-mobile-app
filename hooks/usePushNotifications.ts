@@ -72,35 +72,60 @@ export function usePushNotifications(
   const [isLoading, setIsLoading] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
   const hasRegisteredRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  const configureRunIdRef = useRef(0);
+
+  useEffect(() => {
+    isAuthenticatedRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      cleanupRef.current?.();
+    };
+  }, []);
 
   // Register for push notifications
   const register = useCallback(async (): Promise<PushNotificationState> => {
-    setIsLoading(true);
+    if (isMountedRef.current) {
+      setIsLoading(true);
+    }
     try {
       const result = await PushNotificationService.register();
-      setState(result);
+      if (isMountedRef.current) {
+        setState(result);
+      }
       hasRegisteredRef.current = result.isEnabled;
       return result;
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   // Unregister from push notifications
   const unregister = useCallback(async (): Promise<void> => {
     await PushNotificationService.unregister();
-    setState({
-      isEnabled: false,
-      token: null,
-      error: null,
-    });
+    if (isMountedRef.current) {
+      setState({
+        isEnabled: false,
+        token: null,
+        error: null,
+      });
+    }
     hasRegisteredRef.current = false;
   }, []);
 
   // Configure notification handlers
   useEffect(() => {
+    const runId = ++configureRunIdRef.current;
+    let localCleanup: (() => void) | null = null;
+
     const setup = async () => {
-      cleanupRef.current = await PushNotificationService.configureHandlers({
+      const configuredCleanup = await PushNotificationService.configureHandlers({
         onNotificationReceived: (notification) => {
           // Call user callback
           onNotificationReceived?.(notification);
@@ -111,26 +136,38 @@ export function usePushNotifications(
           onNotificationTapped?.(data);
         },
       });
+
+      if (!isMountedRef.current || runId !== configureRunIdRef.current) {
+        configuredCleanup();
+        return;
+      }
+
+      localCleanup = configuredCleanup;
+      cleanupRef.current = configuredCleanup;
     };
 
-    setup();
+    void setup();
 
     return () => {
-      cleanupRef.current?.();
+      configureRunIdRef.current += 1;
+      localCleanup?.();
+      if (cleanupRef.current === localCleanup) {
+        cleanupRef.current = null;
+      }
     };
   }, [onNotificationReceived, onNotificationTapped]);
 
   // Auto-register when user is authenticated
   useEffect(() => {
     if (autoRegister && isAuthenticated && user && !hasRegisteredRef.current) {
-      register();
+      void register();
     }
   }, [autoRegister, isAuthenticated, user, register]);
 
   // Unregister when user logs out
   useEffect(() => {
     if (!isAuthenticated && hasRegisteredRef.current) {
-      unregister();
+      void unregister();
     }
   }, [isAuthenticated, unregister]);
 
@@ -139,13 +176,18 @@ export function usePushNotifications(
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (
         nextAppState === 'active' &&
-        isAuthenticated &&
+        isAuthenticatedRef.current &&
         hasRegisteredRef.current
       ) {
         // Silently re-register to refresh token
-        PushNotificationService.register().then((result) => {
-          setState(result);
-        });
+        void PushNotificationService.register()
+          .then((result) => {
+            if (!isMountedRef.current || !isAuthenticatedRef.current) return;
+            setState(result);
+          })
+          .catch(() => {
+            // Silent refresh failure should not disrupt UX.
+          });
       }
     };
 

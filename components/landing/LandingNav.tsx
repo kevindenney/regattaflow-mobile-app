@@ -79,8 +79,8 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
   // Product sections (user types)
   const productSections: NavItem[] = [
     { label: 'For Sailors', route: '/', icon: 'boat-outline' },
-    { label: 'For Coaches', route: '/coaches', icon: 'people-outline', comingSoon: true },
-    { label: 'For Clubs', route: '/clubs', icon: 'business-outline', comingSoon: true },
+    { label: 'For Coaches', route: '/coaches', icon: 'people-outline' },
+    { label: 'For Clubs', route: '/club-solutions', icon: 'business-outline' },
   ];
 
   // Content sections
@@ -104,7 +104,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
   };
 
   // Get app tabs for authenticated users based on user type
-  const getAppTabs = (): Array<{ label: string; route: string; icon: string }> => {
+  const _getAppTabs = (): { label: string; route: string; icon: string }[] => {
     if (!user || !userProfile) return [];
     
     const userType = userProfile.user_type;
@@ -216,7 +216,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
         )}
         {isComingSoon && (
           <View style={styles.comingSoonBadge}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
+            <Text style={styles.comingSoonText}>Planned</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -298,7 +298,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
                     router.push(destination as any);
                   }}
                 >
-                  <Text style={styles.utilityLinkText}>Sign In</Text>
+                  <Text style={styles.utilityLinkText}>Dashboard</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -351,7 +351,10 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
               ) : (
                 <TouchableOpacity
                   style={styles.mobileUserButton}
-                  onPress={() => handleNavClick('/(tabs)/races')}
+                  onPress={() => {
+                    const destination = getDashboardRoute(userProfile?.user_type ?? null);
+                    router.push(destination as any);
+                  }}
                 >
                   <Ionicons name="person-circle-outline" size={24} color="#3E92CC" />
                 </TouchableOpacity>
@@ -444,7 +447,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
                       }}
                     >
                       <Ionicons name="log-in-outline" size={20} color="#374151" />
-                      <Text style={styles.mobileUtilityLinkText}>Sign In</Text>
+                      <Text style={styles.mobileUtilityLinkText}>Dashboard</Text>
                     </TouchableOpacity>
                   )}
                 </View>

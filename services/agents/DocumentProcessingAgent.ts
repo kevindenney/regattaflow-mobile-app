@@ -6,13 +6,13 @@
 
 import { BaseAgentService, AgentTool } from './BaseAgentService';
 import { z } from 'zod';
-import Anthropic from '@anthropic-ai/sdk';
 import RaceCourseExtractor from '@/services/ai/RaceCourseExtractor';
-import type { RaceCourseExtraction } from '@/lib/types/ai-knowledge';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('DocumentProcessingAgent');
 
 export class DocumentProcessingAgent extends BaseAgentService {
-    // private anthropic: Anthropic; // Disabled for web compatibility
   private courseExtractor: RaceCourseExtractor;
 
   constructor() {
@@ -40,19 +40,6 @@ Important considerations:
 - Safety information is critical - always extract and highlight it`,
     });
 
-    // NOTE: Anthropic SDK disabled for web compatibility
-    // Requires backend API endpoint for production
-    /*
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error('Anthropic API key not found. Set EXPO_PUBLIC_ANTHROPIC_API_KEY environment variable.');
-    }
-
-    this.anthropic = new Anthropic({
-      apiKey,
-      dangerouslyAllowBrowser: true
-    });
-    */
     this.courseExtractor = new RaceCourseExtractor();
 
     // Register custom tools
@@ -254,6 +241,14 @@ Returns strategic insights for race planning.`,
       execute: async (input) => {
 
         try {
+          const client = this.client;
+          if (!client) {
+            return {
+              success: false,
+              error: 'AI client unavailable for strategy analysis.',
+            };
+          }
+
           const prompt = `Analyze this race course and provide strategic recommendations for sailors:
 
 COURSE LAYOUT: ${input.courseData.courseLayout.type}
@@ -277,7 +272,7 @@ Provide tactical analysis in JSON format:
 }`;
 
           // Using Claude 3.5 Haiku for cost optimization
-          const message = await this.anthropic.messages.create({
+          const message = await client.messages.create({
             model: 'claude-3-haiku-20240307',
             max_tokens: 1024,
             temperature: 0.3,
@@ -375,7 +370,7 @@ Returns confirmation with database IDs.`,
             .single();
 
           if (docError) {
-            console.error('Failed to save document:', docError);
+            logger.error('Failed to save document', docError);
             return {
               success: false,
               error: `Failed to save document: ${docError.message}`,
@@ -413,7 +408,7 @@ Returns confirmation with database IDs.`,
             .single();
 
           if (analysisError) {
-            console.error('Failed to save AI analysis:', analysisError);
+            logger.error('Failed to save AI analysis', analysisError);
             return {
               success: false,
               error: `Failed to save AI analysis: ${analysisError.message}`,
@@ -553,7 +548,7 @@ Returns confirmation with database IDs.`,
       .single();
 
     if (error) {
-      console.error('Failed to retrieve extraction:', error);
+      logger.error('Failed to retrieve extraction', error);
       return { data: null, error };
     }
 
@@ -589,7 +584,7 @@ Returns confirmation with database IDs.`,
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('Failed to retrieve extractions:', error);
+      logger.error('Failed to retrieve extractions', error);
       return { data: null, error, count: 0 };
     }
 
@@ -607,7 +602,7 @@ Returns confirmation with database IDs.`,
       .eq('analysis_type', 'document_extraction');
 
     if (error) {
-      console.error('Failed to delete extraction:', error);
+      logger.error('Failed to delete extraction', error);
       return { success: false, error };
     }
 

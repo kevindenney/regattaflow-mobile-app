@@ -10,7 +10,7 @@
  * - Post-race: see everyone's analysis in one place
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
@@ -83,16 +83,40 @@ export function useRaceParticipants(
   const [participants, setParticipants] = useState<RaceParticipant[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const contentRunIdRef = useRef(0);
+  const activeContextRef = useRef<string>('');
 
   const userId = user?.id;
+  const contextKey = `${raceName || ''}|${raceDate || ''}|${venue || ''}|${userId || ''}|${enabled}|${isGuest}`;
+
+  useEffect(() => {
+    activeContextRef.current = contextKey;
+  }, [contextKey]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+      contentRunIdRef.current += 1;
+    };
+  }, []);
 
   // Fetch participants using fuzzy matching
   const fetchParticipants = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
+
     if (!enabled || !raceName || !raceDate || isGuest) {
+      if (!canCommit()) return;
       setParticipants([]);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -122,19 +146,29 @@ export function useRaceParticipants(
         contentVisibility: p.content_visibility,
       }));
 
+      if (!canCommit()) return;
       setParticipants(foundParticipants);
       logger.info('[useRaceParticipants] Found participants:', foundParticipants.length);
     } catch (err: any) {
       logger.error('[useRaceParticipants] Error:', err);
+      if (!canCommit()) return;
       setError(err?.message || 'Failed to find participants');
       setParticipants([]);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [enabled, raceName, raceDate, venue, userId, isGuest]);
 
   // Load full content for a specific participant
   const loadParticipantContent = useCallback(async (participantRegattaId: string) => {
+    const runId = ++contentRunIdRef.current;
+    const targetContext = activeContextRef.current;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === contentRunIdRef.current &&
+      activeContextRef.current === targetContext;
+
     try {
       const { data, error: fetchError } = await supabase
         .from('regattas')
@@ -147,6 +181,7 @@ export function useRaceParticipants(
       }
 
       // Update participant with content
+      if (!canCommit()) return;
       setParticipants((prev) =>
         prev.map((p) =>
           p.regattaId === participantRegattaId

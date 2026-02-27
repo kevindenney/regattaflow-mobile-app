@@ -10,12 +10,32 @@
  * - Ranked by podium finishes + content sharing
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useClassExperts');
+
+function normalizeClassExpertsError(error: unknown): string {
+  const code = (error as any)?.code;
+  const message = typeof (error as any)?.message === 'string' ? (error as any).message : '';
+  const normalized = message.toLowerCase();
+
+  if (code === '42883' || normalized.includes('get_class_experts')) {
+    return '[CLASS_EXPERTS_RPC_UNAVAILABLE] Class experts are temporarily unavailable.';
+  }
+  if (code === '42501' || normalized.includes('row-level security') || normalized.includes('permission denied')) {
+    return '[CLASS_EXPERTS_RLS] Class experts are unavailable due to access policy restrictions.';
+  }
+  if (normalized.includes('network') || normalized.includes('fetch') || normalized.includes('timed out')) {
+    return '[CLASS_EXPERTS_NETWORK] Unable to load class experts due to a network issue.';
+  }
+  if (message.trim()) {
+    return message.trim();
+  }
+  return 'Failed to load class experts.';
+}
 
 /**
  * Expert sailor profile with scoring
@@ -89,10 +109,88 @@ export function useClassExperts(
 
   const userId = user?.id;
 
+  const fetchFallbackExperts = useCallback(async (): Promise<ClassExpert[]> => {
+    if (!classId) return [];
+
+    const { data: boats, error: boatsError } = await supabase
+      .from('sailor_boats')
+      .select('sailor_id')
+      .eq('class_id', classId)
+      .limit(limit * 8);
+
+    if (boatsError) {
+      throw boatsError;
+    }
+
+    const candidateIds = Array.from(
+      new Set(
+        (boats || [])
+          .map((row: any) => row?.sailor_id)
+          .filter((id: any) => Boolean(id) && id !== userId)
+      )
+    ) as string[];
+
+    if (candidateIds.length === 0) return [];
+
+    const [{ data: profiles, error: profilesError }, { data: follows }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, full_name, avatar_emoji, avatar_color')
+        .in('id', candidateIds),
+      userId
+        ? supabase.from('user_follows').select('following_id').eq('follower_id', userId)
+        : Promise.resolve({ data: [] as any[], error: null as any }),
+    ]);
+
+    if (profilesError) {
+      throw profilesError;
+    }
+
+    const followingIds = new Set((follows || []).map((f: any) => f.following_id));
+
+    const { data: recentRaces } = await supabase
+      .from('regattas')
+      .select('created_by, start_date')
+      .in('created_by', candidateIds)
+      .gte('start_date', new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(400);
+
+    const raceCountByUser = new Map<string, number>();
+    (recentRaces || []).forEach((race: any) => {
+      const owner = race?.created_by;
+      if (!owner) return;
+      raceCountByUser.set(owner, (raceCountByUser.get(owner) || 0) + 1);
+    });
+
+    const fallbackExperts: ClassExpert[] = (profiles || [])
+      .map((profile: any) => {
+        const publicRaceCount = raceCountByUser.get(profile.id) || 0;
+        const recentActivity = publicRaceCount > 0;
+        const expertScore = Math.min(100, 30 + publicRaceCount * 8);
+        return {
+          userId: profile.id,
+          userName: profile.full_name || 'Sailor',
+          avatarEmoji: profile.avatar_emoji || undefined,
+          avatarColor: profile.avatar_color || undefined,
+          expertScore,
+          podiumCount: 0,
+          publicRaceCount,
+          recentActivity,
+          isFollowing: followingIds.has(profile.id),
+        } satisfies ClassExpert;
+      })
+      .sort((a, b) => b.expertScore - a.expertScore)
+      .slice(0, limit);
+
+    return fallbackExperts;
+  }, [classId, limit, userId]);
+
   // Fetch class experts using database function
   const fetchExperts = useCallback(async () => {
     if (!enabled || !classId || isGuest) {
       setExperts([]);
+      setIsLoading(false);
+      setError(null);
       return;
     }
 
@@ -110,7 +208,23 @@ export function useClassExperts(
       });
 
       if (rpcError) {
-        throw rpcError;
+        const rpcCode = rpcError?.code;
+        const rpcMessage = (rpcError?.message || '').toLowerCase();
+        const rpcUnavailable =
+          rpcCode === '42883' || rpcMessage.includes('get_class_experts');
+        if (!rpcUnavailable) {
+          throw rpcError;
+        }
+
+        logger.warn('[useClassExperts] RPC unavailable, using fallback expert query');
+        const fallbackExperts = await fetchFallbackExperts();
+        setExperts(fallbackExperts);
+        setError(
+          fallbackExperts.length > 0
+            ? null
+            : '[CLASS_EXPERTS_RPC_UNAVAILABLE] Class experts are temporarily unavailable.'
+        );
+        return;
       }
 
       // Get following status for current user
@@ -139,15 +253,16 @@ export function useClassExperts(
       }));
 
       setExperts(foundExperts);
+      setError(null);
       logger.info('[useClassExperts] Found experts:', foundExperts.length);
     } catch (err: any) {
       logger.error('[useClassExperts] Error:', err);
-      setError(err?.message || 'Failed to find experts');
+      setError(normalizeClassExpertsError(err));
       setExperts([]);
     } finally {
       setIsLoading(false);
     }
-  }, [enabled, classId, userId, limit, isGuest]);
+  }, [enabled, classId, userId, limit, isGuest, fetchFallbackExperts]);
 
   // Load race previews for an expert
   const loadExpertRaces = useCallback(async (expertUserId: string): Promise<ExpertRacePreview[]> => {
@@ -165,6 +280,7 @@ export function useClassExperts(
 
       // If sharing is explicitly disabled, return empty
       if (sailorProfile?.allow_follower_sharing === false) {
+        setError(null);
         return [];
       }
 
@@ -191,10 +307,12 @@ export function useClassExperts(
       setExperts((prev) =>
         prev.map((e) => (e.userId === expertUserId ? { ...e, recentRaces: previews } : e))
       );
+      setError(null);
 
       return previews;
     } catch (err: any) {
       logger.error('[useClassExperts] Error loading races:', err);
+      setError(normalizeClassExpertsError(err));
       return [];
     }
   }, []);
@@ -226,6 +344,7 @@ export function useClassExperts(
           e.userId === expertUserId ? { ...e, isFollowing: !e.isFollowing } : e
         )
       );
+      setError(null);
 
       logger.info('[useClassExperts] Toggled follow:', {
         expertUserId,
@@ -233,6 +352,7 @@ export function useClassExperts(
       });
     } catch (err: any) {
       logger.error('[useClassExperts] Error toggling follow:', err);
+      setError(normalizeClassExpertsError(err));
     }
   }, [userId, experts]);
 
@@ -263,12 +383,30 @@ export function useUserBoatClass(): {
   const [classId, setClassId] = useState<string | null>(null);
   const [className, setClassName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
 
   useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    const runId = ++fetchRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
+
     if (!user?.id) {
+      if (!canCommit()) return;
+      setClassId(null);
+      setClassName(null);
       setIsLoading(false);
       return;
     }
+
+    if (!canCommit()) return;
+    setIsLoading(true);
 
     const fetchBoatClass = async () => {
       try {
@@ -281,6 +419,7 @@ export function useUserBoatClass(): {
           .maybeSingle();
 
         if (boat) {
+          if (!canCommit()) return;
           setClassId(boat.class_id);
           setClassName((boat.boat_classes as any)?.name || null);
         } else {
@@ -293,18 +432,24 @@ export function useUserBoatClass(): {
             .maybeSingle();
 
           if (anyBoat) {
+            if (!canCommit()) return;
             setClassId(anyBoat.class_id);
             setClassName((anyBoat.boat_classes as any)?.name || null);
+          } else {
+            if (!canCommit()) return;
+            setClassId(null);
+            setClassName(null);
           }
         }
       } catch (err) {
         logger.error('[useUserBoatClass] Error:', err);
       } finally {
+        if (!canCommit()) return;
         setIsLoading(false);
       }
     };
 
-    fetchBoatClass();
+    void fetchBoatClass();
   }, [user?.id]);
 
   return { classId, className, isLoading };

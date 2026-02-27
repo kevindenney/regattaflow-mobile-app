@@ -12,10 +12,11 @@
 
 import { TuningSettings } from '@/hooks/useRegattaContent';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { SailorRacePreparation, sailorRacePreparationService } from '@/services/SailorRacePreparationService';
 import { supabase } from '@/services/supabase';
 import { RaceIntentions } from '@/types/raceIntentions';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const logger = createLogger('usePublicSailorRaceJourney');
 
@@ -55,7 +56,8 @@ export interface RaceData {
  */
 export interface RaceResult {
   id: string;
-  regatta_id: string;
+  regatta_id?: string;
+  race_id?: string;
   position?: number;
   points?: number;
   status_code?: string;
@@ -131,13 +133,45 @@ export function usePublicSailorRaceJourney(
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeContextRef = useRef(`${sailorId ?? ''}|${raceId ?? ''}`);
+
+  useEffect(() => {
+    activeContextRef.current = `${sailorId ?? ''}|${raceId ?? ''}`;
+  }, [sailorId, raceId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const fetchData = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const contextKey = `${sailorId ?? ''}|${raceId ?? ''}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeContextRef.current === contextKey;
+
     if (!sailorId || !raceId) {
+      if (!canCommit()) return;
+      setData({
+        sailorProfile: null,
+        race: null,
+        preparation: null,
+        intentions: null,
+        raceResults: null,
+        checklistSummary: null,
+      });
+      setError(null);
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -230,11 +264,18 @@ export function usePublicSailorRaceJourney(
 
         // Fetch race results
         (async () => {
-          const { data: resultsData, error: resultsError } = await supabase
+          const runResultsQuery = (column: 'regatta_id' | 'race_id') => supabase
             .from('race_results')
-            .select('id, regatta_id, position, points, status_code, notes')
-            .eq('regatta_id', resolvedRaceId)
+            .select('id, regatta_id, race_id, position, points, status_code, notes')
+            .eq(column, resolvedRaceId)
             .eq('sailor_id', sailorId);
+
+          let { data: resultsData, error: resultsError } = await runResultsQuery('regatta_id');
+          if (isMissingIdColumn(resultsError, 'race_results', 'regatta_id')) {
+            const fallback = await runResultsQuery('race_id');
+            resultsData = fallback.data;
+            resultsError = fallback.error;
+          }
 
           if (resultsError) throw resultsError;
           return resultsData as RaceResult[];
@@ -244,6 +285,7 @@ export function usePublicSailorRaceJourney(
       const intentions = preparationResult?.user_intentions || null;
       const checklistSummary = calculateChecklistSummary(intentions);
 
+      if (!canCommit()) return;
       setData({
         sailorProfile: profileResult,
         race: raceResult,
@@ -254,14 +296,16 @@ export function usePublicSailorRaceJourney(
       });
     } catch (err) {
       logger.error('Error fetching sailor race journey:', err);
+      if (!canCommit()) return;
       setError(err as Error);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [sailorId, raceId]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   return {

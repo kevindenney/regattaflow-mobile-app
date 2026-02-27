@@ -10,9 +10,12 @@ import {
   IOS_SPACING
 } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
+import { createLogger } from '@/lib/utils/logger';
 import type { RacePhase } from '@/services/ai/SkillManagementService';
 import { BarChart2, Calendar, CheckCircle, Flag } from 'lucide-react-native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+const logger = createLogger('RaceModeSelector');
 
 export type RaceMode = 'plan' | 'race' | 'debrief';
 
@@ -80,7 +83,7 @@ export function RaceModeSelector({
 }: RaceModeSelectorProps) {
   const phaseIndicator = getPhaseIndicator(racePhase);
 
-  console.log('[RaceModeSelector] Render. Current Mode:', currentMode);
+  logger.debug('Render', { currentMode });
 
   // Animation for the sliding indicator
   // Note: In a full implementation we would measure layout, but for 3 fixed tabs
@@ -88,7 +91,7 @@ export function RaceModeSelector({
   // Using simple conditional styling for reliability first, animation next.
 
   const handleModeChange = (mode: RaceMode) => {
-    console.log('[RaceModeSelector] Mode change requested:', mode);
+    logger.debug('Mode change requested', { mode });
     if (disabled || mode === currentMode) return;
     triggerHaptic('selection');
     onModeChange(mode);
@@ -102,7 +105,7 @@ export function RaceModeSelector({
             we color the active tab background directly. 
         */}
 
-        {MODE_CONFIGS.map((mode, index) => {
+        {MODE_CONFIGS.map((mode) => {
           const isActive = currentMode === mode.id;
           const IconComponent = mode.icon;
           const isRaceMode = mode.id === 'race';

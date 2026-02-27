@@ -5,12 +5,12 @@
 
 set -e
 
-if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$EXPO_PUBLIC_ANTHROPIC_API_KEY" ]; then
-  echo "❌ Error: ANTHROPIC_API_KEY or EXPO_PUBLIC_ANTHROPIC_API_KEY must be set"
+if [ -z "$ANTHROPIC_API_KEY" ]; then
+  echo "❌ Error: ANTHROPIC_API_KEY must be set"
   exit 1
 fi
 
-API_KEY="${ANTHROPIC_API_KEY:-$EXPO_PUBLIC_ANTHROPIC_API_KEY}"
+API_KEY="$ANTHROPIC_API_KEY"
 
 echo "🚀 Uploading Claude Skills to Anthropic"
 echo ""

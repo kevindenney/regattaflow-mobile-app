@@ -17,6 +17,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { supabase } from './supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { createLogger } from '@/lib/utils/logger';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -43,6 +45,7 @@ const CACHE_DURATION = {
   WEATHER: 6 * 60 * 60 * 1000, // 6 hours
   GPS_TRACK: Infinity, // Until uploaded
 } as const;
+const logger = createLogger('OfflineService');
 
 interface CachedItem<T = any> {
   data: T;
@@ -79,10 +82,34 @@ class OfflineService {
    * Debug logging - disabled by default, enable for debugging offline issues
    */
   private static DEBUG_ENABLED = false;
-  private logDebug(message: string, _data?: any) {
+  private logDebug(_message: string, _data?: any) {
     if (__DEV__ && OfflineService.DEBUG_ENABLED) {
-      // Uncomment for debugging: console.log(`[OfflineService] ${message}`, _data ?? '');
+      // Uncomment for debugging: logger.info(`[OfflineService] ${message}`, _data ?? '');
     }
+  }
+
+  private async getRaceStrategiesWithFallback(
+    raceId: string,
+    selectClause: string
+  ): Promise<{ data: any[] | null; error: any }> {
+    const primary = await supabase
+      .from('race_strategies')
+      .select(selectClause)
+      .eq('regatta_id', raceId);
+
+    if (!primary.error) {
+      return { data: primary.data, error: null };
+    }
+
+    if (isMissingIdColumn(primary.error, 'race_strategies', 'regatta_id')) {
+      const fallback = await supabase
+        .from('race_strategies')
+        .select(selectClause)
+        .eq('race_id', raceId);
+      return { data: fallback.data, error: fallback.error };
+    }
+
+    return { data: null, error: primary.error };
   }
 
   constructor() {
@@ -182,12 +209,27 @@ class OfflineService {
       // For now, skip automatic venue caching to avoid foreign key errors
 
       // Fetch and cache strategy
-      const { data: strategy } = await supabase
+      let strategy: any = null;
+      const strategyPrimary = await supabase
         .from('race_strategies')
         .select('*')
         .eq('regatta_id', raceId)
         .eq('user_id', userId)
         .maybeSingle();
+      strategy = strategyPrimary.data;
+
+      if (
+        strategyPrimary.error &&
+        isMissingIdColumn(strategyPrimary.error, 'race_strategies', 'regatta_id')
+      ) {
+        const strategyFallback = await supabase
+          .from('race_strategies')
+          .select('*')
+          .eq('race_id', raceId)
+          .eq('user_id', userId)
+          .maybeSingle();
+        strategy = strategyFallback.data;
+      }
 
       if (strategy) {
         await this.setCachedItem(
@@ -265,7 +307,7 @@ class OfflineService {
         { priority, expiresAt }
       );
     } catch (error) {
-      console.error('Failed to cache venue:', error);
+      logger.error('Failed to cache venue:', error);
     }
   }
 
@@ -292,7 +334,7 @@ class OfflineService {
         }
       );
     } catch (error) {
-      console.error('Failed to cache weather:', error);
+      logger.error('Failed to cache weather:', error);
     }
   }
 
@@ -338,7 +380,7 @@ class OfflineService {
         }
       }
     } catch (error) {
-      console.error('Failed to cache upcoming races:', error);
+      logger.error('Failed to cache upcoming races:', error);
     }
   }
 
@@ -347,10 +389,32 @@ class OfflineService {
    */
   public async cacheSailingDocuments(raceId: string): Promise<void> {
     try {
-      const { data: documents, error } = await supabase
+      let documents: any[] | null = null;
+      let error: any = null;
+
+      const scopedQuery = await supabase
         .from('sailing_documents')
         .select('*')
-        .eq('race_id', raceId);
+        .eq('metadata->>regatta_id', raceId);
+
+      documents = scopedQuery.data;
+      error = scopedQuery.error;
+
+      const shouldFallbackToRaceId =
+        Boolean(error) ||
+        (!error && (!documents || documents.length === 0));
+
+      if (shouldFallbackToRaceId) {
+        if (error) {
+          logger.warn('[offlineService] Regatta-scoped sailing_documents query failed, falling back to race_id:', error);
+        }
+        const fallbackQuery = await supabase
+          .from('sailing_documents')
+          .select('*')
+          .eq('race_id', raceId);
+        documents = fallbackQuery.data;
+        error = fallbackQuery.error;
+      }
 
       if (error) throw error;
 
@@ -362,7 +426,7 @@ class OfflineService {
         );
       }
     } catch (error) {
-      console.error('Failed to cache sailing documents:', error);
+      logger.error('Failed to cache sailing documents:', error);
     }
   }
 
@@ -371,22 +435,43 @@ class OfflineService {
    */
   public async cacheCourseVisualizations(raceId: string): Promise<void> {
     try {
-      const { data: visualizations, error } = await supabase
-        .from('race_strategies')
-        .select('course_data, visualization_data')
-        .eq('regatta_id', raceId);
+      let { data: visualizations, error } = await this.getRaceStrategiesWithFallback(
+        raceId,
+        'id, strategy_content, updated_at'
+      );
+
+      if (!error && (!visualizations || visualizations.length === 0)) {
+        const fallback = await supabase
+          .from('race_strategies')
+          .select('id, strategy_content, updated_at')
+          .eq('race_id', raceId);
+        visualizations = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) throw error;
 
       if (visualizations) {
+        const normalizedVisualizations = (visualizations as any[]).map((item) => {
+          const content = item?.strategy_content || {};
+          return {
+            id: item?.id,
+            updated_at: item?.updated_at,
+            course_data: content?.course_data || content?.course_marks || content?.mark_roundings || null,
+            visualization_data:
+              content?.visualization_data || content?.simulation_results || content?.start_line_summary || null,
+            strategy_content: content,
+          };
+        });
+
         await this.setCachedItem(
           `${STORAGE_KEYS.CACHED_VISUALIZATIONS}:${raceId}`,
-          visualizations,
+          normalizedVisualizations,
           { priority: 'race' }
         );
       }
     } catch (error) {
-      console.error('Failed to cache course visualizations:', error);
+      logger.error('Failed to cache course visualizations:', error);
     }
   }
 
@@ -516,7 +601,7 @@ class OfflineService {
       await AsyncStorage.setItem(STORAGE_KEYS.LAST_SYNC, Date.now().toString());
 
     } catch (error) {
-      console.error('Sync queue processing failed:', error);
+      logger.error('Sync queue processing failed:', error);
     } finally {
       this.isSyncing = false;
       this.notifyListeners();

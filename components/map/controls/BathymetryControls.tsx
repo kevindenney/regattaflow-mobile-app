@@ -11,7 +11,7 @@
  * - 3D terrain toggle
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,9 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('BathymetryControls');
 
 export type BathymetryPreset = 'racing' | 'navigation' | 'analysis' | 'minimal' | 'custom';
 
@@ -72,11 +75,7 @@ export function BathymetryControls({
   const [currentPreset, setCurrentPreset] = useState<BathymetryPreset>('custom');
 
   // Load saved preferences
-  useEffect(() => {
-    loadPreferences();
-  }, []);
-
-  const loadPreferences = async () => {
+  const loadPreferences = useCallback(async () => {
     try {
       const saved = await AsyncStorage.getItem('@bathymetry_config');
       if (saved) {
@@ -84,15 +83,19 @@ export function BathymetryControls({
         onChange(savedConfig);
       }
     } catch (error) {
-      console.error('Failed to load bathymetry preferences:', error);
+      logger.error('Failed to load bathymetry preferences:', error);
     }
-  };
+  }, [onChange]);
+
+  useEffect(() => {
+    void loadPreferences();
+  }, [loadPreferences]);
 
   const savePreferences = async (newConfig: BathymetryConfig) => {
     try {
       await AsyncStorage.setItem('@bathymetry_config', JSON.stringify(newConfig));
     } catch (error) {
-      console.error('Failed to save bathymetry preferences:', error);
+      logger.error('Failed to save bathymetry preferences:', error);
     }
   };
 

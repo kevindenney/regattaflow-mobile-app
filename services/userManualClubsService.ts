@@ -1,20 +1,15 @@
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingRelationError } from '@/lib/utils/supabaseSchemaFallback';
 import MutationQueueService from './MutationQueueService';
 
 const TABLE_NAME = 'user_manual_clubs';
 const COLLECTION_NAME = 'user_manual_clubs';
 const logger = createLogger('userManualClubsService');
 
-const isMissingTableError = (error: any) => {
-  if (!error) return false;
-  const message = typeof error?.message === 'string' ? error.message : '';
-  return message.includes('relation') || message.includes('does not exist');
-};
-
 const warnInvalidId = (id: string) => {
-  console.warn(`[userManualClubsService] Skipping record with invalid id: ${id}`);
+  logger.warn(`Skipping record with invalid id: ${id}`);
 };
 
 type ManualClubInsertRecord = {
@@ -63,7 +58,7 @@ const upsertRecordsSequentially = async (
   for (const record of records) {
     const { error } = await supabase.from(TABLE_NAME).upsert(record, { onConflict: 'id' });
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { success: false, missingTable: true };
       }
       if (isRowLevelSecurityViolation(error)) {
@@ -133,7 +128,7 @@ export async function fetchUserManualClubs(userId: string): Promise<FetchResult>
       .order('added_at', { ascending: false });
 
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { clubs: [], missingTable: true };
       }
       return { clubs: [], missingTable: false, error };
@@ -165,7 +160,7 @@ export async function upsertUserManualClub(userId: string, club: ManualClubPaylo
     );
 
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { success: false, missingTable: true };
       }
       if (isRowLevelSecurityViolation(error)) {
@@ -199,7 +194,7 @@ export async function deleteUserManualClub(userId: string, clubId: string): Prom
       .eq('id', clubId);
 
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { success: false, missingTable: true };
       }
       if (isRowLevelSecurityViolation(error)) {
@@ -235,7 +230,7 @@ export async function bulkUpsertUserManualClubs(userId: string, clubs: ManualClu
     const { error } = await supabase.from(TABLE_NAME).upsert(records, { onConflict: 'id' });
 
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { success: false, missingTable: true };
       }
       if (isRowLevelSecurityViolation(error)) {
@@ -327,7 +322,7 @@ async function upsertUserManualClubDirect(userId: string, club: ManualClubPayloa
     );
 
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { success: false, missingTable: true };
       }
       if (isRowLevelSecurityViolation(error)) {
@@ -363,7 +358,7 @@ async function deleteUserManualClubDirect(userId: string, clubId: string): Promi
       .eq('id', clubId);
 
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { success: false, missingTable: true };
       }
       if (isRowLevelSecurityViolation(error)) {
@@ -401,7 +396,7 @@ async function bulkUpsertUserManualClubsDirect(userId: string, clubs: ManualClub
     const { error } = await supabase.from(TABLE_NAME).upsert(records, { onConflict: 'id' });
 
     if (error) {
-      if (isMissingTableError(error)) {
+      if (isMissingRelationError(error)) {
         return { success: false, missingTable: true };
       }
       if (isRowLevelSecurityViolation(error)) {

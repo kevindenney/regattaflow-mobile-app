@@ -11,10 +11,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
 
 const DISMISSED_COACHING_CARDS_KEY = 'dismissed_coaching_cards';
+const logger = createLogger('useRaceCoachingContext');
 
 export interface CoachInfo {
   id: string;
@@ -41,10 +43,18 @@ const REVIEW_SPECIALTIES = ['fleet_racing', 'race_strategy', 'speed_tuning', 'bo
 export function useRaceCoachingContext() {
   const { user } = useAuth();
   const [dismissedCards, setDismissedCards] = useState<DismissedCards>({});
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Load dismissed cards from storage
   useEffect(() => {
-    AsyncStorage.getItem(DISMISSED_COACHING_CARDS_KEY).then((value) => {
+    void AsyncStorage.getItem(DISMISSED_COACHING_CARDS_KEY).then((value) => {
+      if (!isMountedRef.current) return;
       if (value) {
         try {
           setDismissedCards(JSON.parse(value));
@@ -56,7 +66,7 @@ export function useRaceCoachingContext() {
   }, []);
 
   // Get user's active coaches with details
-  const { data: coaches, isLoading: loadingCoaches } = useQuery({
+  const { data: coaches, isLoading: loadingCoaches, error: coachesError } = useQuery({
     queryKey: ['race-coaching-context', 'coaches', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -68,7 +78,12 @@ export function useRaceCoachingContext() {
         .eq('sailor_id', user.id)
         .eq('status', 'active');
 
-      if (relError || !relationships?.length) return [];
+      if (relError) {
+        logger.error('Failed to fetch active coaching relationships', relError);
+        throw new Error(relError.message || 'Failed to load coaching relationships');
+      }
+
+      if (!relationships?.length) return [];
 
       const coachIds = relationships.map((r) => r.coach_id);
 
@@ -78,7 +93,12 @@ export function useRaceCoachingContext() {
         .select('id, user_id, display_name, profile_photo_url:profile_image_url, specializations, hourly_rate')
         .in('id', coachIds);
 
-      if (profileError || !coachProfiles) return [];
+      if (profileError) {
+        logger.error('Failed to fetch coach profiles', profileError);
+        throw new Error(profileError.message || 'Failed to load coach profiles');
+      }
+
+      if (!coachProfiles) return [];
 
       return coachProfiles.map((coach) => ({
         id: coach.id,
@@ -94,7 +114,7 @@ export function useRaceCoachingContext() {
   });
 
   // Check for recent sessions (last 7 days) to avoid nagging
-  const { data: recentSessions } = useQuery({
+  const { data: recentSessions, error: recentSessionsError, isLoading: loadingRecentSessions } = useQuery({
     queryKey: ['race-coaching-context', 'recent-sessions', user?.id],
     queryFn: async () => {
       if (!user?.id) return { prep: false, review: false };
@@ -102,12 +122,17 @@ export function useRaceCoachingContext() {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      const { data: sessions } = await supabase
+      const { data: sessions, error } = await supabase
         .from('coaching_sessions')
         .select('session_type, scheduled_at')
         .eq('sailor_id', user.id)
         .in('status', ['completed', 'scheduled', 'confirmed'])
         .gte('scheduled_at', sevenDaysAgo.toISOString());
+
+      if (error) {
+        logger.error('Failed to fetch recent coaching sessions', error);
+        throw new Error(error.message || 'Failed to load recent coaching sessions');
+      }
 
       if (!sessions?.length) return { prep: false, review: false };
 
@@ -175,6 +200,7 @@ export function useRaceCoachingContext() {
           [context]: true,
         },
       };
+      if (!isMountedRef.current) return;
       setDismissedCards(updated);
       await AsyncStorage.setItem(DISMISSED_COACHING_CARDS_KEY, JSON.stringify(updated));
     },
@@ -198,9 +224,11 @@ export function useRaceCoachingContext() {
 
   const hasCoach = (coaches?.length || 0) > 0;
   const hasMultipleCoaches = (coaches?.length || 0) > 1;
+  const error = (coachesError || recentSessionsError) as Error | null;
 
   return {
-    isLoading: loadingCoaches,
+    isLoading: loadingCoaches || loadingRecentSessions,
+    error,
     hasCoach,
     hasMultipleCoaches,
     coaches: coaches || [],

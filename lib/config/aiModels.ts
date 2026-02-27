@@ -12,6 +12,7 @@
 
 export type AIModelId =
   | 'claude-3-haiku-20240307'      // Budget model - all tasks
+  | 'claude-3-5-haiku-latest'      // Balanced default model
   | 'claude-3-5-sonnet-latest'     // Premium - complex reasoning only
   | 'claude-3-5-sonnet-20241022';  // Pinned version of Sonnet
 
@@ -41,7 +42,7 @@ export const AI_MODELS: Record<string, ModelConfig> = {
     recommended: ['simple'],
   },
   'claude-3.5-haiku': {
-    id: 'claude-3-haiku-20240307',
+    id: 'claude-3-5-haiku-latest',
     name: 'Claude 3.5 Haiku',
     inputCostPer1M: 0.80,
     outputCostPer1M: 4.00,
@@ -88,20 +89,47 @@ export const TASK_COMPLEXITY: Record<string, TaskComplexity> = {
   'detailed-analysis': 'complex',
 };
 
+const COMPLEX_TASK_HINTS = ['complex', 'detailed', 'championship', 'multi-step', 'code-generation'];
+const SIMPLE_TASK_HINTS = ['simple', 'short', 'spell', 'format', 'transcription'];
+
+function normalizeTaskType(taskType: string): string {
+  return String(taskType || '')
+    .trim()
+    .toLowerCase();
+}
+
+export function getTaskComplexity(taskType: string): TaskComplexity {
+  const normalizedTaskType = normalizeTaskType(taskType);
+  if (!normalizedTaskType) return 'standard';
+
+  const explicit = TASK_COMPLEXITY[normalizedTaskType];
+  if (explicit) return explicit;
+
+  if (COMPLEX_TASK_HINTS.some((hint) => normalizedTaskType.includes(hint))) {
+    return 'complex';
+  }
+  if (SIMPLE_TASK_HINTS.some((hint) => normalizedTaskType.includes(hint))) {
+    return 'simple';
+  }
+  return 'standard';
+}
+
 /**
  * Get the recommended model for a specific task type
  * Defaults to Claude 3.5 Haiku for unknown tasks (good balance of cost/quality)
  */
 export function getModelForTask(taskType: string): AIModelId {
-  const complexity = TASK_COMPLEXITY[taskType] || 'standard';
+  const complexity = getTaskComplexity(taskType);
   
   switch (complexity) {
     case 'simple':
       return 'claude-3-haiku-20240307';
     case 'standard':
+      return 'claude-3-5-haiku-latest';
     case 'complex':
+      return 'claude-3-5-sonnet-latest';
     default:
-      return 'claude-3-haiku-20240307';
+      return 'claude-3-5-haiku-latest';
   }
 }
 
@@ -132,7 +160,7 @@ export function estimateCost(
 /**
  * Default model for most tasks - balances cost and quality
  */
-export const DEFAULT_MODEL: AIModelId = 'claude-3-haiku-20240307';
+export const DEFAULT_MODEL: AIModelId = 'claude-3-5-haiku-latest';
 
 /**
  * Budget model for high-volume, simple tasks
@@ -143,4 +171,3 @@ export const BUDGET_MODEL: AIModelId = 'claude-3-haiku-20240307';
  * Premium model - use sparingly for complex reasoning
  */
 export const PREMIUM_MODEL: AIModelId = 'claude-3-5-sonnet-latest';
-

@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   RaceAnalysis,
   CoachingFeedback,
@@ -16,6 +17,8 @@ import type {
   RacePhase,
 } from '@/types/raceAnalysis';
 import type { Race } from '@/types';
+
+const logger = createLogger('RaceCoachingService');
 
 export class RaceCoachingService {
   private playbookFrameworks: RegattaFlowPlaybookFrameworkData | null = null;
@@ -659,13 +662,13 @@ Use The voice: quantified, tactical, encouraging, with his signature phrases whe
       });
 
       if (error) {
-        console.error('Edge function error for coaching assessment:', error);
+        logger.error('Edge function error for coaching assessment:', error);
         return this.buildFallbackAssessment(feedback, scores);
       }
 
       return data?.text || this.buildFallbackAssessment(feedback, scores);
     } catch (err) {
-      console.error('Failed to generate AI assessment:', err);
+      logger.error('Failed to generate AI assessment:', err);
       return this.buildFallbackAssessment(feedback, scores);
     }
   }

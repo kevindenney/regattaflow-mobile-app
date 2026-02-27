@@ -3,7 +3,7 @@
  * Google Maps-style search sidebar for sailing network
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
-import { SavedNetworkSection } from './SavedNetworkSection';
 import { SailingNetworkService, NetworkPlace, ServiceType } from '@/services/SailingNetworkService';
 import { supabase } from '@/services/supabase';
 import { getShadowStyle } from '@/lib/styles/shadow';
@@ -38,6 +37,8 @@ export function NetworkSidebar({
   const [savedVenueIds, setSavedVenueIds] = useState<Set<string>>(new Set());
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingSaved, setIsLoadingSaved] = useState(true);
+  const [savedError, setSavedError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [slideAnim] = useState(new Animated.Value(0));
 
   // Animate sidebar collapse/expand
@@ -51,20 +52,21 @@ export function NetworkSidebar({
 
   // Fetch saved places on mount
   useEffect(() => {
-    fetchSavedPlaces();
-  }, []);
+    void fetchSavedPlaces();
+  }, [fetchSavedPlaces]);
 
   // Search when query changes
   useEffect(() => {
     if (searchQuery.trim().length > 0) {
-      performSearch();
+      void performSearch();
     } else {
       setSearchResults([]);
     }
-  }, [searchQuery]);
+  }, [performSearch, searchQuery]);
 
-  const fetchSavedPlaces = async () => {
+  const fetchSavedPlaces = useCallback(async () => {
     setIsLoadingSaved(true);
+    setSavedError(null);
     try {
       // Early exit: Check if user is authenticated
       const { data: { user } } = await supabase.auth.getUser();
@@ -78,22 +80,19 @@ export function NetworkSidebar({
       setSavedPlaces(places);
       setSavedVenueIds(new Set(places.map(p => p.id)));
     } catch (error: any) {
-      // Log detailed error information
-      if (error.message?.includes('timed out')) {
-        console.error('[NetworkSidebar] Failed to fetch saved places: Request timed out. Check network connection and Supabase status.', error);
-      } else {
-        console.error('[NetworkSidebar] Failed to fetch saved places:', error);
-      }
+      console.error('[NetworkSidebar] Failed to fetch saved places:', error);
+      setSavedError(error?.message || 'Failed to load saved places.');
       setSavedPlaces([]);
     } finally {
       setIsLoadingSaved(false);
     }
-  };
+  }, []);
 
-  const performSearch = async () => {
+  const performSearch = useCallback(async () => {
     if (searchQuery.trim().length < 2) return;
 
     setIsSearching(true);
+    setSearchError(null);
     try {
       // Timeout after 5 seconds
       const timeoutPromise = new Promise((_, reject) =>
@@ -134,16 +133,13 @@ export function NetworkSidebar({
 
       setSearchResults(results);
     } catch (error: any) {
-      if (error.message?.includes('timed out')) {
-        console.error('[NetworkSidebar] Search timed out. Check network connection.', error);
-      } else {
-        console.error('[NetworkSidebar] Search failed:', error);
-      }
+      console.error('[NetworkSidebar] Search failed:', error);
+      setSearchError(error?.message || 'Search failed.');
       setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [savedVenueIds, searchQuery]);
 
   const handleSave = async (place: NetworkPlace) => {
     try {
@@ -258,9 +254,19 @@ export function NetworkSidebar({
 
         {/* Results */}
         <ScrollView style={styles.content} showsVerticalScrollIndicator={true}>
+          {savedError ? (
+            <View style={styles.errorBanner}>
+              <ThemedText style={styles.errorBannerText}>{savedError}</ThemedText>
+            </View>
+          ) : null}
           {searchQuery.trim().length > 0 ? (
             // Search Results
             <>
+              {searchError ? (
+                <View style={styles.errorBanner}>
+                  <ThemedText style={styles.errorBannerText}>{searchError}</ThemedText>
+                </View>
+              ) : null}
               {isSearching ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#007AFF" />
@@ -370,6 +376,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: '#f8f9fa',
+  },
+  errorBanner: {
+    marginHorizontal: 12,
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEE2E2',
+  },
+  errorBannerText: {
+    color: '#B91C1C',
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   // Place Card (Google Maps style)

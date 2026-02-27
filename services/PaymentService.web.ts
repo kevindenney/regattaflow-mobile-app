@@ -75,7 +75,7 @@ export class PaymentService {
         currency: 'usd',
       };
     } catch (error) {
-      console.error('Error creating payment intent:', error);
+      logger.error('Error creating payment intent:', error);
       throw error;
     }
   }
@@ -83,7 +83,7 @@ export class PaymentService {
   /**
    * Process payment - Not supported on web
    */
-  static async processPayment(paymentIntent: PaymentIntent): Promise<PaymentResult> {
+  static async processPayment(_paymentIntent: PaymentIntent): Promise<PaymentResult> {
     // Web doesn't support native payment sheet
     return {
       success: false,
@@ -143,7 +143,7 @@ export class PaymentService {
         });
       }
     } catch (error) {
-      console.error('Error confirming payment:', error);
+      logger.error('Error confirming payment:', error);
       throw error;
     }
   }
@@ -183,7 +183,7 @@ export class PaymentService {
 
       if (updateError) throw updateError;
     } catch (error) {
-      console.error('Error processing refund:', error);
+      logger.error('Error processing refund:', error);
       throw error;
     }
   }
@@ -222,10 +222,10 @@ export class PaymentService {
         .eq('id', sessionId);
 
       if (updateError) {
-        console.error('Error updating payout status:', updateError);
+        logger.error('Error updating payout status:', updateError);
       }
     } catch (error) {
-      console.error('Error processing coach payout:', error);
+      logger.error('Error processing coach payout:', error);
       throw error;
     }
   }
@@ -255,7 +255,7 @@ export class PaymentService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching payment history:', error);
+      logger.error('Error fetching payment history:', error);
       throw error;
     }
   }
@@ -315,7 +315,7 @@ export class PaymentService {
         commissionRate: totalRevenue > 0 ? (totalCommissions / totalRevenue) * 100 : 0,
       };
     } catch (error) {
-      console.error('Error fetching commission analytics:', error);
+      logger.error('Error fetching commission analytics:', error);
       throw error;
     }
   }
@@ -365,7 +365,7 @@ export class PaymentService {
         period,
       };
     } catch (error) {
-      console.error('Error fetching coach earnings:', error);
+      logger.error('Error fetching coach earnings:', error);
       throw error;
     }
   }
@@ -397,7 +397,7 @@ export class PaymentService {
             amount: payout.amount,
           });
         } catch (error) {
-          console.error(`Payout failed for coach ${payout.coachId}:`, error);
+          logger.error(`Payout failed for coach ${payout.coachId}:`, error);
           results.push({
             coachId: payout.coachId,
             success: false,
@@ -408,7 +408,7 @@ export class PaymentService {
 
       return results;
     } catch (error) {
-      console.error('Error processing bulk payouts:', error);
+      logger.error('Error processing bulk payouts:', error);
       throw error;
     }
   }

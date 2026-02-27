@@ -6,7 +6,12 @@
 import React from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { MapPin, Anchor, Users, Award, Calendar } from 'lucide-react-native';
-import { ConversationalContext } from '@/services/agents/ConversationalOnboardingAgent';
+
+interface ConversationalContext {
+  detectedVenue?: {
+    name?: string;
+  } | null;
+}
 
 interface CollectedDataItem {
   type: 'venue' | 'club' | 'boat' | 'role' | 'fleet' | 'equipment' | 'coach' | 'crew' | 'racingArea' | 'series';
@@ -20,10 +25,10 @@ interface OnboardingDataTallyProps {
   collectedData?: {
     venue?: string;
     role?: string;
-    boats?: Array<{ class: string; sailNumber?: string }>;
+    boats?: { class: string; sailNumber?: string }[];
     clubs?: string[];
     fleets?: string[];
-    equipment?: Array<{ boat: string; makers: string[] }>;
+    equipment?: { boat: string; makers: string[] }[];
     coaches?: string[];
     crew?: string[];
     racingAreas?: string[];

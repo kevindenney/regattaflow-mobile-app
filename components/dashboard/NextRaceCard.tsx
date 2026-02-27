@@ -81,8 +81,7 @@ export function NextRaceCard() {
         .select(
           `
           *,
-          sailing_venues(name, city),
-          yacht_clubs(name)
+          sailing_venues(name, city)
         `
         )
         .in('class_id', fleetIds)
@@ -93,7 +92,20 @@ export function NextRaceCard() {
       if (error) throw error;
 
       if (races && races.length > 0) {
-        const race = races[0];
+        let race: any = races[0];
+        if (race?.club_id) {
+          const { data: clubData } = await supabase
+            .from('yacht_clubs')
+            .select('name')
+            .eq('id', race.club_id)
+            .maybeSingle();
+          if (clubData?.name) {
+            race = {
+              ...race,
+              yacht_clubs: { name: clubData.name },
+            };
+          }
+        }
         setNextRace(race);
 
         // Calculate days until race

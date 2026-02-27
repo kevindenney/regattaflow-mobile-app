@@ -185,8 +185,7 @@ You should be proactive but always confirm critical decisions with the user. Whe
             .from('fleets')
             .select(`
               *,
-              boat_classes!inner(name),
-              users!club_id(full_name)
+              boat_classes!inner(name)
             `)
             .eq('class_id', input.class_id)
             .in('visibility', ['public', 'club'])
@@ -201,12 +200,47 @@ You should be proactive but always confirm critical decisions with the user. Whe
 
           if (error) throw error;
 
+          const rows = fleets || [];
+          const clubIds = Array.from(new Set(rows.map((fleet: any) => fleet?.club_id).filter(Boolean)));
+          const clubNamesById = new Map<string, string>();
+
+          if (clubIds.length > 0) {
+            const { data: clubsData } = await supabase
+              .from('clubs')
+              .select('id, name, club_name')
+              .in('id', clubIds as string[]);
+
+            (clubsData || []).forEach((club: any) => {
+              if (club?.id) {
+                clubNamesById.set(club.id, club.name || club.club_name || 'Club');
+              }
+            });
+
+            const missingClubIds = (clubIds as string[]).filter((id) => !clubNamesById.has(id));
+            if (missingClubIds.length > 0) {
+              const { data: yachtClubsData } = await supabase
+                .from('yacht_clubs')
+                .select('id, name')
+                .in('id', missingClubIds);
+              (yachtClubsData || []).forEach((club: any) => {
+                if (club?.id) {
+                  clubNamesById.set(club.id, club.name || 'Club');
+                }
+              });
+            }
+          }
+
+          const enrichedFleets = rows.map((fleet: any) => ({
+            ...fleet,
+            club_name: fleet?.club_id ? clubNamesById.get(fleet.club_id) : undefined,
+          }));
+
           return {
             success: true,
-            fleets: fleets || [],
-            count: fleets?.length || 0,
-            message: fleets?.length
-              ? `Found ${fleets.length} fleets for this boat class`
+            fleets: enrichedFleets,
+            count: enrichedFleets.length,
+            message: enrichedFleets.length
+              ? `Found ${enrichedFleets.length} fleets for this boat class`
               : 'No fleets found. User may need to create one.',
           };
         } catch (error: any) {
@@ -253,12 +287,29 @@ You should be proactive but always confirm critical decisions with the user. Whe
           if (input.fleet_id) {
             const { data: fleet } = await supabase
               .from('fleets')
-              .select('club_id, yacht_clubs(*)')
+              .select('club_id')
               .eq('id', input.fleet_id)
               .single();
 
-            if (fleet?.yacht_clubs) {
-              results.home_club = fleet.yacht_clubs;
+            if (fleet?.club_id) {
+              const { data: club } = await supabase
+                .from('clubs')
+                .select('*')
+                .eq('id', fleet.club_id)
+                .single();
+
+              if (club) {
+                results.home_club = club;
+              } else {
+                const { data: yachtClub } = await supabase
+                  .from('yacht_clubs')
+                  .select('*')
+                  .eq('id', fleet.club_id)
+                  .single();
+                if (yachtClub) {
+                  results.home_club = yachtClub;
+                }
+              }
             }
           }
 

@@ -4,6 +4,9 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('VenueDocumentService');
 
 export interface VenueKnowledgeDocument {
   id: string;
@@ -128,6 +131,95 @@ export interface CreateInsightParams {
 }
 
 class VenueDocumentServiceClass {
+  private buildInsightsFromExtraction(
+    raceData: any,
+    confidenceScore: number | null
+  ): {
+    category: InsightCategory;
+    title: string;
+    content: string;
+    confidence_score: number | null;
+  }[] {
+    const insights: {
+      category: InsightCategory;
+      title: string;
+      content: string;
+      confidence_score: number | null;
+    }[] = [];
+
+    const venue = raceData?.venue || raceData?.location;
+    const raceName = raceData?.raceName || raceData?.name || 'Race document';
+    const wind = raceData?.expectedConditions;
+    const vhf = raceData?.vhfChannel
+      || (Array.isArray(raceData?.vhfChannels) ? raceData.vhfChannels.map((v: any) => v?.channel).filter(Boolean).join(', ') : undefined);
+    const areaNotes = raceData?.racingAreaDescription || raceData?.venueSpecificNotes;
+    const marks = Array.isArray(raceData?.marks) ? raceData.marks : [];
+
+    if (wind) {
+      insights.push({
+        category: 'wind_pattern',
+        title: `${raceName}: wind guidance`,
+        content: String(wind),
+        confidence_score: confidenceScore,
+      });
+    }
+
+    if (vhf) {
+      insights.push({
+        category: 'general',
+        title: `${raceName}: VHF communication`,
+        content: `Primary communications channel(s): ${vhf}.`,
+        confidence_score: confidenceScore,
+      });
+    }
+
+    if (areaNotes) {
+      insights.push({
+        category: 'shore_effect',
+        title: `${raceName}: venue and area notes`,
+        content: String(areaNotes),
+        confidence_score: confidenceScore,
+      });
+    }
+
+    if (marks.length > 0) {
+      const describedMarks = marks
+        .slice(0, 6)
+        .map((mark: any) => {
+          const name = mark?.name || mark?.label || 'Unnamed mark';
+          const note = mark?.notes ? ` (${mark.notes})` : '';
+          return `${name}${note}`;
+        })
+        .join(', ');
+
+      insights.push({
+        category: 'mark_tactic',
+        title: `${raceName}: course marks`,
+        content: `Extracted mark/course references${venue ? ` for ${venue}` : ''}: ${describedMarks}.`,
+        confidence_score: confidenceScore,
+      });
+    }
+
+    if (insights.length === 0) {
+      const summaryParts = [
+        raceName ? `Race: ${raceName}` : null,
+        venue ? `Venue: ${venue}` : null,
+        raceData?.raceDate ? `Date: ${raceData.raceDate}` : null,
+      ].filter(Boolean);
+
+      insights.push({
+        category: 'general',
+        title: `${raceName}: extracted summary`,
+        content: summaryParts.length > 0
+          ? `${summaryParts.join(' | ')}.`
+          : 'Race information was extracted from this document.',
+        confidence_score: confidenceScore,
+      });
+    }
+
+    return insights.slice(0, 5);
+  }
+
   /**
    * Get documents for a venue
    */
@@ -195,7 +287,7 @@ class VenueDocumentServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[VenueDocumentService] Error fetching documents:', error);
+      logger.error('[VenueDocumentService] Error fetching documents:', error);
       throw error;
     }
 
@@ -213,7 +305,7 @@ class VenueDocumentServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDocumentService] Error fetching document:', error);
+      logger.error('[VenueDocumentService] Error fetching document:', error);
       return null;
     }
 
@@ -246,7 +338,7 @@ class VenueDocumentServiceClass {
         });
 
       if (uploadError) {
-        console.error('[VenueDocumentService] Error uploading file:', uploadError);
+        logger.error('[VenueDocumentService] Error uploading file:', uploadError);
         throw uploadError;
       }
 
@@ -281,14 +373,14 @@ class VenueDocumentServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDocumentService] Error creating document:', error);
+      logger.error('[VenueDocumentService] Error creating document:', error);
       throw error;
     }
 
     // If PDF, trigger AI extraction asynchronously
     if (params.document_type === 'pdf' && documentUrl) {
       this.triggerExtraction(data.id, documentUrl).catch(err => {
-        console.error('[VenueDocumentService] Background extraction failed:', err);
+        logger.error('[VenueDocumentService] Background extraction failed:', err);
       });
     }
 
@@ -298,7 +390,7 @@ class VenueDocumentServiceClass {
   /**
    * Trigger AI extraction for a document
    */
-  async triggerExtraction(documentId: string, documentUrl: string): Promise<void> {
+  async triggerExtraction(documentId: string, _documentUrl: string): Promise<void> {
     try {
       // Update status to processing
       await supabase
@@ -306,16 +398,75 @@ class VenueDocumentServiceClass {
         .update({ extraction_status: 'processing' })
         .eq('id', documentId);
 
-      // Call edge function for extraction (if available)
-      // For now, mark as pending - extraction will happen via edge function or manual process
+      const { data: documentRow, error: documentError } = await supabase
+        .from('venue_knowledge_documents')
+        .select('id, venue_id, fleet_id, document_url, title')
+        .eq('id', documentId)
+        .single();
 
-      // TODO: Implement actual extraction via edge function
-      // const { data, error } = await supabase.functions.invoke('extract-document-insights', {
-      //   body: { documentId, documentUrl }
-      // });
+      if (documentError || !documentRow) {
+        throw new Error(documentError?.message || 'Document not found for extraction');
+      }
+
+      const extractionUrl = documentRow.document_url || _documentUrl;
+      if (!extractionUrl) {
+        throw new Error('Document URL is missing for extraction');
+      }
+
+      const { data: extractionData, error: extractionError } = await supabase.functions.invoke(
+        'extract-race-details',
+        { body: { url: extractionUrl } }
+      );
+
+      if (extractionError) {
+        throw new Error(extractionError.message || 'Document extraction failed');
+      }
+
+      const raceData = extractionData?.races?.[0] || extractionData?.data;
+      if (!raceData) {
+        throw new Error('No extractable race data was returned');
+      }
+
+      const rawConfidence = extractionData?.overallConfidence ?? extractionData?.confidence;
+      const confidenceScore = typeof rawConfidence === 'number'
+        ? Math.max(0, Math.min(1, rawConfidence > 1 ? rawConfidence / 100 : rawConfidence))
+        : null;
+
+      const insightsToInsert = this.buildInsightsFromExtraction(raceData, confidenceScore)
+        .map((insight) => ({
+          document_id: documentId,
+          venue_id: documentRow.venue_id,
+          author_id: null,
+          category: insight.category,
+          title: insight.title,
+          content: insight.content,
+          ai_extracted: true,
+          confidence_score: insight.confidence_score,
+          source_page_numbers: null,
+          is_public: true,
+          fleet_id: documentRow.fleet_id || null,
+        }));
+
+      if (insightsToInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from('venue_knowledge_insights')
+          .insert(insightsToInsert);
+
+        if (insertError) {
+          throw insertError;
+        }
+      }
+
+      await supabase
+        .from('venue_knowledge_documents')
+        .update({
+          extraction_status: 'completed',
+          extraction_error: null,
+        })
+        .eq('id', documentId);
 
     } catch (error) {
-      console.error('[VenueDocumentService] Extraction error:', error);
+      logger.error('[VenueDocumentService] Extraction error:', error);
       await supabase
         .from('venue_knowledge_documents')
         .update({
@@ -352,7 +503,7 @@ class VenueDocumentServiceClass {
       .eq('id', documentId);
 
     if (error) {
-      console.error('[VenueDocumentService] Error deleting document:', error);
+      logger.error('[VenueDocumentService] Error deleting document:', error);
       throw error;
     }
   }
@@ -391,7 +542,7 @@ class VenueDocumentServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[VenueDocumentService] Error fetching insights:', error);
+      logger.error('[VenueDocumentService] Error fetching insights:', error);
       throw error;
     }
 
@@ -425,7 +576,7 @@ class VenueDocumentServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDocumentService] Error creating insight:', error);
+      logger.error('[VenueDocumentService] Error creating insight:', error);
       throw error;
     }
 
@@ -459,7 +610,7 @@ class VenueDocumentServiceClass {
       .eq('id', insightId);
 
     if (error) {
-      console.error('[VenueDocumentService] Error verifying insight:', error);
+      logger.error('[VenueDocumentService] Error verifying insight:', error);
       throw error;
     }
   }
@@ -489,7 +640,7 @@ class VenueDocumentServiceClass {
       });
 
     if (error) {
-      console.error('[VenueDocumentService] Error marking freshness:', error);
+      logger.error('[VenueDocumentService] Error marking freshness:', error);
       throw error;
     }
   }
@@ -508,7 +659,7 @@ class VenueDocumentServiceClass {
       .eq('content_id', contentId);
 
     if (error) {
-      console.error('[VenueDocumentService] Error fetching freshness:', error);
+      logger.error('[VenueDocumentService] Error fetching freshness:', error);
       return { still_accurate: 0, needs_update: 0, outdated: 0 };
     }
 

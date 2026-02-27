@@ -1,9 +1,10 @@
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { PublicSharingStatus, RacePreparationWithStrategy, strategicPlanningService } from '@/services/StrategicPlanningService';
 import { supabase } from '@/services/supabase';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Image,
@@ -144,6 +145,7 @@ export function StrategySharingModal({
   const [selectedCrew, setSelectedCrew] = useState<string[]>([]);
   const [userNotes, setUserNotes] = useState<string>('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const notesSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [publicSharingStatus, setPublicSharingStatus] = useState<PublicSharingStatus>({
     enabled: false,
@@ -204,12 +206,25 @@ export function StrategySharingModal({
 
       // Also load from race_strategies table for AI-generated content
       // Note: race_strategies uses user_id (auth.users.id), not sailor_profiles.id
-      const { data: raceStrat } = await supabase
+      const primaryRaceStrat = await supabase
         .from('race_strategies')
         .select('*')
         .eq('regatta_id', raceId)
         .eq('user_id', fetchedUserId || sailorId)
         .maybeSingle();
+      let raceStrat = primaryRaceStrat.data;
+      if (
+        primaryRaceStrat.error &&
+        isMissingIdColumn(primaryRaceStrat.error, 'race_strategies', 'regatta_id')
+      ) {
+        const fallbackRaceStrat = await supabase
+          .from('race_strategies')
+          .select('*')
+          .eq('race_id', raceId)
+          .eq('user_id', fetchedUserId || sailorId)
+          .maybeSingle();
+        raceStrat = fallbackRaceStrat.data;
+      }
       setRaceStrategy(raceStrat);
       
       // Load user notes from race_strategies.notes or strategy_content.userNotes
@@ -302,17 +317,26 @@ export function StrategySharingModal({
     setSavingNotes(true);
     try {
       // Update the notes in race_strategies table
-      const { error } = await supabase
+      const primaryUpdate = await supabase
         .from('race_strategies')
         .update({ notes })
         .eq('regatta_id', raceId)
         .eq('user_id', userId);
+      let error = primaryUpdate.error;
+      if (error && isMissingIdColumn(error, 'race_strategies', 'regatta_id')) {
+        const fallbackUpdate = await supabase
+          .from('race_strategies')
+          .update({ notes })
+          .eq('race_id', raceId)
+          .eq('user_id', userId);
+        error = fallbackUpdate.error;
+      }
 
       if (error) {
         logger.error('Failed to save notes:', error);
         // If no existing row, try to insert
         if (error.code === 'PGRST116') {
-          const { error: insertError } = await supabase
+          const primaryInsert = await supabase
             .from('race_strategies')
             .insert({
               regatta_id: raceId,
@@ -320,6 +344,18 @@ export function StrategySharingModal({
               notes,
               strategy_type: 'pre_race',
             });
+          let insertError = primaryInsert.error;
+          if (insertError && isMissingIdColumn(insertError, 'race_strategies', 'regatta_id')) {
+            const fallbackInsert = await supabase
+              .from('race_strategies')
+              .insert({
+                race_id: raceId,
+                user_id: userId,
+                notes,
+                strategy_type: 'pre_race',
+              } as any);
+            insertError = fallbackInsert.error;
+          }
           if (insertError) {
             logger.error('Failed to insert notes:', insertError);
           }
@@ -337,12 +373,22 @@ export function StrategySharingModal({
   // Debounced save for notes
   const handleNotesChange = useCallback((text: string) => {
     setUserNotes(text);
-    // Auto-save after a delay
-    const timeoutId = setTimeout(() => {
+    if (notesSaveTimeoutRef.current) {
+      clearTimeout(notesSaveTimeoutRef.current);
+    }
+    notesSaveTimeoutRef.current = setTimeout(() => {
       saveUserNotes(text);
     }, 1000);
-    return () => clearTimeout(timeoutId);
   }, [saveUserNotes]);
+
+  useEffect(() => {
+    return () => {
+      if (notesSaveTimeoutRef.current) {
+        clearTimeout(notesSaveTimeoutRef.current);
+        notesSaveTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const generateShareableText = useCallback(() => {
     const lines: string[] = [];
@@ -598,7 +644,7 @@ export function StrategySharingModal({
         await Linking.openURL(url);
         onShareComplete?.('external', 'WhatsApp');
       } else {
-        showAlert('WhatsApp Not Available', 'WhatsApp is not installed on this device.');
+        await handleNativeShare();
       }
     } catch (error) {
       logger.error('Failed to share via WhatsApp:', error);
@@ -2451,4 +2497,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-

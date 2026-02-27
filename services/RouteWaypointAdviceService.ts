@@ -4,7 +4,10 @@
  * Uses Claude AI with long-distance-racing-analyst skill
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RouteWaypointAdviceService');
 
 export interface WaypointAdvice {
   strategic: string;  // High-level strategic advice
@@ -49,22 +52,26 @@ export interface WaypointContext {
 }
 
 export class RouteWaypointAdviceService {
-  private static anthropic: Anthropic | null = null;
   private static readonly LONG_DISTANCE_SKILL_ID = 'skill_01SKz4JZUgvufuxgkSMkVqXe';
 
-  private static getAnthropic(): Anthropic | null {
-    if (!this.anthropic) {
-      const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        console.warn('[RouteWaypointAdvice] Anthropic API key not configured. Advice generation will use fallback.');
-        return null;
-      }
-      this.anthropic = new Anthropic({ 
-        apiKey,
-        dangerouslyAllowBrowser: true 
-      });
+  private static async invokeWaypointChat(prompt: string, maxTokens = 1024): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Waypoint advice AI invocation failed');
     }
-    return this.anthropic;
+
+    const text = typeof data?.text === 'string' ? data.text : '';
+    if (!text) {
+      throw new Error('Waypoint advice AI returned empty response');
+    }
+
+    return text;
   }
 
   /**
@@ -74,37 +81,13 @@ export class RouteWaypointAdviceService {
     context: WaypointContext
   ): Promise<WaypointAdvice> {
     try {
-      const anthropic = this.getAnthropic();
-      
-      // If no API key, return fallback advice
-      if (!anthropic) {
-        return this.generateFallbackAdvice(context);
-      }
-
       const prompt = this.buildAdvicePrompt(context);
-
-      // claude-3-haiku-20240307 does not support skills or code_execution betas
-      const message = await anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 1024,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      // Extract text from response
-      const responseText = (message.content as Array<{ type: string; text?: string }>)
-        .filter(block => block.type === 'text' && typeof block.text === 'string')
-        .map(block => block.text!.trim())
-        .filter(text => text.length > 0)
-        .join('\n');
+      const responseText = await this.invokeWaypointChat(prompt, 1024);
 
       return this.parseAdviceResponse(responseText, context);
 
     } catch (error) {
-      console.error('[RouteWaypointAdvice] Error generating advice:', error);
+      logger.error('[RouteWaypointAdvice] Error generating advice:', error);
       return this.generateFallbackAdvice(context);
     }
   }
@@ -123,7 +106,7 @@ export class RouteWaypointAdviceService {
         const advice = await this.generateWaypointAdvice(context);
         return { name: context.name, advice };
       } catch (error) {
-        console.error(`[RouteWaypointAdvice] Error for ${context.name}:`, error);
+        logger.error(`[RouteWaypointAdvice] Error for ${context.name}:`, error);
         return { 
           name: context.name, 
           advice: this.generateFallbackAdvice(context) 
@@ -208,7 +191,7 @@ Be specific and actionable. Reference the actual conditions and route context pr
         };
       }
     } catch (error) {
-      console.warn('[RouteWaypointAdvice] Failed to parse JSON response:', error);
+      logger.warn('[RouteWaypointAdvice] Failed to parse JSON response:', error);
     }
 
     // Fallback if parsing fails

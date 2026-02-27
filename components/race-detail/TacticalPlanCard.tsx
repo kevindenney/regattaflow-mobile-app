@@ -11,6 +11,7 @@ import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { raceStrategyEngine, type RaceConditions } from '@/services/ai/RaceStrategyEngine';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 interface TacticalRecommendation {
   leg: string; // 'upwind-1', 'downwind-1', etc.
@@ -54,13 +55,24 @@ export function TacticalPlanCard({
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      const primary = await supabase
         .from('race_strategies')
         .select('*')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
-
+      let data = primary.data;
+      let fetchError = primary.error;
+      if (fetchError && isMissingIdColumn(fetchError, 'race_strategies', 'regatta_id')) {
+        const fallback = await supabase
+          .from('race_strategies')
+          .select('*')
+          .eq('race_id', raceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        data = fallback.data;
+        fetchError = fallback.error;
+      }
       if (fetchError) throw fetchError;
 
       if (data && data.strategy_content) {
@@ -72,7 +84,8 @@ export function TacticalPlanCard({
       }
     } catch (err) {
       console.error('[TacticalPlanCard] Load error:', err);
-      setError('Failed to load tactical plan');
+      const message = err instanceof Error ? err.message : 'Failed to load tactical plan';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -152,8 +165,16 @@ export function TacticalPlanCard({
         return base;
       })();
 
+      const resolvedVenueId =
+        (typeof raceData.venue_id === 'string' && raceData.venue_id) ||
+        (typeof raceData.metadata?.venue_id === 'string' && raceData.metadata.venue_id);
+
+      if (!resolvedVenueId) {
+        throw new Error('Venue is missing. Add a venue to this race to generate tactical plan.');
+      }
+
       const strategy = await raceStrategyEngine.generateVenueBasedStrategy(
-        raceData.venue_id || 'default',
+        resolvedVenueId,
         currentConditions,
         {
           raceName: raceData.name || raceName,
@@ -213,19 +234,31 @@ export function TacticalPlanCard({
       };
 
       // Save to database - preserve existing strategy_content to avoid overwriting other cards' data
-      const existingData = await supabase
+      const primaryExistingData = await supabase
         .from('race_strategies')
         .select('strategy_content')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
+      let existingData = primaryExistingData;
+      if (
+        primaryExistingData.error &&
+        isMissingIdColumn(primaryExistingData.error, 'race_strategies', 'regatta_id')
+      ) {
+        existingData = await supabase
+          .from('race_strategies')
+          .select('strategy_content')
+          .eq('race_id', raceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+      }
 
       // Preserve existing data (e.g., startStrategy from StartStrategyCard)
       const strategyContent = existingData.data?.strategy_content || {};
       (strategyContent as any).tacticalPlan = aiPlan;
       (strategyContent as any).fullAIStrategy = strategy; // Save full AI strategy for reference
 
-      const { error: upsertError } = await supabase
+      const primaryUpsert = await supabase
         .from('race_strategies')
         .upsert({
           regatta_id: raceId,
@@ -237,7 +270,22 @@ export function TacticalPlanCard({
         }, {
           onConflict: 'regatta_id,user_id'
         });
-
+      let upsertError = primaryUpsert.error;
+      if (upsertError && isMissingIdColumn(upsertError, 'race_strategies', 'regatta_id')) {
+        const fallbackUpsert = await supabase
+          .from('race_strategies')
+          .upsert({
+            race_id: raceId,
+            user_id: user.id,
+            strategy_type: 'pre_race',
+            strategy_content: strategyContent,
+            confidence_score: aiPlan.confidence,
+            ai_generated: true,
+          }, {
+            onConflict: 'race_id,user_id'
+          });
+        upsertError = fallbackUpsert.error;
+      }
       if (upsertError) throw upsertError;
 
       setPlan(aiPlan);
@@ -246,7 +294,8 @@ export function TacticalPlanCard({
       logger.debug('[TacticalPlanCard] Skill enabled:', raceStrategyEngine.isSkillReady());
     } catch (err) {
       console.error('[TacticalPlanCard] Generate error:', err);
-      setError('Failed to generate tactical plan');
+      const message = err instanceof Error ? err.message : 'Failed to generate tactical plan';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -293,13 +342,37 @@ export function TacticalPlanCard({
   };
 
   const renderPlanContent = () => {
-    if (!plan) {
+    if (!plan && loading) {
       return (
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color="#3B82F6" />
           <Text style={styles.emptyText}>
             Generating comprehensive tactical plan based on conditions, course layout, and venue intelligence...
           </Text>
+        </View>
+      );
+    }
+    if (!plan && error) {
+      return (
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="alert-circle" size={44} color="#EF4444" />
+          <Text style={styles.emptyErrorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={generatePlan} disabled={loading}>
+            <MaterialCommunityIcons name="refresh" size={16} color="#FFFFFF" />
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    if (!plan) {
+      return (
+        <View style={styles.emptyState}>
+          <MaterialCommunityIcons name="strategy" size={44} color="#94A3B8" />
+          <Text style={styles.emptyText}>No tactical plan available yet.</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={generatePlan} disabled={loading}>
+            <MaterialCommunityIcons name="sparkles" size={16} color="#FFFFFF" />
+            <Text style={styles.retryButtonText}>Generate Plan</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -444,6 +517,30 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 16,
     marginTop: 8,
+  },
+  emptyErrorText: {
+    fontSize: 14,
+    color: '#EF4444',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 14,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   planContent: {
     gap: 20,

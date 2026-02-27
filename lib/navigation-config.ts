@@ -9,6 +9,7 @@
 
 import type { Ionicons } from '@expo/vector-icons';
 import type { UserCapabilities } from '@/providers/AuthProvider';
+import type { VocabularyMap } from '@/lib/vocabulary';
 
 // =============================================================================
 // TYPES
@@ -35,18 +36,35 @@ export interface NavItem {
 // =============================================================================
 
 /**
- * Get tabs for a user based on their type and capabilities.
+ * Get the vocabulary-aware event tab title.
+ * Maps "Learning Event" vocabulary term to a short tab label.
+ */
+const getEventTabTitle = (vocabulary?: VocabularyMap): string => {
+  if (!vocabulary) return 'Race';
+  const term = vocabulary['Learning Event'];
+  if (!term) return 'Race';
+  // Use the first word for short tab labels (e.g., "Clinical Shift" → "Shift")
+  const words = term.split(' ');
+  return words.length > 1 ? words[words.length - 1] : term;
+};
+
+/**
+ * Get tabs for a user based on their type, capabilities, and vocabulary.
  * For sailors with coaching capability, adds coach tabs to sailor tabs.
+ * The vocabulary parameter adapts tab labels to the current interest.
  */
 export const getTabsForUserType = (
   userType: string | null,
   isGuest: boolean = false,
-  capabilities?: UserCapabilities
+  capabilities?: UserCapabilities,
+  vocabulary?: VocabularyMap
 ): TabConfig[] => {
-  // Guests get full sailor-style tabs (same as logged-in sailors)
+  const eventTitle = getEventTabTitle(vocabulary);
+
+  // Guests get full learner-style tabs (same as logged-in learners)
   if (isGuest) {
     return [
-      { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'races', title: eventTitle, icon: 'flag-outline', iconFocused: 'flag' },
       { name: 'connect', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
@@ -54,7 +72,7 @@ export const getTabsForUserType = (
     ];
   }
 
-  // Club admins get their own dedicated tabs (unchanged)
+  // Club/institution admins get their own dedicated tabs (unchanged)
   if (userType === 'club') {
     return [
       { name: 'events', title: 'Events', icon: 'calendar-outline', iconFocused: 'calendar' },
@@ -74,10 +92,10 @@ export const getTabsForUserType = (
     ];
   }
 
-  // Sailors (including sailors with coaching capability)
+  // Learners (sailors, nurses, artists, athletes — including those with coaching capability)
   if (userType === 'sailor' || userType === 'coach') {
     const tabs: TabConfig[] = [
-      { name: 'races', title: 'Race', icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'races', title: eventTitle, icon: 'flag-outline', iconFocused: 'flag' },
       { name: 'connect', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
@@ -139,8 +157,12 @@ export const COMMON_FOOTER_ITEMS: NavItem[] = [
 /**
  * Get primary and secondary nav items based on user type.
  * Used by both NavigationDrawer and WebSidebarNav.
+ * When vocabulary is provided, the first sailor nav item label is adapted.
  */
-export function getNavItemsForUserType(userType: string | null): {
+export function getNavItemsForUserType(
+  userType: string | null,
+  vocabulary?: VocabularyMap
+): {
   primary: NavItem[];
   secondary: NavItem[];
 } {
@@ -150,8 +172,13 @@ export function getNavItemsForUserType(userType: string | null): {
     case 'club':
       return { primary: CLUB_NAV_ITEMS, secondary: [] };
     case 'sailor':
-    default:
-      return { primary: SAILOR_NAV_ITEMS, secondary: SAILOR_SECONDARY_ITEMS };
+    default: {
+      const eventTitle = getEventTabTitle(vocabulary);
+      const primary = SAILOR_NAV_ITEMS.map((item) =>
+        item.key === 'races' ? { ...item, label: eventTitle } : item
+      );
+      return { primary, secondary: SAILOR_SECONDARY_ITEMS };
+    }
   }
 }
 

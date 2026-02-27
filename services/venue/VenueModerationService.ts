@@ -7,6 +7,9 @@
 
 import { supabase } from '@/services/supabase';
 import type { VenueRole } from '@/types/community-feed';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('VenueModerationService');
 
 class VenueModerationServiceClass {
   /**
@@ -28,7 +31,7 @@ class VenueModerationServiceClass {
       });
 
     if (error) {
-      console.error('[VenueModerationService] Error granting role:', error);
+      logger.error('[VenueModerationService] Error granting role:', error);
       throw error;
     }
   }
@@ -45,7 +48,7 @@ class VenueModerationServiceClass {
       .eq('role', role);
 
     if (error) {
-      console.error('[VenueModerationService] Error revoking role:', error);
+      logger.error('[VenueModerationService] Error revoking role:', error);
       throw error;
     }
   }
@@ -73,7 +76,7 @@ class VenueModerationServiceClass {
       .eq('role', 'moderator');
 
     if (error) {
-      console.error('[VenueModerationService] Error listing moderators:', error);
+      logger.error('[VenueModerationService] Error listing moderators:', error);
       return [];
     }
 
@@ -95,7 +98,7 @@ class VenueModerationServiceClass {
       .eq('id', postId);
 
     if (error) {
-      console.error('[VenueModerationService] Error pinning post:', error);
+      logger.error('[VenueModerationService] Error pinning post:', error);
       throw error;
     }
   }
@@ -110,7 +113,7 @@ class VenueModerationServiceClass {
       .eq('id', postId);
 
     if (error) {
-      console.error('[VenueModerationService] Error deleting post:', error);
+      logger.error('[VenueModerationService] Error deleting post:', error);
       throw error;
     }
   }
@@ -125,7 +128,7 @@ class VenueModerationServiceClass {
       .eq('id', commentId);
 
     if (error) {
-      console.error('[VenueModerationService] Error deleting comment:', error);
+      logger.error('[VenueModerationService] Error deleting comment:', error);
       throw error;
     }
   }

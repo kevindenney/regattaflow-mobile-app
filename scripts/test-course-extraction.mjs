@@ -12,10 +12,10 @@ import dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
-const ANTHROPIC_API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 if (!ANTHROPIC_API_KEY) {
-  console.error('Missing EXPO_PUBLIC_ANTHROPIC_API_KEY environment variable');
+  console.error('Missing ANTHROPIC_API_KEY environment variable');
   process.exit(1);
 }
 

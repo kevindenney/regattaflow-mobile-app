@@ -14,7 +14,10 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import { Navigation, Signal, Battery } from 'lucide-react-native';
+import { Navigation, Signal } from 'lucide-react-native';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('LivePositionTracker');
 
 // Dynamic import helper for expo-location (native only)
 let LocationModule: typeof import('expo-location') | null = null;
@@ -60,7 +63,6 @@ export function LivePositionTracker({
   const [currentPosition, setCurrentPosition] = useState<Position | null>(null);
   const [trail, setTrail] = useState<Position[]>([]);
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'unknown'>('unknown');
-  const [isTracking, setIsTracking] = useState(false);
   const subscriptionRef = useRef<any | null>(null);
 
   // Request location permissions
@@ -81,7 +83,7 @@ export function LivePositionTracker({
         const { status } = await Location.requestForegroundPermissionsAsync();
         setPermissionStatus(status === 'granted' ? 'granted' : 'denied');
       } catch (error) {
-        console.error('[LivePositionTracker] Permission request error:', error);
+        logger.error('Permission request error', error);
         setPermissionStatus('denied');
       }
     })();
@@ -131,9 +133,8 @@ export function LivePositionTracker({
           }
         );
 
-        setIsTracking(true);
       } catch (error) {
-        console.error('[LivePositionTracker] Tracking start error:', error);
+        logger.error('Tracking start error', error);
       }
     };
 
@@ -143,7 +144,6 @@ export function LivePositionTracker({
     return () => {
       if (subscriptionRef.current) {
         subscriptionRef.current.remove();
-        setIsTracking(false);
       }
     };
   }, [permissionStatus, updateInterval, trailDuration, onPositionUpdate, onTrailUpdate]);

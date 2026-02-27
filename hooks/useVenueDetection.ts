@@ -1,20 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Platform } from 'react-native';
-import { VenueIntelligenceAgent } from '@/services/agents/VenueIntelligenceAgent';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { venueDetectionService } from '@/services/venue/VenueDetectionService';
 import type { SailingVenue } from '@/lib/types/global-venues';
-
-// Dynamic import helper for expo-location (native only)
-let LocationModule: typeof import('expo-location') | null = null;
-
-async function getLocationModule() {
-  if (Platform.OS === 'web') {
-    return null;
-  }
-  if (!LocationModule) {
-    LocationModule = await import('expo-location');
-  }
-  return LocationModule;
-}
 
 interface VenueDetectionResult {
   currentVenue: SailingVenue | null;
@@ -31,69 +17,46 @@ export function useVenueDetection(): VenueDetectionResult {
   const [confidence, setConfidence] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const detectRunIdRef = useRef(0);
 
-  // Create agent instance once using useMemo to avoid recreation on every render
-  const agent = React.useMemo(() => new VenueIntelligenceAgent(), []);
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      detectRunIdRef.current += 1;
+    };
+  }, []);
 
   const detectVenue = useCallback(async () => {
-    const Location = await getLocationModule();
-    if (!Location) {
-      setError('Location detection is not available on web.');
-      return;
-    }
+    const runId = ++detectRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === detectRunIdRef.current;
 
+    if (!canCommit()) return;
     setIsDetecting(true);
     setError(null);
 
     try {
-      // Request location permissions
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      setPermissionStatus(status);
+      const initialized = await venueDetectionService.initialize();
+      if (!canCommit()) return;
+      setPermissionStatus(initialized ? 'granted' : 'fallback');
 
-      if (status !== 'granted') {
-        setError('Location permission denied. Please enable location access to auto-detect venues.');
-        setIsDetecting(false);
-        return;
-      }
+      await venueDetectionService.forceDetection();
+      if (!canCommit()) return;
 
-      // Get current GPS coordinates
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      const { latitude, longitude } = location.coords;
-
-      // Call VenueIntelligenceAgent to detect and switch venue
-      const result = await agent.switchVenueByGPS({ latitude, longitude });
-
-      if (result.success) {
-
-        // Extract venue data from agent result
-        // The agent's detect_venue_from_gps tool returns venue info
-        const venueData = result.result;
-
-        // Parse confidence from result (agent returns 0.0-1.0)
-        const detectedConfidence = venueData?.confidence || 0;
-        setConfidence(detectedConfidence);
-
-        // Create venue object from agent response
-        if (venueData?.venueId && venueData?.venueName) {
-          setCurrentVenue({
-            id: venueData.venueId,
-            name: venueData.venueName,
-            coordinates: venueData.coordinates || { lat: latitude, lng: longitude },
-            region: venueData.region || 'unknown',
-            // Additional fields will be populated by the agent's intelligence loading
-          } as SailingVenue);
-        }
+      const detectedVenue = venueDetectionService.getCurrentVenue();
+      const detectionStatus = venueDetectionService.getDetectionStatus();
+      if (detectedVenue) {
+        setCurrentVenue(detectedVenue as SailingVenue);
+        setConfidence(detectionStatus?.confidence ?? 0.9);
       } else {
-        setError(result.error || 'Failed to detect venue');
-
+        setError('Failed to detect venue');
+        setConfidence(0);
       }
     } catch (err: any) {
+      if (!canCommit()) return;
       setError(err.message || 'Failed to detect venue');
-
     } finally {
+      if (!canCommit()) return;
       setIsDetecting(false);
     }
   }, []);

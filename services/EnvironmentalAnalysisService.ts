@@ -176,7 +176,7 @@ export class EnvironmentalAnalysisService {
       };
 
     } catch (error) {
-      console.error('Error in environmental analysis:', error);
+      logger.error('Error in environmental analysis:', error);
       throw new Error(`Failed to analyze environment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   FeedPost,
   FeedQueryParams,
@@ -23,6 +24,8 @@ import type {
   TopPeriod,
   VenueRole,
 } from '@/types/community-feed';
+
+const logger = createLogger('CommunityFeedService');
 
 class CommunityFeedServiceClass {
   // ============================================================================
@@ -118,7 +121,7 @@ class CommunityFeedServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching feed:', error);
+      logger.error('[CommunityFeedService] Error fetching feed:', error);
       throw error;
     }
 
@@ -263,7 +266,7 @@ class CommunityFeedServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching aggregated feed:', error);
+      logger.error('[CommunityFeedService] Error fetching aggregated feed:', error);
       throw error;
     }
 
@@ -369,7 +372,7 @@ class CommunityFeedServiceClass {
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching user posts:', error);
+      logger.error('[CommunityFeedService] Error fetching user posts:', error);
       throw error;
     }
 
@@ -444,7 +447,7 @@ class CommunityFeedServiceClass {
       .single();
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching post:', error);
+      logger.error('[CommunityFeedService] Error fetching post:', error);
       return null;
     }
 
@@ -536,7 +539,7 @@ class CommunityFeedServiceClass {
       .single();
 
     if (error) {
-      console.error('[CommunityFeedService] Error creating post:', error);
+      logger.error('[CommunityFeedService] Error creating post:', error);
 
       // Check for common constraint/permission errors and provide user-friendly messages
       const errorMessage = error.message?.toLowerCase() || '';
@@ -603,7 +606,7 @@ class CommunityFeedServiceClass {
       .single();
 
     if (error) {
-      console.error('[CommunityFeedService] Error updating post:', error);
+      logger.error('[CommunityFeedService] Error updating post:', error);
       throw error;
     }
 
@@ -620,7 +623,7 @@ class CommunityFeedServiceClass {
       .eq('id', postId);
 
     if (error) {
-      console.error('[CommunityFeedService] Error deleting post:', error);
+      logger.error('[CommunityFeedService] Error deleting post:', error);
       throw error;
     }
   }
@@ -661,7 +664,7 @@ class CommunityFeedServiceClass {
         if (error) throw error;
       }
     } catch (error: any) {
-      console.error('[CommunityFeedService] Error voting:', error);
+      logger.error('[CommunityFeedService] Error voting:', error);
 
       const errorMessage = error.message?.toLowerCase() || '';
       const errorCode = error.code?.toLowerCase() || '';
@@ -705,7 +708,7 @@ class CommunityFeedServiceClass {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching comments:', error);
+      logger.error('[CommunityFeedService] Error fetching comments:', error);
       throw error;
     }
 
@@ -758,7 +761,7 @@ class CommunityFeedServiceClass {
       .single();
 
     if (error) {
-      console.error('[CommunityFeedService] Error creating comment:', error);
+      logger.error('[CommunityFeedService] Error creating comment:', error);
 
       // Check for common constraint/permission errors and provide user-friendly messages
       const errorMessage = error.message?.toLowerCase() || '';
@@ -798,7 +801,7 @@ class CommunityFeedServiceClass {
       .eq('id', commentId);
 
     if (error) {
-      console.error('[CommunityFeedService] Error updating comment:', error);
+      logger.error('[CommunityFeedService] Error updating comment:', error);
       throw error;
     }
   }
@@ -838,7 +841,7 @@ class CommunityFeedServiceClass {
       .order('sort_order', { ascending: true });
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching topic tags:', error);
+      logger.error('[CommunityFeedService] Error fetching topic tags:', error);
       return [];
     }
 
@@ -877,7 +880,7 @@ class CommunityFeedServiceClass {
       .eq('id', postId);
 
     if (error) {
-      console.error('[CommunityFeedService] Error pinning post:', error);
+      logger.error('[CommunityFeedService] Error pinning post:', error);
       throw error;
     }
   }
@@ -977,7 +980,7 @@ class CommunityFeedServiceClass {
     const { data, error } = await query;
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching map posts:', error);
+      logger.error('[CommunityFeedService] Error fetching map posts:', error);
       return [];
     }
 
@@ -1066,7 +1069,7 @@ class CommunityFeedServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching community posts:', error);
+      logger.error('[CommunityFeedService] Error fetching community posts:', error);
       throw error;
     }
 
@@ -1206,7 +1209,7 @@ class CommunityFeedServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching joined communities feed:', error);
+      logger.error('[CommunityFeedService] Error fetching joined communities feed:', error);
       throw error;
     }
 
@@ -1313,7 +1316,7 @@ class CommunityFeedServiceClass {
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('[CommunityFeedService] Error fetching race posts:', error);
+      logger.error('[CommunityFeedService] Error fetching race posts:', error);
       throw error;
     }
 

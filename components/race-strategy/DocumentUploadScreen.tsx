@@ -10,11 +10,12 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { DocumentProcessingAgent } from '@/services/agents/DocumentProcessingAgent';
+import * as FileSystem from 'expo-file-system/legacy';
 import RaceEventService from '@/services/RaceEventService';
 import { DocumentType, SourceDocument } from '@/types/raceEvents';
+import { supabase } from '@/services/supabase';
 
 interface DocumentUploadScreenProps {
   onProcessingComplete: (raceEventId: string) => void;
@@ -108,68 +109,106 @@ export function DocumentUploadScreen({ onProcessingComplete }: DocumentUploadScr
 
       setStatus('Processing documents with AI...');
 
-      // Step 2: Process documents with DocumentProcessingAgent
-      const agent = new DocumentProcessingAgent();
+      let extractedCourseName: string | undefined;
+      let extractedDescription: string | undefined;
+      let extractedWaypoints: any[] = [];
+      let extractedConfidence: number | undefined;
 
-      // If we have uploaded files, read their content
-      const documentsWithContent = await Promise.all(
-        uploadedFiles.map(async (doc) => {
-          if (doc.url && Platform.OS === 'web') {
-            // For web, fetch the content
-            try {
-              const response = await fetch(doc.url);
-              const text = await response.text();
-              return { ...doc, content: text };
-            } catch {
-              return doc;
-            }
+      // Step 2: Prefer direct document extraction when files are uploaded
+      if (uploadedFiles.length > 0) {
+        const primaryDocument = uploadedFiles[0];
+        if (!primaryDocument?.url) {
+          throw new Error('Selected document is missing a readable URL');
+        }
+
+        const fileName = primaryDocument.filename || 'race-document';
+        const lowerName = fileName.toLowerCase();
+        const mimeType = lowerName.endsWith('.pdf')
+          ? 'application/pdf'
+          : lowerName.endsWith('.csv')
+            ? 'text/csv'
+            : 'application/pdf';
+
+        const base64 = await FileSystem.readAsStringAsync(primaryDocument.url, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        const { data: extractedData, error: extractionError } = await supabase.functions.invoke(
+          'extract-course-from-document',
+          {
+            body: {
+              fileContent: `data:${mimeType};base64,${base64}`,
+              fileName,
+              fileType: mimeType,
+              raceType: 'fleet',
+            },
           }
-          return doc;
-        })
-      );
+        );
 
-      const result = await agent.processRaceEvent({
-        raceEventId: raceEvent.id,
-        source: sourceUrl || '',
-        raceName: raceName,
-        documents: documentsWithContent
-      });
+        if (extractionError) {
+          throw new Error(extractionError.message || 'Failed to parse uploaded document');
+        }
 
-      if (!result.success) {
-        throw new Error(result.errors?.join(', ') || 'Processing failed');
+        extractedCourseName = extractedData?.courseName;
+        extractedDescription = extractedData?.courseDescription;
+        extractedWaypoints = Array.isArray(extractedData?.waypoints) ? extractedData.waypoints : [];
+        extractedConfidence = typeof extractedData?.confidence === 'number' ? extractedData.confidence : undefined;
+      } else if (sourceUrl.trim()) {
+        // Fallback path: URL extraction
+        const { data: extractedData, error: extractionError } = await supabase.functions.invoke(
+          'extract-race-details',
+          {
+            body: { url: sourceUrl.trim() },
+          }
+        );
+
+        if (extractionError) {
+          throw new Error(extractionError.message || 'Failed to parse source URL');
+        }
+
+        const firstRace = Array.isArray(extractedData?.races) ? extractedData.races[0] : null;
+        extractedCourseName = firstRace?.raceName || extractedData?.data?.raceName;
+        extractedDescription = firstRace?.description || extractedData?.data?.description;
+        extractedConfidence = extractedData?.overallConfidence;
+        extractedWaypoints = Array.isArray(firstRace?.marks)
+          ? firstRace.marks.map((mark: any, index: number) => ({
+              name: mark?.name || `Mark ${index + 1}`,
+              latitude: mark?.latitude,
+              longitude: mark?.longitude,
+              type: mark?.type || 'mark',
+              notes: mark?.description || '',
+              passingSide: mark?.rounding || 'either',
+            }))
+          : [];
       }
 
       setStatus('Extraction complete!');
 
       // Step 3: Update race event with extracted data
-      if (result.extracted_data) {
-        await RaceEventService.updateRaceEvent(raceEvent.id, {
-          race_name: result.extracted_data.race_name || raceName,
-          race_series: result.extracted_data.race_series,
-          boat_class: result.extracted_data.boat_class,
-          start_time: result.extracted_data.start_time || startTime.toISOString(),
-          racing_area_name: result.extracted_data.racing_area_name,
-          venue_id: result.extracted_data.venue_id,
-          course_configuration: result.extracted_data.course_configuration,
-          course_description: result.extracted_data.course_description,
-          confidence_score: result.confidence,
-          extraction_status: 'completed'
-        });
+      await RaceEventService.updateRaceEvent(raceEvent.id, {
+        race_name: extractedCourseName || raceName,
+        start_time: startTime.toISOString(),
+        course_description: extractedDescription,
+        confidence_score: extractedConfidence,
+        extraction_status: 'completed'
+      });
 
-        // Add extracted marks
-        if (result.extracted_data.marks && result.extracted_data.marks.length > 0) {
-          const marks = result.extracted_data.marks.map(mark => ({
-            mark_name: mark.name,
-            mark_type: mark.type,
-            position: `POINT(${mark.lng} ${mark.lat})`,
-            rounding_direction: mark.rounding,
-            sequence_number: mark.sequence,
-            mark_color: mark.color,
-            mark_shape: mark.shape,
+      if (extractedWaypoints.length > 0) {
+        const marks = extractedWaypoints
+          .filter((waypoint: any) => typeof waypoint?.latitude === 'number' && typeof waypoint?.longitude === 'number')
+          .map((waypoint: any, index: number) => ({
+            mark_name: waypoint.name || `Mark ${index + 1}`,
+            mark_type: waypoint.type || 'mark',
+            position: `POINT(${waypoint.longitude} ${waypoint.latitude})`,
+            rounding_direction: waypoint.passingSide || 'either',
+            sequence_number: index + 1,
+            mark_color: null,
+            mark_shape: null,
             extracted_from: 'ai_pdf',
-            confidence_score: mark.confidence
+            confidence_score: extractedConfidence || null
           }));
 
+        if (marks.length > 0) {
           await RaceEventService.addCourseMarks(raceEvent.id, marks);
         }
       }

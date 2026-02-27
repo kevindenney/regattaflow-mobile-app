@@ -12,6 +12,9 @@ import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { TemplateSectionAction } from '@/components/cards/types';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useSectionAction');
 
 /**
  * Tool definitions with their routes and availability
@@ -99,7 +102,7 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
   const { raceId, onNavigated, onOpenTool } = options;
 
   const handleSectionAction = useCallback(
-    (action: TemplateSectionAction, sectionId: string) => {
+    (action: TemplateSectionAction, _sectionId: string) => {
       switch (action.type) {
         case 'tool': {
           const toolConfig = action.toolId ? TOOL_ROUTES[action.toolId] : null;
@@ -110,17 +113,15 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
           }
 
           if (!toolConfig.available) {
-            // Tool not yet built - show coming soon
             Alert.alert(
-              `${toolConfig.name}`,
-              'This tool is coming soon! Would you like to be notified when it\'s ready?',
+              toolConfig.name,
+              'This tool is not available yet in this build. You can open Learn for related guidance right now.',
               [
                 { text: 'Not now', style: 'cancel' },
                 {
-                  text: 'Notify me',
+                  text: 'Open Learn',
                   onPress: () => {
-                    // TODO: Add to notification list
-                    Alert.alert('Got it!', "We'll let you know when this tool is ready.");
+                    router.push('/(tabs)/learn');
                   },
                 },
               ]
@@ -171,7 +172,7 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
 
         case 'navigate': {
           if (!action.route) {
-            console.warn('[useSectionAction] Navigate action missing route');
+            logger.warn('Navigate action missing route');
             return;
           }
 
@@ -185,7 +186,7 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
         }
 
         default:
-          console.warn('[useSectionAction] Unknown action type:', (action as any).type);
+          logger.warn('Unknown action type', (action as any).type);
       }
     },
     [raceId, onNavigated, onOpenTool]

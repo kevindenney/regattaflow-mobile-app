@@ -36,6 +36,10 @@ interface SeasonHeaderProps {
   compact?: boolean;
   /** Whether we're in "All Races" mode (no season filter) */
   showAllRaces?: boolean;
+  /** Vocabulary-aware event noun (e.g., "Races", "Shifts", "Workouts") for "All ..." label */
+  eventNounPlural?: string;
+  /** Vocabulary-aware period term (e.g., "season", "rotation", "training block") */
+  periodTerm?: string;
 }
 
 export function SeasonHeader({
@@ -48,7 +52,12 @@ export function SeasonHeader({
   onStartSeasonPress,
   compact = false,
   showAllRaces = false,
+  eventNounPlural,
+  periodTerm,
 }: SeasonHeaderProps) {
+  const allLabel = eventNounPlural ? `All ${eventNounPlural}` : 'All Races';
+  const noPeriodLabel = periodTerm ? `No active ${periodTerm.toLowerCase()}` : 'No active season';
+
   // "All Races" mode - show all races without season filter
   if (showAllRaces && !season) {
     return (
@@ -58,7 +67,7 @@ export function SeasonHeader({
         onLongPress={onArchivePress}
       >
         <Text style={[styles.seasonName, styles.allRacesText, compact && styles.seasonNameCompact]}>
-          All Races
+          {allLabel}
         </Text>
         {totalRaces !== undefined && (
           <Text style={[styles.fraction, compact && styles.fractionCompact]}>
@@ -77,7 +86,7 @@ export function SeasonHeader({
         onPress={onStartSeasonPress}
         onLongPress={onArchivePress}
       >
-        <Text style={[styles.noSeasonText, compact && styles.noSeasonTextCompact]}>No active season</Text>
+        <Text style={[styles.noSeasonText, compact && styles.noSeasonTextCompact]}>{noPeriodLabel}</Text>
       </Pressable>
     );
   }

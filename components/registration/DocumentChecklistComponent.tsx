@@ -3,7 +3,7 @@
  * Displays required documents and handles uploads
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Alert, Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import {
@@ -19,6 +19,9 @@ import {
 import { CheckCircle, Upload, FileText, AlertCircle } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { raceRegistrationService, DocumentRequirement } from '@/services/RaceRegistrationService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('DocumentChecklistComponent');
 
 interface DocumentChecklistProps {
   entryId: string;
@@ -45,9 +48,9 @@ export function DocumentChecklistComponent({
 
   useEffect(() => {
     loadDocumentRequirements();
-  }, [entryId, regattaId]);
+  }, [loadDocumentRequirements]);
 
-  const loadDocumentRequirements = async () => {
+  const loadDocumentRequirements = useCallback(async (): Promise<DocumentStatus[] | null> => {
     try {
       setLoading(true);
 
@@ -83,13 +86,15 @@ export function DocumentChecklistComponent({
       });
 
       setDocuments(documentStatus);
+      return documentStatus;
     } catch (error) {
-      console.error('Failed to load document requirements:', error);
+      logger.error('Failed to load document requirements', error);
       Alert.alert('Error', 'Failed to load document requirements');
+      return null;
     } finally {
       setLoading(false);
     }
-  };
+  }, [entryId, regattaId]);
 
   const handleUploadDocument = async (documentType: string) => {
     try {
@@ -135,23 +140,21 @@ export function DocumentChecklistComponent({
 
       if (uploadResult.success) {
         Alert.alert('Success', 'Document uploaded successfully');
-        await loadDocumentRequirements(); // Reload to show updated status
-
-        // Check if all documents are now complete
-        checkAllDocumentsComplete();
+        const latestDocuments = await loadDocumentRequirements(); // Reload to show updated status
+        checkAllDocumentsComplete(latestDocuments ?? documents);
       } else {
         throw new Error(uploadResult.error || 'Upload failed');
       }
     } catch (error: any) {
-      console.error('Upload error:', error);
+      logger.error('Upload error', error);
       Alert.alert('Error', error.message || 'Failed to upload document');
     } finally {
       setUploading(null);
     }
   };
 
-  const checkAllDocumentsComplete = () => {
-    const allRequired = documents.filter((doc) => doc.requirement.required);
+  const checkAllDocumentsComplete = (docs: DocumentStatus[]) => {
+    const allRequired = docs.filter((doc) => doc.requirement.required);
     const allSubmitted = allRequired.every((doc) => doc.submitted);
 
     if (allSubmitted && onComplete) {

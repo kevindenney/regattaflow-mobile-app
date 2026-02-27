@@ -8,6 +8,7 @@
  */
 
 import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
 
 /**
  * NOAA tide station information
@@ -63,6 +64,8 @@ export interface TidalVisualizationConfig {
   opacity: number;
 }
 
+const logger = createLogger('TidalService');
+
 /**
  * Tidal Service
  */
@@ -84,7 +87,7 @@ export class TidalService {
     }
 
     // For other regions, return empty (can add other APIs later)
-    console.warn(`Tidal data not available for ${venue.country}`);
+    logger.warn(`Tidal data not available for ${venue.country}`);
     return [];
   }
 
@@ -127,7 +130,7 @@ export class TidalService {
       const data = await response.json();
 
       if (!data.predictions || data.predictions.length === 0) {
-        console.warn(`No tidal predictions for station ${stationId}`);
+        logger.warn(`No tidal predictions for station ${stationId}`);
         return null;
       }
 
@@ -157,7 +160,7 @@ export class TidalService {
 
       return tidalData;
     } catch (error) {
-      console.error('Failed to fetch tidal predictions:', error);
+      logger.error('Failed to fetch tidal predictions:', error);
       return null;
     }
   }

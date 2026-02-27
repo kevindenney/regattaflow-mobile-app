@@ -149,7 +149,7 @@ Component.web.tsx      # Web only
 Prefix with `EXPO_PUBLIC_` for client-side access:
 ```
 EXPO_PUBLIC_SUPABASE_URL
-EXPO_PUBLIC_ANTHROPIC_API_KEY
+ANTHROPIC_API_KEY
 EXPO_PUBLIC_GOOGLE_MAPS_API_KEY
 ```
 

@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 export interface RaceStartOrderData {
   /** Position in the start sequence (1-indexed) */
@@ -76,13 +77,26 @@ export function useRaceStartOrder({
       if (regattaId && !regattaId.startsWith('demo-')) {
         // Query schedules for the regatta on the race date
         const raceDay = raceDate.split('T')[0];
-        const { data: schedules } = await supabase
+        let schedules: Array<{ id: string }> | null = null;
+        const primarySchedules = await supabase
           .from('race_start_schedules')
           .select('id')
           .eq('regatta_id', regattaId)
           .gte('scheduled_date', `${raceDay}T00:00:00`)
           .lt('scheduled_date', `${raceDay}T23:59:59`)
           .limit(1);
+        schedules = primarySchedules.data;
+
+        if (isMissingIdColumn(primarySchedules.error, 'race_start_schedules', 'regatta_id')) {
+          const fallbackSchedules = await supabase
+            .from('race_start_schedules')
+            .select('id')
+            .eq('race_id', regattaId)
+            .gte('scheduled_date', `${raceDay}T00:00:00`)
+            .lt('scheduled_date', `${raceDay}T23:59:59`)
+            .limit(1);
+          schedules = fallbackSchedules.data;
+        }
 
         if (schedules && schedules.length > 0) {
           scheduleId = schedules[0].id;

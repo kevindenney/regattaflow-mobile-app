@@ -3,8 +3,8 @@
  * Handles Stripe payment for race entry fees
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Alert, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Alert, Platform, Linking } from 'react-native';
 import { VStack, HStack, Text, Button, Card, Spinner, Divider } from '@/components/ui';
 import { CreditCard, CheckCircle, AlertCircle } from 'lucide-react-native';
 import { raceRegistrationService } from '@/services/RaceRegistrationService';
@@ -30,7 +30,7 @@ interface EntryPaymentInfo {
 
 export function PaymentFlowComponent({
   entryId,
-  userId,
+  userId: _userId,
   onSuccess,
   onCancel,
 }: PaymentFlowProps) {
@@ -40,11 +40,7 @@ export function PaymentFlowComponent({
   const [paymentInfo, setPaymentInfo] = useState<EntryPaymentInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadPaymentInfo();
-  }, [entryId]);
-
-  const loadPaymentInfo = async () => {
+  const loadPaymentInfo = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -69,7 +65,11 @@ export function PaymentFlowComponent({
     } finally {
       setLoading(false);
     }
-  };
+  }, [entryId]);
+
+  useEffect(() => {
+    void loadPaymentInfo();
+  }, [loadPaymentInfo]);
 
   const handlePayment = async () => {
     try {
@@ -91,6 +91,13 @@ export function PaymentFlowComponent({
           'Payment Not Available on Web',
           'Please use the RegattaFlow mobile app to complete payment, or contact the race organizer for alternative payment methods.',
           [
+            {
+              text: 'Contact Support',
+              onPress: () =>
+                Linking.openURL(
+                  `mailto:support@regattaflow.com?subject=${encodeURIComponent('Web Payment Support')}&body=${encodeURIComponent(`Entry: ${entryId}\nEvent: ${paymentInfo?.regatta?.event_name || 'Unknown'}\n\nI need help completing payment on web.`)}`
+                ),
+            },
             {
               text: 'Skip for Now',
               onPress: handleSkipPayment,

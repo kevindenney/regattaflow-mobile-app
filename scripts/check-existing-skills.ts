@@ -11,7 +11,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 async function checkSkills() {
   console.log('🔍 Checking your Anthropic Skills...\n');
 
-  const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
     console.error('❌ No API key found');

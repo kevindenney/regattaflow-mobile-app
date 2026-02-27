@@ -9,6 +9,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 interface RaceOverviewCardProps {
   raceId: string;
@@ -57,12 +58,24 @@ export function RaceOverviewCard({
     try {
       setLoading(true);
 
-      const { data, error } = await supabase
+      const primary = await supabase
         .from('race_strategies')
         .select('confidence_score, created_at')
         .eq('regatta_id', raceId)
         .eq('user_id', user.id)
         .maybeSingle();
+      let data = primary.data;
+      let error = primary.error;
+      if (error && isMissingIdColumn(error, 'race_strategies', 'regatta_id')) {
+        const fallback = await supabase
+          .from('race_strategies')
+          .select('confidence_score, created_at')
+          .eq('race_id', raceId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) throw error;
 

@@ -28,9 +28,8 @@ import { TimelineTimeAxis, TimeAxisRace } from './TimelineTimeAxis';
 import { SharedRaceContentView } from '@/components/discover/SharedRaceContentView';
 import { useIsFollowing, TimelineUser } from '@/hooks/useFollowedTimelines';
 import { TUFTE_BACKGROUND } from '@/components/cards';
-import { IOS_COLORS } from '@/components/cards/constants';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Card dimensions - matching existing races screen
 const CARD_WIDTH = Math.min(SCREEN_WIDTH - 32, 375);
@@ -68,7 +67,7 @@ interface TimelineScreenProps {
 export function TimelineScreen({
   user,
   races,
-  isActive,
+  isActive: _isActive,
   onSelectRace,
   selectedRaceId,
   onScrollChange,
@@ -86,7 +85,7 @@ export function TimelineScreen({
   );
 
   // Get race status helper
-  const getRaceStatus = useCallback((date: string, startTime?: string): 'past' | 'next' | 'future' => {
+  const getRaceStatus = useCallback((date: string, _startTime?: string): 'past' | 'next' | 'future' => {
     const raceDate = new Date(date);
     const now = new Date();
 
@@ -163,17 +162,17 @@ export function TimelineScreen({
   // Scroll left/right arrows
   const handleScrollLeft = useCallback(() => {
     if (scrollViewRef.current) {
-      const currentIndex = Math.round(0 / SNAP_INTERVAL); // Would need state for actual position
+      const currentIndex = currentRaceIndex;
       scrollToIndex(Math.max(0, currentIndex - 1));
     }
-  }, [scrollToIndex]);
+  }, [currentRaceIndex, scrollToIndex]);
 
   const handleScrollRight = useCallback(() => {
     if (scrollViewRef.current) {
-      const currentIndex = Math.round(0 / SNAP_INTERVAL);
+      const currentIndex = currentRaceIndex;
       scrollToIndex(Math.min(races.length - 1, currentIndex + 1));
     }
-  }, [scrollToIndex, races.length]);
+  }, [currentRaceIndex, scrollToIndex, races.length]);
 
   return (
     <View style={styles.container}>

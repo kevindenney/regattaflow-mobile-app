@@ -2,7 +2,6 @@ import { useSailorDashboardData } from '@/hooks/useSailorDashboardData';
 import { useSailorUpcomingSessions } from '@/hooks/useSailorCoachingSessions';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachProfile } from '@/services/CoachingService';
-import { CoachMatchingAgent } from '@/services/agents/CoachMatchingAgent';
 import { supabase } from '@/services/supabase';
 import { TufteCoachRow } from '@/components/coach/TufteCoachRow';
 import { TufteFiltersBar } from '@/components/coach/TufteFiltersBar';
@@ -78,6 +77,76 @@ const SKILL_CHIPS = [
   { key: 'upwind', label: 'Upwind' },
   { key: 'mental_coaching', label: 'Mental Game' },
 ] as const;
+
+function normalizeArray(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean);
+}
+
+function scoreCoach(
+  coach: CoachWithScore,
+  context: {
+    goals: string;
+    selectedSkills: string[];
+    sailorBoatClass?: string;
+    sailorLocation?: string | null;
+  }
+) {
+  const coachSpecialties = normalizeArray((coach as any).specialties || (coach as any).specializations);
+  const coachBoatClasses = normalizeArray((coach as any).boat_classes);
+  const selected = context.selectedSkills.map((entry) => entry.toLowerCase());
+  const overlap = selected.filter((skill) => coachSpecialties.includes(skill));
+  const boatClassMatch =
+    context.sailorBoatClass && coachBoatClasses.includes(context.sailorBoatClass.toLowerCase());
+
+  const experienceMatch = Math.max(30, Math.min(100, Math.round((Number((coach as any).years_coaching || 0) / 12) * 100)));
+  const teachingStyleMatch = 72;
+  const specialtyAlignment = selected.length > 0 ? Math.round((overlap.length / selected.length) * 100) : 60;
+  const successRateRelevance = Math.max(40, Math.min(100, Math.round(Number((coach as any).average_rating || coach.rating || 0) * 20)));
+  const availabilityMatch = (coach as any).is_accepting_clients === false ? 25 : 85;
+  const locationConvenience =
+    context.sailorLocation && (coach.location_name || '').toLowerCase().includes(context.sailorLocation.toLowerCase())
+      ? 90
+      : 65;
+  const valueScore = Number((coach as any).hourly_rate || 0) > 0 ? 70 : 60;
+
+  const overallScore = Math.round(
+    experienceMatch * 0.2 +
+    teachingStyleMatch * 0.1 +
+    specialtyAlignment * 0.25 +
+    successRateRelevance * 0.2 +
+    availabilityMatch * 0.1 +
+    locationConvenience * 0.05 +
+    valueScore * 0.1 +
+    (boatClassMatch ? 6 : 0)
+  );
+
+  return {
+    overallScore: Math.max(0, Math.min(100, overallScore)),
+    breakdown: {
+      experienceMatch,
+      teachingStyleMatch,
+      specialtyAlignment,
+      successRateRelevance,
+      availabilityMatch,
+      locationConvenience,
+      valueScore,
+    },
+    reasoning: overlap.length > 0
+      ? `Strong match on ${overlap.slice(0, 2).join(' and ')} with proven coaching history.`
+      : `General fit based on coaching history and current goals: ${context.goals}.`,
+    recommendations: overlap.length > 0
+      ? [`Prioritize ${overlap[0]} in your first session`]
+      : ['Book an intro session to validate coach fit'],
+    skillGaps: selected
+      .filter((skill) => !coachSpecialties.includes(skill))
+      .map((skill) => ({
+        skill,
+        priority: 'medium',
+        reasoning: 'This area is less explicit in coach specialties.',
+      })),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Main Screen
@@ -300,68 +369,29 @@ export default function CoachDiscoveryScreen() {
         : sailorProfile.goals || 'Improve racing performance';
       const combinedGoals = freeText ? `${skillGoals}. ${freeText}` : skillGoals;
 
-      const agent = new CoachMatchingAgent();
-      const result = await agent.matchSailorWithCoach(
-        user.id,
-        {
-          ...sailorProfile,
-          sailing_experience: sailorProfile.sailing_experience || 5,
-          boat_classes: sailorProfile.boat_classes || sailorData.classes.map(c => c.name),
+      const matchedCoaches: CoachWithScore[] = coaches.map((coach) => {
+        const score = scoreCoach(coach, {
           goals: combinedGoals,
-          competitive_level: sailorProfile.competitive_level || 'intermediate',
-        },
-        {
-          boatClass: sailorProfile.boat_classes?.[0] || sailorData.classes[0]?.name,
-          venueId: sailorData.venues.currentVenue?.id,
-          goals: combinedGoals,
-          // Pass existing coach specialties so AI can factor in gaps
-          existingCoachSpecialties: activeCoaches
-            .flatMap(ac => ac.coach?.specializations || []),
-        }
-      );
-
-      if (!result.success || !result.result) {
-        setAiLoading(false);
-        return;
-      }
-
-      const agentData = result.result;
-      const scores = agentData.scores || [];
-      const skillGaps = agentData.skillGaps || [];
-
-      const coachIds = scores.map((s: any) => s.coachId);
-      if (coachIds.length === 0) {
-        setAiLoading(false);
-        return;
-      }
-
-      const { data: coachProfiles } = await supabase
-        .from('coach_profiles')
-        .select(`*, users!inner(first_name, last_name, email)`)
-        .in('id', coachIds);
-
-      if (!coachProfiles) {
-        setAiLoading(false);
-        return;
-      }
-
-      const matchedCoaches: CoachWithScore[] = coachProfiles.map((coach) => {
-        const score = scores.find((s: any) => s.coachId === coach.id);
+          selectedSkills,
+          sailorBoatClass: sailorProfile.boat_classes?.[0] || sailorData.classes[0]?.name,
+          sailorLocation: sailorProfile.location || sailorProfile.home_port,
+        });
         return {
           ...coach,
-          display_name: `${coach.users.first_name} ${coach.users.last_name}`,
-          compatibilityScore: score?.overallScore ? score.overallScore / 100 : 0,
-          matchReasoning: score?.reasoning,
-          recommendations: score?.recommendations,
-          scoreBreakdown: score?.breakdown,
-          skillGaps,
+          compatibilityScore: score.overallScore / 100,
+          matchReasoning: score.reasoning,
+          recommendations: score.recommendations,
+          scoreBreakdown: score.breakdown,
+          skillGaps: score.skillGaps,
         };
       });
 
       matchedCoaches.sort((a, b) => (b.compatibilityScore || 0) - (a.compatibilityScore || 0));
       setAiMatches(matchedCoaches);
-
-      saveMatchScores(matchedCoaches, agentData);
+      saveMatchScores(matchedCoaches, {
+        recentResults: [],
+        trends: {},
+      });
     } catch (error) {
       console.error('AI matching error:', error);
     } finally {

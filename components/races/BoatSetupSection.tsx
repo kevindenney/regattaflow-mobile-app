@@ -39,6 +39,8 @@ export interface BoatSetupSectionProps {
   selectedRaceTuningLoading?: boolean;
   /** Callback to refresh tuning recommendation */
   onRefreshTuning?: () => void;
+  /** Tuning load/generation error message */
+  selectedRaceTuningErrorMessage?: string | null;
   /** Callback to open chat from rig planner */
   onOpenChat?: () => void;
   /** Whether using generic defaults */
@@ -64,6 +66,7 @@ export function BoatSetupSection({
   selectedRaceTuningRecommendation,
   selectedRaceTuningLoading,
   onRefreshTuning,
+  selectedRaceTuningErrorMessage,
   onOpenChat,
   isGenericDefaults,
   onAddTuningGuide,
@@ -114,6 +117,7 @@ export function BoatSetupSection({
           boatClassName={selectedRaceClassName}
           recommendation={selectedRaceTuningRecommendation}
           loading={selectedRaceTuningLoading}
+          errorMessage={selectedRaceTuningErrorMessage}
           onRefresh={selectedRaceClassId ? onRefreshTuning : undefined}
         />
       )}

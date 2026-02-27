@@ -34,12 +34,36 @@ export default function FleetSettingsScreen() {
         title="Fleet Administration"
         subtitle="Manage fleet profile, WhatsApp link, and membership approvals"
       >
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>Admin tools coming soon</Text>
-          <Text style={styles.placeholderText}>
-            Fleet captains will be able to edit fleet details, manage invites, and configure notifications.
-          </Text>
-        </View>
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => router.push('/(tabs)/fleet/resources')}
+        >
+          <View style={styles.actionIcon}>
+            <MaterialCommunityIcons name="file-document-edit-outline" size={24} color="#2563EB" />
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>Manage Fleet Resources</Text>
+            <Text style={styles.actionDescription}>
+              Update fleet docs, links, and shared resources for members.
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#94A3B8" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => router.push('/(tabs)/members')}
+        >
+          <View style={styles.actionIcon}>
+            <MaterialCommunityIcons name="account-key-outline" size={24} color="#2563EB" />
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>Membership & Approvals</Text>
+            <Text style={styles.actionDescription}>
+              Open the club member workspace to handle roles and pending requests.
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color="#94A3B8" />
+        </TouchableOpacity>
       </DashboardSection>
     </ScrollView>
   );
@@ -85,21 +109,5 @@ const styles = StyleSheet.create({
   actionDescription: {
     fontSize: 13,
     color: '#64748B',
-  },
-  placeholderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    gap: 8,
-  },
-  placeholderTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  placeholderText: {
-    fontSize: 14,
-    color: '#64748B',
-    lineHeight: 20,
   },
 });

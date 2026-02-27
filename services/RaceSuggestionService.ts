@@ -6,10 +6,12 @@
 import { supabase } from './supabase';
 import { fleetService } from './fleetService';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingRelationError, isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('RaceSuggestionService');
 const stringifyPatternData = (value: Record<string, unknown> | null | undefined) =>
   JSON.stringify(value ?? {});
+const ACTIVE_MEMBERSHIP_STATUSES = ['active', 'approved', 'confirmed', 'current'];
 
 // =====================================================
 // Types
@@ -75,6 +77,20 @@ export interface CategorizedSuggestions {
   patterns: RaceSuggestion[];
   templates: RaceSuggestion[];
   total: number;
+  diagnostics?: SuggestionDiagnostics;
+}
+
+export interface SuggestionSourceDiagnostic {
+  name: string;
+  failed: boolean;
+  elapsedMs: number;
+  count: number;
+  errorMessage?: string;
+}
+
+export interface SuggestionDiagnostics {
+  failedSources: string[];
+  sources: SuggestionSourceDiagnostic[];
 }
 
 export interface RacePattern {
@@ -104,6 +120,475 @@ export interface RaceTemplate {
 // =====================================================
 
 class RaceSuggestionService {
+  private createTaggedError(code: string, message: string, cause?: unknown): Error {
+    const tagged = new Error(`[${code}] ${message}`);
+    (tagged as any).code = code;
+    if (cause !== undefined) {
+      (tagged as any).cause = cause;
+    }
+    return tagged;
+  }
+
+  private async fetchRegattasForUser(
+    userId: string,
+    options: {
+      select?: string;
+      orderBy?: string;
+      ascending?: boolean;
+      limit?: number;
+      ltStartDate?: string;
+      gteStartDate?: string;
+    } = {}
+  ): Promise<any[]> {
+    const {
+      select = '*',
+      orderBy = 'start_date',
+      ascending = true,
+      limit,
+      ltStartDate,
+      gteStartDate,
+    } = options;
+
+    const ownerColumns: ('created_by' | 'user_id')[] = ['created_by', 'user_id'];
+
+    for (const ownerColumn of ownerColumns) {
+      let query = supabase
+        .from('regattas')
+        .select(select)
+        .eq(ownerColumn, userId)
+        .order(orderBy, { ascending });
+
+      if (ltStartDate) {
+        query = query.lt('start_date', ltStartDate);
+      }
+      if (gteStartDate) {
+        query = query.gte('start_date', gteStartDate);
+      }
+      if (typeof limit === 'number') {
+        query = query.limit(limit);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        if (this.isSchemaFallbackError(error, `regattas.${ownerColumn}`)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        return data;
+      }
+    }
+
+    return [];
+  }
+
+  private async fetchRegattasForOwners(
+    ownerIds: string[],
+    options: {
+      select?: string;
+      orderBy?: string;
+      ascending?: boolean;
+      limit?: number;
+      gteStartDate?: string;
+    } = {}
+  ): Promise<any[]> {
+    if (ownerIds.length === 0) return [];
+
+    const {
+      select = '*',
+      orderBy = 'start_date',
+      ascending = true,
+      limit,
+      gteStartDate,
+    } = options;
+
+    const ownerColumns: ('created_by' | 'user_id')[] = ['created_by', 'user_id'];
+
+    for (const ownerColumn of ownerColumns) {
+      let query = supabase
+        .from('regattas')
+        .select(select)
+        .in(ownerColumn, ownerIds)
+        .order(orderBy, { ascending });
+
+      if (gteStartDate) {
+        query = query.gte('start_date', gteStartDate);
+      }
+      if (typeof limit === 'number') {
+        query = query.limit(limit);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        if (this.isSchemaFallbackError(error, `regattas.${ownerColumn}`)) {
+          continue;
+        }
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        return data;
+      }
+    }
+
+    return [];
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async withRetry<T>(label: string, fn: () => Promise<T>, attempts = 2): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        logger.warn(`[RaceSuggestionService] ${label} attempt failed`, {
+          attempt,
+          attempts,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (attempt < attempts) {
+          await this.delay(200 * attempt);
+        }
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(`${label} failed`);
+  }
+
+  private isSchemaFallbackError(error: any, qualifiedColumn?: string): boolean {
+    return isMissingRelationError(error) || isMissingSupabaseColumn(error, qualifiedColumn);
+  }
+
+  private isPermissionOrRlsError(error: any): boolean {
+    if (!error) return false;
+    const code = typeof error.code === 'string' ? error.code : '';
+    const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+    return (
+      code === '42501' ||
+      message.includes('row-level security') ||
+      message.includes('permission denied') ||
+      message.includes('not authorized')
+    );
+  }
+
+  private isNonCriticalSuggestionError(error: any, qualifiedColumn?: string): boolean {
+    return this.isSchemaFallbackError(error, qualifiedColumn) || this.isPermissionOrRlsError(error);
+  }
+
+  private getUpcomingMonthIndices(startMonthIndex: number, span: number): number[] {
+    return Array.from({ length: span }, (_, offset) => (startMonthIndex + offset) % 12);
+  }
+
+  private getUpcomingMonthNumbers(startMonthNumber: number, span: number): number[] {
+    return this.getUpcomingMonthIndices(startMonthNumber - 1, span).map((index) => index + 1);
+  }
+
+  private async getActiveClubMemberships(userId: string): Promise<{ club_id: string }[]> {
+    const mergeWithGlobalMemberships = async (
+      memberships: { club_id: string }[]
+    ): Promise<{ club_id: string }[]> => {
+      const globalMembershipResult = await supabase
+        .from('global_club_members')
+        .select('global_club_id')
+        .eq('user_id', userId);
+
+      if (globalMembershipResult.error) {
+        if (this.isSchemaFallbackError(globalMembershipResult.error, 'global_club_members.global_club_id')) {
+          return memberships;
+        }
+        throw globalMembershipResult.error;
+      }
+
+      const globalClubIds = Array.from(
+        new Set(
+          (globalMembershipResult.data || [])
+            .map((row: any) => row?.global_club_id)
+            .filter(Boolean)
+        )
+      ) as string[];
+
+      if (globalClubIds.length === 0) {
+        return memberships;
+      }
+
+      const globalClubsResult = await supabase
+        .from('global_clubs')
+        .select('id, platform_club_id')
+        .in('id', globalClubIds);
+
+      if (globalClubsResult.error) {
+        if (this.isSchemaFallbackError(globalClubsResult.error, 'global_clubs.id')) {
+          return memberships;
+        }
+        throw globalClubsResult.error;
+      }
+
+      const mergedClubIds = new Set<string>(memberships.map((membership) => membership.club_id));
+      (globalClubsResult.data || []).forEach((club: any) => {
+        const resolvedId = club?.platform_club_id || club?.id;
+        if (resolvedId) mergedClubIds.add(resolvedId);
+      });
+
+      return Array.from(mergedClubIds).map((club_id) => ({ club_id }));
+    };
+
+    const activeByFlag = await supabase
+      .from('club_members')
+      .select('club_id')
+      .eq('user_id', userId)
+      .eq('is_active', true);
+
+    if (activeByFlag.error && !this.isSchemaFallbackError(activeByFlag.error, 'club_members.is_active')) {
+      throw activeByFlag.error;
+    }
+
+    if (!activeByFlag.error && activeByFlag.data) {
+      const memberships = (activeByFlag.data as { club_id?: string | null }[])
+        .filter((m): m is { club_id: string } => Boolean(m?.club_id))
+        .map((m) => ({ club_id: m.club_id }));
+      return mergeWithGlobalMemberships(memberships);
+    }
+
+    const activeByStatus = await supabase
+      .from('club_members')
+      .select('club_id')
+      .eq('user_id', userId)
+      .in('status', ACTIVE_MEMBERSHIP_STATUSES);
+
+    if (activeByStatus.error && !this.isSchemaFallbackError(activeByStatus.error, 'club_members.status')) {
+      throw activeByStatus.error;
+    }
+
+    if (!activeByStatus.error && activeByStatus.data) {
+      const memberships = (activeByStatus.data as { club_id?: string | null }[])
+        .filter((m): m is { club_id: string } => Boolean(m?.club_id))
+        .map((m) => ({ club_id: m.club_id }));
+      return mergeWithGlobalMemberships(memberships);
+    }
+
+    const fallbackAllMemberships = await supabase
+      .from('club_members')
+      .select('club_id')
+      .eq('user_id', userId);
+    if (fallbackAllMemberships.error) {
+      if (!this.isSchemaFallbackError(fallbackAllMemberships.error, 'club_members.club_id')) {
+        throw fallbackAllMemberships.error;
+      }
+
+      const legacyByStatus = await supabase
+        .from('club_memberships')
+        .select('club_id')
+        .eq('user_id', userId)
+        .in('status', ACTIVE_MEMBERSHIP_STATUSES);
+      if (!legacyByStatus.error && legacyByStatus.data) {
+        const memberships = (legacyByStatus.data as { club_id?: string | null }[])
+          .filter((m): m is { club_id: string } => Boolean(m?.club_id))
+          .map((m) => ({ club_id: m.club_id }));
+        return mergeWithGlobalMemberships(memberships);
+      }
+      if (legacyByStatus.error && !this.isSchemaFallbackError(legacyByStatus.error, 'club_memberships.status')) {
+        throw legacyByStatus.error;
+      }
+
+      const legacyAll = await supabase
+        .from('club_memberships')
+        .select('club_id')
+        .eq('user_id', userId);
+      if (legacyAll.error) {
+        if (this.isSchemaFallbackError(legacyAll.error, 'club_memberships.club_id')) {
+          return mergeWithGlobalMemberships([]);
+        }
+        throw legacyAll.error;
+      }
+      const memberships = (legacyAll.data as { club_id?: string | null }[])
+        .filter((m): m is { club_id: string } => Boolean(m?.club_id))
+        .map((m) => ({ club_id: m.club_id }));
+      return mergeWithGlobalMemberships(memberships);
+    }
+    const memberships = (fallbackAllMemberships.data as { club_id?: string | null }[])
+      .filter((m): m is { club_id: string } => Boolean(m?.club_id))
+      .map((m) => ({ club_id: m.club_id }));
+    return mergeWithGlobalMemberships(memberships);
+  }
+
+  private async getActiveMembersForClubs(clubIds: string[], excludeUserId?: string): Promise<string[]> {
+    if (clubIds.length === 0) return [];
+
+    const byFlag = await supabase
+      .from('club_members')
+      .select('user_id')
+      .in('club_id', clubIds)
+      .eq('is_active', true);
+
+    let rows = byFlag.data as { user_id?: string | null }[] | null;
+    if (byFlag.error) {
+      if (!this.isSchemaFallbackError(byFlag.error, 'club_members.is_active')) {
+        throw byFlag.error;
+      }
+      const byStatus = await supabase
+        .from('club_members')
+        .select('user_id')
+        .in('club_id', clubIds)
+        .in('status', ACTIVE_MEMBERSHIP_STATUSES);
+      if (byStatus.error && !this.isSchemaFallbackError(byStatus.error, 'club_members.status')) {
+        throw byStatus.error;
+      }
+      if (!byStatus.error) {
+        rows = byStatus.data as { user_id?: string | null }[] | null;
+      } else {
+        const fallbackAllMembers = await supabase
+          .from('club_members')
+          .select('user_id')
+          .in('club_id', clubIds);
+        if (fallbackAllMembers.error) {
+          if (!this.isSchemaFallbackError(fallbackAllMembers.error, 'club_members.user_id')) {
+            throw fallbackAllMembers.error;
+          }
+
+          const legacyByStatus = await supabase
+            .from('club_memberships')
+            .select('user_id')
+            .in('club_id', clubIds)
+            .in('status', ACTIVE_MEMBERSHIP_STATUSES);
+          if (!legacyByStatus.error && legacyByStatus.data) {
+            rows = legacyByStatus.data as { user_id?: string | null }[] | null;
+          } else if (
+            legacyByStatus.error &&
+            !this.isSchemaFallbackError(legacyByStatus.error, 'club_memberships.status')
+          ) {
+            throw legacyByStatus.error;
+          } else {
+            const legacyAllMembers = await supabase
+              .from('club_memberships')
+              .select('user_id')
+              .in('club_id', clubIds);
+            if (legacyAllMembers.error) {
+              if (this.isSchemaFallbackError(legacyAllMembers.error, 'club_memberships.user_id')) {
+                rows = [];
+              } else {
+                throw legacyAllMembers.error;
+              }
+            } else {
+              rows = legacyAllMembers.data as { user_id?: string | null }[] | null;
+            }
+          }
+        } else {
+          rows = fallbackAllMembers.data as { user_id?: string | null }[] | null;
+        }
+      }
+    }
+
+    const uniqueIds = new Set(
+      (rows || [])
+        .map((row) => row?.user_id)
+        .filter((id): id is string => Boolean(id))
+        .filter((id) => (excludeUserId ? id !== excludeUserId : true))
+    );
+    return Array.from(uniqueIds);
+  }
+
+  private async getClubNamesByIds(clubIds: string[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (clubIds.length === 0) return result;
+
+    const clubsRes = await supabase
+      .from('clubs')
+      .select('id, name')
+      .in('id', clubIds);
+
+    if (clubsRes.error && !this.isSchemaFallbackError(clubsRes.error, 'clubs.id')) {
+      throw clubsRes.error;
+    }
+
+    if (!clubsRes.error && clubsRes.data) {
+      clubsRes.data.forEach((club: any) => {
+        if (club?.id && club?.name) {
+          result.set(club.id, club.name);
+        }
+      });
+    }
+
+    const unresolvedClubIds = clubIds.filter((clubId) => !result.has(clubId));
+    if (unresolvedClubIds.length === 0) {
+      return result;
+    }
+
+    const profilesRes = await supabase
+      .from('club_profiles')
+      .select('id, club_name, organization_name')
+      .in('id', unresolvedClubIds);
+    if (profilesRes.error && !this.isSchemaFallbackError(profilesRes.error, 'club_profiles.id')) {
+      throw profilesRes.error;
+    }
+    if (!profilesRes.error && profilesRes.data) {
+      profilesRes.data.forEach((profile: any) => {
+        if (!profile?.id) return;
+        const name = profile.organization_name || profile.club_name;
+        if (name) {
+          result.set(profile.id, name);
+        }
+      });
+    }
+
+    const stillUnresolvedClubIds = clubIds.filter((clubId) => !result.has(clubId));
+    if (stillUnresolvedClubIds.length === 0) {
+      return result;
+    }
+
+    const yachtRes = await supabase
+      .from('yacht_clubs')
+      .select('id, name')
+      .in('id', stillUnresolvedClubIds);
+
+    if (yachtRes.error && !this.isSchemaFallbackError(yachtRes.error, 'yacht_clubs.id')) {
+      throw yachtRes.error;
+    }
+
+    if (!yachtRes.error && yachtRes.data) {
+      yachtRes.data.forEach((club: any) => {
+        if (club?.id && club?.name) {
+          result.set(club.id, club.name);
+        }
+      });
+    }
+
+    const stillUnresolvedAfterYacht = clubIds.filter((clubId) => !result.has(clubId));
+    if (stillUnresolvedAfterYacht.length === 0) {
+      return result;
+    }
+
+    const globalRes = await supabase
+      .from('global_clubs')
+      .select('id, name, platform_club_id')
+      .or(
+        `id.in.(${stillUnresolvedAfterYacht.join(',')}),platform_club_id.in.(${stillUnresolvedAfterYacht.join(',')})`
+      );
+    if (globalRes.error && !this.isSchemaFallbackError(globalRes.error, 'global_clubs.id')) {
+      throw globalRes.error;
+    }
+    if (!globalRes.error && globalRes.data) {
+      globalRes.data.forEach((club: any) => {
+        const name = club?.name;
+        const id = club?.id;
+        const platformId = club?.platform_club_id;
+        if (!name) return;
+        if (id && stillUnresolvedAfterYacht.includes(id)) {
+          result.set(id, name);
+        }
+        if (platformId && stillUnresolvedAfterYacht.includes(platformId)) {
+          result.set(platformId, name);
+        }
+      });
+    }
+
+    return result;
+  }
+
   /**
    * Get all categorized suggestions for a user
    */
@@ -112,7 +597,12 @@ class RaceSuggestionService {
       logger.debug('[getSuggestionsForUser] Fetching suggestions for user:', userId);
 
       // Check cache first
-      const cached = await this.getCachedSuggestions(userId);
+      let cached = this.emptySuggestions();
+      try {
+        cached = await this.withRetry('cache-read', () => this.getCachedSuggestions(userId));
+      } catch (cacheError) {
+        logger.warn('[getSuggestionsForUser] Cache read failed, continuing with fresh generation:', cacheError);
+      }
 
       if (cached.total > 0) {
         logger.debug('[getSuggestionsForUser] Returning cached suggestions:', cached.total);
@@ -121,7 +611,12 @@ class RaceSuggestionService {
 
       // Generate fresh suggestions
       logger.debug('[getSuggestionsForUser] No valid cache, generating fresh suggestions');
-      const suggestions = await this.generateFreshSuggestions(userId);
+      const startedAt = Date.now();
+      const suggestions = await this.withRetry('fresh-generation', () => this.generateFreshSuggestions(userId));
+      logger.debug('[getSuggestionsForUser] Fresh generation completed', {
+        elapsedMs: Date.now() - startedAt,
+        total: suggestions.total,
+      });
 
       // Cache the results
       const cacheSuccess = await this.cacheSuggestions(userId, suggestions);
@@ -131,12 +626,15 @@ class RaceSuggestionService {
 
       return suggestions;
     } catch (error) {
-      logger.debug('[getSuggestionsForUser] Error fetching suggestions (non-blocking):', {
+      logger.error('[getSuggestionsForUser] Error fetching suggestions:', {
         name: (error as Error).name,
         message: (error as Error).message,
       });
-      // Return empty suggestions on error
-      return this.emptySuggestions();
+      throw this.createTaggedError(
+        'RACE_SUGGESTIONS_SERVICE_FAILURE',
+        'Unable to load race suggestions from available sources.',
+        error
+      );
     }
   }
 
@@ -154,8 +652,12 @@ class RaceSuggestionService {
       .order('confidence_score', { ascending: false });
 
     if (error) {
-      logger.debug('[getCachedSuggestions] Error fetching cached suggestions (non-blocking):', error);
-      return this.emptySuggestions();
+      if (this.isNonCriticalSuggestionError(error, 'race_suggestions_cache.user_id')) {
+        logger.debug('[getCachedSuggestions] Cache read skipped due schema/RLS restrictions');
+        return this.emptySuggestions();
+      }
+      logger.error('[getCachedSuggestions] Error fetching cached suggestions:', error);
+      throw error;
     }
 
     if (!data || data.length === 0) {
@@ -170,21 +672,55 @@ class RaceSuggestionService {
    * Generate fresh suggestions from all sources
    */
   private async generateFreshSuggestions(userId: string): Promise<CategorizedSuggestions> {
-    const [clubRaces, fleetRaces, communityRaces, catalogMatches, previousYearRaces, patterns, templates] = await Promise.all([
-      this.getClubUpcomingRaces(userId),
-      this.getFleetUpcomingRaces(userId),
-      this.getCommunityRaces(userId),
-      this.getCatalogMatches(userId),
-      this.getPreviousYearRaces(userId),
-      this.getPatternBasedSuggestions(userId),
-      this.getTemplateSuggestions(userId),
+    const sources = await Promise.all([
+      this.safeSuggestionSource('club_events', () => this.getClubUpcomingRaces(userId)),
+      this.safeSuggestionSource('fleet_races', () => this.getFleetUpcomingRaces(userId)),
+      this.safeSuggestionSource('community_races', () => this.getCommunityRaces(userId)),
+      this.safeSuggestionSource('catalog_matches', () => this.getCatalogMatches(userId)),
+      this.safeSuggestionSource('previous_year', () => this.getPreviousYearRaces(userId)),
+      this.safeSuggestionSource('patterns', () => this.getPatternBasedSuggestions(userId)),
+      this.safeSuggestionSource('templates', () => this.getTemplateSuggestions(userId)),
     ]);
+
+    const [clubRaces, fleetRaces, communityRaces, catalogMatches, previousYearRaces, patterns, templates] =
+      sources.map((source) => source.suggestions);
+    const failedSources = sources.filter((source) => source.failed).map((source) => source.name);
+    const sourceDiagnostics: SuggestionSourceDiagnostic[] = sources.map((source) => ({
+      name: source.name,
+      failed: source.failed,
+      elapsedMs: source.elapsedMs,
+      count: source.suggestions.length,
+      errorMessage: source.errorMessage,
+    }));
+    const totalElapsedMs = sources.reduce((sum, source) => sum + source.elapsedMs, 0);
+
+    logger.debug('[RaceSuggestionService] Source diagnostics', {
+      userId,
+      failedSources,
+      totalElapsedMs,
+      sources: sourceDiagnostics,
+    });
+    const diagnostics =
+      failedSources.length > 0
+        ? ({
+            failedSources,
+            sources: sourceDiagnostics,
+          } satisfies SuggestionDiagnostics)
+        : undefined;
 
     // Cross-category dedup: if same race appears in multiple categories, keep highest confidence
     const allSuggestions = [
       ...clubRaces, ...fleetRaces, ...communityRaces,
       ...catalogMatches, ...previousYearRaces, ...patterns, ...templates,
     ];
+
+    if (allSuggestions.length === 0 && failedSources.length > 0) {
+      logger.warn('[RaceSuggestionService] All suggestion sources unavailable, returning empty set', {
+        failedSources,
+      });
+      return this.emptySuggestions(diagnostics);
+    }
+
     const deduped = this.crossCategoryDedup(allSuggestions);
 
     return {
@@ -196,7 +732,28 @@ class RaceSuggestionService {
       patterns: deduped.filter(s => s.type === 'pattern_match'),
       templates: deduped.filter(s => s.type === 'template'),
       total: deduped.length,
+      diagnostics,
     };
+  }
+
+  private async safeSuggestionSource(
+    name: string,
+    loader: () => Promise<RaceSuggestion[]>
+  ): Promise<{ name: string; suggestions: RaceSuggestion[]; failed: boolean; elapsedMs: number; errorMessage?: string }> {
+    const startedAt = Date.now();
+    try {
+      const suggestions = await loader();
+      return { name, suggestions, failed: false, elapsedMs: Date.now() - startedAt };
+    } catch (error) {
+      logger.warn(`[RaceSuggestionService] Suggestion source failed: ${name}`, error);
+      return {
+        name,
+        suggestions: [],
+        failed: true,
+        elapsedMs: Date.now() - startedAt,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   /**
@@ -204,14 +761,9 @@ class RaceSuggestionService {
    */
   async getClubUpcomingRaces(userId: string): Promise<RaceSuggestion[]> {
     try {
-      // Get user's clubs
-      const { data: memberships, error: memberError } = await supabase
-        .from('club_members')
-        .select('club_id, clubs(id, name)')
-        .eq('user_id', userId)
-        .eq('is_active', true);
+      const memberships = await this.getActiveClubMemberships(userId);
 
-      if (memberError || !memberships || memberships.length === 0) {
+      if (!memberships || memberships.length === 0) {
         logger.debug('[getClubUpcomingRaces] No club memberships found');
         return [];
       }
@@ -223,6 +775,7 @@ class RaceSuggestionService {
       });
 
       const clubIds = memberships.map((m) => m.club_id);
+      const clubNamesById = await this.getClubNamesByIds(clubIds);
 
       // Get upcoming events from these clubs
       const { data: events, error: eventsError } = await supabase
@@ -234,8 +787,10 @@ class RaceSuggestionService {
         .order('start_date', { ascending: true })
         .limit(20);
 
-      if (eventsError || !events) {
-        logger.debug('[getClubUpcomingRaces] Error fetching club events (non-blocking):', eventsError);
+      if (eventsError) {
+        throw eventsError;
+      }
+      if (!events) {
         return [];
       }
 
@@ -247,12 +802,12 @@ class RaceSuggestionService {
 
       // Map to suggestions
       return events.map((event) => {
-        const club = memberships.find((m) => m.club_id === event.club_id)?.clubs as any;
+        const club = { id: event.club_id, name: clubNamesById.get(event.club_id) || 'Your Club' };
         return this.mapClubEventToSuggestion(event, club);
       });
     } catch (error) {
-      logger.debug('[getClubUpcomingRaces] Error (non-blocking):', error);
-      return [];
+      logger.error('[getClubUpcomingRaces] Error:', error);
+      throw error;
     }
   }
 
@@ -305,7 +860,7 @@ class RaceSuggestionService {
       return unique.slice(0, 20);
     } catch (error) {
       logger.error('[getFleetUpcomingRaces] Error:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -326,8 +881,10 @@ class RaceSuggestionService {
         .order('confidence', { ascending: false })
         .limit(10);
 
-      if (error || !patterns) {
-        logger.debug('[getPatternBasedSuggestions] No patterns found');
+      if (error) {
+        throw error;
+      }
+      if (!patterns) {
         return [];
       }
 
@@ -342,7 +899,7 @@ class RaceSuggestionService {
       return suggestions.slice(0, 15);
     } catch (error) {
       logger.error('[getPatternBasedSuggestions] Error:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -358,14 +915,17 @@ class RaceSuggestionService {
         .order('usage_count', { ascending: false })
         .limit(10);
 
-      if (error || !templates) {
+      if (error) {
+        throw error;
+      }
+      if (!templates) {
         return [];
       }
 
       return templates.map((template) => this.mapTemplateToSuggestion(template));
     } catch (error) {
       logger.error('[getTemplateSuggestions] Error:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -373,39 +933,40 @@ class RaceSuggestionService {
    * Detect and update patterns from user's race history
    */
   private async detectAndUpdatePatterns(userId: string): Promise<void> {
+    // Get user's race history
+    let races: any[] = [];
     try {
-      // Get user's race history
-      const { data: races, error } = await supabase
-        .from('regattas')
-        .select('*')
-        .eq('created_by', userId)
-        .order('start_date', { ascending: true });
-
-      if (error || !races || races.length < 3) {
-        // Need at least 3 races to detect patterns
-        logger.debug('[detectAndUpdatePatterns] Insufficient race history for patterns:', {
-          userId,
-          raceCount: races?.length ?? 0,
-          error,
-        });
-        return;
-      }
-
-      logger.debug('[detectAndUpdatePatterns] Processing race history:', {
-        userId,
-        raceCount: races.length,
+      races = await this.fetchRegattasForUser(userId, {
+        select: '*',
+        orderBy: 'start_date',
+        ascending: true,
       });
-
-      // Detect various pattern types
-      await Promise.all([
-        this.detectSeasonalPatterns(userId, races),
-        this.detectVenuePreferences(userId, races),
-        this.detectClassPreferences(userId, races),
-        this.detectTemporalAnnualPatterns(userId, races),
-      ]);
     } catch (error) {
-      logger.error('[detectAndUpdatePatterns] Error:', error);
+      logger.error('[detectAndUpdatePatterns] Failed to load race history:', error);
+      throw error;
     }
+
+    if (!races || races.length < 3) {
+      // Need at least 3 races to detect patterns
+      logger.debug('[detectAndUpdatePatterns] Insufficient race history for patterns:', {
+        userId,
+        raceCount: races?.length ?? 0,
+      });
+      return;
+    }
+
+    logger.debug('[detectAndUpdatePatterns] Processing race history:', {
+      userId,
+      raceCount: races.length,
+    });
+
+    // Detect various pattern types
+    await Promise.all([
+      this.detectSeasonalPatterns(userId, races),
+      this.detectVenuePreferences(userId, races),
+      this.detectClassPreferences(userId, races),
+      this.detectTemporalAnnualPatterns(userId, races),
+    ]);
   }
 
   /**
@@ -507,14 +1068,13 @@ class RaceSuggestionService {
   private async detectTemporalAnnualPatterns(userId: string, races: any[]): Promise<void> {
     const now = new Date();
     const thisYear = now.getFullYear();
-    const nextMonth = now.getMonth() + 1;
-    const monthAfter = now.getMonth() + 2;
+    const targetMonths = this.getUpcomingMonthIndices(now.getMonth(), 3);
 
     // Look for races from previous years in the next 2 months
     const candidateRaces = races.filter((race) => {
       const date = new Date(race.start_date);
       const raceMonth = date.getMonth();
-      return date.getFullYear() < thisYear && (raceMonth === nextMonth || raceMonth === monthAfter);
+      return date.getFullYear() < thisYear && targetMonths.includes(raceMonth);
     });
 
     for (const race of candidateRaces) {
@@ -678,11 +1238,19 @@ class RaceSuggestionService {
 
     try {
       // First, delete old expired suggestions for this user
-      await supabase
+      const cleanupResult = await supabase
         .from('race_suggestions_cache')
         .delete()
         .eq('user_id', userId)
         .lt('expires_at', new Date().toISOString());
+      if (
+        cleanupResult.error &&
+        !this.isNonCriticalSuggestionError(cleanupResult.error, 'race_suggestions_cache.expires_at')
+      ) {
+        logger.debug('[RaceSuggestionService] Cache cleanup failed (non-blocking)', {
+          error: cleanupResult.error,
+        });
+      }
 
       // Use upsert to handle duplicates gracefully
       const { error } = await supabase
@@ -693,6 +1261,10 @@ class RaceSuggestionService {
         });
 
       if (error) {
+        if (this.isNonCriticalSuggestionError(error, 'race_suggestions_cache.user_id')) {
+          logger.debug('[RaceSuggestionService] Cache write skipped due schema/RLS restrictions');
+          return false;
+        }
         logger.debug('[RaceSuggestionService] Failed to cache suggestions (non-blocking)', { error });
         return false;
       }
@@ -716,22 +1288,45 @@ class RaceSuggestionService {
     action: 'accepted' | 'dismissed' | 'modified' | 'clicked',
     modifiedFields?: string[]
   ): Promise<void> {
-    await supabase.rpc('record_suggestion_feedback', {
+    const { error } = await supabase.rpc('record_suggestion_feedback', {
       p_user_id: userId,
       p_suggestion_id: suggestionId,
       p_action: action,
       p_modified_fields: modifiedFields || null,
     });
+    if (error) {
+      if (
+        this.isPermissionOrRlsError(error) ||
+        isMissingRelationError(error) ||
+        isMissingSupabaseColumn(error)
+      ) {
+        logger.debug('[recordFeedback] Feedback RPC unavailable due schema/RLS (non-blocking)');
+        return;
+      }
+      logger.debug('[recordFeedback] RPC failed (non-blocking):', error);
+    }
   }
 
   /**
    * Invalidate cached suggestions (force refresh)
    */
   async invalidateCache(userId: string): Promise<void> {
-    await supabase
-      .from('race_suggestions_cache')
-      .update({ expires_at: new Date().toISOString() })
-      .eq('user_id', userId);
+    try {
+      const { error } = await supabase
+        .from('race_suggestions_cache')
+        .update({ expires_at: new Date().toISOString() })
+        .eq('user_id', userId);
+
+      if (error) {
+        if (this.isNonCriticalSuggestionError(error, 'race_suggestions_cache.user_id')) {
+          logger.debug('[invalidateCache] Cache invalidation skipped due schema/RLS restrictions');
+          return;
+        }
+        logger.debug('[invalidateCache] Cache invalidation skipped (non-blocking):', error);
+      }
+    } catch (error) {
+      logger.debug('[invalidateCache] Unexpected cache invalidation error (non-blocking):', error);
+    }
   }
 
   // =====================================================
@@ -743,12 +1338,7 @@ class RaceSuggestionService {
    */
   async getCommunityRaces(userId: string): Promise<RaceSuggestion[]> {
     try {
-      // Get user's club and fleet memberships
-      const { data: clubMemberships } = await supabase
-        .from('club_members')
-        .select('club_id, clubs(id, name)')
-        .eq('user_id', userId)
-        .eq('is_active', true);
+      const clubMemberships = await this.getActiveClubMemberships(userId);
 
       if (!clubMemberships || clubMemberships.length === 0) {
         logger.debug('[getCommunityRaces] No club memberships found');
@@ -758,29 +1348,20 @@ class RaceSuggestionService {
       const clubIds = clubMemberships.map((m) => m.club_id);
 
       // Get co-members (other users in the same clubs)
-      const { data: coMembers } = await supabase
-        .from('club_members')
-        .select('user_id')
-        .in('club_id', clubIds)
-        .eq('is_active', true)
-        .neq('user_id', userId);
-
-      if (!coMembers || coMembers.length === 0) {
+      const coMemberIds = await this.getActiveMembersForClubs(clubIds, userId);
+      if (coMemberIds.length === 0) {
         logger.debug('[getCommunityRaces] No co-members found');
         return [];
       }
 
-      const coMemberIds = [...new Set(coMembers.map((m) => m.user_id))];
-
       // Get future races created by co-members
-      const { data: communityRaces } = await supabase
-        .from('regattas')
-        .select('id, name, start_date, start_area_name, race_type, metadata, created_by')
-        .in('created_by', coMemberIds)
-        .gte('start_date', new Date().toISOString())
-        .order('start_date', { ascending: true })
-        .limit(30);
-
+      const communityRaces = await this.fetchRegattasForOwners(coMemberIds, {
+        select: 'id, name, start_date, start_area_name, race_type, metadata',
+        gteStartDate: new Date().toISOString(),
+        orderBy: 'start_date',
+        ascending: true,
+        limit: 30,
+      });
       if (!communityRaces || communityRaces.length === 0) {
         return [];
       }
@@ -826,7 +1407,7 @@ class RaceSuggestionService {
         });
     } catch (error) {
       logger.error('[getCommunityRaces] Error:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -839,37 +1420,81 @@ class RaceSuggestionService {
    */
   async getCatalogMatches(userId: string): Promise<RaceSuggestion[]> {
     try {
-      // Get user's boat classes
-      const { data: sailorBoats } = await supabase
+      // Get user's boat classes (support both user_id and sailor_id schema variants)
+      let sailorBoats: any[] | null = null;
+      const boatsByUser = await supabase
         .from('sailor_boats')
         .select('boat_classes(name)')
         .eq('user_id', userId);
+      if (boatsByUser.error && !this.isNonCriticalSuggestionError(boatsByUser.error, 'sailor_boats.user_id')) {
+        throw boatsByUser.error;
+      }
+      const shouldTrySailorId =
+        (isMissingSupabaseColumn(boatsByUser.error, 'sailor_boats.user_id')) ||
+        (!boatsByUser.error && (!boatsByUser.data || boatsByUser.data.length === 0));
+
+      if (shouldTrySailorId) {
+        const boatsBySailor = await supabase
+          .from('sailor_boats')
+          .select('boat_classes(name)')
+          .eq('sailor_id', userId);
+        if (boatsBySailor.error && !this.isNonCriticalSuggestionError(boatsBySailor.error, 'sailor_boats.sailor_id')) {
+          throw boatsBySailor.error;
+        }
+        sailorBoats = boatsBySailor.data || boatsByUser.data;
+      } else {
+        sailorBoats = boatsByUser.data;
+      }
 
       const userClasses = (sailorBoats || [])
         .map((sb: any) => sb.boat_classes?.name)
         .filter(Boolean) as string[];
 
       // Get followed catalog race IDs
-      const { data: followedRaces } = await supabase
+      const { data: followedRaces, error: followedRacesError } = await supabase
         .from('saved_catalog_races')
         .select('catalog_race_id')
         .eq('user_id', userId);
+      if (followedRacesError && !this.isNonCriticalSuggestionError(followedRacesError, 'saved_catalog_races.user_id')) {
+        throw followedRacesError;
+      }
 
       const followedIds = new Set((followedRaces || []).map((r) => r.catalog_race_id));
 
       // Get user's region from profile
-      const { data: profile } = await supabase
+      let profile: { country?: string | null; region?: string | null } | null = null;
+      const profileById = await supabase
         .from('profiles')
         .select('country, region')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
+      if (profileById.error && !this.isNonCriticalSuggestionError(profileById.error, 'profiles.id')) {
+        throw profileById.error;
+      }
+      const shouldTryProfileByUserId =
+        (isMissingSupabaseColumn(profileById.error, 'profiles.id')) ||
+        (!profileById.error && !profileById.data);
+
+      if (shouldTryProfileByUserId) {
+        const profileByUserId = await supabase
+          .from('profiles')
+          .select('country, region')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (profileByUserId.error && !this.isNonCriticalSuggestionError(profileByUserId.error, 'profiles.user_id')) {
+          throw profileByUserId.error;
+        }
+        profile = profileByUserId.data;
+      } else {
+        profile = profileById.data;
+      }
 
       const userCountry = profile?.country;
 
       // Query catalog races matching boat classes or upcoming
       const now = new Date();
       const currentMonth = now.getMonth() + 1; // 1-based
-      const threeMonthsLater = ((currentMonth + 2) % 12) + 1;
+      const upcomingMonths = new Set(this.getUpcomingMonthNumbers(currentMonth, 3));
       const sixMonthsFromNow = new Date(now);
       sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
 
@@ -879,7 +1504,10 @@ class RaceSuggestionService {
         .order('follower_count', { ascending: false })
         .limit(50);
 
-      const { data: catalogRaces } = await query;
+      const { data: catalogRaces, error: catalogError } = await query;
+      if (catalogError) {
+        throw catalogError;
+      }
 
       if (!catalogRaces || catalogRaces.length === 0) {
         return [];
@@ -896,9 +1524,11 @@ class RaceSuggestionService {
         const countryMatch = userCountry && race.country?.toLowerCase() === userCountry.toLowerCase();
 
         // Check if race is upcoming (within next 3 months by typical_month or 6 months by date)
-        const monthMatch = race.typical_month &&
-          race.typical_month >= currentMonth &&
-          race.typical_month <= (currentMonth + 3 > 12 ? currentMonth + 3 - 12 : currentMonth + 3);
+        const normalizedTypicalMonth =
+          typeof race.typical_month === 'number' && race.typical_month >= 1 && race.typical_month <= 12
+            ? race.typical_month
+            : null;
+        const monthMatch = normalizedTypicalMonth ? upcomingMonths.has(normalizedTypicalMonth) : false;
         const dateMatch = race.next_edition_date &&
           new Date(race.next_edition_date) <= sixMonthsFromNow &&
           new Date(race.next_edition_date) >= now;
@@ -954,7 +1584,7 @@ class RaceSuggestionService {
         .slice(0, 15);
     } catch (error) {
       logger.error('[getCatalogMatches] Error:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -975,13 +1605,13 @@ class RaceSuggestionService {
       // from any previous year
       const monthsToMatch = [currentMonth, (currentMonth + 1) % 12, (currentMonth + 2) % 12];
 
-      const { data: pastRaces } = await supabase
-        .from('regattas')
-        .select('*')
-        .eq('created_by', userId)
-        .lt('start_date', `${currentYear}-01-01T00:00:00`)
-        .order('start_date', { ascending: false })
-        .limit(100);
+      const pastRaces = await this.fetchRegattasForUser(userId, {
+        select: '*',
+        ltStartDate: `${currentYear}-01-01T00:00:00`,
+        orderBy: 'start_date',
+        ascending: false,
+        limit: 100,
+      });
 
       if (!pastRaces || pastRaces.length === 0) {
         return [];
@@ -1066,7 +1696,7 @@ class RaceSuggestionService {
       });
     } catch (error) {
       logger.error('[getPreviousYearRaces] Error:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -1098,7 +1728,7 @@ class RaceSuggestionService {
   // Helper Methods
   // =====================================================
 
-  private emptySuggestions(): CategorizedSuggestions {
+  private emptySuggestions(diagnostics?: SuggestionDiagnostics): CategorizedSuggestions {
     return {
       clubRaces: [],
       fleetRaces: [],
@@ -1108,6 +1738,7 @@ class RaceSuggestionService {
       patterns: [],
       templates: [],
       total: 0,
+      diagnostics,
     };
   }
 
@@ -1187,7 +1818,10 @@ class RaceSuggestionService {
     };
   }
 
-  private categorizeSuggestions(suggestions: RaceSuggestion[]): CategorizedSuggestions {
+  private categorizeSuggestions(
+    suggestions: RaceSuggestion[],
+    diagnostics?: SuggestionDiagnostics
+  ): CategorizedSuggestions {
     return {
       clubRaces: suggestions.filter((s) => s.type === 'club_event'),
       fleetRaces: suggestions.filter((s) => s.type === 'fleet_race'),
@@ -1197,6 +1831,7 @@ class RaceSuggestionService {
       patterns: suggestions.filter((s) => s.type === 'pattern_match'),
       templates: suggestions.filter((s) => s.type === 'template'),
       total: suggestions.length,
+      diagnostics,
     };
   }
 
@@ -1215,7 +1850,10 @@ class RaceSuggestionService {
   private suggestDateForMonth(month: number): string {
     const now = new Date();
     const year = now.getFullYear();
-    const suggestedDate = new Date(year, month, 15); // Mid-month
+    const normalizedMonthIndex = Number.isFinite(month)
+      ? Math.max(0, Math.min(11, month))
+      : now.getMonth();
+    const suggestedDate = new Date(year, normalizedMonthIndex, 15); // Mid-month
 
     // If month has passed, suggest next year
     if (suggestedDate < now) {

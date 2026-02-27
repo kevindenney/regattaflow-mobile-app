@@ -17,6 +17,10 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RouteMapCard');
 
 export interface RouteWaypoint {
   name: string;
@@ -28,11 +32,43 @@ export interface RouteWaypoint {
   notes?: string;
 }
 
+const ROUTE_MAP_STYLE_CANDIDATES = [
+  {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: [
+          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        ],
+        tileSize: 256,
+        attribution: '© OpenStreetMap contributors',
+      },
+    },
+    layers: [
+      {
+        id: 'osm-tiles',
+        type: 'raster',
+        source: 'osm',
+        minzoom: 0,
+        maxzoom: 19,
+      },
+    ],
+  },
+  'https://demotiles.maplibre.org/style.json',
+] as const;
+
 // Web-only map component for displaying route
 function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
+  const isMountedRef = useRef(true);
+  const initRunIdRef = useRef(0);
+  const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const styleIndexRef = useRef(0);
   const [mapError, setMapError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [containerReady, setContainerReady] = useState(false);
@@ -48,20 +84,20 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
     setRetryCount(c => c + 1);
   }, []);
 
-  // Callback ref to detect when container mounts
-  const containerRefCallback = useCallback((node: HTMLDivElement | null) => {
-    mapContainerRef.current = node;
-    if (node) {
-      setContainerReady(true);
-    }
-  }, []);
-
   // Also use useLayoutEffect as fallback to detect container after render
   useLayoutEffect(() => {
     if (Platform.OS === 'web' && mapContainerRef.current && !containerReady) {
       setContainerReady(true);
     }
   }, [containerReady]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      initRunIdRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
@@ -74,36 +110,39 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
       return;
     }
 
-    let isMounted = true;
-    let initTimeoutId: NodeJS.Timeout | null = null;
+    const runId = ++initRunIdRef.current;
+    styleIndexRef.current = 0;
+    const isCancelled = () =>
+      !isMountedRef.current || initRunIdRef.current !== runId;
 
     const initMap = async () => {
+      if (isCancelled()) return;
       setIsLoading(true);
       setMapError(null);
       
       // Overall timeout for the entire map initialization
-      initTimeoutId = setTimeout(() => {
-        console.error('[RouteMapView] Overall initialization timeout');
-        if (isMounted) {
+      initTimeoutRef.current = setTimeout(() => {
+        logger.error('Overall initialization timeout');
+        if (!isCancelled()) {
           setMapError('Map initialization timed out');
           setIsLoading(false);
         }
       }, 15000);
       
       try {
-        // Dynamic import of maplibre-gl
-        const maplibreModule = await import('maplibre-gl');
+        // Dynamic import of maplibre-gl with CDN fallback
+        let maplibreModule: any;
+        try {
+          maplibreModule = await import('maplibre-gl');
+        } catch (moduleError) {
+          logger.warn('Module import failed; attempting CDN fallback', moduleError);
+          await ensureMapLibreScript('maplibre-gl-script-route');
+          maplibreModule =
+            typeof window !== 'undefined' ? { default: (window as any).maplibregl } : null;
+        }
         
         // Load CSS dynamically via link element (more reliable than webpack import)
-        if (typeof document !== 'undefined' && !document.getElementById('maplibre-gl-css-route')) {
-          const link = document.createElement('link');
-          link.id = 'maplibre-gl-css-route';
-          link.rel = 'stylesheet';
-          link.href = 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css';
-          document.head.appendChild(link);
-          // Wait a bit for CSS to load
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        ensureMapLibreCss('maplibre-gl-css-route');
         
         // Get the Map constructor - handle both default and named exports
         const MapConstructor = maplibreModule.default?.Map || maplibreModule.Map;
@@ -122,30 +161,7 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
         // Use a simple raster tile style that's more reliable
         const map = new MapConstructor({
           container: mapContainerRef.current!,
-          style: {
-            version: 8,
-            sources: {
-              'osm': {
-                type: 'raster',
-                tiles: [
-                  'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                ],
-                tileSize: 256,
-                attribution: '© OpenStreetMap contributors',
-              },
-            },
-            layers: [
-              {
-                id: 'osm-tiles',
-                type: 'raster',
-                source: 'osm',
-                minzoom: 0,
-                maxzoom: 19,
-              },
-            ],
-          },
+          style: ROUTE_MAP_STYLE_CANDIDATES[styleIndexRef.current],
           center: [centerLng, centerLat],
           zoom: 11,
           attributionControl: false,
@@ -153,32 +169,49 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
 
         // Wait for map to load
         await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            console.error('[RouteMapView] Map load event timeout');
+          loadTimeoutRef.current = setTimeout(() => {
+            logger.error('Map load event timeout');
             reject(new Error('Map load timeout'));
           }, 10000);
           
           map.on('load', () => {
-            clearTimeout(timeout);
+            if (loadTimeoutRef.current) {
+              clearTimeout(loadTimeoutRef.current);
+              loadTimeoutRef.current = null;
+            }
             resolve();
           });
           
           map.on('error', (e: any) => {
-            console.error('[RouteMapView] Map error:', e);
-            clearTimeout(timeout);
+            logger.error('Map error', e);
+            if (loadTimeoutRef.current) {
+              clearTimeout(loadTimeoutRef.current);
+              loadTimeoutRef.current = null;
+            }
+            if (styleIndexRef.current + 1 < ROUTE_MAP_STYLE_CANDIDATES.length) {
+              styleIndexRef.current += 1;
+              try {
+                map.setStyle(ROUTE_MAP_STYLE_CANDIDATES[styleIndexRef.current] as any);
+                return;
+              } catch (styleError) {
+                logger.error('Fallback style failed', styleError);
+              }
+            }
             reject(e);
           });
         });
 
-        if (!isMounted) {
+        if (isCancelled()) {
           map.remove();
           return;
         }
 
-        if (initTimeoutId) clearTimeout(initTimeoutId); // Clear overall timeout on success
+        if (initTimeoutRef.current) {
+          clearTimeout(initTimeoutRef.current); // Clear overall timeout on success
+          initTimeoutRef.current = null;
+        }
         
         mapRef.current = map;
-        setMapLoaded(true);
         setIsLoading(false);
 
         // Add waypoint markers (no connecting line)
@@ -220,9 +253,16 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
           map.fitBounds(bounds, { padding: 40 });
         }
       } catch (error: any) {
-        if (initTimeoutId) clearTimeout(initTimeoutId); // Clear overall timeout on error
-        console.error('[RouteMapView] Error initializing map:', error);
-        if (isMounted) {
+        if (initTimeoutRef.current) {
+          clearTimeout(initTimeoutRef.current); // Clear overall timeout on error
+          initTimeoutRef.current = null;
+        }
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+        logger.error('Error initializing map', error);
+        if (!isCancelled()) {
           setMapError(error.message || 'Failed to load map');
           setIsLoading(false);
         }
@@ -232,8 +272,14 @@ function RouteMapView({ waypoints }: { waypoints: RouteWaypoint[] }) {
     initMap();
 
     return () => {
-      isMounted = false;
-      if (initTimeoutId) clearTimeout(initTimeoutId);
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+        initTimeoutRef.current = null;
+      }
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -396,15 +442,15 @@ interface RouteMapCardProps {
 export function RouteMapCard({
   waypoints,
   totalDistanceNm,
-  raceName,
-  raceId,
+  raceName: _raceName,
+  raceId: _raceId,
   onWaypointPress,
   onEditRoute,
-  expanded = false,
+  expanded: _expanded = false,
 }: RouteMapCardProps) {
   // Calculate leg distances (simplified - would need proper geo calculation)
   const legs = useMemo(() => {
-    const result: Array<{ from: string; to: string; estimatedNm?: number }> = [];
+    const result: { from: string; to: string; estimatedNm?: number }[] = [];
     for (let i = 0; i < waypoints.length - 1; i++) {
       result.push({
         from: waypoints[i].name,
@@ -857,4 +903,3 @@ const styles = StyleSheet.create({
 });
 
 export default RouteMapCard;
-

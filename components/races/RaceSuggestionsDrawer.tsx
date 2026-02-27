@@ -13,11 +13,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import type { RaceSuggestion, CategorizedSuggestions } from '@/services/RaceSuggestionService';
+import type {
+  RaceSuggestion,
+  CategorizedSuggestions,
+  SuggestionDiagnostics,
+} from '@/services/RaceSuggestionService';
 
 interface RaceSuggestionsDrawerProps {
   suggestions: CategorizedSuggestions | null;
+  diagnostics?: SuggestionDiagnostics | null;
   loading: boolean;
+  error?: Error | null;
   processingSuggestionId?: string | null;
   onSelectSuggestion: (suggestion: RaceSuggestion) => void;
   onDismissSuggestion?: (suggestionId: string) => void;
@@ -26,13 +32,21 @@ interface RaceSuggestionsDrawerProps {
 
 export function RaceSuggestionsDrawer({
   suggestions,
+  diagnostics,
   loading,
+  error,
   processingSuggestionId,
   onSelectSuggestion,
   onDismissSuggestion,
   onRefresh,
 }: RaceSuggestionsDrawerProps) {
   const [expandedSection, setExpandedSection] = useState<string | null>('club');
+  const failedSources = diagnostics?.failedSources || [];
+  const formattedErrorMessage = React.useMemo(() => {
+    const raw = error?.message || '';
+    if (!raw) return 'Unable to load race suggestions right now.';
+    return raw.replace(/^\[[A-Z0-9_]+\]\s*/, '').trim();
+  }, [error?.message]);
 
   if (loading) {
     return (
@@ -44,6 +58,23 @@ export function RaceSuggestionsDrawer({
   }
 
   if (!suggestions || suggestions.total === 0) {
+    if (error) {
+      return (
+        <View style={styles.emptyContainer}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={40} color="#DC2626" />
+          <Text style={styles.emptyTitle}>Suggestions Unavailable</Text>
+          <Text style={styles.emptySubtitle}>
+            {formattedErrorMessage}
+          </Text>
+          {onRefresh && (
+            <TouchableOpacity onPress={onRefresh} style={styles.retryButton}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      );
+    }
+
     return (
       <View style={styles.emptyContainer}>
         <MaterialCommunityIcons name="lightbulb-outline" size={40} color="#94A3B8" />
@@ -51,6 +82,13 @@ export function RaceSuggestionsDrawer({
         <Text style={styles.emptySubtitle}>
           Join clubs and fleets to see race recommendations here
         </Text>
+        {failedSources.length > 0 && (
+          <View style={styles.diagnosticsBadge}>
+            <Text style={styles.diagnosticsBadgeText}>
+              Source issues: {failedSources.join(', ')}
+            </Text>
+          </View>
+        )}
       </View>
     );
   }
@@ -82,6 +120,15 @@ export function RaceSuggestionsDrawer({
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
       >
+        {failedSources.length > 0 && (
+          <View style={styles.partialDiagnosticsContainer}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={14} color="#92400E" />
+            <Text style={styles.partialDiagnosticsText}>
+              Some sources unavailable: {failedSources.join(', ')}
+            </Text>
+          </View>
+        )}
+
         {/* Club Races Section */}
         {suggestions.clubRaces.length > 0 && (
           <SuggestionSection
@@ -437,6 +484,32 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 4,
   },
+  diagnosticsBadge: {
+    marginTop: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  diagnosticsBadgeText: {
+    fontSize: 12,
+    color: '#92400E',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 12,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -474,6 +547,25 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     maxHeight: 400,
+  },
+  partialDiagnosticsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  partialDiagnosticsText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#92400E',
   },
   section: {
     backgroundColor: '#FFFFFF',

@@ -28,7 +28,7 @@ export interface RaceCardWithTuningProps extends Omit<RaceCardProps, 'rigTuning'
  * - Headstay/forestay length
  */
 function mapTuningToCardFormat(
-  settings: Array<{ key: string; label: string; value: string }>
+  settings: { key: string; label: string; value: string }[]
 ): RigTuningData | undefined {
   if (!settings || settings.length === 0) return undefined;
 
@@ -132,7 +132,7 @@ export function RaceCardWithTuning({
   }, [raceStatus, classId, className]);
 
   // Fetch rig tuning recommendation based on class and conditions
-  const { settings: tuningSettings, loading: tuningLoading } = useRaceTuningRecommendation({
+  const { settings: tuningSettings, loading: _tuningLoading, error: tuningError } = useRaceTuningRecommendation({
     classId,
     className,
     averageWindSpeed,
@@ -147,6 +147,13 @@ export function RaceCardWithTuning({
   const rigTuning = useMemo(() => {
     return mapTuningToCardFormat(tuningSettings);
   }, [tuningSettings]);
+  const mergedCriticalDetails = useMemo(() => {
+    const base = Array.isArray(critical_details) ? [...critical_details] : [];
+    if (tuningError?.message && !base.some((detail) => detail.includes('Rig tuning'))) {
+      base.push(`Rig tuning: ${tuningError.message}`);
+    }
+    return base;
+  }, [critical_details, tuningError?.message]);
 
   return (
     <>
@@ -155,7 +162,7 @@ export function RaceCardWithTuning({
         id={id}
         wind={wind}
         raceStatus={raceStatus}
-        critical_details={critical_details}
+        critical_details={mergedCriticalDetails}
         rigTuning={rigTuning}
         collaborators={collaborators}
         onCollaboratorsPress={() => setShowCrewHub(true)}
@@ -177,4 +184,3 @@ export function RaceCardWithTuning({
 }
 
 export default RaceCardWithTuning;
-

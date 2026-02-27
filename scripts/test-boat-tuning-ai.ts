@@ -38,7 +38,7 @@ async function test() {
     console.log(`   AI Engine Available: ${isAvailable ? '✅ YES' : '❌ NO'}`);
 
     if (!isAvailable) {
-      console.log('   ⚠️ AI engine not available. Set EXPO_PUBLIC_ANTHROPIC_API_KEY in .env');
+      console.log('   ⚠️ AI engine not available. Set ANTHROPIC_API_KEY in .env');
       console.log('   Continuing with fallback mode...');
     }
 

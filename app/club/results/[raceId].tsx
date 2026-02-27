@@ -4,7 +4,7 @@
  * Universal component (Web + Mobile)
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/ui/text';
@@ -20,8 +20,10 @@ import { CheckIcon } from '@/components/ui/icon';
 import { supabase } from '@/services/supabase';
 import ResultsService from '@/services/ResultsService';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 type ScoreCode = 'DNC' | 'DNS' | 'DNF' | 'DSQ' | 'OCS' | 'RET' | 'RAF';
+type RaceResultsIdColumn = 'regatta_id' | 'race_id';
 
 interface RaceEntry {
   id: string;
@@ -59,6 +61,25 @@ export default function RaceResultsEntryScreen() {
   const [saving, setSaving] = useState(false);
   const [startTime, setStartTime] = useState<string>('');
   const [useManualPositions, setUseManualPositions] = useState(false);
+  const raceResultsIdColumnRef = useRef<RaceResultsIdColumn>('regatta_id');
+
+  const withRaceResultsIdFallback = async <T,>(
+    operation: (column: RaceResultsIdColumn) => Promise<{ data: T | null; error: any }>
+  ) => {
+    const current = raceResultsIdColumnRef.current;
+    let result = await operation(current);
+    if (
+      result.error &&
+      current === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_results', current)
+    ) {
+      result = await operation('race_id');
+      if (!result.error) {
+        raceResultsIdColumnRef.current = 'race_id';
+      }
+    }
+    return result;
+  };
 
   useEffect(() => {
     if (raceId && clubId) {
@@ -114,11 +135,13 @@ export default function RaceResultsEntryScreen() {
       setEntries(normalizedEntries);
 
       // Get existing results
-      const { data: resultsData, error: resultsError } = await supabase
-        .from('race_results')
-        .select('*')
-        .eq('regatta_id', raceData.regatta_id)
-        .eq('race_number', raceData.race_number);
+      const { data: resultsData, error: resultsError } = await withRaceResultsIdFallback((column) =>
+        supabase
+          .from('race_results')
+          .select('*')
+          .eq(column, raceData.regatta_id)
+          .eq('race_number', raceData.race_number)
+      );
 
       if (resultsError) throw resultsError;
 
@@ -248,27 +271,30 @@ export default function RaceResultsEntryScreen() {
       }
 
       // Prepare results for save
-      const resultsToSave = Array.from(results.entries()).map(([entryId, result]) => ({
-        id: result.id,
-        regatta_id: race.regatta_id,
-        race_number: race.race_number,
-        entry_id: entryId,
-        start_time: startTime,
-        finish_time: result.finish_time,
-        finish_position: result.finish_position,
-        corrected_position: result.corrected_position,
-        status: result.status,
-        time_penalty: result.time_penalty_minutes ? `${result.time_penalty_minutes} minutes` : null,
-        scoring_penalty: result.scoring_penalty,
-        notes: result.notes,
-      }));
-
       // Upsert results
-      const { error } = await supabase
-        .from('race_results')
-        .upsert(resultsToSave, {
-          onConflict: 'regatta_id,race_number,entry_id',
-        });
+      const { error } = await withRaceResultsIdFallback((column) =>
+        supabase
+          .from('race_results')
+          .upsert(
+            Array.from(results.entries()).map(([entryId, result]) => ({
+              id: result.id,
+              [column]: race.regatta_id,
+              race_number: race.race_number,
+              entry_id: entryId,
+              start_time: startTime,
+              finish_time: result.finish_time,
+              finish_position: result.finish_position,
+              corrected_position: result.corrected_position,
+              status: result.status,
+              time_penalty: result.time_penalty_minutes ? `${result.time_penalty_minutes} minutes` : null,
+              scoring_penalty: result.scoring_penalty,
+              notes: result.notes,
+            })),
+            {
+              onConflict: `${column},race_number,entry_id`,
+            }
+          )
+      );
 
       if (error) throw error;
 

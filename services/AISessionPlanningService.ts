@@ -1,6 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from './supabase';
 import { CoachingSession, SailorProfile, CoachProfile } from '../types/coach';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('AISessionPlanningService');
 
 interface SessionPlan {
   id: string;
@@ -44,8 +46,6 @@ interface SessionRecommendation {
 }
 
 export class AISessionPlanningService {
-  private static genAI = new Anthropic({ apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '', dangerouslyAllowBrowser: true });
-
   /**
    * Generate a complete learning curriculum for a sailor
    */
@@ -158,17 +158,7 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokePlanningChat(prompt, 1024);
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -179,7 +169,7 @@ Respond in this JSON format:
       // Fallback curriculum
       return this.generateFallbackCurriculum(totalSessions, timeframe, goals);
     } catch (error) {
-      console.error('Error generating curriculum:', error);
+      logger.error('Error generating curriculum:', error);
       return this.generateFallbackCurriculum(
         this.calculateSessionCount(timeframe, sessionFrequency),
         timeframe,
@@ -250,17 +240,7 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokePlanningChat(prompt, 1024);
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -271,7 +251,7 @@ Respond in this JSON format:
       // Fallback session plan
       return this.generateFallbackSessionPlan(focusAreas);
     } catch (error) {
-      console.error('Error generating session plan:', error);
+      logger.error('Error generating session plan:', error);
       return this.generateFallbackSessionPlan(focusAreas);
     }
   }
@@ -321,17 +301,7 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokePlanningChat(prompt, 1024);
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -342,7 +312,7 @@ Respond in this JSON format:
       // Fallback recommendation
       return this.generateFallbackRecommendation();
     } catch (error) {
-      console.error('Error analyzing progress:', error);
+      logger.error('Error analyzing progress:', error);
       return this.generateFallbackRecommendation();
     }
   }
@@ -399,17 +369,7 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokePlanningChat(prompt, 1024);
 
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -420,12 +380,32 @@ Respond in this JSON format:
       // Fallback briefing
       return this.generateFallbackBriefing(sessionPlan);
     } catch (error) {
-      console.error('Error generating briefing:', error);
+      logger.error('Error generating briefing:', error);
       return this.generateFallbackBriefing(sessionPlan);
     }
   }
 
   // Helper methods
+
+  private static async invokePlanningChat(prompt: string, maxTokens: number): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Session planning AI invocation failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text : '';
+    if (!text) {
+      throw new Error('Empty response from session planning AI');
+    }
+
+    return text;
+  }
 
   private static calculateSessionCount(timeframe: string, frequency: string): number {
     const weeks = this.parseTimeframeToWeeks(timeframe);

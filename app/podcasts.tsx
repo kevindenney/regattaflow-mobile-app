@@ -3,7 +3,7 @@
  * Features the RegattaFlow Podcast with episodes on local knowledge and racing insights
  */
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,10 @@ import {
   useWindowDimensions,
   Platform,
   ScrollView,
-  Image,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { LandingNav } from '@/components/landing/LandingNav';
 import { Footer } from '@/components/landing/Footer';
 
@@ -71,16 +70,24 @@ export default function PodcastsPage() {
   const featuredEpisode = EPISODES.find((ep) => ep.isFeatured);
   const isPublished = featuredEpisode?.spotifyUrl || featuredEpisode?.applePodcastsUrl;
 
+  const handleNotifyMe = () => {
+    void Linking.openURL(
+      'mailto:podcast@regattaflow.com?subject=Podcast%20Notifications&body=Please%20notify%20me%20when%20new%20RegattaFlow%20podcast%20episodes%20are%20available.'
+    );
+  };
+
   const handleSubscribe = (platform: 'spotify' | 'apple' | 'youtube') => {
-    // Placeholder - will open platform links when available
+    const urls = {
+      spotify: featuredEpisode?.spotifyUrl || 'https://open.spotify.com',
+      apple: featuredEpisode?.applePodcastsUrl || 'https://podcasts.apple.com',
+      youtube: featuredEpisode?.youtubeUrl || 'https://youtube.com',
+    };
+    const targetUrl = urls[platform];
     if (Platform.OS === 'web') {
-      const urls = {
-        spotify: featuredEpisode?.spotifyUrl || 'https://open.spotify.com',
-        apple: featuredEpisode?.applePodcastsUrl || 'https://podcasts.apple.com',
-        youtube: featuredEpisode?.youtubeUrl || 'https://youtube.com',
-      };
       window.open(urls[platform], '_blank');
+      return;
     }
+    void Linking.openURL(targetUrl);
   };
 
   return (
@@ -173,7 +180,7 @@ export default function PodcastsPage() {
               </View>
               {!isPublished && (
                 <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>Coming Soon</Text>
+                  <Text style={styles.comingSoonText}>In Production</Text>
                 </View>
               )}
             </View>
@@ -223,7 +230,7 @@ export default function PodcastsPage() {
                   </TouchableOpacity>
                 ) : (
                   <View style={styles.notifyContainer}>
-                    <TouchableOpacity style={styles.notifyButton}>
+                    <TouchableOpacity style={styles.notifyButton} onPress={handleNotifyMe}>
                       <Ionicons name="notifications-outline" size={20} color="#3E92CC" />
                       <Text style={styles.notifyButtonText}>Notify Me</Text>
                     </TouchableOpacity>

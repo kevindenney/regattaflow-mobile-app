@@ -4,7 +4,10 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { supabaseVenueService } from '@/services/venue/SupabaseVenueService';
 import type { FleetActivityEntry, FleetMembership, FleetOverview } from '@/services/fleetService';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useSailorDashboardData');
 
 interface SailorRace {
   id: string;
@@ -50,25 +53,25 @@ interface SailorStrategy {
 }
 
 interface SailorPerformance {
-  recentResults: Array<{
+  recentResults: {
     raceName: string;
     position: number;
     fleet: number;
     venue: string;
     date: string;
-  }>;
+  }[];
   seasonStats: {
     totalRaces: number;
     averagePosition: number;
     podiumFinishes: number;
     improvement: number;
   };
-  venueComparison: Array<{
+  venueComparison: {
     venue: string;
     races: number;
     avgPosition: number;
     bestResult: number;
-  }>;
+  }[];
 }
 
 interface WeatherData {
@@ -78,12 +81,12 @@ interface WeatherData {
     temperature: number;
     conditions: string;
   };
-  forecast: Array<{
+  forecast: {
     time: string;
     windSpeed: number;
     windDirection: number;
     conditions: string;
-  }>;
+  }[];
   confidence: number;
 }
 
@@ -120,11 +123,11 @@ export interface SailorVenueIntel {
       bestConditions: string;
       commonHazards: string[];
       localTactics: string[];
-      records: Array<{ type: string; value: string; holder: string }>;
+      records: { type: string; value: string; holder: string }[];
     };
-    services: Array<{ type: string; name: string; contact: string; rating: number }>;
+    services: { type: string; name: string; contact: string; rating: number }[];
   } | null;
-  nearbyVenues: Array<{ id: string; name: string; distance: number; country: string; hasData: boolean }>;
+  nearbyVenues: { id: string; name: string; distance: number; country: string; hasData: boolean }[];
   isDetecting: boolean;
 }
 
@@ -142,9 +145,8 @@ interface SailorClass {
   };
 }
 
-export function useSailorDashboardData(): SailorDashboardData {
-  const { user } = useAuth();
-  const [data, setData] = useState<Omit<SailorDashboardData, 'setActiveClassId'>>({
+function createEmptyDashboardState() {
+  return {
     classes: [],
     activeClassId: null,
     races: [],
@@ -171,18 +173,44 @@ export function useSailorDashboardData(): SailorDashboardData {
     primaryFleetActivity: [],
     loading: true,
     error: null,
-  });
+  };
+}
+
+export function useSailorDashboardData(): SailorDashboardData {
+  const { user } = useAuth();
+  const [data, setData] = useState<Omit<SailorDashboardData, 'setActiveClassId'>>(
+    createEmptyDashboardState()
+  );
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeClassIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    activeClassIdRef.current = data.activeClassId;
+  }, [data.activeClassId]);
 
   const fetchSailorData = useCallback(async (overrideClassId?: string | null) => {
+    const runId = ++fetchRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
 
     if (!user) {
-
-      setData(prev => ({ ...prev, loading: false, error: 'No user authenticated' }));
+      if (!canCommit()) return;
+      setData({
+        ...createEmptyDashboardState(),
+        loading: false,
+        error: 'No user authenticated',
+      });
       return;
     }
 
     try {
-
+      if (!canCommit()) return;
       setData(prev => ({ ...prev, loading: true, error: null }));
 
       // Query regattas using only the existing created_by column
@@ -270,8 +298,8 @@ export function useSailorDashboardData(): SailorDashboardData {
 
       const resolvedClassId =
         overrideClassId === undefined
-          ? (data.activeClassId && processedClasses.some(cls => cls.id === data.activeClassId)
-              ? data.activeClassId
+          ? (activeClassIdRef.current && processedClasses.some(cls => cls.id === activeClassIdRef.current)
+              ? activeClassIdRef.current
               : processedClasses.find(cls => cls.isPrimary)?.id ?? processedClasses[0]?.id ?? null)
           : overrideClassId === null
             ? null
@@ -448,6 +476,7 @@ export function useSailorDashboardData(): SailorDashboardData {
       };
 
       // Update state with non-venue data (venues will load in background)
+      if (!canCommit()) return;
       setData(prev => ({
         ...prev,
         classes: processedClasses,
@@ -492,6 +521,7 @@ export function useSailorDashboardData(): SailorDashboardData {
       // Step 8: Load venue data in background (non-blocking)
       supabaseVenueService.listVenuesForClient(100)
         .then(clientVenues => {
+          if (!canCommit()) return;
           if (!clientVenues || clientVenues.length === 0) {
             return;
           }
@@ -555,13 +585,15 @@ export function useSailorDashboardData(): SailorDashboardData {
           };
 
           // Update state with venue data
+          if (!canCommit()) return;
           setData(prev => ({
             ...prev,
             venues: updatedVenueIntel,
           }));
         })
-        .catch(error => {
+        .catch(() => {
           // Keep empty venue state on error
+          if (!canCommit()) return;
           setData(prev => ({
             ...prev,
             venues: {
@@ -573,6 +605,7 @@ export function useSailorDashboardData(): SailorDashboardData {
         });
 
     } catch (error) {
+      if (!canCommit()) return;
       setData(prev => ({
         ...prev,
         loading: false,
@@ -584,9 +617,12 @@ export function useSailorDashboardData(): SailorDashboardData {
   useEffect(() => {
 
     if (user) {
+      const runId = fetchRunIdRef.current;
+      const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
       // Add timeout fallback to prevent infinite loading
       const timeout = setTimeout(() => {
-        console.error('⏰ [SAILOR-DATA] Fetch timeout after 10 seconds');
+        if (!canCommit()) return;
+        logger.error('Fetch timeout after 10 seconds');
         setData(prev => ({
           ...prev,
           loading: false,
@@ -594,21 +630,31 @@ export function useSailorDashboardData(): SailorDashboardData {
         }));
       }, 10000);
 
-      fetchSailorData().finally(() => {
+      void fetchSailorData().finally(() => {
 
         clearTimeout(timeout);
       });
-    } else {
 
+      return () => {
+        clearTimeout(timeout);
+      };
+    } else {
+      fetchRunIdRef.current += 1;
       // If no user, stop loading
-      setData(prev => ({ ...prev, loading: false, error: null }));
+      if (!isMountedRef.current) return;
+      setData({
+        ...createEmptyDashboardState(),
+        loading: false,
+        error: null,
+      });
     }
+
+    return;
   }, [user, fetchSailorData]);
 
   const setActiveClassId = useCallback((classId: string | null) => {
     setData(prev => ({ ...prev, activeClassId: classId }));
-    fetchSailorData(classId).catch(error => {
-    });
+    void fetchSailorData(classId);
   }, [fetchSailorData]);
 
   return {

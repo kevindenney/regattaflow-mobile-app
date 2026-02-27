@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import { RealtimeChannel } from '@supabase/supabase-js';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fleetSocialService,
   FleetPost,
@@ -7,6 +6,10 @@ import {
   CreatePostParams
 } from '@/services/FleetSocialService';
 import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useFleetSocial');
 
 interface UseFleetPostsOptions {
   limit?: number;
@@ -18,14 +21,29 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
   const [posts, setPosts] = useState<FleetPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [subscription, setSubscription] = useState<RealtimeChannel | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const subscriptionRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const loadPosts = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
     if (!fleetId) {
+      if (!canCommit()) return;
+      setPosts([]);
+      setError(null);
       setLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setLoading(true);
     setError(null);
 
@@ -35,33 +53,48 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
         postType: options?.postType,
         userId: user?.id,
       });
+      if (!canCommit()) return;
       setPosts(fetchedPosts);
     } catch (err) {
-      console.error('Error loading fleet posts:', err);
+      logger.error('Error loading fleet posts', err);
+      if (!canCommit()) return;
       setError(err as Error);
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
   }, [fleetId, options?.limit, options?.postType, user?.id]);
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!fleetId) return;
+    const runId = ++subscriptionRunIdRef.current;
+
+    if (!fleetId) {
+      if (!isMountedRef.current) return;
+      setPosts([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
 
     // Load initial posts
     loadPosts();
 
     // Subscribe to new posts
     const channel = fleetSocialService.subscribeToFleetPosts(fleetId, (newPost) => {
-      setPosts((prev) => [newPost, ...prev]);
+      if (runId !== subscriptionRunIdRef.current) return;
+      if (!isMountedRef.current) return;
+      setPosts((prev) => {
+        if (prev.some((post) => post.id === newPost.id)) {
+          return prev;
+        }
+        return [newPost, ...prev];
+      });
     });
 
-    setSubscription(channel);
-
     return () => {
-      if (subscription) {
-        subscription.unsubscribe();
-      }
+      subscriptionRunIdRef.current += 1;
+      void supabase.removeChannel(channel);
     };
   }, [fleetId, loadPosts]);
 
@@ -84,6 +117,7 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
     await fleetSocialService.likePost(postId);
 
     // Update local state optimistically
+    if (!isMountedRef.current) return;
     setPosts((prev) =>
       prev.map((post) =>
         post.id === postId
@@ -101,6 +135,7 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
     await fleetSocialService.unlikePost(postId);
 
     // Update local state optimistically
+    if (!isMountedRef.current) return;
     setPosts((prev) =>
       prev.map((post) =>
         post.id === postId
@@ -117,6 +152,7 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
   const bookmarkPost = useCallback(async (postId: string) => {
     await fleetSocialService.bookmarkPost(postId);
 
+    if (!isMountedRef.current) return;
     setPosts((prev) =>
       prev.map((post) =>
         post.id === postId ? { ...post, isBookmarkedByUser: true } : post
@@ -127,6 +163,7 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
   const unbookmarkPost = useCallback(async (postId: string) => {
     await fleetSocialService.unbookmarkPost(postId);
 
+    if (!isMountedRef.current) return;
     setPosts((prev) =>
       prev.map((post) =>
         post.id === postId ? { ...post, isBookmarkedByUser: false } : post
@@ -138,6 +175,7 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
     await fleetSocialService.deletePost(postId);
 
     // Remove from local state
+    if (!isMountedRef.current) return;
     setPosts((prev) => prev.filter((post) => post.id !== postId));
   }, []);
 
@@ -158,17 +196,35 @@ export function useFleetPosts(fleetId?: string, options?: UseFleetPostsOptions) 
 export function usePostComments(postId?: string) {
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const loadComments = useCallback(async () => {
-    if (!postId) return;
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
+    if (!postId) {
+      if (!canCommit()) return;
+      setComments([]);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
       const fetchedComments = await fleetSocialService.getComments(postId);
+      if (!canCommit()) return;
       setComments(fetchedComments);
     } catch (err) {
-      console.error('Error loading comments:', err);
+      logger.error('Error loading comments', err);
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
   }, [postId]);
@@ -187,7 +243,9 @@ export function usePostComments(postId?: string) {
         parentCommentId,
       });
 
-      setComments((prev) => [...prev, newComment]);
+      if (isMountedRef.current) {
+        setComments((prev) => [...prev, newComment]);
+      }
       return newComment;
     },
     [postId]
@@ -195,6 +253,7 @@ export function usePostComments(postId?: string) {
 
   const deleteComment = useCallback(async (commentId: string) => {
     await fleetSocialService.deleteComment(commentId);
+    if (!isMountedRef.current) return;
     setComments((prev) => prev.filter((c) => c.id !== commentId));
   }, []);
 

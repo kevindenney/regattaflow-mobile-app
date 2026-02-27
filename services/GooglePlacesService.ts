@@ -4,6 +4,9 @@
  */
 
 import { ServiceType } from './SailingNetworkService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('GooglePlacesService');
 
 export interface PlaceResult {
   id: string;
@@ -20,21 +23,6 @@ export interface PlaceResult {
   isOpen?: boolean;
   placeId: string;
 }
-
-// Map our service types to Google Places types
-const SERVICE_TYPE_MAPPING: Record<ServiceType, string[]> = {
-  yacht_club: ['yacht_club', 'country_club', 'marina'],
-  sailmaker: ['sail_maker', 'sporting_goods_store'],
-  rigger: ['boat_repair', 'marine_supply_store'],
-  coach: ['sports_coach', 'sports_club'],
-  marina: ['marina', 'boat_storage'],
-  chandler: ['marine_supply_store', 'boating_supply_store'],
-  repair: ['boat_repair', 'marine_repair'],
-  engine: ['boat_repair', 'marine_engine_repair'],
-  clothing: ['clothing_store', 'sporting_goods_store'],
-  venue: ['sports_complex', 'stadium'],
-  other: ['point_of_interest'],
-};
 
 // Search queries for each service type when Places types don't match well
 const SERVICE_SEARCH_QUERIES: Record<ServiceType, string> = {
@@ -63,7 +51,7 @@ export class GooglePlacesService {
     try {
       // Use the global google object from Google Maps script
       if (typeof window === 'undefined' || !(window as any).google) {
-        console.warn('Google Maps not loaded');
+        logger.warn('Google Maps not loaded');
         return [];
       }
 
@@ -112,7 +100,7 @@ export class GooglePlacesService {
         });
       });
     } catch (error) {
-
+      logger.error('Search places error:', error);
       return [];
     }
   }
@@ -158,7 +146,7 @@ export class GooglePlacesService {
         );
       });
     } catch (error) {
-      console.error('Get place details error:', error);
+      logger.error('Get place details error:', error);
       return null;
     }
   }

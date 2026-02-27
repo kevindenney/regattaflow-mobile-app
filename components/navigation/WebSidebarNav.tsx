@@ -25,6 +25,7 @@ import {
   getNavItemsForUserType,
   isRouteActive,
 } from '@/lib/navigation-config';
+import { useVocabulary } from '@/hooks/useVocabulary';
 
 export const WEB_SIDEBAR_WIDTH = 280;
 
@@ -35,10 +36,11 @@ interface WebSidebarNavProps {
 function WebSidebarNav({ onClose }: WebSidebarNavProps) {
   const { userType, isGuest, user, signOut } = useAuth();
   const { isPinned, togglePin, closeDrawer } = useWebDrawer();
+  const { vocabulary } = useVocabulary();
   const pathname = usePathname();
   const router = useRouter();
 
-  const { primary, secondary } = getNavItemsForUserType(userType ?? null);
+  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary);
 
   const handleNavigation = (route: string) => {
     router.push(route as Parameters<typeof router.push>[0]);

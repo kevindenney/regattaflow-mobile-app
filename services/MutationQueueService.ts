@@ -58,7 +58,7 @@ class MutationQueueService {
 
     // Try to process immediately if online
     this.processQueue().catch(err => {
-      console.warn('Failed to process queue immediately:', err);
+      this.logger.warn('Failed to process queue immediately:', err);
     });
   }
 
@@ -71,7 +71,7 @@ class MutationQueueService {
       if (!queueJson) return [];
       return JSON.parse(queueJson);
     } catch (error) {
-      console.error('Failed to load mutation queue:', error);
+      this.logger.error('Failed to load mutation queue:', error);
       return [];
     }
   }
@@ -83,7 +83,7 @@ class MutationQueueService {
     try {
       await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue));
     } catch (error) {
-      console.error('Failed to save mutation queue:', error);
+      this.logger.error('Failed to save mutation queue:', error);
       throw error;
     }
   }
@@ -113,7 +113,7 @@ class MutationQueueService {
         const handler = this.handlers.get(mutation.collection);
 
         if (!handler) {
-          console.warn(`No handler registered for collection: ${mutation.collection}`);
+          this.logger.warn(`No handler registered for collection: ${mutation.collection}`);
           // Keep in queue, might register handler later
           remainingQueue.push(mutation);
           continue;
@@ -128,7 +128,7 @@ class MutationQueueService {
           } else if (mutation.type === 'bulk-sync' && handler.bulkSync) {
             await handler.bulkSync(mutation.payload);
           } else {
-            console.warn(`No handler for mutation type: ${mutation.type}`);
+            this.logger.warn(`No handler for mutation type: ${mutation.type}`);
             remainingQueue.push(mutation);
             continue;
           }
@@ -139,7 +139,7 @@ class MutationQueueService {
           mutation.error = error instanceof Error ? error.message : String(error);
 
           if (mutation.retries >= MAX_RETRIES) {
-            console.error(
+            this.logger.error(
               `Mutation ${mutation.id} failed after ${MAX_RETRIES} retries:`,
               error
             );
@@ -212,7 +212,7 @@ class MutationQueueService {
       if (state.isConnected) {
         // Network became available, process queue
         this.processQueue().catch(err => {
-          console.warn('Failed to process queue on network change:', err);
+          this.logger.warn('Failed to process queue on network change:', err);
         });
       }
     });

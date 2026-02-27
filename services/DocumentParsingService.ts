@@ -1,7 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { nominatimService } from './location/NominatimService';
+import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('DocumentParsingService');
 
 interface CourseExtraction {
   course_name: string;
@@ -161,8 +164,6 @@ interface CrewPositioning {
 }
 
 export class DocumentParsingService {
-  private static genAI = new Anthropic({ apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '', dangerouslyAllowBrowser: true });
-
   /**
    * Parse sailing instructions document and extract race course information
    */
@@ -175,178 +176,99 @@ export class DocumentParsingService {
       // Read document content
       const documentContent = await this.readDocumentContent(documentUri);
 
-      const prompt = `
-Analyze this sailing instruction document and extract detailed race course information.
+      const mimeType = this.getMimeType(documentUri);
+      const fileName = documentUri.split('/').pop() || 'race-document';
+      const fileContent = `data:${mimeType};base64,${documentContent}`;
 
-DOCUMENT TYPE: Sailing Instructions / Notice of Race
-VENUE: ${venueId ? `Venue ID: ${venueId}` : 'Unknown venue - extract from document'}
-
-Extract the following information in precise detail:
-
-1. COURSE IDENTIFICATION:
-   - Course name and racing area designation
-   - Geographic location and coordinates if provided
-
-2. MARK POSITIONS:
-   - All course marks with coordinates (lat/lng)
-   - Mark types (start, windward, leeward, reach, finish, gates)
-   - Rounding directions (port/starboard)
-   - Mark descriptions and identification
-
-3. START/FINISH LINES AND LOCATIONS:
-   - Start line coordinates and bearing (if provided)
-   - Finish line coordinates and bearing (if provided)
-   - Line lengths in meters
-   - **CRITICAL: Extract start location names even if coordinates aren't provided** (e.g., "Tai Tam Bay", "Starting line will be laid in [location]")
-   - **CRITICAL: Extract finish location names even if coordinates aren't provided** (e.g., "ABC Main Club", "Race Safety Control Centre at [location]")
-   - Include start_location_name and finish_location_name fields in the response
-
-4. COURSE CONFIGURATIONS:
-   - All possible course configurations
-   - Mark sequences for each configuration
-   - Estimated distances and durations
-   - Wind condition applicability
-
-5. RESTRICTIONS AND BOUNDARIES:
-   - Course boundaries and prohibited areas
-   - Obstructions and hazards
-   - Penalty specifications
-   - Safety restrictions
-
-6. ENVIRONMENTAL CONDITIONS:
-   - Expected wind conditions (direction, speed ranges)
-   - Tidal information (times, current direction/speed)
-   - Weather considerations
-
-7. RACE MANAGEMENT:
-   - Protest procedures
-   - Safety protocols
-   - Communication procedures
-
-8. TACTICAL INTELLIGENCE:
-   - Historical wind patterns mentioned
-   - Local knowledge references
-   - Strategic considerations noted
-
-Look for coordinate data in formats like:
-- Decimal degrees: 22.2854, 114.1577
-- Degrees/minutes: 22°17.124'N, 114°09.462'E
-- GPS waypoints and references
-- Distance/bearing from known points
-
-Extract mark positions with maximum precision. If coordinates aren't explicit, look for distance/bearing references from known positions.
-
-**IMPORTANT FOR START/FINISH:**
-- If the document mentions a start area/location by name (e.g., "Tai Tam Bay", "starting line will be laid in [location]"), extract the location name even if no coordinates are provided
-- If the document mentions a finish location by name (e.g., "ABC Main Club", "Race Safety Control Centre at [location]"), extract the location name even if no coordinates are provided
-- These location names will be geocoded to coordinates after extraction
-
-Respond in this JSON format:
-{
-  "course_name": "Course Alpha",
-  "racing_area": "Central Hong Kong Waters",
-  "marks": [
-    {
-      "id": "M1",
-      "name": "Start/Finish",
-      "type": "start",
-      "coordinates": [22.2854, 114.1577],
-      "rounding_direction": "either",
-      "description": "Orange inflatable mark"
-    }
-  ],
-  "start_line": {
-    "coordinates": [[22.2854, 114.1577], [22.2860, 114.1580]],
-    "bearing": 90,
-    "length_meters": 100
-  },
-  "start_location_name": "Tai Tam Bay" or null if not mentioned,
-  "finish_line": {
-    "coordinates": [[22.2854, 114.1577], [22.2860, 114.1580]],
-    "bearing": 90,
-    "length_meters": 100
-  },
-  "finish_location_name": "ABC Main Club" or null if not mentioned,
-  "course_configurations": [
-    {
-      "name": "Windward/Leeward",
-      "sequence": ["Start", "M1", "M2", "M1", "Finish"],
-      "distance_nm": 2.5,
-      "estimated_duration": 45,
-      "wind_range": [8, 15],
-      "description": "Standard windward-leeward configuration"
-    }
-  ],
-  "restrictions": [
-    {
-      "type": "boundary",
-      "coordinates": [[22.280, 114.150], [22.290, 114.160]],
-      "description": "Eastern boundary line",
-      "penalty": "DSQ"
-    }
-  ],
-  "wind_conditions": {
-    "expected_direction": 90,
-    "expected_speed_range": [8, 15],
-    "shift_probability": 0.3
-  },
-  "tide_information": {
-    "high_tide": "14:30",
-    "low_tide": "08:15",
-    "current_direction": 180,
-    "max_speed_knots": 1.2
-  },
-  "safety_information": [
-    "All boats must monitor VHF Channel 72",
-    "Safety boats positioned at windward mark"
-  ],
-  "protest_procedures": [
-    "Protests must be filed within 60 minutes",
-    "Protest room opens 30 minutes after last finish"
-  ]
-}
-`;
-
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307', // Using cheapest model for document parsing (3x savings)
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'document',
-              source: {
-                type: 'base64',
-                media_type: 'application/pdf',
-                data: documentContent
-              }
-            },
-            {
-              type: 'text',
-              text: prompt
-            }
-          ]
-        }]
+      const { data, error } = await supabase.functions.invoke('extract-course-from-document', {
+        body: {
+          fileContent,
+          fileName,
+          fileType: mimeType,
+          raceType: 'fleet',
+        },
       });
 
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
-
-      // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const extraction = JSON.parse(jsonMatch[0]) as CourseExtraction;
-        
-        // Geocode start/finish location names if provided
-        const geocodedExtraction = await this.geocodeStartFinishLocations(extraction, venueId);
-        
-        return geocodedExtraction;
+      if (error) {
+        throw new Error(error.message || 'Document parsing edge function failed');
       }
 
-      // Fallback course extraction
-      return this.generateFallbackCourse();
+      const waypoints = Array.isArray(data?.waypoints) ? data.waypoints : [];
+      if (waypoints.length === 0) {
+        return this.generateFallbackCourse();
+      }
+
+      const marks: CourseMark[] = waypoints.map((wp: any, index: number) => ({
+        id: `M${index + 1}`,
+        name: wp?.name || `Mark ${index + 1}`,
+        type:
+          wp?.type === 'start' || wp?.type === 'finish' || wp?.type === 'gate'
+            ? wp.type
+            : wp?.type === 'mark'
+            ? 'windward'
+            : 'reach',
+        coordinates: [wp.latitude, wp.longitude],
+        rounding_direction: wp?.passingSide === 'port' || wp?.passingSide === 'starboard' ? wp.passingSide : 'either',
+        description: wp?.notes || '',
+      }));
+
+      const startMarks = marks.filter((m) => m.type === 'start');
+      const finishMarks = marks.filter((m) => m.type === 'finish');
+      const fallbackLine: [number, number] = marks[0]?.coordinates || [22.2854, 114.1577];
+
+      const extraction: CourseExtraction = {
+        course_name: data?.courseName || fileName.replace(/\.[^.]+$/, ''),
+        racing_area: data?.courseDescription || 'Main Racing Area',
+        marks,
+        start_line: {
+          coordinates:
+            startMarks.length >= 2
+              ? [startMarks[0].coordinates, startMarks[1].coordinates]
+              : [fallbackLine, fallbackLine],
+          bearing: 90,
+          length_meters: 100,
+        },
+        start_location_name: data?.startLocationName || null,
+        finish_line: {
+          coordinates:
+            finishMarks.length >= 2
+              ? [finishMarks[0].coordinates, finishMarks[1].coordinates]
+              : [fallbackLine, fallbackLine],
+          bearing: 90,
+          length_meters: 100,
+        },
+        finish_location_name: data?.finishLocationName || null,
+        course_configurations: [
+          {
+            name: data?.courseName || 'Primary Course',
+            sequence: marks.map((m) => m.id),
+            distance_nm: typeof data?.totalDistanceNm === 'number' ? data.totalDistanceNm : 2.5,
+            estimated_duration: 45,
+            wind_range: [8, 15],
+            description: data?.courseDescription || 'Extracted from uploaded race document',
+          },
+        ],
+        restrictions: [],
+        wind_conditions: {
+          expected_direction: 90,
+          expected_speed_range: [8, 15],
+          shift_probability: 0.3,
+        },
+        tide_information: {
+          high_tide: '14:30',
+          low_tide: '08:15',
+          current_direction: 180,
+          max_speed_knots: 1.2,
+        },
+        safety_information: [],
+        protest_procedures: [],
+      };
+
+      // Geocode start/finish location names if provided
+      const geocodedExtraction = await this.geocodeStartFinishLocations(extraction, venueId);
+      return geocodedExtraction;
     } catch (error) {
-      console.error('Error parsing sailing instructions:', error);
+      logger.error('Error parsing sailing instructions', error);
       return this.generateFallbackCourse();
     }
   }
@@ -356,7 +278,6 @@ Respond in this JSON format:
    */
   static async loadVenueIntelligence(venueId: string): Promise<VenueIntelligence> {
     try {
-
       const prompt = `
 Generate comprehensive venue intelligence for sailing venue ID: ${venueId}
 
@@ -390,18 +311,21 @@ Based on global sailing venue database and competitive sailing intelligence.
 
 Respond in JSON format with detailed tactical guidance for competitive advantage.
 `;
-
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307', // Using cheapest model for document parsing (3x savings)
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
+      const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt,
+          max_tokens: 1024,
+        },
       });
 
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      if (error) {
+        throw new Error(error.message || 'Venue intelligence generation failed');
+      }
+
+      const response = typeof data?.text === 'string' ? data.text : '';
+      if (!response) {
+        throw new Error('No venue intelligence response text');
+      }
 
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -410,7 +334,7 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
 
       return this.generateFallbackIntelligence(venueId);
     } catch (error) {
-      console.error('Error loading venue intelligence:', error);
+      logger.error('Error loading venue intelligence', error);
       return this.generateFallbackIntelligence(venueId);
     }
   }
@@ -440,7 +364,7 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
 
       return { documentUri, courseExtraction };
     } catch (error) {
-      console.error('Error selecting and parsing document:', error);
+      logger.error('Error selecting and parsing document', error);
       throw error;
     }
   }
@@ -479,7 +403,7 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
         series_analysis,
       };
     } catch (error) {
-      console.error('Error in batch processing:', error);
+      logger.error('Error in batch processing', error);
       throw error;
     }
   }
@@ -491,7 +415,7 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
    */
   private static async geocodeStartFinishLocations(
     extraction: CourseExtraction,
-    venueId?: string
+    _venueId?: string
   ): Promise<CourseExtraction> {
     try {
       const enhancedExtraction = { ...extraction };
@@ -527,7 +451,7 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
             }
           }
         } catch (error) {
-          console.warn(`[DocumentParsing] Failed to geocode start location: ${extraction.start_location_name}`, error);
+          logger.warn(`[DocumentParsing] Failed to geocode start location: ${extraction.start_location_name}`, error);
         }
       }
 
@@ -561,14 +485,14 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
             }
           }
         } catch (error) {
-          console.warn(`[DocumentParsing] Failed to geocode finish location: ${extraction.finish_location_name}`, error);
+          logger.warn(`[DocumentParsing] Failed to geocode finish location: ${extraction.finish_location_name}`, error);
         }
       }
 
       enhancedExtraction.marks = newMarks;
       return enhancedExtraction;
     } catch (error) {
-      console.error('[DocumentParsing] Error in geocodeStartFinishLocations:', error);
+      logger.error('[DocumentParsing] Error in geocodeStartFinishLocations', error);
       return extraction; // Return original if geocoding fails
     }
   }
@@ -587,9 +511,17 @@ Respond in JSON format with detailed tactical guidance for competitive advantage
         encoding: FileSystem.EncodingType.Base64,
       });
     } catch (error) {
-      console.error('Error reading document:', error);
+      logger.error('Error reading document', error);
       throw error;
     }
+  }
+
+  private static getMimeType(uri: string): string {
+    const lower = uri.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'application/pdf';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.png')) return 'image/png';
+    return 'application/pdf';
   }
 
   private static analyzeRegattaSeries(courses: CourseExtraction[]): {

@@ -5,7 +5,7 @@
  * (no react-map-gl wrapper to avoid ES6 module issues)
  */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -23,6 +23,10 @@ import {
   Spacing,
   BorderRadius
 } from '@/constants/RacingDesignSystem';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('TacticalMapView');
 
 // Declare global maplibregl type
 declare global {
@@ -32,6 +36,38 @@ declare global {
 }
 
 let maplibregl: any = null;
+const MAP_STYLE_CANDIDATES = [
+  {
+    version: 8,
+    sources: {
+      'raster-tiles': {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+      },
+    },
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: { 'background-color': '#0b1f33' },
+      },
+      {
+        id: 'raster-layer',
+        type: 'raster',
+        source: 'raster-tiles',
+        paint: { 'raster-opacity': 0.82 },
+      },
+    ],
+  },
+  'https://tiles.openfreemap.org/styles/liberty',
+  'https://demotiles.maplibre.org/style.json',
+];
+
+type MarkerRef = {
+  markMarkers: any[];
+  positionMarker: any | null;
+};
 
 interface TacticalMapViewProps {
   startLineHeading?: number;
@@ -40,12 +76,20 @@ interface TacticalMapViewProps {
 }
 
 export function TacticalMapView({
-  startLineHeading = 0,
-  startLineLength = 100,
-  timeToStart = 10
+  startLineHeading: _startLineHeading = 0,
+  startLineLength: _startLineLength = 100,
+  timeToStart: _timeToStart = 10
 }: TacticalMapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const markerRef = useRef<MarkerRef>({ markMarkers: [], positionMarker: null });
+  const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapStyleIndexRef = useRef(0);
+  const mapHasLoadedRef = useRef(false);
+  const mapInitRunIdRef = useRef(0);
+  const mapInstanceRunIdRef = useRef(0);
+  const isMountedRef = useRef(true);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapLibLoaded, setMapLibLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,94 +102,243 @@ export function TacticalMapView({
   const course = useRaceConditions(selectCourse);
   const depth = useRaceConditions(selectDepth);
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      mapInitRunIdRef.current += 1;
+      mapInstanceRunIdRef.current += 1;
+    };
+  }, []);
 
-  // Load MapLibre GL from CDN
+  // Load MapLibre GL via module first, then CDN fallback.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
-    // Inject CSS
-    if (typeof document !== 'undefined' && !document.getElementById('maplibre-css')) {
-      const link = document.createElement('link');
-      link.id = 'maplibre-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css';
-      document.head.appendChild(link);
-    }
+    let cancelled = false;
+    const runId = ++mapInitRunIdRef.current;
+    const canCommit = () =>
+      !cancelled &&
+      isMountedRef.current &&
+      runId === mapInitRunIdRef.current;
 
-    // Check if already loaded
-    if (typeof window !== 'undefined' && window.maplibregl) {
-      maplibregl = window.maplibregl;
-      setMapLibLoaded(true);
-      return;
-    }
+    const loadFromCDN = async (): Promise<boolean> => {
+      if (typeof document === 'undefined') return false;
 
-    // Load MapLibre GL script
-    if (typeof document !== 'undefined' && !document.getElementById('maplibre-script')) {
-      const script = document.createElement('script');
-      script.id = 'maplibre-script';
-      script.src = 'https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js';
-      script.async = true;
-      script.onload = () => {
+      ensureMapLibreCss('maplibre-css');
+
+      if (typeof window !== 'undefined' && window.maplibregl) {
         maplibregl = window.maplibregl;
-        setMapLibLoaded(true);
-      };
-      script.onerror = () => {
-        setError('Failed to load MapLibre GL from CDN');
-        console.error('[TacticalMapView] ❌ Failed to load MapLibre GL');
-      };
-      document.head.appendChild(script);
-    }
+        return true;
+      }
+
+      await ensureMapLibreScript('maplibre-script');
+
+      if (typeof window !== 'undefined' && window.maplibregl) {
+        maplibregl = window.maplibregl;
+        return true;
+      }
+      return false;
+    };
+
+    const loadMapLibre = async () => {
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
+      initTimeoutRef.current = setTimeout(() => {
+        if (!canCommit()) return;
+        setError('Map library timed out. Tactical cards remain available.');
+      }, 8000);
+
+      try {
+        const maplibreModule = await import('maplibre-gl');
+        maplibregl = (maplibreModule as any).default || maplibreModule;
+        try {
+          await import('maplibre-gl/dist/maplibre-gl.css');
+        } catch (cssError) {
+          // Expo web can fail CSS module import; inject CDN stylesheet instead.
+          ensureMapLibreCss('maplibre-css');
+          logger.warn('MapLibre CSS module import failed, using injected stylesheet fallback', cssError);
+        }
+        if (canCommit()) {
+          if (initTimeoutRef.current) {
+            clearTimeout(initTimeoutRef.current);
+            initTimeoutRef.current = null;
+          }
+          setMapLibLoaded(true);
+          setError(null);
+        }
+        return;
+      } catch (moduleError) {
+        logger.warn('Module import failed, trying CDN fallback', moduleError);
+      }
+
+      try {
+        const loaded = await loadFromCDN();
+        if (!loaded) {
+          throw new Error('MapLibre not available after CDN load');
+        }
+        if (canCommit()) {
+          if (initTimeoutRef.current) {
+            clearTimeout(initTimeoutRef.current);
+            initTimeoutRef.current = null;
+          }
+          setMapLibLoaded(true);
+          setError(null);
+        }
+      } catch (cdnError) {
+        if (canCommit()) {
+          if (initTimeoutRef.current) {
+            clearTimeout(initTimeoutRef.current);
+            initTimeoutRef.current = null;
+          }
+          setMapLibLoaded(false);
+          setError('Interactive map unavailable. Please continue with tactical data cards.');
+        }
+        logger.error('Failed to load MapLibre GL', cdnError);
+      }
+    };
+
+    void loadMapLibre();
+
+    return () => {
+      cancelled = true;
+      if (mapInitRunIdRef.current === runId) {
+        mapInitRunIdRef.current += 1;
+      }
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+        initTimeoutRef.current = null;
+      }
+    };
   }, []);
+
+  const initialCenter = useMemo<[number, number]>(() => {
+    if (course?.startLine?.centerLon && course?.startLine?.centerLat) {
+      return [course.startLine.centerLon, course.startLine.centerLat];
+    }
+    if (position?.longitude && position?.latitude) {
+      return [position.longitude, position.latitude];
+    }
+    return [114.15, 22.28];
+  }, [
+    course?.startLine?.centerLat,
+    course?.startLine?.centerLon,
+    position?.latitude,
+    position?.longitude,
+  ]);
 
   // Initialize map once MapLibre is loaded
   useEffect(() => {
     if (Platform.OS !== 'web' || !mapLibLoaded || !maplibregl || !mapContainerRef.current || mapRef.current) {
       return;
     }
+    const runId = ++mapInstanceRunIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current && runId === mapInstanceRunIdRef.current;
 
     try {
-      // Calculate initial center
-      const initialCenter = course?.startLine?.centerLon && course?.startLine?.centerLat
-        ? [course.startLine.centerLon, course.startLine.centerLat]
-        : position?.longitude && position?.latitude
-        ? [position.longitude, position.latitude]
-        : [114.15, 22.28];
-
-      const map = new maplibregl.Map({
+      const MapConstructor = maplibregl?.Map;
+      if (!MapConstructor) {
+        setError('Map rendering issue detected. Tactical cards remain available.');
+        return;
+      }
+      const map = new MapConstructor({
         container: mapContainerRef.current,
-        style: 'https://demotiles.maplibre.org/style.json',
+        style: MAP_STYLE_CANDIDATES[mapStyleIndexRef.current],
         center: initialCenter as [number, number],
         zoom: 14,
         pitch: 0,
         bearing: 0
       });
 
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+      loadTimeoutRef.current = setTimeout(() => {
+        if (!canCommit()) return;
+        setError('Map failed to load in time. Tactical cards remain available.');
+        setMapLoaded(false);
+      }, 8000);
+
       map.on('load', () => {
+        if (!canCommit()) return;
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+        mapHasLoadedRef.current = true;
         setMapLoaded(true);
+        setError(null);
       });
 
       map.on('error', (e: any) => {
-        console.error('[TacticalMapView] ❌ Map error:', e);
-        setError(`Map error: ${e.error?.message || 'Unknown'}`);
+        logger.error('Map error:', e);
+        if (!canCommit()) return;
+        const nextStyleIndex = mapStyleIndexRef.current + 1;
+        if (!mapHasLoadedRef.current && nextStyleIndex < MAP_STYLE_CANDIDATES.length) {
+          mapStyleIndexRef.current = nextStyleIndex;
+          try {
+            map.setStyle(MAP_STYLE_CANDIDATES[nextStyleIndex]);
+          } catch (styleError) {
+            logger.error('Failed to apply fallback map style', styleError);
+          }
+          return;
+        }
+        // After initial load, MapLibre may emit non-fatal source/tile errors.
+        // Keep the map visible instead of collapsing to a full error state.
+        if (mapHasLoadedRef.current) {
+          return;
+        }
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+        setMapLoaded(false);
+        setError('Map rendering issue detected. Tactical cards remain available.');
       });
 
       mapRef.current = map;
+      const markerState = markerRef.current;
 
       return () => {
+        if (mapInstanceRunIdRef.current === runId) {
+          mapInstanceRunIdRef.current += 1;
+        }
+        mapHasLoadedRef.current = false;
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+        markerState.markMarkers.forEach((marker) => marker.remove());
+        markerState.markMarkers = [];
+        if (markerState.positionMarker) {
+          markerState.positionMarker.remove();
+          markerState.positionMarker = null;
+        }
         map.remove();
         mapRef.current = null;
       };
     } catch (e: any) {
-      console.error('[TacticalMapView] ❌ Exception creating map:', e);
+      logger.error('Exception creating map:', e);
+      if (!canCommit()) return;
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+      setMapLoaded(false);
       setError(`Exception: ${e.message}`);
     }
-  }, [mapLibLoaded]);
+  }, [initialCenter, mapLibLoaded]);
 
   // Update map layers when data changes
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
+    if (typeof document === 'undefined') return;
 
     const map = mapRef.current;
+    if (typeof map.isStyleLoaded === 'function' && !map.isStyleLoaded()) {
+      return;
+    }
 
     try {
       // Add/update start line
@@ -250,6 +443,9 @@ export function TacticalMapView({
 
       // Add course marks
       if (course?.marks) {
+        markerRef.current.markMarkers.forEach((marker) => marker.remove());
+        markerRef.current.markMarkers = [];
+
         course.marks.forEach((mark, index) => {
           const markerId = `mark-${index}`;
 
@@ -274,14 +470,19 @@ export function TacticalMapView({
           el.style.color = 'white';
           el.textContent = mark.type === 'windward' ? 'W' : 'L';
 
-          new maplibregl.Marker({ element: el })
+          const marker = new maplibregl.Marker({ element: el })
             .setLngLat([mark.position.lng, mark.position.lat])
             .addTo(map);
+          markerRef.current.markMarkers.push(marker);
         });
       }
 
       // Add position marker
       if (position) {
+        if (markerRef.current.positionMarker) {
+          markerRef.current.positionMarker.remove();
+          markerRef.current.positionMarker = null;
+        }
         const positionEl = document.createElement('div');
         positionEl.style.width = '16px';
         positionEl.style.height = '16px';
@@ -290,12 +491,12 @@ export function TacticalMapView({
         positionEl.style.border = '3px solid white';
         positionEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
 
-        new maplibregl.Marker({ element: positionEl })
+        markerRef.current.positionMarker = new maplibregl.Marker({ element: positionEl })
           .setLngLat([position.longitude, position.latitude])
           .addTo(map);
       }
     } catch (e) {
-      console.error('[TacticalMapView] ❌ Error updating layers:', e);
+      logger.error('Error updating layers:', e);
     }
   }, [mapLoaded, course, tacticalZones, position]);
 

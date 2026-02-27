@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('ExecutionEvaluationService');
 
@@ -106,6 +107,88 @@ export interface RaceAnalysisWithExecution {
 }
 
 class ExecutionEvaluationService {
+  private async selectAnalysis(
+    raceId: string,
+    sailorId: string,
+    columns: string
+  ): Promise<{ data: any; error: any }> {
+    const primary = await supabase
+      .from('race_analysis')
+      .select(columns)
+      .eq('race_id', raceId)
+      .eq('sailor_id', sailorId)
+      .maybeSingle();
+
+    if (isMissingIdColumn(primary.error, 'race_analysis', 'race_id')) {
+      return supabase
+        .from('race_analysis')
+        .select(columns)
+        .eq('regatta_id', raceId)
+        .eq('sailor_id', sailorId)
+        .maybeSingle();
+    }
+
+    return primary;
+  }
+
+  private async upsertAnalysis(
+    raceId: string,
+    sailorId: string,
+    payload: Record<string, unknown>
+  ): Promise<{ error: any }> {
+    const primary = await supabase
+      .from('race_analysis')
+      .upsert(
+        {
+          race_id: raceId,
+          sailor_id: sailorId,
+          ...payload,
+        },
+        {
+          onConflict: 'race_id,sailor_id',
+        }
+      );
+
+    if (isMissingIdColumn(primary.error, 'race_analysis', 'race_id')) {
+      return supabase
+        .from('race_analysis')
+        .upsert(
+          {
+            regatta_id: raceId,
+            sailor_id: sailorId,
+            ...payload,
+          },
+          {
+            onConflict: 'regatta_id,sailor_id',
+          }
+        );
+    }
+
+    return { error: primary.error };
+  }
+
+  private async updateAnalysis(
+    raceId: string,
+    sailorId: string,
+    payload: Record<string, unknown>
+  ): Promise<{ error: any }> {
+    const primary = await supabase
+      .from('race_analysis')
+      .update(payload)
+      .eq('race_id', raceId)
+      .eq('sailor_id', sailorId);
+
+    if (isMissingIdColumn(primary.error, 'race_analysis', 'race_id')) {
+      return supabase
+        .from('race_analysis')
+        .update(payload)
+        .eq('regatta_id', raceId)
+        .eq('sailor_id', sailorId);
+    }
+
+    return { error: primary.error };
+  }
+
   /**
    * Get race analysis with execution evaluation
    */
@@ -114,12 +197,7 @@ class ExecutionEvaluationService {
     sailorId: string
   ): Promise<RaceAnalysisWithExecution | null> {
     try {
-      const { data, error } = await supabase
-        .from('race_analysis')
-        .select('*')
-        .eq('race_id', raceId)
-        .eq('sailor_id', sailorId)
-        .maybeSingle();
+      const { data, error } = await this.selectAnalysis(raceId, sailorId, '*');
 
       if (error) {
         logger.error('Error fetching analysis with execution:', error);
@@ -162,18 +240,9 @@ class ExecutionEvaluationService {
 
       const columnName = columnMap[phase];
 
-      const { error } = await supabase
-        .from('race_analysis')
-        .upsert(
-          {
-            race_id: raceId,
-            sailor_id: sailorId,
-            [columnName]: rating,
-          },
-          {
-            onConflict: 'race_id,sailor_id',
-          }
-        );
+      const { error } = await this.upsertAnalysis(raceId, sailorId, {
+        [columnName]: rating,
+      });
 
       if (error) {
         logger.error(`Error updating ${phase} execution rating:`, error);
@@ -212,18 +281,9 @@ class ExecutionEvaluationService {
 
       const columnName = columnMap[phase];
 
-      const { error } = await supabase
-        .from('race_analysis')
-        .upsert(
-          {
-            race_id: raceId,
-            sailor_id: sailorId,
-            [columnName]: notes,
-          },
-          {
-            onConflict: 'race_id,sailor_id',
-          }
-        );
+      const { error } = await this.upsertAnalysis(raceId, sailorId, {
+        [columnName]: notes,
+      });
 
       if (error) {
         logger.error(`Error updating ${phase} execution notes:`, error);
@@ -248,33 +308,24 @@ class ExecutionEvaluationService {
     notes: ExecutionNotes
   ): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('race_analysis')
-        .upsert(
-          {
-            race_id: raceId,
-            sailor_id: sailorId,
-            rig_tuning_execution_rating: ratings.rigTuningExecutionRating,
-            prestart_execution_rating: ratings.prestartExecutionRating,
-            start_execution_rating: ratings.startExecutionRating,
-            upwind_execution_rating: ratings.upwindExecutionRating,
-            windward_mark_execution_rating: ratings.windwardMarkExecutionRating,
-            downwind_execution_rating: ratings.downwindExecutionRating,
-            leeward_mark_execution_rating: ratings.leewardMarkExecutionRating,
-            finish_execution_rating: ratings.finishExecutionRating,
-            rig_tuning_execution_notes: notes.rigTuningExecutionNotes,
-            prestart_execution_notes: notes.prestartExecutionNotes,
-            start_execution_notes: notes.startExecutionNotes,
-            upwind_execution_notes: notes.upwindExecutionNotes,
-            windward_mark_execution_notes: notes.windwardMarkExecutionNotes,
-            downwind_execution_notes: notes.downwindExecutionNotes,
-            leeward_mark_execution_notes: notes.leewardMarkExecutionNotes,
-            finish_execution_notes: notes.finishExecutionNotes,
-          },
-          {
-            onConflict: 'race_id,sailor_id',
-          }
-        );
+      const { error } = await this.upsertAnalysis(raceId, sailorId, {
+        rig_tuning_execution_rating: ratings.rigTuningExecutionRating,
+        prestart_execution_rating: ratings.prestartExecutionRating,
+        start_execution_rating: ratings.startExecutionRating,
+        upwind_execution_rating: ratings.upwindExecutionRating,
+        windward_mark_execution_rating: ratings.windwardMarkExecutionRating,
+        downwind_execution_rating: ratings.downwindExecutionRating,
+        leeward_mark_execution_rating: ratings.leewardMarkExecutionRating,
+        finish_execution_rating: ratings.finishExecutionRating,
+        rig_tuning_execution_notes: notes.rigTuningExecutionNotes,
+        prestart_execution_notes: notes.prestartExecutionNotes,
+        start_execution_notes: notes.startExecutionNotes,
+        upwind_execution_notes: notes.upwindExecutionNotes,
+        windward_mark_execution_notes: notes.windwardMarkExecutionNotes,
+        downwind_execution_notes: notes.downwindExecutionNotes,
+        leeward_mark_execution_notes: notes.leewardMarkExecutionNotes,
+        finish_execution_notes: notes.finishExecutionNotes,
+      });
 
       if (error) {
         logger.error('Error updating complete execution:', error);
@@ -298,13 +349,9 @@ class ExecutionEvaluationService {
     preparationId: string
   ): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('race_analysis')
-        .update({
-          preparation_id: preparationId,
-        })
-        .eq('race_id', raceId)
-        .eq('sailor_id', sailorId);
+      const { error } = await this.updateAnalysis(raceId, sailorId, {
+        preparation_id: preparationId,
+      });
 
       if (error) {
         logger.error('Error linking to preparation:', error);
@@ -333,13 +380,9 @@ class ExecutionEvaluationService {
         generatedAt: new Date().toISOString(),
       };
 
-      const { error } = await supabase
-        .from('race_analysis')
-        .update({
-          ai_execution_coaching: coachingWithTimestamp,
-        })
-        .eq('race_id', raceId)
-        .eq('sailor_id', sailorId);
+      const { error } = await this.updateAnalysis(raceId, sailorId, {
+        ai_execution_coaching: coachingWithTimestamp,
+      });
 
       if (error) {
         logger.error('Error storing AI coaching:', error);
@@ -362,12 +405,11 @@ class ExecutionEvaluationService {
     sailorId: string
   ): Promise<AIExecutionCoaching | null> {
     try {
-      const { data, error } = await supabase
-        .from('race_analysis')
-        .select('ai_execution_coaching')
-        .eq('race_id', raceId)
-        .eq('sailor_id', sailorId)
-        .maybeSingle();
+      const { data, error } = await this.selectAnalysis(
+        raceId,
+        sailorId,
+        'ai_execution_coaching'
+      );
 
       if (error) {
         logger.error('Error fetching AI coaching:', error);
@@ -390,15 +432,11 @@ class ExecutionEvaluationService {
     coachId: string
   ): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('race_analysis')
-        .update({
-          execution_shared_with_coach: true,
-          execution_coach_id: coachId,
-          execution_shared_at: new Date().toISOString(),
-        })
-        .eq('race_id', raceId)
-        .eq('sailor_id', sailorId);
+      const { error } = await this.updateAnalysis(raceId, sailorId, {
+        execution_shared_with_coach: true,
+        execution_coach_id: coachId,
+        execution_shared_at: new Date().toISOString(),
+      });
 
       if (error) {
         logger.error('Error sharing with coach:', error);
@@ -421,15 +459,11 @@ class ExecutionEvaluationService {
     sailorId: string
   ): Promise<boolean> {
     try {
-      const { error } = await supabase
-        .from('race_analysis')
-        .update({
-          execution_shared_with_coach: false,
-          execution_coach_id: null,
-          execution_shared_at: null,
-        })
-        .eq('race_id', raceId)
-        .eq('sailor_id', sailorId);
+      const { error } = await this.updateAnalysis(raceId, sailorId, {
+        execution_shared_with_coach: false,
+        execution_coach_id: null,
+        execution_shared_at: null,
+      });
 
       if (error) {
         logger.error('Error unsharing from coach:', error);

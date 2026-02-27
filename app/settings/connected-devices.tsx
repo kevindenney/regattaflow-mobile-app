@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
+  Linking,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,7 +33,7 @@ const DeviceType: React.FC<DeviceTypeProps> = ({
         <Text style={styles.deviceName}>{name}</Text>
         {comingSoon && (
           <View style={styles.comingSoonBadge}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
+            <Text style={styles.comingSoonText}>Planned</Text>
           </View>
         )}
       </View>
@@ -121,7 +122,14 @@ export default function ConnectedDevicesScreen() {
             We're actively developing sensor integrations. Let us know which devices
             matter most to you.
           </Text>
-          <TouchableOpacity style={styles.ctaButton}>
+          <TouchableOpacity
+            style={styles.ctaButton}
+            onPress={() =>
+              Linking.openURL(
+                'mailto:support@regattaflow.com?subject=Device%20Integration%20Feedback&body=I%27d%20like%20to%20request%20support%20for%20these%20devices%3A%20'
+              )
+            }
+          >
             <Ionicons name="mail-outline" size={18} color="#FFFFFF" />
             <Text style={styles.ctaButtonText}>Share Feedback</Text>
           </TouchableOpacity>

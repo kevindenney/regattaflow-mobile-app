@@ -7,6 +7,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { Platform } from 'react-native';
 
 interface RaceDataPackage {
@@ -144,17 +145,10 @@ export class RaceDataDistributionService {
    */
   private async buildRaceDataPackage(raceId: string): Promise<RaceDataPackage | null> {
     try {
-      // Get race event with club data
+      // Get race event base record.
       const { data: raceEvent, error: raceError } = await supabase
         .from('race_events')
-        .select(`
-          *,
-          clubs (
-            name,
-            sailing_area,
-            location
-          )
-        `)
+        .select('*')
         .eq('id', raceId)
         .single();
 
@@ -163,8 +157,36 @@ export class RaceDataDistributionService {
         return null;
       }
 
+      let clubName = 'Unknown Club';
+      let clubLocation: any = raceEvent?.location;
+      const clubId = raceEvent?.club_id;
+
+      if (clubId) {
+        const { data: clubData } = await supabase
+          .from('clubs')
+          .select('id, name, club_name, location')
+          .eq('id', clubId)
+          .single();
+
+        if (clubData) {
+          clubName = clubData.name || clubData.club_name || clubName;
+          clubLocation = clubData.location || clubLocation;
+        } else {
+          const { data: yachtClubData } = await supabase
+            .from('yacht_clubs')
+            .select('id, name, location')
+            .eq('id', clubId)
+            .single();
+
+          if (yachtClubData) {
+            clubName = yachtClubData.name || clubName;
+            clubLocation = yachtClubData.location || clubLocation;
+          }
+        }
+      }
+
       // Get venue intelligence if available
-      const venueIntelligence = await this.getVenueIntelligence(raceEvent.clubs.location);
+      const venueIntelligence = await this.getVenueIntelligence(clubLocation);
 
       // Get equipment recommendations based on conditions
       const equipmentRecommendations = await this.getEquipmentRecommendations(
@@ -176,7 +198,7 @@ export class RaceDataDistributionService {
       const dataPackage: RaceDataPackage = {
         race_id: raceId,
         race_name: raceEvent.name,
-        club_name: raceEvent.clubs.name,
+        club_name: clubName,
         race_course: raceEvent.race_course,
         start_date: raceEvent.start_date,
         wind_conditions: raceEvent.wind_conditions,
@@ -273,7 +295,7 @@ export class RaceDataDistributionService {
     push_token?: string;
   }>> {
     try {
-      const { data, error } = await supabase
+      const primary = await supabase
         .from('race_registrations')
         .select(`
           user_id,
@@ -286,6 +308,26 @@ export class RaceDataDistributionService {
         `)
         .eq('race_id', raceId)
         .eq('status', 'confirmed');
+      let data = primary.data;
+      let error = primary.error;
+
+      if (isMissingIdColumn(error, 'race_registrations', 'race_id')) {
+        const fallback = await supabase
+          .from('race_registrations')
+          .select(`
+            user_id,
+            users (
+              id,
+              email,
+              full_name,
+              push_token
+            )
+          `)
+          .eq('regatta_id', raceId)
+          .eq('status', 'confirmed');
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       if (error) {
 

@@ -10,7 +10,7 @@
  * - Recent results and post-race analysis
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { CrewFinderService, FleetWithMembers } from '@/services/CrewFinderService';
 import { supabase } from '@/services/supabase';
@@ -82,18 +82,42 @@ export function useFleetActivity(): UseFleetActivityResult {
   const [fleetRaces, setFleetRaces] = useState<Map<string, FleetMateRace[]>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
 
   const userId = user?.id;
 
+  useEffect(() => {
+    activeUserIdRef.current = userId ?? null;
+  }, [userId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
   // Fetch fleet mates and their races
   const fetchFleetActivity = useCallback(async () => {
-    if (!userId || isGuest) {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = userId ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId || isGuest) {
+      if (!canCommit()) return;
       setFleets([]);
       setFleetRaces(new Map());
+      setError(null);
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -101,11 +125,13 @@ export function useFleetActivity(): UseFleetActivityResult {
       logger.info('[useFleetActivity] Fetching fleet mates...');
 
       // Step 1: Get user's fleets with members
-      const userFleets = await CrewFinderService.getFleetMatesForUser(userId);
+      const userFleets = await CrewFinderService.getFleetMatesForUser(targetUserId);
+      if (!canCommit()) return;
       setFleets(userFleets);
 
       if (userFleets.length === 0) {
         logger.info('[useFleetActivity] User has no fleets');
+        if (!canCommit()) return;
         setFleetRaces(new Map());
         setIsLoading(false);
         return;
@@ -129,6 +155,7 @@ export function useFleetActivity(): UseFleetActivityResult {
 
       if (fleetMateIds.size === 0) {
         logger.info('[useFleetActivity] No fleet mates found');
+        if (!canCommit()) return;
         setFleetRaces(new Map());
         setIsLoading(false);
         return;
@@ -154,6 +181,7 @@ export function useFleetActivity(): UseFleetActivityResult {
 
       if (sharingUserIds.length === 0) {
         logger.info('[useFleetActivity] No fleet mates with sharing enabled');
+        if (!canCommit()) return;
         setFleetRaces(new Map());
         setIsLoading(false);
         return;
@@ -212,6 +240,7 @@ export function useFleetActivity(): UseFleetActivityResult {
         racesByFleet.get(memberInfo.fleetId)!.push(fleetRace);
       });
 
+      if (!canCommit()) return;
       setFleetRaces(racesByFleet);
       logger.info('[useFleetActivity] Fetched activity:', {
         fleetCount: userFleets.length,
@@ -219,8 +248,10 @@ export function useFleetActivity(): UseFleetActivityResult {
       });
     } catch (err: any) {
       logger.error('[useFleetActivity] Error:', err);
+      if (!canCommit()) return;
       setError(err?.message || 'Failed to load fleet activity');
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [userId, isGuest]);

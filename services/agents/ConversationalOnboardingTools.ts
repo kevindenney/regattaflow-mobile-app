@@ -233,11 +233,7 @@ Returns fleets ranked by size and engagement with join recommendations.`,
       try {
         let query = supabase
           .from('fleets')
-          .select(`
-            *,
-            boat_classes!inner(name),
-            yacht_clubs(name)
-          `)
+          .select('*')
           .eq('class_id', input.class_id)
           .in('visibility', ['public', 'club'])
           .order('member_count', { ascending: false })
@@ -258,17 +254,38 @@ Returns fleets ranked by size and engagement with join recommendations.`,
           };
         }
 
+        const clubIds = Array.from(
+          new Set(
+            fleets
+              .map((fleet) => fleet.club_id)
+              .filter((clubId): clubId is string => typeof clubId === 'string' && clubId.length > 0)
+          )
+        );
+        let clubNameById = new Map<string, string>();
+        if (clubIds.length > 0) {
+          const { data: clubs } = await supabase
+            .from('yacht_clubs')
+            .select('id, name')
+            .in('id', clubIds);
+          clubNameById = new Map((clubs || []).map((club) => [club.id, club.name]));
+        }
+
+        const enrichedFleets = fleets.map((fleet) => ({
+          ...fleet,
+          yacht_clubs: fleet.club_id ? { name: clubNameById.get(fleet.club_id) || 'Unknown Club' } : null,
+        }));
+
         const topFleet = fleets[0];
         const fleetDescriptions = fleets
           .map(
             f =>
-              `**${f.name}** at ${f.yacht_clubs?.name || 'Unknown Club'} (${f.member_count || 0} members)`
+              `**${f.name}** at ${clubNameById.get(f.club_id) || 'Unknown Club'} (${f.member_count || 0} members)`
           )
           .join(', ');
 
         return {
           success: true,
-          fleets,
+          fleets: enrichedFleets,
           count: fleets.length,
           natural_language: `I found ${fleets.length} active fleet${fleets.length > 1 ? 's' : ''}: ${fleetDescriptions}. The **${topFleet.name}** is the most active with ${topFleet.member_count} members. Want to join?`,
         };
@@ -317,12 +334,19 @@ Returns clubs with racing schedules, facilities, and membership info.`,
         if (input.fleet_id) {
           const { data: fleet } = await supabase
             .from('fleets')
-            .select('club_id, yacht_clubs(*)')
+            .select('club_id')
             .eq('id', input.fleet_id)
             .single();
 
-          if (fleet?.yacht_clubs) {
-            results.home_club = fleet.yacht_clubs;
+          if (fleet?.club_id) {
+            const { data: club } = await supabase
+              .from('yacht_clubs')
+              .select('*')
+              .eq('id', fleet.club_id)
+              .maybeSingle();
+            if (club) {
+              results.home_club = club;
+            }
           }
         }
 

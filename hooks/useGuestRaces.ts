@@ -5,7 +5,7 @@
  * Combines demo races with any locally stored guest race.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DemoRaceService } from '@/services/DemoRaceService';
 import { GuestStorageService, type GuestRace } from '@/services/GuestStorageService';
@@ -102,19 +102,21 @@ export function useGuestRaces() {
   const demoRaces = DemoRaceService.getDemoRaces();
 
   // Combine demo races with guest race
-  const allRaces: GuestRaceListItem[] = [
-    // Demo races first
-    ...demoRaces.map(demoRaceToListItem),
-    // Guest race if it exists
-    ...(guestRace ? [guestRaceToListItem(guestRace)] : []),
-  ];
+  const sortedRaces = useMemo(() => {
+    const allRaces: GuestRaceListItem[] = [
+      // Demo races first
+      ...demoRaces.map(demoRaceToListItem),
+      // Guest race if it exists
+      ...(guestRace ? [guestRaceToListItem(guestRace)] : []),
+    ];
 
-  // Sort by date (upcoming first, then past)
-  const sortedRaces = allRaces.sort((a, b) => {
-    const dateA = new Date(a.start_date).getTime();
-    const dateB = new Date(b.start_date).getTime();
-    return dateA - dateB;
-  });
+    // Sort by date (upcoming first, then past)
+    return allRaces.sort((a, b) => {
+      const dateA = new Date(a.start_date).getTime();
+      const dateB = new Date(b.start_date).getTime();
+      return dateA - dateB;
+    });
+  }, [demoRaces, guestRace]);
 
   // Check if guest has a race
   const hasGuestRace = guestRace !== null && guestRace !== undefined;
@@ -125,14 +127,14 @@ export function useGuestRaces() {
     refetchGuestRace();
   }, [queryClient, refetchGuestRace]);
 
-  return {
+  return useMemo(() => ({
     liveRaces: sortedRaces,
     loading: guestRaceLoading,
     refresh,
     hasGuestRace,
     guestRace,
     demoRaces,
-  };
+  }), [sortedRaces, guestRaceLoading, refresh, hasGuestRace, guestRace, demoRaces]);
 }
 
 /**

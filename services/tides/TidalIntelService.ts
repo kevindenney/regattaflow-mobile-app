@@ -1,8 +1,10 @@
 import type { GeoLocation } from '@/lib/types/advanced-map';
 import { StormGlassService } from '../weather/StormGlassService';
+import { createLogger } from '@/lib/utils/logger';
 
 const DEFAULT_TIMEOUT = 10000;
 const DEFAULT_RETRIES = 2;
+const logger = createLogger('TidalIntelService');
 
 export interface SlackWindow {
   isSlackNow: boolean;
@@ -94,13 +96,13 @@ export class TidalIntelService {
 
       return this.transformStormGlassTideData(tideExtremes, currentHeight, location, referenceTime);
     } catch (error) {
-      console.error('[TidalIntelService] Failed to fetch tide intel from Storm Glass:', error);
+      logger.error('[TidalIntelService] Failed to fetch tide intel from Storm Glass:', error);
       return null;
     }
   }
 
   private transformStormGlassTideData(
-    tideExtremes: Array<{ type: 'high' | 'low'; time: Date; height: number }>,
+    tideExtremes: { type: 'high' | 'low'; time: Date; height: number }[],
     currentHeight: number,
     location: GeoLocation,
     referenceTime: Date
@@ -167,7 +169,7 @@ export class TidalIntelService {
     let nextSlackTime: Date | null = null;
     let slackType: 'high' | 'low' | null = null;
 
-    const upcomingExtremes: Array<{ type: 'high' | 'low'; info: TideExtremeInfo }> = [
+    const upcomingExtremes: { type: 'high' | 'low'; info: TideExtremeInfo }[] = [
       ...(nextHigh ? [{ type: 'high' as const, info: nextHigh }] : []),
       ...(nextLow ? [{ type: 'low' as const, info: nextLow }] : [])
     ].filter(entry => entry.info.minutesUntil >= 0);

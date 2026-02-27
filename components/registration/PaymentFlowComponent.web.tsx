@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 
 interface PaymentFlowProps {
   entryId: string;
@@ -19,6 +19,16 @@ export function PaymentFlowComponent({ onSuccess, onCancel }: PaymentFlowProps) 
         contact the organizer to complete payment.
       </Text>
       <Pressable
+        onPress={() =>
+          Linking.openURL(
+            'mailto:support@regattaflow.com?subject=Web%20Payment%20Support&body=I%20need%20help%20completing%20registration%20payment%20on%20web.'
+          )
+        }
+        style={{ borderWidth: 1, borderColor: '#d1d5db', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 12 }}
+      >
+        <Text style={{ color: '#111827', fontWeight: '600' }}>Contact Support</Text>
+      </Pressable>
+      <Pressable
         onPress={onSuccess}
         style={{ backgroundColor: '#2563eb', padding: 12, borderRadius: 8, alignItems: 'center' }}
       >
@@ -32,5 +42,4 @@ export function PaymentFlowComponent({ onSuccess, onCancel }: PaymentFlowProps) 
     </View>
   );
 }
-
 

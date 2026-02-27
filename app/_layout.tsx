@@ -14,6 +14,8 @@ import {
 } from '@/lib/auth/firebaseBridge';
 import { supabase } from '@/services/supabase';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import { InterestProvider, useInterest } from '@/providers/InterestProvider';
+import { InterestSelection } from '@/components/onboarding/InterestSelection';
 import { ContextualHintProvider } from '@/providers/ContextualHintProvider';
 import StripeProvider from '@/providers/StripeProvider';
 import { initializeCrewMutationHandlers } from '@/services/crewManagementService';
@@ -317,6 +319,35 @@ function FirebaseBridgeHandler() {
   return null; // This component doesn't render anything
 }
 
+/**
+ * Shows the InterestSelection modal for first-time users who haven't chosen an interest.
+ * The modal is only displayed when the user is authenticated (or guest) and the
+ * InterestProvider has finished loading but no preferred interest was found in DB or cache.
+ */
+function InterestSelectionGate() {
+  const { user, isGuest } = useAuth();
+  const { currentInterest, loading: interestLoading } = useInterest();
+  const [dismissed, setDismissed] = useState(false);
+
+  // Show the selection modal when:
+  // 1. User is authenticated or guest (not on landing page)
+  // 2. Interest resolution is complete (not loading)
+  // 3. No current interest was resolved (null)
+  // 4. User hasn't already dismissed the modal this session
+  const shouldShow =
+    (!!user || isGuest) &&
+    !interestLoading &&
+    !currentInterest &&
+    !dismissed;
+
+  return (
+    <InterestSelection
+      visible={shouldShow}
+      onComplete={() => setDismissed(true)}
+    />
+  );
+}
+
 function StackWithSplash() {
   const {state} = useAuth()
 
@@ -326,6 +357,7 @@ function StackWithSplash() {
     <>
       <FirebaseBridgeHandler />
       <NetworkStatusBanner />
+      <InterestSelectionGate />
       <Stack screenOptions={{headerShown: false}}>
         <Stack.Screen name="account" options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="venue/post/create" options={{ presentation: 'modal', headerShown: false }} />
@@ -489,6 +521,7 @@ export default function RootLayout() {
         <GluestackUIProvider mode="light">
           <StripeProvider>
             <AuthProvider>
+              <InterestProvider>
               <ContextualHintProvider>
               <ToastProvider>
                 <PushNotificationHandler>
@@ -496,6 +529,7 @@ export default function RootLayout() {
                 </PushNotificationHandler>
               </ToastProvider>
               </ContextualHintProvider>
+              </InterestProvider>
             </AuthProvider>
           </StripeProvider>
         </GluestackUIProvider>

@@ -9,6 +9,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Users, Navigation, NotebookPen } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 interface FleetEntry {
   sessionId: string;
@@ -105,24 +106,26 @@ export function FleetPostRaceInsights({
         logger.debug('[FleetPostRaceInsights] 📊 Found', sessions.length, 'race sessions');
 
         // Query 2: Get race_analysis directly for this race (includes sailors without GPS tracks)
-        logger.debug('[FleetPostRaceInsights] 🔍 Querying race_analysis for race_id:', raceId);
-        const { data: allAnalysisData, error: allAnalysisError } = await supabase
+        logger.debug('[FleetPostRaceInsights] 🔍 Querying race_analysis for race_id/regatta_id:', raceId);
+        let allAnalysisData: any[] | null = null;
+        let allAnalysisError: any = null;
+        const primaryAnalysis = await supabase
           .from('race_analysis')
-          .select(`
-            id,
-            sailor_id,
-            overall_satisfaction,
-            key_learnings,
-            updated_at,
-            sailor_profiles!inner (
-              id,
-              user_id,
-              home_club,
-              boat_class_preferences
-            )
-          `)
+          .select('id, sailor_id, overall_satisfaction, key_learnings, updated_at')
           .eq('race_id', raceId)
           .limit(limit * 3);
+        allAnalysisData = primaryAnalysis.data;
+        allAnalysisError = primaryAnalysis.error;
+
+        if (isMissingIdColumn(allAnalysisError, 'race_analysis', 'race_id')) {
+          const fallbackAnalysis = await supabase
+            .from('race_analysis')
+            .select('id, sailor_id, overall_satisfaction, key_learnings, updated_at')
+            .eq('regatta_id', raceId)
+            .limit(limit * 3);
+          allAnalysisData = fallbackAnalysis.data;
+          allAnalysisError = fallbackAnalysis.error;
+        }
 
         if (allAnalysisError) {
           logger.warn('[FleetPostRaceInsights] Unable to load race analysis:', allAnalysisError);
@@ -145,11 +148,9 @@ export function FleetPostRaceInsights({
           .map((session) => session.sailor_id)
           .filter((value): value is string => typeof value === 'string');
         
-        const analysisUserIds = allAnalyses
-          .map((a) => (a.sailor_profiles as any)?.user_id)
+        const analysisSailorProfileIds = allAnalyses
+          .map((a) => a.sailor_id)
           .filter((value): value is string => typeof value === 'string');
-
-        const uniqueUserIds = Array.from(new Set([...sessionUserIds, ...analysisUserIds]));
 
         const sessionIds = sessions
           .map((session) => session.id)
@@ -163,12 +164,34 @@ export function FleetPostRaceInsights({
           boat_class_preferences?: any;
         }> = [];
 
-        // Get profiles from analysis data (already joined)
-        const profilesFromAnalysis = allAnalyses
-          .map((a) => a.sailor_profiles as any)
-          .filter((p): p is { id: string; user_id: string; home_club?: string; boat_class_preferences?: any } => 
-            p && typeof p.id === 'string' && typeof p.user_id === 'string'
-          );
+        // Resolve sailor profiles for analysis rows (race_analysis.sailor_id points to sailor_profiles.id)
+        let profilesFromAnalysis: Array<{
+          id: string;
+          user_id: string;
+          home_club?: string | null;
+          boat_class_preferences?: any;
+        }> = [];
+        if (analysisSailorProfileIds.length > 0) {
+          const { data: analysisProfiles, error: analysisProfilesError } = await supabase
+            .from('sailor_profiles')
+            .select('id, user_id, home_club, boat_class_preferences')
+            .in('id', analysisSailorProfileIds);
+
+          if (analysisProfilesError) {
+            logger.warn('[FleetPostRaceInsights] Unable to resolve analysis sailor profiles', analysisProfilesError);
+          } else {
+            profilesFromAnalysis = (analysisProfiles || []).filter(
+              (p): p is { id: string; user_id: string; home_club?: string; boat_class_preferences?: any } =>
+                Boolean(p?.id && p?.user_id)
+            );
+          }
+        }
+
+        const analysisProfileById = new Map(profilesFromAnalysis.map((p) => [p.id, p]));
+        const analysisUserIds = analysisSailorProfileIds
+          .map((profileId) => analysisProfileById.get(profileId)?.user_id)
+          .filter((value): value is string => typeof value === 'string');
+        const uniqueUserIds = Array.from(new Set([...sessionUserIds, ...analysisUserIds]));
 
         // Get additional profiles for session users not in analysis
         const analysisUserIdSet = new Set(analysisUserIds);
@@ -336,17 +359,16 @@ export function FleetPostRaceInsights({
 
         // Find sailors who have analysis but NO timer session (no GPS track)
         const sailorsWithSessions = new Set(deduplicatedSessions.map(s => s.sailor_id).filter(Boolean));
-        const analysisOnlySailors = allAnalyses.filter(a => {
-          const userId = (a.sailor_profiles as any)?.user_id;
-          return userId && !sailorsWithSessions.has(userId);
+        const analysisOnlySailors = allAnalyses.filter((analysis) => {
+          const userId = analysisByProfileId.get(analysis.sailor_id)?.user_id;
+          return !!userId && !sailorsWithSessions.has(userId);
         });
 
         logger.debug('[FleetPostRaceInsights] Found', analysisOnlySailors.length, 'sailors with analysis but no GPS track');
 
         // Add entries for analysis-only sailors
         for (const analysis of analysisOnlySailors) {
-          const sailorProfile = analysis.sailor_profiles as any;
-          const userId = sailorProfile?.user_id;
+          const userId = analysisByProfileId.get(analysis.sailor_id)?.user_id;
           if (!userId) continue;
 
           const displayName = userNameById.get(userId) || 'Sailor';

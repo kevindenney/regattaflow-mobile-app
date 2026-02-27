@@ -8,14 +8,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
-  Dimensions,
   ActivityIndicator,
   Text,
-  TouchableOpacity,
-  Alert
+  TouchableOpacity
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 import type {
   RaceCourseExtraction,
   RaceStrategy,
@@ -26,6 +25,43 @@ import type {
 
 const logger = createLogger('RaceCourseVisualization3D');
 const isWeb = typeof window !== 'undefined';
+const MAP_STYLE_CANDIDATES = [
+  {
+    version: 8,
+    sources: {
+      'raster-tiles': {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+      },
+    },
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: { 'background-color': '#1e3a5f' },
+      },
+      {
+        id: 'raster-layer',
+        type: 'raster',
+        source: 'raster-tiles',
+        paint: { 'raster-opacity': 0.7 },
+      },
+    ],
+  },
+  'https://demotiles.maplibre.org/style.json',
+] as const;
+const MARK_TEXT_COLOR_EXPRESSION = [
+  'match',
+  ['get', 'type'],
+  'start', '#00FF00',
+  'windward', '#FF0000',
+  'leeward', '#0000FF',
+  'finish', '#FFD700',
+  'wing', '#FF8000',
+  'gate', '#8000FF',
+  '#FFFFFF',
+] as const;
 
 interface RaceCourseVisualization3DProps {
   courseExtraction: RaceCourseExtraction;
@@ -44,8 +80,6 @@ interface LayerControl {
   type: 'base' | 'environmental' | 'tactical';
 }
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-
 export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps> = ({
   courseExtraction,
   strategy,
@@ -54,8 +88,14 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
   onMarkSelected,
   onTacticalLayerToggle
 }) => {
-  const mapRef = useRef<any>(null);
+  const mapContainerRef = useRef<any>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+  const initRunIdRef = useRef(0);
+  const styleIndexRef = useRef(0);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [selectedMark, setSelectedMark] = useState<string | null>(null);
   const [layerControls, setLayerControls] = useState<LayerControl[]>([
     {
@@ -103,61 +143,128 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
   ]);
 
   useEffect(() => {
-    if (isWeb && courseExtraction) {
-      initializeMap();
-    }
-  }, [courseExtraction]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      initRunIdRef.current += 1;
+    };
+  }, []);
 
-  const initializeMap = async () => {
+  useEffect(() => {
+    if (!isWeb || !courseExtraction) return;
+
+    let cancelled = false;
+    const runId = ++initRunIdRef.current;
+    styleIndexRef.current = 0;
+    setIsMapLoaded(false);
+    setMapError(null);
+    void initializeMap(() => cancelled || !isMountedRef.current || initRunIdRef.current !== runId);
+
+    return () => {
+      cancelled = true;
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (error) {
+          logger.debug('Failed to remove map instance cleanly during cleanup');
+        } finally {
+          mapInstanceRef.current = null;
+        }
+      }
+    };
+    // initializeMap depends on many local helpers in this file and is intentionally scoped here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseExtraction, venue]);
+
+  const initializeMap = async (isCancelled: () => boolean) => {
     try {
       // Dynamic import for web-only MapLibre GL JS
-      const maplibregl = await import('maplibre-gl');
+      let maplibregl: any = null;
+      try {
+        const maplibreModule = await import('maplibre-gl');
+        maplibregl = (maplibreModule as any).default || maplibreModule;
+      } catch (_moduleError) {
+        ensureMapLibreCss('maplibre-gl-css-race-course-3d');
+        await ensureMapLibreScript('maplibre-gl-script-race-course-3d');
+        maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+      }
+      const MapConstructor = maplibregl?.Map;
+      if (!MapConstructor) {
+        throw new Error('MapLibre Map constructor is unavailable');
+      }
 
-      if (!mapRef.current) return;
+      if (!mapContainerRef.current || isCancelled()) return;
 
-      const map = new maplibregl.Map({
-        container: mapRef.current,
-        style: {
-          version: 8,
-          sources: {
-            'raster-tiles': {
-              type: 'raster',
-              tiles: [
-                'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-              ],
-              tileSize: 256
-            }
-          },
-          layers: [
-            {
-              id: 'background',
-              type: 'background',
-              paint: {
-                'background-color': '#1e3a5f'
-              }
-            },
-            {
-              id: 'raster-layer',
-              type: 'raster',
-              source: 'raster-tiles',
-              paint: {
-                'raster-opacity': 0.7
-              }
-            }
-          ]
-        },
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (error) {
+          logger.debug('Failed to remove previous map instance');
+        } finally {
+          mapInstanceRef.current = null;
+        }
+      }
+
+      const map = new MapConstructor({
+        container: mapContainerRef.current,
+        style: MAP_STYLE_CANDIDATES[styleIndexRef.current],
         center: getCourseCenter(),
         zoom: 12,
         pitch: 45, // 3D perspective
         bearing: 0
       });
 
+      mapInstanceRef.current = map;
+      let didLoad = false;
+      loadTimeoutRef.current = setTimeout(() => {
+        if (didLoad || isCancelled()) return;
+        setMapError('Map unavailable right now.');
+        setIsMapLoaded(false);
+      }, 8000);
+
       map.on('load', () => {
+        didLoad = true;
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+        if (isCancelled()) return;
         setIsMapLoaded(true);
+        setMapError(null);
         addRaceMarks(map);
         addEnvironmentalLayers(map);
         addTacticalLayers(map);
 
+      });
+
+      map.on('error', (event: any) => {
+        logger.warn('RaceCourseVisualization3D map error', {
+          message: event?.error?.message
+        });
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current);
+          loadTimeoutRef.current = null;
+        }
+        if (isCancelled()) return;
+        if (!didLoad && styleIndexRef.current + 1 < MAP_STYLE_CANDIDATES.length) {
+          styleIndexRef.current += 1;
+          try {
+            map.setStyle(MAP_STYLE_CANDIDATES[styleIndexRef.current] as any);
+            return;
+          } catch (styleError) {
+            logger.warn('RaceCourseVisualization3D fallback style failed', styleError);
+          }
+        }
+        if (didLoad) {
+          // Ignore non-fatal source/tile errors after first successful load.
+          return;
+        }
+        setMapError('Unable to load map data.');
+        setIsMapLoaded(false);
       });
 
       map.on('click', (e) => {
@@ -175,17 +282,56 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
       });
 
     } catch (error) {
-
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+      logger.warn('RaceCourseVisualization3D map initialization failed', error);
+      if (isCancelled()) return;
+      setMapError('Map initialization failed.');
+      setIsMapLoaded(false);
     }
   };
 
-  const getCourseCenter = (): [number, number] => {
-    // Calculate center point from course marks
-    if (courseExtraction.marks.length === 0) {
-      return [-122.4, 37.8]; // Default to San Francisco Bay
+  const getExplicitMarkCoordinates = (mark: any): [number, number] | null => {
+    const positionLat = mark?.position?.latitude ?? mark?.position?.lat;
+    const positionLng = mark?.position?.longitude ?? mark?.position?.lng;
+    if (typeof positionLat === 'number' && typeof positionLng === 'number') {
+      return [positionLng, positionLat];
     }
 
-    // For now, return a default center - in production this would calculate from mark positions
+    if (typeof mark?.latitude === 'number' && typeof mark?.longitude === 'number') {
+      return [mark.longitude, mark.latitude];
+    }
+
+    if (Array.isArray(mark?.coordinates) && mark.coordinates.length >= 2) {
+      const [lng, lat] = mark.coordinates;
+      if (typeof lat === 'number' && typeof lng === 'number') {
+        return [lng, lat];
+      }
+    }
+
+    return null;
+  };
+
+  const getCourseCenter = (): [number, number] => {
+    const markCoords = courseExtraction.marks
+      .map((mark) => getExplicitMarkCoordinates(mark))
+      .filter(Boolean) as [number, number][];
+
+    if (markCoords.length > 0) {
+      const lngs = markCoords.map((coord) => coord[0]);
+      const lats = markCoords.map((coord) => coord[1]);
+      return [
+        (Math.min(...lngs) + Math.max(...lngs)) / 2,
+        (Math.min(...lats) + Math.max(...lats)) / 2,
+      ];
+    }
+
+    if (courseExtraction.marks.length === 0) {
+      return [-122.4, 37.8];
+    }
+
     const venueCoordinates: Record<string, [number, number]> = {
       'hong-kong': [114.1694, 22.3193],
       'san-francisco': [-122.4194, 37.7749],
@@ -213,42 +359,51 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
       }
     }));
 
-    map.addSource('race-marks', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: markFeatures
-      }
-    });
+    const marksGeojson = {
+      type: 'FeatureCollection',
+      features: markFeatures
+    };
+    if (map.getSource('race-marks')) {
+      map.getSource('race-marks').setData(marksGeojson);
+    } else {
+      map.addSource('race-marks', {
+        type: 'geojson',
+        data: marksGeojson
+      });
+    }
 
     // Add 3D mark symbols
-    map.addLayer({
-      id: 'race-marks-layer',
-      type: 'symbol',
-      source: 'race-marks',
-      layout: {
-        'icon-image': 'custom-marker', // Custom marker would be loaded
-        'icon-size': 1.5,
-        'icon-allow-overlap': true,
-        'text-field': ['get', 'name'],
-        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-        'text-size': 12,
-        'text-transform': 'uppercase',
-        'text-offset': [0, 2],
-        'text-anchor': 'top'
-      },
-      paint: {
-        'text-color': getMarkColor,
-        'text-halo-color': '#ffffff',
-        'text-halo-width': 2
-      }
-    });
+    if (!map.getLayer('race-marks-layer')) {
+      map.addLayer({
+        id: 'race-marks-layer',
+        type: 'symbol',
+        source: 'race-marks',
+        layout: {
+          'icon-image': 'custom-marker', // Custom marker would be loaded
+          'icon-size': 1.5,
+          'icon-allow-overlap': true,
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-size': 12,
+          'text-transform': 'uppercase',
+          'text-offset': [0, 2],
+          'text-anchor': 'top'
+        },
+        paint: {
+          'text-color': MARK_TEXT_COLOR_EXPRESSION as any,
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2
+        }
+      });
+    }
 
   };
 
   const getMarkCoordinates = (mark: any, index: number): [number, number] => {
-    // In a real implementation, this would use the extracted GPS coordinates
-    // For now, generate a sample course layout
+    const explicitCoords = getExplicitMarkCoordinates(mark);
+    if (explicitCoords) return explicitCoords;
+
+    // Fallback to synthetic course layout when extraction lacks coordinates
     const center = getCourseCenter();
     const offsets: Record<string, [number, number]> = {
       'start': [0, 0],
@@ -259,18 +414,6 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
 
     const offset = offsets[mark.type] || [index * 0.005, index * 0.005];
     return [center[0] + offset[0], center[1] + offset[1]];
-  };
-
-  const getMarkColor = (markType: string): string => {
-    const colors: Record<string, string> = {
-      'start': '#00FF00',
-      'windward': '#FF0000',
-      'leeward': '#0000FF',
-      'finish': '#FFD700',
-      'wing': '#FF8000',
-      'gate': '#8000FF'
-    };
-    return colors[markType] || '#FFFFFF';
   };
 
   const addEnvironmentalLayers = (map: any) => {
@@ -314,36 +457,43 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
       }
     }
 
-    map.addSource('wind-vectors', {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: vectors
-      }
-    });
+    const windGeojson = {
+      type: 'FeatureCollection',
+      features: vectors
+    };
+    if (map.getSource('wind-vectors')) {
+      map.getSource('wind-vectors').setData(windGeojson);
+    } else {
+      map.addSource('wind-vectors', {
+        type: 'geojson',
+        data: windGeojson
+      });
+    }
 
-    map.addLayer({
-      id: 'wind-arrows',
-      type: 'symbol',
-      source: 'wind-vectors',
-      layout: {
-        'icon-image': 'wind-arrow',
-        'icon-size': 0.8,
-        'icon-rotate': ['get', 'direction'],
-        'icon-allow-overlap': true
-      },
-      paint: {
-        'icon-opacity': 0.7
-      }
-    });
+    if (!map.getLayer('wind-arrows')) {
+      map.addLayer({
+        id: 'wind-arrows',
+        type: 'symbol',
+        source: 'wind-vectors',
+        layout: {
+          'icon-image': 'wind-arrow',
+          'icon-size': 0.8,
+          'icon-rotate': ['get', 'direction'],
+          'icon-allow-overlap': true
+        },
+        paint: {
+          'icon-opacity': 0.7
+        }
+      });
+    }
   };
 
-  const addCurrentFlow = (map: any, current: any) => {
+  const addCurrentFlow = (_map: any, _current: any) => {
     // Current flow visualization would be implemented here
 
   };
 
-  const addWavePatterns = (map: any, waves: any) => {
+  const addWavePatterns = (_map: any, _waves: any) => {
     // Wave pattern visualization would be implemented here
   };
 
@@ -361,11 +511,11 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
     }
   };
 
-  const addLaylines = (map: any, wind: any) => {
+  const addLaylines = (_map: any, _wind: any) => {
     // Layline calculation and visualization
   };
 
-  const addStartStrategy = (map: any, startStrategy: any) => {
+  const addStartStrategy = (_map: any, _startStrategy: any) => {
     // Start strategy visualization
 
   };
@@ -382,18 +532,18 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
     setLayerControls(updatedLayers);
 
     // Update map layers
-    if (mapRef.current && isMapLoaded) {
+    if (mapInstanceRef.current && isMapLoaded) {
       const layer = updatedLayers.find(l => l.id === layerId);
       if (layer) {
         // Toggle layer visibility on map
         try {
-          mapRef.current.setLayoutProperty(
+          mapInstanceRef.current.setLayoutProperty(
             `${layerId}-layer`,
             'visibility',
             layer.enabled ? 'visible' : 'none'
           );
         } catch (error) {
-          logger.debug(`Layer ${layerId} not found on map`);
+          logger.debug(`Layer ${layerId} not found on map`, error);
         }
       }
     }
@@ -414,7 +564,7 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
       <View style={styles.mapContainer}>
         {isWeb ? (
           <div
-            ref={mapRef}
+            ref={mapContainerRef}
             style={{
               width: '100%',
               height: '100%',
@@ -433,10 +583,17 @@ export const RaceCourseVisualization3D: React.FC<RaceCourseVisualization3DProps>
           </View>
         )}
 
-        {!isMapLoaded && isWeb && (
+        {!isMapLoaded && !mapError && isWeb && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#0066CC" />
             <Text style={styles.loadingText}>Loading 3D Course...</Text>
+          </View>
+        )}
+        {mapError && isWeb && (
+          <View style={styles.errorOverlay}>
+            <Ionicons name="warning-outline" size={24} color="#a35f00" />
+            <Text style={styles.errorText}>Map unavailable</Text>
+            <Text style={styles.errorSubtext}>{mapError}</Text>
           </View>
         )}
       </View>
@@ -550,6 +707,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#0066CC',
+  },
+  errorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 248, 235, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1001,
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  errorText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#804600',
+  },
+  errorSubtext: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#9a6f2f',
+    textAlign: 'center',
   },
   layerControls: {
     backgroundColor: 'white',

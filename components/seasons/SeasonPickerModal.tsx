@@ -46,6 +46,10 @@ export interface SeasonPickerModalProps {
   onSelectSeason: (seasonId: string | null) => void;
   /** Callback to open season settings (create/edit) */
   onManageSeasons: () => void;
+  /** Vocabulary-aware event noun plural (e.g., "Shifts", "Workouts") */
+  eventNounPlural?: string;
+  /** Vocabulary-aware period term (e.g., "Season", "Rotation", "Training Block") */
+  periodTerm?: string;
 }
 
 // =============================================================================
@@ -61,7 +65,14 @@ export function SeasonPickerModal({
   onClose,
   onSelectSeason,
   onManageSeasons,
+  eventNounPlural,
+  periodTerm,
 }: SeasonPickerModalProps) {
+  const eventsLabel = eventNounPlural?.toLowerCase() || 'races';
+  const periodLabel = periodTerm || 'Season';
+  const periodLabelLower = periodLabel.toLowerCase();
+  const periodLabelUpper = periodLabel.toUpperCase() + 'S';
+
   const handleSelectSeason = (seasonId: string | null) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onSelectSeason(seasonId);
@@ -92,7 +103,7 @@ export function SeasonPickerModal({
           <Pressable style={styles.container} onPress={(e) => e.stopPropagation()}>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Select Season</Text>
+              <Text style={styles.headerTitle}>Select {periodLabel}</Text>
               <TouchableOpacity
                 onPress={onClose}
                 style={styles.closeButton}
@@ -128,10 +139,10 @@ export function SeasonPickerModal({
                     styles.optionTitle,
                     selectedSeasonId === null && styles.optionTitleSelected,
                   ]}>
-                    All Races
+                    All {eventNounPlural || 'Races'}
                   </Text>
                   <Text style={styles.optionSubtitle}>
-                    Show races from all seasons
+                    Show {eventsLabel} from all {periodLabelLower}s
                   </Text>
                 </View>
                 {selectedSeasonId === null && (
@@ -145,7 +156,7 @@ export function SeasonPickerModal({
 
               {/* Divider */}
               <View style={styles.divider}>
-                <Text style={styles.dividerText}>SEASONS</Text>
+                <Text style={styles.dividerText}>{periodLabelUpper}</Text>
               </View>
 
               {/* Current Active Season (if exists) */}
@@ -240,10 +251,10 @@ export function SeasonPickerModal({
                     color={IOS_COLORS.tertiaryLabel}
                   />
                   <Text style={styles.emptyStateText}>
-                    No seasons yet
+                    No {periodLabelLower}s yet
                   </Text>
                   <Text style={styles.emptyStateSubtext}>
-                    Create a season to organize your races
+                    Create a {periodLabelLower} to organize your {eventsLabel}
                   </Text>
                 </View>
               )}
@@ -261,7 +272,7 @@ export function SeasonPickerModal({
                   color={IOS_COLORS.blue}
                 />
                 <Text style={styles.manageButtonText}>
-                  {currentSeason ? 'Manage Season' : 'Create Season'}
+                  {currentSeason ? `Manage ${periodLabel}` : `Create ${periodLabel}`}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -127,7 +127,7 @@ export class CalendarImportService {
         skipped
       };
     } catch (error: any) {
-      console.error('[CalendarImportService] Parse error:', error);
+      logger.error('[CalendarImportService] Parse error:', error);
       return {
         success: false,
         error: error.message,
@@ -174,7 +174,7 @@ export class CalendarImportService {
 
       return null;
     } catch (error) {
-      console.error('[CalendarImportService] Date parse error:', error);
+      logger.error('[CalendarImportService] Date parse error:', error);
       return null;
     }
   }

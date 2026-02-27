@@ -3,7 +3,7 @@
  * Manages user's current location context for sailing network
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SailingNetworkService, LocationSummary, LocationContext } from '@/services/SailingNetworkService';
 import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
@@ -34,12 +34,34 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
     isLoading: true,
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+
+  useEffect(() => {
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   /**
    * Fetch user's current location context and all locations
    */
   const fetchLocationContext = useCallback(async () => {
-    if (!user) {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = user?.id ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId) {
+      if (!canCommit()) return;
       setState({
         currentLocation: null,
         myLocations: [],
@@ -49,6 +71,7 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
       return;
     }
 
+    if (!canCommit()) return;
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
@@ -57,6 +80,7 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
         SailingNetworkService.getMyLocations(),
       ]);
 
+      if (!canCommit()) return;
       setState({
         currentLocation,
         myLocations,
@@ -65,6 +89,7 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
       });
     } catch (error: any) {
       logger.error('Failed to fetch location context:', error);
+      if (!canCommit()) return;
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -134,7 +159,7 @@ export function useLocationContext(): UseLocationContextState & UseLocationConte
 
   // Fetch location context on mount and when user changes
   useEffect(() => {
-    fetchLocationContext();
+    void fetchLocationContext();
   }, [fetchLocationContext]);
 
   return {

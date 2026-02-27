@@ -26,8 +26,11 @@ import { IOS_COLORS } from '@/components/cards/constants';
 import type { RaceType } from '../RaceTypeSelector';
 import type { ExtractedRaceData, ExtractedField } from '../ExtractionResults';
 import type { MultiRaceExtractedData } from '../AIValidationScreen';
-import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
+import { createLogger } from '@/lib/utils/logger';
+import { extractRaceDetailsFromText } from '@/lib/utils/raceExtraction';
+
+const logger = createLogger('TufteAIExtractionSection');
 
 // Transform extraction result to ExtractedRaceData format
 function transformExtractionResult(result: any, raceType: RaceType): ExtractedRaceData {
@@ -43,7 +46,7 @@ function transformExtractionResult(result: any, raceType: RaceType): ExtractedRa
   });
 
   // Helper to format schedule events
-  const formatSchedule = (schedule: Array<{date: string; time: string; event: string; mandatory?: boolean}> | undefined) => {
+  const formatSchedule = (schedule: {date: string; time: string; event: string; mandatory?: boolean}[] | undefined) => {
     if (!schedule || schedule.length === 0) return undefined;
     return schedule
       .map(s => `${s.date} ${s.time}: ${s.event}${s.mandatory ? ' [MANDATORY]' : ''}`)
@@ -51,19 +54,19 @@ function transformExtractionResult(result: any, raceType: RaceType): ExtractedRa
   };
 
   // Helper to format waypoints/peaks
-  const formatWaypoints = (waypoints: Array<{name: string; notes?: string}> | undefined) => {
+  const formatWaypoints = (waypoints: {name: string; notes?: string}[] | undefined) => {
     if (!waypoints || waypoints.length === 0) return undefined;
     return waypoints.map((w, i) => `${i + 1}. ${w.name}`).join(', ');
   };
 
   // Helper to format prohibited areas
-  const formatProhibitedAreas = (areas: Array<{name: string; description?: string}> | undefined) => {
+  const formatProhibitedAreas = (areas: {name: string; description?: string}[] | undefined) => {
     if (!areas || areas.length === 0) return undefined;
     return `${areas.length} areas: ${areas.map(a => a.name).join(', ')}`;
   };
 
   // Helper to format entry fees
-  const formatEntryFees = (fees: Array<{type: string; amount: string}> | undefined) => {
+  const formatEntryFees = (fees: {type: string; amount: string}[] | undefined) => {
     if (!fees || fees.length === 0) return undefined;
     return fees.map(f => `${f.type}: ${f.amount}`).join(', ');
   };
@@ -297,7 +300,7 @@ export function TufteAIExtractionSection({
 
             textContent = extractResult.text;
           } catch (pdfError: any) {
-            console.error('[TufteAIExtractionSection] PDF extraction failed:', pdfError);
+            logger.error('PDF extraction failed', pdfError);
             throw new Error(`PDF extraction failed: ${pdfError.message}`);
           }
         } else {
@@ -327,9 +330,8 @@ export function TufteAIExtractionSection({
         throw new Error('Not enough content to extract race details');
       }
 
-      // Call the AI extraction agent
-      const agent = new ComprehensiveRaceExtractionAgent();
-      const result = await agent.extractRaceDetails(textContent);
+      // Call extraction helper
+      const result = await extractRaceDetailsFromText(textContent);
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to extract race details');
@@ -351,7 +353,7 @@ export function TufteAIExtractionSection({
           return; // Exit early - multi-race flow will handle the rest
         }
         // Fallback: if no multi-race handler, use first race
-        console.warn('[TufteAIExtractionSection] Multiple races detected but no handler - using first race');
+        logger.warn('Multiple races detected but no handler - using first race');
       }
 
       // Single race or fallback: Transform result to ExtractedRaceData format

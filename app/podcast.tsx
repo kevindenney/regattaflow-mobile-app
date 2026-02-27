@@ -1,12 +1,13 @@
 /**
  * Podcast Page
- * Placeholder for podcast content
+ * Podcast entry page with links to published episodes and notifications
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, TouchableOpacity, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { LandingNav } from '@/components/landing/LandingNav';
 
 export default function PodcastPage() {
@@ -28,7 +29,7 @@ export default function PodcastPage() {
           </View>
 
           <Text style={[styles.title, isDesktop && styles.titleDesktop]}>
-            Podcast Coming Soon
+            RegattaFlow Podcast
           </Text>
 
           <Text style={[styles.subtitle, isDesktop && styles.subtitleDesktop]}>
@@ -36,8 +37,21 @@ export default function PodcastPage() {
           </Text>
 
           <View style={styles.comingSoonBadge}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
+            <Text style={styles.comingSoonText}>Episode Pipeline Active</Text>
           </View>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/podcasts')}>
+            <Text style={styles.primaryButtonText}>Browse Episodes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() =>
+              Linking.openURL(
+                'mailto:podcast@regattaflow.com?subject=Podcast%20Notifications&body=Please%20notify%20me%20when%20RegattaFlow%20podcast%20episodes%20launch.'
+              )
+            }
+          >
+            <Text style={styles.secondaryButtonText}>Notify Me</Text>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
     </View>
@@ -102,5 +116,29 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
+  primaryButton: {
+    marginTop: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  primaryButtonText: {
+    color: '#0A2463',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  secondaryButton: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  secondaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 15,
+  },
 });
-

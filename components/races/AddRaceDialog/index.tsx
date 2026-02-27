@@ -18,13 +18,13 @@ import {
   Text,
   Pressable,
   StyleSheet,
+  Alert,
   
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, X, Sparkles } from 'lucide-react-native';
-import { Typography, Spacing, BorderRadius, colors, Shadows } from '@/constants/designSystem';
+import { ChevronLeft, X } from 'lucide-react-native';
 import { RaceType, RACE_TYPE_COLORS } from '../RaceTypeSelector';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { RaceTypeStep } from './RaceTypeStep';
@@ -35,6 +35,7 @@ import { TufteAddRaceForm } from './TufteAddRaceForm';
 import { IOSAddRaceForm } from './IOSAddRaceForm';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import type { ExtractedRaceData } from '../ExtractionResults';
+import { createLogger } from '@/lib/utils/logger';
 
 interface AddRaceDialogProps {
   visible: boolean;
@@ -43,6 +44,7 @@ interface AddRaceDialogProps {
 }
 
 type Step = 'type' | 'input-method' | 'ai-extraction' | 'details';
+const logger = createLogger('AddRaceDialog');
 
 export function AddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) {
   // Use iOS HIG-style form when feature flag is enabled (native only)
@@ -119,8 +121,12 @@ function LegacyAddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) {
       await onSave(data);
       handleClose();
     } catch (error) {
-      console.error('Failed to save race:', error);
-      // TODO: Show error toast
+      logger.error('Failed to save race', error);
+      const message =
+        (error as any)?.message && typeof (error as any).message === 'string'
+          ? (error as any).message
+          : 'Unable to save race right now. Please try again.';
+      Alert.alert('Save failed', message);
     } finally {
       setIsSaving(false);
     }

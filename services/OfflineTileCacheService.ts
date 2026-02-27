@@ -15,6 +15,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('OfflineTileCacheService');
 
 /**
  * Tile layer type
@@ -157,7 +160,7 @@ export class OfflineTileCacheService {
           this.progressCallback(this.downloadProgress);
         }
       } catch (error) {
-        console.error(`Failed to download tile ${tile.z}/${tile.x}/${tile.y}:`, error);
+        logger.error(`Failed to download tile ${tile.z}/${tile.x}/${tile.y}:`, error);
         this.downloadProgress.failedTiles++;
       }
     }

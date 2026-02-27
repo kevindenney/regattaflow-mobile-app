@@ -414,7 +414,7 @@ export function RaceJournalSection({
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.sectionTitle}>Race Journal</Text>
+          <Text style={styles.headerTitle}>Race Journal</Text>
         </View>
         <View style={styles.emptyState}>
           <Ionicons
@@ -447,7 +447,7 @@ export function RaceJournalSection({
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.sectionTitle}>Race Journal</Text>
+          <Text style={styles.headerTitle}>Race Journal</Text>
           <Text style={styles.entryCount}>{entries.length} entries</Text>
         </View>
         {onAddEntry && (
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
   },
-  sectionTitle: {
+  headerTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: IOS_COLORS.label,

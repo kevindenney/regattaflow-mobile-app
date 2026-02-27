@@ -140,7 +140,7 @@ export function CalendarImportFlow({
       setLoading(false);
 
     } catch (error: any) {
-      console.error('[CalendarImportFlow] Upload error:', error);
+      logger.error('Upload error', error);
       Alert.alert('Error', error.message || 'Failed to upload file');
       setLoading(false);
     }
@@ -172,7 +172,7 @@ export function CalendarImportFlow({
       setLoading(false);
 
     } catch (error: any) {
-      console.error('[CalendarImportFlow] Import error:', error);
+      logger.error('Import error', error);
       Alert.alert('Import Error', error.message || 'Failed to import races');
       setLoading(false);
       setStep('preview'); // Go back to preview

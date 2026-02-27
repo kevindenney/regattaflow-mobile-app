@@ -11,7 +11,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   Alert,
   RefreshControl
 } from 'react-native';
@@ -25,12 +24,9 @@ import {
   type VenueIntelligence
 } from '@/services/ai/RaceStrategyEngine';
 import {
-  voiceNoteService,
-  type VoiceNote,
   type TacticalInsight,
   type RaceContext
 } from '@/services/ai/VoiceNoteService';
-import { DocumentProcessingService } from '@/services/ai/DocumentProcessingService';
 
 interface AnalysisDashboardState {
   activeStrategy: RaceStrategy | null;
@@ -57,9 +53,6 @@ interface AIRaceAnalysisDashboardProps {
   onInsightGenerated?: (insight: TacticalInsight) => void;
   style?: object;
 }
-
-const { width: screenWidth } = Dimensions.get('window');
-const isTablet = screenWidth > 768;
 
 export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = ({
   onStrategyGenerated,
@@ -421,6 +414,77 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
     </View>
   );
 
+  const renderConditionsTab = () => {
+    if (!state.currentConditions) {
+      return (
+        <View style={styles.tabContent}>
+          <View style={styles.emptyState}>
+            <Ionicons name="cloud-offline" size={56} color="#9CA3AF" />
+            <Text style={styles.emptyStateTitle}>No Conditions Loaded</Text>
+            <Text style={styles.emptyStateText}>
+              Pull weather and current data to power strategy recommendations.
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    const { wind, current, waves } = state.currentConditions;
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.insightCard}>
+          <Text style={styles.sectionTitle}>Live Conditions</Text>
+          <Text style={styles.sectionContent}>
+            Wind: {wind.speed}kt @ {wind.direction}°
+          </Text>
+          <Text style={styles.sectionContent}>
+            Current: {current.speed}kt {current.tidePhase}
+          </Text>
+          <Text style={styles.sectionContent}>
+            Waves: {waves.height}m @ {waves.period}s
+          </Text>
+          <Text style={styles.sectionDetails}>
+            Risk: {state.currentConditions.weatherRisk.toUpperCase()} | Visibility {state.currentConditions.visibility}nm
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderHistoryTab = () => (
+    <View style={styles.tabContent}>
+      {state.analysisHistory.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="time-outline" size={56} color="#9CA3AF" />
+          <Text style={styles.emptyStateTitle}>No Analysis History Yet</Text>
+          <Text style={styles.emptyStateText}>
+            Strategy generations and insights will appear here.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.insightsContainer}>
+          <Text style={styles.sectionTitle}>Recent Analysis Activity</Text>
+          {state.analysisHistory.slice(0, 20).map((entry) => (
+            <View key={entry.id} style={styles.insightCard}>
+              <View style={styles.insightHeader}>
+                <Text style={styles.sectionContent}>{entry.title}</Text>
+                <Text style={styles.insightTime}>
+                  {entry.timestamp.toLocaleTimeString()}
+                </Text>
+              </View>
+              <Text style={styles.sectionDetails}>{entry.description}</Text>
+              {typeof entry.confidence === 'number' && (
+                <Text style={styles.insightRecommendation}>
+                  Confidence: {Math.round(entry.confidence * 100)}%
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
   const getInsightColor = (type: TacticalInsight['type']): string => {
     const colors: Record<TacticalInsight['type'], string> = {
       wind_shift: '#FF9500',
@@ -502,16 +566,8 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
       >
         {selectedTab === 'strategy' && renderStrategyTab()}
         {selectedTab === 'insights' && renderInsightsTab()}
-        {selectedTab === 'conditions' && (
-          <View style={styles.tabContent}>
-            <Text style={styles.comingSoon}>Conditions analysis coming soon...</Text>
-          </View>
-        )}
-        {selectedTab === 'history' && (
-          <View style={styles.tabContent}>
-            <Text style={styles.comingSoon}>Analysis history coming soon...</Text>
-          </View>
-        )}
+        {selectedTab === 'conditions' && renderConditionsTab()}
+        {selectedTab === 'history' && renderHistoryTab()}
       </ScrollView>
     </View>
   );

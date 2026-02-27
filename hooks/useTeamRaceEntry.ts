@@ -5,13 +5,12 @@
  * Provides real-time sync of team members and state.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { teamRaceEntryService } from '@/services/TeamRaceEntryService';
 import {
   TeamRaceEntry,
   TeamRaceEntryMember,
-  CreateTeamEntryInput,
   JoinTeamInput,
 } from '@/types/teamRacing';
 import type { RaceType } from '@/types/raceEvents';
@@ -64,6 +63,22 @@ export function useTeamRaceEntry({
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const membersEffectRunIdRef = useRef(0);
+  const activeRaceEventIdRef = useRef<string>(raceEventId);
+
+  useEffect(() => {
+    activeRaceEventIdRef.current = raceEventId;
+  }, [raceEventId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      membersEffectRunIdRef.current += 1;
+    };
+  }, []);
 
   // Only active for team racing
   const isTeamRace = raceType === 'team';
@@ -80,6 +95,7 @@ export function useTeamRaceEntry({
   }, [user, teamEntry]);
 
   const inviteCode = teamEntry?.inviteCode || null;
+  const teamEntryId = teamEntry?.id;
 
   const inviteLink = useMemo(() => {
     if (!inviteCode) return null;
@@ -91,7 +107,15 @@ export function useTeamRaceEntry({
    * Load team entry for this race
    */
   const loadTeamEntry = useCallback(async () => {
-    if (!raceEventId || !isTeamRace) {
+    const runId = ++loadRunIdRef.current;
+    const targetRaceEventId = raceEventId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeRaceEventIdRef.current === targetRaceEventId;
+
+    if (!targetRaceEventId || !isTeamRace) {
+      if (!canCommit()) return;
       setTeamEntry(null);
       setMembers([]);
       setIsLoading(false);
@@ -102,19 +126,23 @@ export function useTeamRaceEntry({
       setIsLoading(true);
       setError(null);
 
-      const entry = await teamRaceEntryService.getTeamEntryForRace(raceEventId);
+      const entry = await teamRaceEntryService.getTeamEntryForRace(targetRaceEventId);
+      if (!canCommit()) return;
       setTeamEntry(entry);
 
       if (entry) {
         const teamMembers = await teamRaceEntryService.getTeamMembers(entry.id);
+        if (!canCommit()) return;
         setMembers(teamMembers);
       } else {
         setMembers([]);
       }
     } catch (err) {
       logger.error('Failed to load team entry:', err);
+      if (!canCommit()) return;
       setError(err instanceof Error ? err : new Error('Failed to load team entry'));
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [raceEventId, isTeamRace]);
@@ -124,32 +152,40 @@ export function useTeamRaceEntry({
    */
   const createTeamEntry = useCallback(
     async (teamName: string): Promise<TeamRaceEntry> => {
+      const targetRaceEventId = raceEventId;
       if (!user?.id) {
         throw new Error('Not authenticated');
       }
 
       try {
+        if (!isMountedRef.current || activeRaceEventIdRef.current !== targetRaceEventId) {
+          throw new Error('Race context changed');
+        }
         setIsCreating(true);
         setError(null);
 
         const entry = await teamRaceEntryService.createTeamEntry({
-          raceEventId,
+          raceEventId: targetRaceEventId,
           teamName,
         });
 
+        if (!isMountedRef.current || activeRaceEventIdRef.current !== targetRaceEventId) return entry;
         setTeamEntry(entry);
 
         // Load members (creator is auto-added)
         const teamMembers = await teamRaceEntryService.getTeamMembers(entry.id);
+        if (!isMountedRef.current || activeRaceEventIdRef.current !== targetRaceEventId) return entry;
         setMembers(teamMembers);
 
         logger.info('Created team entry', { entryId: entry.id });
         return entry;
       } catch (err) {
         logger.error('Failed to create team entry:', err);
+        if (!isMountedRef.current || activeRaceEventIdRef.current !== targetRaceEventId) throw err;
         setError(err instanceof Error ? err : new Error('Failed to create team'));
         throw err;
       } finally {
+        if (!isMountedRef.current || activeRaceEventIdRef.current !== targetRaceEventId) return;
         setIsCreating(false);
       }
     },
@@ -180,6 +216,7 @@ export function useTeamRaceEntry({
   const joinTeam = useCallback(
     async (input: JoinTeamInput): Promise<void> => {
       try {
+        if (!isMountedRef.current) return;
         setIsJoining(true);
         setError(null);
 
@@ -191,9 +228,11 @@ export function useTeamRaceEntry({
         logger.info('Joined team', { inviteCode: input.inviteCode });
       } catch (err) {
         logger.error('Failed to join team:', err);
+        if (!isMountedRef.current) throw err;
         setError(err instanceof Error ? err : new Error('Failed to join team'));
         throw err;
       } finally {
+        if (!isMountedRef.current) return;
         setIsJoining(false);
       }
     },
@@ -210,6 +249,7 @@ export function useTeamRaceEntry({
 
     try {
       await teamRaceEntryService.leaveTeam(teamEntry.id);
+      if (!isMountedRef.current) return;
       setTeamEntry(null);
       setMembers([]);
       logger.info('Left team', { entryId: teamEntry.id });
@@ -233,17 +273,23 @@ export function useTeamRaceEntry({
 
   // Subscribe to member changes when we have a team entry
   useEffect(() => {
-    if (!teamEntry) return;
+    if (!teamEntryId) return;
+    const runId = ++membersEffectRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === membersEffectRunIdRef.current;
 
     const unsubscribe = teamRaceEntryService.subscribeToMemberChanges(
-      teamEntry.id,
+      teamEntryId,
       (updatedMembers) => {
+        if (!canCommit()) return;
         setMembers(updatedMembers);
       }
     );
 
-    return unsubscribe;
-  }, [teamEntry?.id]);
+    return () => {
+      membersEffectRunIdRef.current += 1;
+      unsubscribe();
+    };
+  }, [teamEntryId]);
 
   return {
     // State

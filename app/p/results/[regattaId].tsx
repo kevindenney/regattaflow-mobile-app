@@ -17,9 +17,10 @@ import {
     Share2,
     Trophy,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Linking,
     Platform,
     RefreshControl,
     ScrollView,
@@ -84,11 +85,7 @@ export default function PublicResultsPage() {
   const [expandedRaces, setExpandedRaces] = useState<Set<number>>(new Set());
   const [activeTab, setActiveTab] = useState<'standings' | 'races'>('standings');
 
-  useEffect(() => {
-    fetchResults();
-  }, [regattaId]);
-
-  const fetchResults = async (isRefresh = false) => {
+  const fetchResults = useCallback(async (isRefresh = false) => {
     if (!regattaId) return;
     
     try {
@@ -114,7 +111,11 @@ export default function PublicResultsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [regattaId]);
+
+  useEffect(() => {
+    void fetchResults();
+  }, [fetchResults]);
 
   const handleShare = async () => {
     const url = `${API_BASE}/p/results/${regattaId}`;
@@ -191,6 +192,19 @@ export default function PublicResultsPage() {
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => fetchResults()}>
           <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push(`/p/${regattaId}`)}>
+          <Text style={styles.secondaryButtonText}>View Regatta</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() =>
+            Linking.openURL(
+              `mailto:support@regattaflow.com?subject=${encodeURIComponent('Public Results Unavailable')}&body=${encodeURIComponent(`Regatta: ${regattaId}\nError: ${error}`)}`
+            )
+          }
+        >
+          <Text style={styles.secondaryButtonText}>Contact Support</Text>
         </TouchableOpacity>
       </View>
     );
@@ -413,6 +427,19 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryButtonText: {
+    color: '#374151',
     fontWeight: '600',
   },
   header: {
@@ -663,4 +690,3 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
   },
 });
-

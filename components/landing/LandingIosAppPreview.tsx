@@ -4,7 +4,7 @@ import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View }
 
 export type LandingTab = 'race' | 'connect' | 'learn' | 'reflect' | 'search';
 
-const TABS: Array<{ key: LandingTab; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+const TABS: { key: LandingTab; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'race', label: 'Race', icon: 'flag-outline' },
   { key: 'connect', label: 'Connect', icon: 'people-outline' },
   { key: 'learn', label: 'Learn', icon: 'book-outline' },
@@ -26,7 +26,7 @@ const CONTENT: Record<
     header: string;
     subtitle: string;
     chips: string[];
-    cards: Array<{ title: string; meta: string; stat?: string; accent?: string }>;
+    cards: { title: string; meta: string; stat?: string; accent?: string }[];
   }
 > = {
   race: {
@@ -74,7 +74,7 @@ const CONTENT: Record<
     cards: [
       { title: 'Winning Starts & First Beats', meta: 'Fleet positioning strategy', stat: '65% complete' },
       { title: 'Racing Basics', meta: '120 min • 5 modules', stat: 'Free' },
-      { title: 'Boat Handling Fundamentals', meta: '180 min • 3 modules', stat: 'Coming Soon' },
+      { title: 'Boat Handling Fundamentals', meta: '180 min • 3 modules', stat: 'Planned' },
     ],
   },
   reflect: {
@@ -371,8 +371,8 @@ function LearnScreenReplica() {
       <View style={styles.learnHero}><Text style={styles.learnPct}>65%</Text><Text style={styles.learnCourse}>Winning Starts & First Beats</Text><Text style={styles.learnAction}>Continue</Text></View>
       <Text style={styles.learnMeta}>2 of 14 courses started • 1 completed</Text>
       <View style={styles.feedCard}><Text style={styles.feedTitle}>Racing Basics</Text><Text style={styles.feedMeta}>120 min • 5 modules • Free</Text></View>
-      <View style={styles.feedCard}><Text style={styles.feedTitle}>Boat Handling Fundamentals</Text><Text style={styles.feedMeta}>180 min • 3 modules • Coming Soon</Text></View>
-      <View style={styles.feedCard}><Text style={styles.feedTitle}>Wind Shift Tactics</Text><Text style={styles.feedMeta}>180 min • 3 modules • Coming Soon</Text></View>
+      <View style={styles.feedCard}><Text style={styles.feedTitle}>Boat Handling Fundamentals</Text><Text style={styles.feedMeta}>180 min • 3 modules • Planned</Text></View>
+      <View style={styles.feedCard}><Text style={styles.feedTitle}>Wind Shift Tactics</Text><Text style={styles.feedMeta}>180 min • 3 modules • Planned</Text></View>
     </View>
   );
 }

@@ -18,7 +18,6 @@ import {
   Platform,
   Pressable,
   TextInput,
-  Switch,
 } from 'react-native';
 import { X, RotateCcw, Navigation2, Anchor, ChevronDown, Info, Move, Compass, Ship, Minus, Plus, Waves } from 'lucide-react-native';
 import { triggerHaptic } from '@/lib/haptics';
@@ -33,8 +32,11 @@ import type {
   StartLinePosition,
 } from '@/types/courses';
 import { BathymetryCurrentLayer } from '@/components/map/layers/BathymetryCurrentLayer.web';
+import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 const isWeb = Platform.OS === 'web';
+const logger = createLogger('CoursePositionEditor');
 
 // iOS-style colors
 const COLORS = {
@@ -67,6 +69,30 @@ const MARK_COLORS: Record<string, string> = {
   wing: '#22c55e',
   offset: '#3b82f6',
 };
+
+const WEB_MAP_STYLE = {
+  version: 8,
+  sources: {
+    'raster-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#f8fafc' },
+    },
+    {
+      id: 'raster-layer',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: { 'raster-opacity': 0.9 },
+    },
+  ],
+} as const;
 
 /** Forecast data point for sparklines */
 export interface ForecastDataPoint {
@@ -111,7 +137,7 @@ const COURSE_TYPE_OPTIONS: { value: CourseType; label: string; description: stri
 /**
  * Wind direction compass picker component
  */
-function WindDirectionPicker({
+export function WindDirectionPicker({
   direction,
   onChange,
 }: {
@@ -1005,6 +1031,7 @@ export function CoursePositionEditor({
   // Map refs and state
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const maplibreNsRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const [mapReady, setMapReady] = useState(false);
 
@@ -1018,11 +1045,11 @@ export function CoursePositionEditor({
   // Calculate or recalculate course
   const calculateCourse = useCallback(() => {
     if (!initialLocation) {
-      console.log('[CoursePositionEditor] calculateCourse: no initialLocation');
+      logger.debug('[CoursePositionEditor] calculateCourse: no initialLocation');
       return;
     }
 
-    console.log('[CoursePositionEditor] Calculating course:', {
+    logger.debug('[CoursePositionEditor] Calculating course:', {
       initialLocation,
       windDirection,
       legLength,
@@ -1044,7 +1071,7 @@ export function CoursePositionEditor({
       startLineLengthM
     );
 
-    console.log('[CoursePositionEditor] Course result:', {
+    logger.debug('[CoursePositionEditor] Course result:', {
       marksCount: result.marks.length,
       startLine: newStartLine,
       startLineLengthM,
@@ -1280,34 +1307,53 @@ export function CoursePositionEditor({
     if (!isWeb || !visible || !mapContainerRef.current || !initialLocation) return;
     if (mapRef.current) return; // Already initialized
 
+    const markers = markersRef.current;
+
     const initMap = async () => {
       try {
-        const maplibregl = await import('maplibre-gl');
-        await import('maplibre-gl/dist/maplibre-gl.css');
+        let maplibregl: any = null;
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = (maplibreModule as any).default || maplibreModule;
+          try {
+            await import('maplibre-gl/dist/maplibre-gl.css');
+          } catch (_cssError) {
+            ensureMapLibreCss('maplibre-gl-css-course-position-editor');
+          }
+        } catch (_moduleError) {
+          ensureMapLibreCss('maplibre-gl-css-course-position-editor');
+          await ensureMapLibreScript('maplibre-gl-script-course-position-editor');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        maplibreNsRef.current = maplibregl;
+        const MapConstructor = maplibregl?.Map;
+        if (!MapConstructor) {
+          throw new Error('MapLibre Map constructor is unavailable');
+        }
 
-        const map = new maplibregl.default.Map({
+        const map = new MapConstructor({
           container: mapContainerRef.current!,
-          style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+          style: WEB_MAP_STYLE,
           center: [initialLocation.lng, initialLocation.lat],
           zoom: 14,
           attributionControl: false,
         });
 
         map.on('load', () => {
-          console.log('[CoursePositionEditor] Map loaded');
+          logger.debug('[CoursePositionEditor] Map loaded');
           mapRef.current = map;
           setMapReady(true);
         });
       } catch (error) {
-        console.error('[CoursePositionEditor] Failed to initialize map:', error);
+        logger.error('[CoursePositionEditor] Failed to initialize map:', error);
       }
     };
 
     initMap();
 
     return () => {
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current.clear();
+      markers.forEach((marker) => marker.remove());
+      markers.clear();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -1318,7 +1364,7 @@ export function CoursePositionEditor({
 
   // Update map markers when marks change or map becomes ready
   useEffect(() => {
-    console.log('[CoursePositionEditor] Marker effect:', {
+    logger.debug('[CoursePositionEditor] Marker effect:', {
       isWeb,
       mapReady,
       hasMapRef: !!mapRef.current,
@@ -1326,9 +1372,23 @@ export function CoursePositionEditor({
     });
     if (!isWeb || !mapReady || !mapRef.current || !marks.length) return;
 
-    console.log('[CoursePositionEditor] Adding markers to map');
+    logger.debug('[CoursePositionEditor] Adding markers to map');
     const updateMarkers = async () => {
-      const maplibregl = await import('maplibre-gl');
+      let maplibregl = maplibreNsRef.current;
+      if (!maplibregl) {
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = (maplibreModule as any).default || maplibreModule;
+          maplibreNsRef.current = maplibregl;
+        } catch (_moduleError) {
+          await ensureMapLibreScript('maplibre-gl-script-course-position-editor');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+          maplibreNsRef.current = maplibregl;
+        }
+      }
+      const Marker = maplibregl?.Marker;
+      const LngLatBounds = maplibregl?.LngLatBounds;
+      if (!Marker || !LngLatBounds) return;
       const map = mapRef.current;
 
       // Guard against race condition where map becomes null after async import
@@ -1394,7 +1454,7 @@ export function CoursePositionEditor({
           box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.4);
         `;
         pinEl.textContent = 'P';
-        const pinMarker = new maplibregl.default.Marker({ element: pinEl })
+        const pinMarker = new Marker({ element: pinEl })
           .setLngLat([startLine.pin.lng, startLine.pin.lat])
           .addTo(map);
         markersRef.current.set('start-pin', pinMarker);
@@ -1416,7 +1476,7 @@ export function CoursePositionEditor({
           box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.4);
         `;
         cbEl.textContent = 'CB';
-        const cbMarker = new maplibregl.default.Marker({ element: cbEl })
+        const cbMarker = new Marker({ element: cbEl })
           .setLngLat([startLine.committee.lng, startLine.committee.lat])
           .addTo(map);
         markersRef.current.set('start-committee', cbMarker);
@@ -1439,7 +1499,7 @@ export function CoursePositionEditor({
           box-shadow: 0 0 0 2px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.4);
         `;
         finishEl.textContent = 'F';
-        const finishMarker = new maplibregl.default.Marker({ element: finishEl })
+        const finishMarker = new Marker({ element: finishEl })
           .setLngLat([finishPos.lng, finishPos.lat])
           .addTo(map);
         markersRef.current.set('finish', finishMarker);
@@ -1462,7 +1522,7 @@ export function CoursePositionEditor({
 
         // Only add course line if we have at least 2 valid points
         if (sortedMarks.length < 2) {
-          console.warn('[CoursePositionEditor] Not enough valid marks for course line');
+          logger.warn('[CoursePositionEditor] Not enough valid marks for course line');
         } else {
           map.addSource('course-line', {
           type: 'geojson',
@@ -1531,7 +1591,7 @@ export function CoursePositionEditor({
                     : '•';
         el.textContent = label;
 
-        const marker = new maplibregl.default.Marker({
+        const marker = new Marker({
           element: el,
           draggable: true,
         })
@@ -1555,7 +1615,7 @@ export function CoursePositionEditor({
 
       // Fit bounds to show all marks
       if (validMarks.length > 0 && hasValidStartLine) {
-        const bounds = new maplibregl.default.LngLatBounds();
+        const bounds = new LngLatBounds();
         validMarks.forEach((m) => bounds.extend([m.longitude, m.latitude]));
         bounds.extend([startLine!.pin.lng, startLine!.pin.lat]);
         bounds.extend([startLine!.committee.lng, startLine!.committee.lat]);

@@ -9,6 +9,7 @@
 import { supabase } from './supabase';
 import { ScoringEngine, ScoringConfiguration, SeriesStanding, DEFAULT_LOW_POINT_CONFIG } from './scoring/ScoringEngine';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 export interface RegattaWithResults {
   id: string;
@@ -29,7 +30,18 @@ export interface ResultsPublishingOptions {
 }
 
 const logger = createLogger('ResultsService');
+type RaceResultsIdColumn = 'regatta_id' | 'race_id';
 export class ResultsService {
+  private static async withRaceResultsIdFallback<T>(
+    operation: (column: RaceResultsIdColumn) => Promise<{ data: T | null; error: any }>
+  ): Promise<{ data: T | null; error: any }> {
+    let result = await operation('regatta_id');
+    if (result.error && isMissingIdColumn(result.error, 'race_results', 'regatta_id')) {
+      result = await operation('race_id');
+    }
+    return result;
+  }
+
   /**
    * Get scoring configuration for a regatta
    */
@@ -215,23 +227,25 @@ export class ResultsService {
    * Get race results
    */
   static async getRaceResults(regattaId: string, raceNumber: number) {
-    const { data, error } = await supabase
-      .from('race_results')
-      .select(`
-        *,
-        entry:entry_id (
-          entry_number,
-          sail_number,
-          entry_class,
-          sailor:sailor_id (
-            full_name,
-            club_name
+    const { data, error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .select(`
+          *,
+          entry:entry_id (
+            entry_number,
+            sail_number,
+            entry_class,
+            sailor:sailor_id (
+              full_name,
+              club_name
+            )
           )
-        )
-      `)
-      .eq('regatta_id', regattaId)
-      .eq('race_number', raceNumber)
-      .order('finish_position');
+        `)
+        .eq(column, regattaId)
+        .eq('race_number', raceNumber)
+        .order('finish_position')
+    );
 
     if (error) throw error;
     return data || [];
@@ -367,29 +381,90 @@ export class ResultsService {
    * Notify participants of published results
    */
   private static async notifyParticipants(regattaId: string): Promise<void> {
-    // Get all participants
-    const { data: entries } = await supabase
-      .from('race_entries')
-      .select('sailor_id, sailor:sailor_id(email)')
-      .eq('regatta_id', regattaId)
-      .eq('status', 'confirmed');
+    try {
+      // Get all participants
+      const { data: entries, error: entriesError } = await supabase
+        .from('race_entries')
+        .select('sailor_id, sailor:sailor_id(email)')
+        .eq('regatta_id', regattaId)
+        .eq('status', 'confirmed');
 
-    if (!entries) return;
+      if (entriesError) {
+        throw entriesError;
+      }
+      if (!entries || entries.length === 0) return;
 
-    // Get regatta info
-    const { data: regatta } = await supabase
-      .from('regattas')
-      .select('name, venue')
-      .eq('id', regattaId)
-      .single();
+      // Get regatta info
+      const { data: regatta, error: regattaError } = await supabase
+        .from('regattas')
+        .select('name, venue')
+        .eq('id', regattaId)
+        .single();
 
-    if (!regatta) return;
+      if (regattaError || !regatta) {
+        throw regattaError || new Error('Regatta not found');
+      }
 
-    // Send notifications (would integrate with email service)
-    // For now, this is a placeholder
-    logger.debug(`Notifying ${entries.length} participants about ${regatta.name} results`);
+      const participantIds = Array.from(
+        new Set(
+          entries
+            .map((entry: any) => entry?.sailor_id)
+            .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+        )
+      );
 
-    // TODO: Integrate with EmailService or push notifications
+      if (participantIds.length === 0) return;
+
+      const message = `${regatta.name} results are now published${regatta.venue ? ` for ${regatta.venue}` : ''}.`;
+      const payload = participantIds.map((userId) => ({
+        user_id: userId,
+        type: 'results_published',
+        title: 'Results Published',
+        message,
+        data: {
+          regatta_id: regattaId,
+          regatta_name: regatta.name,
+          venue: regatta.venue || null,
+        },
+        read: false,
+      }));
+
+      const notifyResult = await supabase
+        .from('notifications')
+        .insert(payload);
+
+      if (notifyResult.error) {
+        // Fallback schema for social notifications in newer builds.
+        const fallbackPayload = participantIds.map((userId) => ({
+          user_id: userId,
+          type: 'general',
+          actor_id: null,
+          regatta_id: regattaId,
+          title: 'Results Published',
+          body: message,
+          read_at: null,
+        }));
+
+        const fallback = await supabase
+          .from('social_notifications')
+          .insert(fallbackPayload);
+
+        if (fallback.error) {
+          throw fallback.error;
+        }
+      }
+
+      logger.debug(`Created result notifications for ${participantIds.length} participants`, {
+        regattaId,
+        regattaName: regatta.name,
+      });
+    } catch (error) {
+      // Best-effort path: notification failure should not block publishing.
+      logger.warn('Failed to notify participants after results publication', {
+        regattaId,
+        error,
+      });
+    }
   }
 
   /**

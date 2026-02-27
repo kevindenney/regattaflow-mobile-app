@@ -146,7 +146,7 @@ export class RegionalWeatherService {
         this.stormGlassService.enableMockMode('configuration override');
       }
     } else {
-      console.warn('[RegionalWeatherService] No Storm Glass API key found - using simulated data. Set EXPO_PUBLIC_STORMGLASS_API_KEY in .env');
+      this.logger.warn('[RegionalWeatherService] No Storm Glass API key found - using simulated data. Set EXPO_PUBLIC_STORMGLASS_API_KEY in .env');
     }
   }
 

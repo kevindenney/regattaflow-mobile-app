@@ -65,6 +65,7 @@ import { supabase } from '@/services/supabase';
 import { RaceAnalysisService } from '@/services/RaceAnalysisService';
 import { SmartRaceCoach } from '@/components/coaching/SmartRaceCoach';
 import { QuickSkillButtons } from '@/components/coaching/QuickSkillButtons';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const { width } = Dimensions.get('window');
 
@@ -192,7 +193,6 @@ const RaceTimerProScreen = () => {
   const requestLocationPermission = async () => {
     const Location = await getLocationModule();
     if (!Location) {
-      Alert.alert('Not Available', 'GPS tracking is not available on web.');
       return false;
     }
 
@@ -304,7 +304,7 @@ const RaceTimerProScreen = () => {
         throw new Error('User not authenticated');
       }
 
-      const { data, error } = await supabase
+      const primaryInsert = await supabase
         .from('race_timer_sessions')
         .insert({
           sailor_id: user.id,
@@ -316,6 +316,26 @@ const RaceTimerProScreen = () => {
         })
         .select()
         .single();
+
+      let { data, error } = primaryInsert;
+
+      if (error && isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')) {
+        const fallbackInsert = await supabase
+          .from('race_timer_sessions')
+          .insert({
+            sailor_id: user.id,
+            race_id: null, // Legacy schema support
+            start_time: new Date().toISOString(),
+            track_points: [],
+            wind_direction: windData.direction,
+            wind_speed: windData.speed,
+          })
+          .select()
+          .single();
+
+        data = fallbackInsert.data;
+        error = fallbackInsert.error;
+      }
 
       if (error) throw error;
 

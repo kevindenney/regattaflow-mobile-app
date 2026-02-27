@@ -225,7 +225,7 @@ Skills are invoked through the Anthropic Messages API with:
 
 Skills require the following environment variable:
 ```bash
-EXPO_PUBLIC_ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 This is configured in:

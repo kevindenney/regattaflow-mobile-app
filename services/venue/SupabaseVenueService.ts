@@ -13,6 +13,9 @@ import type {
     VenueType
 } from '@/lib/types/global-venues';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SupabaseVenueService');
 
 export class SupabaseVenueService {
   private isInitialized: boolean = false;
@@ -205,10 +208,7 @@ export class SupabaseVenueService {
     try {
       const { data, error } = await supabase
         .from('sailing_venues')
-        .select(`
-          *,
-          yacht_clubs (*)
-        `)
+        .select('*')
         .order('name');
 
       if (error) {
@@ -308,7 +308,6 @@ export class SupabaseVenueService {
         .from('sailing_venues')
         .select(`
           *,
-          yacht_clubs (*),
           venue_conditions (*),
           cultural_profiles (*),
           weather_sources (*),
@@ -335,7 +334,6 @@ export class SupabaseVenueService {
         .from('sailing_venues')
         .select(`
           *,
-          yacht_clubs (*),
           venue_conditions (*),
           cultural_profiles (*),
           weather_sources (*)
@@ -369,10 +367,7 @@ export class SupabaseVenueService {
     try {
       let queryBuilder = supabase
         .from('sailing_venues')
-        .select(`
-          *,
-          yacht_clubs (*)
-        `);
+        .select('*');
 
       // Add text search
       if (query.trim()) {
@@ -702,7 +697,7 @@ export class SupabaseVenueService {
       await seedVenueDatabase();
 
     } catch (error: any) {
-      console.error('[SEED DEBUG] Failed to seed venues:', error.message);
+      logger.error('[SEED DEBUG] Failed to seed venues:', error.message);
 
       // Don't throw - allow app to continue with empty venues
 

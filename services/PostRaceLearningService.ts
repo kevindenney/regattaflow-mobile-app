@@ -2,14 +2,10 @@
  * PostRaceLearningService
  *
  * Aggregates race history to detect recurring strengths and focus areas,
- * then optionally uses Anthropic Claude Skills to generate personalized summaries.
+ * then optionally uses secure edge-function AI calls to generate personalized summaries.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import Constants from 'expo-constants';
-
 import { createLogger } from '@/lib/utils/logger';
-import { skillManagementService } from '@/services/ai/SkillManagementService';
 import { supabase } from '@/services/supabase';
 import type {
   RegattaFlowPlaybookFramework,
@@ -272,26 +268,6 @@ function deriveRecurringInsightsFromPatterns(
   }));
 }
 
-function getResolvedApiKey(): string | undefined {
-  const configExtra =
-    Constants.expoConfig?.extra ||
-    (Constants as any).manifest?.extra ||
-    (Constants as any).manifest2?.extra ||
-    {};
-
-  const envKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-
-  if (envKey && envKey !== 'placeholder') {
-    return envKey;
-  }
-
-  if (typeof configExtra?.anthropicApiKey === 'string' && configExtra.anthropicApiKey !== 'placeholder') {
-    return configExtra.anthropicApiKey;
-  }
-
-  return undefined;
-}
-
 function buildStrengthsAndFocus(patterns: PerformancePattern[]) {
   const strengths: PerformancePattern[] = [];
   const focus: PerformancePattern[] = [];
@@ -399,27 +375,7 @@ function formatInsightsForAi(insights: RecurringInsight[]) {
 }
 
 class PostRaceLearningService {
-  private anthropic: Anthropic | null = null;
-  private customSkillId: string | null = null;
-  private hasApiKey = false;
-  private skillInitializationPromise: Promise<void> | null = null;
-
-  constructor() {
-    const apiKey = getResolvedApiKey();
-    this.hasApiKey = Boolean(apiKey);
-
-    if (!apiKey) {
-      logger.info('PostRaceLearningService: Anthropic API key not configured. AI summaries disabled.');
-      return;
-    }
-
-    this.anthropic = new Anthropic({
-      apiKey,
-      dangerouslyAllowBrowser: true,
-    });
-
-    this.skillInitializationPromise = this.initializeSkill();
-  }
+  constructor() {}
 
   async getLearningProfileForUser(userId: string): Promise<LearningProfile | null> {
     try {
@@ -996,33 +952,24 @@ class PostRaceLearningService {
     };
   }
 
-  private async initializeSkill(): Promise<void> {
-    if (!this.hasApiKey) {
-      return;
+  private async invokeLearningChat(prompt: string, maxTokens: number): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Learning AI invocation failed');
     }
 
-    try {
-      const skillId = await skillManagementService.initializeRaceLearningSkill();
-      if (skillId) {
-        this.customSkillId = skillId;
-        logger.info(`PostRaceLearningService: Using race-learning-analyst skill ${skillId}`);
-      } else {
-        logger.info('PostRaceLearningService: Skill not available, using prompt-only mode');
-      }
-    } catch (error) {
-      logger.error('PostRaceLearningService: Skill initialization failed', error);
+    const text = typeof data?.text === 'string' ? data.text : '';
+    if (!text) {
+      throw new Error('Learning AI returned empty response');
     }
-  }
 
-  private async ensureSkillInitialized(): Promise<void> {
-    if (!this.hasApiKey) return;
-    if (this.customSkillId) return;
-    if (this.skillInitializationPromise) {
-      await this.skillInitializationPromise;
-      return;
-    }
-    this.skillInitializationPromise = this.initializeSkill();
-    await this.skillInitializationPromise;
+    return text;
   }
 
   /**
@@ -1033,8 +980,8 @@ class PostRaceLearningService {
     pattern: PerformancePattern,
     analyses: RaceAnalysisRecord[]
   ): Promise<string | null> {
-    if (!this.hasApiKey || !this.anthropic) {
-      // Return fallback suggestion based on pattern data
+    // Return fallback suggestion based on pattern data if AI call fails
+    const buildFallbackSuggestion = () => {
       const isStrength = pattern.average >= 4.0;
       const isFocusArea = pattern.average <= 3.0;
 
@@ -1048,9 +995,7 @@ class PostRaceLearningService {
       }
 
       return `Your ${pattern.label.toLowerCase()} performance: ${pattern.average.toFixed(1)} avg across ${pattern.sampleCount} races. ${pattern.trend === 'improving' ? 'Trending up - keep the momentum!' : pattern.trend === 'declining' ? 'Trending down - refocus on fundamentals.' : 'Stable performance.'}`;
-    }
-
-    await this.ensureSkillInitialized();
+    };
 
     try {
       const phaseLabels: Record<string, string> = {
@@ -1070,16 +1015,9 @@ class PostRaceLearningService {
         .slice(-3)
         .map(s => s.notes);
 
-      // Beta skills API disabled - format changed, container now expects string
-      const response = await this.anthropic.messages.create({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 200,
-            temperature: 0.4,
-            system: 'You are a sailing coach providing brief, specific strategic advice for a sailor planning their next race. Be encouraging but direct. Focus on actionable tactics.',
-            messages: [
-              {
-                role: 'user',
-                content: `Based on past performance, provide ONE concise strategic suggestion (2-3 sentences max) for the ${phaseLabels[phase]} phase.
+      const prompt = `You are a sailing coach providing brief, specific strategic advice for a sailor planning their next race. Be encouraging but direct. Focus on actionable tactics.
+
+Based on past performance, provide ONE concise strategic suggestion (2-3 sentences max) for the ${phaseLabels[phase]} phase.
 
 Performance data:
 - Average rating: ${pattern.average.toFixed(1)}/5.0
@@ -1089,20 +1027,13 @@ Performance data:
 
 ${pattern.average >= 4.0 ? 'This is a STRENGTH - help them leverage it.' : pattern.average <= 3.0 ? 'This is a FOCUS AREA - provide specific technique advice.' : 'Provide balanced guidance for improvement.'}
 
-Return ONLY the suggestion text, no preamble.`,
-              },
-            ],
-          });
+Return ONLY the suggestion text, no preamble.`;
 
-      const textBlocks = (response.content as Array<{ type: string; text?: string }>)
-        .filter((block) => block.type === 'text' && typeof block.text === 'string')
-        .map((block) => block.text!.trim())
-        .filter((text) => text.length > 0);
-
-      return textBlocks.join(' ').trim() || null;
+      const text = await this.invokeLearningChat(prompt, 300);
+      return text.trim() || null;
     } catch (error) {
       logger.error('PostRaceLearningService: Failed to generate phase suggestion', error);
-      return null;
+      return buildFallbackSuggestion();
     }
   }
 
@@ -1110,12 +1041,6 @@ Return ONLY the suggestion text, no preamble.`,
     profile: LearningProfile,
     analyses: RaceAnalysisRecord[]
   ): Promise<AILearningSummary | undefined> {
-    if (!this.hasApiKey || !this.anthropic) {
-      return undefined;
-    }
-
-    await this.ensureSkillInitialized();
-
     try {
       // Calculate planning and execution insights
       const planningInsights = await this.calculatePlanningInsights(profile.sailorId, analyses);
@@ -1137,9 +1062,9 @@ Return ONLY the suggestion text, no preamble.`,
         executionInsights,
       };
 
-      // Beta skills API disabled - format changed, container now expects string
-      const systemPrompt = "You are RegattaFlow's race learning analyst. Blend RegattaFlow Playbook theory with on-boat execution detail. You MUST respond with ONLY valid JSON - no explanatory text before or after the JSON object.";
-      const userPrompt = `Analyze the race data and return a JSON object with this exact structure:
+      const prompt = `You are RegattaFlow's race learning analyst. Blend RegattaFlow Playbook theory with on-boat execution detail. You MUST respond with ONLY valid JSON - no explanatory text before or after the JSON object.
+
+Analyze the race data and return a JSON object with this exact structure:
 {
   "headline": "string - concise one-line summary",
   "keepDoing": ["string array - things going well"],
@@ -1154,22 +1079,9 @@ ${JSON.stringify(payload, null, 2)}
 
 Return ONLY the JSON object, no other text.`;
 
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 900,
-        temperature: 0.35,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      });
-
-      const textBlocks = (response.content as Array<{ type: string; text?: string }>)
-        .filter((block) => block.type === 'text' && typeof block.text === 'string')
-        .map((block) => block.text!.trim())
-        .filter((text) => text.length > 0);
-
-      const combinedText = textBlocks.join('\n').trim();
+      const combinedText = await this.invokeLearningChat(prompt, 1200);
       if (!combinedText) {
-        logger.warn('PostRaceLearningService: Claude response returned no text');
+        logger.warn('PostRaceLearningService: Learning AI response returned no text');
         return undefined;
       }
 

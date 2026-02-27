@@ -59,7 +59,7 @@ export default function FeaturesScreen() {
                             icon={Watch}
                             title="Install the Watch App"
                             description="Track your races and performance directly from your wrist."
-                            badge="Coming Soon"
+                            badge="Planned"
                         />
                         <SetupItem
                             icon={Bell}

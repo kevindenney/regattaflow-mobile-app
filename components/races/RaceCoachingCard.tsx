@@ -33,17 +33,32 @@ export function RaceCoachingCard({
   debriefData,
   racePlanData,
 }: RaceCoachingCardProps) {
-  const router = useRouter();
   const { user } = useAuth();
   const {
     isLoading,
+    error,
     hasCoach,
-    hasMultipleCoaches,
     getRelevantCoach,
     getOtherCoaches,
     shouldShowCard,
     dismissCard,
   } = useRaceCoachingContext();
+
+  if (error) {
+    return (
+      <View className="mt-4 bg-amber-50 rounded-xl border border-amber-200 p-4">
+        <View className="flex-row items-start gap-3">
+          <Ionicons name="warning-outline" size={20} color="#92400E" />
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-amber-900">Coaching unavailable</Text>
+            <Text className="text-xs text-amber-800 mt-1">
+              {error.message || 'Unable to load coaching context right now.'}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   // Don't render if shouldn't show
   if (isLoading || !shouldShowCard(raceId, context)) {

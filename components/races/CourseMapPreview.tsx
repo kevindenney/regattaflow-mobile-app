@@ -7,11 +7,14 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Platform, ActivityIndicator } from 'react-native';
-import { Anchor, Edit2, MapPin, Navigation, Wind } from 'lucide-react-native';
+import { Anchor, Edit2, MapPin, Wind } from 'lucide-react-native';
 import type { PositionedCourse } from '@/types/courses';
 import { COURSE_TEMPLATES } from '@/services/CoursePositioningService';
+import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 const isWeb = Platform.OS === 'web';
+const logger = createLogger('CourseMapPreview');
 
 // Mark colors by type
 const MARK_COLORS: Record<string, string> = {
@@ -21,6 +24,30 @@ const MARK_COLORS: Record<string, string> = {
   wing: '#22c55e',
   offset: '#3b82f6',
 };
+
+const MAP_STYLE = {
+  version: 8,
+  sources: {
+    'raster-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#f8fafc' },
+    },
+    {
+      id: 'raster-layer',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: { 'raster-opacity': 0.9 },
+    },
+  ],
+} as const;
 
 interface CourseMapPreviewProps {
   course: PositionedCourse;
@@ -39,18 +66,41 @@ export function CourseMapPreview({
 }: CourseMapPreviewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   // Initialize map
   useEffect(() => {
     if (!isWeb || !mapContainerRef.current || mapRef.current) return;
 
+    let cancelled = false;
+
     const initMap = async () => {
+      let didLoad = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
       try {
         setLoading(true);
-        const maplibregl = await import('maplibre-gl');
-        await import('maplibre-gl/dist/maplibre-gl.css');
+        setMapError(null);
+        let maplibregl: any = null;
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibregl = (maplibreModule as any).default || maplibreModule;
+          try {
+            await import('maplibre-gl/dist/maplibre-gl.css');
+          } catch (_cssError) {
+            ensureMapLibreCss('maplibre-gl-css-course-map-preview');
+          }
+        } catch (_moduleError) {
+          ensureMapLibreCss('maplibre-gl-css-course-map-preview');
+          await ensureMapLibreScript('maplibre-gl-script-course-map-preview');
+          maplibregl = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        const MapConstructor = maplibregl?.Map;
+        const Marker = maplibregl?.Marker;
+        const LngLatBounds = maplibregl?.LngLatBounds;
+        if (!MapConstructor || !Marker || !LngLatBounds) {
+          throw new Error('MapLibre constructors are unavailable');
+        }
 
         // Calculate center from marks and start line
         const allLats = [
@@ -67,18 +117,30 @@ export function CourseMapPreview({
         const centerLat = (Math.min(...allLats) + Math.max(...allLats)) / 2;
         const centerLng = (Math.min(...allLngs) + Math.max(...allLngs)) / 2;
 
-        const map = new maplibregl.default.Map({
+        const map = new MapConstructor({
           container: mapContainerRef.current!,
-          style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+          style: MAP_STYLE,
           center: [centerLng, centerLat],
           zoom: 13,
           interactive: !compact, // Disable interaction in compact mode
           attributionControl: false,
         });
 
+        timeoutId = setTimeout(() => {
+          if (!didLoad && !cancelled) {
+            setMapError('Map timed out while loading. Course details remain available below.');
+            setLoading(false);
+          }
+        }, 8000);
+
         map.on('load', () => {
+          didLoad = true;
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          if (cancelled) return;
           mapRef.current = map;
-          setMapLoaded(true);
           setLoading(false);
 
           // Add course line
@@ -166,7 +228,7 @@ export function CourseMapPreview({
                       : (index + 1).toString();
             el.textContent = label;
 
-            new maplibregl.default.Marker({
+            new Marker({
               element: el,
               offset: [-(size / 2), -(size / 2)],
             })
@@ -175,7 +237,7 @@ export function CourseMapPreview({
           });
 
           // Fit bounds to show entire course
-          const bounds = new maplibregl.default.LngLatBounds();
+          const bounds = new LngLatBounds();
           course.marks.forEach((m) => bounds.extend([m.longitude, m.latitude]));
           bounds.extend([course.startLine.pin.lng, course.startLine.pin.lat]);
           bounds.extend([course.startLine.committee.lng, course.startLine.committee.lat]);
@@ -185,20 +247,37 @@ export function CourseMapPreview({
             maxZoom: 15,
           });
         });
+
+        map.on('error', () => {
+          if (cancelled) return;
+          setMapError('Unable to render map in this browser. Course summary is still available.');
+          setLoading(false);
+        });
       } catch (error) {
-        console.error('Failed to initialize preview map:', error);
+        logger.error('Failed to initialize preview map', error);
+        if (!cancelled) {
+          setMapError(
+            `Map failed to initialize: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`
+          );
+        }
         setLoading(false);
+      } finally {
+        if (timeoutId && didLoad) {
+          clearTimeout(timeoutId);
+        }
       }
     };
 
     initMap();
 
     return () => {
+      cancelled = true;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
-      setMapLoaded(false);
     };
   }, [course, compact]);
 
@@ -246,6 +325,26 @@ export function CourseMapPreview({
           >
             <ActivityIndicator size="small" color="#6366f1" />
             <Text className="text-xs text-gray-500 mt-2">Loading map...</Text>
+          </View>
+        )}
+
+        {!!mapError && (
+          <View
+            style={{
+              position: 'absolute',
+              left: 8,
+              right: 8,
+              bottom: 8,
+              backgroundColor: 'rgba(248, 250, 252, 0.95)',
+              borderWidth: 1,
+              borderColor: '#CBD5E1',
+              borderRadius: 8,
+              paddingVertical: 8,
+              paddingHorizontal: 10,
+            }}
+          >
+            <Text className="text-xs font-semibold text-slate-800">Map unavailable</Text>
+            <Text className="text-xs text-slate-600 mt-1">{mapError}</Text>
           </View>
         )}
 

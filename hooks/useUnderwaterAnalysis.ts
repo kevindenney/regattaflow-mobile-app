@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BathymetricTidalService } from '@/services/BathymetricTidalService';
 import type { UnderwaterAnalysis, UnderwaterAnalysisRequest } from '@/types/bathymetry';
 import type { SailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useUnderwaterAnalysis');
 
 interface UseUnderwaterAnalysisParams {
   racingArea?: GeoJSON.Polygon | null;
@@ -29,12 +32,14 @@ export function useUnderwaterAnalysis({
   const [analysis, setAnalysis] = useState<UnderwaterAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const runIdRef = useRef(0);
 
   const service = useMemo(() => {
     try {
       return new BathymetricTidalService();
     } catch (err) {
-      console.warn('useUnderwaterAnalysis: Unable to create BathymetricTidalService', err);
+      logger.warn('Unable to create BathymetricTidalService', err);
       return null;
     }
   }, []);
@@ -47,6 +52,13 @@ export function useUnderwaterAnalysis({
   }, [raceTime]);
 
   const available = Boolean(service && racingArea && venue);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      runIdRef.current += 1;
+    };
+  }, []);
 
   const runAnalysis = useCallback(async (): Promise<UnderwaterAnalysis | null> => {
     if (!service || !racingArea || !venue || !enabled) {
@@ -71,47 +83,52 @@ export function useUnderwaterAnalysis({
       return;
     }
 
-    let isActive = true;
+    const runId = ++runIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === runIdRef.current;
+    if (!canCommit()) return;
     setLoading(true);
     setError(null);
 
     void runAnalysis()
       .then((result) => {
-        if (!isActive) return;
+        if (!canCommit()) return;
         setAnalysis(result);
       })
       .catch((err: any) => {
-        if (!isActive) return;
+        if (!canCommit()) return;
         setAnalysis(null);
         setError(err instanceof Error ? err : new Error('Failed to analyze underwater conditions'));
       })
       .finally(() => {
-        if (!isActive) return;
+        if (!canCommit()) return;
         setLoading(false);
       });
-
-    return () => {
-      isActive = false;
-    };
   }, [available, enabled, runAnalysis]);
 
   const refetch = useCallback(async () => {
+    const runId = ++runIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === runIdRef.current;
     if (!available || !enabled) {
+      if (!canCommit()) return;
       setAnalysis(null);
       setError(null);
       return;
     }
 
+    if (!canCommit()) return;
     setLoading(true);
     setError(null);
 
     try {
       const result = await runAnalysis();
+      if (!canCommit()) return;
       setAnalysis(result);
     } catch (err: any) {
+      if (!canCommit()) return;
       setAnalysis(null);
       setError(err instanceof Error ? err : new Error('Failed to analyze underwater conditions'));
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
   }, [available, enabled, runAnalysis]);

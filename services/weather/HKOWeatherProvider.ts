@@ -20,9 +20,11 @@ import {
   ConfidenceLevel,
   TideState
 } from '@/types/environmental';
+import { createLogger } from '@/lib/utils/logger';
 
 // HKO API base URL
 const HKO_API_BASE = 'https://data.weather.gov.hk/weatherAPI/opendata';
+const logger = createLogger('HKOWeatherProvider');
 
 // HKO Tide stations relevant to sailing venues
 export const HKO_TIDE_STATIONS = {
@@ -65,7 +67,7 @@ interface HKOForecastResponse {
   forecastDesc: string;
   outlook: string;
   updateTime: string;
-  weatherForecast: Array<{
+  weatherForecast: {
     forecastDate: string;
     week: string;
     forecastWind: string; // e.g., "East force 4-5."
@@ -88,46 +90,46 @@ interface HKOForecastResponse {
     };
     ForecastIcon: number;
     PSR: string;
-  }>;
+  }[];
 }
 
 interface HKOCurrentConditionsResponse {
   rainfall: {
-    data: Array<{
+    data: {
       unit: string;
       place: string;
       max: number;
       main: string;
-    }>;
+    }[];
     startTime: string;
     endTime: string;
   };
   icon: number[];
   iconUpdateTime: string;
   uvindex: {
-    data: Array<{
+    data: {
       place: string;
       value: number;
       desc: string;
-    }>;
+    }[];
     recordDesc: string;
   };
   updateTime: string;
   temperature: {
-    data: Array<{
+    data: {
       place: string;
       value: number;
       unit: string;
-    }>;
+    }[];
     recordTime: string;
   };
   humidity: {
     recordTime: string;
-    data: Array<{
+    data: {
       unit: string;
       value: number;
       place: string;
-    }>;
+    }[];
   };
 }
 
@@ -172,7 +174,7 @@ export class HKOWeatherProvider {
       ]);
 
       if (!forecastData) {
-        console.warn('HKO: No forecast data available');
+        logger.warn('HKO: No forecast data available');
         return null;
       }
 
@@ -183,7 +185,7 @@ export class HKOWeatherProvider {
       );
 
       if (!dayForecast) {
-        console.warn(`HKO: No forecast for ${targetDate}`);
+        logger.warn(`HKO: No forecast for ${targetDate}`);
         // Use first available forecast
         const firstForecast = forecastData.weatherForecast[0];
         if (!firstForecast) return null;
@@ -193,7 +195,7 @@ export class HKOWeatherProvider {
 
       return this.buildForecast(dayForecast, currentData, marineData, targetTime);
     } catch (error) {
-      console.error('HKO Weather Provider error:', error);
+      logger.error('HKO Weather Provider error:', error);
       return null;
     }
   }
@@ -216,7 +218,7 @@ export class HKOWeatherProvider {
 
       return tideData;
     } catch (error) {
-      console.error('HKO Tide Provider error:', error);
+      logger.error('HKO Tide Provider error:', error);
       return null;
     }
   }
@@ -237,7 +239,7 @@ export class HKOWeatherProvider {
       const data: HKOForecastResponse = await response.json();
       return data;
     } catch (error) {
-      console.error('Error fetching HKO local forecast:', error);
+      logger.error('Error fetching HKO local forecast:', error);
       return null;
     }
   }
@@ -258,7 +260,7 @@ export class HKOWeatherProvider {
       const data: HKOCurrentConditionsResponse = await response.json();
       return data;
     } catch (error) {
-      console.error('Error fetching HKO current conditions:', error);
+      logger.error('Error fetching HKO current conditions:', error);
       return null;
     }
   }
@@ -279,7 +281,7 @@ export class HKOWeatherProvider {
       const data: HKOMarineForecastResponse = await response.json();
       return data;
     } catch (error) {
-      console.error('Error fetching HKO marine forecast:', error);
+      logger.error('Error fetching HKO marine forecast:', error);
       return null;
     }
   }
@@ -433,7 +435,7 @@ export class HKOWeatherProvider {
   ): Promise<TideData | null> {
     try {
       // HKO Tide prediction URL
-      const url = `https://www.hko.gov.hk/en/tide/predtide.htm?s=${station}`;
+      const _url = `https://www.hko.gov.hk/en/tide/predtide.htm?s=${station}`;
 
       // NOTE: This requires HTML scraping which is complex in React Native
       // For now, return estimated tide data based on typical Hong Kong tides
@@ -481,7 +483,7 @@ export class HKOWeatherProvider {
         current_direction: state === TideState.FLOOD ? 45 : 225 // NE flood, SW ebb (typical for HK)
       };
     } catch (error) {
-      console.error('Error fetching HKO tide data:', error);
+      logger.error('Error fetching HKO tide data:', error);
       return null;
     }
   }

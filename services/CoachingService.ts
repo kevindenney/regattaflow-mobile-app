@@ -10,6 +10,8 @@
 
 import { addDays } from 'date-fns';
 import { supabase } from './supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { createLogger } from '@/lib/utils/logger';
 import type { CoachingFeedback, FrameworkScores } from '@/types/raceAnalysis';
 import type {
   CoachProfile as MarketplaceCoachProfile,
@@ -25,6 +27,8 @@ import type {
   CoachingSession as MarketplaceCoachingSession,
   SessionReview,
 } from '@/types/coach';
+
+const logger = createLogger('CoachingService');
 
 export interface CoachProfile {
   id: string;
@@ -271,7 +275,7 @@ class CoachingService {
     if (error) {
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError || !refreshData.user) {
-        console.warn('[CoachingService] Session refresh failed:', refreshError?.message || 'No user after refresh');
+        logger.warn('[CoachingService] Session refresh failed:', refreshError?.message || 'No user after refresh');
         return null;
       }
       return refreshData.user;
@@ -303,7 +307,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error fetching coach profile:', error);
+      logger.error('Error fetching coach profile:', error);
       return null;
     }
 
@@ -406,7 +410,7 @@ class CoachingService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching coach sessions for earnings summary:', error);
+      logger.error('Error fetching coach sessions for earnings summary:', error);
       throw error;
     }
 
@@ -449,7 +453,7 @@ class CoachingService {
         .in('id', sailorIds);
 
       if (sailorsError) {
-        console.warn('[CoachingService.getCoachEarningsSummary] Failed to fetch sailor details:', sailorsError.message);
+        logger.warn('[CoachingService.getCoachEarningsSummary] Failed to fetch sailor details:', sailorsError.message);
       } else if (sailors) {
         sailorMap = new Map(sailors.map(s => [s.id, s]));
       }
@@ -612,7 +616,7 @@ class CoachingService {
     const { data: clients, error: clientsError } = await clientsQuery;
 
     if (clientsError) {
-      console.error('Error fetching clients:', clientsError);
+      logger.error('Error fetching clients:', clientsError);
       throw clientsError;
     }
 
@@ -634,7 +638,7 @@ class CoachingService {
       .in('id', sailorIds);
 
     if (sailorsError) {
-      console.error('Error fetching sailors:', sailorsError);
+      logger.error('Error fetching sailors:', sailorsError);
       // Return clients without sailor data rather than failing
       return clients as CoachingClient[];
     }
@@ -678,7 +682,7 @@ class CoachingService {
     ]);
 
     if (clientResult.error) {
-      console.error('Error fetching client:', clientResult.error);
+      logger.error('Error fetching client:', clientResult.error);
       return null;
     }
 
@@ -705,7 +709,7 @@ class CoachingService {
         .maybeSingle();
 
       if (sailorError && sailorError.code !== 'PGRST116') {
-        console.warn('[CoachingService] Failed to load sailor profile for client', sailorError);
+        logger.warn('[CoachingService] Failed to load sailor profile for client', sailorError);
       } else if (sailorData) {
         clientSailor = sailorData;
       }
@@ -713,12 +717,12 @@ class CoachingService {
 
     const sessions = sessionsResult.error ? [] : (sessionsResult.data || []);
     if (sessionsResult.error) {
-      console.warn('[CoachingService] Failed to load sessions for client', clientId, sessionsResult.error);
+      logger.warn('[CoachingService] Failed to load sessions for client', clientId, sessionsResult.error);
     }
 
     const progressMetrics = metricsResult.error ? [] : (metricsResult.data || []);
     if (metricsResult.error) {
-      console.warn('[CoachingService] Failed to load progress metrics for client', clientId, metricsResult.error);
+      logger.warn('[CoachingService] Failed to load progress metrics for client', clientId, metricsResult.error);
     }
 
     const completedSessions = sessions.filter((session: CoachingSession & { completed_at?: string }) => session.status === 'completed');
@@ -748,7 +752,8 @@ class CoachingService {
           .maybeSingle();
 
         if (sailorProfile?.id) {
-          const { data: analysisRows } = await supabase
+          let analysisRows: any[] = [];
+          const primaryAnalysis = await supabase
             .from('race_analysis')
             .select(`
               id,
@@ -763,7 +768,29 @@ class CoachingService {
             .order('created_at', { ascending: false })
             .limit(5);
 
-          const raceIds = (analysisRows || []).map(row => row.race_id).filter(Boolean);
+          if (!primaryAnalysis.error && primaryAnalysis.data) {
+            analysisRows = primaryAnalysis.data;
+          } else if (isMissingIdColumn(primaryAnalysis.error, 'race_analysis', 'race_id')) {
+            const fallbackAnalysis = await supabase
+              .from('race_analysis')
+              .select(`
+                id,
+                regatta_id,
+                created_at,
+                overall_satisfaction,
+                key_learnings,
+                ai_coaching_feedback,
+                framework_scores
+              `)
+              .eq('sailor_id', sailorProfile.id)
+              .order('created_at', { ascending: false })
+              .limit(5);
+            analysisRows = fallbackAnalysis.data || [];
+          }
+
+          const raceIds = (analysisRows || [])
+            .map((row: any) => row.race_id || row.regatta_id)
+            .filter(Boolean);
           let raceMeta = new Map<string, { race_name?: string; regatta_name?: string }>();
 
           if (raceIds.length > 0) {
@@ -782,13 +809,29 @@ class CoachingService {
                 regatta_name: race.regatta?.name,
               });
             });
+
+            // Fallback when IDs refer to regattas instead of regatta_races
+            const unresolvedRaceIds = raceIds.filter((id: string) => !raceMeta.has(id));
+            if (unresolvedRaceIds.length > 0) {
+              const { data: regattaRows } = await supabase
+                .from('regattas')
+                .select('id, name')
+                .in('id', unresolvedRaceIds);
+              regattaRows?.forEach((regatta: any) => {
+                raceMeta.set(regatta.id, {
+                  race_name: regatta.name,
+                  regatta_name: regatta.name,
+                });
+              });
+            }
           }
 
-          recentRaceAnalysis = (analysisRows || []).map(row => {
-            const meta = raceMeta.get(row.race_id) || {};
+          recentRaceAnalysis = (analysisRows || []).map((row: any) => {
+            const raceRef = row.race_id || row.regatta_id;
+            const meta = raceMeta.get(raceRef) || {};
             return {
               id: row.id,
-              race_id: row.race_id,
+              race_id: raceRef,
               created_at: row.created_at,
               overall_satisfaction: row.overall_satisfaction,
               key_learnings: row.key_learnings || [],
@@ -816,7 +859,7 @@ class CoachingService {
           .limit(5);
 
         if (strategyError) {
-          console.warn('[CoachingService] Failed to load race strategies for sailor', sailorUserId, strategyError);
+          logger.warn('[CoachingService] Failed to load race strategies for sailor', sailorUserId, strategyError);
         }
 
         if (!strategyError && strategyRows?.length) {
@@ -847,7 +890,7 @@ class CoachingService {
         }
       }
     } catch (error) {
-      console.error('Error loading shared race insights:', error);
+      logger.error('Error loading shared race insights:', error);
     }
 
     return {
@@ -908,7 +951,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching sessions:', error);
+      logger.error('Error fetching sessions:', error);
       throw error;
     }
 
@@ -934,7 +977,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error creating client:', error);
+      logger.error('Error creating client:', error);
       throw error;
     }
 
@@ -957,7 +1000,7 @@ class CoachingService {
       .limit(10);
 
     if (error) {
-      console.error('Error searching sailors:', error);
+      logger.error('Error searching sailors:', error);
       throw error;
     }
 
@@ -976,7 +1019,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error updating client:', error);
+      logger.error('Error updating client:', error);
       throw error;
     }
 
@@ -994,7 +1037,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error creating session:', error);
+      logger.error('Error creating session:', error);
       throw error;
     }
 
@@ -1013,7 +1056,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error updating session:', error);
+      logger.error('Error updating session:', error);
       throw error;
     }
 
@@ -1037,7 +1080,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error adding feedback:', error);
+      logger.error('Error adding feedback:', error);
       throw error;
     }
 
@@ -1061,7 +1104,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error adding progress metric:', error);
+      logger.error('Error adding progress metric:', error);
       throw error;
     }
 
@@ -1088,7 +1131,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching progress metrics:', error);
+      logger.error('Error fetching progress metrics:', error);
       throw error;
     }
 
@@ -1121,7 +1164,7 @@ class CoachingService {
       .limit(limit);
 
     if (error) {
-      console.error('Error fetching upcoming sessions:', error);
+      logger.error('Error fetching upcoming sessions:', error);
       throw error;
     }
 
@@ -1154,7 +1197,7 @@ class CoachingService {
       .limit(limit);
 
     if (error) {
-      console.error('Error fetching recent sessions:', error);
+      logger.error('Error fetching recent sessions:', error);
       throw error;
     }
 
@@ -1186,7 +1229,7 @@ class CoachingService {
     const { data: clients, error: clientsError } = await query;
 
     if (clientsError) {
-      console.error('Error fetching sailor coach relationships:', clientsError);
+      logger.error('Error fetching sailor coach relationships:', clientsError);
       throw clientsError;
     }
 
@@ -1208,7 +1251,7 @@ class CoachingService {
       .in('id', coachIds);
 
     if (coachesError) {
-      console.error('Error fetching coach profiles for relationships:', coachesError);
+      logger.error('Error fetching coach profiles for relationships:', coachesError);
       return clients as (CoachingClient & { coachProfile?: CoachProfile })[];
     }
 
@@ -1250,7 +1293,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error creating availability slot:', error);
+      logger.error('Error creating availability slot:', error);
       throw error;
     }
 
@@ -1282,7 +1325,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching availability slots:', error);
+      logger.error('Error fetching availability slots:', error);
       throw error;
     }
 
@@ -1316,7 +1359,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error updating availability slot:', error);
+      logger.error('Error updating availability slot:', error);
       throw error;
     }
 
@@ -1333,7 +1376,7 @@ class CoachingService {
       .eq('id', slotId);
 
     if (error) {
-      console.error('Error deleting availability slot:', error);
+      logger.error('Error deleting availability slot:', error);
       throw error;
     }
   }
@@ -1389,7 +1432,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error creating booking request:', error);
+      logger.error('Error creating booking request:', error);
       throw error;
     }
 
@@ -1450,7 +1493,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching sailor booking requests:', error);
+      logger.error('Error fetching sailor booking requests:', error);
       throw error;
     }
 
@@ -1483,7 +1526,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching sailor sessions:', error);
+      logger.error('Error fetching sailor sessions:', error);
       throw error;
     }
 
@@ -1513,7 +1556,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error fetching coach booking requests:', error);
+      logger.error('Error fetching coach booking requests:', error);
       throw error;
     }
 
@@ -1552,7 +1595,7 @@ class CoachingService {
     });
 
     if (error) {
-      console.error('Error accepting booking:', error);
+      logger.error('Error accepting booking:', error);
       throw error;
     }
 
@@ -1613,7 +1656,7 @@ class CoachingService {
           { booking_id: bookingId, session_id: data }
         );
       } catch (msgError) {
-        console.error('[acceptBookingRequest] Messaging error (non-fatal):', msgError);
+        logger.error('[acceptBookingRequest] Messaging error (non-fatal):', msgError);
       }
 
       // Send push notification to sailor
@@ -1631,7 +1674,7 @@ class CoachingService {
           'booking_requests'
         ).catch(() => {});
       } catch (pushError) {
-        console.error('[acceptBookingRequest] Push error (non-fatal):', pushError);
+        logger.error('[acceptBookingRequest] Push error (non-fatal):', pushError);
       }
     }
 
@@ -1661,7 +1704,7 @@ class CoachingService {
     });
 
     if (error) {
-      console.error('Error rejecting booking:', error);
+      logger.error('Error rejecting booking:', error);
       throw error;
     }
 
@@ -1713,7 +1756,7 @@ class CoachingService {
       .eq('id', bookingId);
 
     if (error) {
-      console.error('Error cancelling booking:', error);
+      logger.error('Error cancelling booking:', error);
       throw error;
     }
 
@@ -1822,7 +1865,7 @@ class CoachingService {
         })
       );
     } catch (error) {
-      console.error('Error notifying coaches of shared race analysis:', error);
+      logger.error('Error notifying coaches of shared race analysis:', error);
     }
   }
 
@@ -1878,7 +1921,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error discovering coaches:', error);
+      logger.error('Error discovering coaches:', error);
       throw error;
     }
 
@@ -1934,7 +1977,7 @@ class CoachingService {
     ]);
 
     if (profileResult.error) {
-      console.error('Error fetching coach profile:', profileResult.error);
+      logger.error('Error fetching coach profile:', profileResult.error);
       throw profileResult.error;
     }
 
@@ -2228,7 +2271,7 @@ class CoachingService {
   /**
    * Send cancellation emails to both parties
    */
-  private async sendCancellationEmails(sessionId: string, refundAmount: number): Promise<void> {
+  private async sendCancellationEmails(sessionId: string, _refundAmount: number): Promise<void> {
     const { data: session } = await supabase
       .from('coaching_sessions')
       .select(`
@@ -2297,7 +2340,7 @@ class CoachingService {
       .eq('id', sessionId);
 
     if (updateError) {
-      console.error('Error completing session:', updateError);
+      logger.error('Error completing session:', updateError);
       throw updateError;
     }
 
@@ -2324,7 +2367,7 @@ class CoachingService {
         session_id: sessionId,
       });
     } catch (emailError) {
-      console.error('Error sending completion emails:', emailError);
+      logger.error('Error sending completion emails:', emailError);
       // Don't throw - session is already marked complete
     }
   }
@@ -2358,7 +2401,7 @@ class CoachingService {
       .order('scheduled_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching sessions requiring completion:', error);
+      logger.error('Error fetching sessions requiring completion:', error);
       throw error;
     }
 
@@ -2379,7 +2422,7 @@ class CoachingService {
     });
 
     if (error) {
-      console.error('Error fetching coach dashboard data:', error);
+      logger.error('Error fetching coach dashboard data:', error);
       throw error;
     }
 
@@ -2396,7 +2439,7 @@ class CoachingService {
     });
 
     if (error) {
-      console.error('Error fetching sailor coaching overview:', error);
+      logger.error('Error fetching sailor coaching overview:', error);
       throw error;
     }
 
@@ -2425,7 +2468,7 @@ class CoachingService {
     });
 
     if (error) {
-      console.error('Error searching coaches:', error);
+      logger.error('Error searching coaches:', error);
       throw error;
     }
 
@@ -2465,7 +2508,7 @@ class CoachingService {
     const { data, error } = await query;
 
     if (error) {
-      console.error('Error querying sailor sessions view:', error);
+      logger.error('Error querying sailor sessions view:', error);
       throw error;
     }
 
@@ -2483,7 +2526,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('Error fetching coach metrics:', error);
+      logger.error('Error fetching coach metrics:', error);
       return null;
     }
 
@@ -2502,7 +2545,7 @@ class CoachingService {
       .limit(limit);
 
     if (error) {
-      console.error('Error fetching coach feedback:', error);
+      logger.error('Error fetching coach feedback:', error);
       throw error;
     }
 
@@ -2633,7 +2676,7 @@ class CoachingService {
 
       return coach;
     } catch (error) {
-      console.error('Error registering coach:', error);
+      logger.error('Error registering coach:', error);
       throw error;
     }
   }
@@ -2655,7 +2698,7 @@ class CoachingService {
 
       return (data as SailorProfile) ?? null;
     } catch (error) {
-      console.error('Error fetching sailor profile:', error);
+      logger.error('Error fetching sailor profile:', error);
       return null;
     }
   }
@@ -2714,7 +2757,7 @@ class CoachingService {
         reviews: reviews || []
       };
     } catch (error) {
-      console.error('Error getting coach profile:', error);
+      logger.error('Error getting coach profile:', error);
       throw error;
     }
   }
@@ -2734,7 +2777,7 @@ class CoachingService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error updating coach profile:', error);
+      logger.error('Error updating coach profile:', error);
       throw error;
     }
   }
@@ -2806,7 +2849,7 @@ class CoachingService {
       query = query.order('average_rating', { ascending: false })
                   .order('total_reviews', { ascending: false });
 
-      const { data: coaches, error, count } = await query;
+      const { data: coaches, error } = await query;
 
       if (error) throw error;
 
@@ -2840,7 +2883,7 @@ class CoachingService {
         filters_applied: filters
       };
     } catch (error) {
-      console.error('Error searching coaches:', error);
+      logger.error('Error searching coaches:', error);
       throw error;
     }
   }
@@ -2901,7 +2944,7 @@ class CoachingService {
 
       return undefined;
     } catch (error) {
-      console.error('Error getting next available slot:', error);
+      logger.error('Error getting next available slot:', error);
       return undefined;
     }
   }
@@ -2965,7 +3008,7 @@ class CoachingService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error booking session:', error);
+      logger.error('Error booking session:', error);
       throw error;
     }
   }
@@ -2990,7 +3033,7 @@ class CoachingService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error getting user sessions:', error);
+      logger.error('Error getting user sessions:', error);
       throw error;
     }
   }
@@ -3015,7 +3058,7 @@ class CoachingService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error updating session status:', error);
+      logger.error('Error updating session status:', error);
       throw error;
     }
   }
@@ -3034,7 +3077,7 @@ class CoachingService {
       if (error) throw error;
       return data;
     } catch (error) {
-      console.error('Error submitting review:', error);
+      logger.error('Error submitting review:', error);
       throw error;
     }
   }
@@ -3117,7 +3160,7 @@ class CoachingService {
         recent_reviews: recent_reviews || []
       };
     } catch (error) {
-      console.error('Error getting coach dashboard:', error);
+      logger.error('Error getting coach dashboard:', error);
       throw error;
     }
   }
@@ -3221,7 +3264,7 @@ class CoachingService {
         pending_reviews: pending_reviews || []
       };
     } catch (error) {
-      console.error('Error getting student dashboard:', error);
+      logger.error('Error getting student dashboard:', error);
       throw error;
     }
   }
@@ -3239,7 +3282,7 @@ class CoachingService {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error getting sailing specialties:', error);
+      logger.error('Error getting sailing specialties:', error);
       return [];
     }
   }
@@ -3270,7 +3313,7 @@ class CoachingService {
       .eq('status', 'active');
 
     if (clientError) {
-      console.error('[CoachingService.getSailorActiveCoaches] Error fetching clients:', clientError);
+      logger.error('[CoachingService.getSailorActiveCoaches] Error fetching clients:', clientError);
       throw clientError;
     }
 
@@ -3292,7 +3335,7 @@ class CoachingService {
       .in('id', coachIds);
 
     if (profileError) {
-      console.error('[CoachingService.getSailorActiveCoaches] Error fetching coach profiles:', profileError);
+      logger.error('[CoachingService.getSailorActiveCoaches] Error fetching coach profiles:', profileError);
       throw profileError;
     }
 
@@ -3356,7 +3399,7 @@ class CoachingService {
       .single();
 
     if (error) {
-      console.error('[CoachingService.getCoachPricing] Error:', error);
+      logger.error('[CoachingService.getCoachPricing] Error:', error);
       return null;
     }
 
@@ -3410,13 +3453,13 @@ class CoachingService {
         .eq('id', coachId);
 
       if (error) {
-        console.error('[CoachingService.updateCoachPricing] Error:', error);
+        logger.error('[CoachingService.updateCoachPricing] Error:', error);
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (err) {
-      console.error('[CoachingService.updateCoachPricing] Error:', err);
+      logger.error('[CoachingService.updateCoachPricing] Error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
@@ -3451,7 +3494,7 @@ class CoachingService {
 
       return { success: true, id: newCharge.id };
     } catch (err) {
-      console.error('[CoachingService.addCustomCharge] Error:', err);
+      logger.error('[CoachingService.addCustomCharge] Error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
@@ -3478,7 +3521,7 @@ class CoachingService {
         custom_charges: updatedCharges,
       });
     } catch (err) {
-      console.error('[CoachingService.updateCustomCharge] Error:', err);
+      logger.error('[CoachingService.updateCustomCharge] Error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
@@ -3504,7 +3547,7 @@ class CoachingService {
         custom_charges: updatedCharges,
       });
     } catch (err) {
-      console.error('[CoachingService.deleteCustomCharge] Error:', err);
+      logger.error('[CoachingService.deleteCustomCharge] Error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
@@ -3525,7 +3568,7 @@ class CoachingService {
       .order('start_time', { ascending: true });
 
     if (error) {
-      console.error('[CoachingService.getCoachWeeklyAvailability] Error:', error);
+      logger.error('[CoachingService.getCoachWeeklyAvailability] Error:', error);
       return [];
     }
 
@@ -3548,13 +3591,13 @@ class CoachingService {
         .eq('id', coachId);
 
       if (error) {
-        console.error('[CoachingService.updateAcceptingClients] Error:', error);
+        logger.error('[CoachingService.updateAcceptingClients] Error:', error);
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (err) {
-      console.error('[CoachingService.updateAcceptingClients] Error:', err);
+      logger.error('[CoachingService.updateAcceptingClients] Error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
@@ -3576,7 +3619,7 @@ class CoachingService {
       .order('start_date', { ascending: true });
 
     if (error) {
-      console.error('[CoachingService.getBlockedDates] Error:', error);
+      logger.error('[CoachingService.getBlockedDates] Error:', error);
       return [];
     }
 
@@ -3611,13 +3654,13 @@ class CoachingService {
         .single();
 
       if (error) {
-        console.error('[CoachingService.addBlockedDate] Error:', error);
+        logger.error('[CoachingService.addBlockedDate] Error:', error);
         return { success: false, error: error.message };
       }
 
       return { success: true, id: data.id };
     } catch (err) {
-      console.error('[CoachingService.addBlockedDate] Error:', err);
+      logger.error('[CoachingService.addBlockedDate] Error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
@@ -3637,13 +3680,13 @@ class CoachingService {
         .eq('id', blockedDateId);
 
       if (error) {
-        console.error('[CoachingService.deleteBlockedDate] Error:', error);
+        logger.error('[CoachingService.deleteBlockedDate] Error:', error);
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (err) {
-      console.error('[CoachingService.deleteBlockedDate] Error:', err);
+      logger.error('[CoachingService.deleteBlockedDate] Error:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   }
@@ -3663,7 +3706,7 @@ class CoachingService {
       .limit(1);
 
     if (error) {
-      console.error('[CoachingService.isDateBlocked] Error:', error);
+      logger.error('[CoachingService.isDateBlocked] Error:', error);
       return false;
     }
 
@@ -3753,7 +3796,7 @@ class CoachingService {
         .single();
 
       if (profileError || !coachProfile) {
-        console.error('[CoachingService.shareDebriefWithCoach] Error fetching coach profile:', profileError);
+        logger.error('[CoachingService.shareDebriefWithCoach] Error fetching coach profile:', profileError);
         throw new Error('Coach not found');
       }
 
@@ -3798,7 +3841,7 @@ class CoachingService {
         });
       } catch (notificationError) {
         // Notifications table may not exist, continue without error
-        console.log('[CoachingService.shareDebriefWithCoach] Notification insert skipped:', notificationError);
+        logger.info('[CoachingService.shareDebriefWithCoach] Notification insert skipped:', notificationError);
       }
 
       // Send debrief share as a message in the coach-sailor conversation
@@ -3818,10 +3861,10 @@ class CoachingService {
           }
         );
       } catch (msgError) {
-        console.error('[shareDebriefWithCoach] Messaging error (non-fatal):', msgError);
+        logger.error('[shareDebriefWithCoach] Messaging error (non-fatal):', msgError);
       }
     } catch (error) {
-      console.error('[CoachingService.shareDebriefWithCoach] Error sharing debrief:', error);
+      logger.error('[CoachingService.shareDebriefWithCoach] Error sharing debrief:', error);
       throw error;
     }
   }
@@ -3896,7 +3939,7 @@ class CoachingService {
         .eq('id', sessionId);
 
       if (updateError) {
-        console.error('[CoachingService.completeSessionWithNotes] Update error:', updateError);
+        logger.error('[CoachingService.completeSessionWithNotes] Update error:', updateError);
         return { success: false, error: updateError.message };
       }
 
@@ -3906,7 +3949,7 @@ class CoachingService {
 
       return { success: true };
     } catch (error: any) {
-      console.error('[CoachingService.completeSessionWithNotes] Error:', error);
+      logger.error('[CoachingService.completeSessionWithNotes] Error:', error);
       return { success: false, error: error.message || 'Failed to complete session' };
     }
   }
@@ -3959,7 +4002,7 @@ class CoachingService {
           homework: structuredNotes?.homework_next_steps || session.homework,
         });
       } catch (emailError) {
-        console.error('[sendSessionSummaryToSailor] Email error:', emailError);
+        logger.error('[sendSessionSummaryToSailor] Email error:', emailError);
         // Continue - we'll mark it as sent anyway
       }
 
@@ -3993,7 +4036,7 @@ class CoachingService {
           );
         }
       } catch (msgError) {
-        console.error('[sendSessionSummaryToSailor] Messaging error (non-fatal):', msgError);
+        logger.error('[sendSessionSummaryToSailor] Messaging error (non-fatal):', msgError);
       }
 
       // Send push notification to sailor
@@ -4021,7 +4064,7 @@ class CoachingService {
           ).catch(() => {});
         }
       } catch (pushError) {
-        console.error('[sendSessionSummaryToSailor] Push error (non-fatal):', pushError);
+        logger.error('[sendSessionSummaryToSailor] Push error (non-fatal):', pushError);
       }
 
       return { success: true };
@@ -4210,7 +4253,7 @@ class CoachingService {
   /**
    * Get pending booking requests with expiration info
    */
-  async getPendingBookingRequestsWithExpiration(coachId: string): Promise<Array<{
+  async getPendingBookingRequestsWithExpiration(coachId: string): Promise<{
     id: string;
     sailorId: string;
     sailorName: string;
@@ -4226,7 +4269,7 @@ class CoachingService {
       urgencyLevel: 'normal' | 'warning' | 'critical';
       displayText: string;
     };
-  }>> {
+  }[]> {
     const { data, error } = await supabase
       .from('session_bookings')
       .select(`
@@ -4299,7 +4342,7 @@ class CoachingService {
       .single();
 
     if (error || !data) {
-      console.error('[getCoachProfileForEdit] Error:', error);
+      logger.error('[getCoachProfileForEdit] Error:', error);
       return null;
     }
 
@@ -4366,13 +4409,13 @@ class CoachingService {
         .eq('id', coachId);
 
       if (error) {
-        console.error('[updateCoachProfileFull] Error:', error);
+        logger.error('[updateCoachProfileFull] Error:', error);
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (error: any) {
-      console.error('[updateCoachProfileFull] Error:', error);
+      logger.error('[updateCoachProfileFull] Error:', error);
       return { success: false, error: error.message || 'Failed to update profile' };
     }
   }
@@ -4425,7 +4468,7 @@ class CoachingService {
         });
 
       if (uploadError) {
-        console.error('[uploadProfilePhoto] Upload error:', uploadError);
+        logger.error('[uploadProfilePhoto] Upload error:', uploadError);
         return { url: null, error: uploadError.message };
       }
 
@@ -4435,7 +4478,7 @@ class CoachingService {
 
       return { url: urlData.publicUrl };
     } catch (error: any) {
-      console.error('[uploadProfilePhoto] Error:', error);
+      logger.error('[uploadProfilePhoto] Error:', error);
       return { url: null, error: error.message };
     }
   }
@@ -4482,7 +4525,7 @@ const LEGACY_TIME_BLOCKS = [
   { key: 'evening', startHour: 17, endHour: 20 },
 ] as const;
 
-function expandLegacyAvailabilitySlots(records: Record<string, any>[], startDate?: Date, endDate?: Date) {
+function _expandLegacyAvailabilitySlots(records: Record<string, any>[], startDate?: Date, endDate?: Date) {
   if (!records.length) {
     return [];
   }

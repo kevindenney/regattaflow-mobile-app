@@ -8,33 +8,35 @@
 import React from 'react';
 import { Platform, TurboModuleRegistry } from 'react-native';
 import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SwellOverlay');
 
 // Conditional imports for native only
 let Marker: any = null;
-let mapsAvailable = false;
 
 // Check if native module is registered BEFORE requiring react-native-maps
 if (Platform.OS !== 'web') {
   try {
     const nativeModule = TurboModuleRegistry.get('RNMapsAirModule');
     if (nativeModule) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const maps = require('react-native-maps');
       Marker = maps.Marker;
-      mapsAvailable = true;
     }
   } catch (e) {
-    console.warn('[SwellOverlay] react-native-maps not available:', e);
+    logger.warn('react-native-maps not available', e);
   }
 }
 
-interface Region {
+export interface Region {
   latitude: number;
   longitude: number;
   latitudeDelta: number;
   longitudeDelta: number;
 }
 
-interface SwellConditions {
+export interface SwellConditions {
   primarySwell: {
     height: number; // meters
     period: number; // seconds
@@ -205,7 +207,12 @@ export const SwellOverlay: React.FC<SwellOverlayProps> = ({
   const positions = generateSwellArrowGrid(region);
 
   if (Platform.OS === 'web') {
-    // Web version - TODO: Implement MapLibre layer
+    // Web rendering is provided through getSwellLayerSpec() for map engines.
+    return null;
+  }
+
+  if (!Marker) {
+    logger.warn('Swell overlay unavailable: react-native-maps Marker is not registered');
     return null;
   }
 
@@ -234,9 +241,201 @@ export const SwellOverlay: React.FC<SwellOverlayProps> = ({
  */
 export function getSwellLayerSpec(
   conditions: SwellConditions,
-  region: Region
+  region: Region,
+  showSecondary: boolean = true
 ): any[] {
-  // TODO: Implement MapLibre GL layer spec for web platform
-  // This would use symbols with rotation and sizing based on swell data
-  return [];
+  if (!conditions || conditions.primarySwell.height < 0.2) {
+    return [];
+  }
+
+  const positions = generateSwellArrowGrid(region);
+  const swellFeatures = positions.map((position, index) => ({
+    type: 'Feature' as const,
+    id: `swell-${index}`,
+    geometry: {
+      type: 'Point' as const,
+      coordinates: [position.longitude, position.latitude],
+    },
+    properties: {
+      primaryDirection: Number(conditions.primarySwell.direction) || 0,
+      primaryHeight: Number(conditions.primarySwell.height) || 0,
+      primaryPeriod: Number(conditions.primarySwell.period) || 0,
+      secondaryDirection: Number(conditions.secondarySwell?.direction) || 0,
+      secondaryHeight: Number(conditions.secondarySwell?.height) || 0,
+      secondaryPeriod: Number(conditions.secondarySwell?.period) || 0,
+      showSecondary: showSecondary ? 1 : 0,
+      // Keep these as plain strings so map text-field can consume directly.
+      primaryHeightLabel: `${conditions.primarySwell.height.toFixed(1)}m`,
+      primaryPeriodLabel: `${conditions.primarySwell.period.toFixed(0)}s`,
+      secondaryHeightLabel: conditions.secondarySwell
+        ? `${conditions.secondarySwell.height.toFixed(1)}m`
+        : '',
+      primaryArrowGlyph: '▲',
+      secondaryArrowGlyph: '△',
+    },
+  }));
+
+  const source = {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: swellFeatures,
+    },
+  };
+
+  const primaryArrowLayer = {
+    id: 'swell-primary-arrow',
+    type: 'symbol',
+    source,
+    layout: {
+      'text-field': ['get', 'primaryArrowGlyph'],
+      'text-size': [
+        'interpolate',
+        ['linear'],
+        ['get', 'primaryHeight'],
+        0.2,
+        12,
+        1.5,
+        18,
+        3.5,
+        24,
+      ],
+      // Convert incoming direction to visual "arrow points toward swell direction".
+      'text-rotate': ['+', ['get', 'primaryDirection'], 180],
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+    },
+    paint: {
+      'text-color': [
+        'step',
+        ['get', 'primaryHeight'],
+        '#4A90E2',
+        1,
+        '#2E7BCF',
+        2,
+        '#1E5FA3',
+        3,
+        '#0D3D6B',
+      ],
+      'text-opacity': [
+        'interpolate',
+        ['linear'],
+        ['get', 'primaryHeight'],
+        0.2,
+        0.35,
+        3.5,
+        0.95,
+      ],
+      'text-halo-color': '#0B1F33',
+      'text-halo-width': 0.75,
+    },
+  };
+
+  const primaryHeightLabelLayer = {
+    id: 'swell-primary-height-label',
+    type: 'symbol',
+    source,
+    layout: {
+      'text-field': ['get', 'primaryHeightLabel'],
+      'text-size': 10,
+      'text-offset': [0, 1.4],
+      'text-anchor': 'top',
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+    },
+    paint: {
+      'text-color': '#D6E6F7',
+      'text-halo-color': '#0B1F33',
+      'text-halo-width': 1,
+      'text-opacity': 0.85,
+    },
+  };
+
+  const primaryPeriodLabelLayer = {
+    id: 'swell-primary-period-label',
+    type: 'symbol',
+    source,
+    layout: {
+      'text-field': ['get', 'primaryPeriodLabel'],
+      'text-size': 9,
+      'text-offset': [1.2, -1.2],
+      'text-anchor': 'left',
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
+    },
+    paint: {
+      'text-color': '#B7CCE6',
+      'text-halo-color': '#0B1F33',
+      'text-halo-width': 1,
+      'text-opacity': 0.8,
+    },
+  };
+
+  const secondaryLayers =
+    showSecondary && conditions.secondarySwell && conditions.secondarySwell.height > 0.3
+      ? [
+          {
+            id: 'swell-secondary-arrow',
+            type: 'symbol',
+            source,
+            layout: {
+              'text-field': ['get', 'secondaryArrowGlyph'],
+              'text-size': [
+                'interpolate',
+                ['linear'],
+                ['get', 'secondaryHeight'],
+                0.3,
+                9,
+                1.5,
+                14,
+                3,
+                18,
+              ],
+              'text-rotate': ['+', ['get', 'secondaryDirection'], 180],
+              'text-allow-overlap': true,
+              'text-ignore-placement': true,
+            },
+            paint: {
+              'text-color': [
+                'step',
+                ['get', 'secondaryHeight'],
+                '#8BC34A',
+                1,
+                '#66BB6A',
+                2,
+                '#43A047',
+              ],
+              'text-opacity': 0.7,
+              'text-halo-color': '#0B1F33',
+              'text-halo-width': 0.75,
+            },
+          },
+          {
+            id: 'swell-secondary-height-label',
+            type: 'symbol',
+            source,
+            layout: {
+              'text-field': ['get', 'secondaryHeightLabel'],
+              'text-size': 8,
+              'text-offset': [0, -1.8],
+              'text-anchor': 'bottom',
+              'text-allow-overlap': true,
+              'text-ignore-placement': true,
+            },
+            paint: {
+              'text-color': '#D6F2D6',
+              'text-halo-color': '#0B1F33',
+              'text-halo-width': 1,
+              'text-opacity': 0.75,
+            },
+          },
+        ]
+      : [];
+
+  return [
+    primaryArrowLayer,
+    primaryHeightLabelLayer,
+    primaryPeriodLabelLayer,
+    ...secondaryLayers,
+  ];
 }

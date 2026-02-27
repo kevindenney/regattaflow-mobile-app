@@ -46,11 +46,11 @@ Expert frameworks from RegattaFlow Playbook, RegattaFlow Coach, Hans Fogh, Kevin
 async function uploadRaceStrategySkill() {
   console.log('🏁 Uploading race-strategy-analyst Claude Skill\n');
 
-  const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
     console.error('❌ No API key found in .env file');
-    console.error('   Please set EXPO_PUBLIC_ANTHROPIC_API_KEY in your .env file');
+    console.error('   Please set ANTHROPIC_API_KEY in your .env file');
     process.exit(1);
   }
 

@@ -1,52 +1,28 @@
 /**
- * Learn Tab - Racing Academy Course Catalog
- * Redesigned: slim banner, flat filter chips, progress rings, learning stats
+ * Learn Tab - BetterAt Course Catalog
+ * Database-backed courses for all interests (sailing, nursing, drawing, fitness).
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import CourseCatalogService, { type Course } from '@/services/CourseCatalogService';
 import { IOS_COLORS } from '@/components/cards/constants';
-import { CourseRow } from '@/components/learn/CourseRow';
 import { CoachesContent } from '@/components/learn/CoachesContent';
-import { InProgressBanner } from '@/components/learn/InProgressBanner';
-import { LearningStatsBar } from '@/components/learn/LearningStatsBar';
-import { FilterChipStrip } from '@/components/learn/FilterChipStrip';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
-
-// Mock progress data - in production this would come from LessonProgressService
-interface CourseProgress {
-  courseId: string;
-  progress: number;
-  currentModuleIndex: number;
-  lastAccessedTitle?: string;
-}
-
-const MOCK_PROGRESS: Record<string, CourseProgress> = {
-  'winning-starts-first-beats': {
-    courseId: 'winning-starts-first-beats',
-    progress: 65,
-    currentModuleIndex: 1,
-    lastAccessedTitle: 'Fleet Positioning Strategy',
-  },
-  'racing-rules-fundamentals': {
-    courseId: 'racing-rules-fundamentals',
-    progress: 100,
-    currentModuleIndex: 2,
-  },
-};
+import { useInterest } from '@/providers/InterestProvider';
+import { useCourses, type BetterAtCourse } from '@/hooks/useBetterAtCourses';
 
 type LearnSegment = 'courses' | 'coaches';
 
@@ -62,102 +38,20 @@ export default function LearnScreen() {
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
   const [activeSegment, setActiveSegment] = useState<LearnSegment>('courses');
-  const [activeFilter, setActiveFilter] = useState<string>('all');
 
   const isDesktop = mounted && width > 768;
 
-  // Get data from catalog service
-  const levels = CourseCatalogService.getLevels();
-  const topics = CourseCatalogService.getTopics();
+  const { currentInterest } = useInterest();
+  const { data: betterAtCourses, isLoading: betterAtLoading } = useCourses();
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // All courses
-  const allCourses = useMemo(() => CourseCatalogService.getAllCourses(), []);
-
-  // Filtered courses based on active filter chip
-  const filteredCourses = useMemo(() => {
-    if (activeFilter === 'all') return allCourses;
-
-    // Check if it's a level filter
-    const level = levels.find((l) => l.id === activeFilter);
-    if (level) return level.courses;
-
-    // Otherwise it's a topic filter
-    return CourseCatalogService.getCoursesByTopic(activeFilter);
-  }, [activeFilter, allCourses, levels]);
-
-  // Derive section header from active filter
-  const sectionInfo = useMemo(() => {
-    if (activeFilter === 'all') {
-      return { title: 'ALL COURSES', count: allCourses.length };
-    }
-    const level = levels.find((l) => l.id === activeFilter);
-    if (level) {
-      return { title: level.name.toUpperCase(), count: level.courses.length };
-    }
-    const topic = topics.find((t) => t.id === activeFilter);
-    if (topic) {
-      const courses = CourseCatalogService.getCoursesByTopic(activeFilter);
-      return { title: topic.label.toUpperCase(), count: courses.length };
-    }
-    return { title: 'COURSES', count: filteredCourses.length };
-  }, [activeFilter, allCourses, levels, topics, filteredCourses]);
-
-  // Find the in-progress course to feature
-  const inProgressCourse = useMemo(() => {
-    const inProgressSlug = Object.entries(MOCK_PROGRESS).find(
-      ([, progress]) => progress.progress > 0 && progress.progress < 100
-    )?.[0];
-    return inProgressSlug ? allCourses.find(c => c.slug === inProgressSlug) : undefined;
-  }, [allCourses]);
-  const inProgressCourseProgress = inProgressCourse
-    ? MOCK_PROGRESS[inProgressCourse.slug]
-    : undefined;
-
-  // Compute learning stats from MOCK_PROGRESS
-  const learningStats = useMemo(() => {
-    const entries = Object.values(MOCK_PROGRESS);
-    const started = entries.filter(e => e.progress > 0).length;
-    const completed = entries.filter(e => e.progress === 100).length;
-
-    // Estimate remaining hours from unfinished courses
-    const unfinishedSlugs = entries
-      .filter(e => e.progress > 0 && e.progress < 100)
-      .map(e => e.courseId);
-    const remainingHours = allCourses
-      .filter(c => unfinishedSlugs.includes(c.slug))
-      .reduce((sum, c) => {
-        const progress = MOCK_PROGRESS[c.slug];
-        const remainingFraction = 1 - (progress?.progress || 0) / 100;
-        return sum + c.duration.estimatedHours * remainingFraction;
-      }, 0);
-
-    return {
-      coursesStarted: started,
-      totalCourses: allCourses.length,
-      coursesCompleted: completed,
-      estimatedHoursRemaining: Math.round(remainingHours),
-    };
-  }, [allCourses]);
-
-  // Build chip data from levels and topics
-  const levelChips = useMemo(
-    () => levels.map((l) => ({ id: l.id, label: l.name })),
-    [levels]
-  );
-  const topicChips = useMemo(
-    () => topics.map((t) => ({ id: t.id, label: t.label, icon: t.icon })),
-    [topics]
-  );
-
-  // Navigation handlers
-  const handleCoursePress = (course: Course) => {
+  const handleBetterAtCoursePress = (course: BetterAtCourse) => {
     router.push({
       pathname: '/(tabs)/learn/[courseId]',
-      params: { courseId: course.slug },
+      params: { courseId: course.id },
     });
   };
 
@@ -167,70 +61,65 @@ export default function LearnScreen() {
       {activeSegment === 'courses' ? (
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView} contentContainerStyle={[styles.scrollContent, { paddingTop: toolbarHeight }]} onScroll={handleToolbarScroll} scrollEventThrottle={16}>
           <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-            {/* 1. In-Progress Banner (slim replacement for InProgressCard) */}
-            {inProgressCourse && inProgressCourseProgress && (
-              <InProgressBanner
-                course={inProgressCourse}
-                progress={inProgressCourseProgress.progress}
-                currentModuleIndex={inProgressCourseProgress.currentModuleIndex}
-                lastAccessedTitle={inProgressCourseProgress.lastAccessedTitle}
-                onContinue={() => handleCoursePress(inProgressCourse)}
-                onPress={() => handleCoursePress(inProgressCourse)}
-              />
-            )}
-
-            {/* 2. Learning Stats Bar */}
-            <LearningStatsBar
-              coursesStarted={learningStats.coursesStarted}
-              totalCourses={learningStats.totalCourses}
-              coursesCompleted={learningStats.coursesCompleted}
-              estimatedHoursRemaining={learningStats.estimatedHoursRemaining}
-            />
-
-            {/* 3. Filter Chip Strip */}
-            <FilterChipStrip
-              activeChipId={activeFilter}
-              onChipSelect={setActiveFilter}
-              levels={levelChips}
-              topics={topicChips}
-            />
-
-            {/* 4. iOS Section Header */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>
-                {sectionInfo.title}
-              </Text>
-              <Text style={styles.sectionCount}>
-                {sectionInfo.count}
-              </Text>
-            </View>
-
-            {/* 5. Course List */}
-            <View style={styles.coursesList}>
-              {filteredCourses.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Ionicons name="book-outline" size={32} color={IOS_COLORS.gray3} />
-                  <Text style={styles.emptyText}>
-                    No courses yet for this filter
+            {betterAtLoading ? (
+              <View style={styles.betterAtLoading}>
+                <ActivityIndicator size="large" color={currentInterest?.accent_color || IOS_COLORS.systemBlue} />
+              </View>
+            ) : !betterAtCourses || betterAtCourses.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="book-outline" size={32} color={IOS_COLORS.gray3} />
+                <Text style={styles.emptyText}>No courses available yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Courses for {currentInterest?.name || 'this interest'} are coming soon
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionLabel}>
+                    {(currentInterest?.name || 'COURSES').toUpperCase()}
                   </Text>
-                  <Text style={styles.emptySubtext}>
-                    New courses are added regularly
-                  </Text>
+                  <Text style={styles.sectionCount}>{betterAtCourses.length}</Text>
                 </View>
-              ) : (
-                filteredCourses
-                  .filter(course => course.slug !== inProgressCourse?.slug)
-                  .map((course) => (
-                    <CourseRow
+                <View style={styles.coursesList}>
+                  {betterAtCourses.map((course) => (
+                    <TouchableOpacity
                       key={course.id}
-                      course={course}
-                      progress={MOCK_PROGRESS[course.slug]?.progress}
-                      isInProgress={MOCK_PROGRESS[course.slug]?.progress !== undefined && MOCK_PROGRESS[course.slug]?.progress < 100}
-                      onPress={() => handleCoursePress(course)}
-                    />
-                  ))
-              )}
-            </View>
+                      style={styles.betterAtCourseRow}
+                      onPress={() => handleBetterAtCoursePress(course)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[
+                        styles.betterAtCourseAccent,
+                        { backgroundColor: currentInterest?.accent_color || '#003DA5' },
+                      ]} />
+                      <View style={styles.betterAtCourseInfo}>
+                        <Text style={styles.betterAtCourseTitle}>{course.title}</Text>
+                        {course.description && (
+                          <Text style={styles.betterAtCourseDesc} numberOfLines={2}>
+                            {course.description}
+                          </Text>
+                        )}
+                        <View style={styles.betterAtCourseMeta}>
+                          <Text style={styles.betterAtCourseLevel}>{course.level}</Text>
+                          <Text style={styles.betterAtCourseMetaSep}>·</Text>
+                          <Text style={styles.betterAtCourseLessons}>
+                            {course.lesson_count} {course.lesson_count === 1 ? 'lesson' : 'lessons'}
+                          </Text>
+                          {course.topic && (
+                            <>
+                              <Text style={styles.betterAtCourseMetaSep}>·</Text>
+                              <Text style={styles.betterAtCourseTopic}>{course.topic}</Text>
+                            </>
+                          )}
+                        </View>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.tertiaryLabel} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
           </View>
         </ScrollView>
       ) : (
@@ -246,7 +135,7 @@ export default function LearnScreen() {
           {
             icon: 'bookmark-outline',
             label: 'Saved courses',
-            onPress: () => Alert.alert('Saved', 'Saved courses coming soon'),
+            onPress: () => router.push('/(tabs)/my-learning'),
           },
         ]}
         onMeasuredHeight={setToolbarHeight}
@@ -332,5 +221,62 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 13,
     color: IOS_COLORS.tertiaryLabel,
+  },
+  // BetterAt DB-backed course styles
+  betterAtLoading: {
+    paddingVertical: 64,
+    alignItems: 'center',
+  },
+  betterAtCourseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  betterAtCourseAccent: {
+    width: 4,
+    height: '80%',
+    borderRadius: 2,
+    marginRight: 12,
+  },
+  betterAtCourseInfo: {
+    flex: 1,
+  },
+  betterAtCourseTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 3,
+  },
+  betterAtCourseDesc: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  betterAtCourseMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  betterAtCourseLevel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    textTransform: 'capitalize',
+  },
+  betterAtCourseMetaSep: {
+    fontSize: 11,
+    color: '#CBD5E1',
+  },
+  betterAtCourseLessons: {
+    fontSize: 11,
+    color: '#64748B',
+  },
+  betterAtCourseTopic: {
+    fontSize: 11,
+    color: '#64748B',
   },
 });

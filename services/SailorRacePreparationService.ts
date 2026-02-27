@@ -110,13 +110,13 @@ class SailorRacePreparationService {
       .maybeSingle();
 
     if (regattaCheckError) {
-      console.error('[SailorRacePreparationService] Error checking regatta existence:', regattaCheckError);
+      logger.error('[SailorRacePreparationService] Error checking regatta existence:', regattaCheckError);
       logger.error('Error checking regatta existence:', regattaCheckError);
       return null;
     }
 
     if (!regattaExists) {
-      console.warn('[SailorRacePreparationService] Regatta does not exist:', preparation.regatta_id);
+      logger.warn('[SailorRacePreparationService] Regatta does not exist:', preparation.regatta_id);
       logger.info(`Regatta ${preparation.regatta_id} does not exist, skipping upsert`);
       return null;
     }
@@ -166,7 +166,7 @@ class SailorRacePreparationService {
         return null; // Return null instead of throwing for FK errors
       }
 
-      console.error('[SailorRacePreparationService] Supabase upsert error:', {
+      logger.error('[SailorRacePreparationService] Supabase upsert error:', {
         code: error.code,
         message: error.message,
         details: error.details,

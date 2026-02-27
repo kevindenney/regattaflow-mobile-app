@@ -56,6 +56,27 @@ export interface LocationContext {
 
 const logger = createLogger('SailingNetworkService');
 export class SailingNetworkService {
+  private static createTaggedError(code: string, message: string, cause?: unknown): Error {
+    const tagged = new Error(`[${code}] ${message}`);
+    (tagged as any).code = code;
+    if (cause !== undefined) {
+      (tagged as any).cause = cause;
+    }
+    return tagged;
+  }
+
+  private static isMissingRelation(error: any): boolean {
+    return Boolean(
+      error &&
+      (error.code === '42P01' || (typeof error.message === 'string' && error.message.includes('does not exist')))
+    );
+  }
+
+  private static isTimeoutError(error: unknown): boolean {
+    const message = (error as any)?.message;
+    return typeof message === 'string' && message.toLowerCase().includes('timed out');
+  }
+
   /**
    * Get user's saved network for a specific location
    */
@@ -95,7 +116,7 @@ export class SailingNetworkService {
       data = viewResult.data;
 
       // If view doesn't exist, fall back to direct saved_venues query
-      if (error && (error.code === '42P01' || error.message?.includes('does not exist'))) {
+      if (error && this.isMissingRelation(error)) {
         logger.warn('saved_venues_with_details view not found, using fallback query');
         
         let fallbackQuery = supabase
@@ -114,8 +135,15 @@ export class SailingNetworkService {
 
         if (fallbackResult.error) {
           // If saved_venues table also doesn't exist, return empty
-          logger.debug('saved_venues table not found, returning empty network');
-          return [];
+          if (this.isMissingRelation(fallbackResult.error)) {
+            logger.debug('saved_venues table not found, returning empty network');
+            return [];
+          }
+          throw this.createTaggedError(
+            'NETWORK_SAVED_LOOKUP_FAILED',
+            fallbackResult.error.message || 'Failed to load saved venues',
+            fallbackResult.error
+          );
         }
 
         // Map fallback data (without venue details)
@@ -140,8 +168,11 @@ export class SailingNetworkService {
       }
 
       if (error) {
-        logger.error('Failed to get network:', error);
-        return []; // Return empty array instead of throwing
+        throw this.createTaggedError(
+          'NETWORK_SAVED_LOOKUP_FAILED',
+          error.message || 'Failed to load network',
+          error
+        );
       }
 
       return (data || []).map(item => ({
@@ -163,13 +194,13 @@ export class SailingNetworkService {
         isHomeVenue: item.is_home_venue,
       }));
     } catch (error: any) {
-      // Handle timeout or other errors gracefully
-      if (error.message?.includes('timed out')) {
-        logger.warn('getMyNetwork timed out, returning empty array');
-      } else {
-        logger.error('getMyNetwork failed:', error);
+      if (this.isTimeoutError(error)) {
+        throw this.createTaggedError('NETWORK_TIMEOUT', 'Saved places request timed out.', error);
       }
-      return [];
+      if ((error as any)?.code) {
+        throw error;
+      }
+      throw this.createTaggedError('NETWORK_SAVED_LOOKUP_FAILED', 'Failed to load saved places.', error);
     }
   }
 
@@ -191,7 +222,7 @@ export class SailingNetworkService {
 
       const authPromise = supabase.auth.getUser();
       const { data: { user } } = await Promise.race([authPromise, timeoutPromise]) as any;
-      if (!user) throw new Error('User not authenticated');
+      if (!user) throw this.createTaggedError('NETWORK_UNAUTHENTICATED', 'User not authenticated');
 
       // Get saved venue IDs to exclude from discovery
       const savedVenuesPromise = supabase
@@ -215,7 +246,13 @@ export class SailingNetworkService {
 
       const { data, error } = await Promise.race([query, timeoutPromise]) as any;
 
-      if (error) throw error;
+      if (error) {
+        throw this.createTaggedError(
+          'NETWORK_DISCOVERY_QUERY_FAILED',
+          error.message || 'Failed to discover venues',
+          error
+        );
+      }
 
       // Filter out already saved venues
       const unsavedVenues = (data || [])
@@ -238,12 +275,13 @@ export class SailingNetworkService {
 
       return unsavedVenues;
     } catch (error: any) {
-      if (error.message?.includes('timed out')) {
-        logger.warn('discoverInLocation timed out, returning empty array');
-      } else {
-        logger.error('discoverInLocation failed:', error);
+      if (this.isTimeoutError(error)) {
+        throw this.createTaggedError('NETWORK_TIMEOUT', 'Venue discovery request timed out.', error);
       }
-      return [];
+      if ((error as any)?.code) {
+        throw error;
+      }
+      throw this.createTaggedError('NETWORK_DISCOVERY_QUERY_FAILED', 'Failed to discover places.', error);
     }
   }
 
@@ -335,8 +373,14 @@ export class SailingNetworkService {
       const { data, error } = await Promise.race([rpcPromise, timeoutPromise]) as any;
 
       if (error) {
-        logger.error('Failed to get locations:', error);
-        return []; // Return empty array instead of throwing
+        if (this.isMissingRelation(error)) {
+          return [];
+        }
+        throw this.createTaggedError(
+          'NETWORK_LOCATIONS_LOOKUP_FAILED',
+          error.message || 'Failed to load locations',
+          error
+        );
       }
 
       const mapped = (data || []).map((item: any) => ({
@@ -349,12 +393,13 @@ export class SailingNetworkService {
 
       return mapped;
     } catch (error: any) {
-      if (error.message?.includes('timed out')) {
-        logger.warn('getMyLocations timed out, returning empty array');
-      } else {
-        logger.error('getMyLocations failed:', error);
+      if (this.isTimeoutError(error)) {
+        throw this.createTaggedError('NETWORK_TIMEOUT', 'Locations request timed out.', error);
       }
-      return [];
+      if ((error as any)?.code) {
+        throw error;
+      }
+      throw this.createTaggedError('NETWORK_LOCATIONS_LOOKUP_FAILED', 'Failed to load locations.', error);
     }
   }
 
@@ -384,8 +429,14 @@ export class SailingNetworkService {
       const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
       if (error) {
-        logger.error('Failed to get current location context:', error);
-        return null; // Return null instead of throwing to prevent app crash
+        if (this.isMissingRelation(error)) {
+          return null;
+        }
+        throw this.createTaggedError(
+          'NETWORK_LOCATION_CONTEXT_FAILED',
+          error.message || 'Failed to load current location context',
+          error
+        );
       }
       if (!data) {
         return null;
@@ -403,12 +454,17 @@ export class SailingNetworkService {
 
       return result;
     } catch (error: any) {
-      if (error.message?.includes('timed out')) {
-        logger.warn('getCurrentLocationContext timed out, returning null');
-      } else {
-        logger.error('getCurrentLocationContext failed:', error);
+      if (this.isTimeoutError(error)) {
+        throw this.createTaggedError('NETWORK_TIMEOUT', 'Current location request timed out.', error);
       }
-      return null;
+      if ((error as any)?.code) {
+        throw error;
+      }
+      throw this.createTaggedError(
+        'NETWORK_LOCATION_CONTEXT_FAILED',
+        'Failed to load current location context.',
+        error
+      );
     }
   }
 
@@ -474,7 +530,7 @@ export class SailingNetworkService {
     } catch (error: any) {
       // Silent fail if already saved - this is auto-save, not critical
       if (!error.message?.includes('already saved')) {
-        console.error('Auto-save failed:', error);
+        logger.error('Auto-save failed:', error);
       }
     }
   }

@@ -4,6 +4,10 @@
  */
 
 import { supabase } from './supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('HandicapService');
 
 // ============================================================================
 // TYPES
@@ -126,6 +130,22 @@ export interface CalculateCorrectedInput {
 // ============================================================================
 
 class HandicapService {
+  private raceResultsIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
+
+  private async withRaceResultsIdFallback<T>(
+    operation: (column: 'regatta_id' | 'race_id') => Promise<{ data: T | null; error: any }>
+  ): Promise<{ data: T | null; error: any }> {
+    const current = this.raceResultsIdColumn;
+    let result = await operation(current);
+    if (result.error && current === 'regatta_id' && isMissingIdColumn(result.error, 'race_results', current)) {
+      result = await operation('race_id');
+      if (!result.error) {
+        this.raceResultsIdColumn = 'race_id';
+      }
+    }
+
+    return result;
+  }
 
   // -------------------------------------------------------------------------
   // HANDICAP SYSTEMS
@@ -418,19 +438,21 @@ class HandicapService {
     if (!system) throw new Error(`Unknown system: ${systemCode}`);
 
     // Get race results with elapsed times
-    const { data: raceResults, error: resultsError } = await supabase
-      .from('race_results')
-      .select(`
-        *,
-        race_entries!inner(
-          sail_number,
-          boat_name,
-          skipper_name
-        )
-      `)
-      .eq('regatta_id', regattaId)
-      .eq('race_number', raceNumber)
-      .not('elapsed_time', 'is', null);
+    const { data: raceResults, error: resultsError } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .select(`
+          *,
+          race_entries!inner(
+            sail_number,
+            boat_name,
+            skipper_name
+          )
+        `)
+        .eq(column, regattaId)
+        .eq('race_number', raceNumber)
+        .not('elapsed_time', 'is', null)
+    );
 
     if (resultsError) throw resultsError;
     if (!raceResults || raceResults.length === 0) {
@@ -446,7 +468,7 @@ class HandicapService {
       // Get rating for this boat
       const rating = await this.getBoatRating(sailNumber, system.id);
       if (!rating) {
-        console.warn(`No rating found for ${sailNumber} in ${systemCode}`);
+        logger.warn(`No rating found for ${sailNumber} in ${systemCode}`);
         continue;
       }
 
@@ -529,11 +551,13 @@ class HandicapService {
     courseDistanceNm?: number
   ): Promise<{ races: number; results: number }> {
     // Get all race numbers
-    const { data: races, error } = await supabase
-      .from('race_results')
-      .select('race_number')
-      .eq('regatta_id', regattaId)
-      .not('elapsed_time', 'is', null);
+    const { data: races, error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .select('race_number')
+        .eq(column, regattaId)
+        .not('elapsed_time', 'is', null)
+    );
 
     if (error) throw error;
 
@@ -745,4 +769,3 @@ class HandicapService {
 // Export singleton
 export const handicapService = new HandicapService();
 export default HandicapService;
-

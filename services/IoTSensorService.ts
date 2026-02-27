@@ -156,7 +156,7 @@ export class IoTSensorService {
 
       logger.debug(`Initialized ${this.connectedSensors.size} sensors for boat ${boatId}`);
     } catch (error) {
-      console.error('Error initializing sensors:', error);
+      logger.error('Error initializing sensors:', error);
       throw error;
     }
   }
@@ -211,7 +211,7 @@ export class IoTSensorService {
 
       logger.debug(`Saved ${allData.length} sensor data points`);
     } catch (error) {
-      console.error('Error saving sensor data:', error);
+      logger.error('Error saving sensor data:', error);
       throw error;
     }
   }
@@ -225,18 +225,12 @@ export class IoTSensorService {
         return this.generateSimulatedTelemetry();
       }
 
-      const now = Date.now();
-      const telemetry: Partial<BoatTelemetry> = {
-        boat_id: 'current-boat',
-        timestamp: now,
-      };
-
       // Aggregate sensor data into telemetry structure
       // This would integrate with actual sensor readings
       // For demo, we'll return simulated data
       return this.generateSimulatedTelemetry();
     } catch (error) {
-      console.error('Error getting telemetry:', error);
+      logger.error('Error getting telemetry:', error);
       return null;
     }
   }
@@ -249,7 +243,7 @@ export class IoTSensorService {
       // In production, this would read from load cells and position sensors
       return this.generateSimulatedSailTelemetry();
     } catch (error) {
-      console.error('Error getting sail telemetry:', error);
+      logger.error('Error getting sail telemetry:', error);
       return null;
     }
   }
@@ -293,7 +287,7 @@ export class IoTSensorService {
         },
       };
     } catch (error) {
-      console.error('Error calculating performance metrics:', error);
+      logger.error('Error calculating performance metrics:', error);
       return this.generateFallbackMetrics();
     }
   }
@@ -366,7 +360,7 @@ export class IoTSensorService {
 
       logger.debug(`Configured sensor: ${config.name}`);
     } catch (error) {
-      console.error('Error configuring sensor:', error);
+      logger.error('Error configuring sensor:', error);
       throw error;
     }
   }
@@ -397,7 +391,7 @@ export class IoTSensorService {
 
       logger.debug(`Calibrated sensor ${sensorId}: offset=${offset}, multiplier=${multiplier}`);
     } catch (error) {
-      console.error('Error calibrating sensor:', error);
+      logger.error('Error calibrating sensor:', error);
       throw error;
     }
   }
@@ -523,14 +517,14 @@ export class IoTSensorService {
     return speed * Math.cos(relativeAngle * Math.PI / 180);
   }
 
-  private static getTargetSpeed(windSpeed: number, windAngle: number, polarData: any): number {
+  private static getTargetSpeed(windSpeed: number, windAngle: number, _polarData: any): number {
     // Simplified polar lookup - in production would interpolate from actual polar data
     const baseSpeed = windSpeed * 0.6; // Rough approximation
     const angleEfficiency = Math.sin(windAngle * Math.PI / 180);
     return baseSpeed * angleEfficiency;
   }
 
-  private static getTargetAngle(windSpeed: number, polarData: any): number {
+  private static getTargetAngle(windSpeed: number, _polarData: any): number {
     // Simplified target angle calculation
     if (windSpeed < 8) return 35;
     if (windSpeed < 15) return 30;
@@ -544,7 +538,7 @@ export class IoTSensorService {
     return Math.max(0, heelEffect + speedEffect);
   }
 
-  private static calculateSetAndDrift(telemetry: BoatTelemetry): { set: number; drift: number } {
+  private static calculateSetAndDrift(_telemetry: BoatTelemetry): { set: number; drift: number } {
     // Simplified current calculation
     return {
       set: 180 + (Math.random() - 0.5) * 60,
@@ -567,7 +561,7 @@ export class IoTSensorService {
     }
   }
 
-  private static triggerAlert(rule: AlertRule, telemetry: BoatTelemetry): void {
+  private static triggerAlert(rule: AlertRule, _telemetry: BoatTelemetry): void {
     logger.debug(`ALERT [${rule.severity}]: ${rule.message}`);
 
     // In production, would send notifications, log to database, etc.

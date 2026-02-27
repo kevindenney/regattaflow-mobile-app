@@ -55,7 +55,7 @@ function getRegistrationInfo(status?: string): { label: string; color: string } 
     case 'full':
       return { label: 'Full', color: '#d97706' };
     case 'pending':
-      return { label: 'Coming Soon', color: '#6b7280' };
+      return { label: 'Pending', color: '#6b7280' };
     default:
       return { label: '', color: '#6b7280' };
   }
@@ -569,4 +569,3 @@ const styles = StyleSheet.create({
 });
 
 export default UpcomingRacesSection;
-

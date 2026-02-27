@@ -4,6 +4,9 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('StripeConnectService');
 
 // Get Supabase function URL
 const getSupabaseFunctionUrl = (functionName: string) => {
@@ -87,7 +90,7 @@ export class StripeConnectService {
 
       return await response.json();
     } catch (error) {
-      console.error('Error fetching Stripe Connect status:', error);
+      logger.error('Error fetching Stripe Connect status:', error);
       return {
         connected: false,
         needsOnboarding: true,
@@ -136,7 +139,7 @@ export class StripeConnectService {
         currency: data.currency || 'usd',
       };
     } catch (error) {
-      console.error('Error fetching Stripe balance:', error);
+      logger.error('Error fetching Stripe balance:', error);
       throw error;
     }
   }
@@ -148,7 +151,7 @@ export class StripeConnectService {
     coachId: string,
     opts?: { limit?: number }
   ): Promise<
-    Array<{
+    {
       id: string;
       amount: number; // cents
       currency: string;
@@ -156,7 +159,7 @@ export class StripeConnectService {
       description?: string;
       status?: string;
       type?: string; // charge|transfer|payout
-    }>
+    }[]
   > {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -188,7 +191,7 @@ export class StripeConnectService {
 
       return Array.isArray(data?.transactions) ? data.transactions : [];
     } catch (error) {
-      console.error('Error fetching Stripe transactions:', error);
+      logger.error('Error fetching Stripe transactions:', error);
       return [];
     }
   }
@@ -230,7 +233,7 @@ export class StripeConnectService {
 
       return { success: true, url: data.url };
     } catch (error: any) {
-      console.error('Error starting Stripe Connect onboarding:', error);
+      logger.error('Error starting Stripe Connect onboarding:', error);
       return { success: false, error: error.message };
     }
   }
@@ -266,7 +269,7 @@ export class StripeConnectService {
 
       return { success: true, url: data.url };
     } catch (error: any) {
-      console.error('Error getting Stripe dashboard link:', error);
+      logger.error('Error getting Stripe dashboard link:', error);
       return { success: false, error: error.message };
     }
   }
@@ -291,11 +294,11 @@ export class StripeConnectService {
           .eq('id', coachId);
 
         if (error) {
-          console.error('Error updating coach Stripe status:', error);
+          logger.error('Error updating coach Stripe status:', error);
         }
       }
     } catch (error) {
-      console.error('Error refreshing account status:', error);
+      logger.error('Error refreshing account status:', error);
     }
   }
 
@@ -309,7 +312,7 @@ export class StripeConnectService {
              status.detailsSubmitted === true &&
              status.chargesEnabled === true;
     } catch (error) {
-      console.error('Error checking payment readiness:', error);
+      logger.error('Error checking payment readiness:', error);
       return false;
     }
   }
@@ -324,7 +327,7 @@ export class StripeConnectService {
              status.detailsSubmitted === true &&
              status.payoutsEnabled === true;
     } catch (error) {
-      console.error('Error checking payout readiness:', error);
+      logger.error('Error checking payout readiness:', error);
       return false;
     }
   }
@@ -337,7 +340,7 @@ export class StripeConnectService {
       const status = await this.getConnectStatus(coachId);
       return status.requirements?.currently_due || [];
     } catch (error) {
-      console.error('Error getting requirements:', error);
+      logger.error('Error getting requirements:', error);
       return [];
     }
   }
@@ -377,7 +380,7 @@ export class StripeConnectService {
 
       return data;
     } catch (error: any) {
-      console.error('Error requesting payout:', error);
+      logger.error('Error requesting payout:', error);
       return { success: false, error: error.message };
     }
   }
@@ -428,7 +431,7 @@ export class StripeConnectService {
       const data = await response.json();
       return Array.isArray(data?.payouts) ? data.payouts : [];
     } catch (error) {
-      console.error('Error fetching payout history:', error);
+      logger.error('Error fetching payout history:', error);
       return [];
     }
   }

@@ -26,6 +26,9 @@ import {
 import Svg, { Polyline, Circle } from 'react-native-svg';
 import { supabase } from '@/services/supabase';
 import { IOS_COLORS } from '@/components/cards/constants';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('GPSTrackSection');
 
 const MINI_MAP_WIDTH = Dimensions.get('window').width - 64; // Account for margins
 const MINI_MAP_HEIGHT = 120;
@@ -132,7 +135,7 @@ function pointsToSvgPath(
   };
 }
 
-export function GPSTrackSection({ raceId, userId, timerSessionId }: GPSTrackSectionProps) {
+export function GPSTrackSection({ raceId: _raceId, userId: _userId, timerSessionId }: GPSTrackSectionProps) {
   const router = useRouter();
   const [trackData, setTrackData] = useState<TrackData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -157,7 +160,7 @@ export function GPSTrackSection({ raceId, userId, timerSessionId }: GPSTrackSect
         if (fetchError) throw fetchError;
         setTrackData(data);
       } catch (err: any) {
-        console.error('Error fetching track data:', err);
+        logger.error('Error fetching track data', err);
         setError('Failed to load track');
       } finally {
         setLoading(false);

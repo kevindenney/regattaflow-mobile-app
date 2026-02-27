@@ -20,7 +20,6 @@ import {
   useWindowDimensions,
   RefreshControl,
   FlatList,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -34,9 +33,13 @@ import { useReflectData, type RaceLogEntry } from '@/hooks/useReflectData';
 import { useReflectProfile } from '@/hooks/useReflectProfile';
 import { useCoachingInsights } from '@/hooks/useCoachingInsights';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { supabase } from '@/services/supabase';
 import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
+import { CompetencyDashboard } from '@/components/competency';
+import { useCompetencyProgress } from '@/hooks/useCompetencyProgress';
 import {
   WeeklyCalendar,
   MonthlyStatsCard,
@@ -69,7 +72,7 @@ import {
   RaceJournalSection,
 } from '@/components/reflect';
 import type { RecentActivity } from '@/components/reflect';
-import type { SeasonGoal, PerformanceInsight, BoatWithMaintenance, MaintenanceLog, TrainingPlan, CourseRecord, RaceJournalEntry } from '@/hooks/useReflectProfile';
+import type { SeasonGoal, PerformanceInsight, BoatWithMaintenance, MaintenanceLog } from '@/hooks/useReflectProfile';
 
 // =============================================================================
 // TYPES
@@ -77,7 +80,8 @@ import type { SeasonGoal, PerformanceInsight, BoatWithMaintenance, MaintenanceLo
 
 type ReflectSegment = 'progress' | 'racelog' | 'profile';
 
-const REFLECT_SEGMENTS = [
+/** Default segments — overridden per interest via reflectConfig.segments */
+const DEFAULT_REFLECT_SEGMENTS = [
   { value: 'progress' as const, label: 'Progress' },
   { value: 'racelog' as const, label: 'Race Log' },
   { value: 'profile' as const, label: 'Profile' },
@@ -96,6 +100,10 @@ interface ProgressViewProps {
 function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps) {
   const { data, loading, refresh } = useReflectData();
   const { userProfile } = useAuth();
+  const { currentInterest } = useInterest();
+  const progressEventConfig = useInterestEventConfig();
+  const isNursing = currentInterest?.slug === 'nursing' || currentInterest?.slug === 'jhu-msn-nursing';
+  const { competencies, summary } = useCompetencyProgress();
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -105,25 +113,25 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
   }, [refresh]);
 
   const handleSeeCalendar = () => {
-    Alert.alert('Coming Soon', 'Full calendar view is coming in a future update');
+    router.push('/(tabs)/races');
   };
 
   const handleSeeMonthStats = () => {
-    Alert.alert('Coming Soon', 'Detailed monthly statistics are coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleSeePerformance = () => {
-    Alert.alert('Coming Soon', 'Extended performance history is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleSeeEffort = () => {
-    Alert.alert('Coming Soon', 'Effort comparison is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: toolbarHeight + 20 }]}>
-        <Text style={styles.loadingText}>Loading your sailing data...</Text>
+        <Text style={styles.loadingText}>Loading your data...</Text>
       </View>
     );
   }
@@ -132,12 +140,12 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
     return (
       <View style={[styles.emptyContainer, { paddingTop: toolbarHeight + 20 }]}>
         <Ionicons name="boat-outline" size={48} color={IOS_COLORS.systemGray3} />
-        <Text style={styles.emptyTitle}>No Sailing Data Yet</Text>
+        <Text style={styles.emptyTitle}>No Data Yet</Text>
         <Text style={styles.emptySubtitle}>
-          Start adding races to see your progress here
+          Start adding {progressEventConfig.eventNoun.toLowerCase()}s to see your progress here
         </Text>
         <TouchableOpacity style={styles.emptyPrimaryButton} onPress={() => router.push('/(tabs)/races')}>
-          <Text style={styles.emptyPrimaryButtonText}>Go to Race tab</Text>
+          <Text style={styles.emptyPrimaryButtonText}>Go to {progressEventConfig.eventNoun} tab</Text>
         </TouchableOpacity>
       </View>
     );
@@ -182,6 +190,18 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
 
         {/* AI Coaching Insight - Pattern-based recommendations */}
         <CoachingInsightCard sailorId={userProfile?.id} />
+
+        {/* Competency Dashboard - Nursing interests only */}
+        {isNursing && competencies && competencies.length > 0 && (
+          <CompetencyDashboard
+            competencies={competencies}
+            summary={summary ?? null}
+            onSelectCompetency={(c) =>
+              router.push({ pathname: '/competency-detail', params: { competencyId: c.id } })
+            }
+            accentColor={currentInterest?.accent_color}
+          />
+        )}
 
         {/* Relative Effort */}
         <RelativeEffortCard
@@ -257,11 +277,11 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   };
 
   const handleSeeAllStats = () => {
-    Alert.alert('Coming Soon', 'Detailed statistics view is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleSeeAllVenues = () => {
-    Alert.alert('Coming Soon', 'Full venues list is coming in a future update');
+    router.push('/(tabs)/community');
   };
 
   const handleAddBoat = () => {
@@ -273,28 +293,38 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   };
 
   const handleSeeAllAchievements = () => {
-    Alert.alert('Coming Soon', 'Full achievements gallery is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleAchievementPress = (achievement: any) => {
-    Alert.alert(
+    const relatedRaceId = achievement.relatedRegattaId || achievement.regattaId;
+    showAlertWithButtons(
       achievement.title,
       `${achievement.description}\n\nEarned: ${new Date(achievement.earnedAt).toLocaleDateString()}${
         achievement.relatedRegattaName ? `\n\nRace: ${achievement.relatedRegattaName}` : ''
-      }`
+      }`,
+      [
+        { text: 'Close', style: 'cancel' },
+        ...(relatedRaceId
+          ? [{
+              text: 'Open Race',
+              onPress: () => router.push(`/(tabs)/race/${relatedRaceId}` as any),
+            }]
+          : []),
+      ]
     );
   };
 
   const handleSeeAllRecords = () => {
-    Alert.alert('Coming Soon', 'Full personal records view is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleSeeAllChallenges = () => {
-    Alert.alert('Coming Soon', 'Full challenges view is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleJoinChallenge = () => {
-    Alert.alert('Coming Soon', 'Challenge browser is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   // Phase 4: Social handlers
@@ -313,23 +343,30 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
 
   // Phase 5: Goals handlers
   const handleSeeAllGoals = () => {
-    Alert.alert('Coming Soon', 'Full goals management is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleGoalPress = (goal: SeasonGoal) => {
-    Alert.alert(
+    showAlertWithButtons(
       goal.title,
-      `${goal.description || ''}\n\nProgress: ${goal.currentValue}/${goal.targetValue} ${goal.unit}\nPeriod: ${goal.period}`
+      `${goal.description || ''}\n\nProgress: ${goal.currentValue}/${goal.targetValue} ${goal.unit}\nPeriod: ${goal.period}`,
+      [
+        { text: 'Close', style: 'cancel' },
+        {
+          text: 'Open Race Log',
+          onPress: () => router.push('/(tabs)/races'),
+        },
+      ]
     );
   };
 
   const handleAddGoal = () => {
-    Alert.alert('Coming Soon', 'Goal creation is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   // Phase 5: Insights handlers
   const handleSeeAllInsights = () => {
-    Alert.alert('Coming Soon', 'Full insights view is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   const handleInsightPress = useCallback(
@@ -388,11 +425,7 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
               {
                 text: `Message ${matchingData.coachName || 'Coach'}`,
                 onPress: () => {
-                  // Navigate to messaging with existing coach (placeholder)
-                  showAlert(
-                    'Coming Soon',
-                    'In-app messaging is coming in a future update.'
-                  );
+                  router.push('/social-notifications');
                 },
               },
               {
@@ -421,7 +454,7 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
 
   // Phase 5: Comparison handlers
   const handleSeeAllComparisons = () => {
-    Alert.alert('Coming Soon', 'Full leaderboard view is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   // Phase 5: Weekly Summary handlers
@@ -430,7 +463,7 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   };
 
   const handleSeeWeekDetails = () => {
-    Alert.alert('Coming Soon', 'Detailed weekly breakdown is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   // Phase 5: Gear Management handlers
@@ -439,40 +472,50 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   };
 
   const handleMaintenanceLogPress = (log: MaintenanceLog) => {
-    Alert.alert(
+    const relatedBoatId = (log as any).boatId;
+    showAlertWithButtons(
       log.title,
-      `${log.description || ''}\n\nType: ${log.type}\nDate: ${new Date(log.date).toLocaleDateString()}\nStatus: ${log.status}${log.cost ? `\nCost: $${log.cost}` : ''}${log.vendor ? `\nVendor: ${log.vendor}` : ''}`
+      `${log.description || ''}\n\nType: ${log.type}\nDate: ${new Date(log.date).toLocaleDateString()}\nStatus: ${log.status}${log.cost ? `\nCost: $${log.cost}` : ''}${log.vendor ? `\nVendor: ${log.vendor}` : ''}`,
+      [
+        { text: 'Close', style: 'cancel' },
+        ...(relatedBoatId
+          ? [{
+              text: 'Open Boat',
+              onPress: () => router.push(`/(tabs)/boat/edit/${relatedBoatId}` as any),
+            }]
+          : []),
+      ]
     );
   };
 
   const handleAddMaintenance = (boatId: string) => {
-    Alert.alert('Coming Soon', 'Maintenance logging is coming in a future update');
+    router.push(`/(tabs)/boat/edit/${boatId}` as any);
   };
 
   const handleSeeAllMaintenance = () => {
-    Alert.alert('Coming Soon', 'Full maintenance history is coming in a future update');
+    router.push('/(tabs)/boat');
   };
 
   // Phase 6: Training Plans handlers
-  const handleStartPlan = (planId: string) => {
-    Alert.alert('Coming Soon', 'Training plan management is coming in a future update');
+  const handleStartPlan = (_planId: string) => {
+    router.push('/(tabs)/my-learning');
   };
 
-  const handleCompleteActivity = (planId: string, activityId: string) => {
-    Alert.alert('Coming Soon', 'Activity completion is coming in a future update');
+  const handleCompleteActivity = (_planId: string, _activityId: string) => {
+    router.push('/(tabs)/my-learning');
   };
 
-  const handleViewPlanDetails = (planId: string) => {
+  const handleViewPlanDetails = (_planId: string) => {
     // Modal opens in the component
   };
 
   const handleCreatePlan = () => {
-    Alert.alert('Coming Soon', 'Plan creation is coming in a future update');
+    router.push('/(tabs)/my-learning');
   };
 
   // Phase 6: Venue Heatmap handlers
-  const handleVenuePress = (venueId: string) => {
-    Alert.alert('Coming Soon', 'Venue details are coming in a future update');
+  const handleVenuePress = (_venueId: string) => {
+    router.push('/(tabs)/community');
   };
 
   // Phase 6: Season Recap handlers
@@ -485,26 +528,26 @@ function ProfileView({ toolbarHeight, onScroll, isDesktop }: ProfileViewProps) {
   };
 
   // Phase 6: Course Records handlers
-  const handleRecordPress = (recordId: string) => {
-    Alert.alert('Coming Soon', 'Course record details are coming in a future update');
+  const handleRecordPress = (_recordId: string) => {
+    router.push('/(tabs)/my-learning');
   };
 
   // Phase 6: Photo Gallery handlers
-  const handlePhotoPress = (photoId: string) => {
+  const handlePhotoPress = (_photoId: string) => {
     // Lightbox opens in the component
   };
 
   const handleAddPhoto = () => {
-    Alert.alert('Coming Soon', 'Photo upload is coming in a future update');
+    router.push('/(tabs)/races');
   };
 
   // Phase 6: Race Journal handlers
-  const handleJournalEntryPress = (entryId: string) => {
+  const handleJournalEntryPress = (_entryId: string) => {
     // Modal opens in the component
   };
 
   const handleAddJournalEntry = () => {
-    Alert.alert('Coming Soon', 'Journal entry creation is coming in a future update');
+    router.push('/(tabs)/races');
   };
 
   if (loading) {
@@ -857,6 +900,19 @@ export default function ReflectScreen() {
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
   const [activeSegment, setActiveSegment] = useState<ReflectSegment>('progress');
+  const eventConfig = useInterestEventConfig();
+
+  // Use interest-specific segment labels from config, falling back to defaults
+  const reflectSegments = useMemo(() => {
+    const configSegments = eventConfig.reflectConfig?.segments;
+    if (configSegments && configSegments.length > 0) {
+      return configSegments.map((s) => ({
+        value: s.value as ReflectSegment,
+        label: s.label,
+      }));
+    }
+    return DEFAULT_REFLECT_SEGMENTS;
+  }, [eventConfig.reflectConfig?.segments]);
 
   const isDesktop = width > 768;
 
@@ -896,7 +952,7 @@ export default function ReflectScreen() {
         {/* Segmented Control */}
         <View style={styles.segmentedControlContainer}>
           <IOSSegmentedControl
-            segments={REFLECT_SEGMENTS}
+            segments={reflectSegments}
             selectedValue={activeSegment}
             onValueChange={setActiveSegment}
           />

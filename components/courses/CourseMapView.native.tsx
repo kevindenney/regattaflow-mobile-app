@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal, Platform, TurboModuleRegistry } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Modal, Platform, TurboModuleRegistry, Linking } from 'react-native';
 import {
   Layers,
   Wind,
@@ -13,10 +13,7 @@ import {
   Eye,
   EyeOff,
   X,
-  Settings,
   Zap,
-  Droplets,
-  Thermometer,
   MapPin,
   Info
 } from 'lucide-react-native';
@@ -79,18 +76,18 @@ interface CoursePrediction {
     longitude: number;
     bias: 'pin' | 'boat' | 'middle';
   };
-  wind_shifts?: Array<{
+  wind_shifts?: {
     latitude: number;
     longitude: number;
     shift_degrees: number;
     probability: number;
-  }>;
-  strategic_zones?: Array<{
+  }[];
+  strategic_zones?: {
     latitude: number;
     longitude: number;
     zone_type: 'favored' | 'avoid' | 'neutral';
     reason: string;
-  }>;
+  }[];
 }
 
 interface CourseMapViewProps {
@@ -106,15 +103,26 @@ interface CourseMapViewProps {
 const CourseMapView: React.FC<CourseMapViewProps> = ({
   courseMarks = [],
   centerCoordinate = { latitude: 22.2793, longitude: 114.1628 }, // Default to HK
-  onMarkPress,
+  onMarkPress: _onMarkPress,
   prediction = null,
-  selectedMarkId,
+  selectedMarkId: _selectedMarkId,
   compact = false,
 }) => {
   const mapRef = useRef<any>(null);
   const [showLayerPanel, setShowLayerPanel] = useState(false);
   const [selectedMark, setSelectedMark] = useState<CourseMark | null>(null);
   const [mapType, setMapType] = useState<'standard' | 'satellite' | 'hybrid'>('satellite');
+  const handleContactSupport = () => {
+    const subject = encodeURIComponent('Course Map Unavailable');
+    const body = encodeURIComponent(
+      `Course map is unavailable in this build.\n\n` +
+      `Platform: ${Platform.OS}\n` +
+      `Maps module available: ${mapsAvailable ? 'yes' : 'no'}\n` +
+      `Marks loaded: ${courseMarks.length}`
+    );
+    const mailtoUrl = `mailto:support@regattaflow.com?subject=${subject}&body=${body}`;
+    Linking.openURL(mailtoUrl).catch(() => {});
+  };
 
   const [layers, setLayers] = useState<Layer[]>([
     // Environmental Layers
@@ -168,7 +176,7 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
 
   // Create course line from marks
   const courseCoordinates = courseMarks
-    .filter(mark => layers.find(l => l.id === 'marks')?.enabled)
+    .filter(() => layers.find(l => l.id === 'marks')?.enabled)
     .map(mark => mark.coordinates);
 
   const renderLayerPanel = () => (
@@ -484,6 +492,12 @@ const CourseMapView: React.FC<CourseMapViewProps> = ({
           Native maps require a development build.{'\n'}
           {courseMarks.length} marks loaded.
         </Text>
+        <TouchableOpacity
+          className="mt-4 px-4 py-2 rounded-lg bg-white border border-gray-300"
+          onPress={handleContactSupport}
+        >
+          <Text className="text-blue-600 font-semibold">Contact Support</Text>
+        </TouchableOpacity>
         {courseMarks.length > 0 && (
           <View className="mt-4 bg-white rounded-lg p-3 w-full">
             {courseMarks.slice(0, 5).map((mark) => (

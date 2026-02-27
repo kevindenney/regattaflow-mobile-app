@@ -4,10 +4,10 @@
  * Uses natural language to gather crew info, duration estimates, and watch preferences.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { createLogger } from '@/lib/utils/logger';
 import type { WatchSchedule, WatchSystem, WatchGroup, CrewMember, WatchBlock } from '@/types/watchSchedule';
+import { supabase } from '@/services/supabase';
 
 const logger = createLogger('WatchScheduleAgent');
 
@@ -40,18 +40,12 @@ export interface ChatMessage {
 }
 
 export class WatchScheduleAgent {
-  private client: Anthropic;
-  private conversationHistory: Anthropic.MessageParam[] = [];
+  private conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   private context: WatchScheduleAgentContext;
   private systemPrompt: string;
   private pendingSchedule: WatchSchedule | null = null;
 
   constructor(context: WatchScheduleAgentContext) {
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '';
-    this.client = new Anthropic({
-      apiKey,
-      dangerouslyAllowBrowser: true,
-    });
     this.context = context;
     this.systemPrompt = this.buildSystemPrompt();
   }
@@ -138,111 +132,67 @@ When ready to save, call save_schedule with:
     });
 
     try {
-      // Define the save_schedule tool
-      const tools: Anthropic.Tool[] = [{
-        name: 'save_schedule',
-        description: 'Save the finalized watch schedule. Call this when the user confirms the schedule looks good.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            system: {
-              type: 'string',
-              enum: ['4on4off', '3on3off'],
-              description: 'Watch rotation system',
-            },
-            crew: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  name: { type: 'string' },
-                  watch: { type: 'string', enum: ['A', 'B'] },
-                },
-                required: ['id', 'name', 'watch'],
-              },
-              description: 'Crew members assigned to watches',
-            },
-            estimatedDuration: {
-              type: 'number',
-              description: 'Estimated race duration in hours',
-            },
-            notes: {
-              type: 'string',
-              description: 'Optional notes about the schedule',
-            },
-          },
-          required: ['system', 'crew', 'estimatedDuration'],
-        },
-      }];
+      const prompt = `${this.systemPrompt}
 
-      // Call Claude
-      const response = await this.client.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 1024,
-        temperature: 0.7,
-        system: this.systemPrompt,
-        messages: this.conversationHistory,
-        tools,
+Conversation history:
+${this.conversationHistory.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join('\n')}
+
+Return ONLY valid JSON with this structure:
+{
+  "response": "assistant reply text",
+  "isComplete": false,
+  "scheduleInput": {
+    "system": "4on4off|3on3off",
+    "crew": [{"id":"string","name":"string","watch":"A|B"}],
+    "estimatedDuration": 8,
+    "notes": "optional"
+  }
+}
+
+Rules:
+- If user has not confirmed a final schedule, set isComplete=false and omit scheduleInput.
+- If user confirms schedule, set isComplete=true and provide complete scheduleInput.
+- Keep response concise (2-3 sentences).`;
+
+      const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt,
+          max_tokens: 1024,
+        },
       });
 
-      // Check if tool was called
-      let isComplete = false;
+      if (error) {
+        throw new Error(error.message || 'Watch schedule AI invocation failed');
+      }
+
+      const rawText = typeof data?.text === 'string' ? data.text : '';
+      if (!rawText) {
+        throw new Error('Watch schedule AI returned empty response');
+      }
+
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+
+      const textResponse = typeof parsed?.response === 'string'
+        ? parsed.response
+        : "I'm ready to help with your watch schedule!";
+      const isComplete = Boolean(parsed?.isComplete);
+
       let schedule: WatchSchedule | undefined;
-      let textResponse = '';
-
-      for (const block of response.content) {
-        if (block.type === 'text') {
-          textResponse += block.text;
-        } else if (block.type === 'tool_use' && block.name === 'save_schedule') {
-          // Tool was called - build the schedule
-          const input = block.input as z.infer<typeof WatchScheduleInputSchema>;
-          schedule = this.buildWatchSchedule(input);
-          isComplete = true;
-
-          // Add tool result to continue conversation
-          this.conversationHistory.push({
-            role: 'assistant',
-            content: response.content,
-          });
-          this.conversationHistory.push({
-            role: 'user',
-            content: [{
-              type: 'tool_result',
-              tool_use_id: block.id,
-              content: JSON.stringify({ success: true, message: 'Schedule saved successfully' }),
-            }],
-          });
-
-          // Get final response after tool use
-          const finalResponse = await this.client.messages.create({
-            model: 'claude-3-haiku-20240307',
-            max_tokens: 256,
-            temperature: 0.7,
-            system: this.systemPrompt,
-            messages: this.conversationHistory,
-          });
-
-          for (const finalBlock of finalResponse.content) {
-            if (finalBlock.type === 'text') {
-              textResponse = finalBlock.text;
-            }
-          }
-        }
+      if (isComplete && parsed?.scheduleInput) {
+        const validated = WatchScheduleInputSchema.parse(parsed.scheduleInput);
+        schedule = this.buildWatchSchedule(validated);
       }
 
-      // Add assistant response to history
-      if (!isComplete) {
-        this.conversationHistory.push({
-          role: 'assistant',
-          content: response.content,
-        });
-      }
+      this.conversationHistory.push({
+        role: 'assistant',
+        content: textResponse,
+      });
 
       return {
-        response: textResponse || "I'm ready to help with your watch schedule!",
+        response: textResponse,
         schedule,
-        isComplete,
+        isComplete: Boolean(schedule && isComplete),
       };
     } catch (error: any) {
       logger.error('Error processing message:', error);

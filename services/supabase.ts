@@ -1,6 +1,9 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('supabase');
 
 // Validate required environment variables at startup
 const expoExtra = (Constants.expoConfig?.extra ?? (Constants as any).manifest2?.extra ?? {}) as Record<string, string | undefined>;
@@ -21,11 +24,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   if (!supabaseAnonKey) missingVars.push('EXPO_PUBLIC_SUPABASE_ANON_KEY');
   
   SUPABASE_CONFIG_ERROR = `Missing environment variables: ${missingVars.join(', ')}`;
-  console.error('[SUPABASE]', SUPABASE_CONFIG_ERROR);
+  logger.error('[SUPABASE]', SUPABASE_CONFIG_ERROR);
 } else {
   // Keep this low-detail to avoid leaking keys while still helping diagnose native env issues.
   const source = envSupabaseUrl && envSupabaseAnonKey ? 'process.env' : 'expo.extra';
-  console.log('[SUPABASE] Config loaded from', source, 'URL host:', supabaseUrl.replace(/^https?:\/\//, '').split('/')[0]);
+  logger.info('[SUPABASE] Config loaded from', source, 'URL host:', supabaseUrl.replace(/^https?:\/\//, '').split('/')[0]);
 }
 
 type SecureStoreModule = typeof import('expo-secure-store');

@@ -8,6 +8,7 @@
 
 import { supabase } from '../supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -37,6 +38,7 @@ export type ScoreCode =
 export interface RaceResult {
   id: string;
   regatta_id: string;
+  race_id?: string;
   race_number: number;
   entry_id: string;
   finish_position?: number;
@@ -169,9 +171,25 @@ export const DEFAULT_LOW_POINT_CONFIG: ScoringConfiguration = {
 
 export class ScoringEngine {
   private config: ScoringConfiguration;
+  private raceResultsIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
 
   constructor(config: ScoringConfiguration = DEFAULT_LOW_POINT_CONFIG) {
     this.config = config;
+  }
+
+  private async withRaceResultsIdFallback<T>(
+    operation: (column: 'regatta_id' | 'race_id') => Promise<{ data: T | null; error: any }>
+  ): Promise<{ data: T | null; error: any }> {
+    const current = this.raceResultsIdColumn;
+    let result = await operation(current);
+    if (result.error && current === 'regatta_id' && isMissingIdColumn(result.error, 'race_results', current)) {
+      result = await operation('race_id');
+      if (!result.error) {
+        this.raceResultsIdColumn = 'race_id';
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -591,7 +609,7 @@ export class ScoringEngine {
       const func = new Function('position', `return ${formula}`);
       return func(position);
     } catch (error) {
-      console.error('Custom formula error:', error);
+      logger.error('Custom formula error:', error);
       return position; // Fallback to position
     }
   }
@@ -658,10 +676,12 @@ export class ScoringEngine {
   }
 
   private async getAllResults(regattaId: string): Promise<RaceResult[]> {
-    const { data, error } = await supabase
-      .from('race_results')
-      .select('*')
-      .eq('regatta_id', regattaId);
+    const { data, error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .select('*')
+        .eq(column, regattaId)
+    );
 
     if (error) throw error;
     return data || [];

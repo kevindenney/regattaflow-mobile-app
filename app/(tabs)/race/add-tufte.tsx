@@ -14,21 +14,17 @@
 
 import { useFocusEffect } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
-import * as DocumentPicker from 'expo-document-picker';
+import * as Clipboard from 'expo-clipboard';
+import type { DocumentPickerAsset } from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import {
-  CheckCircle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  FileText,
-  Info,
-  Link,
   Map,
   MapPin,
   Navigation,
   Sailboat,
-  Sparkles,
   Trophy,
   Users,
 } from 'lucide-react-native';
@@ -63,14 +59,19 @@ import { RaceSuggestionsDrawer } from '@/components/races/RaceSuggestionsDrawer'
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRaceSuggestions } from '@/hooks/useRaceSuggestions';
+import { extractSuggestionFailureSources } from '@/hooks/useRaceSuggestions.errors';
 import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
-import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
-import { geocodeExtractedLocations, geocodeSingleLocation } from '@/services/location/geocodeExtractedLocations';
-import { PDFExtractionService } from '@/services/PDFExtractionService';
 import { supabase } from '@/services/supabase';
 import type { RaceSuggestion } from '@/services/RaceSuggestionService';
 
 import type { RaceType } from '@/components/races/RaceTypeSelector';
+import { useInterest } from '@/providers/InterestProvider';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useActivityCatalog } from '@/hooks/useActivityCatalog';
+import { ActivityCatalog } from '@/components/events/ActivityCatalog';
+import { TemplatePreview } from '@/components/events/TemplatePreview';
+import type { ActivityTemplate } from '@/types/activities';
+import type { EventSubtypeConfig, EventFormField } from '@/types/interestEventConfig';
 
 const logger = createLogger('AddRaceScreen');
 
@@ -97,6 +98,16 @@ const RACE_TYPE_CONFIG: Record<RaceType, { label: string; icon: any; color: stri
   distance: { label: 'Distance', icon: Navigation, color: '#059669', description: 'Offshore/passage' },
   match: { label: 'Match', icon: Trophy, color: '#7C3AED', description: '1v1 racing' },
   team: { label: 'Team', icon: Users, color: '#DC2626', description: 'Team vs team' },
+};
+
+const SUGGESTION_SOURCE_HINTS: Record<string, string> = {
+  club_events: 'club_members -> club_events',
+  fleet_races: 'fleet_members -> fleet/boat class races',
+  community_races: 'club_members -> regattas(created_by co-members)',
+  catalog_matches: 'sailor_boats + race_catalog + saved_catalog_races',
+  previous_year: 'regattas(start_date history)',
+  patterns: 'regattas -> race_patterns',
+  templates: 'race_templates',
 };
 
 // Helper function to map course type string to PositionedCourseType
@@ -136,6 +147,10 @@ interface CourseMark {
 interface FormState {
   // Core fields
   raceType: RaceType;
+  /** Interest-specific event subtype (e.g., 'clinical_shift', 'drawing_session') */
+  eventSubtype: string;
+  /** Dynamic field values from config-driven form fields */
+  subtypeFields: Record<string, string>;
   name: string;
   date: string;
   time: string;
@@ -171,7 +186,7 @@ interface FormState {
   aiExpanded: boolean;
   aiInputText: string;
   aiInputMethod: 'paste' | 'upload' | 'url';
-  aiSelectedFile: DocumentPicker.DocumentPickerAsset | null;
+  aiSelectedFile: DocumentPickerAsset | null;
   aiExtractedFields: Set<string>;
   extractionComplete: boolean;
   // Extracted details from AI (for display and saving)
@@ -185,10 +200,36 @@ interface FormState {
 export default function AddRaceScreen() {
   const router = useRouter();
   const { user, isGuest } = useAuth();
+  const { currentInterest } = useInterest();
+  const eventConfig = useInterestEventConfig();
+
+  // Activity catalog from followed orgs & coaches
+  const {
+    templates: catalogTemplates,
+    isLoading: catalogLoading,
+    enroll: enrollInCatalogTemplate,
+  } = useActivityCatalog();
+
+  // Template preview state
+  const [previewTemplate, setPreviewTemplate] = useState<ActivityTemplate | null>(null);
+
+  // Derive the interest-aware header title
+  const headerTitle = useMemo(() => {
+    const slug = currentInterest?.slug;
+    if (!slug || slug === 'sail-racing') return 'Add Race';
+    if (slug === 'nursing') return 'Add Shift';
+    if (slug === 'drawing') return 'Add Session';
+    if (slug === 'fitness') return 'Add Workout';
+    return 'Add Event';
+  }, [currentInterest?.slug]);
 
   // Form state
+  const isSailing = !currentInterest?.slug || currentInterest.slug === 'sail-racing';
+
   const getInitialState = (): FormState => ({
     raceType: 'fleet',
+    eventSubtype: isSailing ? '' : (eventConfig.eventSubtypes[0]?.id ?? ''),
+    subtypeFields: {},
     name: '',
     date: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
     time: '12:00',
@@ -224,28 +265,53 @@ export default function AddRaceScreen() {
   });
 
   const [form, setForm] = useState<FormState>(getInitialState());
-  const [isExtracting, setIsExtracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showRouteMap, setShowRouteMap] = useState(false);
   const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
   const [showAllSuggestions, setShowAllSuggestions] = useState(false);
+  const [showSuggestionDiagnostics, setShowSuggestionDiagnostics] = useState(false);
 
   // Race suggestions from the full suggestion engine
   const {
     suggestions,
+    diagnostics: suggestionDiagnostics,
     loading: suggestionsLoading,
+    error: suggestionsError,
+    refresh: refreshSuggestions,
     acceptSuggestion,
     dismissSuggestion,
   } = useRaceSuggestions();
+
+  const suggestionFailureSources = useMemo(() => {
+    return extractSuggestionFailureSources(
+      suggestionDiagnostics?.failedSources,
+      suggestionsError?.message
+    );
+  }, [suggestionDiagnostics?.failedSources, suggestionsError?.message]);
+  const copySuggestionDiagnostics = useCallback(async () => {
+    if (!suggestionsError) return;
+    const lines = [
+      `Last error: ${suggestionsError.message}`,
+      'Query path: race_suggestions_cache -> source generators -> race_suggestions_cache upsert',
+      ...(suggestionFailureSources.length > 0
+        ? suggestionFailureSources.map(
+            (source) => `${source}: ${SUGGESTION_SOURCE_HINTS[source] || 'unknown source path'}`
+          )
+        : ['Source-level failure details unavailable.']),
+    ];
+    try {
+      await Clipboard.setStringAsync(lines.join('\n'));
+      Alert.alert('Copied', 'Suggestion diagnostics copied to clipboard.');
+    } catch (_error) {
+      Alert.alert('Copy failed', 'Clipboard is unavailable on this device.');
+    }
+  }, [suggestionsError, suggestionFailureSources]);
 
   // Multi-race detection state
   const [showMultiRaceModal, setShowMultiRaceModal] = useState(false);
   const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
   const [isCreatingMultiple, setIsCreatingMultiple] = useState(false);
-
-  // SSI document state
-  const [ssiDocumentId, setSsiDocumentId] = useState<string | null>(null);
 
   // Course position editor state
   const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
@@ -255,11 +321,9 @@ export default function AddRaceScreen() {
   useFocusEffect(
     useCallback(() => {
       setForm(getInitialState());
-      setIsExtracting(false);
       setIsSaving(false);
       setCalculatedDistance(null);
       setShowRouteMap(false);
-      setSsiDocumentId(null);
       setShowCoursePositionEditor(false);
       setPositionedCourse(null);
       setShowAllSuggestions(false);
@@ -320,378 +384,6 @@ export default function AddRaceScreen() {
       boatClassName: className,
       boatClass: className || prev.boatClass,
     }));
-  }, []);
-
-  // Handle AI extraction
-  const handleExtract = useCallback(async () => {
-    logger.debug('[AddRaceScreen] handleExtract called, isExtracting:', isExtracting);
-
-    if (isExtracting) return;
-
-    let textContent = '';
-
-    // Get content based on input method
-    if (form.aiInputMethod === 'paste') {
-      textContent = form.aiInputText.trim();
-      if (textContent.length < 20) {
-        Alert.alert('Error', 'Please paste more text to extract from');
-        return;
-      }
-    } else if (form.aiInputMethod === 'upload' && form.aiSelectedFile) {
-      setIsExtracting(true);
-      try {
-        const result = await PDFExtractionService.extractText(form.aiSelectedFile.uri, { maxPages: 50 });
-        if (!result.success || !result.text) {
-          throw new Error(result.error || 'Failed to extract text from PDF');
-        }
-        textContent = result.text;
-      } catch (err) {
-        Alert.alert('Error', err instanceof Error ? err.message : 'PDF extraction failed');
-        setIsExtracting(false);
-        return;
-      }
-    } else if (form.aiInputMethod === 'url') {
-      let url = form.aiInputText.trim();
-      // Normalize URL - add https:// if no protocol specified
-      if (!url.startsWith('http')) {
-        if (url.startsWith('www.')) {
-          url = `https://${url}`;
-        } else {
-          Alert.alert('Error', 'Please enter a valid URL');
-          return;
-        }
-      }
-
-      setIsExtracting(true);
-      try {
-        const isPdfUrl = url.toLowerCase().includes('.pdf') || url.includes('_files/ugd/');
-
-        if (isPdfUrl) {
-          const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-          const response = await fetch(`${supabaseUrl}/functions/v1/extract-pdf-text`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({ url }),
-          });
-          const result = await response.json();
-          if (!response.ok || !result.success) {
-            throw new Error(result.error || `Failed to extract PDF: ${response.status}`);
-          }
-          textContent = result.text;
-        } else {
-          const response = await fetch(url);
-          textContent = await response.text();
-        }
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Could not fetch content from URL';
-        Alert.alert('Error', errorMsg);
-        setIsExtracting(false);
-        return;
-      }
-    }
-
-    if (!textContent || textContent.length < 20) {
-      Alert.alert('Error', 'Not enough content to extract');
-      setIsExtracting(false);
-      return;
-    }
-
-    setIsExtracting(true);
-
-    try {
-      const agent = new ComprehensiveRaceExtractionAgent();
-      const result = await agent.extractRaceDetails(textContent);
-
-      if (!result.success || !result.data) {
-        throw new Error(result.error || 'Extraction failed');
-      }
-
-      // Check for multiple races
-      if (result.data.multipleRaces && result.data.races && result.data.races.length > 1) {
-        logger.debug('[AddRaceScreen] Multiple races detected:', result.data.races.length);
-        setMultiRaceData(result.data as MultiRaceExtractedData);
-        setShowMultiRaceModal(true);
-        setIsExtracting(false);
-        return;
-      }
-
-      // Apply extracted data to form (single race)
-      const extracted = result.data;
-      const aiFields = new Set<string>();
-      const updates: Partial<FormState> = {};
-
-      if (extracted.raceName) { updates.name = extracted.raceName; aiFields.add('name'); }
-      if (extracted.raceDate || extracted.date) { updates.date = extracted.raceDate || extracted.date; aiFields.add('date'); }
-      if (extracted.warningSignalTime || extracted.startTime) { updates.time = extracted.warningSignalTime || extracted.startTime; aiFields.add('time'); }
-      if (extracted.venue || extracted.location) { updates.location = extracted.venue || extracted.location; aiFields.add('location'); }
-      if (extracted.raceType && ['fleet', 'distance', 'match', 'team'].includes(extracted.raceType)) {
-        updates.raceType = extracted.raceType as RaceType;
-        aiFields.add('raceType');
-      }
-
-      // VHF Channel
-      if (extracted.vhfChannels?.length > 0) {
-        updates.vhfChannel = extracted.vhfChannels[0].channel?.toString() || '';
-        aiFields.add('vhfChannel');
-      }
-
-      // Distance-specific
-      if (extracted.totalDistanceNm) { updates.totalDistanceNm = extracted.totalDistanceNm.toString(); aiFields.add('totalDistanceNm'); }
-      if (extracted.timeLimitHours) { updates.timeLimitHours = extracted.timeLimitHours.toString(); aiFields.add('timeLimitHours'); }
-      if (extracted.courseDescription) { updates.routeDescription = extracted.courseDescription; aiFields.add('routeDescription'); }
-
-      // Fleet-specific
-      if (extracted.courseType) { updates.courseType = extracted.courseType; aiFields.add('courseType'); }
-      if (extracted.numberOfLegs) { updates.numberOfLaps = extracted.numberOfLegs.toString(); aiFields.add('numberOfLaps'); }
-      if (extracted.boatClass) { updates.boatClass = extracted.boatClass; aiFields.add('boatClass'); }
-
-      // Route waypoints
-      if (extracted.routeWaypoints?.length > 0) {
-        const mappedWaypoints = extracted.routeWaypoints.map((wp: any, i: number) => ({
-          id: `wp-${Date.now()}-${i}`,
-          name: wp.name || `Waypoint ${i + 1}`,
-          latitude: wp.latitude || 0,
-          longitude: wp.longitude || 0,
-          type: wp.type || 'waypoint',
-          required: wp.type === 'start' || wp.type === 'finish',
-        }));
-
-        // FIX: Don't filter here! Keep ALL waypoints - geocoding will fill in coordinates
-        // The filter was removing waypoints without coordinates BEFORE geocoding could run
-        updates.routeWaypoints = mappedWaypoints;
-
-        if (updates.routeWaypoints.length > 0) aiFields.add('routeWaypoints');
-      }
-
-      // Course marks
-      if (extracted.marks?.length > 0) {
-        updates.marks = extracted.marks;
-        aiFields.add('marks');
-      }
-
-      // Map raw extraction to ExtractedDetailsData for display in ExtractedDetailsSummary
-      const extractedDetails: ExtractedDetailsData = {
-        schedule: extracted.schedule,
-        minimumCrew: extracted.minimumCrew,
-        crewRequirements: extracted.crewRequirements,
-        minorSailorRules: extracted.minorSailorRules,
-        prohibitedAreas: extracted.prohibitedAreas?.map((a: any) => ({
-          name: a.name,
-          description: a.description,
-        })),
-        startAreaName: extracted.startAreaName,
-        startAreaDescription: extracted.startAreaDescription,
-        finishAreaName: extracted.finishAreaName,
-        finishAreaDescription: extracted.finishAreaDescription,
-        routeWaypoints: extracted.routeWaypoints?.map((wp: any) => ({
-          name: wp.name,
-          latitude: wp.latitude,
-          longitude: wp.longitude,
-          type: wp.type,
-          notes: wp.notes,
-        })),
-        trafficSeparationSchemes: extracted.trafficSeparationSchemes?.map((t: any) => t.name),
-        tideGates: extracted.tideGates?.map((tg: any) => ({
-          location: tg.location,
-          optimalTime: tg.optimalPassingTime,
-          notes: tg.notes,
-        })),
-        entryFees: extracted.entryFeeAmount ? [{
-          type: 'Entry Fee',
-          amount: `${extracted.entryFeeCurrency || 'HKD'} ${extracted.entryFeeAmount}`,
-        }] : undefined,
-        entryDeadline: extracted.entryDeadline,
-        entryFormUrl: extracted.entryFormUrl,
-        scoringFormulaDescription: extracted.scoringFormulaDescription,
-        handicapSystem: extracted.scoringSystem ? [extracted.scoringSystem] : undefined,
-        motoringDivisionAvailable: extracted.motoringDivisionAvailable,
-        motoringDivisionRules: extracted.motoringDivisionRules,
-        vhfChannels: extracted.vhfChannels,
-        organizingAuthority: extracted.organizingAuthority,
-        eventWebsite: extracted.eventWebsite,
-        safetyRequirements: extracted.safetyRequirements,
-        retirementNotification: extracted.retirementNotificationRequirements,
-        insuranceRequirements: extracted.insurancePolicyReference,
-        classRules: extracted.classRules ? [extracted.classRules] : undefined,
-        eligibilityRequirements: extracted.eligibilityRequirements,
-        expectedConditions: extracted.expectedConditions,
-        expectedWindDirection: extracted.expectedWindDirection?.toString(),
-        expectedWindSpeedMin: extracted.expectedWindSpeedMin,
-        expectedWindSpeedMax: extracted.expectedWindSpeedMax,
-        prizesDescription: extracted.prizesDescription,
-      };
-
-      // =========================================================================
-      // GEOCODING PHASE: Auto-geocode locations that have names but no coordinates
-      // =========================================================================
-      const regionHint = extracted.venue || extracted.location || 'Hong Kong';
-
-      // 1. Geocode START area if it has a name but no coordinates
-      if (extractedDetails.startAreaName) {
-        try {
-          const startResult = await geocodeSingleLocation(extractedDetails.startAreaName, regionHint);
-          if (startResult) {
-            logger.debug('[AddRaceScreen] Geocoded start area:', extractedDetails.startAreaName, startResult);
-            extractedDetails.startAreaCoordinates = startResult;
-          }
-        } catch (err) {
-          logger.warn('[AddRaceScreen] Failed to geocode start area:', err);
-        }
-      }
-
-      // 2. Geocode FINISH area if it has a name but no coordinates
-      if (extractedDetails.finishAreaName) {
-        try {
-          const finishResult = await geocodeSingleLocation(extractedDetails.finishAreaName, regionHint);
-          if (finishResult) {
-            logger.debug('[AddRaceScreen] Geocoded finish area:', extractedDetails.finishAreaName, finishResult);
-            extractedDetails.finishAreaCoordinates = finishResult;
-          }
-        } catch (err) {
-          logger.warn('[AddRaceScreen] Failed to geocode finish area:', err);
-        }
-      }
-
-      // 3. Geocode ROUTE WAYPOINTS (peaks) that don't have coordinates
-      if (extractedDetails.routeWaypoints && extractedDetails.routeWaypoints.length > 0) {
-        try {
-          const waypointsToGeocode = extractedDetails.routeWaypoints.map(wp => ({
-            name: wp.name,
-            latitude: wp.latitude,
-            longitude: wp.longitude,
-            type: wp.type,
-            notes: wp.notes,
-          }));
-
-          const geocodedWaypoints = await geocodeExtractedLocations(waypointsToGeocode, regionHint);
-
-          extractedDetails.routeWaypoints = geocodedWaypoints;
-
-          // Also update the form's routeWaypoints for map display
-          const waypointsWithCoords = geocodedWaypoints.filter(wp => wp.latitude && wp.longitude);
-          const waypointsWithoutCoords = geocodedWaypoints.filter(wp => !wp.latitude || !wp.longitude);
-
-          // Calculate a default position for waypoints that failed geocoding
-          // Use the center of successfully geocoded waypoints, or default to Hong Kong
-          let defaultLat = 22.3193; // Hong Kong default
-          let defaultLng = 114.1694;
-
-          if (waypointsWithCoords.length > 0) {
-            defaultLat = waypointsWithCoords.reduce((sum, wp) => sum + wp.latitude!, 0) / waypointsWithCoords.length;
-            defaultLng = waypointsWithCoords.reduce((sum, wp) => sum + wp.longitude!, 0) / waypointsWithCoords.length;
-          }
-
-          // Include ALL waypoints - those with coords and those needing positioning
-          const allWaypoints = [
-            ...waypointsWithCoords.map((wp, i) => ({
-              id: `wp-${Date.now()}-${i}`,
-              name: wp.name,
-              latitude: wp.latitude!,
-              longitude: wp.longitude!,
-              type: (wp.type as 'start' | 'waypoint' | 'gate' | 'finish') || 'waypoint',
-              required: wp.type === 'start' || wp.type === 'finish',
-              needsPositioning: false,
-            })),
-            // Place failed geocoding waypoints at default position with offset so they don't stack
-            ...waypointsWithoutCoords.map((wp, i) => ({
-              id: `wp-${Date.now()}-needs-${i}`,
-              name: wp.name,
-              latitude: defaultLat + (i * 0.01), // Slight offset so they don't stack
-              longitude: defaultLng + (i * 0.01),
-              type: (wp.type as 'start' | 'waypoint' | 'gate' | 'finish') || 'waypoint',
-              required: wp.type === 'start' || wp.type === 'finish',
-              needsPositioning: true, // Flag for UI to show differently
-            })),
-          ];
-
-          if (allWaypoints.length > 0) {
-            updates.routeWaypoints = allWaypoints;
-            aiFields.add('routeWaypoints');
-          }
-        } catch (err) {
-          logger.warn('[AddRaceScreen] Failed to geocode waypoints:', err);
-        }
-      }
-
-      // 4. Geocode PROHIBITED AREAS that don't have coordinates
-      if (extractedDetails.prohibitedAreas && extractedDetails.prohibitedAreas.length > 0) {
-        try {
-          const areasToGeocode = extractedDetails.prohibitedAreas.map(area => ({
-            name: area.name,
-            description: area.description,
-            latitude: undefined as number | undefined,
-            longitude: undefined as number | undefined,
-          }));
-
-          const geocodedAreas = await geocodeExtractedLocations(areasToGeocode, regionHint);
-
-          extractedDetails.prohibitedAreas = geocodedAreas.map((area, i) => ({
-            name: area.name,
-            description: extractedDetails.prohibitedAreas![i].description,
-            coordinates: area.latitude && area.longitude
-              ? [{ lat: area.latitude, lng: area.longitude }]
-              : undefined,
-          }));
-
-          logger.debug('[AddRaceScreen] Geocoded prohibited areas:', geocodedAreas.filter(a => a.latitude).length);
-        } catch (err) {
-          logger.warn('[AddRaceScreen] Failed to geocode prohibited areas:', err);
-        }
-      }
-
-      logger.debug('[AddRaceScreen] Geocoding phase complete');
-
-      setForm(prev => ({
-        ...prev,
-        ...updates,
-        aiExtractedFields: aiFields,
-        extractionComplete: true,
-        // Keep AI section expanded - don't auto-collapse after extraction
-        extractedDetails,
-      }));
-
-      // Auto-show route map if any geocoded course elements exist
-      const hasWaypoints = updates.routeWaypoints && updates.routeWaypoints.length > 0;
-      const hasStartArea = extractedDetails.startAreaCoordinates?.lat && extractedDetails.startAreaCoordinates?.lng;
-      const hasFinishArea = extractedDetails.finishAreaCoordinates?.lat && extractedDetails.finishAreaCoordinates?.lng;
-      const hasProhibitedAreas = extractedDetails.prohibitedAreas?.some(a => a.coordinates?.[0]?.lat);
-
-      if (hasWaypoints || hasStartArea || hasFinishArea || hasProhibitedAreas) {
-        setShowRouteMap(true);
-        logger.debug('[AddRaceScreen] Auto-showing route map:', {
-          waypoints: updates.routeWaypoints?.length || 0,
-          hasStartArea: !!hasStartArea,
-          hasFinishArea: !!hasFinishArea,
-          prohibitedAreas: extractedDetails.prohibitedAreas?.filter(a => a.coordinates?.[0]).length || 0,
-        });
-      }
-
-      logger.debug('[AddRaceScreen] Extraction complete:', { fieldsExtracted: aiFields.size });
-    } catch (err) {
-      logger.error('[AddRaceScreen] Extraction failed:', err);
-      Alert.alert('Extraction Failed', err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setIsExtracting(false);
-    }
-  }, [form.aiInputMethod, form.aiInputText, form.aiSelectedFile, isExtracting]);
-
-  // Handle file pick
-  const handleFilePick = useCallback(async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf'],
-        copyToCacheDirectory: true,
-      });
-
-      if (!result.canceled && result.assets?.[0]) {
-        setForm(prev => ({ ...prev, aiSelectedFile: result.assets[0] }));
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Failed to select file');
-    }
   }, []);
 
   // Handle multi-race selection confirmation
@@ -932,10 +624,21 @@ export default function AddRaceScreen() {
   // Validation
   const isFormValid = useMemo(() => {
     if (!form.name.trim() || !form.date || !form.time) return false;
-    if (form.raceType === 'match' && !form.opponentName.trim()) return false;
-    if (form.raceType === 'team' && (!form.yourTeamName.trim() || !form.opponentTeamName.trim())) return false;
+    if (isSailing) {
+      if (form.raceType === 'match' && !form.opponentName.trim()) return false;
+      if (form.raceType === 'team' && (!form.yourTeamName.trim() || !form.opponentTeamName.trim())) return false;
+    } else {
+      // For non-sailing: validate required subtype fields
+      if (!form.eventSubtype) return false;
+      const subtypeConfig = eventConfig.eventSubtypes.find(s => s.id === form.eventSubtype);
+      if (subtypeConfig?.formFields) {
+        for (const field of subtypeConfig.formFields) {
+          if (field.required && !form.subtypeFields[field.id]?.trim()) return false;
+        }
+      }
+    }
     return true;
-  }, [form]);
+  }, [form, isSailing, eventConfig]);
 
   // Save handler
   const handleSave = useCallback(async () => {
@@ -980,8 +683,9 @@ export default function AddRaceScreen() {
         start_date: startTime,
         created_by: user.id,
         status: 'planned',
-        race_type: form.raceType,
-        vhf_channel: form.vhfChannel || null,
+        race_type: isSailing ? form.raceType : form.eventSubtype,
+        vhf_channel: isSailing ? (form.vhfChannel || null) : null,
+        interest_id: currentInterest?.id ?? null,
       };
 
       // ... (rest of the existing Supabase logic) ...
@@ -1005,23 +709,33 @@ export default function AddRaceScreen() {
       }
 
       // Type-specific fields
-      if (form.raceType === 'fleet') {
-        metadata.course_type = form.courseType || null;
-        metadata.number_of_laps = form.numberOfLaps ? parseInt(form.numberOfLaps) : null;
-        if (form.expectedFleetSize) raceData.expected_fleet_size = parseInt(form.expectedFleetSize);
-        if (form.boatClass) metadata.class_name = form.boatClass;
-      } else if (form.raceType === 'distance') {
-        if (form.totalDistanceNm) raceData.total_distance_nm = parseFloat(form.totalDistanceNm);
-        else if (calculatedDistance) raceData.total_distance_nm = calculatedDistance;
-        if (form.timeLimitHours) raceData.time_limit_hours = parseFloat(form.timeLimitHours);
-        metadata.route_description = form.routeDescription || null;
-      } else if (form.raceType === 'match') {
-        metadata.opponent_name = form.opponentName;
-        metadata.match_round = form.matchRound || null;
-      } else if (form.raceType === 'team') {
-        metadata.your_team_name = form.yourTeamName;
-        metadata.opponent_team_name = form.opponentTeamName;
-        metadata.team_size = form.teamSize ? parseInt(form.teamSize) : null;
+      if (isSailing) {
+        if (form.raceType === 'fleet') {
+          metadata.course_type = form.courseType || null;
+          metadata.number_of_laps = form.numberOfLaps ? parseInt(form.numberOfLaps) : null;
+          if (form.expectedFleetSize) raceData.expected_fleet_size = parseInt(form.expectedFleetSize);
+          if (form.boatClass) metadata.class_name = form.boatClass;
+        } else if (form.raceType === 'distance') {
+          if (form.totalDistanceNm) raceData.total_distance_nm = parseFloat(form.totalDistanceNm);
+          else if (calculatedDistance) raceData.total_distance_nm = calculatedDistance;
+          if (form.timeLimitHours) raceData.time_limit_hours = parseFloat(form.timeLimitHours);
+          metadata.route_description = form.routeDescription || null;
+        } else if (form.raceType === 'match') {
+          metadata.opponent_name = form.opponentName;
+          metadata.match_round = form.matchRound || null;
+        } else if (form.raceType === 'team') {
+          metadata.your_team_name = form.yourTeamName;
+          metadata.opponent_team_name = form.opponentTeamName;
+          metadata.team_size = form.teamSize ? parseInt(form.teamSize) : null;
+        }
+      } else {
+        // Non-sailing: store event subtype and dynamic fields in metadata
+        metadata.event_subtype = form.eventSubtype;
+        metadata.interest_slug = currentInterest?.slug;
+        // Copy all subtype-specific form values
+        for (const [key, value] of Object.entries(form.subtypeFields)) {
+          if (value) metadata[key] = value;
+        }
       }
 
       raceData.metadata = metadata;
@@ -1166,20 +880,12 @@ export default function AddRaceScreen() {
   }, [form, isFormValid, user?.id, isGuest, isSaving, calculatedDistance, router]);
 
   const handleClose = useCallback(() => {
-    router.canGoBack() ? router.back() : router.replace('/(tabs)/races');
-  }, [router]);
-
-  // Check if we can extract
-  const canExtract = useMemo(() => {
-    if (form.aiInputMethod === 'paste') return form.aiInputText.trim().length > 20;
-    if (form.aiInputMethod === 'upload') return form.aiSelectedFile !== null;
-    if (form.aiInputMethod === 'url') {
-      const url = form.aiInputText.trim();
-      // Accept URLs with http/https or starting with www.
-      return url.startsWith('http') || url.startsWith('www.');
+    if (router.canGoBack()) {
+      router.back();
+      return;
     }
-    return false;
-  }, [form.aiInputMethod, form.aiInputText, form.aiSelectedFile]);
+    router.replace('/(tabs)/races');
+  }, [router]);
 
   // Get venue center for route map
   const mapCenter = useMemo(() => {
@@ -1215,7 +921,7 @@ export default function AddRaceScreen() {
           <Pressable onPress={handleClose} hitSlop={12}>
             <ChevronLeft size={28} color={COLORS.accent} />
           </Pressable>
-          <Text style={styles.headerTitle}>Add Race</Text>
+          <Text style={styles.headerTitle}>{headerTitle}</Text>
           <Pressable
             onPress={handleSave}
             disabled={!isFormValid || isSaving}
@@ -1236,36 +942,119 @@ export default function AddRaceScreen() {
           {/* Race Suggestion Chips */}
           <RaceSuggestionChips
             suggestions={suggestions}
+            diagnostics={suggestionDiagnostics}
             loading={suggestionsLoading}
+            error={suggestionsError}
             onUseSuggestion={applySuggestion}
             onDismissSuggestion={handleDismissSuggestion}
             onSeeAll={() => setShowAllSuggestions(true)}
+            onRetry={refreshSuggestions}
           />
-
-          {/* Race Type Selector */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>RACE TYPE</Text>
-            <View style={styles.raceTypeGrid}>
-              {(Object.keys(RACE_TYPE_CONFIG) as RaceType[]).map((type) => {
-                const config = RACE_TYPE_CONFIG[type];
-                const Icon = config.icon;
-                const isSelected = form.raceType === type;
-                return (
-                  <Pressable
-                    key={type}
-                    style={[styles.raceTypeCard, isSelected && { borderColor: config.color }]}
-                    onPress={() => updateField('raceType', type)}
-                  >
-                    <Icon size={20} color={isSelected ? config.color : COLORS.tertiary} />
-                    <Text style={[styles.raceTypeLabel, isSelected && { color: config.color }]}>
-                      {config.label}
+          {(suggestionsError || suggestionFailureSources.length > 0) && (
+            <View style={styles.suggestionDiagnosticCard}>
+              <View style={styles.suggestionDiagnosticHeader}>
+                <Text style={styles.suggestionDiagnosticTitle}>Suggestion diagnostics</Text>
+                <View style={styles.suggestionDiagnosticActions}>
+                  <Pressable onPress={copySuggestionDiagnostics}>
+                    <Text style={styles.suggestionDiagnosticToggle}>Copy</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setShowSuggestionDiagnostics((prev) => !prev)}>
+                    <Text style={styles.suggestionDiagnosticToggle}>
+                      {showSuggestionDiagnostics ? 'Hide' : 'Show'}
                     </Text>
                   </Pressable>
-                );
-              })}
+                </View>
+              </View>
+              {suggestionsError ? (
+                <Text style={styles.suggestionDiagnosticLine}>
+                  Last error: {suggestionsError.message}
+                </Text>
+              ) : null}
+              {showSuggestionDiagnostics && (
+                <View style={styles.suggestionDiagnosticDetails}>
+                  <Text style={styles.suggestionDiagnosticLine}>
+                    Query path: race_suggestions_cache -&gt; source generators -&gt; race_suggestions_cache upsert
+                  </Text>
+                  {suggestionFailureSources.length > 0 ? (
+                    suggestionFailureSources.map((source) => (
+                      <Text key={source} style={styles.suggestionDiagnosticLine}>
+                        {source}: {SUGGESTION_SOURCE_HINTS[source] || 'unknown source path'}
+                      </Text>
+                    ))
+                  ) : (
+                    <Text style={styles.suggestionDiagnosticLine}>
+                      Source-level failure details unavailable.
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
-          </View>
+          )}
 
+          {/* Activity Catalog — templates from orgs & coaches */}
+          {(catalogTemplates.length > 0 || catalogLoading) && (
+            <View style={styles.section}>
+              <ActivityCatalog
+                templates={catalogTemplates}
+                onSelectTemplate={setPreviewTemplate}
+                isLoading={catalogLoading}
+              />
+            </View>
+          )}
+
+          {/* Event Type Selector — interest-aware */}
+          {isSailing ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>RACE TYPE</Text>
+              <View style={styles.raceTypeGrid}>
+                {(Object.keys(RACE_TYPE_CONFIG) as RaceType[]).map((type) => {
+                  const config = RACE_TYPE_CONFIG[type];
+                  const Icon = config.icon;
+                  const isSelected = form.raceType === type;
+                  return (
+                    <Pressable
+                      key={type}
+                      style={[styles.raceTypeCard, isSelected && { borderColor: config.color }]}
+                      onPress={() => updateField('raceType', type)}
+                    >
+                      <Icon size={20} color={isSelected ? config.color : COLORS.tertiary} />
+                      <Text style={[styles.raceTypeLabel, isSelected && { color: config.color }]}>
+                        {config.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>EVENT TYPE</Text>
+              <View style={styles.raceTypeGrid}>
+                {eventConfig.eventSubtypes.map((subtype) => {
+                  const isSelected = form.eventSubtype === subtype.id;
+                  const accentColor = currentInterest?.accent_color ?? COLORS.accent;
+                  return (
+                    <Pressable
+                      key={subtype.id}
+                      style={[styles.raceTypeCard, isSelected && { borderColor: accentColor }]}
+                      onPress={() => setForm(prev => ({ ...prev, eventSubtype: subtype.id, subtypeFields: {} }))}
+                    >
+                      <Text style={[styles.raceTypeLabel, isSelected && { color: accentColor }]}>
+                        {subtype.label}
+                      </Text>
+                      <Text style={[styles.subtypeDescription, isSelected && { color: accentColor }]} numberOfLines={1}>
+                        {subtype.description}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          {/* ---- Sailing-specific sections ---- */}
+          {isSailing && (
+          <>
           {/* Unified Document Input - AI Extraction with source tracking */}
           <UnifiedDocumentInput
             mode="race_creation"
@@ -1644,6 +1433,127 @@ export default function AddRaceScreen() {
               onChange={(updatedDetails) => updateField('extractedDetails', updatedDetails)}
             />
           )}
+          </>
+          )}
+
+          {/* ---- Non-sailing: dynamic form fields from config ---- */}
+          {!isSailing && form.eventSubtype && (() => {
+            const subtypeConfig = eventConfig.eventSubtypes.find(s => s.id === form.eventSubtype);
+            if (!subtypeConfig?.formFields?.length) return null;
+            const accentColor = currentInterest?.accent_color ?? COLORS.accent;
+            return (
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>{subtypeConfig.label.toUpperCase()}</Text>
+                {subtypeConfig.formFields.map((field: EventFormField) => {
+                  if (field.type === 'select' && field.options) {
+                    return (
+                      <View key={field.id} style={{ marginBottom: 12 }}>
+                        <Text style={styles.fieldLabel}>{field.label}{field.required ? ' *' : ''}</Text>
+                        <View style={styles.selectGrid}>
+                          {field.options.map((opt) => {
+                            const isSelected = form.subtypeFields[field.id] === opt.value;
+                            return (
+                              <Pressable
+                                key={opt.value}
+                                style={[styles.selectChip, isSelected && { borderColor: accentColor, backgroundColor: accentColor + '12' }]}
+                                onPress={() => setForm(prev => ({
+                                  ...prev,
+                                  subtypeFields: { ...prev.subtypeFields, [field.id]: opt.value },
+                                }))}
+                              >
+                                <Text style={[styles.selectChipText, isSelected && { color: accentColor }]}>
+                                  {opt.label}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  }
+                  if (field.type === 'multi-select' && field.options) {
+                    const selectedValues = (form.subtypeFields[field.id] || '').split(',').filter(Boolean);
+                    return (
+                      <View key={field.id} style={{ marginBottom: 12 }}>
+                        <Text style={styles.fieldLabel}>{field.label}</Text>
+                        <View style={styles.selectGrid}>
+                          {field.options.map((opt) => {
+                            const isSelected = selectedValues.includes(opt.value);
+                            return (
+                              <Pressable
+                                key={opt.value}
+                                style={[styles.selectChip, isSelected && { borderColor: accentColor, backgroundColor: accentColor + '12' }]}
+                                onPress={() => {
+                                  const newValues = isSelected
+                                    ? selectedValues.filter(v => v !== opt.value)
+                                    : [...selectedValues, opt.value];
+                                  setForm(prev => ({
+                                    ...prev,
+                                    subtypeFields: { ...prev.subtypeFields, [field.id]: newValues.join(',') },
+                                  }));
+                                }}
+                              >
+                                <Text style={[styles.selectChipText, isSelected && { color: accentColor }]}>
+                                  {opt.label}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  }
+                  if (field.type === 'boolean') {
+                    const isChecked = form.subtypeFields[field.id] === 'true';
+                    return (
+                      <Pressable
+                        key={field.id}
+                        style={styles.booleanRow}
+                        onPress={() => setForm(prev => ({
+                          ...prev,
+                          subtypeFields: { ...prev.subtypeFields, [field.id]: isChecked ? 'false' : 'true' },
+                        }))}
+                      >
+                        <View style={[styles.booleanCheck, isChecked && { backgroundColor: accentColor, borderColor: accentColor }]}>
+                          {isChecked && <Text style={styles.booleanCheckmark}>✓</Text>}
+                        </View>
+                        <Text style={styles.booleanLabel}>{field.label}</Text>
+                      </Pressable>
+                    );
+                  }
+                  // Default: text, number, date, time, duration — render as FieldRow
+                  return (
+                    <FieldRow
+                      key={field.id}
+                      label={field.label}
+                      value={form.subtypeFields[field.id] || ''}
+                      onChangeText={(v) => setForm(prev => ({
+                        ...prev,
+                        subtypeFields: { ...prev.subtypeFields, [field.id]: v },
+                      }))}
+                      placeholder={field.placeholder || ''}
+                      required={field.required}
+                      keyboardType={field.type === 'number' ? 'numeric' : 'default'}
+                    />
+                  );
+                })}
+              </View>
+            );
+          })()}
+
+          {/* Shared Notes Section (all interests) */}
+          {!isSailing && (
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>NOTES</Text>
+              <FieldRow
+                label="Notes"
+                value={form.notes}
+                onChangeText={(v) => updateField('notes', v)}
+                placeholder="Any additional notes..."
+                multiline
+              />
+            </View>
+          )}
 
           <View style={{ height: 60 }} />
         </ScrollView>
@@ -1690,15 +1600,52 @@ export default function AddRaceScreen() {
           </View>
           <RaceSuggestionsDrawer
             suggestions={suggestions}
+            diagnostics={suggestionDiagnostics}
             loading={suggestionsLoading}
+            error={suggestionsError}
             onSelectSuggestion={(suggestion) => {
               applySuggestion(suggestion);
               setShowAllSuggestions(false);
             }}
             onDismissSuggestion={handleDismissSuggestion}
+            onRefresh={refreshSuggestions}
           />
         </SafeAreaView>
       </Modal>
+
+      {/* Template Preview Modal */}
+      {previewTemplate && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setPreviewTemplate(null)}
+        >
+          <SafeAreaView style={styles.container} edges={['top']}>
+            <TemplatePreview
+              template={previewTemplate}
+              onEnroll={async (template) => {
+                await enrollInCatalogTemplate(template);
+                setPreviewTemplate(null);
+                // Pre-fill form from template data
+                const updates: Partial<FormState> = {};
+                if (template.title) updates.name = template.title;
+                if (template.scheduledDate) {
+                  const d = new Date(template.scheduledDate);
+                  updates.date = format(d, 'yyyy-MM-dd');
+                  updates.time = format(d, 'HH:mm');
+                }
+                if (template.location) updates.location = template.location;
+                if (template.eventType && ['fleet', 'distance', 'match', 'team'].includes(template.eventType)) {
+                  updates.raceType = template.eventType as RaceType;
+                }
+                setForm(prev => ({ ...prev, ...updates }));
+              }}
+              onClose={() => setPreviewTemplate(null)}
+            />
+          </SafeAreaView>
+        </Modal>
+      )}
 
       {/* Multi-Race Selection Modal */}
       {showMultiRaceModal && multiRaceData && (
@@ -1807,6 +1754,47 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
   },
+  suggestionDiagnosticCard: {
+    marginTop: 8,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  suggestionDiagnosticHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  suggestionDiagnosticActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  suggestionDiagnosticTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#7F1D1D',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  suggestionDiagnosticToggle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B91C1C',
+  },
+  suggestionDiagnosticDetails: {
+    marginTop: 2,
+    gap: 2,
+  },
+  suggestionDiagnosticLine: {
+    fontSize: 12,
+    color: '#991B1B',
+  },
 
   // Section
   section: {
@@ -1850,6 +1838,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.secondary,
+  },
+  subtypeDescription: {
+    fontSize: 10,
+    color: COLORS.tertiary,
+    marginTop: 2,
+  },
+
+  // Dynamic form fields (non-sailing)
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: COLORS.ink,
+    marginBottom: 6,
+  },
+  selectGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  selectChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.inputBorder,
+    backgroundColor: COLORS.inputBg,
+  },
+  selectChipText: {
+    fontSize: 13,
+    color: COLORS.secondary,
+    fontWeight: '500',
+  },
+  booleanRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+  },
+  booleanCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: COLORS.inputBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  booleanCheckmark: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  booleanLabel: {
+    fontSize: 14,
+    color: COLORS.ink,
   },
 
   // AI extraction

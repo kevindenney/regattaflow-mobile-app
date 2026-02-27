@@ -13,6 +13,10 @@ import {
   RaceScore,
   ScoreCode,
 } from './scoring/ScoringEngine';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ScoringService');
 
 // Types
 export interface RegattaScoring {
@@ -44,11 +48,29 @@ export interface RaceResultEntry {
   scoring_penalty?: number;
 }
 
+type RaceResultsIdColumn = 'regatta_id' | 'race_id';
+
 class ScoringService {
   private engine: ScoringEngine;
+  private raceResultsIdColumn: RaceResultsIdColumn = 'regatta_id';
 
   constructor(config?: ScoringConfiguration) {
     this.engine = new ScoringEngine(config || DEFAULT_LOW_POINT_CONFIG);
+  }
+
+  private async withRaceResultsIdFallback<T>(
+    operation: (column: RaceResultsIdColumn) => Promise<{ data: T | null; error: any }>
+  ): Promise<{ data: T | null; error: any }> {
+    const current = this.raceResultsIdColumn;
+    let result = await operation(current);
+    if (result.error && current === 'regatta_id' && isMissingIdColumn(result.error, 'race_results', current)) {
+      result = await operation('race_id');
+      if (!result.error) {
+        this.raceResultsIdColumn = 'race_id';
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -175,21 +197,24 @@ class ScoringService {
       });
 
     // Prepare result records
-    const resultRecords = results.map((r, index) => ({
-      regatta_id: regattaId,
-      race_number: raceNumber,
-      entry_id: r.entryId,
-      finish_position: r.position || (index + 1),
-      status: r.scoreCode ? this.scoreCodeToStatus(r.scoreCode) : 'finished',
-      score_code: r.scoreCode,
-    }));
-
     // Upsert results
-    const { error } = await supabase
-      .from('race_results')
-      .upsert(resultRecords, {
-        onConflict: 'regatta_id,race_number,entry_id',
-      });
+    const { error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .upsert(
+          results.map((r, index) => ({
+            [column]: regattaId,
+            race_number: raceNumber,
+            entry_id: r.entryId,
+            finish_position: r.position || (index + 1),
+            status: r.scoreCode ? this.scoreCodeToStatus(r.scoreCode) : 'finished',
+            score_code: r.scoreCode,
+          })),
+          {
+            onConflict: `${column},race_number,entry_id`,
+          }
+        )
+    );
 
     if (error) throw error;
   }
@@ -203,17 +228,19 @@ class ScoringService {
     entryId: string,
     updates: Partial<RaceResultEntry>
   ): Promise<void> {
-    const { error } = await supabase
-      .from('race_results')
-      .update({
-        ...updates,
-        status: updates.score_code 
-          ? this.scoreCodeToStatus(updates.score_code)
-          : 'finished',
-      })
-      .eq('regatta_id', regattaId)
-      .eq('race_number', raceNumber)
-      .eq('entry_id', entryId);
+    const { error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .update({
+          ...updates,
+          status: updates.score_code
+            ? this.scoreCodeToStatus(updates.score_code)
+            : 'finished',
+        })
+        .eq(column, regattaId)
+        .eq('race_number', raceNumber)
+        .eq('entry_id', entryId)
+    );
 
     if (error) throw error;
 
@@ -232,24 +259,28 @@ class ScoringService {
     reason?: string
   ): Promise<void> {
     // Get current result
-    const { data: current } = await supabase
-      .from('race_results')
-      .select('*')
-      .eq('regatta_id', regattaId)
-      .eq('race_number', raceNumber)
-      .eq('entry_id', entryId)
-      .single();
+    const { data: current } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .select('*')
+        .eq(column, regattaId)
+        .eq('race_number', raceNumber)
+        .eq('entry_id', entryId)
+        .single()
+    );
 
     // Update with penalty
-    const { error } = await supabase
-      .from('race_results')
-      .update({
-        score_code: scoreCode,
-        status: this.scoreCodeToStatus(scoreCode),
-      })
-      .eq('regatta_id', regattaId)
-      .eq('race_number', raceNumber)
-      .eq('entry_id', entryId);
+    const { error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .update({
+          score_code: scoreCode,
+          status: this.scoreCodeToStatus(scoreCode),
+        })
+        .eq(column, regattaId)
+        .eq('race_number', raceNumber)
+        .eq('entry_id', entryId)
+    );
 
     if (error) throw error;
 
@@ -275,15 +306,17 @@ class ScoringService {
     redressPosition: number,
     reason: string
   ): Promise<void> {
-    const { error } = await supabase
-      .from('race_results')
-      .update({
-        finish_position: redressPosition,
-        score_code: 'RDG',
-      })
-      .eq('regatta_id', regattaId)
-      .eq('race_number', raceNumber)
-      .eq('entry_id', entryId);
+    const { error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .update({
+          finish_position: redressPosition,
+          score_code: 'RDG',
+        })
+        .eq(column, regattaId)
+        .eq('race_number', raceNumber)
+        .eq('entry_id', entryId)
+    );
 
     if (error) throw error;
 
@@ -370,12 +403,14 @@ class ScoringService {
     regattaId: string,
     entryId: string
   ): Promise<RaceScore[]> {
-    const { data: results, error } = await supabase
-      .from('race_results')
-      .select('*')
-      .eq('regatta_id', regattaId)
-      .eq('entry_id', entryId)
-      .order('race_number');
+    const { data: results, error } = await this.withRaceResultsIdFallback((column) =>
+      supabase
+        .from('race_results')
+        .select('*')
+        .eq(column, regattaId)
+        .eq('entry_id', entryId)
+        .order('race_number')
+    );
 
     if (error) throw error;
 
@@ -456,7 +491,7 @@ class ScoringService {
           changed_by: user?.id,
         });
     } catch (error) {
-      console.error('Failed to log result change:', error);
+      logger.error('Failed to log result change:', error);
     }
   }
 }
@@ -464,4 +499,3 @@ class ScoringService {
 // Export singleton instance
 export const scoringService = new ScoringService();
 export default ScoringService;
-

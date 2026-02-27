@@ -112,7 +112,7 @@ export class StripeService {
       return { url: data.url };
 
     } catch (error: any) {
-      console.error('Checkout session error:', error);
+      logger.error('Checkout session error:', error);
       return { error: error.message };
     }
   }
@@ -148,7 +148,7 @@ export class StripeService {
       return { url: data.url };
 
     } catch (error: any) {
-      console.error('Portal session error:', error);
+      logger.error('Portal session error:', error);
       return { error: error.message };
     }
   }
@@ -178,7 +178,7 @@ export class StripeService {
       };
 
     } catch (error: any) {
-      console.error('Failed to get subscription status:', error);
+      logger.error('Failed to get subscription status:', error);
       return { active: false };
     }
   }
@@ -211,7 +211,7 @@ export class StripeService {
       return { success: true };
 
     } catch (error: any) {
-      console.error('Cancel subscription error:', error);
+      logger.error('Cancel subscription error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -244,7 +244,7 @@ export class StripeService {
       return { success: true };
 
     } catch (error: any) {
-      console.error('Resume subscription error:', error);
+      logger.error('Resume subscription error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -310,7 +310,7 @@ export class StripeService {
         logger.debug('Stripe initialized for mobile');
       }
     } catch (error) {
-      console.error('Failed to initialize Stripe:', error);
+      logger.error('Failed to initialize Stripe:', error);
     }
   }
 
@@ -364,7 +364,7 @@ export class StripeService {
             throw error;
           }
         } catch (importError) {
-          console.error('Failed to import Stripe React Native:', importError);
+          logger.error('Failed to import Stripe React Native:', importError);
           throw new Error('Payment not available on this platform');
         }
       }
@@ -372,7 +372,7 @@ export class StripeService {
       return { success: true };
 
     } catch (error: any) {
-      console.error('Payment error:', error);
+      logger.error('Payment error:', error);
       return { success: false, error: error.message };
     }
   }

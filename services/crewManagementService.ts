@@ -37,7 +37,7 @@ export interface CrewMember {
   inviteSentAt?: string;
   inviteAcceptedAt?: string;
   notes?: string;
-  performanceNotes: Array<{ date: string; race: string; note: string }>;
+  performanceNotes: { date: string; race: string; note: string }[];
   createdAt: string;
   updatedAt: string;
   queuedForSync?: boolean;
@@ -170,7 +170,7 @@ class CrewManagementService {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching crew members:', error);
+      logger.error('Error fetching crew members:', error);
       throw error;
     }
 
@@ -188,7 +188,7 @@ class CrewManagementService {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('Error fetching all crew members:', error);
+      logger.error('Error fetching all crew members:', error);
       throw error;
     }
 
@@ -318,7 +318,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error adding crew member from user:', error);
+      logger.error('Error adding crew member from user:', error);
       throw error;
     }
 
@@ -475,7 +475,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error updating crew member:', error);
+      logger.error('Error updating crew member:', error);
       throw error;
     }
 
@@ -512,7 +512,7 @@ class CrewManagementService {
       .eq('id', crewMemberId);
 
     if (error) {
-      console.error('Error removing crew member:', error);
+      logger.error('Error removing crew member:', error);
       throw error;
     }
   }
@@ -546,7 +546,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error accepting invite:', error);
+      logger.error('Error accepting invite:', error);
       throw error;
     }
 
@@ -557,7 +557,7 @@ class CrewManagementService {
    * Resend crew invitation
    */
   async resendInvite(crewMemberId: string): Promise<void> {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('crew_members')
       .update({
         invite_sent_at: new Date().toISOString(),
@@ -568,7 +568,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error resending invite:', error);
+      logger.error('Error resending invite:', error);
       throw error;
     }
 
@@ -591,7 +591,7 @@ class CrewManagementService {
       .single();
 
     if (fetchError) {
-      console.error('Error fetching current notes:', fetchError);
+      logger.error('Error fetching current notes:', fetchError);
       throw fetchError;
     }
 
@@ -605,7 +605,7 @@ class CrewManagementService {
       .eq('id', crewMemberId);
 
     if (updateError) {
-      console.error('Error adding performance note:', updateError);
+      logger.error('Error adding performance note:', updateError);
       throw updateError;
     }
   }
@@ -697,7 +697,7 @@ class CrewManagementService {
     });
 
     if (error) {
-      console.error('Error setting primary crew:', error);
+      logger.error('Error setting primary crew:', error);
       throw error;
     }
   }
@@ -715,7 +715,7 @@ class CrewManagementService {
       .eq('status', 'active');
 
     if (error) {
-      console.error('Error fetching primary crew:', error);
+      logger.error('Error fetching primary crew:', error);
       throw error;
     }
 
@@ -741,7 +741,7 @@ class CrewManagementService {
       .single();
 
     if (fetchError) {
-      console.error('Error fetching current certifications:', fetchError);
+      logger.error('Error fetching current certifications:', fetchError);
       throw fetchError;
     }
 
@@ -755,7 +755,7 @@ class CrewManagementService {
       .eq('id', crewMemberId);
 
     if (updateError) {
-      console.error('Error adding certification:', updateError);
+      logger.error('Error adding certification:', updateError);
       throw updateError;
     }
   }
@@ -776,7 +776,7 @@ class CrewManagementService {
       .single();
 
     if (fetchError) {
-      console.error('Error fetching current certifications:', fetchError);
+      logger.error('Error fetching current certifications:', fetchError);
       throw fetchError;
     }
 
@@ -790,7 +790,7 @@ class CrewManagementService {
       .eq('id', crewMemberId);
 
     if (updateError) {
-      console.error('Error updating certification:', updateError);
+      logger.error('Error updating certification:', updateError);
       throw updateError;
     }
   }
@@ -810,7 +810,7 @@ class CrewManagementService {
       .single();
 
     if (fetchError) {
-      console.error('Error fetching current certifications:', fetchError);
+      logger.error('Error fetching current certifications:', fetchError);
       throw fetchError;
     }
 
@@ -824,7 +824,7 @@ class CrewManagementService {
       .eq('id', crewMemberId);
 
     if (updateError) {
-      console.error('Error removing certification:', updateError);
+      logger.error('Error removing certification:', updateError);
       throw updateError;
     }
   }
@@ -864,7 +864,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error adding race participation:', error);
+      logger.error('Error adding race participation:', error);
       throw error;
     }
 
@@ -882,7 +882,7 @@ class CrewManagementService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching race history:', error);
+      logger.error('Error fetching race history:', error);
       throw error;
     }
 
@@ -898,7 +898,7 @@ class CrewManagementService {
     });
 
     if (error) {
-      console.error('Error fetching crew race stats:', error);
+      logger.error('Error fetching crew race stats:', error);
       throw error;
     }
 
@@ -943,7 +943,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error updating race participation:', error);
+      logger.error('Error updating race participation:', error);
       throw error;
     }
 
@@ -977,7 +977,7 @@ class CrewManagementService {
     const { data, error } = await query.order('start_date', { ascending: true });
 
     if (error) {
-      console.error('Error fetching crew availability:', error);
+      logger.error('Error fetching crew availability:', error);
       throw error;
     }
 
@@ -1056,7 +1056,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error setting crew availability:', error);
+      logger.error('Error setting crew availability:', error);
       throw error;
     }
 
@@ -1127,7 +1127,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error updating crew availability:', error);
+      logger.error('Error updating crew availability:', error);
       throw error;
     }
 
@@ -1164,7 +1164,7 @@ class CrewManagementService {
       .eq('id', availabilityId);
 
     if (error) {
-      console.error('Error deleting crew availability:', error);
+      logger.error('Error deleting crew availability:', error);
       throw error;
     }
   }
@@ -1179,7 +1179,7 @@ class CrewManagementService {
     const normalizedDate = normalizeDateInput(date);
 
     if (!normalizedDate) {
-      console.warn('Invalid date provided to checkCrewAvailabilityForDate, defaulting to available', {
+      logger.warn('Invalid date provided to checkCrewAvailabilityForDate, defaulting to available', {
         date,
       });
       return 'available';
@@ -1224,7 +1224,7 @@ class CrewManagementService {
         logger.debug('crew_availability table not found, defaulting to available');
         return 'available';
       }
-      console.error('Error checking crew availability:', error);
+      logger.error('Error checking crew availability:', error);
       return 'available'; // Default to available on error
     }
   }
@@ -1259,7 +1259,7 @@ class CrewManagementService {
             nextUnavailableError.code !== 'PGRST116' &&
             nextUnavailableError.code !== 'PGRST205' &&
             nextUnavailableError.code !== '42P01') {
-          console.error('Error loading next unavailable period:', nextUnavailableError);
+          logger.error('Error loading next unavailable period:', nextUnavailableError);
         }
 
         return {
@@ -1287,14 +1287,14 @@ class CrewManagementService {
     startDate: string,
     endDate: string
   ): Promise<
-    Array<{
+    {
       crewMemberId: string;
       crewName: string;
       crewRole: string;
       availableDays: number;
       unavailableDays: number;
       tentativeDays: number;
-    }>
+    }[]
   > {
     const { data, error } = await supabase.rpc('get_crew_availability_summary', {
       p_sailor_id: sailorId,
@@ -1303,7 +1303,7 @@ class CrewManagementService {
     });
 
     if (error) {
-      console.error('Error fetching crew availability summary:', error);
+      logger.error('Error fetching crew availability summary:', error);
       throw error;
     }
 
@@ -1366,7 +1366,7 @@ class CrewManagementService {
       .eq('race_id', raceId);
 
     if (error) {
-      console.error('Error fetching assigned crew for race:', error);
+      logger.error('Error fetching assigned crew for race:', error);
       throw error;
     }
 
@@ -1393,7 +1393,7 @@ class CrewManagementService {
       .eq('race_id', raceId);
 
     if (error) {
-      console.error('Error fetching race crew assignments:', error);
+      logger.error('Error fetching race crew assignments:', error);
       throw error;
     }
 
@@ -1435,7 +1435,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error assigning crew to race:', error);
+      logger.error('Error assigning crew to race:', error);
       throw error;
     }
 
@@ -1452,7 +1452,7 @@ class CrewManagementService {
       .eq('id', assignmentId);
 
     if (error) {
-      console.error('Error unassigning crew from race:', error);
+      logger.error('Error unassigning crew from race:', error);
       throw error;
     }
   }
@@ -1480,7 +1480,7 @@ class CrewManagementService {
       .select();
 
     if (error) {
-      console.error('Error assigning multiple crew to race:', error);
+      logger.error('Error assigning multiple crew to race:', error);
       throw error;
     }
 
@@ -1497,7 +1497,7 @@ class CrewManagementService {
       .eq('race_id', raceId);
 
     if (error) {
-      console.error('Error clearing race crew assignments:', error);
+      logger.error('Error clearing race crew assignments:', error);
       throw error;
     }
   }
@@ -1519,7 +1519,7 @@ class CrewManagementService {
       .single();
 
     if (error) {
-      console.error('Error updating race crew assignment:', error);
+      logger.error('Error updating race crew assignment:', error);
       throw error;
     }
 
@@ -1568,7 +1568,7 @@ class CrewManagementService {
         .eq('regatta_id', raceId);
 
       if (participantsError) {
-        console.error('Error fetching race participants:', participantsError);
+        logger.error('Error fetching race participants:', participantsError);
         throw participantsError;
       }
 
@@ -1594,7 +1594,7 @@ class CrewManagementService {
         .eq('race_id', raceId);
 
       if (assignmentsError) {
-        console.error('Error fetching crew assignments:', assignmentsError);
+        logger.error('Error fetching crew assignments:', assignmentsError);
         // Don't throw - just return participants without crew data
       }
 
@@ -1638,7 +1638,7 @@ class CrewManagementService {
         return a.sailNumber.localeCompare(b.sailNumber);
       });
     } catch (error) {
-      console.error('Error getting race crew manifest:', error);
+      logger.error('Error getting race crew manifest:', error);
       throw error;
     }
   }

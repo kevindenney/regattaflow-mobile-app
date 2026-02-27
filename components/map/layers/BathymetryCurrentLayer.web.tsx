@@ -130,7 +130,7 @@ const GEBCO_WMS_URL = 'https://www.gebco.net/data_and_products/gebco_web_service
 
 // Elevation grid type
 interface ElevationGrid {
-  points: Array<{ lat: number; lng: number; elevation: number; depth: number }>;
+  points: { lat: number; lng: number; elevation: number; depth: number }[];
   bounds: { north: number; south: number; east: number; west: number };
   center: { latitude: number; longitude: number };
   minDepth: number;
@@ -154,19 +154,21 @@ export function BathymetryCurrentLayer({
 }: BathymetryCurrentLayerProps): React.ReactElement | null {
   const [grid, setGrid] = useState<DepthModulatedCurrentGrid | null>(null);
   const [elevationGrid, setElevationGrid] = useState<ElevationGrid | null>(null);
-  const [isLoadingDepth, setIsLoadingDepth] = useState(false);
+  const [, setIsLoadingDepth] = useState(false);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const serviceRef = useRef<BathymetricCurrentService | null>(null);
   const bathymetryRef = useRef<BathymetryService | null>(null);
 
   // Initialize services
+  const targetTimeMs = targetTime.getTime();
+
   useEffect(() => {
     if (!serviceRef.current) {
       serviceRef.current = BathymetricCurrentService.getInstance();
     }
     if (!bathymetryRef.current) {
       bathymetryRef.current = BathymetryService.getInstance();
-      console.log('[BathymetryCurrentLayer] Bathymetry service initialized');
+      logger.debug('[BathymetryCurrentLayer] Bathymetry service initialized');
     }
   }, []);
 
@@ -208,11 +210,11 @@ export function BathymetryCurrentLayer({
     return () => {
       cancelled = true;
     };
-  }, [visible, center?.lat, center?.lng, radiusKm, targetTime.getTime(), gridSpacingM]);
+  }, [visible, center, radiusKm, targetTime, targetTimeMs, gridSpacingM, tideExtremes]);
 
   // Fetch elevation grid data (for depth visualization)
   useEffect(() => {
-    console.log('[BathymetryCurrentLayer] Depth effect triggered:', {
+    logger.debug('[BathymetryCurrentLayer] Depth effect triggered', {
       visible,
       showContours,
       hasCenter: !!center,
@@ -228,7 +230,10 @@ export function BathymetryCurrentLayer({
 
     const fetchElevation = async () => {
       setIsLoadingDepth(true);
-      console.log('[BathymetryCurrentLayer] Fetching elevation grid for:', center, 'radius:', radiusKm);
+      logger.debug('[BathymetryCurrentLayer] Fetching elevation grid', {
+        center,
+        radiusKm,
+      });
       try {
         // Use 10x10 grid = 100 points for good coverage
         const result = await bathymetryRef.current!.getElevationGrid(
@@ -239,7 +244,7 @@ export function BathymetryCurrentLayer({
         if (!cancelled) {
           // Log detailed result for debugging
           const waterPoints = result.points.filter(p => p.depth > 0);
-          console.log('[BathymetryCurrentLayer] Elevation grid loaded:', {
+          logger.debug('[BathymetryCurrentLayer] Elevation grid loaded', {
             totalPoints: result.points.length,
             waterPoints: waterPoints.length,
             depthRange: [result.minDepth, result.maxDepth],
@@ -248,7 +253,7 @@ export function BathymetryCurrentLayer({
 
           // Check if all points returned 0 depth (no water data for this location)
           if (waterPoints.length === 0 && result.points.length > 0) {
-            console.warn('[BathymetryCurrentLayer] All depth values are 0 - location may be on land or API issue, using GEBCO fallback');
+            logger.warn('[BathymetryCurrentLayer] All depth values are 0 - location may be on land or API issue, using GEBCO fallback');
             setQuotaExceeded(true);
             setElevationGrid(null);
           } else {
@@ -257,7 +262,7 @@ export function BathymetryCurrentLayer({
           }
         }
       } catch (error) {
-        console.error('[BathymetryCurrentLayer] Failed to load elevation grid:', error);
+        logger.error('[BathymetryCurrentLayer] Failed to load elevation grid', error);
         if (!cancelled) {
           setQuotaExceeded(true);
           setElevationGrid(null);
@@ -274,7 +279,7 @@ export function BathymetryCurrentLayer({
     return () => {
       cancelled = true;
     };
-  }, [visible, showContours, center?.lat, center?.lng, radiusKm]);
+  }, [visible, showContours, center, radiusKm]);
 
   // Add OpenSeaMap nautical overlay (buoys, beacons, lighthouses, etc.)
   // This is always visible when the layer is visible, independent of depth toggle
@@ -338,7 +343,7 @@ export function BathymetryCurrentLayer({
       return;
     }
 
-    console.log('[BathymetryCurrentLayer] Adding GEBCO bathymetry fallback layer');
+    logger.debug('[BathymetryCurrentLayer] Adding GEBCO bathymetry fallback layer');
 
     // Remove existing if present
     if (map.getLayer(GEBCO_LAYER_ID)) map.removeLayer(GEBCO_LAYER_ID);
@@ -365,7 +370,7 @@ export function BathymetryCurrentLayer({
       },
     }, beforeLayer);
 
-    console.log('[BathymetryCurrentLayer] GEBCO bathymetry fallback layer added');
+    logger.debug('[BathymetryCurrentLayer] GEBCO bathymetry fallback layer added');
 
     return () => {
       if (!isMapValid(map)) return;

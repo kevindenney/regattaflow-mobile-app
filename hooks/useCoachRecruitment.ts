@@ -10,14 +10,16 @@
  * - 'coach_profile' - Subtle link for coached users viewing coach profiles
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createLogger } from '@/lib/utils/logger';
 
 const DISMISSAL_STORAGE_KEY = '@regattaflow/coach-recruitment-dismissals';
 const DISMISSAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const logger = createLogger('useCoachRecruitment');
 
 export type RecruitmentContext = 'coaches_tab' | 'course_completion' | 'coach_profile';
 
@@ -27,26 +29,22 @@ interface DismissalRecord {
   [context: string]: number; // timestamp when dismissed
 }
 
-interface SailorProfile {
-  boatClasses: string[];
-  seasonCount: number;
-  raceCount: number;
-}
-
-interface CoachRecruitmentData {
-  relationship: CoachingRelationship;
-  sailorProfile: SailorProfile;
-  isLoading: boolean;
-}
-
 export function useCoachRecruitment() {
   const { user, capabilities } = useAuth();
   const [dismissals, setDismissals] = useState<DismissalRecord>({});
   const [dismissalsLoaded, setDismissalsLoaded] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Load dismissals from AsyncStorage
   useEffect(() => {
-    AsyncStorage.getItem(DISMISSAL_STORAGE_KEY).then((value) => {
+    void AsyncStorage.getItem(DISMISSAL_STORAGE_KEY).then((value) => {
+      if (!isMountedRef.current) return;
       if (value) {
         try {
           const parsed = JSON.parse(value);
@@ -68,17 +66,21 @@ export function useCoachRecruitment() {
   }, []);
 
   // Check if user is a coach
-  const { data: coachProfile, isLoading: loadingCoach } = useQuery({
+  const { data: coachProfile, isLoading: loadingCoach, error: coachProfileError } = useQuery({
     queryKey: ['coach-recruitment', 'is-coach', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('coach_profiles')
         .select('id, is_active')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
+      if (error) {
+        logger.error('Failed to load coach profile state', error);
+        throw new Error(error.message || 'Failed to load coach profile');
+      }
       return data;
     },
     enabled: !!user?.id,
@@ -86,17 +88,21 @@ export function useCoachRecruitment() {
   });
 
   // Check if user has active coaching relationships (as a sailor)
-  const { data: coachingClient, isLoading: loadingClient } = useQuery({
+  const { data: coachingClient, isLoading: loadingClient, error: coachingClientError } = useQuery({
     queryKey: ['coach-recruitment', 'has-coach', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('coaching_clients')
         .select('id')
         .eq('sailor_id', user.id)
         .eq('status', 'active')
         .limit(1)
         .maybeSingle();
+      if (error) {
+        logger.error('Failed to load coaching relationship state', error);
+        throw new Error(error.message || 'Failed to load coaching relationships');
+      }
       return data;
     },
     enabled: !!user?.id && !coachProfile,
@@ -104,7 +110,7 @@ export function useCoachRecruitment() {
   });
 
   // Get sailor profile data for personalized messaging
-  const { data: sailorData, isLoading: loadingSailor } = useQuery({
+  const { data: sailorData, isLoading: loadingSailor, error: sailorDataError } = useQuery({
     queryKey: ['coach-recruitment', 'sailor-profile', user?.id],
     queryFn: async () => {
       if (!user?.id) return { boatClasses: [], seasonCount: 0, raceCount: 0 };
@@ -125,6 +131,19 @@ export function useCoachRecruitment() {
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id),
       ]);
+
+      if (profileResult.error) {
+        logger.error('Failed to load sailor profile for recruitment', profileResult.error);
+        throw new Error(profileResult.error.message || 'Failed to load sailor profile');
+      }
+      if (seasonsResult.error) {
+        logger.error('Failed to load user seasons for recruitment', seasonsResult.error);
+        throw new Error(seasonsResult.error.message || 'Failed to load season history');
+      }
+      if (racesResult.error) {
+        logger.error('Failed to load race history for recruitment', racesResult.error);
+        throw new Error(racesResult.error.message || 'Failed to load race history');
+      }
 
       const boatClasses: string[] = [];
       if (profileResult.data?.primary_boat_class) {
@@ -153,6 +172,7 @@ export function useCoachRecruitment() {
   }
 
   const isLoading = loadingCoach || loadingClient || loadingSailor || !dismissalsLoaded;
+  const error = (coachProfileError || coachingClientError || sailorDataError) as Error | null;
 
   // Check if a context is dismissed
   const isDismissed = useCallback(
@@ -198,6 +218,7 @@ export function useCoachRecruitment() {
         ...dismissals,
         [context]: Date.now(),
       };
+      if (!isMountedRef.current) return;
       setDismissals(updated);
       await AsyncStorage.setItem(DISMISSAL_STORAGE_KEY, JSON.stringify(updated));
     },
@@ -240,6 +261,7 @@ export function useCoachRecruitment() {
     relationship,
     sailorProfile: sailorData || { boatClasses: [], seasonCount: 0, raceCount: 0 },
     isLoading,
+    error,
     shouldShowPrompt,
     isDismissed,
     dismiss,

@@ -76,6 +76,15 @@ const logger = createLogger('RaceTuningService');
 class RaceTuningService {
   private readonly aiEngine = raceTuningEngine;
 
+  private createServiceError(code: string, message: string, cause?: unknown): Error {
+    const tagged = new Error(`[${code}] ${message}`);
+    (tagged as any).code = code;
+    if (cause !== undefined) {
+      (tagged as any).cause = cause;
+    }
+    return tagged;
+  }
+
   /**
    * Get equipment context for a boat to personalize tuning recommendations
    */
@@ -216,70 +225,137 @@ class RaceTuningService {
       return [];
     }
 
-    try {
-      const guides = await tuningGuideService.getGuidesByReference({ classId, className });
+    const guides = await tuningGuideService.getGuidesByReference({ classId, className });
 
-      const candidateSections = this.collectCandidateSections(
-        guides,
-        averageWindSpeed ?? undefined,
-        pointsOfSail
-      );
+    const candidateSections = this.collectCandidateSections(
+      guides,
+      averageWindSpeed ?? undefined,
+      pointsOfSail
+    );
 
-      // NEW: If NO guides/sections exist, try AI-only generation
-      if (candidateSections.length === 0) {
-        logger.debug('No extracted sections found; attempting AI-only tuning generation');
-        const aiOnlyRecommendations = await this.tryGenerateAIOnlyRecommendations(request);
+    // NEW: If NO guides/sections exist, try AI-only generation
+    if (candidateSections.length === 0) {
+      logger.debug('No extracted sections found; attempting AI-only tuning generation');
+      const aiOnlyRecommendations = await this.tryGenerateAIOnlyRecommendations(request);
 
-        if (aiOnlyRecommendations && aiOnlyRecommendations.length > 0) {
-          return aiOnlyRecommendations;
-        }
-
-        return [];
+      if (aiOnlyRecommendations && aiOnlyRecommendations.length > 0) {
+        return aiOnlyRecommendations;
       }
 
-      const sortedCandidates = candidateSections.sort((a, b) => b.score - a.score);
-
-      // DISABLED: AI enhancement was replacing North Sails guide data entirely
-      // TODO: Make AI enhancement actually enhance (add reasoning) rather than replace
-      // const aiRecommendations = await this.tryGenerateAIRecommendations({
-      //   classId,
-      //   className,
-      //   averageWindSpeed: averageWindSpeed ?? undefined,
-      //   pointsOfSail,
-      //   limit,
-      //   candidates: sortedCandidates
-      // });
-      //
-      // if (aiRecommendations && aiRecommendations.length > 0) {
-      //   logger.info('Using AI-enhanced tuning recommendations', { count: aiRecommendations.length });
-      //   return aiRecommendations;
-      // }
-
-      const recommendations = sortedCandidates
-        .slice(0, limit)
-        .map(({ guide, section }) => this.buildRecommendation(guide, section));
-
-      // Enhance recommendations with equipment context if available
-      const filteredRecommendations = recommendations.filter(rec => rec.settings.length > 0);
-
-      if (equipmentContext && filteredRecommendations.length > 0) {
-        return filteredRecommendations.map(rec => ({
-          ...rec,
-          equipmentContext,
-          equipmentSpecificNotes: this.generateEquipmentSpecificNotes(equipmentContext, rec.settings),
-        }));
-      }
-
-      return filteredRecommendations;
-    } catch (error) {
-      // Log as debug since this can happen when no guides exist - not a critical error
-      logger.debug('Could not load tuning recommendations', {
-        error: (error as Error)?.message,
-        classId,
-        className
-      });
       return [];
     }
+
+    const sortedCandidates = candidateSections.sort((a, b) => b.score - a.score);
+
+    const recommendations = sortedCandidates
+      .slice(0, limit)
+      .map(({ guide, section }) => this.buildRecommendation(guide, section));
+
+    const aiRecommendations = await this.tryGenerateAIRecommendations({
+      classId,
+      className,
+      averageWindSpeed: averageWindSpeed ?? undefined,
+      pointsOfSail,
+      limit,
+      candidates: sortedCandidates
+    });
+
+    const enhancedRecommendations =
+      aiRecommendations && aiRecommendations.length > 0
+        ? this.mergeAIEnhancements(recommendations, aiRecommendations)
+        : recommendations;
+
+    // Enhance recommendations with equipment context if available
+    const filteredRecommendations = enhancedRecommendations.filter(rec => rec.settings.length > 0);
+
+    if (equipmentContext && filteredRecommendations.length > 0) {
+      return filteredRecommendations.map(rec => ({
+        ...rec,
+        equipmentContext,
+        equipmentSpecificNotes: this.generateEquipmentSpecificNotes(equipmentContext, rec.settings),
+      }));
+    }
+
+    return filteredRecommendations;
+  }
+
+  private mergeAIEnhancements(
+    baseRecommendations: RaceTuningRecommendation[],
+    aiRecommendations: RaceTuningRecommendation[]
+  ): RaceTuningRecommendation[] {
+    const matchedAi = new Set<number>();
+
+    return baseRecommendations.map((base) => {
+      let bestAiIndex = -1;
+      let bestScore = -1;
+
+      aiRecommendations.forEach((aiRec, index) => {
+        if (matchedAi.has(index)) return;
+        const score = this.computeRecommendationMatchScore(base, aiRec);
+        if (score > bestScore) {
+          bestScore = score;
+          bestAiIndex = index;
+        }
+      });
+
+      if (bestAiIndex === -1 || bestScore <= 0) {
+        return base;
+      }
+
+      matchedAi.add(bestAiIndex);
+      const aiRec = aiRecommendations[bestAiIndex];
+      const aiSettingByKey = new Map(
+        aiRec.settings.map((setting) => [setting.key.toLowerCase(), setting])
+      );
+
+      const mergedSettings = base.settings.map((setting) => {
+        const key = setting.key.toLowerCase();
+        const aiSetting = aiSettingByKey.get(key);
+        if (!aiSetting?.reasoning) return setting;
+        return {
+          ...setting,
+          reasoning: aiSetting.reasoning,
+        };
+      });
+
+      const mergedNotes = [base.notes, aiRec.notes].filter(Boolean).join('\n\n').trim() || undefined;
+
+      return {
+        ...base,
+        settings: mergedSettings,
+        notes: mergedNotes,
+        isAIGenerated: aiRec.isAIGenerated || base.isAIGenerated,
+        confidence: typeof aiRec.confidence === 'number' ? aiRec.confidence : base.confidence,
+        weatherSpecificNotes: aiRec.weatherSpecificNotes?.length ? aiRec.weatherSpecificNotes : base.weatherSpecificNotes,
+        caveats: aiRec.caveats?.length ? aiRec.caveats : base.caveats,
+      };
+    });
+  }
+
+  private computeRecommendationMatchScore(
+    base: RaceTuningRecommendation,
+    aiRec: RaceTuningRecommendation
+  ): number {
+    let score = 0;
+    const baseSection = base.sectionTitle?.toLowerCase().trim();
+    const aiSection = aiRec.sectionTitle?.toLowerCase().trim();
+    if (baseSection && aiSection && baseSection === aiSection) {
+      score += 3;
+    }
+
+    const baseCondition = base.conditionSummary?.toLowerCase().trim();
+    const aiCondition = aiRec.conditionSummary?.toLowerCase().trim();
+    if (baseCondition && aiCondition && baseCondition === aiCondition) {
+      score += 2;
+    }
+
+    const aiKeys = new Set(aiRec.settings.map((s) => s.key.toLowerCase()));
+    const overlap = base.settings.reduce((count, setting) => {
+      return aiKeys.has(setting.key.toLowerCase()) ? count + 1 : count;
+    }, 0);
+
+    score += overlap;
+    return score;
   }
 
   /**
@@ -295,8 +371,13 @@ class RaceTuningService {
     const isAvailable = this.aiEngine.isAvailable();
 
     if (!isAvailable) {
-      logger.warn('AI engine not available; cannot generate AI-only recommendations');
-      return null;
+      const initError = this.aiEngine.getSkillInitializationError();
+      throw this.createServiceError(
+        'AI_TUNING_UNAVAILABLE',
+        initError
+          ? `AI rig tuning unavailable: ${initError}`
+          : 'AI rig tuning unavailable: Supabase configuration is missing'
+      );
     }
 
     logger.debug('AI engine available; generating AI-only recommendations');
@@ -316,12 +397,14 @@ class RaceTuningService {
         return aiRecommendations;
       }
 
-      logger.warn('AI engine returned empty array or null');
-      return null;
+      throw this.createServiceError('AI_TUNING_NO_RECOMMENDATIONS', 'AI rig tuning returned no recommendations');
     } catch (error) {
-      // AI declining is expected when no tuning guides exist - not an error
-      logger.debug('AI-only tuning generation did not produce results', { message: (error as Error)?.message?.substring(0, 100) });
-      return null;
+      const message = (error as Error)?.message || 'Unknown AI rig tuning error';
+      logger.warn('AI-only tuning generation failed', { message: message.substring(0, 200) });
+      if (message.includes('[AI_TUNING_')) {
+        throw error as Error;
+      }
+      throw this.createServiceError('AI_TUNING_GENERATION_FAILED', `AI rig tuning failed: ${message}`, error);
     }
   }
 
@@ -360,10 +443,20 @@ class RaceTuningService {
 
       return recommendations.length > 0 ? recommendations : null;
     } catch (error) {
-      // Log as debug - AI failures are expected when no guides exist or API is unavailable
-      logger.debug('AI tuning generation unavailable', {
-        error: (error as Error)?.message
-      });
+      // For guide-backed flows we return base recommendations if AI augmentation fails.
+      // Keep a structured diagnostic trail with code-like tags.
+      const message = (error as Error)?.message || 'Unknown AI tuning augmentation error';
+      const isExpectedDegrade =
+        message.includes('[AI_TUNING_UNAVAILABLE]') ||
+        message.includes('[AI_TUNING_CHAT_FAILED]') ||
+        message.includes('[AI_TUNING_EMPTY_RESPONSE]') ||
+        message.includes('[AI_TUNING_INVALID_RESPONSE]') ||
+        message.includes('[AI_TUNING_PARSE_ERROR]');
+      if (isExpectedDegrade) {
+        logger.debug('AI tuning enhancement degraded to guide-only recommendations', { error: message });
+      } else {
+        logger.warn('AI tuning enhancement failed unexpectedly', { error: message.substring(0, 200) });
+      }
       return null;
     }
   }

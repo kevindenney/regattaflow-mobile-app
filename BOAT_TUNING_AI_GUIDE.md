@@ -106,7 +106,7 @@ Set in `.env` (or `.env.local`):
 
 ```bash
 # Required for AI features
-EXPO_PUBLIC_ANTHROPIC_API_KEY=sk-ant-api03-...
+ANTHROPIC_API_KEY=sk-ant-api03-...
 
 # Supabase (for tuning guide storage)
 EXPO_PUBLIC_SUPABASE_URL=https://...
@@ -222,13 +222,13 @@ Would match "Radial Cut MKII - Medium Breeze" with settings for vang, cunningham
 ### 2. "AI engine not available"
 
 **Causes:**
-- Missing `EXPO_PUBLIC_ANTHROPIC_API_KEY`
+- Missing `ANTHROPIC_API_KEY`
 - API key is set to "placeholder"
 
 **Fix:**
 ```bash
 # Add to .env
-EXPO_PUBLIC_ANTHROPIC_API_KEY=sk-ant-api03-YOUR-KEY-HERE
+ANTHROPIC_API_KEY=sk-ant-api03-YOUR-KEY-HERE
 ```
 
 ### 3. "Skill initialization failed"

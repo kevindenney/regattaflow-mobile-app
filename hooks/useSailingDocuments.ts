@@ -3,15 +3,18 @@
  * Manages upload, processing, and querying of valuable sailing documents
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { sailingDocumentLibrary } from '@/services/storage/SailingDocumentLibraryService';
 import type { SailingDocument } from '@/services/storage/SailingDocumentLibraryService';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface DocumentUploadProgress {
   phase: 'uploading' | 'processing' | 'analyzing' | 'complete';
   progress: number;
   message: string;
 }
+
+const logger = createLogger('useSailingDocuments');
 
 export const useSailingDocuments = (userId?: string) => {
   const [uploading, setUploading] = useState(false);
@@ -21,6 +24,43 @@ export const useSailingDocuments = (userId?: string) => {
   const [documents, setDocuments] = useState<SailingDocument[]>([]);
   const [recommendations, setRecommendations] = useState<SailingDocument[]>([]);
   const [libraryStats, setLibraryStats] = useState<any>(null);
+  const isMountedRef = useRef(true);
+  const activeUserIdRef = useRef(userId);
+  const uploadRunIdRef = useRef(0);
+  const searchRunIdRef = useRef(0);
+  const recommendationRunIdRef = useRef(0);
+  const documentsRunIdRef = useRef(0);
+  const statsRunIdRef = useRef(0);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+
+  const clearProgressTimers = useCallback(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+
+    for (const timeoutId of progressTimeoutsRef.current) {
+      clearTimeout(timeoutId);
+    }
+    progressTimeoutsRef.current = [];
+  }, []);
+
+  useEffect(() => {
+    activeUserIdRef.current = userId;
+  }, [userId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      uploadRunIdRef.current += 1;
+      searchRunIdRef.current += 1;
+      recommendationRunIdRef.current += 1;
+      documentsRunIdRef.current += 1;
+      statsRunIdRef.current += 1;
+      clearProgressTimers();
+    };
+  }, [clearProgressTimers]);
 
   /**
    * Upload a sailing document (like your tides/current strategy book!)
@@ -40,17 +80,26 @@ export const useSailingDocuments = (userId?: string) => {
       throw new Error('User authentication required');
     }
 
-    setUploading(true);
-    setError(null);
-    setUploadProgress({
+    const requestUserId = userId;
+    const runId = ++uploadRunIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === uploadRunIdRef.current &&
+      activeUserIdRef.current === requestUserId;
+
+    if (canCommit()) setUploading(true);
+    if (canCommit()) setError(null);
+    if (canCommit()) setUploadProgress({
       phase: 'uploading',
       progress: 0,
       message: `Uploading "${metadata.title}"...`
     });
 
     try {
+      clearProgressTimers();
       // Simulate upload progress
-      const progressInterval = setInterval(() => {
+      progressIntervalRef.current = setInterval(() => {
+        if (!canCommit()) return;
         setUploadProgress(prev => {
           if (!prev) return null;
           const newProgress = Math.min(prev.progress + 10, 90);
@@ -65,22 +114,26 @@ export const useSailingDocuments = (userId?: string) => {
       // Step 1: Upload phase
 
       // Step 2: Processing phase
-      setTimeout(() => {
+      const processingTimeout = setTimeout(() => {
+        if (!canCommit()) return;
         setUploadProgress({
           phase: 'processing',
           progress: 95,
           message: 'Processing document with AI...'
         });
       }, 2000);
+      progressTimeoutsRef.current.push(processingTimeout);
 
       // Step 3: AI Analysis phase
-      setTimeout(() => {
+      const analysisTimeout = setTimeout(() => {
+        if (!canCommit()) return;
         setUploadProgress({
           phase: 'analyzing',
           progress: 98,
           message: 'Extracting sailing intelligence...'
         });
       }, 4000);
+      progressTimeoutsRef.current.push(analysisTimeout);
 
       // Actual upload and processing
       const document = await sailingDocumentLibrary.uploadSailingDocument(
@@ -89,32 +142,40 @@ export const useSailingDocuments = (userId?: string) => {
         userId
       );
 
-      clearInterval(progressInterval);
-      setUploadProgress({
+      clearProgressTimers();
+      if (canCommit()) setUploadProgress({
         phase: 'complete',
         progress: 100,
         message: `"${metadata.title}" successfully processed!`
       });
 
       // Update documents list
-      await loadDocuments();
+      const refreshedDocs = await sailingDocumentLibrary.searchDocumentLibrary(
+        '',
+        {},
+        userId
+      );
+      if (canCommit()) setDocuments(refreshedDocs);
 
       // Show success for a moment, then clear
-      setTimeout(() => {
+      const clearTimeoutId = setTimeout(() => {
+        if (!canCommit()) return;
         setUploadProgress(null);
       }, 2000);
+      progressTimeoutsRef.current.push(clearTimeoutId);
 
       return document;
 
     } catch (err: any) {
-      setError(err.message);
-      setUploadProgress(null);
+      if (canCommit()) setError(err.message);
+      if (canCommit()) setUploadProgress(null);
 
       throw err;
     } finally {
-      setUploading(false);
+      clearProgressTimers();
+      if (canCommit()) setUploading(false);
     }
-  }, [userId]);
+  }, [userId, clearProgressTimers]);
 
   /**
    * Search the document library
@@ -127,20 +188,27 @@ export const useSailingDocuments = (userId?: string) => {
       type?: SailingDocument['type'];
     }
   ) => {
-    setProcessing(true);
+    const requestUserId = userId;
+    const runId = ++searchRunIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === searchRunIdRef.current &&
+      activeUserIdRef.current === requestUserId;
+
+    if (canCommit()) setProcessing(true);
     try {
       const results = await sailingDocumentLibrary.searchDocumentLibrary(
         query,
         filters,
         userId
       );
-      setDocuments(results);
+      if (canCommit()) setDocuments(results);
       return results;
     } catch (err: any) {
-      setError(err.message);
+      if (canCommit()) setError(err.message);
       return [];
     } finally {
-      setProcessing(false);
+      if (canCommit()) setProcessing(false);
     }
   }, [userId]);
 
@@ -152,19 +220,29 @@ export const useSailingDocuments = (userId?: string) => {
     conditions?: string;
     skill?: 'novice' | 'intermediate' | 'expert';
   }) => {
-    if (!userId) return;
+    if (!userId) {
+      setRecommendations([]);
+      return;
+    }
 
-    setProcessing(true);
+    const requestUserId = userId;
+    const runId = ++recommendationRunIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === recommendationRunIdRef.current &&
+      activeUserIdRef.current === requestUserId;
+
+    if (canCommit()) setProcessing(true);
     try {
       const recs = await sailingDocumentLibrary.getRecommendedDocuments(
         userId,
         context
       );
-      setRecommendations(recs);
+      if (canCommit()) setRecommendations(recs);
     } catch (err: any) {
-      setError(err.message);
+      if (canCommit()) setError(err.message);
     } finally {
-      setProcessing(false);
+      if (canCommit()) setProcessing(false);
     }
   }, [userId]);
 
@@ -172,7 +250,17 @@ export const useSailingDocuments = (userId?: string) => {
    * Load user's documents
    */
   const loadDocuments = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setDocuments([]);
+      return;
+    }
+
+    const requestUserId = userId;
+    const runId = ++documentsRunIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === documentsRunIdRef.current &&
+      activeUserIdRef.current === requestUserId;
 
     try {
       const userDocs = await sailingDocumentLibrary.searchDocumentLibrary(
@@ -180,9 +268,9 @@ export const useSailingDocuments = (userId?: string) => {
         {},
         userId
       );
-      setDocuments(userDocs);
+      if (canCommit()) setDocuments(userDocs);
     } catch (err: any) {
-      setError(err.message);
+      if (canCommit()) setError(err.message);
     }
   }, [userId]);
 
@@ -190,13 +278,23 @@ export const useSailingDocuments = (userId?: string) => {
    * Load library statistics
    */
   const loadLibraryStats = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setLibraryStats(null);
+      return;
+    }
+
+    const requestUserId = userId;
+    const runId = ++statsRunIdRef.current;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === statsRunIdRef.current &&
+      activeUserIdRef.current === requestUserId;
 
     try {
       const stats = await sailingDocumentLibrary.getLibraryStats(userId);
-      setLibraryStats(stats);
+      if (canCommit()) setLibraryStats(stats);
     } catch (err: any) {
-      console.error('Failed to load library stats:', err);
+      logger.error('Failed to load library stats', err);
     }
   }, [userId]);
 
@@ -217,11 +315,20 @@ export const useSailingDocuments = (userId?: string) => {
   // Load initial data when userId changes
   useEffect(() => {
     if (userId) {
-      loadDocuments();
-      loadLibraryStats();
-      getRecommendations();
+      void loadDocuments();
+      void loadLibraryStats();
+      void getRecommendations();
+      return;
     }
-  }, [userId, loadDocuments, loadLibraryStats, getRecommendations]);
+    setDocuments([]);
+    setRecommendations([]);
+    setLibraryStats(null);
+    setUploadProgress(null);
+    setUploading(false);
+    setProcessing(false);
+    setError(null);
+    clearProgressTimers();
+  }, [userId, loadDocuments, loadLibraryStats, getRecommendations, clearProgressTimers]);
 
   return {
     // State

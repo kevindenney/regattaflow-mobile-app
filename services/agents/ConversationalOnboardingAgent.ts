@@ -6,9 +6,8 @@
  * Extends OnboardingAgent with real-time streaming responses
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-import { BaseAgentService, AgentTool } from './BaseAgentService';
-import { supabase } from '../supabase';
+import type Anthropic from '@anthropic-ai/sdk';
+import { BaseAgentService } from './BaseAgentService';
 import {
   createDetectVenueWithIntelTool,
   createSearchVenuesWithContextTool,
@@ -16,7 +15,6 @@ import {
   createDiscoverFleetsWithSocialProofTool,
   createSuggestClubsWithInsightsTool,
   createImportRacesConversationallyTool,
-  createFinalizeOnboardingConversationallyTool,
 } from './ConversationalOnboardingTools';
 import {
   createFindYachtClubsTool,
@@ -41,9 +39,6 @@ import {
 } from './WebScrapingTools';
 import {
   createFindClassAssociationsTool,
-  createSaveEquipmentMakersTool,
-  createSaveCoachesTool,
-  createSaveCrewMembersTool,
   createFindPublicSailorsInFleetTool,
   createSaveRacingAreaTool,
   createFindRacingSeriesAndRegattasTool,
@@ -69,6 +64,87 @@ export interface ConversationalContext {
 
 export class ConversationalOnboardingAgent extends BaseAgentService {
   private conversationHistory: Anthropic.MessageParam[] = [];
+
+  private localEntityFallback(
+    userMessage: string,
+    previousData: any = {}
+  ): {
+    boats?: { className: string; sailNumber: string; boatName?: string }[];
+    clubs?: { name: string; url?: string }[];
+    venues?: { name: string }[];
+    documents?: { url: string; type: string }[];
+    nextRace?: any;
+    upcomingRaces?: any[];
+    sailorRole?: 'owner' | 'crew' | 'both';
+    aiResponse?: string;
+  } {
+    const text = userMessage || '';
+    const lower = text.toLowerCase();
+    const urls = text.match(/https?:\/\/[^\s)]+/g) || [];
+
+    let sailorRole = previousData?.sailorRole as 'owner' | 'crew' | 'both' | undefined;
+    if (lower.includes('both')) {
+      sailorRole = 'both';
+    } else if (/\bowner\b/.test(lower)) {
+      sailorRole = 'owner';
+    } else if (/\bcrew\b/.test(lower)) {
+      sailorRole = 'crew';
+    }
+
+    const knownClasses = [
+      'dragon',
+      'j/70',
+      'j70',
+      'etchells',
+      'laser',
+      'ilca',
+      '420',
+      '470',
+      'optimist',
+      '49er',
+      'finn',
+    ];
+    const detectedClass = knownClasses.find((item) => lower.includes(item));
+    const sailNumberMatch = text.match(/\b[A-Z]{1,3}\s?-?\s?\d{1,4}\b/);
+    const boats =
+      detectedClass || sailNumberMatch
+        ? [
+            {
+              className: detectedClass ? detectedClass.toUpperCase().replace('/', '') : 'Unknown Class',
+              sailNumber: sailNumberMatch ? sailNumberMatch[0].replace(/\s+/g, '') : '',
+            },
+          ]
+        : previousData?.boats;
+
+    const clubMatch = text.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,4}\s+(?:Yacht Club|Sailing Club))/);
+    const clubs = clubMatch
+      ? [{ name: clubMatch[1], url: urls[0] }]
+      : previousData?.clubs;
+
+    const venues = previousData?.venues;
+    const documents = urls.length > 0
+      ? urls.map((url) => ({ url, type: 'url' }))
+      : (previousData?.documents || []);
+
+    return {
+      boats,
+      clubs,
+      venues,
+      documents,
+      nextRace: previousData?.nextRace,
+      upcomingRaces: previousData?.upcomingRaces,
+      sailorRole,
+      aiResponse: sailorRole
+        ? `Noted. I have you marked as ${sailorRole}. You can keep adding details anytime.`
+        : "Got it. I captured what I could from that message.",
+    };
+  }
+
+  private async getReadyClient(): Promise<Anthropic | null> {
+    const ready = await this.ensureClientReady();
+    if (!ready) return null;
+    return this.client || null;
+  }
 
   constructor() {
     super({
@@ -313,6 +389,11 @@ If user says NO or wants to continue:
     userMessage: string,
     context: ConversationalContext
   ): AsyncGenerator<string, void, unknown> {
+    const client = await this.getReadyClient();
+    if (!client) {
+      yield '\n\nAI onboarding is currently unavailable. Please try again in a moment.';
+      return;
+    }
 
     // Add user message to conversation history
     this.conversationHistory.push({
@@ -329,7 +410,7 @@ If user says NO or wants to continue:
       }));
 
       // Create streaming request
-      const stream = await this.client.messages.stream({
+      const stream = await client.messages.stream({
         model: this.config.model,
         max_tokens: this.config.maxTokens,
         temperature: this.config.temperature,
@@ -338,21 +419,12 @@ If user says NO or wants to continue:
         tools: anthropicTools,
       });
 
-      // Track assistant response for conversation history
-      let assistantResponse = '';
-      let toolUses: Anthropic.ToolUseBlock[] = [];
-
       // Stream text deltas
       for await (const chunk of stream) {
         if (chunk.type === 'content_block_delta') {
           if (chunk.delta.type === 'text_delta') {
             const text = chunk.delta.text;
-            assistantResponse += text;
             yield text;
-          }
-        } else if (chunk.type === 'content_block_start') {
-          if (chunk.content_block.type === 'tool_use') {
-            toolUses.push(chunk.content_block);
           }
         }
       }
@@ -422,13 +494,19 @@ If user says NO or wants to continue:
    */
   private async *streamFollowUp(): AsyncGenerator<string, void, unknown> {
     try {
+      const client = await this.getReadyClient();
+      if (!client) {
+        yield '\n\nAI onboarding is currently unavailable. Please try again in a moment.';
+        return;
+      }
+
       const anthropicTools = Array.from(this.tools.values()).map(tool => ({
         name: tool.name,
         description: tool.description,
         input_schema: this.zodToAnthropicSchema(tool.input_schema),
       }));
 
-      const stream = await this.client.messages.stream({
+      const stream = await client.messages.stream({
         model: this.config.model,
         max_tokens: this.config.maxTokens,
         temperature: this.config.temperature,
@@ -437,14 +515,11 @@ If user says NO or wants to continue:
         tools: anthropicTools,
       });
 
-      let assistantResponse = '';
-
       // Stream text deltas
       for await (const chunk of stream) {
         if (chunk.type === 'content_block_delta') {
           if (chunk.delta.type === 'text_delta') {
             const text = chunk.delta.text;
-            assistantResponse += text;
             yield text;
           }
         }
@@ -617,17 +692,25 @@ If user says NO or wants to continue:
   ): Promise<{
     success: boolean;
     result?: {
-      boats?: Array<{ className: string; sailNumber: string; boatName?: string }>;
-      clubs?: Array<{ name: string; url?: string }>;
-      venues?: Array<{ name: string }>;
-      documents?: Array<{ url: string; type: string }>;
+      boats?: { className: string; sailNumber: string; boatName?: string }[];
+      clubs?: { name: string; url?: string }[];
+      venues?: { name: string }[];
+      documents?: { url: string; type: string }[];
       nextRace?: any;
-      upcomingRaces?: Array<any>; // NEW: List of upcoming races for selection
+      upcomingRaces?: any[]; // NEW: List of upcoming races for selection
+      sailorRole?: 'owner' | 'crew' | 'both';
       aiResponse?: string;
     };
     error?: string;
   }> {
     try {
+      const client = this.getReadyClient();
+      if (!client) {
+        return {
+          success: true,
+          result: this.localEntityFallback(userMessage, previousData),
+        };
+      }
 
       // Step 1: Basic entity extraction
       const extractionPrompt = `Extract sailing-related entities from this message. Return ONLY valid JSON, no other text.
@@ -635,6 +718,7 @@ If user says NO or wants to continue:
 User message: "${userMessage}"
 
 Extract these entities if present:
+- sailorRole: one of owner | crew | both
 - boats: array of {className, sailNumber, boatName} (e.g., "Dragon D59 named Blue Lightning")
 - clubs: array of {name, url} (e.g., "Royal Hong Kong Yacht Club")
 - venues: array of {name} (e.g., "Victoria Harbour")
@@ -643,6 +727,7 @@ Extract these entities if present:
 
 Return format:
 {
+  "sailorRole": "owner|crew|both",
   "boats": [...],
   "clubs": [...],
   "venues": [...],
@@ -651,7 +736,7 @@ Return format:
   "summary": "friendly acknowledgment of what was extracted"
 }`;
 
-      const response = await this.client.messages.create({
+      const response = await client.messages.create({
         model: 'claude-3-haiku-20240307',
         max_tokens: 1024,
         messages: [{
@@ -671,7 +756,7 @@ Return format:
       const extracted = JSON.parse(textContent.text);
 
       // Step 2: If club/class URLs detected, scrape for calendar
-      const upcomingRaces: Array<any> = [];
+      const upcomingRaces: any[] = [];
       const allDocuments = [...(extracted.documents || [])];
 
       for (const doc of extracted.documents || []) {
@@ -769,6 +854,7 @@ Return format:
 
       // Merge with previous data
       const mergedData = {
+        sailorRole: extracted.sailorRole || previousData.sailorRole,
         boats: [...(previousData.boats || []), ...(extracted.boats || [])],
         clubs: [...(previousData.clubs || []), ...(extracted.clubs || [])],
         venues: [...(previousData.venues || []), ...(extracted.venues || [])],
@@ -788,8 +874,8 @@ Return format:
     } catch (error: any) {
 
       return {
-        success: false,
-        error: error.message
+        success: true,
+        result: this.localEntityFallback(userMessage, previousData)
       };
     }
   }

@@ -11,6 +11,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('MonteCarloService');
 
 // Simulation parameters
 interface SimulationParams {
@@ -63,19 +66,19 @@ export interface SimulationResults {
   podiumProbability: number; // probability of top 3
   winProbability: number; // probability of 1st
 
-  successFactors: Array<{
+  successFactors: {
     factor: string;
     impact: number; // correlation coefficient
     description: string;
-  }>;
+  }[];
 
-  alternativeStrategies: Array<{
+  alternativeStrategies: {
     name: string;
     expectedFinish: number;
     podiumProbability: number;
     riskLevel: 'low' | 'medium' | 'high';
     description: string;
-  }>;
+  }[];
 
   confidenceInterval: {
     lower: number; // 95% CI lower bound
@@ -89,11 +92,11 @@ export interface SimulationResults {
 // Strategy comparison
 export interface StrategyComparison {
   baseline: SimulationResults;
-  alternatives: Array<{
+  alternatives: {
     name: string;
     results: SimulationResults;
     improvement: number; // expected position improvement
-  }>;
+  }[];
 }
 
 /**
@@ -189,7 +192,7 @@ export class MonteCarloService {
       .single();
 
     if (error) {
-      console.error('Error loading race strategy:', error);
+      logger.error('Error loading race strategy:', error);
       return null;
     }
 
@@ -239,7 +242,7 @@ export class MonteCarloService {
       fleetSize,
       windVariation,
       currentVariation,
-      strategy,
+      strategy: _strategy,
     } = params;
 
     // Randomize conditions for this iteration
@@ -579,10 +582,6 @@ export class MonteCarloService {
       .filter((iteration: SimulationIteration) => iteration.finishPosition <= fleetSize / 4)
       .sort((a: SimulationIteration, b: SimulationIteration) => a.finishPosition - b.finishPosition);
 
-    const bottomQuartile = iterations
-      .filter((iteration: SimulationIteration) => iteration.finishPosition > fleetSize * 0.75)
-      .sort((a: SimulationIteration, b: SimulationIteration) => b.finishPosition - a.finishPosition);
-
     // Conservative strategy (minimize risk)
     const conservativePositions = iterations.map((iteration: SimulationIteration) => {
       // Simulate more cautious approach (less aggressive tactics)
@@ -654,7 +653,7 @@ export class MonteCarloService {
       .single();
 
     if (error) {
-      console.error('Error saving simulation:', error);
+      logger.error('Error saving simulation:', error);
       return null;
     }
 
@@ -672,7 +671,7 @@ export class MonteCarloService {
       .single();
 
     if (error) {
-      console.error('Error loading simulation:', error);
+      logger.error('Error loading simulation:', error);
       return null;
     }
 

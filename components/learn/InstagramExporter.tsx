@@ -5,7 +5,7 @@
  * Works on both web (html2canvas) and native (react-native-view-shot)
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,9 @@ import {
   ActivityIndicator,
   Platform,
   Dimensions,
+  Linking,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -92,6 +94,31 @@ export function InstagramExporter({
   const handleSlideChange = useCallback((index: number) => {
     setCurrentSlideIndex(index);
   }, []);
+
+  const showMissingNativeExportTools = useCallback(async () => {
+    const quickCaption = `RegattaFlow carousel: ${skillName}\n\nSlides: ${slides.length}\n#Sailing #RegattaFlow`;
+    Alert.alert(
+      'Export Tools Missing',
+      'Image export is not available in this build. You can copy a caption template or contact support for setup help.',
+      [
+        { text: 'Close', style: 'cancel' },
+        {
+          text: 'Copy Caption',
+          onPress: async () => {
+            await Clipboard.setStringAsync(quickCaption);
+            Alert.alert('Copied', 'Caption template copied to clipboard.');
+          },
+        },
+        {
+          text: 'Contact Support',
+          onPress: () =>
+            Linking.openURL(
+              'mailto:support@regattaflow.com?subject=Instagram%20Export%20Setup&body=Please%20help%20me%20enable%20Instagram%20image%20export%20on%20my%20build.'
+            ),
+        },
+      ]
+    );
+  }, [skillName, slides.length]);
 
   // Web export using html2canvas + JSZip (single ZIP download)
   const exportAllSlidesWeb = useCallback(async () => {
@@ -180,12 +207,12 @@ export function InstagramExporter({
       setIsExporting(false);
       Alert.alert('Export Failed', 'Unable to export images. Please try again.');
     }
-  }, [slides, selectedAspect]);
+  }, [slides]);
 
   // Native export using react-native-view-shot
   const exportAllSlidesNative = useCallback(async () => {
     if (!captureRef || !MediaLibrary) {
-      Alert.alert('Not Available', 'Export is not available on this platform.');
+      await showMissingNativeExportTools();
       return;
     }
 
@@ -254,7 +281,7 @@ export function InstagramExporter({
       setIsExporting(false);
       Alert.alert('Export Failed', 'Unable to save images. Please try again.');
     }
-  }, [slides, selectedAspect]);
+  }, [selectedAspect, showMissingNativeExportTools, slides]);
 
   // Main export function
   const exportAllSlides = useCallback(async () => {
@@ -324,8 +351,10 @@ export function InstagramExporter({
         console.error('Share error:', error);
         Alert.alert('Share Failed', 'Unable to share this slide.');
       }
+    } else {
+      await showMissingNativeExportTools();
     }
-  }, [selectedAspect]);
+  }, [selectedAspect, showMissingNativeExportTools]);
 
   const renderThemeSelector = () => (
     <View style={styles.selectorContainer}>

@@ -1,11 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/services/supabase';
 import { v4 as uuid } from 'uuid';
+import { createLogger } from '@/lib/utils/logger';
 
 const GUEST_RACE_KEY = '@regattaflow/guest_race';
 const PENDING_RACE_KEY = '@regattaflow/pending_race';
 const FIRST_LAUNCH_KEY = '@regattaflow/first_launch';
 const ONBOARDING_COMPLETE_KEY = '@regattaflow/onboarding_complete';
+const logger = createLogger('GuestStorageService');
 
 export interface GuestRace {
   id: string;
@@ -34,7 +36,7 @@ export class GuestStorageService {
       if (!data) return null;
       return JSON.parse(data) as GuestRace;
     } catch (error) {
-      console.error('[GuestStorageService] Error getting guest race:', error);
+      logger.error('Error getting guest race:', error);
       return null;
     }
   }
@@ -53,7 +55,7 @@ export class GuestStorageService {
       };
       await AsyncStorage.setItem(GUEST_RACE_KEY, JSON.stringify(raceWithId));
     } catch (error) {
-      console.error('[GuestStorageService] Error saving guest race:', error);
+      logger.error('Error saving guest race:', error);
       throw new Error('Failed to save race locally');
     }
   }
@@ -67,7 +69,7 @@ export class GuestStorageService {
       const data = await AsyncStorage.getItem(GUEST_RACE_KEY);
       return data !== null;
     } catch (error) {
-      console.error('[GuestStorageService] Error checking guest race:', error);
+      logger.error('Error checking guest race:', error);
       return false;
     }
   }
@@ -83,7 +85,7 @@ export class GuestStorageService {
         ONBOARDING_COMPLETE_KEY,
       ]);
     } catch (error) {
-      console.error('[GuestStorageService] Error clearing guest data:', error);
+      logger.error('Error clearing guest data:', error);
     }
   }
 
@@ -121,7 +123,7 @@ export class GuestStorageService {
         .single();
 
       if (error) {
-        console.error('[GuestStorageService] Migration error:', error);
+        logger.error('Migration error:', error);
         throw new Error('Failed to migrate race to account');
       }
 
@@ -130,7 +132,7 @@ export class GuestStorageService {
 
       return data.id;
     } catch (error) {
-      console.error('[GuestStorageService] Migration failed:', error);
+      logger.error('Migration failed:', error);
       throw error;
     }
   }
@@ -151,7 +153,7 @@ export class GuestStorageService {
       };
       await AsyncStorage.setItem(PENDING_RACE_KEY, JSON.stringify(raceWithId));
     } catch (error) {
-      console.error('[GuestStorageService] Error saving pending race:', error);
+      logger.error('Error saving pending race:', error);
       throw new Error('Failed to save pending race');
     }
   }
@@ -166,7 +168,7 @@ export class GuestStorageService {
       if (!data) return null;
       return JSON.parse(data) as GuestRace;
     } catch (error) {
-      console.error('[GuestStorageService] Error getting pending race:', error);
+      logger.error('Error getting pending race:', error);
       return null;
     }
   }
@@ -178,7 +180,7 @@ export class GuestStorageService {
     try {
       await AsyncStorage.removeItem(PENDING_RACE_KEY);
     } catch (error) {
-      console.error('[GuestStorageService] Error clearing pending race:', error);
+      logger.error('Error clearing pending race:', error);
     }
   }
 
@@ -216,7 +218,7 @@ export class GuestStorageService {
         .single();
 
       if (error) {
-        console.error('[GuestStorageService] Pending race migration error:', error);
+        logger.error('Pending race migration error:', error);
         throw new Error('Failed to migrate pending race to account');
       }
 
@@ -225,7 +227,7 @@ export class GuestStorageService {
 
       return data.id;
     } catch (error) {
-      console.error('[GuestStorageService] Pending race migration failed:', error);
+      logger.error('Pending race migration failed:', error);
       throw error;
     }
   }
@@ -251,7 +253,7 @@ export class GuestStorageService {
     try {
       await AsyncStorage.setItem(FIRST_LAUNCH_KEY, new Date().toISOString());
     } catch (error) {
-      console.error('[GuestStorageService] Error marking launched:', error);
+      logger.error('Error marking launched:', error);
     }
   }
 
@@ -274,7 +276,7 @@ export class GuestStorageService {
     try {
       await AsyncStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     } catch (error) {
-      console.error('[GuestStorageService] Error completing onboarding:', error);
+      logger.error('Error completing onboarding:', error);
     }
   }
 }

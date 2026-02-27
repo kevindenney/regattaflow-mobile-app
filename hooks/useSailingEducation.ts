@@ -14,6 +14,7 @@ import type {
   EquipmentRecommendation,
   CompetitiveIntelligence
 } from '@/lib/types/ai-knowledge';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface EnhancedEducationalStrategy {
   insights: StrategyInsight[];
@@ -35,6 +36,8 @@ export interface SailingEducationHook {
   refreshKnowledgeBase: () => void;
   clearError: () => void;
 }
+
+const logger = createLogger('useSailingEducation');
 
 export const useSailingEducation = (venueId?: string): SailingEducationHook => {
   const [loading, setLoading] = useState(false);
@@ -98,7 +101,7 @@ export const useSailingEducation = (venueId?: string): SailingEducationHook => {
     } catch (err: any) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get educational strategy';
       setError(errorMessage);
-      console.error('📚 Sailing education strategy error:', err);
+      logger.error('Sailing education strategy error', err);
     } finally {
       setLoading(false);
     }
@@ -112,7 +115,7 @@ export const useSailingEducation = (venueId?: string): SailingEducationHook => {
       const stats = sailingEducationService.getKnowledgeBaseStats();
       setKnowledgeBaseStats(stats);
     } catch (err) {
-      console.error('📚 Failed to refresh knowledge base stats:', err);
+      logger.error('Failed to refresh knowledge base stats', err);
     }
   }, []);
 
@@ -157,7 +160,7 @@ export const useVenueSailingEducation = (venueId: string) => {
       const insights = await sailingEducationService.getVenueEducationalInsights(venueId);
       setVenueInsights(insights);
     } catch (err) {
-      console.error(`📚 Failed to load venue insights for ${venueId}:`, err);
+      logger.error(`Failed to load venue insights for ${venueId}`, err);
     }
   }, [venueId]);
 
@@ -196,7 +199,7 @@ export const useEducationalDocumentProcessing = () => {
 
       return resource;
     } catch (err) {
-      console.error('📚 Educational document processing failed:', err);
+      logger.error('Educational document processing failed', err);
       throw err;
     } finally {
       setProcessing(false);

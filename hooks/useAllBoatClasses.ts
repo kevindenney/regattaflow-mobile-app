@@ -6,7 +6,7 @@
  * Used when user doesn't have a boat class yet.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -58,14 +58,30 @@ export function useAllBoatClasses(
   const [classes, setClasses] = useState<BrowseBoatClass[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   // Fetch all boat classes
   const fetchClasses = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
+
     if (!enabled) {
+      if (!canCommit()) return;
       setClasses([]);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
@@ -85,6 +101,7 @@ export function useAllBoatClasses(
       }
 
       if (!classData || classData.length === 0) {
+        if (!canCommit()) return;
         setClasses([]);
         return;
       }
@@ -144,20 +161,23 @@ export function useAllBoatClasses(
       });
 
       // Take only the top classes
+      if (!canCommit()) return;
       setClasses(classesWithCounts.slice(0, limit));
       logger.info('[useAllBoatClasses] Loaded classes:', classesWithCounts.length);
     } catch (err: any) {
       logger.error('[useAllBoatClasses] Error:', err);
+      if (!canCommit()) return;
       setError(err?.message || 'Failed to load boat classes');
       setClasses([]);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [enabled, limit]);
 
   // Initial fetch
   useEffect(() => {
-    fetchClasses();
+    void fetchClasses();
   }, [fetchClasses]);
 
   return {

@@ -1,5 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 interface LiveConditions {
   windSpeed: number; // knots
@@ -93,7 +93,7 @@ interface SessionAnalysis {
 }
 
 export class AICoachingAssistant {
-  private static genAI = new Anthropic({ apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '', dangerouslyAllowBrowser: true });
+  private static logger = createLogger('AICoachingAssistant');
   private static activeSession: string | null = null;
   private static realtimeAdviceHistory: RealTimeAdvice[] = [];
 
@@ -160,22 +160,12 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeCoachingChat(prompt, 1024);
 
       // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const advice = JSON.parse(jsonMatch[0]);
+      const parsed = this.tryParseJsonObject(response);
+      if (parsed) {
+        const advice = parsed as RealTimeAdvice;
         this.realtimeAdviceHistory.push(advice);
 
         // Keep only last 10 pieces of advice
@@ -189,7 +179,7 @@ Respond in this JSON format:
       // Fallback advice
       return this.generateFallbackAdvice(tacticalSituation, conditions);
     } catch (error) {
-      console.error('Error generating real-time advice:', error);
+      this.logger.error('Error generating real-time advice', error);
       return this.generateFallbackAdvice(tacticalSituation, conditions);
     }
   }
@@ -243,29 +233,19 @@ Respond with this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeCoachingChat(prompt, 1024);
 
       // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const analysis = JSON.parse(jsonMatch[0]);
-        return analysis.insights;
+      const parsed = this.tryParseJsonObject(response);
+      if (parsed) {
+        const analysis = parsed as { insights?: PerformanceInsight[] };
+        return analysis.insights || [];
       }
 
       // Fallback insights
       return this.generateFallbackInsights(boatState, conditions);
     } catch (error) {
-      console.error('Error analyzing performance:', error);
+      this.logger.error('Error analyzing performance', error);
       return this.generateFallbackInsights(boatState, conditions);
     }
   }
@@ -319,28 +299,23 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeCoachingChat(prompt, 1024);
 
       // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      const parsed = this.tryParseJsonObject(response);
+      if (parsed) {
+        return parsed as {
+          strategy: string;
+          keyDecisionPoints: string[];
+          riskAssessment: string;
+          alternatives: string[];
+        };
       }
 
       // Fallback strategy
       return this.generateFallbackStrategy(conditions);
     } catch (error) {
-      console.error('Error generating strategy:', error);
+      this.logger.error('Error generating strategy', error);
       return this.generateFallbackStrategy(conditions);
     }
   }
@@ -405,28 +380,18 @@ Respond in this JSON format:
 }
 `;
 
-      const message = await this.genAI.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeCoachingChat(prompt, 1024);
 
       // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+      const parsed = this.tryParseJsonObject(response);
+      if (parsed) {
+        return parsed as SessionAnalysis;
       }
 
       // Fallback analysis
       return this.generateFallbackAnalysis(sessionData);
     } catch (error) {
-      console.error('Error analyzing session:', error);
+      this.logger.error('Error analyzing session', error);
       return this.generateFallbackAnalysis(sessionData);
     }
   }
@@ -447,11 +412,42 @@ Respond in this JSON format:
     this.realtimeAdviceHistory = [];
   }
 
+  private static async invokeCoachingChat(prompt: string, maxTokens: number): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Failed to invoke coaching chat');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text : '';
+    if (!text) {
+      throw new Error('Empty response from coaching chat');
+    }
+
+    return text;
+  }
+
+  private static tryParseJsonObject(raw: string): unknown | null {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch {
+      return null;
+    }
+  }
+
   // Fallback methods
 
   private static generateFallbackAdvice(
     tacticalSituation: TacticalSituation,
-    conditions: LiveConditions
+    _conditions: LiveConditions
   ): RealTimeAdvice {
     let advice: RealTimeAdvice;
 
@@ -515,7 +511,7 @@ Respond in this JSON format:
     ];
   }
 
-  private static generateFallbackStrategy(conditions: LiveConditions) {
+  private static generateFallbackStrategy(_conditions: LiveConditions) {
     return {
       strategy: 'Conservative approach focusing on consistent speed and positioning',
       keyDecisionPoints: ['Start line positioning', 'First shift decision', 'Mark approach'],

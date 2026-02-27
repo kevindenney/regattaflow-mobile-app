@@ -1,8 +1,11 @@
 // @ts-nocheck
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useClubDashboardData');
 
 interface ClubEvent {
   id: string;
@@ -52,12 +55,12 @@ interface VolunteerPosition {
   date: string;
   required_count: number;
   filled_count: number;
-  volunteers: Array<{
+  volunteers: {
     id: string;
     name: string;
     email: string;
     status: 'confirmed' | 'tentative' | 'declined';
-  }>;
+  }[];
 }
 
 interface ClubFinancials {
@@ -68,14 +71,14 @@ interface ClubFinancials {
   membership_revenue: number;
   facility_costs: number;
   insurance_costs: number;
-  recent_transactions: Array<{
+  recent_transactions: {
     id: string;
     type: 'revenue' | 'expense';
     category: string;
     amount: number;
     date: string;
     description: string;
-  }>;
+  }[];
 }
 
 interface ClubActivity {
@@ -143,18 +146,53 @@ export function useClubDashboardData(): ClubDashboardData {
     loading: true,
     error: null,
   });
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | undefined>(user?.id);
 
-  const fetchClubData = async () => {
-    if (!user) return;
+  useEffect(() => {
+    activeUserIdRef.current = user?.id;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
+  const fetchClubData = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = user?.id;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId) {
+      if (!canCommit()) return;
+      setData((prev) => ({
+        ...prev,
+        events: [],
+        members: [],
+        facilities: [],
+        volunteers: [],
+        recentActivity: [],
+        loading: false,
+        error: null,
+      }));
+      return;
+    }
 
     try {
+      if (!canCommit()) return;
       setData(prev => ({ ...prev, loading: true, error: null }));
 
       // Fetch club events (using regattas table as events)
       const { data: eventsData, error: eventsError } = await supabase
         .from('regattas')
         .select('*')
-        .eq('created_by', user.id)
+        .eq('created_by', targetUserId)
         .gte('start_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
         .order('start_date', { ascending: true });
 
@@ -162,23 +200,18 @@ export function useClubDashboardData(): ClubDashboardData {
 
       // Skip club members query since table doesn't exist and foreign key relationships are missing
       const membersData: any[] | null = null;
-      const membersError = null;
 
       // Skip club facilities query since table doesn't exist
       const facilitiesData: any[] | null = null;
-      const facilitiesError = null;
 
       // Skip volunteer positions query since table doesn't exist
       const volunteersData: any[] | null = null;
-      const volunteersError = null;
 
       // Skip club financials query since table doesn't exist
       const financialsData: any[] | null = null;
-      const financialsError = null;
 
       // Skip club activity query since table doesn't exist
       const activityData: any[] | null = null;
-      const activityError = null;
 
       // Process events data
       const processedEvents: ClubEvent[] = eventsData?.map(event => ({
@@ -287,6 +320,7 @@ export function useClubDashboardData(): ClubDashboardData {
                     processedVolunteers.reduce((sum, pos) => sum + pos.required_count, 1) * 100)
         : 0;
 
+      if (!canCommit()) return;
       setData(prev => ({
         ...prev,
         events: processedEvents,
@@ -330,18 +364,19 @@ export function useClubDashboardData(): ClubDashboardData {
       }));
 
     } catch (error) {
-      console.error('Error fetching club dashboard data:', error);
+      logger.error('Error fetching club dashboard data', error);
+      if (!canCommit()) return;
       setData(prev => ({
         ...prev,
         loading: false,
         error: error instanceof Error ? error.message : 'Failed to load dashboard data',
       }));
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
-    fetchClubData();
-  }, [user]);
+    void fetchClubData();
+  }, [fetchClubData]);
 
   return data;
 }

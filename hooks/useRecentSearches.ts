@@ -5,17 +5,25 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STORAGE_KEY = 'regattaflow:recent_searches';
 const MAX_RECENTS = 3;
 
 export function useRecentSearches() {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Load on mount
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+    void AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
+      if (!isMountedRef.current) return;
       if (raw) {
         try {
           const parsed = JSON.parse(raw);

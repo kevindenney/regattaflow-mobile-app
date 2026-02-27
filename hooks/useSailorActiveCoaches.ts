@@ -14,6 +14,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface ActiveCoach {
   /** coaching_clients record ID */
@@ -55,6 +56,8 @@ interface UseSailorActiveCoachesResult {
   /** Error if any */
   error: Error | null;
 }
+
+const logger = createLogger('useSailorActiveCoaches');
 
 /**
  * Phase-specific specialty mappings for coach relevance
@@ -133,7 +136,7 @@ export function useSailorActiveCoaches(
         .eq('status', 'active');
 
       if (clientError) {
-        console.error('[useSailorActiveCoaches] Error fetching clients:', clientError);
+        logger.error('Error fetching clients', clientError);
         throw clientError;
       }
 
@@ -155,7 +158,7 @@ export function useSailorActiveCoaches(
         .in('id', coachIds);
 
       if (profileError) {
-        console.error('[useSailorActiveCoaches] Error fetching coach profiles:', profileError);
+        logger.error('Error fetching coach profiles', profileError);
         throw profileError;
       }
 

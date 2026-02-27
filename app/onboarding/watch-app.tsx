@@ -22,7 +22,7 @@ export default function WatchAppScreen() {
                             <Watch size={80} color="#0F172A" />
                         </View>
                         <View style={styles.badge}>
-                            <Text style={styles.badgeText}>COMING SOON</Text>
+                            <Text style={styles.badgeText}>PLANNED</Text>
                         </View>
                     </View>
 

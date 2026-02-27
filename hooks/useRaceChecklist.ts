@@ -5,13 +5,12 @@
  * Integrates with useRacePreparation for storing completion state.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useRacePreparation } from './useRacePreparation';
 import { useEquipmentFlow } from './useEquipmentFlow';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   getChecklistItems,
-  getItemsGroupedByCategory,
   getCategoriesForPhase,
 } from '@/lib/checklists';
 import type {
@@ -80,7 +79,7 @@ interface UseRaceChecklistReturn {
  */
 export function useRaceChecklist({
   regattaId,
-  raceName,
+  raceName: _raceName,
   raceType,
   phase,
   includeCarryover = true,
@@ -184,7 +183,7 @@ export function useRaceChecklist({
   const completeItem = useCallback(
     (itemId: string, notes?: string) => {
       if (!user?.id) {
-        console.warn('[useRaceChecklist] Cannot complete item - no user ID');
+        logger.warn('Cannot complete item - no user ID');
         return;
       }
 
@@ -248,7 +247,7 @@ export function useRaceChecklist({
         completeItem(itemId);
       }
     },
-    [completions, completeItem, uncompleteItem, regattaId]
+    [completions, completeItem, uncompleteItem]
   );
 
   /**

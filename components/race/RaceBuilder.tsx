@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import { View, ScrollView, StyleSheet, Alert } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui';
@@ -9,6 +9,7 @@ import { WeatherIntegration } from './WeatherIntegration';
 import { CourseValidation } from './CourseValidation';
 import { CourseMap } from './shared/CourseMap';
 import { createLogger } from '@/lib/utils/logger';
+import { supabase } from '@/services/supabase';
 
 export interface RaceCourse {
   id: string;
@@ -40,7 +41,6 @@ export interface WeatherData {
 }
 
 const logger = createLogger('RaceBuilder');
-const { width, height } = Dimensions.get('window');
 
 export function RaceBuilder() {
   const [currentCourse, setCurrentCourse] = useState<RaceCourse | null>(null);
@@ -69,8 +69,61 @@ export function RaceBuilder() {
   const handlePublishCourse = async () => {
     if (!currentCourse) return;
 
-    // TODO: Implement course publishing to Supabase
-    logger.debug('Publishing course:', currentCourse);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user?.id) {
+        Alert.alert('Sign in required', 'Please sign in to publish a race course.');
+        return;
+      }
+
+      const mappedMarks = (currentCourse.marks || []).map((mark) => ({
+        name: mark.name,
+        type: mark.type === 'reaching' ? 'wing' : mark.type,
+        latitude: mark.coordinates[1],
+        longitude: mark.coordinates[0],
+      }));
+
+      const payload = {
+        name: currentCourse.name,
+        description: `Published from Race Builder (${currentCourse.type})`,
+        course_type:
+          currentCourse.type === 'windward-leeward'
+            ? 'windward_leeward'
+            : currentCourse.type === 'triangle'
+            ? 'triangle'
+            : 'custom',
+        marks: mappedMarks,
+        layout: {
+          sequence: currentCourse.sequence || [],
+        },
+        created_by: user.id,
+      };
+
+      const { data, error } = await supabase
+        .from('race_courses')
+        .insert(payload)
+        .select('id')
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      logger.debug('Published course to race_courses', {
+        raceCourseId: data?.id,
+        sourceCourseId: currentCourse.id,
+      });
+      Alert.alert('Course Published', 'Your course was saved to the shared course library.');
+    } catch (error) {
+      logger.error('Failed to publish course', error);
+      Alert.alert(
+        'Publish failed',
+        error instanceof Error ? error.message : 'Unable to publish course right now.'
+      );
+    }
   };
 
   const TabButton = ({

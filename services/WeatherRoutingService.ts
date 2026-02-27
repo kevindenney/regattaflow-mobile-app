@@ -19,9 +19,7 @@ import type {
   AgreementLevel,
   DisagreementPeriod,
   DecisionPoint,
-  DecisionPointType,
   SailChangePlan,
-  OptimalTimingWindow,
   RiskLevel,
   RoutingRecommendation,
   GetRouteWeatherParams,
@@ -31,6 +29,7 @@ import type {
 import { OpenMeteoService } from './weather/OpenMeteoService';
 import { StormGlassService } from './weather/StormGlassService';
 import Constants from 'expo-constants';
+import { createLogger } from '@/lib/utils/logger';
 
 // =============================================================================
 // Types
@@ -40,6 +39,8 @@ interface GeoLocation {
   latitude: number;
   longitude: number;
 }
+
+const logger = createLogger('WeatherRoutingService');
 
 // =============================================================================
 // Service Implementation
@@ -169,7 +170,7 @@ export class WeatherRoutingService {
           forecasts.push(openMeteoData);
         }
       } catch (err) {
-        console.warn('[WeatherRoutingService] OpenMeteo fetch failed:', err);
+        logger.warn('[WeatherRoutingService] OpenMeteo fetch failed:', err);
       }
     }
 
@@ -191,7 +192,7 @@ export class WeatherRoutingService {
             forecasts.push(sgData);
           }
         } catch (err) {
-          console.warn(
+          logger.warn(
             `[WeatherRoutingService] StormGlass ${modelName} fetch failed:`,
             err
           );
@@ -335,7 +336,7 @@ export class WeatherRoutingService {
         visibility: 'good',
       };
     } catch (err) {
-      console.warn('[WeatherRoutingService] Error fetching leg weather:', err);
+      logger.warn('[WeatherRoutingService] Error fetching leg weather:', err);
       return this.getDefaultLegConditions();
     }
   }
@@ -378,9 +379,6 @@ export class WeatherRoutingService {
     const allWindDirections: number[] = [];
 
     // Get common time range
-    const allTimes = forecasts.flatMap((f) =>
-      f.hourlyData.map((h) => h.time.getTime())
-    );
     const minTime = Math.max(...forecasts.map((f) => f.hourlyData[0]?.time.getTime() || 0));
     const maxTime = Math.min(
       ...forecasts.map(
@@ -735,7 +733,7 @@ export class WeatherRoutingService {
         hourlyData,
       };
     } catch (err) {
-      console.error('[WeatherRoutingService] OpenMeteo fetch error:', err);
+      logger.error('[WeatherRoutingService] OpenMeteo fetch error:', err);
       return null;
     }
   }

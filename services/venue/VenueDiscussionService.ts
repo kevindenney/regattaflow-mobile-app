@@ -4,6 +4,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface VenueDiscussion {
   id: string;
@@ -85,6 +86,8 @@ export interface CreateCommentParams {
   body: string;
   parent_id?: string;
 }
+
+const logger = createLogger('VenueDiscussionService');
 
 class VenueDiscussionServiceClass {
   /**
@@ -174,7 +177,7 @@ class VenueDiscussionServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[VenueDiscussionService] Error fetching discussions:', error);
+      logger.error('[VenueDiscussionService] Error fetching discussions:', error);
       throw error;
     }
 
@@ -220,7 +223,7 @@ class VenueDiscussionServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDiscussionService] Error fetching discussion:', error);
+      logger.error('[VenueDiscussionService] Error fetching discussion:', error);
       return null;
     }
 
@@ -264,7 +267,7 @@ class VenueDiscussionServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDiscussionService] Error creating discussion:', error);
+      logger.error('[VenueDiscussionService] Error creating discussion:', error);
       throw error;
     }
 
@@ -289,7 +292,7 @@ class VenueDiscussionServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDiscussionService] Error updating discussion:', error);
+      logger.error('[VenueDiscussionService] Error updating discussion:', error);
       throw error;
     }
 
@@ -306,7 +309,7 @@ class VenueDiscussionServiceClass {
       .eq('id', discussionId);
 
     if (error) {
-      console.error('[VenueDiscussionService] Error deleting discussion:', error);
+      logger.error('[VenueDiscussionService] Error deleting discussion:', error);
       throw error;
     }
   }
@@ -332,7 +335,7 @@ class VenueDiscussionServiceClass {
       .order('created_at', { ascending: true });
 
     if (error) {
-      console.error('[VenueDiscussionService] Error fetching comments:', error);
+      logger.error('[VenueDiscussionService] Error fetching comments:', error);
       throw error;
     }
 
@@ -409,7 +412,7 @@ class VenueDiscussionServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDiscussionService] Error creating comment:', error);
+      logger.error('[VenueDiscussionService] Error creating comment:', error);
       throw error;
     }
 
@@ -431,7 +434,7 @@ class VenueDiscussionServiceClass {
       .single();
 
     if (error) {
-      console.error('[VenueDiscussionService] Error updating comment:', error);
+      logger.error('[VenueDiscussionService] Error updating comment:', error);
       throw error;
     }
 
@@ -448,7 +451,7 @@ class VenueDiscussionServiceClass {
       .eq('id', commentId);
 
     if (error) {
-      console.error('[VenueDiscussionService] Error deleting comment:', error);
+      logger.error('[VenueDiscussionService] Error deleting comment:', error);
       throw error;
     }
   }
@@ -474,7 +477,7 @@ class VenueDiscussionServiceClass {
         .eq('target_id', targetId);
 
       if (error) {
-        console.error('[VenueDiscussionService] Error removing vote:', error);
+        logger.error('[VenueDiscussionService] Error removing vote:', error);
         throw error;
       }
     } else {
@@ -491,7 +494,7 @@ class VenueDiscussionServiceClass {
         });
 
       if (error) {
-        console.error('[VenueDiscussionService] Error voting:', error);
+        logger.error('[VenueDiscussionService] Error voting:', error);
         throw error;
       }
     }

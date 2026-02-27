@@ -17,9 +17,9 @@ import {
 } from 'react-native';
 import { X, Upload, FileText, Sparkles } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
-import { RaceExtractionAgent } from '@/services/agents/RaceExtractionAgent';
 import { BoatSelector } from './BoatSelector';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -27,28 +27,6 @@ interface AddRaceModalProps {
   visible: boolean;
   onClose: () => void;
   onRaceAdded: () => void;
-}
-
-interface ExtractedRaceData {
-  name: string;
-  venue: string;
-  date: string;
-  startTime: string;
-  wind?: {
-    direction: string;
-    speedMin: number;
-    speedMax: number;
-  };
-  tide?: {
-    state: 'flooding' | 'ebbing' | 'slack';
-    height: number;
-  };
-  strategy?: string;
-  critical_details?: {
-    vhf_channel?: string;
-    warning_signal?: string;
-    first_start?: string;
-  };
 }
 
 const logger = createLogger('AddRaceModal');
@@ -67,40 +45,54 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
     try {
       logger.debug('[AddRaceModal] Starting AI extraction...');
 
-      // Use Anthropic Agent SDK for intelligent extraction
-      const agent = new RaceExtractionAgent();
-      const result = await agent.extractRaceData(inputText);
+      const { data: extraction, error: extractionError } = await supabase.functions.invoke(
+        'extract-race-details',
+        { body: { text: inputText.trim() } }
+      );
 
-      logger.debug('[AddRaceModal] Extraction result:', result);
+      if (extractionError) {
+        throw new Error(extractionError.message || 'Failed to extract race details');
+      }
 
-      if (!result.success || !result.data) {
+      const extracted =
+        (Array.isArray(extraction?.races) && extraction.races[0]) ||
+        extraction?.data ||
+        null;
+
+      logger.debug('[AddRaceModal] Extraction result:', {
+        hasExtracted: Boolean(extracted),
+        overallConfidence: extraction?.overallConfidence,
+      });
+
+      if (!extracted) {
         Alert.alert(
           'Could Not Extract Race Details',
-          result.error || 'Please include race name, venue, and date in your text.',
+          'Please include race name, venue, and date in your text.',
           [{ text: 'OK' }]
         );
         setIsProcessing(false);
         return;
       }
-
-      const extracted = result.data;
+      const extractedName = extracted.raceName || extracted.name || 'Untitled Race';
+      const extractedVenue = extracted.venue || extracted.racingAreaName || 'Venue unavailable';
+      const extractedDate = extracted.raceDate || extracted.date || new Date().toISOString().split('T')[0];
 
       // Save to Supabase - match actual schema with created_by field
-      const { data, error } = await supabase.from('regattas').insert({
+      const { data: _data, error } = await supabase.from('regattas').insert({
         created_by: user.id,
-        name: extracted.name,
+        name: extractedName,
         boat_id: selectedBoatId || null,
         location: null, // PostGIS geography type - set to null for now
         metadata: {
-          venue_name: extracted.venue,
+          venue_name: extractedVenue,
           wind: extracted.wind,
           tide: extracted.tide,
           strategy: extracted.strategy,
-          critical_details: extracted.critical_details,
-          startTime: extracted.startTime || '10:00',
+          critical_details: extracted.criticalDetails || extracted.critical_details,
+          startTime: extracted.warningSignalTime || extracted.startTime || '10:00',
         },
-        start_date: extracted.date,
-        end_date: extracted.date, // Single day race by default
+        start_date: extractedDate,
+        end_date: extractedDate, // Single day race by default
         status: 'planned', // Valid enum value: planned, active, completed, cancelled
       });
 
@@ -115,10 +107,10 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
 
       // Show success message (works better on web than Alert)
       setTimeout(() => {
-        Alert.alert('Success', `Added: ${extracted.name} at ${extracted.venue}`);
+        Alert.alert('Success', `Added: ${extractedName} at ${extractedVenue}`);
       }, 300);
     } catch (error: any) {
-      console.error('[AddRaceModal] Error:', error);
+      logger.error('Error during text extraction flow', error);
       Alert.alert('Error', error.message || 'Failed to add race. Please try again.');
     } finally {
       setIsProcessing(false);
@@ -126,6 +118,8 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
   };
 
   const handleDocumentUpload = async () => {
+    if (!user) return;
+
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/pdf', 'text/plain', 'image/*'],
@@ -135,18 +129,91 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
       if (result.canceled) return;
 
       setIsProcessing(true);
+      const asset = result.assets?.[0];
+      if (!asset?.uri) {
+        throw new Error('Selected document is missing a readable URI.');
+      }
 
-      // TODO: Integrate with AI document parsing
-      // For now, show placeholder
-      Alert.alert(
-        'Coming Soon',
-        'AI document parsing will be available in the next update. Please use text input for now.'
+      const fileName = asset.name || 'race-document';
+      const lowerName = fileName.toLowerCase();
+      const mimeType =
+        asset.mimeType ||
+        (lowerName.endsWith('.pdf')
+          ? 'application/pdf'
+          : lowerName.endsWith('.txt')
+            ? 'text/plain'
+            : lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')
+              ? 'image/jpeg'
+              : lowerName.endsWith('.png')
+                ? 'image/png'
+                : 'application/pdf');
+
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const { data: extraction, error: extractionError } = await supabase.functions.invoke(
+        'extract-course-from-document',
+        {
+          body: {
+            fileContent: `data:${mimeType};base64,${base64}`,
+            fileName,
+            fileType: mimeType,
+            raceType: 'fleet',
+          },
+        }
       );
 
-      setIsProcessing(false);
+      if (extractionError) {
+        throw new Error(extractionError.message || 'Failed to process document');
+      }
+
+      const extractedName =
+        extraction?.courseName ||
+        fileName.replace(/\.[^.]+$/, '') ||
+        'Untitled Race';
+      const extractedVenue =
+        extraction?.courseDescription ||
+        extraction?.venueName ||
+        extraction?.venue ||
+        'Venue unavailable';
+      const inferredStartDate = new Date();
+      inferredStartDate.setHours(inferredStartDate.getHours() + 24);
+      const startDateIso = inferredStartDate.toISOString().split('T')[0];
+
+      const { error: saveError } = await supabase.from('regattas').insert({
+        created_by: user.id,
+        name: extractedName,
+        boat_id: selectedBoatId || null,
+        location: null,
+        metadata: {
+          venue_name: extractedVenue,
+          source_document: {
+            name: fileName,
+            mimeType,
+          },
+          extracted_waypoints: extraction?.waypoints || [],
+          extracted_constraints: extraction?.constraints || [],
+        },
+        start_date: startDateIso,
+        end_date: startDateIso,
+        status: 'planned',
+      });
+
+      if (saveError) throw saveError;
+
+      onRaceAdded();
+      onClose();
+      setTimeout(() => {
+        Alert.alert('Success', `Added: ${extractedName} (${extractedVenue})`);
+      }, 250);
     } catch (error) {
-      console.error('Error picking document:', error);
-      Alert.alert('Error', 'Failed to upload document.');
+      logger.error('Error picking document', error);
+      Alert.alert(
+        'Upload failed',
+        error instanceof Error ? error.message : 'Failed to upload document.'
+      );
+    } finally {
       setIsProcessing(false);
     }
   };

@@ -20,6 +20,7 @@ import { gpsTracker } from '@/services/GPSTracker';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRouter } from 'expo-router';
+import { createLogger } from '@/lib/utils/logger';
 import {
   getTimerConfig,
   calculateSyncTime,
@@ -50,6 +51,7 @@ type TimerState = 'pre-race' | 'race-day' | 'start-sequence' | 'racing' | 'compl
 // =============================================================================
 
 const DEFAULT_RACE_TIME = '10:00';
+const logger = createLogger('RaceCountdownTimer');
 
 // =============================================================================
 // HELPERS
@@ -187,7 +189,7 @@ export function RaceCountdownTimer({
     try {
       Vibration.vibrate(pattern || 200);
     } catch (error) {
-      console.error('Error vibrating:', error);
+      logger.error('Error vibrating', error);
     }
   }, []);
 
@@ -357,7 +359,7 @@ export function RaceCountdownTimer({
       setGpsPointCount(0);
 
     } catch (error: any) {
-      console.error('Error starting race timer:', error);
+      logger.error('Error starting race timer', error);
       Alert.alert('Error', 'Failed to start race timer. Please try again.');
     }
   }, [user, raceId]);
@@ -397,7 +399,7 @@ export function RaceCountdownTimer({
 
       setShowStopModal(true);
     } catch (error: any) {
-      console.error('Error stopping race timer:', error);
+      logger.error('Error stopping race timer', error);
       Alert.alert('Error', 'Failed to stop race timer.');
     }
   }, [sessionId, elapsedSeconds, gpsPointCount, startMarkedAt]);

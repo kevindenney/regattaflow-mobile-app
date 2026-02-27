@@ -60,21 +60,39 @@ export function useClubSuggestions(options: UseClubSuggestionsOptions = {}) {
   // Venue suggestions
   const [venueSuggestions, setVenueSuggestions] = useState<VenueSuggestion[]>([]);
   const [loadingVenues, setLoadingVenues] = useState(false);
+  const isMountedRef = useRef(true);
+  const clubRunIdRef = useRef(0);
+  const classRunIdRef = useRef(0);
+  const venueRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      clubRunIdRef.current += 1;
+      classRunIdRef.current += 1;
+      venueRunIdRef.current += 1;
+    };
+  }, []);
 
   /**
    * Load club suggestions based on location
    */
   const loadLocationBasedClubs = useCallback(async () => {
+    const runId = ++clubRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === clubRunIdRef.current;
     if (!autoDetectLocation) return;
 
+    if (!canCommit()) return;
     setLoadingClubs(true);
     try {
       const suggestions = await ClubOnboardingService.suggestClubsByLocation();
+      if (!canCommit()) return;
       setClubSuggestions(suggestions);
       logger.debug('Loaded location-based club suggestions', suggestions.length);
     } catch (error) {
       logger.error('Error loading location-based clubs:', error);
     } finally {
+      if (!canCommit()) return;
       setLoadingClubs(false);
     }
   }, [autoDetectLocation]);
@@ -83,19 +101,25 @@ export function useClubSuggestions(options: UseClubSuggestionsOptions = {}) {
    * Search clubs by query
    */
   const searchClubs = useCallback(async (searchQuery: string) => {
+    const runId = ++clubRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === clubRunIdRef.current;
     if (!searchQuery || searchQuery.trim().length < 2) {
+      if (!canCommit()) return;
       setClubSuggestions([]);
       return;
     }
 
+    if (!canCommit()) return;
     setLoadingClubs(true);
     try {
       const suggestions = await ClubOnboardingService.searchClubs(searchQuery.trim(), 10);
+      if (!canCommit()) return;
       setClubSuggestions(suggestions);
       logger.debug('Searched clubs:', suggestions.length);
     } catch (error) {
       logger.error('Error searching clubs:', error);
     } finally {
+      if (!canCommit()) return;
       setLoadingClubs(false);
     }
   }, []);
@@ -112,14 +136,19 @@ export function useClubSuggestions(options: UseClubSuggestionsOptions = {}) {
    * Load class suggestions when a club is selected
    */
   const loadClassSuggestions = useCallback(async (clubId: string) => {
+    const runId = ++classRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === classRunIdRef.current;
+    if (!canCommit()) return;
     setLoadingClasses(true);
     try {
       const suggestions = await ClubOnboardingService.suggestClassesByClub(clubId);
+      if (!canCommit()) return;
       setClassSuggestions(suggestions);
       logger.debug('Loaded class suggestions for club:', suggestions.length);
     } catch (error) {
       logger.error('Error loading class suggestions:', error);
     } finally {
+      if (!canCommit()) return;
       setLoadingClasses(false);
     }
   }, []);
@@ -128,14 +157,19 @@ export function useClubSuggestions(options: UseClubSuggestionsOptions = {}) {
    * Load class suggestions by region/venue
    */
   const loadClassSuggestionsByRegion = useCallback(async (venueId: string) => {
+    const runId = ++classRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === classRunIdRef.current;
+    if (!canCommit()) return;
     setLoadingClasses(true);
     try {
       const suggestions = await ClubOnboardingService.suggestClassesByRegion(venueId);
+      if (!canCommit()) return;
       setClassSuggestions(suggestions);
       logger.debug('Loaded class suggestions for region:', suggestions.length);
     } catch (error) {
       logger.error('Error loading class suggestions by region:', error);
     } finally {
+      if (!canCommit()) return;
       setLoadingClasses(false);
     }
   }, []);
@@ -144,19 +178,25 @@ export function useClubSuggestions(options: UseClubSuggestionsOptions = {}) {
    * Search venues by query
    */
   const searchVenues = useCallback(async (searchQuery: string) => {
+    const runId = ++venueRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === venueRunIdRef.current;
     if (!searchQuery || searchQuery.trim().length < 2) {
+      if (!canCommit()) return;
       setVenueSuggestions([]);
       return;
     }
 
+    if (!canCommit()) return;
     setLoadingVenues(true);
     try {
       const suggestions = await ClubOnboardingService.suggestVenues(searchQuery.trim());
+      if (!canCommit()) return;
       setVenueSuggestions(suggestions);
       logger.debug('Searched venues:', suggestions.length);
     } catch (error) {
       logger.error('Error searching venues:', error);
     } finally {
+      if (!canCommit()) return;
       setLoadingVenues(false);
     }
   }, []);
@@ -173,14 +213,19 @@ export function useClubSuggestions(options: UseClubSuggestionsOptions = {}) {
    * Load venue suggestions by coordinates
    */
   const loadVenuesByCoordinates = useCallback(async (coords: { lat: number; lng: number }) => {
+    const runId = ++venueRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === venueRunIdRef.current;
+    if (!canCommit()) return;
     setLoadingVenues(true);
     try {
       const suggestions = await ClubOnboardingService.suggestVenues(undefined, coords);
+      if (!canCommit()) return;
       setVenueSuggestions(suggestions);
       logger.debug('Loaded venues by coordinates:', suggestions.length);
     } catch (error) {
       logger.error('Error loading venues by coordinates:', error);
     } finally {
+      if (!canCommit()) return;
       setLoadingVenues(false);
     }
   }, []);
@@ -253,6 +298,14 @@ export function useClubSuggestions(options: UseClubSuggestionsOptions = {}) {
       loadVenuesByCoordinates(coordinates);
     }
   }, [coordinates, loadVenuesByCoordinates]);
+
+  // Cleanup debounced callbacks on unmount/rerender
+  useEffect(() => {
+    return () => {
+      debouncedSearchClubs.cancel();
+      debouncedSearchVenues.cancel();
+    };
+  }, [debouncedSearchClubs, debouncedSearchVenues]);
 
   return {
     // Club suggestions

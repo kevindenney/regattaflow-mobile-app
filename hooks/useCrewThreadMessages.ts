@@ -102,10 +102,35 @@ export function useCrewThreadMessages({
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const profileCacheRef = useRef<Record<string, CrewThreadMessage['profile']>>({});
+  const messagesRef = useRef<CrewThreadMessage[]>([]);
+  const isMountedRef = useRef(true);
+  const activeThreadIdRef = useRef<string | undefined>(threadId);
+  const fetchRunIdRef = useRef(0);
+  const loadMoreRunIdRef = useRef(0);
+  const realtimeRunIdRef = useRef(0);
+
+  useEffect(() => {
+    activeThreadIdRef.current = threadId;
+  }, [threadId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const fetchMessages = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
+
     if (!threadId || !isValidUUID(threadId)) {
+      if (!canCommit()) return;
       setMessages([]);
+      setError(null);
       setIsLoading(false);
       setHasMore(false);
       return;
@@ -124,13 +149,16 @@ export function useCrewThreadMessages({
         }
       });
 
+      if (!canCommit()) return;
       setMessages(fetchedMessages);
       // If we got fewer messages than pageSize, there are no more older messages
       setHasMore(fetchedMessages.length >= pageSize);
     } catch (err) {
       logger.error('Failed to fetch messages:', err);
+      if (!canCommit()) return;
       setError(err instanceof Error ? err : new Error('Failed to fetch messages'));
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [threadId, pageSize]);
@@ -143,17 +171,27 @@ export function useCrewThreadMessages({
   // Mark as read on mount (if autoMarkRead)
   useEffect(() => {
     if (threadId && autoMarkRead && user?.id) {
-      CrewThreadService.markAsRead(threadId).then(() => {
-        // Invalidate unread count
-        queryClient.invalidateQueries({ queryKey: [CREW_THREAD_UNREAD_COUNT_KEY] });
-        queryClient.invalidateQueries({ queryKey: [CREW_THREADS_QUERY_KEY] });
-      });
+      const targetThreadId = threadId;
+      const targetUserId = user.id;
+      CrewThreadService.markAsRead(threadId)
+        .then(() => {
+          if (!isMountedRef.current || activeThreadIdRef.current !== targetThreadId) return;
+          // Invalidate unread count
+          queryClient.invalidateQueries({ queryKey: [CREW_THREAD_UNREAD_COUNT_KEY, targetUserId] });
+          queryClient.invalidateQueries({ queryKey: [CREW_THREADS_QUERY_KEY, targetUserId] });
+        })
+        .catch((err) => {
+          logger.debug('Auto mark-as-read failed (non-blocking):', err);
+        });
     }
   }, [threadId, autoMarkRead, user?.id, queryClient]);
 
   // Realtime subscription
   useEffect(() => {
     if (!threadId || !realtime || !isValidUUID(threadId)) return;
+    const runId = ++realtimeRunIdRef.current;
+    const targetThreadId = threadId;
+    const canCommit = () => isMountedRef.current && runId === realtimeRunIdRef.current;
 
     const channel = supabase
       .channel(`crew-thread-messages:${threadId}`)
@@ -165,8 +203,8 @@ export function useCrewThreadMessages({
           table: 'crew_thread_messages',
           filter: `thread_id=eq.${threadId}`,
         },
-        async (payload) => {
-          const row = payload.new as any;
+          async (payload) => {
+            const row = payload.new as any;
           let msg: CrewThreadMessage = {
             id: row.id,
             threadId: row.thread_id,
@@ -187,6 +225,7 @@ export function useCrewThreadMessages({
             }
           }
 
+          if (!canCommit() || activeThreadIdRef.current !== targetThreadId) return;
           setMessages((prev) => {
             // Avoid duplicates
             if (prev.some((m) => m.id === msg.id)) return prev;
@@ -195,7 +234,7 @@ export function useCrewThreadMessages({
 
           // Mark as read if it's not from current user
           if (autoMarkRead && msg.userId !== user?.id) {
-            CrewThreadService.markAsRead(threadId);
+            void CrewThreadService.markAsRead(targetThreadId);
           }
         }
       )
@@ -209,6 +248,7 @@ export function useCrewThreadMessages({
         },
         (payload) => {
           const deletedId = payload.old.id;
+          if (!canCommit() || activeThreadIdRef.current !== targetThreadId) return;
           setMessages((prev) => prev.filter((m) => m.id !== deletedId));
         }
       )
@@ -219,14 +259,19 @@ export function useCrewThreadMessages({
       });
 
     return () => {
-      supabase.removeChannel(channel);
+      if (realtimeRunIdRef.current === runId) {
+        realtimeRunIdRef.current += 1;
+      }
+      void supabase.removeChannel(channel);
     };
   }, [threadId, realtime, user?.id, autoMarkRead]);
 
   const sendMessage = useCallback(
     async (text: string) => {
       if (!threadId || !user?.id || !text.trim()) return;
+      const targetThreadId = threadId;
 
+      if (!isMountedRef.current || activeThreadIdRef.current !== targetThreadId) return;
       setIsSending(true);
       try {
         const newMessage = await CrewThreadService.sendMessage(threadId, text.trim());
@@ -237,6 +282,7 @@ export function useCrewThreadMessages({
         if (newMessage.profile) {
           profileCacheRef.current[newMessage.userId] = newMessage.profile;
         }
+        if (!isMountedRef.current || activeThreadIdRef.current !== targetThreadId) return;
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMessage.id)) return prev;
           return [...prev, newMessage];
@@ -245,6 +291,7 @@ export function useCrewThreadMessages({
         logger.error('Failed to send message:', err);
         throw err;
       } finally {
+        if (!isMountedRef.current) return;
         setIsSending(false);
       }
     },
@@ -254,7 +301,7 @@ export function useCrewThreadMessages({
   const deleteMessage = useCallback(
     async (messageId: string) => {
       // Optimistic removal
-      const removed = messages.find((m) => m.id === messageId);
+      const removed = messagesRef.current.find((m) => m.id === messageId);
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
 
       try {
@@ -276,7 +323,7 @@ export function useCrewThreadMessages({
         throw err;
       }
     },
-    [messages]
+    []
   );
 
   const postSystemMessage = useCallback(
@@ -294,14 +341,29 @@ export function useCrewThreadMessages({
   );
 
   const markAsRead = useCallback(async () => {
-    if (!threadId) return;
-    await CrewThreadService.markAsRead(threadId);
+    const targetThreadId = activeThreadIdRef.current;
+    const targetUserId = user?.id;
+    if (!targetThreadId) return;
+    await CrewThreadService.markAsRead(targetThreadId);
+    if (!isMountedRef.current || activeThreadIdRef.current !== targetThreadId) return;
+    if (targetUserId) {
+      queryClient.invalidateQueries({ queryKey: [CREW_THREAD_UNREAD_COUNT_KEY, targetUserId] });
+      queryClient.invalidateQueries({ queryKey: [CREW_THREADS_QUERY_KEY, targetUserId] });
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: [CREW_THREAD_UNREAD_COUNT_KEY] });
     queryClient.invalidateQueries({ queryKey: [CREW_THREADS_QUERY_KEY] });
-  }, [threadId, queryClient]);
+  }, [queryClient, user?.id]);
 
   const loadMore = useCallback(async () => {
-    if (!threadId || !hasMore || isLoadingMore || messages.length === 0) return;
+    const runId = ++loadMoreRunIdRef.current;
+    const targetThreadId = threadId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadMoreRunIdRef.current &&
+      activeThreadIdRef.current === targetThreadId;
+
+    if (!targetThreadId || !hasMore || isLoadingMore || messages.length === 0) return;
 
     // Get the oldest message's createdAt as the cursor
     const oldestMessage = messages[0];
@@ -309,7 +371,7 @@ export function useCrewThreadMessages({
 
     setIsLoadingMore(true);
     try {
-      const olderMessages = await CrewThreadService.getMessages(threadId, {
+      const olderMessages = await CrewThreadService.getMessages(targetThreadId, {
         limit: pageSize,
         before: oldestMessage.createdAt,
       });
@@ -323,14 +385,17 @@ export function useCrewThreadMessages({
 
       if (olderMessages.length > 0) {
         // Prepend older messages to the beginning
+        if (!canCommit()) return;
         setMessages((prev) => [...olderMessages, ...prev]);
       }
 
       // If we got fewer than pageSize, no more messages to load
+      if (!canCommit()) return;
       setHasMore(olderMessages.length >= pageSize);
     } catch (err) {
       logger.error('Failed to load more messages:', err);
     } finally {
+      if (!canCommit()) return;
       setIsLoadingMore(false);
     }
   }, [threadId, hasMore, isLoadingMore, messages, pageSize]);

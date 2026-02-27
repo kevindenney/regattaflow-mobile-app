@@ -14,13 +14,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const envPath = join(__dirname, '..', '.env');
 
-let ANTHROPIC_API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ||
-  process.env.ANTHROPIC_API_KEY;
+let ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 if (!ANTHROPIC_API_KEY) {
   try {
     const envContent = readFileSync(envPath, 'utf8');
-    const match = envContent.match(/EXPO_PUBLIC_ANTHROPIC_API_KEY=(.+)/);
+    const match = envContent.match(/ANTHROPIC_API_KEY=(.+)/);
     if (match) {
       ANTHROPIC_API_KEY = match[1].trim();
       console.log('✅ Loaded API key from .env file\n');
@@ -107,7 +106,7 @@ const mockCandidates = [
 async function testAI() {
   if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === 'placeholder') {
     console.log('❌ No Anthropic API key found!');
-    console.log('   Set EXPO_PUBLIC_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY in your environment');
+    console.log('   Set ANTHROPIC_API_KEY in your environment');
     process.exit(1);
   }
 

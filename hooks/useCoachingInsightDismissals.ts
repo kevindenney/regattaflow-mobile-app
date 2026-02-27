@@ -5,7 +5,7 @@
  * Dismissed insights are hidden for 14 days.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DISMISSAL_STORAGE_KEY = '@regattaflow/coaching-insight-dismissals';
@@ -18,10 +18,18 @@ interface DismissalRecord {
 export function useCoachingInsightDismissals() {
   const [dismissals, setDismissals] = useState<DismissalRecord>({});
   const [loaded, setLoaded] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Load dismissals from AsyncStorage
   useEffect(() => {
-    AsyncStorage.getItem(DISMISSAL_STORAGE_KEY).then((value) => {
+    void AsyncStorage.getItem(DISMISSAL_STORAGE_KEY).then((value) => {
+      if (!isMountedRef.current) return;
       if (value) {
         try {
           const parsed = JSON.parse(value);

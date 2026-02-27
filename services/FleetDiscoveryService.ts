@@ -5,11 +5,13 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const isUuid = (value?: string) => !!value && UUID_REGEX.test(value);
+const logger = createLogger('FleetDiscoveryService');
 
 export interface Fleet {
   id: string;
@@ -99,7 +101,7 @@ export class FleetDiscoveryService {
       // Sort by member count (popularity)
       return fleetsWithCounts.sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
     } catch (error) {
-      console.error('Error discovering fleets:', error);
+      logger.error('Error discovering fleets:', error);
       return [];
     }
   }
@@ -109,21 +111,13 @@ export class FleetDiscoveryService {
    */
   static async getSuggestedFleets(sailorId: string): Promise<Fleet[]> {
     try {
-      // Get sailor's locations and boat classes
-      const [locationsResult, boatsResult] = await Promise.all([
-        supabase
-          .from('sailor_locations')
-          .select('location_id')
+      // Get sailor's boat classes
+      const boatsResult = await supabase
+        .from('sailor_boats')
+        .select('class_id')
         .eq('sailor_id', sailorId)
-          .eq('is_active', true),
-        supabase
-          .from('sailor_boats')
-          .select('class_id')
-          .eq('sailor_id', sailorId)
-          .in('status', ['active', 'racing']),
-      ]);
+        .in('status', ['active', 'racing']);
 
-      const venueIds = locationsResult.data?.map((l: any) => l.location_id) || [];
       const classIds = boatsResult.data?.map((b: any) => b.class_id) || [];
 
       if (classIds.length === 0) {
@@ -167,7 +161,7 @@ export class FleetDiscoveryService {
         .sort((a, b) => (b.member_count || 0) - (a.member_count || 0))
         .slice(0, 10);
     } catch (error) {
-      console.error('Error getting suggested fleets:', error);
+      logger.error('Error getting suggested fleets:', error);
       return [];
     }
   }
@@ -181,7 +175,7 @@ export class FleetDiscoveryService {
     notifyFleet: boolean = false
   ): Promise<FleetMembership | null> {
     if (!isUuid(fleetId)) {
-      console.warn('Skipping joinFleet for non-UUID fleet id', { fleetId });
+      logger.warn('Skipping joinFleet for non-UUID fleet id', { fleetId });
       return null;
     }
 
@@ -202,7 +196,7 @@ export class FleetDiscoveryService {
 
       return membership;
     } catch (error) {
-      console.error('Error joining fleet:', error);
+      logger.error('Error joining fleet:', error);
       return null;
     }
   }
@@ -212,7 +206,7 @@ export class FleetDiscoveryService {
    */
   static async leaveFleet(sailorId: string, fleetId: string): Promise<boolean> {
     if (!isUuid(fleetId)) {
-      console.warn('Skipping leaveFleet for non-UUID fleet id', { fleetId });
+      logger.warn('Skipping leaveFleet for non-UUID fleet id', { fleetId });
       return false;
     }
 
@@ -227,7 +221,7 @@ export class FleetDiscoveryService {
 
       return true;
     } catch (error) {
-      console.error('Error leaving fleet:', error);
+      logger.error('Error leaving fleet:', error);
       return false;
     }
   }
@@ -253,7 +247,7 @@ export class FleetDiscoveryService {
 
       return memberships?.map((m: any) => m.fleets).filter(Boolean) || [];
     } catch (error) {
-      console.error('Error getting sailor fleets:', error);
+      logger.error('Error getting sailor fleets:', error);
       return [];
     }
   }
@@ -294,7 +288,7 @@ export class FleetDiscoveryService {
 
       return fleetsWithCounts;
     } catch (error) {
-      console.error('Error searching fleets:', error);
+      logger.error('Error searching fleets:', error);
       return [];
     }
   }
@@ -338,7 +332,7 @@ export class FleetDiscoveryService {
 
       return newFleet;
     } catch (error) {
-      console.error('Error creating fleet:', error);
+      logger.error('Error creating fleet:', error);
       return null;
     }
   }
@@ -348,7 +342,7 @@ export class FleetDiscoveryService {
    */
   static async isMember(sailorId: string, fleetId: string): Promise<boolean> {
     if (!isUuid(fleetId)) {
-      console.warn('Skipping isMember check for non-UUID fleet id', { fleetId });
+      logger.warn('Skipping isMember check for non-UUID fleet id', { fleetId });
       return false;
     }
 
@@ -367,7 +361,7 @@ export class FleetDiscoveryService {
 
       return !!data;
     } catch (error) {
-      console.error('Error checking fleet membership:', error);
+      logger.error('Error checking fleet membership:', error);
       return false;
     }
   }
@@ -408,7 +402,7 @@ export class FleetDiscoveryService {
       // Sort by member count (popularity)
       return fleetsWithCounts.sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
     } catch (error) {
-      console.error('Error discovering fleets by club:', error);
+      logger.error('Error discovering fleets by club:', error);
       return [];
     }
   }
@@ -464,7 +458,7 @@ export class FleetDiscoveryService {
       // Sort by member count (popularity)
       return fleetsWithCounts.sort((a, b) => (b.member_count || 0) - (a.member_count || 0));
     } catch (error) {
-      console.error('Error discovering fleets by venue:', error);
+      logger.error('Error discovering fleets by venue:', error);
       return [];
     }
   }

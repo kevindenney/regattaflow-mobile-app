@@ -4,7 +4,6 @@
  * Handles sailing instructions, race documents, or any text with race information
  */
 
-import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
 export interface ComprehensiveRaceData {
@@ -23,7 +22,7 @@ export interface ComprehensiveRaceData {
   preparatoryMinutes?: number;
   classIntervalMinutes?: number;
   totalStarts?: number;
-  startSequence?: Array<{ class: string; warning: string; start: string }>;
+  startSequence?: { class: string; warning: string; start: string }[];
   plannedFinishTime?: string;
   timeLimitMinutes?: number;
 
@@ -31,14 +30,14 @@ export interface ComprehensiveRaceData {
   vhfChannel?: string;  // Legacy single channel (deprecated, use vhfChannels)
   vhfBackupChannel?: string;
   safetyChannel?: string;
-  vhfChannels?: Array<{
+  vhfChannels?: {
     channel: string;
     purpose: string;      // e.g., "Inner Starting Line", "Outer Starting Line", "Safety", "Race Committee"
     classes?: string[];   // Which classes use this channel, e.g., ["Dragon", "J/80", "Fast Fleet"]
-  }>;
+  }[];
   rcBoatName?: string;
   rcBoatPosition?: string;
-  markBoats?: Array<{ mark: string; boat: string; position: string }>;
+  markBoats?: { mark: string; boat: string; position: string }[];
   raceOfficer?: string;
   protestCommittee?: string;
 
@@ -48,7 +47,7 @@ export interface ComprehensiveRaceData {
   startLineLength?: number;
   
   // Multiple Start Lines (for races with Inner/Outer lines, different class starts)
-  startLines?: Array<{
+  startLines?: {
     name: string;           // "Inner Starting Line", "Outer Starting Line"
     description?: string;   // How to start (e.g., "west to east between IDM and ODM")
     classes: string[];      // Which classes use this line ["Dragon", "J/80", "Etchells"]
@@ -58,12 +57,12 @@ export interface ComprehensiveRaceData {
       portEnd?: string;      // e.g., "ODM", "orange inflatable buoy"
     };
     direction?: string;     // e.g., "W-E"
-    startTimes?: Array<{    // Start times for classes on this line
+    startTimes?: {    // Start times for classes on this line
       class: string;
       flag: string;
       time: string;
-    }>;
-  }>;
+    }[];
+  }[];
   
   potentialCourses?: string[];
   courseSelectionCriteria?: string;
@@ -75,22 +74,22 @@ export interface ComprehensiveRaceData {
   approximateDistance?: string;   // e.g., "26nm"
   
   // Prohibited Areas (TSS, military zones, etc.)
-  prohibitedAreas?: Array<{
+  prohibitedAreas?: {
     name: string;
     description?: string;
-    coordinates?: Array<{ lat: number; lng: number }>;
+    coordinates?: { lat: number; lng: number }[];
     consequence?: string;  // e.g., "disqualified without a hearing"
-  }>;
+  }[];
   
   // Course Gates
-  gates?: Array<{
+  gates?: {
     name: string;           // e.g., "Stanley Bay GATE"
     description?: string;
     orientation?: string;   // e.g., "SE-NW"
     portMark?: string;
     starboardMark?: string;
     canShortenHere?: boolean;
-  }>;
+  }[];
   
   // Finish Area
   finishAreaName?: string;
@@ -106,7 +105,7 @@ export interface ComprehensiveRaceData {
   noticeOfRaceUrl?: string;
 
   // Class & Fleet
-  classDivisions?: Array<{ name: string; fleet_size: number }>;
+  classDivisions?: { name: string; fleet_size: number }[];
   expectedFleetSize?: number;
 
   // Weather & Conditions
@@ -139,7 +138,7 @@ export interface ComprehensiveRaceData {
 
   // NOR Document Fields
   supplementarySIUrl?: string;
-  norAmendments?: Array<{ url?: string; date: string; description: string }>;
+  norAmendments?: { url?: string; date: string; description: string }[];
 
   // Governing Rules
   racingRulesSystem?: string;
@@ -167,13 +166,13 @@ export interface ComprehensiveRaceData {
   reserveDays?: string[];
 
   // Multi-day Event Schedule (for events spanning multiple days)
-  schedule?: Array<{
+  schedule?: {
     date: string;  // YYYY-MM-DD format
     time: string;  // HH:MM or HHMMhrs format
     event: string;  // e.g., "Skippers Briefing", "Race Start", "Race Finish Deadline", "Prize Giving"
     location?: string;  // e.g., "ABC Main Clubhouse Harbour Room"
     mandatory?: boolean;  // true if attendance is compulsory (e.g., skippers briefing)
-  }>;
+  }[];
 
   // Enhanced Course Information
   courseAttachmentReference?: string;
@@ -183,10 +182,10 @@ export interface ComprehensiveRaceData {
   seriesRacesRequired?: number;
   discardsPolicy?: string;
   scoringFormulaDescription?: string;  // Human-readable explanation of how results are calculated
-  scoringCheckpoints?: Array<{
+  scoringCheckpoints?: {
     location: string;
     checkType: string;  // "gate", "timing", "reporting"
-  }>;
+  }[];
 
   // Motoring Division (for distance races allowing engine use)
   motoringDivisionAvailable?: boolean;  // true if boats can elect to enter motoring division
@@ -211,11 +210,11 @@ export interface ComprehensiveRaceData {
 
   // Class Flags - mapping of boat classes to International Code Flags
   // Essential for Race Tab - shows which flag to watch for during starts
-  classFlags?: Array<{
+  classFlags?: {
     className: string;           // e.g., "Dragon", "Etchells", "J/80"
     flag: string;               // International Code Flag (e.g., "D", "G", "J")
     flagDescription?: string;   // e.g., "Naval 6" for Flying Fifteen
-  }>;
+  }[];
 
   // Protest Procedures - how to file protests
   protestProcedures?: {
@@ -240,21 +239,21 @@ export interface ComprehensiveRaceData {
   signalsMadeAshore?: {
     location?: string;                   // e.g., "RHKYC Shelter Cove flagpoles"
     apFlagMeaning?: string;              // What AP flag means (e.g., "not less than 30 minutes")
-    otherSignals?: Array<{
+    otherSignals?: {
       signal: string;
       meaning: string;
-    }>;
+    }[];
   };
 
   // GPS Coordinates & Course Layout (NEW - from enhanced Skills extraction)
-  marks?: Array<{
+  marks?: {
     name: string;
     latitude: number; // decimal degrees
     longitude: number; // decimal degrees
     type: string; // "windward", "leeward", "start", "finish", "wing", "gate"
     color?: string;
     shape?: string;
-  }>;
+  }[];
 
   racingArea?: {
     type: 'rectangle' | 'polygon';
@@ -277,7 +276,7 @@ export interface ComprehensiveRaceData {
   
   // Route waypoints for distance/offshore races
   // Note: For adventure races like "Four Peaks", peaks may not have GPS coordinates
-  routeWaypoints?: Array<{
+  routeWaypoints?: {
     name: string;
     latitude?: number;  // Optional - may not be available for peaks/landmarks
     longitude?: number;  // Optional - may not be available for peaks/landmarks
@@ -286,7 +285,7 @@ export interface ComprehensiveRaceData {
     passingSide?: 'port' | 'starboard' | 'either';
     notes?: string;  // e.g., "Leave to port", "Rounding mark", "Shore party ascent required"
     order?: number;  // Sequence order (1, 2, 3, 4 for Four Peaks)
-  }>;
+  }[];
   
   // Total race distance in nautical miles
   totalDistanceNm?: number;
@@ -298,19 +297,19 @@ export interface ComprehensiveRaceData {
   startFinishSameLocation?: boolean;
   
   // Tide gates - optimal timing windows based on tidal currents
-  tideGates?: Array<{
+  tideGates?: {
     location: string;
     optimalPassingTime: string;  // ISO time or relative time
     currentDirection: 'favorable' | 'adverse';
     notes?: string;
-  }>;
+  }[];
   
   // Shipping/traffic separation schemes to avoid or navigate
-  trafficSeparationSchemes?: Array<{
+  trafficSeparationSchemes?: {
     name: string;
     crossingStrategy?: string;
-    coordinates?: Array<{ lat: number; lng: number }>;
-  }>;
+    coordinates?: { lat: number; lng: number }[];
+  }[];
 }
 
 const logger = createLogger('ComprehensiveRaceExtractionAgent');
@@ -352,7 +351,7 @@ export class ComprehensiveRaceExtractionAgent {
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
-        console.error('[ComprehensiveRaceExtractionAgent] Aborting request after 60 seconds');
+        logger.error('[ComprehensiveRaceExtractionAgent] Aborting request after 60 seconds');
         controller.abort();
       }, 60000); // Increased to 60 seconds for large documents
 
@@ -396,13 +395,15 @@ export class ComprehensiveRaceExtractionAgent {
           result = await response.json();
           logger.debug('[ComprehensiveRaceExtractionAgent] Edge function response:', result);
         } catch (jsonError: any) {
-          console.error('[ComprehensiveRaceExtractionAgent] Failed to parse JSON response:', jsonError);
+          logger.error('[ComprehensiveRaceExtractionAgent] Failed to parse JSON response', jsonError);
           throw new Error(`Failed to parse response: ${jsonError.message}`);
         }
 
         // Check if response is not OK but has partial data (400 with partialData)
         if (!response.ok) {
-          console.warn('[ComprehensiveRaceExtractionAgent] Response not OK, status:', response.status);
+          logger.warn('[ComprehensiveRaceExtractionAgent] Response not OK', {
+            status: response.status,
+          });
 
           // If we have partial data despite the error, treat it as a partial success
           if (result.partialData && Object.keys(result.partialData).length > 0) {
@@ -424,12 +425,14 @@ export class ComprehensiveRaceExtractionAgent {
             result.stop_reason && `Stop reason: ${result.stop_reason}`,
             result.parseAttempts && `Parse attempts: ${JSON.stringify(result.parseAttempts)}`
           ].filter(Boolean).join('. ');
-          console.error('[ComprehensiveRaceExtractionAgent] Full error details:', result);
+          logger.error('[ComprehensiveRaceExtractionAgent] Full error details', result);
           throw new Error(`Edge function returned ${response.status}: ${errorDetails || 'Unknown error'}`);
         }
 
         if (!result.success) {
-          console.warn('[ComprehensiveRaceExtractionAgent] Extraction incomplete:', result.error);
+          logger.warn('[ComprehensiveRaceExtractionAgent] Extraction incomplete', {
+            error: result.error,
+          });
 
           // If we have partial data, return it as a success so user can fill in missing fields
           if (result.partialData && Object.keys(result.partialData).length > 0) {
@@ -506,7 +509,7 @@ export class ComprehensiveRaceExtractionAgent {
         };
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
-        console.error('[ComprehensiveRaceExtractionAgent] Fetch error:', fetchError);
+        logger.error('[ComprehensiveRaceExtractionAgent] Fetch error', fetchError);
 
         let errorMessage = fetchError.message || 'Failed to call edge function';
         if (fetchError.name === 'AbortError') {
@@ -519,7 +522,7 @@ export class ComprehensiveRaceExtractionAgent {
         };
       }
     } catch (error: any) {
-      console.error('[ComprehensiveRaceExtractionAgent] Error:', error);
+      logger.error('[ComprehensiveRaceExtractionAgent] Error', error);
 
       return {
         success: false,
@@ -534,7 +537,7 @@ export class ComprehensiveRaceExtractionAgent {
    */
   async enhanceWithSuggestions(
     partialData: Partial<ComprehensiveRaceData>,
-    venueId?: string
+    _venueId?: string
   ): Promise<Partial<ComprehensiveRaceData>> {
     // TODO: Implement AI enhancement based on venue intelligence
     // - Suggest typical start times for venue

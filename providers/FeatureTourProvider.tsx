@@ -122,6 +122,7 @@ export function FeatureTourProvider({
   const [spotlightBounds, setSpotlightBounds] = useState<SpotlightBounds | null>(null);
   const [readySteps, setReadySteps] = useState<Set<TourStep>>(new Set());
   const readyStepsRef = useRef<Set<TourStep>>(new Set());
+  const pricingPromptTriggeredRef = useRef(false);
 
   useEffect(() => {
     readyStepsRef.current = readySteps;
@@ -403,10 +404,11 @@ export function FeatureTourProvider({
   }, [isTourActive, stepReadinessIssue]);
 
   useEffect(() => {
-    if (isLoading || !isTourComplete || hasSeenPricingPrompt) {
+    if (isLoading || !isTourComplete || hasSeenPricingPrompt || pricingPromptTriggeredRef.current) {
       return;
     }
 
+    pricingPromptTriggeredRef.current = true;
     triggerPricingPrompt();
   }, [hasSeenPricingPrompt, isLoading, isTourComplete, triggerPricingPrompt]);
 

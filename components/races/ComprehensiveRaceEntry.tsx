@@ -7,10 +7,11 @@ import { RigTuningCard } from '@/components/race-detail/RigTuningCard';
 import TacticalRaceMap from '@/components/race-strategy/TacticalRaceMap';
 import { Toast, ToastDescription, ToastTitle, useToast } from '@/components/ui/toast';
 import { useRaceSuggestions } from '@/hooks/useRaceSuggestions';
+import { extractSuggestionFailureSources } from '@/hooks/useRaceSuggestions.errors';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { createLogger } from '@/lib/utils/logger';
+import { extractRaceDetailsFromText } from '@/lib/utils/raceExtraction';
 import { useAuth } from '@/providers/AuthProvider';
-import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
 import type { RaceSuggestion } from '@/services/RaceSuggestionService';
 import { RaceWeatherService } from '@/services/RaceWeatherService';
@@ -19,6 +20,7 @@ import { supabase } from '@/services/supabase';
 import type { CourseMark, RaceEventWithDetails } from '@/types/raceEvents';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import {
@@ -40,7 +42,7 @@ import {
     Upload,
     X
 } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -63,7 +65,7 @@ import { VenueLocationPicker } from './VenueLocationPicker';
 
 export interface ExtractionMetadata {
   racingAreaName?: string;
-  extractedMarks?: Array<{ name: string; type: string }>;
+  extractedMarks?: { name: string; type: string }[];
   venueId?: string;
   raceName?: string;
 }
@@ -95,6 +97,16 @@ interface ClassDivision {
 }
 
 const logger = createLogger('ComprehensiveRaceEntry');
+const SUGGESTION_SOURCE_HINTS: Record<string, string> = {
+  club_events: 'club_members -> club_events',
+  fleet_races: 'fleet_members -> fleet/boat class races',
+  community_races: 'club_members -> regattas(created_by co-members)',
+  catalog_matches: 'sailor_boats + race_catalog + saved_catalog_races',
+  previous_year: 'regattas(start_date history)',
+  patterns: 'regattas -> race_patterns',
+  templates: 'race_templates',
+};
+
 export function ComprehensiveRaceEntry({
   onSubmit,
   onCancel,
@@ -105,9 +117,10 @@ export function ComprehensiveRaceEntry({
   const router = useRouter();
   const toast = useToast();
   const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [processingSuggestionId, setProcessingSuggestionId] = useState<string | null>(null);
+  const [showSuggestionDiagnostics, setShowSuggestionDiagnostics] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['basic', 'timing'])
   );
@@ -115,29 +128,55 @@ export function ComprehensiveRaceEntry({
   // Race Suggestions
   const {
     suggestions,
+    diagnostics: suggestionDiagnostics,
     loading: suggestionsLoading,
+    error: suggestionsError,
     refresh: refreshSuggestions,
     acceptSuggestion,
     dismissSuggestion,
   } = useRaceSuggestions();
+  const suggestionFailureSources = useMemo(() => {
+    return extractSuggestionFailureSources(
+      suggestionDiagnostics?.failedSources,
+      suggestionsError?.message
+    );
+  }, [suggestionDiagnostics?.failedSources, suggestionsError?.message]);
+  const copySuggestionDiagnostics = useCallback(async () => {
+    if (!suggestionsError) return;
+    const lines = [
+      `Last error: ${suggestionsError.message}`,
+      'Query path: race_suggestions_cache -> source generators -> race_suggestions_cache upsert',
+      ...(suggestionFailureSources.length > 0
+        ? suggestionFailureSources.map(
+            (source) => `${source}: ${SUGGESTION_SOURCE_HINTS[source] || 'unknown source path'}`
+          )
+        : ['Source-level failure details unavailable.']),
+    ];
+    try {
+      await Clipboard.setStringAsync(lines.join('\n'));
+      Alert.alert('Copied', 'Suggestion diagnostics copied to clipboard.');
+    } catch (_error) {
+      Alert.alert('Copy failed', 'Clipboard is unavailable on this device.');
+    }
+  }, [suggestionsError, suggestionFailureSources]);
 
   // AI Freeform Input
   const [freeformText, setFreeformText] = useState('');
   const [extracting, setExtracting] = useState(false);
-  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [_uploadedFileName, setUploadedFileName] = useState('');
   const [currentDocType, setCurrentDocType] = useState<'nor' | 'si' | 'other' | null>(null);
   // AI Quick Entry section is collapsed by default in edit mode
   const [aiQuickEntryExpanded, setAiQuickEntryExpanded] = useState(!existingRaceId);
 
   // Multi-document processing state
-  const [uploadedDocuments, setUploadedDocuments] = useState<Array<{
+  const [uploadedDocuments, setUploadedDocuments] = useState<{
     id: string;
     filename: string;
     docType: 'NOR' | 'SI' | 'SSI' | 'Appendix' | 'Calendar' | 'Amendment' | 'other';
     status: 'pending' | 'extracting' | 'complete' | 'error';
     content?: string;
     error?: string;
-  }>>([]);
+  }[]>([]);
   const [aggregationStatus, setAggregationStatus] = useState<'idle' | 'processing' | 'complete' | 'error'>('idle');
   const [aggregationMetadata, setAggregationMetadata] = useState<{
     documents_processed?: number;
@@ -159,11 +198,11 @@ export function ComprehensiveRaceEntry({
   const [multiRaceProgress, setMultiRaceProgress] = useState<{ current: number; total: number; raceName: string } | null>(null);
 
   // Track documents to upload after race creation
-  const [pendingDocuments, setPendingDocuments] = useState<Array<{
+  const [pendingDocuments, setPendingDocuments] = useState<{
     file: { uri: string; name: string; mimeType: string; size: number };
     docType: 'nor' | 'si' | 'other';
     extractedText: string;
-  }>>([]);
+  }[]>([]);
 
   // Extraction preferences dialog
   const [showExtractionPreferences, setShowExtractionPreferences] = useState(false);
@@ -197,11 +236,11 @@ export function ComprehensiveRaceEntry({
   const [vhfBackupChannel, setVhfBackupChannel] = useState('');
   const [safetyChannel, setSafetyChannel] = useState('VHF 16');
   // Store full VHF channels array with purposes for metadata
-  const [vhfChannelsDetailed, setVhfChannelsDetailed] = useState<Array<{
+  const [vhfChannelsDetailed, setVhfChannelsDetailed] = useState<{
     channel: string;
     purpose: string;
     classes?: string[];
-  }>>([]);
+  }[]>([]);
   const [rcBoatName, setRcBoatName] = useState('');
   const [rcBoatPosition, setRcBoatPosition] = useState('');
   const [markBoats, setMarkBoats] = useState<MarkBoat[]>([]);
@@ -273,8 +312,6 @@ export function ComprehensiveRaceEntry({
   const [skipperBriefingTime, setSkipperBriefingTime] = useState('');
 
   // AI Suggestions
-  const [aiSuggesting, setAiSuggesting] = useState(false);
-
   // Store original weather data when editing (to preserve historical forecasts)
   const [originalWeatherData, setOriginalWeatherData] = useState<{
     wind?: any;
@@ -292,6 +329,7 @@ export function ComprehensiveRaceEntry({
   const {
     recommendation: rigTuningRecommendation,
     loading: rigTuningLoading,
+    error: rigTuningError,
     refresh: refreshRigTuning,
   } = useRaceTuningRecommendation({
     className: tuningBoatClass,
@@ -303,7 +341,7 @@ export function ComprehensiveRaceEntry({
 
   // NOR Document Fields
   const [supplementarySIUrl, setSupplementarySIUrl] = useState('');
-  const [norAmendments, setNorAmendments] = useState<Array<{ url?: string; date: string; description: string }>>([]);
+  const [norAmendments, setNorAmendments] = useState<{ url?: string; date: string; description: string }[]>([]);
 
   // Governing Rules
   const [racingRulesSystem, setRacingRulesSystem] = useState('');
@@ -347,7 +385,7 @@ export function ComprehensiveRaceEntry({
 
   // === NEW: Time Limits ===
   const [absoluteTimeLimit, setAbsoluteTimeLimit] = useState('');
-  const [cutOffPoints, setCutOffPoints] = useState<Array<{location: string; time: string}>>([]);
+  const [cutOffPoints, setCutOffPoints] = useState<{location: string; time: string}[]>([]);
 
   // === Distance Racing Fields ===
   const [routeWaypoints, setRouteWaypoints] = useState<RouteWaypoint[]>([]);
@@ -363,12 +401,12 @@ export function ComprehensiveRaceEntry({
   const [finishVenue, setFinishVenue] = useState(''); // For point-to-point races
 
   // === Prohibited Areas (TSS, military zones, etc.) ===
-  const [prohibitedAreas, setProhibitedAreas] = useState<Array<{
+  const [prohibitedAreas, setProhibitedAreas] = useState<{
     name: string;
     description?: string;
-    coordinates?: Array<{ lat: number; lng: number }>;
+    coordinates?: { lat: number; lng: number }[];
     consequence?: string;
-  }>>([]);
+  }[]>([]);
 
   // === NEW: Race Office & Contacts ===
   const [raceOfficeLocation, setRaceOfficeLocation] = useState('');
@@ -376,13 +414,13 @@ export function ComprehensiveRaceEntry({
   const [contactEmail, setContactEmail] = useState('');
 
   // === NEW: Entry Information (from NOR) ===
-  const [entryFees, setEntryFees] = useState<Array<{type: string; amount: string; deadline?: string}>>([]);
+  const [entryFees, setEntryFees] = useState<{type: string; amount: string; deadline?: string}[]>([]);
   const [eligibleClasses, setEligibleClasses] = useState<string[]>([]);
   const [safetyBriefingDetails, setSafetyBriefingDetails] = useState('');
   const [signOnRequirement, setSignOnRequirement] = useState(''); // SailSys sign-on requirements
 
   // === Start Lines (multiple start lines for different classes) ===
-  const [startLines, setStartLines] = useState<Array<{
+  const [startLines, setStartLines] = useState<{
     name: string;
     description?: string;
     classes: string[];
@@ -392,17 +430,17 @@ export function ComprehensiveRaceEntry({
       portEnd?: string;
     };
     direction?: string;
-    startTimes?: Array<{
+    startTimes?: {
       class: string;
       flag: string;
       time: string;
-    }>;
-  }>>([]);
+    }[];
+  }[]>([]);
 
   // === NEW: Prizegiving ===
-  const [prizegivingDate, setPrizegivingDate] = useState('');
-  const [prizegivingTime, setPrizegivingTime] = useState('');
-  const [prizegivingLocation, setPrizegivingLocation] = useState('');
+  const [_prizegivingDate, setPrizegivingDate] = useState('');
+  const [_prizegivingTime, setPrizegivingTime] = useState('');
+  const [_prizegivingLocation, setPrizegivingLocation] = useState('');
 
   // Load existing race data if in edit mode
   useEffect(() => {
@@ -652,7 +690,7 @@ export function ComprehensiveRaceEntry({
 
         logger.debug('[ComprehensiveRaceEntry] Race data loaded successfully');
       } catch (err: any) {
-        console.error('[ComprehensiveRaceEntry] Error loading race:', err);
+        logger.error('[ComprehensiveRaceEntry] Error loading race:', err);
         Alert.alert('Error', 'Failed to load race data');
       } finally {
         setLoading(false);
@@ -750,7 +788,7 @@ export function ComprehensiveRaceEntry({
           setSelectedClassId(null);
         }
       } catch (error) {
-        console.error('[ComprehensiveRaceEntry] Failed to fetch boat for class suggestion:', error);
+        logger.error('[ComprehensiveRaceEntry] Failed to fetch boat for class suggestion:', error);
         if (!cancelled) {
           setClassSuggestionLoading(false);
           setClassSuggestion({
@@ -814,7 +852,7 @@ export function ComprehensiveRaceEntry({
       logger.debug('[handleFileUpload] Opening document picker...');
 
       if (!user) {
-        console.error('[handleFileUpload] No user authenticated!');
+        logger.error('[handleFileUpload] No user authenticated!');
         Alert.alert('Not Authenticated', 'Please log in to upload documents');
         return;
       }
@@ -836,7 +874,7 @@ export function ComprehensiveRaceEntry({
       }
 
       if (!result.assets || result.assets.length === 0) {
-        console.error('[handleFileUpload] No assets in result:', result);
+        logger.error('[handleFileUpload] No assets in result:', result);
         Alert.alert('Error', 'No file was selected');
         return;
       }
@@ -909,7 +947,7 @@ export function ComprehensiveRaceEntry({
 
           logger.debug('[handleFileUpload] Document processed successfully:', file.name);
         } catch (fileError: any) {
-          console.error('[handleFileUpload] Error processing file:', file.name, fileError);
+          logger.error('[handleFileUpload] Error processing file:', file.name, fileError);
 
           // Update document status to error
           setUploadedDocuments(prev => prev.map(doc =>
@@ -924,11 +962,11 @@ export function ComprehensiveRaceEntry({
       logger.debug('[handleFileUpload] All files processed');
       logger.debug('=== FILE UPLOAD COMPLETED ===');
     } catch (error: any) {
-      console.error('=== FILE UPLOAD ERROR ===');
-      console.error('[handleFileUpload] Error type:', error.constructor.name);
-      console.error('[handleFileUpload] Error message:', error.message);
-      console.error('[handleFileUpload] Error stack:', error.stack);
-      console.error('[handleFileUpload] Full error:', error);
+      logger.error('=== FILE UPLOAD ERROR ===');
+      logger.error('[handleFileUpload] Error type:', error.constructor.name);
+      logger.error('[handleFileUpload] Error message:', error.message);
+      logger.error('[handleFileUpload] Error stack:', error.stack);
+      logger.error('[handleFileUpload] Full error:', error);
       setExtracting(false);
       setCurrentDocType(null);
       Alert.alert('Upload Error', error.message || 'Failed to upload document');
@@ -1054,7 +1092,7 @@ export function ComprehensiveRaceEntry({
           return await attemptFetch(proxiedUrl, proxy.name);
         } catch (proxyError: any) {
           const errorMsg = proxyError?.message || String(proxyError);
-          console.error(`❌ Proxy ${proxy.name} failed:`, errorMsg);
+          logger.error(`❌ Proxy ${proxy.name} failed:`, errorMsg);
           logger.error('[fetchPdfBlobWithFallback] Proxy fetch failed:', proxy.name, proxyError);
           lastProxyError = proxyError;
         }
@@ -1180,11 +1218,11 @@ export function ComprehensiveRaceEntry({
         setFreeformText(`=== ${summary} ===\n\n${documentText}`);
 
       } catch (error: any) {
-        console.error('[extractFromText] URL fetch/extraction error:', error);
-        console.error('[extractFromText] Error message:', error?.message);
+        logger.error('[extractFromText] URL fetch/extraction error:', error);
+        logger.error('[extractFromText] Error message:', error?.message);
         const errorMsg = error.message || 'Could not fetch or extract PDF from URL. Please check the URL and try again.';
         // Alert.alert may not work on web, so also log prominently
-        console.error('❌ PDF FETCH FAILED:', errorMsg);
+        logger.error('❌ PDF FETCH FAILED:', errorMsg);
         Alert.alert('PDF Fetch Failed', errorMsg);
         setExtracting(false);
         return;
@@ -1192,12 +1230,10 @@ export function ComprehensiveRaceEntry({
     }
 
     try {
-      logger.debug('[extractFromText] Creating agent...');
-      const agent = new ComprehensiveRaceExtractionAgent();
-      logger.debug('[extractFromText] Calling extractRaceDetails...');
+      logger.debug('[extractFromText] Calling extract-race-details helper...');
       logger.debug('[extractFromText] Document length:', documentText.length, 'characters');
 
-      const result = await agent.extractRaceDetails(documentText);
+      const result = await extractRaceDetailsFromText(documentText);
       logger.debug('[extractFromText] Result:', result);
       
       // Enhanced logging for start/finish extraction debugging
@@ -1220,7 +1256,7 @@ export function ComprehensiveRaceEntry({
       }
 
       if (!result.success || !result.data) {
-        console.error('[extractFromText] Extraction failed:', result.error);
+        logger.error('[extractFromText] Extraction failed:', result.error);
         Alert.alert('Extraction Failed', result.error || 'Could not extract race details');
         setExtracting(false);
         return;
@@ -1298,7 +1334,7 @@ export function ComprehensiveRaceEntry({
       setExtracting(false); // Stop loading spinner
       setUploadedFileName(''); // Reset filename
     } catch (error: any) {
-      console.error('[extractFromText] Error:', error);
+      logger.error('[extractFromText] Error:', error);
       Alert.alert('Error', error.message || 'Failed to extract race details');
     } finally {
       setExtracting(false);
@@ -1446,7 +1482,7 @@ export function ComprehensiveRaceEntry({
         Alert.alert('No Waypoints Found', 'Could not find any waypoints with coordinates in the provided text/URL');
       }
     } catch (error: any) {
-      console.error('[handleReimportWaypoints] Error:', error);
+      logger.error('[handleReimportWaypoints] Error:', error);
       Alert.alert('Error', error.message || 'Failed to extract waypoints');
     } finally {
       setReimportingWaypoints(false);
@@ -1546,7 +1582,7 @@ export function ComprehensiveRaceEntry({
       setShowValidationScreen(true);
 
     } catch (error: any) {
-      console.error('[processMultipleDocuments] Error:', error);
+      logger.error('[processMultipleDocuments] Error:', error);
       setAggregationStatus('error');
       Alert.alert('Processing Error', error.message || 'Failed to process documents');
     } finally {
@@ -2189,7 +2225,7 @@ export function ComprehensiveRaceEntry({
         .single();
 
       if (error) {
-        console.error('[handleDirectRaceCreation] Error creating race:', error);
+        logger.error('[handleDirectRaceCreation] Error creating race:', error);
         throw error;
       }
 
@@ -2249,7 +2285,7 @@ export function ComprehensiveRaceEntry({
         router.replace(`/(tabs)/races?selected=${data.id}`);
       }
     } catch (error: any) {
-      console.error('[handleDirectRaceCreation] Error:', error);
+      logger.error('[handleDirectRaceCreation] Error:', error);
       Alert.alert('Error', error.message || 'Failed to create race from suggestion');
     } finally {
       setSaving(false);
@@ -2283,12 +2319,12 @@ export function ComprehensiveRaceEntry({
         .eq('id', raceId);
 
       if (error) {
-        console.error('[downloadAndAttachDocument] Error:', error);
+        logger.error('[downloadAndAttachDocument] Error:', error);
       } else {
         logger.debug('[downloadAndAttachDocument] Document URL stored successfully');
       }
     } catch (error) {
-      console.error('[downloadAndAttachDocument] Error:', error);
+      logger.error('[downloadAndAttachDocument] Error:', error);
       // Don't throw - we don't want to fail race creation if document download fails
     }
   };
@@ -2397,7 +2433,6 @@ export function ComprehensiveRaceEntry({
         }
 
         // Upload to Supabase Storage
-        const fileExt = doc.file.name.split('.').pop() || 'pdf';
         const fileName = `${regattaId}/${Date.now()}_${doc.file.name}`;
         const storagePath = `race-documents/${fileName}`;
 
@@ -2411,17 +2446,13 @@ export function ComprehensiveRaceEntry({
           });
 
         if (uploadError) {
-          console.error('[uploadPendingDocuments] Storage upload error:', uploadError);
+          logger.error('[uploadPendingDocuments] Storage upload error:', uploadError);
           throw uploadError;
         }
 
         logger.debug('[uploadPendingDocuments] Upload successful:', uploadData);
 
         // Get public URL (or signed URL if bucket is private)
-        const { data: urlData } = supabase.storage
-          .from('documents')
-          .getPublicUrl(storagePath);
-
         // Create document record in database
         const documentRecord = {
           user_id: user?.id,
@@ -2447,13 +2478,13 @@ export function ComprehensiveRaceEntry({
           .insert(documentRecord);
 
         if (dbError) {
-          console.error('[uploadPendingDocuments] Database insert error:', dbError);
+          logger.error('[uploadPendingDocuments] Database insert error:', dbError);
           throw dbError;
         }
 
         logger.debug('[uploadPendingDocuments] Document record created successfully');
       } catch (error: any) {
-        console.error('[uploadPendingDocuments] Error uploading document:', doc.file.name, error);
+        logger.error('[uploadPendingDocuments] Error uploading document:', doc.file.name, error);
         // Continue with other documents even if one fails
         Alert.alert(
           'Document Upload Warning',
@@ -2518,7 +2549,7 @@ export function ComprehensiveRaceEntry({
       logger.debug('[handleSubmit] Checking authenticated user...');
 
       if (!user?.id) {
-        console.error('[handleSubmit] No user found in AuthProvider');
+        logger.error('[handleSubmit] No user found in AuthProvider');
         Alert.alert('Authentication Error', 'You must be logged in to create a race. Please log in and try again.');
         setSaving(false);
         return;
@@ -2778,7 +2809,7 @@ export function ComprehensiveRaceEntry({
         logger.debug('[handleSubmit] Insert returned error:', error);
 
         if (error) {
-          console.error('[handleSubmit] Race creation error:', error);
+          logger.error('[handleSubmit] Race creation error:', error);
           throw error;
         }
 
@@ -2811,7 +2842,7 @@ export function ComprehensiveRaceEntry({
             .single();
 
           if (raceEventError) {
-            console.error('[handleSubmit] Error creating race_event:', raceEventError);
+            logger.error('[handleSubmit] Error creating race_event:', raceEventError);
             Alert.alert('Warning', 'Race created but course marks could not be saved');
           } else {
             raceEventId = raceEventResult.id;
@@ -2841,7 +2872,7 @@ export function ComprehensiveRaceEntry({
             .insert(marksToInsert);
 
           if (marksError) {
-            console.error('[handleSubmit] Error saving marks:', marksError);
+            logger.error('[handleSubmit] Error saving marks:', marksError);
             // Don't throw - race was created successfully, just log the error
             Alert.alert('Warning', 'Race created but some marks could not be saved');
           } else {
@@ -2893,7 +2924,7 @@ export function ComprehensiveRaceEntry({
             .insert(racingAreaData);
 
           if (areaError) {
-            console.error('[handleSubmit] Error saving racing area:', areaError);
+            logger.error('[handleSubmit] Error saving racing area:', areaError);
             // Don't throw - race was created successfully, just log the error
             Alert.alert('Warning', 'Race created but racing area could not be saved');
           } else {
@@ -2970,17 +3001,17 @@ export function ComprehensiveRaceEntry({
             logger.debug('[handleSubmit] No onSubmit callback provided');
           }
         } catch (navError) {
-          console.error('[handleSubmit] Navigation error:', navError);
+          logger.error('[handleSubmit] Navigation error:', navError);
           // Don't throw - race was created successfully
         }
       }
     } catch (error: any) {
-      console.error('=== ERROR IN HANDLESUBMIT ===');
-      console.error('[handleSubmit] Error type:', typeof error);
-      console.error('[handleSubmit] Error constructor:', error?.constructor?.name);
-      console.error('[handleSubmit] Error message:', error?.message);
-      console.error('[handleSubmit] Error stack:', error?.stack);
-      console.error('[handleSubmit] Full error object:', error);
+      logger.error('=== ERROR IN HANDLESUBMIT ===');
+      logger.error('[handleSubmit] Error type:', typeof error);
+      logger.error('[handleSubmit] Error constructor:', error?.constructor?.name);
+      logger.error('[handleSubmit] Error message:', error?.message);
+      logger.error('[handleSubmit] Error stack:', error?.stack);
+      logger.error('[handleSubmit] Full error object:', error);
       Alert.alert('Error', error.message || 'Failed to save race');
     } finally {
       logger.debug('[handleSubmit] Finally block - setting saving=false');
@@ -3289,16 +3320,62 @@ export function ComprehensiveRaceEntry({
           </View>
         )}
 
-        {/* Race Suggestions - Only show when user has club/fleet suggestions */}
-        {!existingRaceId && suggestions && suggestions.total > 0 && (
-          <RaceSuggestionsDrawer
-            suggestions={suggestions}
-            loading={suggestionsLoading}
-            processingSuggestionId={processingSuggestionId}
-            onSelectSuggestion={handleSelectSuggestion}
-            onDismissSuggestion={handleDismissSuggestion}
-            onRefresh={refreshSuggestions}
-          />
+        {/* Race Suggestions */}
+        {!existingRaceId && ((suggestions && suggestions.total > 0) || suggestionsError) && (
+          <>
+            <RaceSuggestionsDrawer
+              suggestions={suggestions}
+              diagnostics={suggestionDiagnostics}
+              loading={suggestionsLoading}
+              error={suggestionsError}
+              processingSuggestionId={processingSuggestionId}
+              onSelectSuggestion={handleSelectSuggestion}
+              onDismissSuggestion={handleDismissSuggestion}
+              onRefresh={refreshSuggestions}
+            />
+            {(suggestionsError || suggestionFailureSources.length > 0) && (
+              <View className="mt-2 mb-4 border border-red-200 bg-red-50 rounded-lg px-3 py-2">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-[11px] font-bold text-red-900 uppercase tracking-wide">
+                    Suggestion Diagnostics
+                  </Text>
+                  <View className="flex-row items-center gap-3">
+                    <Pressable onPress={copySuggestionDiagnostics}>
+                      <Text className="text-xs font-semibold text-red-700">Copy</Text>
+                    </Pressable>
+                    <Pressable onPress={() => setShowSuggestionDiagnostics((prev) => !prev)}>
+                      <Text className="text-xs font-semibold text-red-700">
+                        {showSuggestionDiagnostics ? 'Hide' : 'Show'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+                {suggestionsError ? (
+                  <Text className="text-xs text-red-800 mt-1">
+                    Last error: {suggestionsError.message}
+                  </Text>
+                ) : null}
+                {showSuggestionDiagnostics && (
+                  <View className="mt-1">
+                    <Text className="text-xs text-red-800">
+                      Query path: race_suggestions_cache -&gt; source generators -&gt; race_suggestions_cache upsert
+                    </Text>
+                    {suggestionFailureSources.length > 0 ? (
+                      suggestionFailureSources.map((source) => (
+                        <Text key={source} className="text-xs text-red-800">
+                          {source}: {SUGGESTION_SOURCE_HINTS[source] || 'unknown source path'}
+                        </Text>
+                      ))
+                    ) : (
+                      <Text className="text-xs text-red-800">
+                        Source-level failure details unavailable.
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+          </>
         )}
 
         {/* AI Quick Entry - Primary Action, Always Expanded */}
@@ -4459,10 +4536,11 @@ export function ComprehensiveRaceEntry({
               boatClassName={tuningBoatClass}
               recommendation={rigTuningRecommendation}
               loading={rigTuningLoading}
+              errorMessage={rigTuningError?.message ?? null}
               onRefresh={refreshRigTuning}
             />
             
-            {!rigTuningRecommendation && !rigTuningLoading && (
+            {!rigTuningRecommendation && !rigTuningLoading && !rigTuningError && (
               <View className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
                 <Text className="text-sm text-amber-800">
                   No tuning guide found for {tuningBoatClass}. Add a tuning guide in Settings → Boat to unlock race-day rig checklists.

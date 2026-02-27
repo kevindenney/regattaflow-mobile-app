@@ -5,6 +5,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
+import { router } from 'expo-router';
 import {
   Alert,
   ScrollView,
@@ -31,21 +32,20 @@ interface ClubsAssociationsSectionProps {
 }
 
 const logger = createLogger('ClubsAssociationsSection');
-export function ClubsAssociationsSection({ sailorId, classId, className }: ClubsAssociationsSectionProps) {
-  // Mock data - this would come from Supabase in a real implementation
-  // Base clubs that are always shown (yacht clubs)
-  const baseClubs: Club[] = [
-    {
-      id: '1',
-      name: 'Royal Hong Kong Yacht Club',
-      type: 'yacht_club',
-      location: 'Hong Kong',
-      memberSince: '2023',
-    },
-  ];
 
+const BASE_CLUBS: Club[] = [
+  {
+    id: '1',
+    name: 'Royal Hong Kong Yacht Club',
+    type: 'yacht_club',
+    location: 'Hong Kong',
+    memberSince: '2023',
+  },
+];
+
+export function ClubsAssociationsSection({ sailorId, classId, className }: ClubsAssociationsSectionProps) {
   // Class-specific associations based on selected class
-  const getClassAssociations = (): Club[] => {
+  const getClassAssociations = React.useCallback((): Club[] => {
     if (!className) return [];
 
     // Map of class names to their associations
@@ -96,9 +96,9 @@ export function ClubsAssociationsSection({ sailorId, classId, className }: Clubs
 
     const association = classAssociations[className];
     return association ? [association] : [];
-  };
+  }, [className]);
 
-  const [clubs] = useState<Club[]>([...baseClubs, ...getClassAssociations()]);
+  const [removedClubIds, setRemovedClubIds] = useState<Set<string>>(new Set());
 
   const handleAddClub = () => {
     Alert.alert(
@@ -109,8 +109,7 @@ export function ClubsAssociationsSection({ sailorId, classId, className }: Clubs
         {
           text: 'Search',
           onPress: () => {
-            // TODO: Navigate to club search/add screen
-            alert('Club search feature coming soon!');
+            router.push('/(tabs)/clubs');
           },
         },
       ]
@@ -127,8 +126,16 @@ export function ClubsAssociationsSection({ sailorId, classId, className }: Clubs
           text: 'Remove',
           style: 'destructive',
           onPress: () => {
-            // TODO: Remove from Supabase
-            alert('Remove club functionality coming soon!');
+            setRemovedClubIds((prev) => {
+              const next = new Set(prev);
+              next.add(club.id);
+              return next;
+            });
+            logger.info('Club removed from local profile view', {
+              sailorId,
+              classId,
+              clubId: club.id,
+            });
           },
         },
       ]
@@ -145,8 +152,10 @@ export function ClubsAssociationsSection({ sailorId, classId, className }: Clubs
 
   // Recalculate clubs when className changes
   const displayClubs = React.useMemo(() => {
-    return [...baseClubs, ...getClassAssociations()];
-  }, [className]);
+    return [...BASE_CLUBS, ...getClassAssociations()].filter(
+      (club) => !removedClubIds.has(club.id)
+    );
+  }, [getClassAssociations, removedClubIds]);
 
   return (
     <View style={styles.container}>

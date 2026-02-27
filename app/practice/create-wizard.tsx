@@ -35,6 +35,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 let DateTimePicker: any = null;
 try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   DateTimePicker = require('@react-native-community/datetimepicker').default;
 } catch (_error) {
   DateTimePicker = null;
@@ -54,7 +55,8 @@ export default function PracticeCreateWizardScreen() {
   const { user, isGuest } = useAuth();
   const wizard = usePracticeCreationWizard();
   const { drills: availableDrills, isLoading: isLoadingDrills } = useDrillLibrary();
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const [hasInitializedSchedule, setHasInitializedSchedule] = useState(false);
+  const [hasAppliedSuggestion, setHasAppliedSuggestion] = useState(false);
 
   // Scheduling state
   const isScheduleMode = params.mode === 'schedule' || !params.mode;
@@ -70,26 +72,27 @@ export default function PracticeCreateWizardScreen() {
 
   // Initialize schedule when in schedule mode
   useEffect(() => {
-    if (isScheduleMode && !hasInitialized) {
+    if (isScheduleMode && !hasInitializedSchedule) {
       const dateStr = selectedDate.toISOString().split('T')[0];
       const timeStr = selectedDate.toTimeString().slice(0, 5);
       wizard.setSchedule(dateStr, timeStr);
       wizard.setSessionType('scheduled');
+      setHasInitializedSchedule(true);
     }
-  }, [isScheduleMode, hasInitialized]);
+  }, [hasInitializedSchedule, isScheduleMode, selectedDate, wizard]);
 
   // Pre-populate from AI suggestion params
   useEffect(() => {
-    if (params.fromSuggestion === 'true' && !hasInitialized) {
+    if (params.fromSuggestion === 'true' && !hasAppliedSuggestion) {
       if (params.skillArea) {
         wizard.setFocusAreas([params.skillArea as SkillArea]);
       }
       if (params.aiReasoning) {
         wizard.setAIReasoning(params.aiReasoning);
       }
-      setHasInitialized(true);
+      setHasAppliedSuggestion(true);
     }
-  }, [params, hasInitialized]);
+  }, [hasAppliedSuggestion, params, wizard]);
 
   // Add drills once availableDrills are loaded (from drill library)
   useEffect(() => {
@@ -107,7 +110,7 @@ export default function PracticeCreateWizardScreen() {
         }
       });
     }
-  }, [params.drillIds, params.fromSuggestion, availableDrills]);
+  }, [availableDrills, params.drillIds, params.fromSuggestion, wizard]);
 
   const canProceed = wizard.state.what.focusAreas.length > 0 && wizard.state.what.drills.length > 0;
 
@@ -199,6 +202,69 @@ export default function PracticeCreateWizardScreen() {
     });
   };
 
+  const commitSchedule = (nextDate: Date) => {
+    setSelectedDate(nextDate);
+    const dateStr = nextDate.toISOString().split('T')[0];
+    const timeStr = nextDate.toTimeString().slice(0, 5);
+    wizard.setSchedule(dateStr, timeStr);
+  };
+
+  const openDateFallbackMenu = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const plusTwo = new Date();
+    plusTwo.setDate(plusTwo.getDate() + 2);
+
+    Alert.alert('Select Date', 'Date picker is unavailable, choose a quick date:', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: `Today (${formatDate(new Date())})`,
+        onPress: () => {
+          const next = new Date();
+          next.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+          commitSchedule(next);
+        },
+      },
+      {
+        text: `Tomorrow (${formatDate(tomorrow)})`,
+        onPress: () => {
+          const next = new Date(tomorrow);
+          next.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+          commitSchedule(next);
+        },
+      },
+      {
+        text: `+2 Days (${formatDate(plusTwo)})`,
+        onPress: () => {
+          const next = new Date(plusTwo);
+          next.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+          commitSchedule(next);
+        },
+      },
+    ]);
+  };
+
+  const openTimeFallbackMenu = () => {
+    const options = [
+      { label: '8:00 AM', hours: 8, minutes: 0 },
+      { label: '10:00 AM', hours: 10, minutes: 0 },
+      { label: '2:00 PM', hours: 14, minutes: 0 },
+      { label: '4:00 PM', hours: 16, minutes: 0 },
+    ];
+
+    Alert.alert('Select Time', 'Time picker is unavailable, choose a quick time:', [
+      { text: 'Cancel', style: 'cancel' },
+      ...options.map((option) => ({
+        text: option.label,
+        onPress: () => {
+          const next = new Date(selectedDate);
+          next.setHours(option.hours, option.minutes, 0, 0);
+          commitSchedule(next);
+        },
+      })),
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -231,7 +297,7 @@ export default function PracticeCreateWizardScreen() {
             style={styles.scheduleButton}
             onPress={() => {
               if (!hasDateTimePicker) {
-                Alert.alert('Unavailable', 'Date picker is unavailable in this build.');
+                openDateFallbackMenu();
                 return;
               }
               setShowDatePicker(true);
@@ -244,7 +310,7 @@ export default function PracticeCreateWizardScreen() {
             style={styles.scheduleButton}
             onPress={() => {
               if (!hasDateTimePicker) {
-                Alert.alert('Unavailable', 'Time picker is unavailable in this build.');
+                openTimeFallbackMenu();
                 return;
               }
               setShowTimePicker(true);

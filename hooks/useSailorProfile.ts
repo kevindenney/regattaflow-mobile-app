@@ -5,7 +5,7 @@
  * Used for strategy cards and other sailor-specific features.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -40,38 +40,66 @@ export function useSailorProfile({
 }: UseSailorProfileParams): UseSailorProfileReturn {
   const [sailorId, setSailorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+
+  useEffect(() => {
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     const fetchSailorId = async () => {
-      if (!user?.id) {
+      const runId = ++fetchRunIdRef.current;
+      const targetUserId = user?.id ?? null;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === fetchRunIdRef.current &&
+        activeUserIdRef.current === targetUserId;
+
+      if (!targetUserId) {
+        if (!canCommit()) return;
         setSailorId(null);
+        setLoading(false);
         return;
       }
 
+      if (!canCommit()) return;
       setLoading(true);
       try {
         const { data, error } = await supabase
           .from('sailor_profiles')
           .select('id')
-          .eq('user_id', user.id)
+          .eq('user_id', targetUserId)
           .maybeSingle();
 
         if (error) {
           logger.warn('[useSailorProfile] Error fetching sailor profile', error);
+          if (!canCommit()) return;
           setSailorId(null);
           return;
         }
 
+        if (!canCommit()) return;
         setSailorId(data?.id || null);
       } catch (error) {
         logger.warn('[useSailorProfile] Unexpected error fetching sailor profile', error);
+        if (!canCommit()) return;
         setSailorId(null);
       } finally {
+        if (!canCommit()) return;
         setLoading(false);
       }
     };
 
-    fetchSailorId();
+    void fetchSailorId();
   }, [user?.id]);
 
   return {

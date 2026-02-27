@@ -34,12 +34,12 @@ export class RaceAnalysisService {
     try {
       const session = await RaceTimerService.getSession(timerSessionId);
       if (!session) {
-        console.error('Race session not found');
+        logger.error('Race session not found');
         return null;
       }
 
       if (!session.end_time) {
-        console.error('Cannot analyze incomplete race session');
+        logger.error('Cannot analyze incomplete race session');
         return null;
       }
 
@@ -57,7 +57,7 @@ export class RaceAnalysisService {
       // Fallback to fetching directly in case API responded without payload
       return this.getAnalysis(timerSessionId);
     } catch (error) {
-      console.error('Error in analyzeRaceSession:', error);
+      logger.error('Error in analyzeRaceSession:', error);
       return null;
     }
   }
@@ -83,7 +83,7 @@ export class RaceAnalysisService {
 
       return data;
     } catch (error) {
-      console.error('Error getting race analysis:', error);
+      logger.error('Error getting race analysis:', error);
       return null;
     }
   }
@@ -109,7 +109,7 @@ export class RaceAnalysisService {
       const sentences = analysis.overall_summary.match(/[^.!?]+[.!?]+/g) || [];
       return sentences.slice(0, 2).join(' ');
     } catch (error) {
-      console.error('Error getting quick summary:', error);
+      logger.error('Error getting quick summary:', error);
       return null;
     }
   }
@@ -128,7 +128,7 @@ export class RaceAnalysisService {
         await this.analyzeRaceSession(session.id);
       }
     } catch (error) {
-      console.error('Error analyzing unanalyzed sessions:', error);
+      logger.error('Error analyzing unanalyzed sessions:', error);
     }
   }
 
@@ -152,7 +152,7 @@ export class RaceAnalysisService {
 
       return { analyzed, analysisExists, canAnalyze };
     } catch (error) {
-      console.error('Error getting analysis status:', error);
+      logger.error('Error getting analysis status:', error);
       return { analyzed: false, analysisExists: false, canAnalyze: false };
     }
   }
@@ -177,7 +177,7 @@ export class RaceAnalysisService {
 
       return true;
     } catch (error) {
-      console.error('Error deleting race analysis:', error);
+      logger.error('Error deleting race analysis:', error);
       return false;
     }
   }
@@ -207,20 +207,20 @@ export class RaceAnalysisService {
     });
 
     if (error) {
-      console.error('Edge Function error details:', JSON.stringify(error, null, 2));
-      console.error('Error message:', error.message);
-      console.error('Error context:', error.context);
+      logger.error('Edge Function error details:', JSON.stringify(error, null, 2));
+      logger.error('Error message:', error.message);
+      logger.error('Error context:', error.context);
 
       // Try to get response body
       if (error.context?.body) {
-        console.error('Response body:', error.context.body);
+        logger.error('Response body:', error.context.body);
       }
 
       throw new Error(error.message || 'Failed to trigger AI analysis');
     }
 
     if (data?.error) {
-      console.error('Edge Function returned error in data:', data.error);
+      logger.error('Edge Function returned error in data:', data.error);
       throw new Error(data.error);
     }
 

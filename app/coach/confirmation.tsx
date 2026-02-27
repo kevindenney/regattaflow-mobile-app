@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
+    Linking,
     Platform,
     ScrollView,
     Share,
@@ -38,8 +39,19 @@ export default function BookingConfirmationScreen() {
   };
 
   const handleAddToCalendar = () => {
-    // In a real implementation, this would use expo-calendar
-    showAlert('Add to Calendar', 'Calendar integration coming soon. You can manually add this to your calendar.');
+    const start = new Date(params.startTime);
+    const end = new Date(params.endTime);
+    const formatGoogleDate = (date: Date) => date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const title = `Coaching Session with ${params.coachName}`;
+    const details = `${params.sessionType?.replace('_', ' ') || 'Sailing coaching'}${params.locationNotes ? `\n${params.locationNotes}` : ''}`;
+    const location = params.venueName || 'TBD';
+    const googleCalendarUrl =
+      `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+      `&text=${encodeURIComponent(title)}` +
+      `&dates=${formatGoogleDate(start)}/${formatGoogleDate(end)}` +
+      `&details=${encodeURIComponent(details)}` +
+      `&location=${encodeURIComponent(location)}`;
+    void Linking.openURL(googleCalendarUrl);
   };
 
   const handleMessageCoach = () => {

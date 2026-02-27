@@ -6,7 +6,6 @@
  * bathymetric-tidal-analyst Skill to generate strategic recommendations.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { feature } from '@turf/helpers';
 import centroid from '@turf/centroid';
 import {
@@ -25,7 +24,7 @@ import {
 } from '../types/bathymetry';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import { createLogger } from '@/lib/utils/logger';
-import { skillManagementService } from './ai/SkillManagementService';
+import { supabase } from './supabase';
 
 /**
  * Main service for bathymetric and tidal analysis
@@ -33,18 +32,6 @@ import { skillManagementService } from './ai/SkillManagementService';
 
 const logger = createLogger('BathymetricTidalService');
 export class BathymetricTidalService {
-  private anthropic?: Anthropic;
-
-  constructor() {
-    const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      console.warn('BathymetricTidalService: EXPO_PUBLIC_ANTHROPIC_API_KEY not configured. Proceeding with rule-based analysis only.');
-      this.anthropic = undefined;
-      return;
-    }
-    this.anthropic = new Anthropic({ apiKey });
-  }
-
   /**
    * Perform complete underwater analysis for a racing area
    *
@@ -117,7 +104,7 @@ export class BathymetricTidalService {
         venue: request.venue
       };
     } catch (error) {
-      console.error('Error in analyzeRacingArea:', error);
+      logger.error('Error in analyzeRacingArea:', error);
       throw new Error(`Failed to analyze racing area: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -149,7 +136,7 @@ export class BathymetricTidalService {
       const data = await this.fetchBathymetryFromSource(source, bufferedBounds, config?.desiredResolution);
       return data;
     } catch (error) {
-      console.warn(`Failed to fetch from ${source}, falling back to GEBCO...`, error);
+      logger.warn(`Failed to fetch from ${source}, falling back to GEBCO...`, error);
       // Fallback to GEBCO global coverage
       return await this.fetchBathymetryFromSource(BathymetrySource.GEBCO, bufferedBounds, config?.desiredResolution);
     }
@@ -213,8 +200,8 @@ export class BathymetricTidalService {
    * Fetch bathymetric data from NOAA (US waters)
    */
   private async fetchNOAA(
-    bounds: { north: number; south: number; east: number; west: number },
-    desiredResolution?: number
+    _bounds: { north: number; south: number; east: number; west: number },
+    _desiredResolution?: number
   ): Promise<BathymetricData> {
     // NOAA Bathymetric Data Viewer API
     // https://www.ncei.noaa.gov/maps/bathymetry/
@@ -225,8 +212,8 @@ export class BathymetricTidalService {
    * Fetch bathymetric data from EMODnet (Europe)
    */
   private async fetchEMODnet(
-    bounds: { north: number; south: number; east: number; west: number },
-    desiredResolution?: number
+    _bounds: { north: number; south: number; east: number; west: number },
+    _desiredResolution?: number
   ): Promise<BathymetricData> {
     // EMODnet Bathymetry WMS
     // https://rest.emodnet-bathymetry.eu
@@ -237,8 +224,8 @@ export class BathymetricTidalService {
    * Fetch bathymetric data from Hong Kong Hydrographic Office
    */
   private async fetchHKO(
-    bounds: { north: number; south: number; east: number; west: number },
-    desiredResolution?: number
+    _bounds: { north: number; south: number; east: number; west: number },
+    _desiredResolution?: number
   ): Promise<BathymetricData> {
     // Hong Kong Hydrographic Office - would require API access
     throw new Error('HKO bathymetry not yet implemented - use GEBCO fallback');
@@ -266,7 +253,7 @@ export class BathymetricTidalService {
         interval
       );
     } catch (error) {
-      console.warn(`Failed to fetch tidal predictions from ${source}, using fallback...`, error);
+      logger.warn(`Failed to fetch tidal predictions from ${source}, using fallback...`, error);
       return this.generateFallbackTidalPredictions(centerPoint, startTime, endTime, interval);
     }
   }
@@ -374,10 +361,10 @@ export class BathymetricTidalService {
    * Fetch tidal predictions from NOAA (US waters)
    */
   private async fetchNOAATides(
-    centerPoint: { lat: number; lng: number },
-    startTime: Date,
-    endTime: Date,
-    interval: number
+    _centerPoint: { lat: number; lng: number },
+    _startTime: Date,
+    _endTime: Date,
+    _interval: number
   ): Promise<TidalAnalysis> {
     // NOAA Tides and Currents API
     // https://api.tidesandcurrents.noaa.gov/api/prod/datagetter
@@ -393,7 +380,7 @@ export class BathymetricTidalService {
     endTime: Date,
     interval: number
   ): TidalAnalysis {
-    console.warn('Using fallback simulated tidal predictions');
+    logger.warn('Using fallback simulated tidal predictions');
 
     // Simple semi-diurnal simulation
     const predictions: TidalPrediction[] = [];
@@ -589,11 +576,6 @@ export class BathymetricTidalService {
     confidence: 'high' | 'moderate' | 'low';
     caveats: string[];
   }> {
-    if (!this.anthropic) {
-      logger.debug('BathymetricTidalService: Anthropic client unavailable, generating heuristic analysis.');
-      return this.generateFallbackAnalysis(data);
-    }
-
     // Prepare bathymetric summary
     const depths = data.bathymetry.depths.flat();
     const minDepth = Math.min(...depths);
@@ -665,45 +647,28 @@ Format your response as JSON:
 }`;
 
     try {
-      // Try to get the tidal-opportunism-analyst skill ID
-      let tidalSkillId: string | null = null;
-      try {
-        tidalSkillId = await skillManagementService.getSkillId('tidal-opportunism-analyst');
-      } catch (skillError) {
-        console.warn('BathymetricTidalService: Unable to load tidal-opportunism-analyst skill, continuing without it.', skillError);
+      const { data: aiData, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: {
+          prompt,
+          max_tokens: 4096
+        }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'race-coaching-chat invocation failed');
       }
 
-      // Build the message creation params
-      const messageParams: any = {
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4096,
-        messages: [{
-          role: 'user',
-          content: prompt
-        }]
-      };
-
-      // If we have the skill ID, use it
-      if (tidalSkillId) {
-        messageParams.betas = ['skills-2025-10-02'];
-        messageParams.skills = [{ type: 'custom', id: tidalSkillId }];
-      } else {
-        console.warn('BathymetricTidalService: tidal-opportunism-analyst skill not found, proceeding without skill');
-      }
-
-      const response = await this.anthropic.messages.create(messageParams);
-
-      const content = response.content[0];
-      if (content.type !== 'text') {
+      const content = typeof aiData?.text === 'string' ? aiData.text : '';
+      if (!content) {
         throw new Error('Unexpected response type from Claude API');
       }
 
       // Parse JSON response
-      const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         // Fallback: parse as structured text
         return {
-          analysis: content.text,
+          analysis: content,
           recommendations: {
             startStrategy: 'See full analysis',
             upwindStrategy: 'See full analysis',
@@ -720,7 +685,7 @@ Format your response as JSON:
       return parsed;
 
     } catch (error) {
-      console.error('Error calling Claude API:', error);
+      logger.error('Error calling Claude API:', error);
       return this.generateFallbackAnalysis(data, error);
     }
   }
@@ -746,7 +711,7 @@ Format your response as JSON:
     caveats: string[];
   } {
     if (error) {
-      console.warn('BathymetricTidalService: Falling back to heuristic analysis due to error.', error);
+      logger.warn('BathymetricTidalService: Falling back to heuristic analysis due to error.', error);
     }
 
     const snapshot =
@@ -834,7 +799,7 @@ Format your response as JSON:
     }
 
     const coords = zone.polygon.coordinates[0];
-    const latSum = coords.reduce((sum, [lng, lat]) => sum + lat, 0);
+    const latSum = coords.reduce((sum, [_lng, lat]) => sum + lat, 0);
     const lngSum = coords.reduce((sum, [lng]) => sum + lng, 0);
     const centroidLat = latSum / coords.length;
     const centroidLng = lngSum / coords.length;
@@ -935,12 +900,12 @@ Format your response as JSON:
   /**
    * Generate depth contours for visualization
    */
-  generateDepthContours(bathymetry: BathymetricData, contourIntervals: number[]): DepthContour[] {
+  generateDepthContours(_bathymetry: BathymetricData, _contourIntervals: number[]): DepthContour[] {
     // This would use a contouring algorithm (marching squares) to generate GeoJSON LineStrings
     // for each depth contour. For PoC, returning empty array.
     // In production, would use library like 'd3-contour' or 'turf-isolines'
 
-    console.warn('Depth contour generation not yet implemented');
+    logger.warn('Depth contour generation not yet implemented');
     return [];
   }
 

@@ -4,8 +4,11 @@
  * OnX Maps inspired 3D race course visualization and tactical planning
  */
 
-import maplibregl from 'maplibre-gl';
-import { Platform } from 'react-native';
+import type { Map as MapLibreMap } from 'maplibre-gl';
+import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreScript } from '@/lib/maplibreWeb';
+
+const logger = createLogger('MapLibreService');
 
 interface RaceMark {
   id: string;
@@ -53,7 +56,8 @@ interface TacticalLayer {
  */
 export class MapLibreService {
   private static instance: MapLibreService;
-  private map: maplibregl.Map | null = null;
+  private maplibreNs: any = null;
+  private map: MapLibreMap | null = null;
   private raceCourse: RaceCourse | null = null;
   private weatherOverlays: WeatherOverlay[] = [];
   private tacticalLayers: TacticalLayer[] = [];
@@ -94,6 +98,28 @@ export class MapLibreService {
     return MapLibreService.instance;
   }
 
+  private async ensureMapLibreNamespace(): Promise<any> {
+    if (this.maplibreNs) {
+      return this.maplibreNs;
+    }
+
+    try {
+      const maplibreModule = await import('maplibre-gl');
+      this.maplibreNs = (maplibreModule as any).default || maplibreModule;
+    } catch (_moduleError) {
+      if (typeof window !== 'undefined') {
+        await ensureMapLibreScript('maplibre-gl-script-maplibre-service');
+        this.maplibreNs = (window as any).maplibregl || null;
+      }
+    }
+
+    if (!this.maplibreNs) {
+      throw new Error('MapLibre namespace unavailable');
+    }
+
+    return this.maplibreNs;
+  }
+
   /**
    * Initialize MapLibre GL with marine-optimized settings
    */
@@ -103,15 +129,24 @@ export class MapLibreService {
     style?: string;
     bearing?: number;
     pitch?: number;
-  }): Promise<maplibregl.Map> {
+  }): Promise<MapLibreMap> {
     try {
 
       // Default to sailing tactical style
       const defaultStyle = this.mapStyles.find(s => s.optimizedFor === 'tactical')?.url ||
                           this.mapStyles[0].url;
 
+      const maplibregl = await this.ensureMapLibreNamespace();
+      const MapConstructor = maplibregl?.Map;
+      const NavigationControl = maplibregl?.NavigationControl;
+      const ScaleControl = maplibregl?.ScaleControl;
+      const FullscreenControl = maplibregl?.FullscreenControl;
+      if (!MapConstructor || !NavigationControl || !ScaleControl || !FullscreenControl) {
+        throw new Error('MapLibre constructors are unavailable');
+      }
+
       // Marine-optimized map configuration
-      this.map = new maplibregl.Map({
+      this.map = new MapConstructor({
         container,
         style: options.style || defaultStyle,
         center: options.center,
@@ -126,26 +161,74 @@ export class MapLibreService {
       });
 
       // Add marine-specific controls
-      this.map.addControl(new maplibregl.NavigationControl({
+      this.map.addControl(new NavigationControl({
         showCompass: true,
         showZoom: true,
         visualizePitch: true,
       }), 'top-right');
 
-      this.map.addControl(new maplibregl.ScaleControl({
+      this.map.addControl(new ScaleControl({
         maxWidth: 100,
         unit: 'nautical', // Nautical miles for sailing
       }), 'bottom-left');
 
-      this.map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+      this.map.addControl(new FullscreenControl(), 'top-right');
 
-      // Wait for map to load
-      await new Promise<void>((resolve) => {
-        this.map!.on('load', () => {
-          this.isInitialized = true;
+      // Wait for map to load, but fail fast on error/timeout to avoid hanging UI.
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        const mapRef = this.map;
+        if (!mapRef) {
+          reject(new Error('Map instance unavailable after constructor'));
+          return;
+        }
 
+        const cleanup = () => {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          if (typeof mapRef.off === 'function') {
+            mapRef.off('load', onLoad);
+            mapRef.off('error', onError);
+          }
+        };
+
+        const settleResolve = () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
           resolve();
-        });
+        };
+
+        const settleReject = (error: Error) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
+        };
+
+        const onLoad = () => {
+          this.isInitialized = true;
+          settleResolve();
+        };
+
+        const onError = (event: any) => {
+          const message =
+            event?.error?.message ||
+            event?.message ||
+            'MapLibre reported an initialization error';
+          logger.warn('Map initialization error event', { message });
+          settleReject(new Error(message));
+        };
+
+        timeoutId = setTimeout(() => {
+          settleReject(new Error('Map initialization timed out'));
+        }, 10000);
+
+        mapRef.on('load', onLoad);
+        mapRef.on('error', onError);
       });
 
       // Add marine-specific layers
@@ -154,7 +237,7 @@ export class MapLibreService {
       return this.map;
 
     } catch (error) {
-
+      logger.error('Failed to initialize map', error);
       throw error;
     }
   }
@@ -199,7 +282,7 @@ export class MapLibreService {
       });
 
     } catch (error) {
-
+      logger.warn('Failed to setup marine layers', error);
     }
   }
 
@@ -212,7 +295,6 @@ export class MapLibreService {
     }
 
     try {
-
       this.raceCourse = course;
 
       // Clear existing race course data
@@ -234,7 +316,7 @@ export class MapLibreService {
       this.fitToCourse(course.marks);
 
     } catch (error) {
-
+      logger.error('Failed to display race course', error);
       throw error;
     }
   }
@@ -478,7 +560,6 @@ export class MapLibreService {
     if (!this.map || !this.isInitialized) return;
 
     try {
-
       const sourceId = `weather-${overlay.type}`;
       const layerId = `weather-${overlay.type}-layer`;
 
@@ -536,6 +617,10 @@ export class MapLibreService {
       this.weatherOverlays.push(overlay);
 
     } catch (error) {
+      logger.warn('Failed to add weather overlay', {
+        type: overlay.type,
+        error,
+      });
     }
   }
 
@@ -546,7 +631,6 @@ export class MapLibreService {
     if (!this.map || !this.isInitialized) return;
 
     try {
-
       const sourceId = `tactical-${layer.type}`;
       const layerId = `tactical-${layer.type}-layer`;
 
@@ -564,6 +648,10 @@ export class MapLibreService {
       this.tacticalLayers.push(layer);
 
     } catch (error) {
+      logger.warn('Failed to add tactical layer', {
+        type: layer.type,
+        error,
+      });
     }
   }
 
@@ -577,7 +665,6 @@ export class MapLibreService {
     if (!style) return;
 
     try {
-
       this.map.setStyle(style.url);
 
       // Re-add layers after style change
@@ -598,7 +685,11 @@ export class MapLibreService {
       });
 
     } catch (error) {
-
+      logger.warn('Failed to switch map style', {
+        style: style.name,
+        optimizedFor: style.optimizedFor,
+        error,
+      });
     }
   }
 
@@ -638,8 +729,10 @@ export class MapLibreService {
 
   private fitToCourse(marks: RaceMark[]): void {
     if (!this.map || marks.length === 0) return;
+    const LngLatBounds = this.maplibreNs?.LngLatBounds;
+    if (!LngLatBounds) return;
 
-    const bounds = new maplibregl.LngLatBounds();
+    const bounds = new LngLatBounds();
     marks.forEach(mark => bounds.extend([mark.lng, mark.lat]));
 
     this.map.fitBounds(bounds, {
@@ -701,7 +794,7 @@ export class MapLibreService {
   /**
    * Get map instance
    */
-  getMap(): maplibregl.Map | null {
+  getMap(): MapLibreMap | null {
     return this.map;
   }
 

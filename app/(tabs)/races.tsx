@@ -67,7 +67,7 @@ import { useRaceCourse } from '@/hooks/useRaceCourse';
 import { useRaceDebriefData } from '@/hooks/useRaceDebriefData';
 import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 import { useRaceLayoutData } from '@/hooks/useRaceLayoutData';
-import { DEMO_RACE, useRaceListData } from '@/hooks/useRaceListData';
+import { DEMO_RACE, getDemoEvent, useRaceListData } from '@/hooks/useRaceListData';
 import { useRaceMarks } from '@/hooks/useRaceMarks';
 import { useRacePhaseDetection } from '@/hooks/useRacePhaseDetection';
 import { useRacePhaseInput } from '@/hooks/useRacePhaseInput';
@@ -97,6 +97,8 @@ import {
 import { createLogger } from '@/lib/utils/logger';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useVocabulary } from '@/hooks/useVocabulary';
 import { useFeatureTourContext } from '@/providers/FeatureTourProvider';
 import { DemoRaceService } from '@/services/DemoRaceService';
 import { isDemoRaceId } from '@/lib/demo/demoRaceData';
@@ -132,17 +134,21 @@ const normalizeDocumentType = (
   return normalizeDocumentTypeUtil(type) as RaceDocumentsCardDocument['type'];
 };
 
+// Stable empty array to avoid creating new reference when liveRaces is null/undefined
+const EMPTY_RACES: any[] = [];
+
 export default function RacesScreen() {
   const auth = useAuth();
   const { user, userProfile, signedIn, ready, isDemoSession, userType, isGuest, enterGuestMode } = auth;
   const { isTourActive, currentStep, triggerPricingPrompt } = useFeatureTourContext();
+  const eventConfig = useInterestEventConfig();
+  const { vocab } = useVocabulary();
 
   // Safe area insets for proper header spacing
   const insets = useSafeAreaInsets();
 
   // State for dismissing the demo notice
   const [demoNoticeDismissed, setDemoNoticeDismissed] = useState(false);
-  const [demoContextDismissed, setDemoContextDismissed] = useState(false);
 
   // Season archive modal
   const [showFullArchive, setShowFullArchive] = useState(false);
@@ -210,6 +216,8 @@ export default function RacesScreen() {
     fetchUserProfileRef.current = auth.fetchUserProfile;
   }, [auth.fetchUserProfile]);
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
   const searchParams = useLocalSearchParams<{ selected?: string }>();
   const [showCalendarImport, setShowCalendarImport] = useState(false);
   const mainScrollViewRef = useRef<ScrollView>(null); // Main vertical ScrollView
@@ -395,13 +403,23 @@ export default function RacesScreen() {
       }
       : authenticatedRacesResult;
 
+  // Filter races by interest: the regattas table contains only sailing data,
+  // so non-sailing interests should see an empty timeline (which shows the
+  // interest-appropriate demo event card instead).
+  const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
+  const interestFilteredRaces = useMemo(() => {
+    if (isSailingInterest) return liveRaces;
+    // For non-sailing interests, don't show sailing regattas from the DB
+    return EMPTY_RACES;
+  }, [liveRaces, isSailingInterest]);
+
   // Track if races have been loaded at least once to prevent flash of demo content
   const hasLoadedRacesOnce = useRef(false);
   useEffect(() => {
-    if (!liveRacesLoading && liveRaces !== undefined) {
+    if (!liveRacesLoading && interestFilteredRaces !== undefined) {
       hasLoadedRacesOnce.current = true;
     }
-  }, [liveRacesLoading, liveRaces]);
+  }, [liveRacesLoading, interestFilteredRaces]);
 
   const scrollToPosition = useCallback((position: number) => {
     if (!mainScrollViewRef.current) {
@@ -468,12 +486,12 @@ export default function RacesScreen() {
         params.raceDate = String(raceDate);
       }
 
-      router.push({
+      routerRef.current.push({
         pathname: '/(tabs)/crew',
         params,
       });
     },
-    [router]
+    []
   );
 
   // loadUserPostRaceSession, handleOpenPostRaceInterviewManually, and sailorId fetch
@@ -492,7 +510,7 @@ export default function RacesScreen() {
       // This page is only for sailors
       if (userType === 'club') {
         logger.debug('Club user on races page, redirecting to events');
-        router.replace('/(tabs)/events');
+        routerRef.current.replace('/(tabs)/events');
         return;
       }
       // Note: Coaches are now sailors with coaching capability, so they can access races
@@ -553,7 +571,7 @@ export default function RacesScreen() {
     };
 
     checkAuthAndOnboarding();
-  }, [ready, signedIn, isGuest, user?.id, router, isDemoSession, userType, enterGuestMode]);
+  }, [ready, signedIn, isGuest, user?.id, isDemoSession, userType, enterGuestMode]);
 
   // Fetch data from API
   const {
@@ -579,8 +597,14 @@ export default function RacesScreen() {
   }, [error]);
 
   // Refetch races when dashboard comes into focus (after navigation back from race creation)
-  // Skip the initial mount to prevent unnecessary refetch
+  // Skip the initial mount to prevent unnecessary refetch.
+  // Use refs for refetch/refetchRaces to keep the callback identity stable and avoid
+  // useFocusEffect re-running on every render (which caused an infinite render loop).
   const isInitialMount = useRef(true);
+  const refetchRef = useRef(refetch);
+  refetchRef.current = refetch;
+  const refetchRacesRef = useRef(refetchRaces);
+  refetchRacesRef.current = refetchRaces;
   useFocusEffect(
     useCallback(() => {
       if (isInitialMount.current) {
@@ -588,13 +612,13 @@ export default function RacesScreen() {
         return;
       }
       logger.debug('Screen focused - refetching races');
-      refetch?.();
-      refetchRaces?.(); // Also refresh live races list
+      refetchRef.current?.();
+      refetchRacesRef.current?.(); // Also refresh live races list
       if (selectedRaceId) {
         logger.debug('Screen focused - refreshing selected race detail');
         triggerRaceDetailReload();
       }
-    }, [refetch, refetchRaces, selectedRaceId, triggerRaceDetailReload])
+    }, [selectedRaceId, triggerRaceDetailReload])
   );
 
   // GPS Venue Detection
@@ -616,7 +640,9 @@ export default function RacesScreen() {
   const { isOnline, cacheNextRace } = useOffline();
 
   // Enrich races with real weather data
-  const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(liveRaces || []);
+  // Use stable empty array fallback to avoid creating a new reference each render
+  const racesForEnrichment = interestFilteredRaces || EMPTY_RACES;
+  const { races: enrichedRaces, loading: weatherEnrichmentLoading } = useEnrichedRaces(racesForEnrichment);
 
   // Social timeline: get all timelines (current user + followed users)
   const { allTimelines, isLoading: loadingFollowedTimelines } = useFollowedTimelines(enrichedRaces);
@@ -638,9 +664,9 @@ export default function RacesScreen() {
     hasRealRaces,
     recentRace,
   } = useRaceListData({
-    liveRaces,
+    liveRaces: interestFilteredRaces,
     enrichedRaces,
-    recentRaces,
+    recentRaces: isSailingInterest ? recentRaces : EMPTY_RACES,
   });
 
   // Track if we're showing the demo race (no real races)
@@ -682,9 +708,6 @@ export default function RacesScreen() {
     const idx = safeRecentRaces.findIndex((r: any) => r.id === selectedRaceId);
     return idx >= 0 ? idx + 1 : undefined;
   }, [selectedRaceId, headerTotalRaces, safeRecentRaces]);
-
-  const showGuestContextBanner = isGuest && !demoContextDismissed && !isTourActive;
-  const showGuestTourBadge = isGuest && isTourActive && !showGuestContextBanner;
 
   // Season-filtered race counts for display in header
   // When a season filter is active, show only races in that season
@@ -746,31 +769,25 @@ export default function RacesScreen() {
     // If no races and sample race not dismissed (only for own timeline), show demo race
     if (racesToShow.length === 0 && !sampleRaceDismissed && !isViewingOtherTimeline) {
       const demoIso = getDemoRaceStartDateISO(7, 11, 0);
+      const demoEvent = getDemoEvent(eventConfig.interestSlug, eventConfig.eventNoun);
+      const isSailing = eventConfig.interestSlug === 'sail-racing';
       return [{
         id: DEMO_RACE.id || 'demo-race',
-        name: 'Sample Race',
-        venue: DEMO_RACE.venue || 'Your Local Yacht Club',
+        name: demoEvent.name || `Sample ${eventConfig.eventNoun}`,
+        venue: demoEvent.venue || vocab('Institution'),
         date: DEMO_RACE.date || demoIso,
         startTime: DEMO_RACE.startTime || getDemoRaceStartTimeLabel(11, 0),
-        boatClass: 'Your Boat Class',
-        race_type: 'fleet' as const,
+        boatClass: isSailing ? 'Your Boat Class' : undefined,
+        race_type: (eventConfig.defaultSubtype || 'fleet') as const,
         isDemo: true,
-        vhf_channel: 'Ch 72',
-        // Sample weather data
-        boat_id: 'demo-boat-j70', // Explicitly set demo boat ID
-        class_id: 'demo-class-j70',
-        wind: {
-          direction: 'NE',
-          speedMin: 12,
-          speedMax: 18,
-        },
-        tide: {
-          state: 'flooding' as const,
-          height: 1.8,
-          direction: 'NW',
-        },
-        // Sample regulatory documents
-        regulatory: {
+        vhf_channel: isSailing ? 'Ch 72' : undefined,
+        // Sample weather data (sailing-specific fields only when relevant)
+        boat_id: isSailing ? 'demo-boat-j70' : undefined,
+        class_id: isSailing ? 'demo-class-j70' : undefined,
+        wind: isSailing ? { direction: 'NE', speedMin: 12, speedMax: 18 } : undefined,
+        tide: isSailing ? { state: 'flooding' as const, height: 1.8, direction: 'NW' } : undefined,
+        // Sample regulatory documents (sailing only)
+        regulatory: isSailing ? {
           documents: [
             { id: 'demo-nor', name: 'Notice of Race', type: 'nor', uploadedAt: new Date().toISOString() },
             { id: 'demo-si', name: 'Sailing Instructions', type: 'si', uploadedAt: new Date().toISOString() },
@@ -778,20 +795,20 @@ export default function RacesScreen() {
           ],
           vhfChannel: 'Ch 72',
           protestDeadline: '30 min after finish',
-        },
-        // Sample fleet info
-        fleet: {
+        } : undefined,
+        // Sample fleet/group info (sailing only)
+        fleet: isSailing ? {
           totalCompetitors: 24,
           fleetName: 'Main Fleet',
           isRegistered: false,
-        },
+        } : undefined,
         // No created_by so delete/edit menu won't appear
       }];
     }
 
     return racesToShow.map((race: any) => ({
       id: race.id,
-      name: race.name || race.race_name || 'Unnamed Race',
+      name: race.name || race.race_name || `Unnamed ${eventConfig.eventNoun}`,
       venue: race.venue || race.venue_name,
       date: race.start_date || race.date || new Date().toISOString(),
       startTime: race.start_time || race.startTime,
@@ -1038,7 +1055,7 @@ export default function RacesScreen() {
 
       // TODO: Pass context to chat/messages screen via route params or global state
       // For now, just navigate to messages - the chat will use useRaceBriefSync to get context
-      router.push('/messages' as any);
+      routerRef.current.push('/messages' as any);
 
       logger.info('Opened chat with race context', {
         hasContext: !!context,
@@ -1047,7 +1064,7 @@ export default function RacesScreen() {
     } catch (error) {
       logger.warn('Unable to navigate to chat from rig planner', error);
     }
-  }, [router, getAIContext, isRaceBriefStale]);
+  }, [getAIContext, isRaceBriefStale]);
 
   const handleToggleAcknowledgement = useCallback((key: keyof RegulatoryAcknowledgements) => {
     toggleAcknowledgement(key);
@@ -1057,11 +1074,11 @@ export default function RacesScreen() {
     if (!raceId) return;
 
     try {
-      router.push(`/race/edit/${raceId}`);
+      routerRef.current.push(`/race/edit/${raceId}`);
     } catch (error) {
       logger.error('Error navigating to edit race:', error);
     }
-  }, [logger, router]);
+  }, [logger]);
 
   // Navigate to the comprehensive edit flow for the selected race
   const handleEditSelectedRace = useCallback(() => {
@@ -1071,15 +1088,15 @@ export default function RacesScreen() {
 
   // Practice session handlers
   const handleSelectPractice = useCallback((sessionId: string) => {
-    router.push({
+    routerRef.current.push({
       pathname: '/practice/[id]',
       params: { id: sessionId },
     });
-  }, [router]);
+  }, []);
 
   const handleAddPractice = useCallback(() => {
-    router.push('/practice/create');
-  }, [router]);
+    routerRef.current.push('/practice/create');
+  }, []);
 
   // Navigate to the next upcoming race when "X upcoming" is tapped
   const handleUpcomingPress = useCallback(() => {
@@ -1329,8 +1346,8 @@ export default function RacesScreen() {
       // Clear drawing state
       setDrawingRacingArea([]);
 
-      // Refresh race data in background
-      refetch?.();
+      // Refresh race data in background (use ref for stable callback identity)
+      refetchRef.current?.();
 
       const coordsMessage = shouldUpdateVenueCoords
         ? `\n\nVenue coordinates auto-detected from racing area center for tide/weather data.`
@@ -1339,7 +1356,7 @@ export default function RacesScreen() {
     } catch (error) {
       logger.error('Error saving racing area:', error);
     }
-  }, [selectedRaceId, drawingRacingArea, refetch]);
+  }, [selectedRaceId, drawingRacingArea]);
 
   const ensureRaceEventId = useCallback(async (): Promise<string | null> => {
     logger.debug('[ensureRaceEventId] START', { selectedRaceId });
@@ -1456,8 +1473,8 @@ export default function RacesScreen() {
 
   // Memoized navigation handlers
   const handleVenuePress = useCallback(() => {
-    router.push('/connect');
-  }, [router]);
+    routerRef.current.push('/connect');
+  }, []);
 
   // Venue insights handlers (loadCachedInsights, handleGetVenueInsights) and
   // related effects are now managed by useVenueInsights hook above
@@ -2492,6 +2509,7 @@ export default function RacesScreen() {
   const {
     recommendation: selectedRaceTuningRecommendation,
     loading: selectedRaceTuningLoading,
+    error: selectedRaceTuningError,
     refresh: refreshSelectedRaceTuning,
   } = useRaceTuningRecommendation({
     classId: selectedRaceClassId,
@@ -2555,8 +2573,8 @@ export default function RacesScreen() {
   const isDemoProfile = (profileOnboardingStep ?? '').toString().startsWith('demo');
 
   const handleClaimWorkspace = useCallback(() => {
-    router.push('/account');
-  }, [router]);
+    routerRef.current.push('/account');
+  }, []);
 
   // Clear old details immediately on selection change to avoid showing stale details
   React.useEffect(() => {
@@ -2742,140 +2760,6 @@ export default function RacesScreen() {
         <View
           style={{ flex: 1 }}
         >
-          {/* Welcome Card for new guest users */}
-          {showGuestContextBanner && (
-            <>
-              {/* Dark overlay to gray out the interface */}
-              <Pressable
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                  zIndex: 34,
-                }}
-                onPress={() => setDemoContextDismissed(true)}
-              />
-              <View
-                style={{
-                  position: 'absolute',
-                  top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 16,
-                  left: 16,
-                  right: 16,
-                  zIndex: 35,
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: 20,
-                  padding: 20,
-                  shadowColor: '#000000',
-                  shadowOpacity: 0.2,
-                  shadowRadius: 24,
-                  shadowOffset: { width: 0, height: 12 },
-                  elevation: 12,
-                }}
-              >
-                {/* Header */}
-                <View style={{ alignItems: 'center', marginBottom: 16 }}>
-                  <View style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 12,
-                    backgroundColor: '#EFF6FF',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 12,
-                  }}>
-                    <Text style={{ fontSize: 24 }}>⛵</Text>
-                  </View>
-                  <Text style={{ fontSize: 20, fontWeight: '700', color: '#0F172A', textAlign: 'center' }}>
-                    Welcome to RegattaFlow
-                  </Text>
-                  <Text style={{ marginTop: 4, fontSize: 13, color: '#64748B', textAlign: 'center' }}>
-                    Your AI-powered sailing companion
-                  </Text>
-                </View>
-
-                {/* Feature Pills */}
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 16 }}>
-                  {[
-                    { icon: '📋', label: 'Race Prep' },
-                    { icon: '🎯', label: 'Live Tracking' },
-                    { icon: '📊', label: 'AI Debrief' },
-                    { icon: '🌤️', label: 'Weather' },
-                  ].map((item, i) => (
-                    <View key={i} style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: '#F8FAFC',
-                      paddingHorizontal: 10,
-                      paddingVertical: 6,
-                      borderRadius: 20,
-                      gap: 4,
-                    }}>
-                      <Text style={{ fontSize: 12 }}>{item.icon}</Text>
-                      <Text style={{ fontSize: 12, color: '#475569', fontWeight: '500' }}>{item.label}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* Quick tip */}
-                <View style={{
-                  backgroundColor: '#F0FDF4',
-                  borderRadius: 10,
-                  padding: 12,
-                  marginBottom: 16,
-                }}>
-                  <Text style={{ fontSize: 12, color: '#166534', lineHeight: 17 }}>
-                    <Text style={{ fontWeight: '600' }}>💡 Tip:</Text> Swipe left/right through your races. Each has Prep → Race → Review phases.
-                  </Text>
-                </View>
-
-                {/* Pricing Cards */}
-                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                  <View style={{ flex: 1, backgroundColor: '#F8FAFC', borderRadius: 10, padding: 10, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 2 }}>FREE</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>$0</Text>
-                    <Text style={{ fontSize: 10, color: '#94A3B8' }}>forever</Text>
-                  </View>
-                  <View style={{ flex: 1, backgroundColor: '#EFF6FF', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#BFDBFE' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563EB', marginBottom: 2 }}>PRO</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>$10<Text style={{ fontSize: 11, fontWeight: '500', color: '#64748B' }}>/mo</Text></Text>
-                    <Text style={{ fontSize: 10, color: '#059669', fontWeight: '600' }}>$100/yr save 17%</Text>
-                  </View>
-                  <View style={{ flex: 1, backgroundColor: '#F8FAFC', borderRadius: 10, padding: 10, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748B', marginBottom: 2 }}>TEAM</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A' }}>$20<Text style={{ fontSize: 11, fontWeight: '500', color: '#64748B' }}>/mo</Text></Text>
-                    <Text style={{ fontSize: 10, color: '#059669', fontWeight: '600' }}>$200/yr save 17%</Text>
-                  </View>
-                </View>
-
-                {/* Actions */}
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: '#2563EB',
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    alignItems: 'center',
-                    marginBottom: 10,
-                  }}
-                  onPress={() => {
-                    setDemoContextDismissed(true);
-                    router.push('/(auth)/signup');
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '600' }}>Get Started Free</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ alignItems: 'center', paddingVertical: 6 }}
-                  onPress={() => setDemoContextDismissed(true)}
-                >
-                  <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '500' }}>Explore the demo first</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-
           {/* Backdrop spotlight (TourBackdrop) now handles target highlighting */}
 
           {/* Timeline header when viewing another user */}
@@ -3013,103 +2897,10 @@ export default function RacesScreen() {
         >
           {/* Demo notice */}
           <DemoNotice
-            visible={isDemoProfile && !demoNoticeDismissed && !showGuestContextBanner}
+            visible={isDemoProfile && !demoNoticeDismissed}
             onDismiss={() => setDemoNoticeDismissed(true)}
             onClaimWorkspace={handleClaimWorkspace}
           />
-
-          {/* Welcome Card for new users (legacy ScrollView - matches CardGrid version) */}
-          {showGuestContextBanner && (
-            <View
-              style={{
-                marginHorizontal: 16,
-                marginTop: 12,
-                marginBottom: 8,
-                padding: 16,
-                backgroundColor: '#FFFFFF',
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: '#E2E8F0',
-                shadowColor: '#0F172A',
-                shadowOpacity: 0.12,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 4 },
-                elevation: 5,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>
-                Welcome to RegattaFlow
-              </Text>
-              <Text style={{ marginTop: 6, fontSize: 13, color: '#64748B', lineHeight: 18 }}>
-                Your AI-powered sailing companion for race prep, execution, and review.
-              </Text>
-
-              {/* Race Timeline */}
-              <View style={{ marginTop: 14 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F172A', marginBottom: 6 }}>
-                  Race Timeline
-                </Text>
-                <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 18 }}>
-                  Swipe left/right through your races. Each has three phases:
-                </Text>
-                <View style={{ marginTop: 8, gap: 4 }}>
-                  <Text style={{ fontSize: 13, color: '#475569' }}>
-                    <Text style={{ color: '#2563EB', fontWeight: '600' }}>Prep</Text> → Weather, docs, strategy
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#475569' }}>
-                    <Text style={{ color: '#2563EB', fontWeight: '600' }}>Race</Text> → Track performance live
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#475569' }}>
-                    <Text style={{ color: '#2563EB', fontWeight: '600' }}>Review</Text> → AI-powered debrief
-                  </Text>
-                </View>
-              </View>
-
-              {/* Pricing */}
-              <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E2E8F0' }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>Free forever</Text>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>
-                    Pro $10/mo <Text style={{ color: '#059669' }}>$100/yr</Text>
-                  </Text>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>
-                    Team $20/mo <Text style={{ color: '#059669' }}>$200/yr</Text>
-                  </Text>
-                </View>
-              </View>
-
-              {/* Actions */}
-              <View style={{ marginTop: 12, flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#2563EB',
-                    borderRadius: 8,
-                    paddingVertical: 10,
-                    alignItems: 'center',
-                  }}
-                  onPress={() => {
-                    setDemoContextDismissed(true);
-                    router.push('/(auth)/signup');
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600' }}>Sign Up Free</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#F1F5F9',
-                    borderRadius: 8,
-                    paddingVertical: 10,
-                    alignItems: 'center',
-                  }}
-                  onPress={() => setDemoContextDismissed(true)}
-                >
-                  <Text style={{ color: '#475569', fontSize: 13, fontWeight: '600' }}>Explore First</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
 
           {/* Fleet Activity Feed - Auto-surfaces fleet mates' race prep (Inner Circle discovery) */}
           {!isGuest && hasRealRaces && (
@@ -3368,6 +3159,7 @@ export default function RacesScreen() {
                           onChangeNotes={setRigNotes}
                           selectedRaceTuningRecommendation={selectedRaceTuningRecommendation}
                           selectedRaceTuningLoading={selectedRaceTuningLoading}
+                          selectedRaceTuningErrorMessage={selectedRaceTuningError?.message ?? null}
                           onRefreshTuning={selectedRaceClassId ? refreshSelectedRaceTuning : undefined}
                           onOpenChat={handleOpenChatFromRigPlanner}
                           isGenericDefaults={isGenericDefaultsFromMetadata && !selectedRaceTuningRecommendation}
@@ -3531,6 +3323,8 @@ export default function RacesScreen() {
             onSeasonPress={() => setShowSeasonPicker(true)}
             onArchivePress={() => setShowFullArchive(true)}
             showAllRaces={!activeFilterSeasonId}
+            eventNounPlural={`${eventConfig.eventNoun}s`}
+            periodTerm={vocab('Period')}
             compact
           />
         </Pressable>
@@ -3582,6 +3376,8 @@ export default function RacesScreen() {
           setFilterSeasonId(seasonId);
         }}
         onManageSeasons={() => setShowSeasonSettings(true)}
+        eventNounPlural={`${eventConfig.eventNoun}s`}
+        periodTerm={vocab('Period')}
       />
 
       {/* Season Settings Modal - Create/Edit/End Season */}

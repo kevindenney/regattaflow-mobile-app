@@ -2,6 +2,7 @@ import { createChannelName, realtimeService } from '@/services/RealtimeService';
 import { supabase } from '@/services/supabase';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('RaceResults');
 
@@ -11,9 +12,82 @@ const logger = createLogger('RaceResults');
 const isValidUUID = (id: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
+type TrackedSubscription = {
+  name: string;
+  callback: (payload: any) => void;
+  runId: number;
+  attempts: number;
+};
+
+const UNSUBSCRIBE_TIMEOUT_MS = 4000;
+
+async function unsubscribeWithTimeout(
+  channelName: string,
+  callback: (payload: any) => void
+): Promise<void> {
+  await Promise.race([
+    realtimeService.unsubscribe(channelName, callback),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`unsubscribe timeout for ${channelName}`)), UNSUBSCRIBE_TIMEOUT_MS)
+    ),
+  ]);
+}
+
+async function unsubscribeTrackedSubscriptions(
+  tracked: TrackedSubscription[],
+  context: string
+): Promise<TrackedSubscription[]> {
+  const MAX_UNSUBSCRIBE_RETRIES = 2;
+  const failed: TrackedSubscription[] = [];
+
+  await Promise.all(
+    tracked.map(async (entry) => {
+      try {
+        await unsubscribeWithTimeout(entry.name, entry.callback);
+      } catch (err) {
+        if (entry.attempts + 1 < MAX_UNSUBSCRIBE_RETRIES) {
+          failed.push({ ...entry, attempts: entry.attempts + 1 });
+        }
+        logger.error(`${context}:`, err);
+      }
+    })
+  );
+
+  return failed;
+}
+
+function mergeTrackedSubscriptions(
+  current: TrackedSubscription[],
+  incoming: TrackedSubscription[]
+): TrackedSubscription[] {
+  if (incoming.length === 0) return current;
+
+  const merged = [...current];
+  incoming.forEach((entry) => {
+    const existingIndex = merged.findIndex(
+      (candidate) =>
+        candidate.runId === entry.runId &&
+        candidate.name === entry.name &&
+        candidate.callback === entry.callback
+    );
+
+    if (existingIndex === -1) {
+      merged.push(entry);
+      return;
+    }
+
+    if (entry.attempts > merged[existingIndex].attempts) {
+      merged[existingIndex] = entry;
+    }
+  });
+
+  return merged;
+}
+
 export interface RaceResult {
   id: string;
-  regatta_id: string;
+  regatta_id?: string;
+  race_id?: string;
   race_number?: number;
   sailor_id: string;
   position: number;
@@ -29,6 +103,8 @@ export interface Race {
   id: string;
   regatta_id: string;
   race_number: number;
+  created_by?: string;
+  start_date?: string;
   scheduled_start: string;
   actual_start?: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'abandoned';
@@ -44,11 +120,35 @@ export function useRaceResults(raceId?: string) {
   const [race, setRace] = useState<Race | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const subscriptionsRef = useRef<TrackedSubscription[]>([]);
+  const effectRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      effectRunIdRef.current += 1;
+      const tracked = [...subscriptionsRef.current];
+      subscriptionsRef.current = [];
+      void unsubscribeTrackedSubscriptions(
+        tracked,
+        'Error unsubscribing race results channel during unmount'
+      );
+    };
+  }, []);
 
   // Load initial results
   const loadResults = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
     if (!raceId || !isValidUUID(raceId)) {
       // Skip Supabase query for missing or demo race IDs
+      if (!canCommit()) return;
+      setResults([]);
+      setRace(null);
       setLoading(false);
       return;
     }
@@ -65,72 +165,188 @@ export function useRaceResults(raceId?: string) {
         .single();
 
       if (raceError) throw raceError;
+      if (!canCommit()) return;
       setRace(raceData);
 
       // Load results
-      const { data: resultsData, error: resultsError } = await supabase
+      const primaryResults = await supabase
         .from('race_results')
         .select('*')
         .eq('regatta_id', raceId)
         .order('position', { ascending: true });
+      let resultsData = primaryResults.data;
+      let resultsError = primaryResults.error;
+      if (resultsError && isMissingIdColumn(resultsError, 'race_results', 'regatta_id')) {
+        const fallbackResults = await supabase
+          .from('race_results')
+          .select('*')
+          .eq('race_id', raceId)
+          .order('position', { ascending: true });
+        resultsData = fallbackResults.data;
+        resultsError = fallbackResults.error;
+      }
 
       if (resultsError) throw resultsError;
+      if (!canCommit()) return;
       setResults(resultsData || []);
     } catch (err) {
       logger.error('Error loading results:', err);
+      if (!canCommit()) return;
       setError(err as Error);
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
   }, [raceId]);
 
   // Set up real-time subscription
   useEffect(() => {
-    if (!raceId || !isValidUUID(raceId)) return;
+    if (!raceId || !isValidUUID(raceId)) {
+      loadRunIdRef.current += 1; // invalidate any in-flight load for previous race id
+      if (!isMountedRef.current) return;
+      setResults([]);
+      setRace(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
 
-    loadResults();
+    let effectDisposed = false;
+    const currentRunId = ++effectRunIdRef.current;
+    const isActiveRun = () =>
+      isMountedRef.current && !effectDisposed && effectRunIdRef.current === currentRunId;
+
+    const teardownChannels = async () => {
+      const tracked = subscriptionsRef.current.filter((entry) => entry.runId === currentRunId);
+      subscriptionsRef.current = subscriptionsRef.current.filter((entry) => entry.runId !== currentRunId);
+      const failed = await unsubscribeTrackedSubscriptions(
+        tracked,
+        'Error unsubscribing race results channel'
+      );
+      if (failed.length > 0 && isActiveRun()) {
+        subscriptionsRef.current = mergeTrackedSubscriptions(subscriptionsRef.current, failed);
+      }
+    };
+
+    const staleTracked = subscriptionsRef.current.filter((entry) => entry.runId !== currentRunId);
+    if (staleTracked.length > 0) {
+      subscriptionsRef.current = subscriptionsRef.current.filter((entry) => entry.runId === currentRunId);
+      void unsubscribeTrackedSubscriptions(
+        staleTracked,
+        'Error unsubscribing stale race results channel'
+      ).then((failed) => {
+        if (failed.length > 0 && isMountedRef.current) {
+          subscriptionsRef.current = mergeTrackedSubscriptions(subscriptionsRef.current, failed);
+        }
+      });
+    }
+
+    const registerSubscription = (name: string, callback: (payload: any) => void) => {
+      if (!isActiveRun()) {
+        void realtimeService.unsubscribe(name, callback).catch((err) => {
+          logger.error(`Error unsubscribing stale ${name} channel:`, err);
+        });
+        return;
+      }
+      const next: TrackedSubscription = { name, callback, runId: currentRunId, attempts: 0 };
+      subscriptionsRef.current = mergeTrackedSubscriptions(subscriptionsRef.current, [next]);
+    };
+
+    void loadResults();
 
     const channelName = createChannelName('race-results', raceId);
+    const onRaceResultsPayload = (payload: any) => {
+      if (!isActiveRun()) return;
+      const payloadRaceId = payload?.new?.regatta_id || payload?.new?.race_id || payload?.old?.regatta_id || payload?.old?.race_id;
+      if (payloadRaceId !== raceId) return;
 
-    // Subscribe to race results updates
-    realtimeService.subscribe(
-      channelName,
+      if (payload.eventType === 'INSERT') {
+        setResults((prev) => {
+          const next = payload.new as RaceResult;
+          if (!next?.id || prev.some((item) => item.id === next.id)) {
+            return prev;
+          }
+          return [...prev, next].sort((a, b) => a.position - b.position);
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        setResults((prev) => {
+          const next = payload.new as RaceResult;
+          if (!next?.id) return prev;
+          const index = prev.findIndex((item) => item.id === next.id);
+          if (index === -1) {
+            return [...prev, next].sort((a, b) => a.position - b.position);
+          }
+          const updated = [...prev];
+          updated[index] = next;
+          return updated.sort((a, b) => a.position - b.position);
+        });
+      } else if (payload.eventType === 'DELETE') {
+        setResults((prev) => prev.filter((r) => r.id !== payload.old.id));
+      }
+    };
+
+    const safeSubscribe = (
+      name: string,
+      config: { table: string; filter?: string },
+      callback: (payload: any) => void
+    ): boolean => {
+      try {
+        realtimeService.subscribe(
+          name,
+          config,
+          callback
+        );
+        registerSubscription(name, callback);
+        return true;
+      } catch (err) {
+        logger.error(`Error setting up ${name} realtime subscription:`, err);
+        return false;
+      }
+    };
+
+    // Subscribe to race results updates (both legacy race_id and canonical regatta_id)
+    // to support schema drift without listening to the full table.
+    const raceResultsByRegattaSubscribed = safeSubscribe(
+      `${channelName}:regatta`,
       {
         table: 'race_results',
         filter: `regatta_id=eq.${raceId}`,
       },
-      (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setResults((prev) => [...prev, payload.new as RaceResult].sort((a, b) => a.position - b.position));
-        } else if (payload.eventType === 'UPDATE') {
-          setResults((prev) =>
-            prev.map((r) => (r.id === payload.new.id ? (payload.new as RaceResult) : r))
-              .sort((a, b) => a.position - b.position)
-          );
-        } else if (payload.eventType === 'DELETE') {
-          setResults((prev) => prev.filter((r) => r.id !== payload.old.id));
-        }
-      }
+      onRaceResultsPayload
+    );
+    const raceResultsByRaceSubscribed = safeSubscribe(
+      `${channelName}:race`,
+      {
+        table: 'race_results',
+        filter: `race_id=eq.${raceId}`,
+      },
+      onRaceResultsPayload
     );
 
     // Subscribe to race status updates
     const raceChannelName = createChannelName('race-status', raceId);
-    realtimeService.subscribe(
+    const onRaceStatusPayload = (payload: any) => {
+      if (!isActiveRun()) return;
+      if (payload.eventType === 'UPDATE') {
+        setRace(payload.new as Race);
+      }
+    };
+    const raceStatusSubscribed = safeSubscribe(
       raceChannelName,
       {
         table: 'regattas',
         filter: `id=eq.${raceId}`,
       },
-      (payload) => {
-        if (payload.eventType === 'UPDATE') {
-          setRace(payload.new as Race);
-        }
-      }
+      onRaceStatusPayload
     );
+    if ((!raceResultsByRegattaSubscribed && !raceResultsByRaceSubscribed) || !raceStatusSubscribed) {
+      void teardownChannels();
+      setError(new Error('Realtime race updates unavailable. Pull to refresh.'));
+    }
 
     return () => {
-      realtimeService.unsubscribe(channelName);
-      realtimeService.unsubscribe(raceChannelName);
+      effectDisposed = true;
+      void teardownChannels();
     };
   }, [raceId, loadResults]);
 
@@ -151,9 +367,54 @@ export function useLiveRaces(userId?: string) {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const hasLoadedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const collaboratorRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const subscriptionsRef = useRef<TrackedSubscription[]>([]);
+  const effectRunIdRef = useRef(0);
+  const trackedRaceIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      effectRunIdRef.current += 1;
+      const tracked = [...subscriptionsRef.current];
+      subscriptionsRef.current = [];
+      void unsubscribeTrackedSubscriptions(
+        tracked,
+        'Error unsubscribing live races channel during unmount'
+      );
+      if (collaboratorRefreshTimeoutRef.current) {
+        clearTimeout(collaboratorRefreshTimeoutRef.current);
+        collaboratorRefreshTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    trackedRaceIdsRef.current = new Set(liveRaces.map((race) => race.id).filter(Boolean));
+  }, [liveRaces]);
+
+  // Reset data/loading state when auth context switches users or logs out.
+  useEffect(() => {
+    hasLoadedRef.current = false;
+    loadRunIdRef.current += 1; // invalidate in-flight loaders from previous user context
+    if (!isMountedRef.current) return;
+    setLiveRaces([]);
+    setIsRefreshing(false);
+    setLoading(Boolean(userId));
+  }, [userId]);
 
   const loadLiveRaces = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
     if (!userId) {
+      if (!canCommit()) return;
+      setLiveRaces([]);
+      setIsRefreshing(false);
+      hasLoadedRef.current = false;
       setLoading(false);
       return;
     }
@@ -186,7 +447,9 @@ export function useLiveRaces(userId?: string) {
 
       if (createdError) {
         logger.warn('Returning empty due to regatta query error:', createdError);
+        if (!canCommit()) return;
         setLiveRaces([]);
+        setIsRefreshing(false);
         setLoading(false);
         return;
       }
@@ -225,19 +488,41 @@ export function useLiveRaces(userId?: string) {
       }
 
       // Regattas where the user has logged timer sessions
-      const { data: sessionRows, error: sessionsError } = await supabase
+      let sessionRows: { regatta_id?: string | null; race_id?: string | null }[] | null = null;
+      let sessionsError: any = null;
+      const primarySessions = await supabase
         .from('race_timer_sessions')
         .select('regatta_id')
         .eq('sailor_id', userId)
         .not('regatta_id', 'is', null)
         .order('end_time', { ascending: false })
         .limit(200);
+      sessionRows = primarySessions.data as any;
+      sessionsError = primarySessions.error;
+
+      if (
+        sessionsError &&
+        isMissingIdColumn(sessionsError, 'race_timer_sessions', 'regatta_id')
+      ) {
+        const fallbackSessions = await supabase
+          .from('race_timer_sessions')
+          .select('race_id')
+          .eq('sailor_id', userId)
+          .not('race_id', 'is', null)
+          .order('end_time', { ascending: false })
+          .limit(200);
+        sessionRows = (fallbackSessions.data as any[] | null)?.map((row: any) => ({
+          regatta_id: row.race_id,
+          race_id: row.race_id,
+        })) || null;
+        sessionsError = fallbackSessions.error;
+      }
 
       if (sessionsError) {
         logger.warn('Unable to load participant regattas from race_timer_sessions:', sessionsError);
       } else {
         const uniqueSessionRegattaIds = Array.from(
-          new Set((sessionRows ?? []).map((row) => row.regatta_id).filter(Boolean))
+          new Set((sessionRows ?? []).map((row) => row.regatta_id || row.race_id).filter(Boolean))
         ) as string[];
 
         const missingRegattaIds = uniqueSessionRegattaIds.filter((regattaId) => !racesById.has(regattaId));
@@ -355,12 +640,15 @@ export function useLiveRaces(userId?: string) {
         return aTime - bTime;
       });
 
+      if (!canCommit()) return;
       setLiveRaces(merged);
       hasLoadedRef.current = true;
     } catch (err) {
       logger.error('Error loading races:', err);
+      if (!canCommit()) return;
       setLiveRaces([]);
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
       setIsRefreshing(false);
     }
@@ -372,154 +660,296 @@ export function useLiveRaces(userId?: string) {
       return;
     }
 
-    loadLiveRaces();
+    let effectDisposed = false;
+    const currentRunId = ++effectRunIdRef.current;
+    const isActiveRun = () =>
+      isMountedRef.current && !effectDisposed && effectRunIdRef.current === currentRunId;
+
+    const teardownChannels = async () => {
+      const tracked = subscriptionsRef.current.filter((entry) => entry.runId === currentRunId);
+      subscriptionsRef.current = subscriptionsRef.current.filter((entry) => entry.runId !== currentRunId);
+      const failed = await unsubscribeTrackedSubscriptions(
+        tracked,
+        'Error unsubscribing live races channel'
+      );
+      if (failed.length > 0 && isActiveRun()) {
+        subscriptionsRef.current = mergeTrackedSubscriptions(subscriptionsRef.current, failed);
+      }
+    };
+
+    const staleTracked = subscriptionsRef.current.filter((entry) => entry.runId !== currentRunId);
+    if (staleTracked.length > 0) {
+      subscriptionsRef.current = subscriptionsRef.current.filter((entry) => entry.runId === currentRunId);
+      void unsubscribeTrackedSubscriptions(
+        staleTracked,
+        'Error unsubscribing stale live races channel'
+      ).then((failed) => {
+        if (failed.length > 0 && isMountedRef.current) {
+          subscriptionsRef.current = mergeTrackedSubscriptions(subscriptionsRef.current, failed);
+        }
+      });
+    }
+
+    const registerSubscription = (name: string, callback: (payload: any) => void) => {
+      if (!isActiveRun()) {
+        void realtimeService.unsubscribe(name, callback).catch((err) => {
+          logger.error(`Error unsubscribing stale ${name} channel:`, err);
+        });
+        return;
+      }
+      const next: TrackedSubscription = { name, callback, runId: currentRunId, attempts: 0 };
+      subscriptionsRef.current = mergeTrackedSubscriptions(subscriptionsRef.current, [next]);
+    };
+
+    const safeSubscribe = (
+      name: string,
+      config: { table: string; filter?: string },
+      callback: (payload: any) => void
+    ): boolean => {
+      try {
+        realtimeService.subscribe(name, config, callback);
+        registerSubscription(name, callback);
+        return true;
+      } catch (err) {
+        logger.error(`Error setting up ${name} realtime subscription:`, err);
+        return false;
+      }
+    };
+
+    void loadLiveRaces();
 
     // Subscribe to regatta changes for the user (INSERT, UPDATE, DELETE)
     // Only set up subscription if we successfully loaded races
     const channelName = createChannelName('user-regattas', userId);
+    const onRegattasPayload = (payload: any) => {
+      if (!isActiveRun()) return;
+      try {
+        const raceId = payload?.new?.id || payload?.old?.id;
+        const isTrackedRace = raceId ? trackedRaceIdsRef.current.has(raceId) : false;
 
-    try {
-      realtimeService.subscribe(
-        channelName,
-        {
-          table: 'regattas',
-          // No event filter - listen to all events (INSERT, UPDATE, DELETE)
-        },
-        (payload) => {
-          try {
-            if (payload.eventType === 'INSERT') {
-              // Add new race to the list
-              const newRace = payload.new as Race;
-              setLiveRaces((prev) => {
-                // Check if race already exists to avoid duplicates
-                if (prev.some((r) => r.id === newRace.id)) {
-                  return prev;
-                }
-                // Add and sort by start_date
-                return [...prev, newRace].sort((a: any, b: any) =>
-                  new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
-                );
-              });
-            } else if (payload.eventType === 'UPDATE') {
-              // Update existing race
-              const updatedRace = payload.new as Race;
-              setLiveRaces((prev) => {
-                const index = prev.findIndex((r) => r.id === updatedRace.id);
-                if (index >= 0) {
-                  const updated = [...prev];
-                  updated[index] = updatedRace;
-                  return updated;
-                }
-                return prev;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              // Remove deleted race
-              setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
-            }
-          } catch (err) {
-            logger.error('Error handling realtime event:', err);
+        if (payload.eventType === 'INSERT') {
+          // Add new race to the list
+          const newRace = payload.new as Race;
+          const isRelevantToUser =
+            newRace?.created_by === userId ||
+            (newRace as any)?.isOwner ||
+            (newRace as any)?.isCollaborator ||
+            (newRace as any)?.isPendingInvite;
+          if (!isRelevantToUser && !isTrackedRace) {
+            return;
           }
+          setLiveRaces((prev) => {
+            // Ignore unrelated races to avoid broad-table churn
+            if (!isRelevantToUser && !prev.some((r) => r.id === newRace.id)) {
+              return prev;
+            }
+            // Check if race already exists to avoid duplicates
+            if (prev.some((r) => r.id === newRace.id)) {
+              return prev;
+            }
+            // Add and sort by start_date
+            return [...prev, newRace].sort((a: any, b: any) =>
+              new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+            );
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          // Update existing race
+          const updatedRace = payload.new as Race;
+          const isRelevantToUser =
+            updatedRace?.created_by === userId ||
+            (updatedRace as any)?.isOwner ||
+            (updatedRace as any)?.isCollaborator ||
+            (updatedRace as any)?.isPendingInvite;
+          if (!isRelevantToUser && !isTrackedRace) {
+            return;
+          }
+          setLiveRaces((prev) => {
+            if (!isRelevantToUser && !prev.some((r) => r.id === updatedRace.id)) {
+              return prev;
+            }
+            const index = prev.findIndex((r) => r.id === updatedRace.id);
+            if (index >= 0) {
+              const updated = [...prev];
+              updated[index] = updatedRace;
+              return updated.sort((a: any, b: any) =>
+                new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+              );
+            }
+            return prev;
+          });
+        } else if (payload.eventType === 'DELETE') {
+          // Remove deleted race
+          if (!isTrackedRace) {
+            return;
+          }
+          setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
         }
-      );
-    } catch (err) {
-      logger.error('Error setting up realtime subscription:', err);
-    }
+      } catch (err) {
+        logger.error('Error handling realtime event:', err);
+      }
+    };
+
+    const onRaceEventsPayload = (payload: any) => {
+      if (!isActiveRun()) return;
+      try {
+        if (payload.eventType === 'INSERT') {
+          const newEvent = payload.new as any;
+          // Normalize to match regatta structure
+          const normalizedEvent = {
+            ...newEvent,
+            start_date: newEvent.start_time || newEvent.event_date,
+            race_name: newEvent.name,
+            created_by: newEvent.user_id,
+            metadata: {
+              ...(newEvent.metadata || {}),
+              venue_name: newEvent.location || newEvent.metadata?.venue_name || null,
+              venue: newEvent.location || newEvent.metadata?.venue || null,
+            },
+            _source: 'race_events',
+          };
+          setLiveRaces((prev) => {
+            if (prev.some((r) => r.id === normalizedEvent.id)) {
+              return prev;
+            }
+            return [...prev, normalizedEvent].sort((a: any, b: any) =>
+              new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+            );
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedEvent = payload.new as any;
+          const normalizedEvent = {
+            ...updatedEvent,
+            start_date: updatedEvent.start_time || updatedEvent.event_date,
+            race_name: updatedEvent.name,
+            created_by: updatedEvent.user_id,
+            metadata: {
+              ...(updatedEvent.metadata || {}),
+              venue_name: updatedEvent.location || updatedEvent.metadata?.venue_name || null,
+              venue: updatedEvent.location || updatedEvent.metadata?.venue || null,
+            },
+            _source: 'race_events',
+          };
+          setLiveRaces((prev) => {
+            const index = prev.findIndex((r) => r.id === normalizedEvent.id);
+            if (index >= 0) {
+              const updated = [...prev];
+              updated[index] = normalizedEvent;
+              return updated.sort((a: any, b: any) =>
+                new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+              );
+            }
+            return prev;
+          });
+        } else if (payload.eventType === 'DELETE') {
+          setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
+        }
+      } catch (err) {
+        logger.error('Error handling race_events realtime event:', err);
+      }
+    };
+
+    const regattasSubscribed = safeSubscribe(
+      channelName,
+      {
+        table: 'regattas',
+      },
+      onRegattasPayload
+    );
 
     // Also subscribe to race_events for user-created races
     const raceEventsChannelName = createChannelName('user-race-events', userId);
-    try {
-      realtimeService.subscribe(
-        raceEventsChannelName,
-        {
-          table: 'race_events',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          try {
-            if (payload.eventType === 'INSERT') {
-              const newEvent = payload.new as any;
-              // Normalize to match regatta structure
-              const normalizedEvent = {
-                ...newEvent,
-                start_date: newEvent.start_time || newEvent.event_date,
-                race_name: newEvent.name,
-                created_by: newEvent.user_id,
-                _source: 'race_events',
-              };
-              setLiveRaces((prev) => {
-                if (prev.some((r) => r.id === normalizedEvent.id)) {
-                  return prev;
-                }
-                return [...prev, normalizedEvent].sort((a: any, b: any) =>
-                  new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
-                );
-              });
-            } else if (payload.eventType === 'UPDATE') {
-              const updatedEvent = payload.new as any;
-              const normalizedEvent = {
-                ...updatedEvent,
-                start_date: updatedEvent.start_time || updatedEvent.event_date,
-                race_name: updatedEvent.name,
-                created_by: updatedEvent.user_id,
-                _source: 'race_events',
-              };
-              setLiveRaces((prev) => {
-                const index = prev.findIndex((r) => r.id === normalizedEvent.id);
-                if (index >= 0) {
-                  const updated = [...prev];
-                  updated[index] = normalizedEvent;
-                  return updated;
-                }
-                return prev;
-              });
-            } else if (payload.eventType === 'DELETE') {
-              setLiveRaces((prev) => prev.filter((r) => r.id !== payload.old.id));
-            }
-          } catch (err) {
-            logger.error('Error handling race_events realtime event:', err);
-          }
-        }
-      );
-    } catch (err) {
-      logger.error('Error setting up race_events realtime subscription:', err);
-    }
+    const raceEventsSubscribed = safeSubscribe(
+      raceEventsChannelName,
+      {
+        table: 'race_events',
+        filter: `user_id=eq.${userId}`,
+      },
+      onRaceEventsPayload
+    );
 
     // Subscribe to race_collaborators changes for this user
     // This handles when user receives a new invite or when their invite status changes
     const collaboratorsChannelName = createChannelName('user-collaborators', userId);
-    try {
-      realtimeService.subscribe(
-        collaboratorsChannelName,
-        {
-          table: 'race_collaborators',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          try {
-            // For any collaborator change, refresh the races list to get updated data
-            // This is simpler than trying to merge individual updates and ensures consistency
-            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
-              loadLiveRaces();
-            }
-          } catch (err) {
-            logger.error('Error handling race_collaborators realtime event:', err);
-          }
+    const onCollaboratorsPayload = (payload: any) => {
+      if (!isActiveRun()) return;
+      const scheduleRefresh = () => {
+        if (collaboratorRefreshTimeoutRef.current) {
+          clearTimeout(collaboratorRefreshTimeoutRef.current);
         }
-      );
-    } catch (err) {
-      logger.error('Error setting up race_collaborators realtime subscription:', err);
+        collaboratorRefreshTimeoutRef.current = setTimeout(() => {
+          if (!isActiveRun()) {
+            collaboratorRefreshTimeoutRef.current = null;
+            return;
+          }
+          collaboratorRefreshTimeoutRef.current = null;
+          void loadLiveRaces();
+        }, 250);
+      };
+
+      try {
+        // For any collaborator change, refresh the races list to get updated data.
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+          scheduleRefresh();
+        }
+      } catch (err) {
+        logger.error('Error handling race_collaborators realtime event:', err);
+      }
+    };
+
+    // Subscribe to race_participants changes for this user to keep timeline membership
+    // in sync (joins, withdrawals, re-joins).
+    const participantsChannelName = createChannelName('user-participants', userId);
+    const onParticipantsPayload = (payload: any) => {
+      if (!isActiveRun()) return;
+      try {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+          if (collaboratorRefreshTimeoutRef.current) {
+            clearTimeout(collaboratorRefreshTimeoutRef.current);
+          }
+          collaboratorRefreshTimeoutRef.current = setTimeout(() => {
+            if (!isActiveRun()) {
+              collaboratorRefreshTimeoutRef.current = null;
+              return;
+            }
+            collaboratorRefreshTimeoutRef.current = null;
+            void loadLiveRaces();
+          }, 250);
+        }
+      } catch (err) {
+        logger.error('Error handling race_participants realtime event:', err);
+      }
+    };
+    const collaboratorsSubscribed = safeSubscribe(
+      collaboratorsChannelName,
+      {
+        table: 'race_collaborators',
+        filter: `user_id=eq.${userId}`,
+      },
+      onCollaboratorsPayload
+    );
+    const participantsSubscribed = safeSubscribe(
+      participantsChannelName,
+      {
+        table: 'race_participants',
+        filter: `user_id=eq.${userId}`,
+      },
+      onParticipantsPayload
+    );
+
+    if (!regattasSubscribed || !raceEventsSubscribed || !collaboratorsSubscribed || !participantsSubscribed) {
+      void teardownChannels();
     }
 
     return () => {
-      try {
-        realtimeService.unsubscribe(channelName);
-        realtimeService.unsubscribe(raceEventsChannelName);
-        realtimeService.unsubscribe(collaboratorsChannelName);
-      } catch (err) {
-        logger.error('Error unsubscribing from realtime:', err);
+      effectDisposed = true;
+      if (collaboratorRefreshTimeoutRef.current) {
+        clearTimeout(collaboratorRefreshTimeoutRef.current);
+        collaboratorRefreshTimeoutRef.current = null;
       }
+      void teardownChannels();
     };
-  }, [userId, loadLiveRaces]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadLiveRaces is stable for a given userId; including it causes infinite re-renders
+  }, [userId]);
 
   return {
     liveRaces,
@@ -641,7 +1071,18 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
     }
 
     // Also check race_results table for individual race results
-    const { data: raceResults, error: raceResultsError } = await supabase
+    let raceResults: {
+      id: string;
+      regatta_id?: string | null;
+      race_id?: string | null;
+      race_number?: number | null;
+      sailor_id: string;
+      position?: number | null;
+      points?: number | null;
+      status_code?: string | null;
+    }[] | null = null;
+    let raceResultsError: any = null;
+    const primaryRaceResults = await supabase
       .from('race_results')
       .select(`
         id,
@@ -653,23 +1094,61 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
         status_code
       `)
       .eq('sailor_id', userId);
+    raceResults = primaryRaceResults.data as any;
+    raceResultsError = primaryRaceResults.error;
+
+    if (
+      raceResultsError &&
+      isMissingIdColumn(raceResultsError, 'race_results', 'regatta_id')
+    ) {
+      const fallbackRaceResults = await supabase
+        .from('race_results')
+        .select(`
+          id,
+          race_id,
+          race_number,
+          sailor_id,
+          position,
+          points,
+          status_code
+        `)
+        .eq('sailor_id', userId);
+      raceResults = fallbackRaceResults.data as any;
+      raceResultsError = fallbackRaceResults.error;
+    }
 
     if (!raceResultsError && raceResults) {
       for (const result of raceResults) {
-        const regattaId = result.regatta_id;
+        const regattaId = result.regatta_id || result.race_id;
 
         if (regattaId && validRegattaIds.includes(regattaId) && !resultsMap.has(regattaId)) {
           // Count fleet size for this regatta + race_number
-          const { count } = await supabase
+          let count = 0;
+          const primaryCount = await supabase
             .from('race_results')
             .select('*', { count: 'exact', head: true })
             .eq('regatta_id', regattaId)
             .eq('race_number', result.race_number);
+          count = primaryCount.count || 0;
 
+          if (
+            primaryCount.error &&
+            isMissingIdColumn(primaryCount.error, 'race_results', 'regatta_id')
+          ) {
+            const fallbackCount = await supabase
+              .from('race_results')
+              .select('*', { count: 'exact', head: true })
+              .eq('race_id', regattaId)
+              .eq('race_number', result.race_number);
+            count = fallbackCount.count || 0;
+          }
+
+          const normalizedPosition = result.position ?? 0;
+          const normalizedPoints = result.points ?? normalizedPosition;
           resultsMap.set(regattaId, {
             regattaId,
-            position: result.position,
-            points: result.points || result.position,
+            position: normalizedPosition,
+            points: normalizedPoints,
             fleetSize: count || 0,
             status: (result.status_code?.toLowerCase() || 'finished') as UserRaceResult['status'],
           });
@@ -720,23 +1199,41 @@ export async function fetchUserResults(userId: string, regattaIds: string[]): Pr
 export function useUserRaceResults(userId?: string, regattaIds?: string[]) {
   const [results, setResults] = useState<Map<string, UserRaceResult>>(new Map());
   const [loading, setLoading] = useState(false);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
   const loadResults = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === loadRunIdRef.current;
+
     if (!userId || !regattaIds || regattaIds.length === 0) {
+      if (!canCommit()) return;
+      setResults(new Map());
+      setLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setLoading(true);
     try {
       const fetchedResults = await fetchUserResults(userId, regattaIds);
+      if (!canCommit()) return;
       setResults(fetchedResults);
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
-  }, [userId, regattaIds?.join(',')]);
+  }, [userId, regattaIds]);
 
   useEffect(() => {
-    loadResults();
+    void loadResults();
   }, [loadResults]);
 
   return {

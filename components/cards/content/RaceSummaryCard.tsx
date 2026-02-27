@@ -34,6 +34,7 @@ import { useRouter } from 'expo-router';
 
 import { CrewHub } from '@/components/crew';
 import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
+import { ModuleDetailBottomSheet } from '@/components/races/ModuleDetailBottomSheet';
 import { RaceChatDrawer } from '@/components/races/RaceChatDrawer';
 import { RaceStartInfoBar } from '@/components/races/RaceStartInfoBar';
 import { CrewAvatarStack } from '@/components/races/CrewAvatarStack';
@@ -59,12 +60,14 @@ import { detectRaceType } from '@/lib/races/raceDataUtils';
 import {
   CardContentProps,
   RACE_PHASES,
-  RACE_PHASE_SHORT_LABELS,
   RacePhase,
   getCurrentPhaseForRace,
 } from '../types';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useInterest } from '@/providers/InterestProvider';
 import {
   AfterRaceContent,
+  ConfigDrivenPhaseContent,
   DaysBeforeContent,
   OnWaterContent,
 } from './phases';
@@ -99,12 +102,7 @@ const DISTANCE_COLORS = {
   routeBg: '#F5F3FF',
 } as const;
 
-// Pill-style phase labels (Prep/Race/Review)
-const RACE_PHASE_PILL_LABELS: Record<RacePhase, string> = {
-  days_before: 'Prep',
-  on_water: 'Race',
-  after_race: 'Review',
-};
+// Phase labels are now driven by useInterestEventConfig() — see phaseTabs useMemo below
 
 // =============================================================================
 // ERROR BOUNDARY for phase content debugging
@@ -622,6 +620,9 @@ export function RaceSummaryCard({
   refetchTrigger,
 }: CardContentProps) {
   const router = useRouter();
+  const { currentInterest } = useInterest();
+  const eventConfig = useInterestEventConfig();
+  const isSailing = currentInterest?.slug === 'sail-racing';
 
   // Temporal phase state
   const currentPhase = useMemo(
@@ -632,6 +633,9 @@ export function RaceSummaryCard({
 
   // Detail bottom sheet state
   const [activeDetailSheet, setActiveDetailSheet] = useState<DetailCardType | null>(null);
+
+  // Module detail sheet state (non-sailing interests)
+  const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
 
   // Detailed Review modal state
   const [showDetailedReview, setShowDetailedReview] = useState(false);
@@ -717,6 +721,16 @@ export function RaceSummaryCard({
   // Handler to close detail sheet
   const handleCloseDetailSheet = useCallback(() => {
     setActiveDetailSheet(null);
+  }, []);
+
+  // Handler to open module detail sheet (non-sailing interests)
+  const handleModulePress = useCallback((moduleId: string) => {
+    setActiveModuleId(moduleId);
+  }, []);
+
+  // Handler to close module detail sheet
+  const handleCloseModuleSheet = useCallback(() => {
+    setActiveModuleId(null);
   }, []);
 
   // Handler for scroll position tracking (shows edge gradients + toolbar hide/show)
@@ -969,24 +983,25 @@ export function RaceSummaryCard({
   // Render race type badge component
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
 
-  // Phase tabs data for IOSSegmentedControl (Prep/Launch/Race/Review)
+  // Phase tabs data for IOSSegmentedControl — labels driven by interest config
   // Tufte: Include completion counts directly in labels for maximum information density
   const phaseTabs = useMemo(() => {
     return RACE_PHASES.map((phase) => {
       const count = phaseCounts[phase];
       const countLabel = formatPhaseCompletionLabel(count.completed, count.total);
+      const phaseLabel = eventConfig.phaseLabels[phase]?.short ?? phase;
       return {
         value: phase,
-        label: `${RACE_PHASE_PILL_LABELS[phase]}${countLabel}`,
+        label: `${phaseLabel}${countLabel}`,
       };
     });
-  }, [phaseCounts]);
+  }, [phaseCounts, eventConfig.phaseLabels]);
 
   // Handle phase tab change with haptic feedback
   const handlePhaseChange = useCallback((phase: RacePhase) => {
     // DEBUG: Log phase tab selection
     if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
-      (window as any).__PERIOD_DEBUG__.log('RaceSummaryCard.phaseTab', RACE_PHASE_PILL_LABELS[phase], { phase, raceId: race.id });
+      (window as any).__PERIOD_DEBUG__.log('RaceSummaryCard.phaseTab', eventConfig.phaseLabels[phase]?.short ?? phase, { phase, raceId: race.id });
     }
     setSelectedPhase(phase);
   }, [race.id]);
@@ -1033,6 +1048,19 @@ export function RaceSummaryCard({
 
   // Helper to render phase-specific content
   const renderPhaseContent = () => {
+    // Non-sailing interests use config-driven rendering
+    if (!isSailing) {
+      return (
+        <ConfigDrivenPhaseContent
+          phase={selectedPhase}
+          config={eventConfig}
+          race={cardRaceData}
+          onModulePress={handleModulePress}
+        />
+      );
+    }
+
+    // Sailing retains rich hardcoded phase content
     switch (selectedPhase) {
       case 'days_before':
         return (
@@ -1432,7 +1460,7 @@ export function RaceSummaryCard({
           </ScrollView>
         </Pressable>
 
-      {/* Detail Bottom Sheet for drill-down */}
+      {/* Detail Bottom Sheet for drill-down (sailing) */}
       <DetailBottomSheet
         type={activeDetailSheet}
         isOpen={activeDetailSheet !== null}
@@ -1440,6 +1468,16 @@ export function RaceSummaryCard({
         raceId={race.id}
         raceData={raceDataForDetailCards}
       />
+
+      {/* Module Detail Bottom Sheet for non-sailing interests */}
+      {!isSailing && (
+        <ModuleDetailBottomSheet
+          moduleId={activeModuleId}
+          isOpen={activeModuleId !== null}
+          onClose={handleCloseModuleSheet}
+          config={eventConfig}
+        />
+      )}
 
       {/* Detailed Review Modal for full post-race analysis */}
       <DetailedReviewModal

@@ -26,6 +26,9 @@ import {
   type SkillAdvice,
   type SkillDisplayDefinition,
 } from '@/components/coaching/skillInvocation';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('PhaseSkillButtons');
 
 interface PhaseSkillButtonsProps {
   phase: RacePhase;
@@ -141,7 +144,7 @@ export function PhaseSkillButtons({
         Alert.alert(title, message);
       }
     } catch (error) {
-      console.error('[PhaseSkillButtons] Skill invocation failed:', error);
+      logger.error('Skill invocation failed', error);
       const message = 'Unable to get AI advice right now. Please try again.';
       if (Platform.OS === 'web') {
         window.alert(message);

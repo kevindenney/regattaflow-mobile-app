@@ -54,6 +54,7 @@ import {
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { Audio } from 'expo-av';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -87,6 +88,8 @@ interface RaceResult {
   elapsed_seconds: number | null;
   status: 'racing' | 'finished' | 'dnf' | 'dns' | 'dsq' | 'ocs' | 'dnc' | 'ret' | 'raf' | 'bfd' | 'ufd';
 }
+
+type RaceResultsIdColumn = 'regatta_id' | 'race_id';
 
 interface SignalFlag {
   code: string;
@@ -152,6 +155,27 @@ export default function RaceCommitteeConsole() {
   const soundRef = useRef<Audio.Sound | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const raceResultsIdColumnRef = useRef<RaceResultsIdColumn>('regatta_id');
+
+  const withRaceResultsColumnFallback = async <T,>(
+    operation: (column: RaceResultsIdColumn) => Promise<{ data: T | null; error: any }>
+  ) => {
+    const currentColumn = raceResultsIdColumnRef.current;
+    let result = await operation(currentColumn);
+    if (
+      result.error &&
+      currentColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_results', currentColumn)
+    ) {
+      const fallbackColumn: RaceResultsIdColumn = 'race_id';
+      result = await operation(fallbackColumn);
+      if (!result.error) {
+        raceResultsIdColumnRef.current = fallbackColumn;
+      }
+    }
+
+    return result;
+  };
 
   // Animation values
   const timerPulse = useSharedValue(1);
@@ -179,7 +203,6 @@ export default function RaceCommitteeConsole() {
         event: '*',
         schema: 'public',
         table: 'race_results',
-        filter: `regatta_id=eq.${regattaId}`,
       }, () => {
         loadResults();
       })
@@ -231,19 +254,21 @@ export default function RaceCommitteeConsole() {
 
   const loadResults = async () => {
     try {
-      const { data, error } = await supabase
-        .from('race_results')
-        .select(`
-          id,
-          entry_id,
-          finish_position,
-          finish_time,
-          elapsed_time,
-          status,
-          race_entries(sail_number, boat_name)
-        `)
-        .eq('regatta_id', regattaId)
-        .eq('race_number', raceNumber);
+      const { data, error } = await withRaceResultsColumnFallback((column) =>
+        supabase
+          .from('race_results')
+          .select(`
+            id,
+            entry_id,
+            finish_position,
+            finish_time,
+            elapsed_time,
+            status,
+            race_entries(sail_number, boat_name)
+          `)
+          .eq(column, regattaId)
+          .eq('race_number', raceNumber)
+      );
 
       if (error) throw error;
 
@@ -373,17 +398,21 @@ export default function RaceCommitteeConsole() {
 
     // Initialize results for all entries
     try {
-      const initialResults = entries.map(entry => ({
-        regatta_id: regattaId,
-        race_number: raceNumber,
-        entry_id: entry.id,
-        start_time: now.toISOString(),
-        status: 'racing',
-      }));
-
-      await supabase.from('race_results').upsert(initialResults, {
-        onConflict: 'regatta_id,race_number,entry_id',
-      });
+      const { error } = await withRaceResultsColumnFallback((column) =>
+        supabase.from('race_results').upsert(
+          entries.map((entry) => ({
+            [column]: regattaId,
+            race_number: raceNumber,
+            entry_id: entry.id,
+            start_time: now.toISOString(),
+            status: 'racing',
+          })),
+          {
+            onConflict: `${column},race_number,entry_id`,
+          }
+        )
+      );
+      if (error) throw error;
 
       await supabase.from('race_start_sequences').upsert({
         regatta_id: regattaId,
@@ -472,17 +501,19 @@ export default function RaceCommitteeConsole() {
     const nextPosition = finishQueue.length + 1;
 
     try {
-      const { error } = await supabase
-        .from('race_results')
-        .update({
-          finish_time: finishTime.toISOString(),
-          finish_position: nextPosition,
-          elapsed_time: elapsed,
-          status: 'finished',
-        })
-        .eq('regatta_id', regattaId)
-        .eq('race_number', raceNumber)
-        .eq('entry_id', entry.id);
+      const { error } = await withRaceResultsColumnFallback((column) =>
+        supabase
+          .from('race_results')
+          .update({
+            finish_time: finishTime.toISOString(),
+            finish_position: nextPosition,
+            elapsed_time: elapsed,
+            status: 'finished',
+          })
+          .eq(column, regattaId)
+          .eq('race_number', raceNumber)
+          .eq('entry_id', entry.id)
+      );
 
       if (error) throw error;
 
@@ -502,12 +533,15 @@ export default function RaceCommitteeConsole() {
 
   const updateStatus = async (entryId: string, status: RaceResult['status']) => {
     try {
-      await supabase
-        .from('race_results')
-        .update({ status })
-        .eq('regatta_id', regattaId)
-        .eq('race_number', raceNumber)
-        .eq('entry_id', entryId);
+      const { error } = await withRaceResultsColumnFallback((column) =>
+        supabase
+          .from('race_results')
+          .update({ status })
+          .eq(column, regattaId)
+          .eq('race_number', raceNumber)
+          .eq('entry_id', entryId)
+      );
+      if (error) throw error;
 
       loadResults();
     } catch (error) {
@@ -1748,4 +1782,3 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 });
-

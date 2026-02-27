@@ -29,7 +29,7 @@ import { X, MapPin, ChevronRight } from 'lucide-react-native';
 import { format, addDays } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { tufteFormStyles, TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from './tufteFormStyles';
+import { TUFTE_FORM_COLORS, TUFTE_FORM_SPACING } from './tufteFormStyles';
 import { TUFTE_BACKGROUND, IOS_COLORS } from '@/components/cards/constants';
 import { TufteRaceTypeSelector } from './TufteRaceTypeSelector';
 import { TufteSectionLabel } from './TufteSectionLabel';
@@ -52,6 +52,7 @@ import type { ExtractedRaceData } from '../ExtractionResults';
 import type { CourseMark, RouteWaypoint } from '@/hooks/useAddRace';
 import type { MultiRaceExtractedData, ExtractedData } from '../AIValidationScreen';
 import { MultiRaceSelectionScreen } from '../MultiRaceSelectionScreen';
+import { createLogger } from '@/lib/utils/logger';
 
 // =============================================================================
 // TYPES
@@ -77,7 +78,7 @@ interface FormState {
   // Course/Map data from AI extraction or manual entry
   marks: CourseMark[];
   routeWaypoints: RouteWaypoint[];
-  racingAreaPolygon: Array<{ lat: number; lng: number }>;
+  racingAreaPolygon: { lat: number; lng: number }[];
   // Type-specific
   fleet: FleetRaceData;
   distance: DistanceRaceData;
@@ -88,6 +89,8 @@ interface FormState {
 interface FormErrors {
   [key: string]: string;
 }
+
+const logger = createLogger('TufteAddRaceForm');
 
 // =============================================================================
 // CONSTANTS
@@ -142,7 +145,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
   // Multi-race selection state
   const [showMultiRaceModal, setShowMultiRaceModal] = useState(false);
   const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
-  const [isCreatingMultiple, setIsCreatingMultiple] = useState(false);
+  const [_isCreatingMultiple, setIsCreatingMultiple] = useState(false);
   // Source document tracking for provenance
   const [sourceDocumentIds, setSourceDocumentIds] = useState<string[]>([]);
 
@@ -499,7 +502,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       setShowMultiRaceModal(false);
       onClose();
     } catch (error) {
-      console.error('[TufteAddRaceForm] Failed to create multiple races:', error);
+      logger.error('Failed to create multiple races', error);
       // Keep modal open so user can retry or select fewer races
     } finally {
       setIsCreatingMultiple(false);
@@ -626,7 +629,7 @@ export function TufteAddRaceForm({ visible, onClose, onSave }: TufteAddRaceFormP
       await onSave(raceData);
       onClose();
     } catch (error) {
-      console.error('[TufteAddRaceForm] Save failed:', error);
+      logger.error('Save failed', error);
     } finally {
       setIsSaving(false);
     }

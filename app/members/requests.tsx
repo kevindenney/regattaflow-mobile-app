@@ -43,13 +43,16 @@ export default function MembershipRequestsScreen() {
 
       const { data: clubProfile } = await supabase
         .from('club_profiles')
-        .select('id')
+        .select('id, yacht_club_id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (clubProfile) {
-        setClubId(clubProfile.id);
-        await loadRequests(clubProfile.id);
+      const resolvedClubId =
+        clubProfile?.yacht_club_id || clubProfile?.id || null;
+
+      if (resolvedClubId) {
+        setClubId(resolvedClubId);
+        await loadRequests(resolvedClubId);
       }
     } catch (error) {
       console.error('Error loading club and requests:', error);

@@ -3,7 +3,7 @@
  * Automatically detects current race phase based on time and GPS position
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { RacePhase } from '@/services/ai/SkillManagementService';
 
 interface RacePhaseContext {
@@ -61,13 +61,13 @@ export function useRacePhaseDetection(raceData: RaceData): RacePhaseContext {
     return () => clearInterval(interval);
   }, [startTimeKey, positionKey, marksKey, phase]);
 
-  return {
+  return useMemo(() => ({
     phase,
     timeInPhase,
     nextPhase: getNextPhase(phase),
     timeToNextPhase: estimateTimeToNextPhase(phase, raceData),
     confidence
-  };
+  }), [phase, timeInPhase, confidence, startTimeKey]);
 }
 
 /**

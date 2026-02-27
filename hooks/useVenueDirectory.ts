@@ -4,7 +4,7 @@
  * Fetches all sailing venues for the venue directory landing page.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 
 export interface VenueDirectoryItem {
@@ -19,8 +19,21 @@ export function useVenueDirectory() {
   const [allVenues, setAllVenues] = useState<VenueDirectoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const fetchVenues = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const canCommit = () => isMountedRef.current && runId === fetchRunIdRef.current;
+
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -30,16 +43,19 @@ export function useVenueDirectory() {
         .order('name');
 
       if (dbError) throw dbError;
+      if (!canCommit()) return;
       setAllVenues(data || []);
     } catch (err: any) {
+      if (!canCommit()) return;
       setError(err.message || 'Failed to fetch venues');
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchVenues();
+    void fetchVenues();
   }, [fetchVenues]);
 
   return { allVenues, isLoading, error, refetch: fetchVenues };

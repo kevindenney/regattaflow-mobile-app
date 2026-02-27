@@ -8,6 +8,7 @@ import { LiveWeatherData } from '@/hooks/useVenueLiveWeather';
 import { VenueRace } from '@/hooks/useVenueRaces';
 import { VenueRacingArea } from '@/hooks/useVenueRacingAreas';
 import { VenueFleet } from '@/hooks/useVenueFleetInfo';
+import { createLogger } from '@/lib/utils/logger';
 
 // Cache key prefixes
 const CACHE_PREFIX = '@venue_cache_';
@@ -23,6 +24,7 @@ const RACES_TTL = 6 * 60 * 60 * 1000; // 6 hours
 const AREAS_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const FLEET_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const INTEL_TTL = 12 * 60 * 60 * 1000; // 12 hours
+const logger = createLogger('VenueOfflineCacheService');
 
 interface CachedData<T> {
   data: T;
@@ -48,7 +50,7 @@ async function readCache<T>(key: string): Promise<{ data: T; cachedAt: Date; isS
       isStale,
     };
   } catch (error) {
-    console.error('[VenueOfflineCache] Error reading cache:', error);
+    logger.error('[VenueOfflineCache] Error reading cache:', error);
     return null;
   }
 }
@@ -66,7 +68,7 @@ async function writeCache<T>(key: string, data: T, ttl: number): Promise<boolean
     await AsyncStorage.setItem(key, JSON.stringify(cached));
     return true;
   } catch (error) {
-    console.error('[VenueOfflineCache] Error writing cache:', error);
+    logger.error('[VenueOfflineCache] Error writing cache:', error);
     return false;
   }
 }
@@ -143,7 +145,7 @@ export class VenueOfflineCacheService {
     try {
       await AsyncStorage.multiRemove(keys);
     } catch (error) {
-      console.error('[VenueOfflineCache] Error clearing venue cache:', error);
+      logger.error('[VenueOfflineCache] Error clearing venue cache:', error);
     }
   }
 
@@ -158,7 +160,7 @@ export class VenueOfflineCacheService {
         await AsyncStorage.multiRemove(cacheKeys);
       }
     } catch (error) {
-      console.error('[VenueOfflineCache] Error clearing all cache:', error);
+      logger.error('[VenueOfflineCache] Error clearing all cache:', error);
     }
   }
 
@@ -205,7 +207,7 @@ export class VenueOfflineCacheService {
         oldestItem: cacheKeys.length > 0 ? new Date(oldestTime) : undefined,
       };
     } catch (error) {
-      console.error('[VenueOfflineCache] Error getting cache stats:', error);
+      logger.error('[VenueOfflineCache] Error getting cache stats:', error);
       return {
         totalItems: 0,
         venueCount: 0,
@@ -241,7 +243,7 @@ export class VenueOfflineCacheService {
 
       return keysToRemove.length;
     } catch (error) {
-      console.error('[VenueOfflineCache] Error pruning cache:', error);
+      logger.error('[VenueOfflineCache] Error pruning cache:', error);
       return 0;
     }
   }
@@ -280,4 +282,3 @@ export function formatCacheAge(cachedAt: Date): string {
 }
 
 export default venueOfflineCache;
-

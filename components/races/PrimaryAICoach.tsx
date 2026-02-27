@@ -22,6 +22,9 @@ import {
   type CoachingSkillKey,
   type SkillAdvice,
 } from '@/components/coaching/skillInvocation';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('PrimaryAICoach');
 
 const PHASE_LABELS: Record<RacePhase, string> = {
   'pre-race': 'Pre-Race Preparation',
@@ -172,7 +175,7 @@ export function PrimaryAICoach({
         onAdviceReady?.(payload);
         lastFetchPhaseRef.current = phase;
       } catch (err) {
-        console.error('[PrimaryAICoach] Failed to get advice', err);
+        logger.error('Failed to get advice', err);
         setError(
           err instanceof Error ? err.message : 'AI Coach temporarily unavailable'
         );

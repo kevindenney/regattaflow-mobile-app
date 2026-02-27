@@ -40,6 +40,8 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
   const [availableFleets, setAvailableFleets] = useState<Fleet[]>([]);
   const [userFleetMemberships, setUserFleetMemberships] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [participantsError, setParticipantsError] = useState<string | null>(null);
+  const [fleetsError, setFleetsError] = useState<string | null>(null);
   const [expandedView, setExpandedView] = useState(false);
   const [showFleetsExpanded, setShowFleetsExpanded] = useState(false);
   
@@ -73,6 +75,7 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
 
     try {
       setLoading(true);
+      setParticipantsError(null);
       
       // Add timeout to prevent infinite loading
       const timeoutPromise = new Promise<[]>((_, reject) => {
@@ -106,6 +109,7 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
         raceId,
         userId: user?.id,
       });
+      setParticipantsError(error?.message || 'Unable to load competitors.');
       setParticipants([]);
     } finally {
       setLoading(false);
@@ -130,9 +134,13 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
   };
 
   const loadAvailableFleets = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setAvailableFleets([]);
+      return;
+    }
 
     try {
+      setFleetsError(null);
       let fleets: Fleet[] = [];
       const memberships = new Set<string>();
 
@@ -192,6 +200,8 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
       setUserFleetMemberships(memberships);
     } catch (error) {
       console.error('Error loading fleets:', error);
+      setFleetsError('Unable to load available fleets.');
+      setAvailableFleets([]);
     }
   };
 
@@ -289,6 +299,18 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
           <Text style={styles.countText}>{visibleParticipants.length}</Text>
         </View>
       </View>
+
+      {fleetsError ? (
+        <View style={styles.errorBanner}>
+          <View style={styles.errorContent}>
+            <Ionicons name="warning-outline" size={16} color={colors.error[700]} />
+            <Text style={styles.errorText}>{fleetsError}</Text>
+          </View>
+          <TouchableOpacity onPress={loadAvailableFleets}>
+            <Text style={styles.errorAction}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Race Registration Button */}
       {!isRegistered ? (
@@ -405,6 +427,16 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
       {loading ? (
         <View style={styles.loadingState}>
           <Text style={styles.loadingText}>Loading racers...</Text>
+        </View>
+      ) : participantsError ? (
+        <View style={styles.errorBanner}>
+          <View style={styles.errorContent}>
+            <Ionicons name="warning-outline" size={16} color={colors.error[700]} />
+            <Text style={styles.errorText}>Unable to load competitors right now.</Text>
+          </View>
+          <TouchableOpacity onPress={loadParticipants}>
+            <Text style={styles.errorAction}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : visibleParticipants.length === 0 ? (
         <View style={styles.emptyState}>
@@ -741,6 +773,35 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     color: colors.text.secondary,
+  },
+  errorBanner: {
+    marginBottom: Spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.error[200],
+    backgroundColor: colors.error[50],
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  errorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.error[700],
+    flexShrink: 1,
+  },
+  errorAction: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.error[700],
   },
   emptyState: {
     alignItems: 'center',

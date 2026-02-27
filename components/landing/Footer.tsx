@@ -13,29 +13,30 @@ import { router } from 'expo-router';
 
 const SOCIAL_LINKS = {
   linkedin: 'https://www.linkedin.com/in/kevindenney',
-  instagram: 'https://instagram.com/regattaflow',
-  youtube: 'https://youtube.com/@regattaflow',
-  twitter: 'https://twitter.com/regattaflow',
+  instagram: 'https://instagram.com/betterat',
+  youtube: 'https://youtube.com/@betterat',
+  twitter: 'https://twitter.com/betterat',
 };
 
 const FOOTER_LINKS = {
-  product: [
-    { label: 'For Sailors', href: '/#sailors' },
-    { label: 'For Coaches', href: '/#coaches' },
-    { label: 'For Clubs', href: '/#clubs' },
+  interests: [
+    { label: 'Sail Racing', href: '/sail-racing' },
+    { label: 'Nursing', href: '/nursing' },
+    { label: 'Drawing', href: '/drawing' },
+    { label: 'Fitness', href: '/fitness' },
     { label: 'Pricing', href: '/pricing' },
   ],
   company: [
     { label: 'About', href: '/about' },
     { label: 'Blog', href: '/blog' },
     { label: 'Careers', href: '/careers' },
-    { label: 'Contact', href: 'mailto:hello@regattaflow.io' },
+    { label: 'Contact', href: 'mailto:hello@betterat.com' },
   ],
   resources: [
     { label: 'Help Center', href: '/support' },
     { label: 'Documentation', href: '/docs' },
     { label: 'API', href: '/developers' },
-    { label: 'Status', href: 'https://status.regattaflow.io' },
+    { label: 'Status', href: 'https://status.betterat.com' },
   ],
   legal: [
     { label: 'Privacy', href: '/privacy' },
@@ -82,15 +83,15 @@ export function Footer() {
           {/* Brand */}
           <View style={[styles.brandSection, isDesktop && styles.brandSectionDesktop]}>
             <View style={styles.logoRow}>
-              <Ionicons name="water-outline" size={28} color="#3E92CC" />
-              <Text style={styles.logoText}>RegattaFlow</Text>
+              <Ionicons name="trending-up-outline" size={28} color="#FFFFFF" />
+              <Text style={styles.logoText}>BetterAt</Text>
             </View>
             <Text style={styles.tagline}>
-              The Complete Sailing Ecosystem
+              One Platform, Every Interest
             </Text>
             <Text style={styles.description}>
-              Empowering sailors, coaches, and yacht clubs with AI-powered race strategy, 
-              performance analytics, and seamless regatta management.
+              The deliberate practice platform that helps you Plan, Do, and Review —
+              whatever you're working to improve. Structure meets passion.
             </Text>
 
             {/* Social Links */}
@@ -131,10 +132,10 @@ export function Footer() {
 
           {/* Links Grid */}
           <View style={[styles.linksGrid, isDesktop && styles.linksGridDesktop]}>
-            {/* Product Links */}
+            {/* Interests Links */}
             <View style={styles.linkColumn}>
-              <Text style={styles.linkColumnTitle}>Product</Text>
-              {FOOTER_LINKS.product.map((link) => (
+              <Text style={styles.linkColumnTitle}>Interests</Text>
+              {FOOTER_LINKS.interests.map((link) => (
                 <TouchableOpacity
                   key={link.label}
                   onPress={() => openLink(link.href)}
@@ -192,27 +193,27 @@ export function Footer() {
         {/* Newsletter Signup */}
         <View style={[styles.newsletterSection, isDesktop && styles.newsletterSectionDesktop]}>
           <View style={styles.newsletterContent}>
-            <Ionicons name="mail-outline" size={24} color="#3E92CC" />
+            <Ionicons name="mail-outline" size={24} color="#FFFFFF" />
             <View style={styles.newsletterText}>
               <Text style={styles.newsletterTitle}>Stay in the loop</Text>
               <Text style={styles.newsletterSubtitle}>
-                Get race strategy tips, product updates, and sailing insights.
+                Get practice tips, product updates, and performance insights.
               </Text>
             </View>
           </View>
           <TouchableOpacity 
             style={styles.newsletterButton}
-            onPress={() => openLink('mailto:newsletter@regattaflow.io?subject=Newsletter Signup')}
+            onPress={() => openLink('mailto:newsletter@betterat.com?subject=Newsletter Signup')}
           >
             <Text style={styles.newsletterButtonText}>Subscribe</Text>
-            <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+            <Ionicons name="arrow-forward" size={16} color="#1A1A1A" />
           </TouchableOpacity>
         </View>
 
         {/* Bottom Bar */}
         <View style={[styles.bottomBar, isDesktop && styles.bottomBarDesktop]}>
           <Text style={styles.copyright}>
-            © {new Date().getFullYear()} RegattaFlow. All rights reserved.
+            © {new Date().getFullYear()} BetterAt. All rights reserved.
           </Text>
           
           <View style={styles.bottomLinks}>
@@ -236,7 +237,7 @@ export function Footer() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#0A2463',
+    backgroundColor: '#1A1A1A',
     position: 'relative',
   },
   waveContainer: {
@@ -253,7 +254,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 80,
-    backgroundColor: '#0A2463',
+    backgroundColor: '#1A1A1A',
     borderTopLeftRadius: 100,
     borderTopRightRadius: 100,
     transform: [{ scaleX: 3 }],
@@ -306,12 +307,12 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#93C5FD',
+    color: 'rgba(255, 255, 255, 0.7)',
     marginBottom: 16,
   },
   description: {
     fontSize: 14,
-    color: '#BFDBFE',
+    color: 'rgba(255, 255, 255, 0.6)',
     lineHeight: 22,
     marginBottom: 24,
   },
@@ -362,7 +363,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    color: '#BFDBFE',
+    color: 'rgba(255, 255, 255, 0.6)',
     ...Platform.select({
       web: {
         cursor: 'pointer',
@@ -403,12 +404,12 @@ const styles = StyleSheet.create({
   },
   newsletterSubtitle: {
     fontSize: 14,
-    color: '#BFDBFE',
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   newsletterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#3E92CC',
+    backgroundColor: '#FFFFFF',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -423,7 +424,7 @@ const styles = StyleSheet.create({
   newsletterButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#1A1A1A',
   },
 
   // Bottom Bar
@@ -440,7 +441,7 @@ const styles = StyleSheet.create({
   },
   copyright: {
     fontSize: 14,
-    color: '#93C5FD',
+    color: 'rgba(255, 255, 255, 0.5)',
   },
   bottomLinks: {
     flexDirection: 'row',
@@ -449,7 +450,7 @@ const styles = StyleSheet.create({
   },
   bottomLinkText: {
     fontSize: 14,
-    color: '#BFDBFE',
+    color: 'rgba(255, 255, 255, 0.6)',
     ...Platform.select({
       web: {
         cursor: 'pointer',

@@ -20,7 +20,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
-  Switch,
   LayoutAnimation,
   UIManager,
 } from 'react-native';
@@ -29,18 +28,12 @@ import {
   ChevronRight,
   MapPin,
   Calendar,
-  Clock,
-  FileText,
-  Link,
-  Clipboard,
-  Upload,
   Sailboat,
   Route,
   Trophy,
   Users,
   Sparkles,
   Check,
-  AlertCircle,
 } from 'lucide-react-native';
 import { format, addDays } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -59,6 +52,7 @@ import type { MatchRaceData } from './MatchRaceFields';
 import type { TeamRaceData } from './TeamRaceFields';
 import type { MultiRaceExtractedData } from '../AIValidationScreen';
 import { MultiRaceSelectionScreen } from '../MultiRaceSelectionScreen';
+import { createLogger } from '@/lib/utils/logger';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -157,6 +151,7 @@ interface FormState {
 // =============================================================================
 
 const STORAGE_KEY_LAST_LOCATION = '@regattaflow/lastRaceLocation';
+const logger = createLogger('IOSAddRaceForm');
 
 // =============================================================================
 // HELPER COMPONENTS
@@ -229,8 +224,6 @@ const InputRow: React.FC<{
   error?: string;
   aiExtracted?: boolean;
 }> = ({ label, value, onChangeText, placeholder, required, isLast, keyboardType, autoFocus, error, aiExtracted }) => {
-  const [isFocused, setIsFocused] = useState(false);
-
   return (
     <View style={[styles.inputRow, !isLast && styles.listRowBorder]}>
       <Text style={styles.inputLabel}>
@@ -246,8 +239,6 @@ const InputRow: React.FC<{
           placeholderTextColor={IOS.colors.tertiaryLabel}
           keyboardType={keyboardType}
           autoFocus={autoFocus}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
         />
         {aiExtracted && (
           <View style={styles.aiIndicator}>
@@ -307,38 +298,6 @@ const RaceTypeSelector: React.FC<{
   );
 };
 
-/** iOS-style segmented control for document input type */
-const DocumentInputTabs: React.FC<{
-  selected: 'url' | 'paste' | 'pdf';
-  onSelect: (tab: 'url' | 'paste' | 'pdf') => void;
-}> = ({ selected, onSelect }) => {
-  const tabs = [
-    { id: 'url' as const, label: 'URL', icon: <Link size={16} color={selected === 'url' ? IOS.colors.blue : IOS.colors.secondaryLabel} /> },
-    { id: 'paste' as const, label: 'Paste', icon: <Clipboard size={16} color={selected === 'paste' ? IOS.colors.blue : IOS.colors.secondaryLabel} /> },
-    { id: 'pdf' as const, label: 'PDF', icon: <Upload size={16} color={selected === 'pdf' ? IOS.colors.blue : IOS.colors.secondaryLabel} /> },
-  ];
-
-  return (
-    <View style={styles.segmentedControl}>
-      {tabs.map(({ id, label, icon }) => (
-        <Pressable
-          key={id}
-          style={[styles.segment, selected === id && styles.segmentSelected]}
-          onPress={() => {
-            triggerHaptic('selection');
-            onSelect(id);
-          }}
-        >
-          {icon}
-          <Text style={[styles.segmentLabel, selected === id && styles.segmentLabelSelected]}>
-            {label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-};
-
 // =============================================================================
 // MAIN COMPONENT
 // =============================================================================
@@ -371,7 +330,7 @@ export function IOSAddRaceForm({ visible, onClose, onSave }: IOSAddRaceFormProps
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [documentInputKey, setDocumentInputKey] = useState(0);
   const [showMultiRaceModal, setShowMultiRaceModal] = useState(false);
-  const [multiRaceData, setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
+  const [multiRaceData, _setMultiRaceData] = useState<MultiRaceExtractedData | null>(null);
   const [sourceDocumentIds, setSourceDocumentIds] = useState<string[]>([]);
   const [showAISection, setShowAISection] = useState(true);
   const [showSeasonModal, setShowSeasonModal] = useState(false);
@@ -513,7 +472,7 @@ export function IOSAddRaceForm({ visible, onClose, onSave }: IOSAddRaceFormProps
       onClose();
     } catch (error) {
       triggerHaptic('error');
-      console.error('Failed to save race:', error);
+      logger.error('Failed to save race', error);
     } finally {
       setIsSaving(false);
     }
@@ -768,7 +727,7 @@ export function IOSAddRaceForm({ visible, onClose, onSave }: IOSAddRaceFormProps
           visible={showMultiRaceModal}
           data={multiRaceData}
           onClose={() => setShowMultiRaceModal(false)}
-          onConfirm={async (selectedRaces) => {
+          onConfirm={async (_selectedRaces) => {
             setShowMultiRaceModal(false);
             // Handle multi-race creation
           }}

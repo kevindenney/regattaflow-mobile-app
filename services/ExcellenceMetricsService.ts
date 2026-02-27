@@ -7,6 +7,10 @@
 
 import { supabase } from './supabase';
 import { logger } from '@/lib/utils/logger';
+import {
+  isMissingRelationError,
+  isMissingSupabaseColumn,
+} from '@/lib/utils/supabaseSchemaFallback';
 import { RaceChecklistService } from './RaceChecklistService';
 import type {
   ExcellenceMetrics,
@@ -538,7 +542,7 @@ export class ExcellenceMetricsService {
   ): Promise<OutcomeMetrics> {
     try {
       // Query race results for this sailor
-      let query = supabase
+      const runPrimaryQuery = () => supabase
         .from('race_results')
         .select(
           `
@@ -559,10 +563,34 @@ export class ExcellenceMetricsService {
         .order('created_at', { ascending: false })
         .limit(20);
 
+      const runFallbackQuery = () => supabase
+        .from('race_results')
+        .select(
+          `
+          id,
+          position,
+          fleet_size,
+          regatta_id,
+          race_id,
+          created_at
+        `
+        )
+        .eq('sailor_id', sailorId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
       // If season specified, filter by date range
       // (would need to join with seasons table for exact dates)
 
-      const { data: results, error } = await query;
+      let { data: results, error } = await runPrimaryQuery();
+      if (
+        isMissingSupabaseColumn(error, 'race_results.race_event_id') ||
+        isMissingRelationError(error)
+      ) {
+        const fallback = await runFallbackQuery();
+        results = fallback.data as any;
+        error = fallback.error;
+      }
 
       if (error) {
         logger.warn('Failed to get race results for outcome metrics', { error });
@@ -615,7 +643,7 @@ export class ExcellenceMetricsService {
 
       // Format recent results
       const recentResults: RaceResult[] = allResults.slice(0, 10).map((r) => ({
-        raceId: r.race_event_id,
+        raceId: r.race_event_id || r.regatta_id || r.race_id,
         position: r.position,
         fleetSize: r.fleet_size || undefined,
         date: r.race_events?.event_date || r.created_at,
@@ -627,7 +655,7 @@ export class ExcellenceMetricsService {
         averagePosition: Math.round(averagePosition * 10) / 10,
         positionTrend,
         bestFinish,
-        bestFinishRaceId: bestFinishResult?.race_event_id || undefined,
+        bestFinishRaceId: bestFinishResult?.race_event_id || bestFinishResult?.regatta_id || bestFinishResult?.race_id || undefined,
         recentResults,
       };
     } catch (error) {

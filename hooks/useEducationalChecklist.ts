@@ -7,9 +7,10 @@
  * - Calculating progress for each section
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { supabase } from '@/services/supabase';
 import { logger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import type { EducationalChecklistItem } from '@/types/checklists';
 
 interface UseEducationalChecklistOptions {
@@ -90,28 +91,72 @@ export function useEducationalChecklist({
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const completionsRef = useRef<Set<string>>(new Set(completions));
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const activeContextRef = useRef(`${raceId}|${userId ?? ''}|${sectionId}`);
+
+  useEffect(() => {
+    completionsRef.current = completions;
+  }, [completions]);
+
+  useEffect(() => {
+    activeContextRef.current = `${raceId}|${userId ?? ''}|${sectionId}`;
+  }, [raceId, userId, sectionId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
 
   // Load completions from Supabase on mount
   useEffect(() => {
     if (!userId || !raceId) {
+      const localCompletions = loadFromLocalStorage(raceId, sectionId);
+      setCompletions(localCompletions);
+      completionsRef.current = new Set(localCompletions);
+      setError(null);
       setIsLoading(false);
       return;
     }
 
-    let isMounted = true;
-
     async function loadCompletions() {
+      const runId = ++loadRunIdRef.current;
+      const contextKey = `${raceId}|${userId ?? ''}|${sectionId}`;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === loadRunIdRef.current &&
+        activeContextRef.current === contextKey;
       try {
+        if (!canCommit()) return;
         setIsLoading(true);
         setError(null);
 
         // Query completions from database
-        const { data, error: dbError } = await supabase
+        let data: { item_id: string; completed_at: string }[] | null = null;
+        let dbError: any = null;
+
+        const primaryLoad = await supabase
           .from('educational_checklist_completions')
           .select('item_id, completed_at')
           .eq('race_id', raceId)
           .eq('user_id', userId)
           .eq('section_id', sectionId);
+        data = primaryLoad.data;
+        dbError = primaryLoad.error;
+
+        if (isMissingIdColumn(dbError, 'educational_checklist_completions', 'race_id')) {
+          const fallbackLoad = await supabase
+            .from('educational_checklist_completions')
+            .select('item_id, completed_at')
+            .eq('regatta_id', raceId)
+            .eq('user_id', userId)
+            .eq('section_id', sectionId);
+          data = fallbackLoad.data;
+          dbError = fallbackLoad.error;
+        }
 
         if (dbError) {
           // Table might not exist yet, fall back to local storage
@@ -119,43 +164,42 @@ export function useEducationalChecklist({
           return;
         }
 
-        if (isMounted && data) {
+        if (canCommit() && data) {
           const completedIds = new Set(data.map((row) => row.item_id));
           setCompletions(completedIds);
           saveToLocalStorage(raceId, sectionId, completedIds);
         }
       } catch (err) {
-        if (isMounted) {
+        if (canCommit()) {
           logger.error('Error loading educational checklist completions', { error: err });
           // Keep local storage data on error
         }
       } finally {
-        if (isMounted) {
+        if (canCommit()) {
           setIsLoading(false);
         }
       }
     }
 
-    loadCompletions();
-
-    return () => {
-      isMounted = false;
-    };
+    void loadCompletions();
   }, [raceId, userId, sectionId]);
 
   // Toggle completion with optimistic update
   const toggleCompletion = useCallback(
     async (itemId: string) => {
-      const wasCompleted = completions.has(itemId);
-      const newCompletions = new Set(completions);
+      const previousCompletions = new Set(completionsRef.current);
+      const wasCompleted = previousCompletions.has(itemId);
+      const newCompletions = new Set(previousCompletions);
 
       // Optimistic update
+      if (!isMountedRef.current) return;
       if (wasCompleted) {
         newCompletions.delete(itemId);
       } else {
         newCompletions.add(itemId);
       }
       setCompletions(newCompletions);
+      completionsRef.current = new Set(newCompletions);
       saveToLocalStorage(raceId, sectionId, newCompletions);
 
       // Skip database update if no user
@@ -166,20 +210,34 @@ export function useEducationalChecklist({
       try {
         if (wasCompleted) {
           // Delete completion record
-          const { error: dbError } = await supabase
+          let dbError: any = null;
+          const primaryDelete = await supabase
             .from('educational_checklist_completions')
             .delete()
             .eq('race_id', raceId)
             .eq('user_id', userId)
             .eq('section_id', sectionId)
             .eq('item_id', itemId);
+          dbError = primaryDelete.error;
+
+          if (isMissingIdColumn(dbError, 'educational_checklist_completions', 'race_id')) {
+            const fallbackDelete = await supabase
+              .from('educational_checklist_completions')
+              .delete()
+              .eq('regatta_id', raceId)
+              .eq('user_id', userId)
+              .eq('section_id', sectionId)
+              .eq('item_id', itemId);
+            dbError = fallbackDelete.error;
+          }
 
           if (dbError) {
             logger.warn('Failed to delete checklist completion', { error: dbError });
           }
         } else {
           // Insert completion record
-          const { error: dbError } = await supabase
+          let dbError: any = null;
+          const primaryUpsert = await supabase
             .from('educational_checklist_completions')
             .upsert({
               race_id: raceId,
@@ -188,6 +246,20 @@ export function useEducationalChecklist({
               item_id: itemId,
               completed_at: new Date().toISOString(),
             });
+          dbError = primaryUpsert.error;
+
+          if (isMissingIdColumn(dbError, 'educational_checklist_completions', 'race_id')) {
+            const fallbackUpsert = await supabase
+              .from('educational_checklist_completions')
+              .upsert({
+                regatta_id: raceId,
+                user_id: userId,
+                section_id: sectionId,
+                item_id: itemId,
+                completed_at: new Date().toISOString(),
+              });
+            dbError = fallbackUpsert.error;
+          }
 
           if (dbError) {
             logger.warn('Failed to save checklist completion', { error: dbError });
@@ -196,11 +268,13 @@ export function useEducationalChecklist({
       } catch (err) {
         // Revert on error
         logger.error('Error toggling checklist completion', { error: err });
-        setCompletions(completions);
-        saveToLocalStorage(raceId, sectionId, completions);
+        if (!isMountedRef.current) return;
+        setCompletions(previousCompletions);
+        completionsRef.current = new Set(previousCompletions);
+        saveToLocalStorage(raceId, sectionId, previousCompletions);
       }
     },
-    [completions, raceId, userId, sectionId]
+    [raceId, userId, sectionId]
   );
 
   // Check if item is completed

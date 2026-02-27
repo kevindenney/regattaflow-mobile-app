@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ClubMember,
   MemberFilters,
   clubMemberService,
 } from '@/services/ClubMemberService';
-import { ClubRole } from '@/types/club';
+import { ClubRole, normalizeClubRole } from '@/types/club';
 
 interface UseClubMembersOptions {
   enabled?: boolean;
@@ -21,15 +21,8 @@ interface UseClubMembersResult {
 
 const createEmptyGrouped = (): Record<ClubRole, ClubMember[]> => ({
   admin: [],
-  race_officer: [],
-  scorer: [],
-  communications: [],
-  treasurer: [],
-  membership_manager: [],
-  sailing_manager: [],
-  race_committee: [],
-  instructor: [],
-  secretary: [],
+  race_admin: [],
+  volunteer_results: [],
   member: [],
   guest: [],
 });
@@ -43,9 +36,31 @@ export function useClubMembers(
   const [members, setMembers] = useState<ClubMember[]>([]);
   const [loading, setLoading] = useState<boolean>(Boolean(enabled && clubId));
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeContextRef = useRef(`${clubId ?? ''}|${enabled ? '1' : '0'}`);
+
+  useEffect(() => {
+    activeContextRef.current = `${clubId ?? ''}|${enabled ? '1' : '0'}`;
+  }, [clubId, enabled]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   const fetchMembers = useCallback(async () => {
+    const runId = ++fetchRunIdRef.current;
+    const contextKey = `${clubId ?? ''}|${enabled ? '1' : '0'}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeContextRef.current === contextKey;
+
     if (!clubId || !enabled) {
+      if (!canCommit()) return;
       setMembers([]);
       setLoading(false);
       setError(null);
@@ -57,23 +72,27 @@ export function useClubMembers(
 
     try {
       const results = await clubMemberService.getClubMembers(clubId, filters);
+      if (!canCommit()) return;
       setMembers(results);
     } catch (err) {
+      if (!canCommit()) return;
       setError(err as Error);
       setMembers([]);
     } finally {
+      if (!canCommit()) return;
       setLoading(false);
     }
   }, [clubId, enabled, filters]);
 
   useEffect(() => {
-    fetchMembers();
+    void fetchMembers();
   }, [fetchMembers]);
 
   const groupedByRole = useMemo(() => {
     const grouped = createEmptyGrouped();
     members.forEach((member) => {
-      grouped[member.role].push(member);
+      const normalizedRole = normalizeClubRole(member.role);
+      grouped[normalizedRole].push(member);
     });
     return grouped;
   }, [members]);

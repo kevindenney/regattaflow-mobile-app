@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useAIChatSession');
 
 const API_BASE =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
@@ -128,7 +131,7 @@ export function useAIChatSession(options: UseAIChatSessionOptions): UseAIChatSes
   useEffect(() => {
     if (autoLoad && ready) {
       loadHistory().catch((err) => {
-        console.error('[useAIChatSession] history load error', err);
+        logger.error('history load error', err);
       });
     }
   }, [autoLoad, loadHistory, ready]);

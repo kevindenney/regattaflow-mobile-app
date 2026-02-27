@@ -7,80 +7,149 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { createLogger } from '@/lib/utils/logger';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 const logger = createLogger('MapDebug');
-
-let maplibregl: any = null;
-
-if (Platform.OS === 'web') {
-  try {
-    // Inject CSS
-    if (typeof document !== 'undefined' && !document.getElementById('maplibre-css')) {
-      const link = document.createElement('link');
-      link.id = 'maplibre-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/maplibre-gl@3.5.2/dist/maplibre-gl.css';
-      document.head.appendChild(link);
-      logger.debug('MapLibre CSS injected');
-    }
-
-    // Load MapLibre GL
-    maplibregl = require('maplibre-gl');
-    logger.debug('MapLibre GL loaded', { typeofMapLibre: typeof maplibregl });
-  } catch (e) {
-    logger.error('Failed to load MapLibre GL:', e);
-  }
-}
+const MAP_STYLE = {
+  version: 8,
+  sources: {
+    'raster-tiles': {
+      type: 'raster',
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': '#f8fafc' },
+    },
+    {
+      id: 'raster-layer',
+      type: 'raster',
+      source: 'raster-tiles',
+      paint: { 'raster-opacity': 0.9 },
+    },
+  ],
+} as const;
 
 export default function MapDebugPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const maplibreRef = useRef<any>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onLoadRef = useRef<((...args: any[]) => void) | null>(null);
+  const onErrorRef = useRef<((...args: any[]) => void) | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
-    if (Platform.OS !== 'web' || !maplibregl || !mapContainerRef.current) {
-      setError('Not running on web or MapLibre not loaded');
+    if (Platform.OS !== 'web' || !mapContainerRef.current) {
+      setError('Not running on web');
       return;
     }
 
-    try {
-      logger.debug('Creating map instance');
+    let cancelled = false;
+    const initialize = async () => {
+      try {
+        if (typeof document !== 'undefined' && !document.getElementById('maplibre-css-debug')) {
+          ensureMapLibreCss('maplibre-css-debug');
+          logger.debug('MapLibre CSS injected');
+        }
 
-      const map = new maplibregl.Map({
-        container: mapContainerRef.current,
-        style: 'https://demotiles.maplibre.org/style.json',
-        center: [114.15, 22.28], // Hong Kong
-        zoom: 12
-      });
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibreRef.current = (maplibreModule as any).default || maplibreModule;
+        } catch (_moduleError) {
+          await ensureMapLibreScript('maplibre-gl-script-debug');
+          maplibreRef.current = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        const MapConstructor = maplibreRef.current?.Map;
+        const MarkerConstructor = maplibreRef.current?.Marker;
+        if (!MapConstructor || !MarkerConstructor || !mapContainerRef.current) {
+          throw new Error('MapLibre constructors unavailable');
+        }
 
-      map.on('load', () => {
-        logger.debug('Map loaded successfully');
-        setMapLoaded(true);
+        logger.debug('Creating map instance');
+        const map = new MapConstructor({
+          container: mapContainerRef.current,
+          style: MAP_STYLE,
+          center: [114.15, 22.28], // Hong Kong
+          zoom: 12
+        });
 
-        // Add a simple marker
-        new maplibregl.Marker({ color: '#FF0000' })
-          .setLngLat([114.15, 22.28])
-          .addTo(map);
+        loadTimeoutRef.current = setTimeout(() => {
+          if (cancelled) return;
+          setError('Map load timed out.');
+          setMapLoaded(false);
+        }, 8000);
 
-        logger.debug('Marker added');
-      });
+        const onLoad = () => {
+          if (cancelled) return;
+          logger.debug('Map loaded successfully');
+          if (loadTimeoutRef.current) {
+            clearTimeout(loadTimeoutRef.current);
+            loadTimeoutRef.current = null;
+          }
+          setMapLoaded(true);
 
-      map.on('error', (e: any) => {
-        logger.error('Map error:', e);
-        setError(`Map error: ${e.error?.message || 'Unknown'}`);
-      });
+          // Add a simple marker
+          new MarkerConstructor({ color: '#FF0000' })
+            .setLngLat([114.15, 22.28])
+            .addTo(map);
 
-      mapRef.current = map;
+          logger.debug('Marker added');
+        };
+        onLoadRef.current = onLoad;
+        map.on('load', onLoad);
 
-      return () => {
+        const onError = (e: any) => {
+          if (cancelled) return;
+          if (loadTimeoutRef.current) {
+            clearTimeout(loadTimeoutRef.current);
+            loadTimeoutRef.current = null;
+          }
+          logger.error('Map error:', e);
+          setError(`Map error: ${e.error?.message || 'Unknown'}`);
+        };
+        onErrorRef.current = onError;
+        map.on('error', onError);
+
+        mapRef.current = map;
+      } catch (e: any) {
+        if (!cancelled) {
+          if (loadTimeoutRef.current) {
+            clearTimeout(loadTimeoutRef.current);
+            loadTimeoutRef.current = null;
+          }
+          logger.error('Exception creating map:', e);
+          setError(`Exception: ${e.message}`);
+        }
+      }
+    };
+
+    void initialize();
+    return () => {
+      cancelled = true;
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+      if (mapRef.current) {
         logger.debug('Cleaning up map');
-        map.remove();
-      };
-    } catch (e: any) {
-      logger.error('Exception creating map:', e);
-      setError(`Exception: ${e.message}`);
-    }
+        if (onLoadRef.current) {
+          mapRef.current.off('load', onLoadRef.current);
+          onLoadRef.current = null;
+        }
+        if (onErrorRef.current) {
+          mapRef.current.off('error', onErrorRef.current);
+          onErrorRef.current = null;
+        }
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
   }, []);
 
   if (Platform.OS !== 'web') {

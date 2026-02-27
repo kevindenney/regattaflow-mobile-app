@@ -79,6 +79,8 @@ import type { RaceType } from '@/types/raceEvents';
 import { getLearningLinks, getLearningBrief, getItemCategory, getLessonLink, getLearningForItem } from '@/data/learningLinks';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { useFocusIntentForRace, useDismissFocusIntent } from '@/hooks/useFocusIntent';
+import { useAISuggestions } from '@/hooks/useAISuggestions';
+import { CrossInterestInsight } from '@/components/cards/plan/CrossInterestInsight';
 
 // Team collaboration components
 import {
@@ -587,6 +589,15 @@ export function DaysBeforeContent({
   // Focus intent for this race (set from a previous race's review)
   const { focusIntent } = useFocusIntentForRace(race.id);
   const { dismiss: dismissFocusIntent, isPending: isDismissingFocus } = useDismissFocusIntent();
+
+  // Cross-interest AI suggestions
+  const {
+    suggestions: aiSuggestions,
+    applySuggestion,
+    dismissSuggestion: dismissAISuggestion,
+    saveSuggestion,
+    hasSuggestions: hasAISuggestions,
+  } = useAISuggestions();
 
   // State for team invite modal
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -1660,6 +1671,21 @@ export function DaysBeforeContent({
                 </View>
               ))}
           </View>
+        </View>
+      )}
+
+      {/* Cross-Interest AI Suggestions */}
+      {hasAISuggestions && (
+        <View style={{ gap: 8, marginBottom: 12 }}>
+          {aiSuggestions.map((suggestion) => (
+            <CrossInterestInsight
+              key={suggestion.id}
+              suggestion={suggestion}
+              onApply={(s) => applySuggestion(s, race.id)}
+              onDismiss={dismissAISuggestion}
+              onSave={saveSuggestion}
+            />
+          ))}
         </View>
       )}
 

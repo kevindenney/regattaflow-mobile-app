@@ -6,8 +6,11 @@
  */
 
 import { supabase } from './supabase';
-import { ComprehensiveRaceExtractionAgent } from './agents/ComprehensiveRaceExtractionAgent';
 import { PDFExtractionService } from './PDFExtractionService';
+import { createLogger } from '@/lib/utils/logger';
+import { extractRaceDetailsFromText } from '@/lib/utils/raceExtraction';
+
+const logger = createLogger('UnifiedDocumentService');
 
 // =============================================================================
 // TYPES
@@ -249,7 +252,6 @@ export class UnifiedDocumentService {
       if (!source.file) throw new Error('File is required for upload source type');
       // Upload file to storage
       const { uri, name } = source.file;
-      const fileExt = name.split('.').pop() || 'pdf';
       const fileName = `${userId}/${Date.now()}_${name}`;
 
       const response = await fetch(uri);
@@ -305,7 +307,7 @@ export class UnifiedDocumentService {
     if (triggerExtraction) {
       // Don't await - let it run in background
       this.extractDocument(document.id, source).catch((err) => {
-        console.error('[UnifiedDocumentService] Background extraction failed:', err);
+        logger.error('[UnifiedDocumentService] Background extraction failed:', err);
       });
     }
 
@@ -454,7 +456,7 @@ export class UnifiedDocumentService {
 
     // Trigger extraction
     this.extractDocument(document.id, source).catch((err) => {
-      console.error('[UnifiedDocumentService] Amendment extraction failed:', err);
+      logger.error('[UnifiedDocumentService] Amendment extraction failed:', err);
     });
 
     return document;
@@ -467,13 +469,13 @@ export class UnifiedDocumentService {
     const { regattaId, documentId, extractedData, fieldConfidence = {} } = params;
 
     // Build provenance records for each extracted field
-    const provenanceRecords: Array<{
+    const provenanceRecords: {
       regatta_id: string;
       source_document_id: string;
       field_path: string;
       field_value: unknown;
       extraction_confidence: number | null;
-    }> = [];
+    }[] = [];
 
     const contributedFields: string[] = [];
 
@@ -508,7 +510,7 @@ export class UnifiedDocumentService {
         });
 
       if (provenanceError) {
-        console.error('[UnifiedDocumentService] Failed to upsert provenance:', provenanceError);
+        logger.error('[UnifiedDocumentService] Failed to upsert provenance:', provenanceError);
       }
     }
 
@@ -673,9 +675,8 @@ export class UnifiedDocumentService {
         throw new Error('Not enough content to extract');
       }
 
-      // Run AI extraction
-      const agent = new ComprehensiveRaceExtractionAgent();
-      const result = await agent.extractRaceDetails(textContent);
+      // Run AI extraction through the edge-function helper
+      const result = await extractRaceDetailsFromText(textContent);
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Extraction failed');
@@ -692,7 +693,7 @@ export class UnifiedDocumentService {
         .eq('id', documentId);
 
     } catch (error) {
-      console.error('[UnifiedDocumentService] Extraction error:', error);
+      logger.error('[UnifiedDocumentService] Extraction error:', error);
 
       // Update document with error
       await supabase

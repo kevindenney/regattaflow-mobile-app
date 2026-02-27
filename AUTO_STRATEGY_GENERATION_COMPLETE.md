@@ -200,7 +200,7 @@ Your AI strategy engine has complete knowledge of:
 
 Set in `.env`:
 ```
-EXPO_PUBLIC_ANTHROPIC_API_KEY=your-key-here
+ANTHROPIC_API_KEY=your-key-here
 ```
 
 ## 📚 Documentation Files Created
@@ -255,8 +255,8 @@ Card displays:
 
 ## 🚨 Important Notes
 
-1. **API Key Required**: Set `EXPO_PUBLIC_ANTHROPIC_API_KEY` in `.env`
-2. **Browser Mode**: Currently using `dangerouslyAllowBrowser: true` (development only)
+1. **API Key Required**: Set `ANTHROPIC_API_KEY` in `.env`
+2. **Browser Mode**: Currently using `server-side Edge Function proxy` (development only)
 3. **Production**: Move to backend API for production deployments
 4. **Skill Upload**: Optional but recommended for 60% cost savings
 5. **Fallback**: Works without skill, just uses more tokens

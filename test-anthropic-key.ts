@@ -9,7 +9,7 @@ console.log('='.repeat(50));
 console.log('ANTHROPIC API KEY TEST');
 console.log('='.repeat(50));
 
-const key = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
+const key = process.env.ANTHROPIC_API_KEY;
 
 console.log('API Key found:', !!key);
 console.log('API Key length:', key?.length || 0);
@@ -26,7 +26,7 @@ if (key && key.startsWith('sk-ant-')) {
   console.log('❌ API key is NOT properly configured');
   console.log('');
   console.log('Fix:');
-  console.log('1. Ensure .env file has: EXPO_PUBLIC_ANTHROPIC_API_KEY=sk-ant-...');
+  console.log('1. Ensure .env file has: ANTHROPIC_API_KEY=sk-ant-...');
   console.log('2. Restart your dev server');
 }
 

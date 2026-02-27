@@ -6,17 +6,20 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from 'react-native';
 import { ArrowLeft, PenLine } from 'lucide-react-native';
-import { Typography, Spacing, BorderRadius, colors } from '@/constants/designSystem';
-import { RaceType, RACE_TYPE_COLORS, RaceTypeBadge } from '../RaceTypeSelector';
+import { Typography, Spacing, colors } from '@/constants/designSystem';
+import { RaceType, RaceTypeBadge } from '../RaceTypeSelector';
 import { AIQuickEntry, InputMethod } from '../AIQuickEntry';
 import { ExtractionProgress, ExtractionStep } from '../ExtractionProgress';
 import { ExtractionResults, ExtractedRaceData, ExtractedField } from '../ExtractionResults';
-import { ComprehensiveRaceExtractionAgent } from '@/services/agents/ComprehensiveRaceExtractionAgent';
 import { PDFExtractionService } from '@/services/PDFExtractionService';
+import { createLogger } from '@/lib/utils/logger';
+import { extractRaceDetailsFromText } from '@/lib/utils/raceExtraction';
 
 type ExtractionState = 'input' | 'extracting' | 'results';
+
+const logger = createLogger('AIExtractionStep');
 
 interface AIExtractionStepProps {
   raceType: RaceType;
@@ -36,8 +39,6 @@ export function AIExtractionStep({
   const [extractionProgress, setExtractionProgress] = useState(0);
   const [extractedData, setExtractedData] = useState<ExtractedRaceData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const typeColors = RACE_TYPE_COLORS[raceType];
 
   // Handle AI extraction
   const handleExtract = useCallback(async (method: InputMethod, content: string | File) => {
@@ -124,7 +125,7 @@ export function AIExtractionStep({
 
             textContent = pdfResult.text;
           } catch (pdfError: any) {
-            console.error('[AIExtractionStep] PDF extraction failed:', pdfError);
+            logger.error('PDF extraction failed', pdfError);
             // Provide helpful error message
             throw new Error(
               `Could not extract text from this PDF URL. ${pdfError.message}\n\n` +
@@ -150,7 +151,7 @@ export function AIExtractionStep({
               );
             }
             // If direct fetch fails due to CORS, provide helpful message
-            console.error('[AIExtractionStep] URL fetch failed:', fetchError);
+            logger.error('URL fetch failed', fetchError);
             throw new Error(
               `Could not fetch content from this URL (likely blocked by CORS).\n\n` +
               'Try one of these options:\n' +
@@ -166,8 +167,7 @@ export function AIExtractionStep({
       setExtractionProgress(30);
       setExtractionStep('extracting_basic');
 
-      // Call the extraction agent
-      const agent = new ComprehensiveRaceExtractionAgent();
+      // Call extraction helper
 
       // Simulate progress updates
       const progressInterval = setInterval(() => {
@@ -190,7 +190,7 @@ export function AIExtractionStep({
         });
       }, 500);
 
-      const result = await agent.extractRaceDetails(textContent);
+      const result = await extractRaceDetailsFromText(textContent);
 
       clearInterval(progressInterval);
 
@@ -212,7 +212,7 @@ export function AIExtractionStep({
       }, 500);
 
     } catch (error) {
-      console.error('Extraction error:', error);
+      logger.error('Extraction error', error);
       setIsLoading(false);
       setState('input');
       Alert.alert(

@@ -8,6 +8,7 @@ import ProtestModal from '@/components/race-control/ProtestModal';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -58,6 +59,8 @@ interface RaceResult {
   elapsed_time?: string;
 }
 
+type RaceResultsIdColumn = 'regatta_id' | 'race_id';
+
 interface FlagControl {
   type: string;
   label: string;
@@ -104,6 +107,27 @@ export default function RaceControlScreen() {
   // Sound
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const countdownInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const raceResultsIdColumnRef = useRef<RaceResultsIdColumn>('regatta_id');
+
+  const withRaceResultsColumnFallback = async <T,>(
+    operation: (column: RaceResultsIdColumn) => Promise<{ data: T | null; error: any }>
+  ) => {
+    const currentColumn = raceResultsIdColumnRef.current;
+    let result = await operation(currentColumn);
+    if (
+      result.error &&
+      currentColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_results', currentColumn)
+    ) {
+      const fallbackColumn: RaceResultsIdColumn = 'race_id';
+      result = await operation(fallbackColumn);
+      if (!result.error) {
+        raceResultsIdColumnRef.current = fallbackColumn;
+      }
+    }
+
+    return result;
+  };
 
   // Load data
   useEffect(() => {
@@ -135,7 +159,6 @@ export default function RaceControlScreen() {
           event: '*',
           schema: 'public',
           table: 'race_results',
-          filter: `regatta_id=eq.${id}`,
         },
         () => {
           loadResults();
@@ -185,15 +208,17 @@ export default function RaceControlScreen() {
   const loadResults = async () => {
     if (!clubId) return;
     try {
-      const { data, error } = await supabase
-        .from('race_results')
-        .select(`
-          *,
-          race_entries!inner(sail_number, entry_number)
-        `)
-        .eq('regatta_id', id)
-        .eq('race_number', raceNumber)
-        .order('finish_position', { ascending: true });
+      const { data, error } = await withRaceResultsColumnFallback((column) =>
+        supabase
+          .from('race_results')
+          .select(`
+            *,
+            race_entries!inner(sail_number, entry_number)
+          `)
+          .eq(column, id)
+          .eq('race_number', raceNumber)
+          .order('finish_position', { ascending: true })
+      );
 
       if (error) throw error;
 
@@ -276,16 +301,18 @@ export default function RaceControlScreen() {
         status: 'completed',
       });
 
-      // Initialize results for all entries with DNS status
-      const initialResults = entries.map(entry => ({
-        regatta_id: id!,
-        race_number: raceNumber,
-        entry_id: entry.id,
-        start_time: now.toISOString(),
-        status: 'racing' as const,
-      }));
-
-      await supabase.from('race_results').upsert(initialResults);
+      // Initialize results for all entries as racing
+      await withRaceResultsColumnFallback((column) =>
+        supabase.from('race_results').upsert(
+          entries.map((entry) => ({
+            [column]: id!,
+            race_number: raceNumber,
+            entry_id: entry.id,
+            start_time: now.toISOString(),
+            status: 'racing' as const,
+          }))
+        )
+      );
       loadResults();
     } catch (error) {
       console.error('Error recording start:', error);
@@ -332,11 +359,13 @@ export default function RaceControlScreen() {
             setSequenceStatus('idle');
 
             // Update all results to DNS
-            await supabase
-              .from('race_results')
-              .update({ status: 'dnc' })
-              .eq('regatta_id', id)
-              .eq('race_number', raceNumber);
+            await withRaceResultsColumnFallback((column) =>
+              supabase
+                .from('race_results')
+                .update({ status: 'dnc' })
+                .eq(column, id)
+                .eq('race_number', raceNumber)
+            );
 
             loadResults();
           },
@@ -350,15 +379,17 @@ export default function RaceControlScreen() {
     const finishTime = new Date();
 
     try {
-      const { error } = await supabase
-        .from('race_results')
-        .update({
-          finish_time: finishTime.toISOString(),
-          status: 'finished',
-        })
-        .eq('regatta_id', id)
-        .eq('race_number', raceNumber)
-        .eq('entry_id', entryId);
+      const { error } = await withRaceResultsColumnFallback((column) =>
+        supabase
+          .from('race_results')
+          .update({
+            finish_time: finishTime.toISOString(),
+            status: 'finished',
+          })
+          .eq(column, id)
+          .eq('race_number', raceNumber)
+          .eq('entry_id', entryId)
+      );
 
       if (error) throw error;
 
@@ -379,12 +410,14 @@ export default function RaceControlScreen() {
 
   const updateBoatStatus = async (entryId: string, status: RaceResult['status']) => {
     try {
-      const { error } = await supabase
-        .from('race_results')
-        .update({ status })
-        .eq('regatta_id', id)
-        .eq('race_number', raceNumber)
-        .eq('entry_id', entryId);
+      const { error } = await withRaceResultsColumnFallback((column) =>
+        supabase
+          .from('race_results')
+          .update({ status })
+          .eq(column, id)
+          .eq('race_number', raceNumber)
+          .eq('entry_id', entryId)
+      );
 
       if (error) throw error;
       loadResults();

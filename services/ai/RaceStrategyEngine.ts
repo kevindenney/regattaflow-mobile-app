@@ -16,12 +16,9 @@ import { cachedAICall } from '@/lib/utils/aiCache';
 import {
   isAIInFallbackMode,
   isCreditExhaustedError,
-  activateFallbackMode,
-  generateMockStrategy
+  activateFallbackMode
 } from '@/lib/utils/aiFallback';
-import { isDemoMode, isAIServiceAvailable } from '@/lib/utils/demoMode';
-import Anthropic from '@anthropic-ai/sdk';
-import Constants from 'expo-constants';
+import { supabase } from '@/services/supabase';
 import { DocumentProcessingService } from './DocumentProcessingService';
 import { sailingEducationService } from './SailingEducationService';
 import { skillManagementService, detectRaceType, SKILL_REGISTRY } from './SkillManagementService';
@@ -115,7 +112,6 @@ export interface RaceStrategy {
 
 const logger = createLogger('RaceStrategyEngine');
 export class RaceStrategyEngine {
-  private anthropic: Anthropic;
   private documentProcessor: DocumentProcessingService;
   private venueDatabase: Map<string, VenueIntelligence> = new Map();
   private customSkillId: string | null = null; // Fleet racing skill (race-strategy-analyst)
@@ -126,34 +122,16 @@ export class RaceStrategyEngine {
   private hasValidApiKey: boolean = false;
 
   constructor() {
-    const configExtra =
-      Constants.expoConfig?.extra ||
-      // @ts-expect-error manifest is only available in classic builds
-      Constants.manifest?.extra ||
-      // @ts-expect-error manifest2 exists in Expo Go / EAS builds
-      Constants.manifest2?.extra ||
-      {};
-    const envApiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-    const resolvedApiKey =
-      envApiKey && envApiKey !== 'placeholder'
-        ? envApiKey
-        : typeof configExtra?.anthropicApiKey === 'string'
-          ? configExtra.anthropicApiKey
-          : undefined;
-
-    this.hasValidApiKey = Boolean(resolvedApiKey);
+    this.hasValidApiKey = Boolean(
+      process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+    );
 
     if (!this.hasValidApiKey) {
-      logger.debug('⚠️ No Anthropic API key found - using dev mode with mock strategies');
-      console.warn('⚠️ Anthropic API key not configured - using mock strategies');
+      logger.debug('⚠️ Supabase config missing - using dev mode with mock strategies');
+      logger.warn('Supabase configuration not available - using mock strategies');
     } else {
-      logger.debug('✅ Anthropic API key configured');
+      logger.debug('✅ Secure edge-function AI configured');
     }
-
-    this.anthropic = new Anthropic({
-      apiKey: resolvedApiKey || 'placeholder',
-      dangerouslyAllowBrowser: true // Development only - move to backend for production
-    });
 
     this.documentProcessor = new DocumentProcessingService();
     this.initializeVenueDatabase();
@@ -166,6 +144,27 @@ export class RaceStrategyEngine {
     } else {
       logger.debug('ℹ️  Race strategies will use fallback mode (still excellent quality!)');
     }
+  }
+
+  private async invokeStrategyChat(prompt: string, maxTokens: number, temperature = 0.3): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+        temperature
+      }
+    });
+
+    if (error) {
+      throw new Error(error.message || 'race-coaching-chat invocation failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    if (!text) {
+      throw new Error('race-coaching-chat returned no text');
+    }
+
+    return text;
   }
 
   /**
@@ -207,7 +206,7 @@ export class RaceStrategyEngine {
       }
     } catch (error) {
       logger.error('Skill initialization failed:', error);
-      console.warn('⚠️ RaceStrategyEngine: Skill initialization failed, continuing without skills');
+      logger.warn('RaceStrategyEngine: Skill initialization failed, continuing without skills');
     }
   }
 
@@ -341,11 +340,11 @@ export class RaceStrategyEngine {
       boatType?: string;
       fleetSize?: number;
       importance?: 'practice' | 'series' | 'championship' | 'worlds';
-      racingAreaPolygon?: Array<{ lat: number; lng: number }>;
+      racingAreaPolygon?: { lat: number; lng: number }[];
       // Sailor learning profile for personalized recommendations
       sailorProfile?: {
-        strengths: Array<{ metric: string; average: number; trend: string }>;
-        focusAreas: Array<{ metric: string; average: number; trend: string }>;
+        strengths: { metric: string; average: number; trend: string }[];
+        focusAreas: { metric: string; average: number; trend: string }[];
         recurringWins?: string[];
         recurringChallenges?: string[];
         racesAnalyzed?: number;
@@ -354,8 +353,8 @@ export class RaceStrategyEngine {
       boatSetup?: RaceTuningRecommendation;
       // FIX 2: Briefing insights from RaceBriefingService
       briefingInsights?: {
-        keyPoints?: Array<{ title: string; content: string; priority: 'critical' | 'important' | 'consider' }>;
-        decisionPoints?: Array<{ question: string; options: string[] }>;
+        keyPoints?: { title: string; content: string; priority: 'critical' | 'important' | 'consider' }[];
+        decisionPoints?: { question: string; options: string[] }[];
         warnings?: string[];
       };
     }
@@ -671,30 +670,14 @@ CRITICAL OUTPUT RULES:
 - If uncertain, return the best-effort JSON structure above.`;
 
     // Select appropriate skill based on race type (fleet vs distance/offshore)
-    const selectedSkillId = this.getSkillForRaceType({
+    this.getSkillForRaceType({
       raceName: raceContext?.raceName,
       raceType: raceContext?.raceType,
       estimatedDurationHours: raceContext?.estimatedDurationHours
     });
 
     try {
-      // claude-3-haiku-20240307 does not support skills or code_execution betas
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 4000,
-        temperature: 0.7,
-        messages: [{
-          role: 'user',
-          content: strategyPrompt
-        }]
-      });
-
-      const textBlocks = (response.content as Array<{ type: string; text?: string }>)
-        .filter(block => block.type === 'text' && typeof block.text === 'string')
-        .map(block => block.text!.trim())
-        .filter(text => text.length > 0);
-
-      const combinedText = textBlocks.join('\n').trim();
+      const combinedText = await this.invokeStrategyChat(strategyPrompt, 4000, 0.7);
       if (!combinedText) {
         throw new Error('No text content returned from AI');
       }
@@ -726,8 +709,8 @@ CRITICAL OUTPUT RULES:
    * This enables personalized strategy recommendations based on past performance
    */
   private buildSailorProfilePromptSection(sailorProfile: {
-    strengths: Array<{ metric: string; average: number; trend: string }>;
-    focusAreas: Array<{ metric: string; average: number; trend: string }>;
+    strengths: { metric: string; average: number; trend: string }[];
+    focusAreas: { metric: string; average: number; trend: string }[];
     recurringWins?: string[];
     recurringChallenges?: string[];
     racesAnalyzed?: number;
@@ -806,8 +789,8 @@ CRITICAL OUTPUT RULES:
    * Connects RaceBriefingService data to strategy generation
    */
   private buildBriefingInsightsPromptSection(briefingInsights: {
-    keyPoints?: Array<{ title: string; content: string; priority: 'critical' | 'important' | 'consider' }>;
-    decisionPoints?: Array<{ question: string; options: string[] }>;
+    keyPoints?: { title: string; content: string; priority: 'critical' | 'important' | 'consider' }[];
+    decisionPoints?: { question: string; options: string[] }[];
     warnings?: string[];
   }): string {
     const lines: string[] = ['\nRACE BRIEFING INTELLIGENCE:'];
@@ -849,7 +832,7 @@ CRITICAL OUTPUT RULES:
     metadata: { filename: string; venue?: string }
   ): Promise<RaceCourseExtraction> {
     // Use existing document processing service to extract course
-    const analysis = await this.documentProcessor.analyzeDocumentContent(
+    await this.documentProcessor.analyzeDocumentContent(
       instructionsText,
       {
         filename: metadata.filename,
@@ -948,7 +931,7 @@ CRITICAL OUTPUT RULES:
     const strategyPrompt = this.buildStrategyPrompt(course, conditions, venue, educationalInsights, raceContext);
 
     // Select appropriate skill based on race type (fleet vs distance/offshore)
-    const selectedSkillId = this.getSkillForRaceType({
+    this.getSkillForRaceType({
       raceName: raceContext?.raceName,
       raceType: raceContext?.raceType,
       courseLengthNm: course?.totalDistanceNm,
@@ -957,30 +940,13 @@ CRITICAL OUTPUT RULES:
     });
 
     try {
-      // claude-3-haiku-20240307 does not support skills or code_execution betas
-      const message = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2048,
-        temperature: 0.3,
-        messages: [{
-          role: 'user',
-          content: strategyPrompt
-        }]
-      });
-
-      // Extract text from Claude's response (handle multiple blocks)
-      const strategyText = (message.content as Array<{ type: string; text?: string }>)
-        .filter(block => block.type === 'text' && typeof block.text === 'string')
-        .map(block => block.text!.trim())
-        .filter(text => text.length > 0)
-        .join('\n');
+      const strategyText = await this.invokeStrategyChat(strategyPrompt, 2048, 0.3);
 
       // Parse AI response into structured strategy
       return this.parseAIStrategyResponse(strategyText, conditions, venue);
 
     } catch (error) {
-
-      console.warn('Using fallback strategy');
+      logger.warn('Using fallback strategy after AI generation error', error);
       return this.generateFallbackStrategy(course, conditions, venue);
     }
   }
@@ -1125,9 +1091,8 @@ ABSOLUTE: Do NOT call any tools or code execution utilities. Respond directly wi
       return parsed;
 
     } catch (error) {
-
       logger.debug('Raw AI response:', strategyText.substring(0, 200));
-      console.warn('Using fallback strategy');
+      logger.warn('Using fallback strategy after strategy parse error', error);
       return this.generateFallbackStrategy({} as RaceCourseExtraction, conditions, venue);
     }
   }
@@ -1204,7 +1169,7 @@ ABSOLUTE: Do NOT call any tools or code execution utilities. Respond directly wi
   private generateMockVenueStrategy(
     conditions: RaceConditions,
     venue: VenueIntelligence,
-    raceContext: any
+    _raceContext: any
   ): RaceStrategy['strategy'] {
     const windSpeed = conditions.wind.speed;
     const preferredSide = venue.localKnowledge.windPatterns.localEffects.some(e =>
@@ -1378,14 +1343,7 @@ Respond in JSON format:
   ]
 }`;
 
-      const response = await this.anthropic.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 1500,
-        temperature: 0.3,
-        messages: [{ role: 'user', content: contingencyPrompt }]
-      });
-
-      const responseText = response.content[0].type === 'text' ? response.content[0].text : '';
+      const responseText = await this.invokeStrategyChat(contingencyPrompt, 1500, 0.3);
       
       // Parse JSON response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -1449,7 +1407,7 @@ Respond in JSON format:
    */
   private getDefaultContingencyPlans(
     conditions: RaceConditions,
-    venue: VenueIntelligence
+    _venue: VenueIntelligence
   ): RaceStrategy['contingencies'] {
     const contingencies: RaceStrategy['contingencies'] = {
       windShift: [],
@@ -1533,12 +1491,10 @@ Respond in JSON format:
   ): Promise<RaceStrategy['simulationResults']> {
     // Simplified simulation - in production this would be much more sophisticated
     const fleetSize = raceContext.fleetSize || 20;
-    const windVariability = conditions.weatherRisk === 'high' ? 0.3 : 0.15;
     const venueBonus = venue.localKnowledge.expertTips.length * 0.1;
 
     // Simulate expected performance based on strategy quality and conditions
     const baseFinish = Math.floor(fleetSize * 0.3); // Assume we're aiming for top 30%
-    const variability = Math.floor(fleetSize * windVariability);
 
     return {
       averageFinish: Math.max(1, baseFinish - Math.floor(venueBonus * fleetSize)),

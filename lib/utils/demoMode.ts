@@ -5,7 +5,6 @@
  * Checks API keys and environment to determine if services should use fallbacks.
  */
 
-import Constants from 'expo-constants';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('DemoMode');
@@ -19,9 +18,9 @@ let cachedMissingServices: string[] | null = null;
  */
 const API_KEY_CONFIG = {
   anthropic: {
-    envKey: 'EXPO_PUBLIC_ANTHROPIC_API_KEY',
-    label: 'Anthropic Claude',
-    required: false, // Core AI features
+    envKey: 'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+    label: 'AI Edge Functions',
+    required: false, // AI runs through secured edge functions
   },
   stormglass: {
     envKey: 'EXPO_PUBLIC_STORMGLASS_API_KEY',
@@ -44,8 +43,24 @@ const API_KEY_CONFIG = {
  * Check if a specific API key is configured and valid
  */
 export function isApiKeyConfigured(service: keyof typeof API_KEY_CONFIG): boolean {
-  const config = API_KEY_CONFIG[service];
-  const key = process.env[config.envKey];
+  let key: string | undefined;
+  switch (service) {
+    case 'anthropic':
+      key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      break;
+    case 'stormglass':
+      key = process.env.EXPO_PUBLIC_STORMGLASS_API_KEY;
+      break;
+    case 'googleMaps':
+      key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+      break;
+    case 'supabase':
+      key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      break;
+    default:
+      key = undefined;
+      break;
+  }
 
   // Check for missing, placeholder, or empty keys
   if (!key || key === 'placeholder' || key === '' || key === 'undefined') {
@@ -86,25 +101,12 @@ export function isDemoMode(): boolean {
     return cachedDemoMode;
   }
 
-  // Check if Anthropic API key is missing (main AI features)
-  const hasAnthropicKey = isApiKeyConfigured('anthropic');
-
-  // Also check expo config for API keys (some may be in app.config.js)
-  const configExtra =
-    Constants.expoConfig?.extra ||
-    // @ts-ignore - manifest is only available in classic builds
-    Constants.manifest?.extra ||
-    // @ts-ignore - manifest2 exists in Expo Go / EAS builds
-    Constants.manifest2?.extra ||
-    {};
-
-  const hasConfigAnthropicKey = Boolean(
-    configExtra?.anthropicApiKey &&
-    configExtra.anthropicApiKey !== 'placeholder'
+  // Demo mode is determined by missing required services (currently Supabase).
+  const missingRequiredServices = Object.entries(API_KEY_CONFIG).filter(
+    ([service, config]) =>
+      config.required && !isApiKeyConfigured(service as keyof typeof API_KEY_CONFIG)
   );
-
-  // Demo mode if no valid Anthropic key from either source
-  const inDemoMode = !hasAnthropicKey && !hasConfigAnthropicKey;
+  const inDemoMode = missingRequiredServices.length > 0;
 
   if (inDemoMode) {
     logger.debug('App running in demo mode', {
@@ -173,5 +175,6 @@ export function isWeatherServiceAvailable(): boolean {
  * Check specifically if AI services are available
  */
 export function isAIServiceAvailable(): boolean {
-  return isApiKeyConfigured('anthropic');
+  // AI runs through Supabase edge functions; availability depends on Supabase config.
+  return isApiKeyConfigured('supabase');
 }

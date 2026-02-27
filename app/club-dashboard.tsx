@@ -476,11 +476,8 @@ const ClubDashboardScreen = () => {
   const roleHighlights = useMemo(() => {
     const rolesToHighlight: ClubRole[] = [
       'admin',
-      'race_officer',
-      'scorer',
-      'communications',
-      'treasurer',
-      'membership_manager',
+      'race_admin',
+      'volunteer_results',
     ];
 
     return rolesToHighlight
@@ -558,15 +555,8 @@ const ClubDashboardScreen = () => {
 
     const roleOrder: ClubRole[] = [
       'admin',
-      'sailing_manager',
-      'race_officer',
-      'scorer',
-      'communications',
-      'treasurer',
-      'membership_manager',
-      'race_committee',
-      'instructor',
-      'secretary',
+      'race_admin',
+      'volunteer_results',
       'member',
       'guest',
     ];

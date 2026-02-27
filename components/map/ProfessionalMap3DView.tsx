@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Dimensions, Platform } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { MapLibreEngine } from './engines/MapLibreEngine';
 import { ProfessionalWeatherService } from '@/services/weather/ProfessionalWeatherService';
-import { NOAABathymetryService } from '@/services/bathymetry/NOAABathymetryService';
 import { AISStreamService } from '@/services/ais/AISStreamService';
 import { WebMapView } from './WebMapView';
 import sailingLocations from '@/data/sailing-locations.json';
@@ -14,9 +13,7 @@ import {
   RaceMark,
   GeoLocation,
   VesselData,
-  LayerControlSystem,
   NavigationResult,
-  RaceStrategy,
   VesselType,
   NavigationStatus
 } from '@/lib/types/advanced-map';
@@ -56,29 +53,26 @@ export function ProfessionalMap3DView({
 
   // Professional services
   const [weatherService] = useState(() => new ProfessionalWeatherService(apiKeys));
-  const [bathymetryService] = useState(() => new NOAABathymetryService());
   const [aisService] = useState(() => new AISStreamService({
     apiKey: apiKeys['aisstream-api'] || 'demo-key'
   }));
 
   // Venue-specific data
   const venueConfig = (sailingLocations.venues as any)[venue];
+  const venueCenter = venueConfig?.coordinates?.center;
   const [currentWeather, setCurrentWeather] = useState<AdvancedWeatherConditions | null>(null);
   const [vessels, setVessels] = useState<VesselData[]>([]);
-  const [fleetTrackingId, setFleetTrackingId] = useState<string | null>(null);
-  const [showVessels, setShowVessels] = useState<boolean>(professionalMode);
-  const [activeAlerts, setActiveAlerts] = useState<any[]>([]);
+  const [showVessels] = useState<boolean>(professionalMode);
+  const [activeAlerts, _setActiveAlerts] = useState<any[]>([]);
 
   // Professional UI state
-  const [layerControl, setLayerControl] = useState<LayerControlSystem | null>(null);
-  const [measurementMode, setMeasurementMode] = useState<'off' | 'distance' | 'area'>('off');
   const [tacticalMode, setTacticalMode] = useState<boolean>(false);
   const [realTimeUpdates, setRealTimeUpdates] = useState<string | null>(null);
 
   // Performance monitoring
   const [performanceMetrics, setPerformanceMetrics] = useState<any>(null);
 
-  const defaultConfig: AdvancedMapConfig = {
+  const defaultConfig: AdvancedMapConfig = useMemo(() => ({
     rendering: {
       engine: 'maplibre',
       quality: professionalMode ? 'ultra' : 'high',
@@ -126,7 +120,7 @@ export function ProfessionalMap3DView({
     camera: {
       pitch: 60,
       bearing: 0,
-      zoom: venueConfig?.coordinates?.center ? 14 : 10,
+      zoom: venueCenter ? 14 : 10,
       animation: 'smooth',
       followMode: 'off'
     },
@@ -138,9 +132,9 @@ export function ProfessionalMap3DView({
       windField: true,
       hazards: true
     }
-  };
+  }), [professionalMode, venueCenter]);
 
-  const finalConfig = { ...defaultConfig, ...config };
+  const finalConfig = useMemo(() => ({ ...defaultConfig, ...config }), [config, defaultConfig]);
 
   // Initialize professional map engine
   useEffect(() => {
@@ -155,9 +149,9 @@ export function ProfessionalMap3DView({
         await engine.initialize(mapContainerRef.current!, finalConfig);
 
         // Set initial view to venue location
-        if (venueConfig?.coordinates?.center) {
+        if (venueCenter) {
           engine.setCamera({
-            center: [venueConfig.coordinates.center.longitude, venueConfig.coordinates.center.latitude],
+            center: [venueCenter.longitude, venueCenter.latitude],
             zoom: 14,
             bearing: 0,
             pitch: 60
@@ -173,16 +167,16 @@ export function ProfessionalMap3DView({
     };
 
     initializeMap();
-  }, [isInitialized]);
+  }, [finalConfig, isInitialized, venueCenter]);
 
   // Update map camera when venue changes (after initialization)
   useEffect(() => {
-    if (!mapEngine || !isInitialized || !venueConfig?.coordinates?.center) return;
+    if (!mapEngine || !isInitialized || !venueCenter) return;
 
     mapEngine.flyTo({
       center: {
-        latitude: venueConfig.coordinates.center.latitude,
-        longitude: venueConfig.coordinates.center.longitude
+        latitude: venueCenter.latitude,
+        longitude: venueCenter.longitude
       },
       zoom: 14,
       bearing: 0,
@@ -191,26 +185,27 @@ export function ProfessionalMap3DView({
       duration: 2000,
       essential: true
     });
-  }, [venue, mapEngine, isInitialized, venueConfig]);
+  }, [mapEngine, isInitialized, venueCenter]);
 
   // Setup professional weather updates
   useEffect(() => {
-    if (!venueConfig?.coordinates?.center || !weatherService) return;
+    if (!venueCenter || !weatherService) return;
+    let updateId: string | null = null;
 
     const setupWeatherUpdates = async () => {
 
       try {
         // Initial weather fetch
         const weather = await weatherService.getAdvancedWeatherConditions(
-          venueConfig.coordinates.center
+          venueCenter
         );
         setCurrentWeather(weather);
         onWeatherUpdate?.(weather);
 
         // Setup real-time updates for professional mode
         if (professionalMode) {
-          const updateId = weatherService.setupRealTimeUpdates(
-            venueConfig.coordinates.center,
+          updateId = weatherService.setupRealTimeUpdates(
+            venueCenter,
             (updatedWeather) => {
               setCurrentWeather(updatedWeather);
               onWeatherUpdate?.(updatedWeather);
@@ -218,6 +213,8 @@ export function ProfessionalMap3DView({
             }
           );
           setRealTimeUpdates(updateId);
+        } else {
+          setRealTimeUpdates(null);
         }
       } catch (error) {
 
@@ -227,21 +224,22 @@ export function ProfessionalMap3DView({
     setupWeatherUpdates();
 
     return () => {
-      if (realTimeUpdates) {
-        weatherService.stopRealTimeUpdates(realTimeUpdates);
+      if (updateId) {
+        weatherService.stopRealTimeUpdates(updateId);
       }
     };
-  }, [venue, weatherService, professionalMode]);
+  }, [onWeatherUpdate, professionalMode, venueCenter, weatherService]);
 
   // Setup AIS vessel tracking
   useEffect(() => {
-    if (!venueConfig?.coordinates?.center || !aisService || !professionalMode || !showVessels) return;
+    if (!venueCenter || !aisService || !professionalMode || !showVessels) return;
+    let trackingId: string | null = null;
 
     const setupVesselTracking = async () => {
 
       try {
         // Define tracking area around the venue
-        const center = venueConfig.coordinates.center;
+        const center = venueCenter;
         const radius = 0.1; // ~6 nautical miles
 
         const bounds = {
@@ -256,7 +254,7 @@ export function ProfessionalMap3DView({
         };
 
         // Start fleet tracking
-        const trackingId = await aisService.startFleetTracking(
+        trackingId = await aisService.startFleetTracking(
           bounds,
           (updatedVessels) => {
             setVessels(updatedVessels);
@@ -278,8 +276,6 @@ export function ProfessionalMap3DView({
           }
         );
 
-        setFleetTrackingId(trackingId);
-
       } catch (error) {
 
       }
@@ -288,96 +284,11 @@ export function ProfessionalMap3DView({
     setupVesselTracking();
 
     return () => {
-      if (fleetTrackingId) {
-        aisService.stopFleetTracking(fleetTrackingId);
-        setFleetTrackingId(null);
+      if (trackingId) {
+        aisService.stopFleetTracking(trackingId);
       }
     };
-  }, [venue, aisService, professionalMode, showVessels]);
-
-  // Professional layer management
-  const initializeLayerControl = useCallback((): LayerControlSystem => {
-    return {
-      categories: {
-        navigation: {
-          nauticalChart: true,
-          bathymetry: true,
-          depthContours: true,
-          navigationAids: true,
-          harbors: true,
-          anchorages: false
-        },
-        weather: {
-          windField: true,
-          pressure: professionalMode,
-          temperature: professionalMode,
-          precipitation: true,
-          waves: true,
-          tides: true,
-          currents: true,
-          visibility: professionalMode
-        },
-        racing: {
-          courseMarks: true,
-          startFinishLines: true,
-          laylines: professionalMode,
-          courseBoundaries: true,
-          restrictedAreas: true,
-          raceArea: true
-        },
-        safety: {
-          vessels: professionalMode,
-          emergencyServices: true,
-          hazards: true,
-          weatherAlerts: true,
-          communicationZones: false
-        },
-        historical: {
-          pastRaces: professionalMode,
-          weatherHistory: professionalMode,
-          performanceData: professionalMode,
-          trackAnalysis: professionalMode
-        },
-        custom: {
-          userOverlays: [],
-          teamData: professionalMode,
-          personalNotes: true,
-          photos: false
-        }
-      },
-      visibility: {
-        toggleLayer: (layerId: string) => {
-          // Implementation would update map engine
-        },
-        setLayerOpacity: (layerId: string, opacity: number) => {
-        },
-        showLayerGroup: (groupId: string) => {
-        },
-        hideLayerGroup: (groupId: string) => {
-        },
-        resetToDefaults: () => {
-
-        }
-      },
-      ordering: {
-        moveLayerUp: (layerId: string) => {
-        },
-        moveLayerDown: (layerId: string) => {
-        },
-        setLayerOrder: (layerIds: string[]) => {
-
-        }
-      },
-      styling: {
-        updateLayerStyle: (layerId: string, style: any) => {
-        },
-        createStylePreset: (name: string, styles: any) => {
-        },
-        applyStylePreset: (presetName: string) => {
-        }
-      }
-    };
-  }, [professionalMode]);
+  }, [aisService, professionalMode, showVessels, venueCenter]);
 
   // Performance monitoring for professional mode
   useEffect(() => {
@@ -397,7 +308,7 @@ export function ProfessionalMap3DView({
   }, [mapEngine, professionalMode]);
 
   // Professional tactical calculations
-  const calculateTacticalAdvantage = useCallback(async (position: GeoLocation) => {
+  const calculateTacticalAdvantage = useCallback(async (_position: GeoLocation) => {
     if (!currentWeather || !professionalMode) return;
 
     // Calculate laylines, start line advantage, etc.
@@ -453,7 +364,7 @@ export function ProfessionalMap3DView({
         marks={marks}
         clubMarkers={clubMarkers}
         onMarkPress={onMarkPress}
-        onMapPress={onMapPress}
+        onMapPress={handleMapPress}
         style={{
           position: 'absolute',
           top: 0,
@@ -571,6 +482,7 @@ export function ProfessionalMap3DView({
         <ThemedText style={styles.statusText}>
           {isInitialized ? '✅ PROFESSIONAL' : '🔄 INITIALIZING'} •
           {realTimeUpdates ? ' 📡 LIVE' : ' 📊 CACHED'} •
+          Vessels: {vessels.length} •
           Venue: {venue.toUpperCase()}
         </ThemedText>
       </View>

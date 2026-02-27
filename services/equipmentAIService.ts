@@ -4,6 +4,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('equipmentAIService');
 
 interface EquipmentData {
   id: string;
@@ -15,14 +18,6 @@ interface EquipmentData {
   lastUsedDate?: string;
   condition?: string;
   productId?: string;
-}
-
-interface PerformanceData {
-  equipmentId: string;
-  finishPosition: number;
-  windSpeedMin?: number;
-  windSpeedMax?: number;
-  venueId?: string;
 }
 
 interface AIAlert {
@@ -111,7 +106,7 @@ export async function generateMaintenanceAlerts(
 
     return alerts;
   } catch (error) {
-    console.error('Error generating maintenance alerts:', error);
+    logger.error('Error generating maintenance alerts:', error);
     return [];
   }
 }
@@ -189,7 +184,7 @@ export async function generatePerformanceOptimizations(
 
     return alerts;
   } catch (error) {
-    console.error('Error generating performance optimizations:', error);
+    logger.error('Error generating performance optimizations:', error);
     return [];
   }
 }
@@ -253,7 +248,7 @@ export async function generateVenueRecommendations(
 
     return alerts;
   } catch (error) {
-    console.error('Error generating venue recommendations:', error);
+    logger.error('Error generating venue recommendations:', error);
     return [];
   }
 }
@@ -298,7 +293,7 @@ export async function generateAllEquipmentAlerts(
 
     return allAlerts;
   } catch (error) {
-    console.error('Error generating all equipment alerts:', error);
+    logger.error('Error generating all equipment alerts:', error);
     return [];
   }
 }
@@ -377,7 +372,7 @@ export async function predictOptimalEquipment(
       reasoning: `Based on analysis of ${historicalData.length} races in ${conditions.windMin}-${conditions.windMax} knot conditions`,
     };
   } catch (error) {
-    console.error('Error predicting optimal equipment:', error);
+    logger.error('Error predicting optimal equipment:', error);
     return {
       equipment: [],
       confidence: 0,

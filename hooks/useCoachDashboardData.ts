@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -61,6 +62,8 @@ interface EarningsData {
   currency: string;
 }
 
+const logger = createLogger('useCoachDashboardData');
+
 export interface CoachDashboardData {
   coachProfileId: string | null;
   clients: CoachClient[];
@@ -118,22 +121,57 @@ export function useCoachDashboardData(): CoachDashboardData {
   const [averageRating, setAverageRating] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | undefined>(user?.id);
 
   // Manual refetch trigger
   const [refetchKey, setRefetchKey] = useState(0);
   const refetch = useCallback(() => setRefetchKey((k) => k + 1), []);
 
   useEffect(() => {
+    activeUserIdRef.current = user?.id;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = user?.id;
+    const canCommit = () =>
+      !cancelled &&
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
 
     const fetchData = async () => {
-      const userId = user?.id;
+      const userId = targetUserId;
       if (!userId) {
+        if (!canCommit()) return;
+        setCoachProfileId(null);
+        setClients([]);
+        setSessions([]);
+        setFeedback([]);
+        setAverageRating(null);
+        setEarnings({
+          monthly: { current: 0, previous: 0, projected: 0 },
+          weekly: { current: 0, previous: 0 },
+          totalOutstanding: 0,
+          currency: 'USD',
+        });
+        setError(null);
         setLoading(false);
         return;
       }
 
       try {
+        if (!canCommit()) return;
         setLoading(true);
         setError(null);
 
@@ -149,7 +187,7 @@ export function useCoachDashboardData(): CoachDashboardData {
         }
 
         if (!coachProfile) {
-          if (!cancelled) {
+          if (canCommit()) {
             setCoachProfileId(null);
             setClients([]);
             setSessions([]);
@@ -162,7 +200,7 @@ export function useCoachDashboardData(): CoachDashboardData {
         }
 
         const coachId = coachProfile.id;
-        if (!cancelled) {
+        if (canCommit()) {
           setCoachProfileId(coachId);
           setAverageRating(coachProfile.average_rating ?? null);
         }
@@ -221,11 +259,11 @@ export function useCoachDashboardData(): CoachDashboardData {
             .order('scheduled_at', { ascending: false }),
         ]);
 
-        if (cancelled) return;
+        if (!canCommit()) return;
 
         // Handle clients
         if (clientsResult.error) {
-          console.warn('Error fetching coaching clients:', clientsResult.error.message);
+          logger.warn('Error fetching coaching clients', clientsResult.error.message);
         }
 
         const processedClients: CoachClient[] = (clientsResult.data ?? []).map((row: any) => {
@@ -248,7 +286,7 @@ export function useCoachDashboardData(): CoachDashboardData {
 
         // Handle sessions
         if (sessionsResult.error) {
-          console.warn('Error fetching coaching sessions:', sessionsResult.error.message);
+          logger.warn('Error fetching coaching sessions', sessionsResult.error.message);
         }
 
         const rawSessions = sessionsResult.data ?? [];
@@ -286,7 +324,7 @@ export function useCoachDashboardData(): CoachDashboardData {
             .order('created_at', { ascending: false });
 
           if (feedbackError) {
-            console.warn('Error fetching session feedback:', feedbackError.message);
+            logger.warn('Error fetching session feedback', feedbackError.message);
           }
 
           processedFeedback = (feedbackData ?? []).map((fb: any) => ({
@@ -298,7 +336,7 @@ export function useCoachDashboardData(): CoachDashboardData {
           }));
         }
 
-        if (cancelled) return;
+        if (!canCommit()) return;
 
         // 4. Calculate earnings from completed sessions
         const now = new Date();
@@ -362,7 +400,7 @@ export function useCoachDashboardData(): CoachDashboardData {
           computedRating = Math.round((sum / processedFeedback.length) * 10) / 10;
         }
 
-        if (!cancelled) {
+        if (canCommit()) {
           setClients(processedClients);
           setSessions(processedSessions);
           setFeedback(processedFeedback);
@@ -383,15 +421,15 @@ export function useCoachDashboardData(): CoachDashboardData {
           setLoading(false);
         }
       } catch (err) {
-        console.error('Error fetching coach dashboard data:', err);
-        if (!cancelled) {
+        logger.error('Error fetching coach dashboard data', err);
+        if (canCommit()) {
           setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
           setLoading(false);
         }
       }
     };
 
-    fetchData();
+    void fetchData();
 
     return () => {
       cancelled = true;

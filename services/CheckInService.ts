@@ -5,6 +5,8 @@
  */
 
 import { supabase } from './supabase';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 // ============================================================================
 // TYPES
@@ -95,6 +97,39 @@ export interface FleetStatus {
 // ============================================================================
 
 class CheckInService {
+  private raceResultsIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
+  private subscriptions: Map<string, RealtimeChannel> = new Map();
+  private listeners: Map<string, Set<(checkIn: CheckIn) => void>> = new Map();
+
+  private async upsertRaceResultWithFallback(
+    regattaId: string,
+    raceNumber: number,
+    entryId: string,
+    payload: Record<string, any>
+  ): Promise<void> {
+    const attempt = async (column: 'regatta_id' | 'race_id') => supabase
+      .from('race_results')
+      .upsert({
+        [column]: regattaId,
+        race_number: raceNumber,
+        entry_id: entryId,
+        ...payload,
+      }, {
+        onConflict: `${column},race_number,entry_id`,
+      });
+
+    const current = this.raceResultsIdColumn;
+    let { error } = await attempt(current);
+    if (error && current === 'regatta_id' && isMissingIdColumn(error, 'race_results', current)) {
+      const fallback = await attempt('race_id');
+      error = fallback.error;
+      if (!error) {
+        this.raceResultsIdColumn = 'race_id';
+      }
+    }
+
+    if (error) throw error;
+  }
 
   // -------------------------------------------------------------------------
   // CHECK-IN OPERATIONS
@@ -325,17 +360,10 @@ class CheckInService {
     if (error) throw error;
 
     // Also update race results if they exist
-    await supabase
-      .from('race_results')
-      .upsert({
-        regatta_id: regattaId,
-        race_number: raceNumber,
-        entry_id: entryId,
-        status: 'dns',
-        score_code: 'DNS',
-      }, {
-        onConflict: 'regatta_id,race_number,entry_id',
-      });
+    await this.upsertRaceResultWithFallback(regattaId, raceNumber, entryId, {
+      status: 'dns',
+      score_code: 'DNS',
+    });
   }
 
   /**
@@ -701,34 +729,73 @@ class CheckInService {
     raceNumber: number,
     callback: (checkIn: CheckIn) => void
   ) {
-    return supabase
-      .channel(`check-ins:${regattaId}:${raceNumber}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'race_check_ins',
-          filter: `regatta_id=eq.${regattaId}&race_number=eq.${raceNumber}`,
-        },
-        (payload) => {
-          callback(payload.new as CheckIn);
-        }
-      )
-      .subscribe();
+    const channelKey = `check-ins:${regattaId}:${raceNumber}`;
+    const existingListeners = this.listeners.get(channelKey) || new Set();
+    existingListeners.add(callback);
+    this.listeners.set(channelKey, existingListeners);
+
+    if (!this.subscriptions.has(channelKey)) {
+      const channel = supabase
+        .channel(channelKey)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'race_check_ins',
+            filter: `regatta_id=eq.${regattaId}&race_number=eq.${raceNumber}`,
+          },
+          (payload) => {
+            const checkIn = payload.new as CheckIn;
+            const listeners = this.listeners.get(channelKey);
+            if (!listeners || listeners.size === 0) return;
+            listeners.forEach((listener) => {
+              try {
+                listener(checkIn);
+              } catch (_err) {
+                // Listener errors are isolated so one callback cannot break stream fan-out.
+              }
+            });
+          }
+        )
+        .subscribe();
+      this.subscriptions.set(channelKey, channel);
+    }
+
+    return () => this.unsubscribeFromCheckIns(regattaId, raceNumber, callback);
   }
 
   /**
    * Unsubscribe from check-in changes
    */
-  unsubscribeFromCheckIns(regattaId: string, raceNumber: number) {
-    supabase.removeChannel(
-      supabase.channel(`check-ins:${regattaId}:${raceNumber}`)
-    );
+  unsubscribeFromCheckIns(
+    regattaId: string,
+    raceNumber: number,
+    callback?: (checkIn: CheckIn) => void
+  ) {
+    const channelKey = `check-ins:${regattaId}:${raceNumber}`;
+    const listeners = this.listeners.get(channelKey);
+
+    if (listeners && callback) {
+      listeners.delete(callback);
+    } else if (listeners) {
+      listeners.clear();
+    }
+
+    const remaining = this.listeners.get(channelKey);
+    if (remaining && remaining.size > 0) {
+      return;
+    }
+
+    const channel = this.subscriptions.get(channelKey);
+    if (channel) {
+      void supabase.removeChannel(channel);
+      this.subscriptions.delete(channelKey);
+    }
+    this.listeners.delete(channelKey);
   }
 }
 
 // Export singleton
 export const checkInService = new CheckInService();
 export default CheckInService;
-

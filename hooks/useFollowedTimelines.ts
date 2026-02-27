@@ -10,10 +10,9 @@
  * - Combined: All timelines for easy navigation indexing
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
-import { CrewFinderService, FollowedUserTimeline, SailorProfileSummary } from '@/services/CrewFinderService';
-import { useEnrichedRaces } from '@/hooks/useEnrichedRaces';
+import { CrewFinderService, FollowedUserTimeline } from '@/services/CrewFinderService';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useFollowedTimelines');
@@ -79,8 +78,22 @@ export function useFollowedTimelines(
   const [followedData, setFollowedData] = useState<FollowedUserTimeline[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
 
   const userId = user?.id;
+
+  useEffect(() => {
+    activeUserIdRef.current = userId ?? null;
+  }, [userId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
 
   // Build current user's timeline
   const myTimeline: Timeline | null = useMemo(() => {
@@ -107,19 +120,29 @@ export function useFollowedTimelines(
 
   // Fetch followed users' data
   const fetchFollowedTimelines = useCallback(async () => {
-    if (!userId || isGuest) {
+    const runId = ++fetchRunIdRef.current;
+    const targetUserId = userId ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId || isGuest) {
+      if (!canCommit()) return;
       setFollowedData([]);
+      setError(null);
       setIsLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
 
     try {
       logger.info('[useFollowedTimelines] Fetching followed users with races...');
 
-      const data = await CrewFinderService.getFollowedUsersWithRaces(userId, {
+      const data = await CrewFinderService.getFollowedUsersWithRaces(targetUserId, {
         includeRaces: true,
         racesLimit: 20,
       });
@@ -129,12 +152,15 @@ export function useFollowedTimelines(
         totalRaces: data.reduce((sum, u) => sum + u.raceCount, 0),
       });
 
+      if (!canCommit()) return;
       setFollowedData(data);
     } catch (err: any) {
       logger.error('[useFollowedTimelines] Error fetching data:', err);
+      if (!canCommit()) return;
       setError(err?.message || 'Failed to load followed timelines');
       setFollowedData([]);
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [userId, isGuest]);
@@ -180,7 +206,7 @@ export function useFollowedTimelines(
     await fetchFollowedTimelines();
   }, [fetchFollowedTimelines]);
 
-  return {
+  return useMemo(() => ({
     myTimeline,
     followedTimelines,
     allTimelines,
@@ -189,7 +215,7 @@ export function useFollowedTimelines(
     timelineCount: allTimelines.length,
     refresh,
     error,
-  };
+  }), [myTimeline, followedTimelines, allTimelines, isLoading, refresh, error]);
 }
 
 /**
@@ -203,49 +229,109 @@ export function useIsFollowing(targetUserId: string | null): {
   const { user } = useAuth();
   const [isFollowing, setIsFollowing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const isMountedRef = useRef(true);
+  const checkRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
+  const activeTargetUserIdRef = useRef<string | null>(targetUserId);
 
   const userId = user?.id;
 
+  useEffect(() => {
+    activeUserIdRef.current = userId ?? null;
+    activeTargetUserIdRef.current = targetUserId;
+  }, [userId, targetUserId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      checkRunIdRef.current += 1;
+    };
+  }, []);
+
   // Check follow status
   useEffect(() => {
+    const runId = ++checkRunIdRef.current;
+    const targetUser = userId ?? null;
+    const targetFollowee = targetUserId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === checkRunIdRef.current &&
+      activeUserIdRef.current === targetUser &&
+      activeTargetUserIdRef.current === targetFollowee;
+
     if (!userId || !targetUserId) {
+      if (!canCommit()) return;
       setIsFollowing(false);
       setIsLoading(false);
       return;
     }
 
     const checkFollowStatus = async () => {
+      if (!canCommit()) return;
       setIsLoading(true);
       try {
-        const following = await CrewFinderService.isFollowing(userId, targetUserId);
+        const following = await CrewFinderService.isFollowing(targetUser, targetFollowee);
+        if (!canCommit()) return;
         setIsFollowing(following);
       } catch (err) {
         logger.error('[useIsFollowing] Error checking status:', err);
+        if (!canCommit()) return;
         setIsFollowing(false);
       } finally {
+        if (!canCommit()) return;
         setIsLoading(false);
       }
     };
 
-    checkFollowStatus();
+    void checkFollowStatus();
   }, [userId, targetUserId]);
 
   // Toggle follow/unfollow
   const toggleFollow = useCallback(async () => {
-    if (!userId || !targetUserId) return;
+    const targetUser = userId ?? null;
+    const targetFollowee = targetUserId;
+    if (!targetUser || !targetFollowee) return;
 
+    if (
+      !isMountedRef.current ||
+      activeUserIdRef.current !== targetUser ||
+      activeTargetUserIdRef.current !== targetFollowee
+    ) {
+      return;
+    }
     setIsLoading(true);
     try {
       if (isFollowing) {
-        await CrewFinderService.unfollowUser(userId, targetUserId);
+        await CrewFinderService.unfollowUser(targetUser, targetFollowee);
+        if (
+          !isMountedRef.current ||
+          activeUserIdRef.current !== targetUser ||
+          activeTargetUserIdRef.current !== targetFollowee
+        ) {
+          return;
+        }
         setIsFollowing(false);
       } else {
-        await CrewFinderService.followUser(userId, targetUserId);
+        await CrewFinderService.followUser(targetUser, targetFollowee);
+        if (
+          !isMountedRef.current ||
+          activeUserIdRef.current !== targetUser ||
+          activeTargetUserIdRef.current !== targetFollowee
+        ) {
+          return;
+        }
         setIsFollowing(true);
       }
     } catch (err) {
       logger.error('[useIsFollowing] Error toggling follow:', err);
     } finally {
+      if (
+        !isMountedRef.current ||
+        activeUserIdRef.current !== targetUser ||
+        activeTargetUserIdRef.current !== targetFollowee
+      ) {
+        return;
+      }
       setIsLoading(false);
     }
   }, [userId, targetUserId, isFollowing]);

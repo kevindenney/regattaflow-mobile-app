@@ -4,13 +4,15 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   RaceCourse,
   CourseFilterOptions,
   CourseValidation,
   CourseScope,
-  Mark,
 } from '@/types/courses';
+
+const logger = createLogger('CourseLibraryService');
 
 export class CourseLibraryService {
   /**
@@ -51,7 +53,7 @@ export class CourseLibraryService {
       const { data, error } = await query;
 
       if (error) {
-        console.error('[CourseLibraryService] Error fetching courses:', error);
+        logger.error('[CourseLibraryService] Error fetching courses:', error);
         throw error;
       }
 
@@ -90,7 +92,7 @@ export class CourseLibraryService {
 
       return courses as RaceCourse[];
     } catch (error) {
-      console.error('[CourseLibraryService] Error in fetchCourses:', error);
+      logger.error('[CourseLibraryService] Error in fetchCourses:', error);
       return [];
     }
   }
@@ -113,7 +115,7 @@ export class CourseLibraryService {
       switch (scope) {
         case 'personal':
           if (!options.userId) {
-            console.warn(
+            logger.warn(
               '[CourseLibraryService] userId required for personal scope'
             );
             return [];
@@ -123,7 +125,7 @@ export class CourseLibraryService {
 
         case 'club':
           if (!options.clubId) {
-            console.warn(
+            logger.warn(
               '[CourseLibraryService] clubId required for club scope'
             );
             return [];
@@ -133,7 +135,7 @@ export class CourseLibraryService {
 
         case 'venue':
           if (!options.venueId) {
-            console.warn(
+            logger.warn(
               '[CourseLibraryService] venueId required for venue scope'
             );
             return [];
@@ -156,13 +158,13 @@ export class CourseLibraryService {
       const { data, error } = await query;
 
       if (error) {
-        console.error('[CourseLibraryService] Error fetching courses:', error);
+        logger.error('[CourseLibraryService] Error fetching courses:', error);
         throw error;
       }
 
       return (data || []) as RaceCourse[];
     } catch (error) {
-      console.error('[CourseLibraryService] Error in fetchCoursesByScope:', error);
+      logger.error('[CourseLibraryService] Error in fetchCoursesByScope:', error);
       return [];
     }
   }
@@ -191,13 +193,13 @@ export class CourseLibraryService {
         .single();
 
       if (error) {
-        console.error('[CourseLibraryService] Error saving course:', error);
+        logger.error('[CourseLibraryService] Error saving course:', error);
         throw error;
       }
 
       return data as RaceCourse;
     } catch (error) {
-      console.error('[CourseLibraryService] Error in saveCourse:', error);
+      logger.error('[CourseLibraryService] Error in saveCourse:', error);
       return null;
     }
   }
@@ -221,13 +223,13 @@ export class CourseLibraryService {
         .single();
 
       if (error) {
-        console.error('[CourseLibraryService] Error updating course:', error);
+        logger.error('[CourseLibraryService] Error updating course:', error);
         throw error;
       }
 
       return data as RaceCourse;
     } catch (error) {
-      console.error('[CourseLibraryService] Error in updateCourse:', error);
+      logger.error('[CourseLibraryService] Error in updateCourse:', error);
       return null;
     }
   }
@@ -261,7 +263,7 @@ export class CourseLibraryService {
       }
 
     } catch (error) {
-      console.error('[CourseLibraryService] Error recording usage:', error);
+      logger.error('[CourseLibraryService] Error recording usage:', error);
     }
   }
 
@@ -276,13 +278,13 @@ export class CourseLibraryService {
         .eq('id', courseId);
 
       if (error) {
-        console.error('[CourseLibraryService] Error deleting course:', error);
+        logger.error('[CourseLibraryService] Error deleting course:', error);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('[CourseLibraryService] Error in deleteCourse:', error);
+      logger.error('[CourseLibraryService] Error in deleteCourse:', error);
       return false;
     }
   }
@@ -316,7 +318,7 @@ export class CourseLibraryService {
           ]);
           currentUserId = sessionData?.session?.user?.id;
         } catch (authError) {
-          console.warn('[CourseLibraryService] Auth lookup failed/timed out, continuing without user filter:', authError);
+          logger.warn('[CourseLibraryService] Auth lookup failed/timed out, continuing without user filter:', authError);
         }
       }
 
@@ -370,7 +372,7 @@ export class CourseLibraryService {
         const queryTimeout = new Promise<{ data: null, error: Error }>((resolve) => {
           timeoutId = setTimeout(() => {
             didTimeout = true;
-            console.error(`[CourseLibraryService] Query timed out after ${timeoutMs/1000} seconds (attempt ${attempt + 1})`);
+            logger.error(`[CourseLibraryService] Query timed out after ${timeoutMs/1000} seconds (attempt ${attempt + 1})`);
             resolve({ data: null, error: new Error('Query timeout') });
           }, timeoutMs);
         });
@@ -384,7 +386,7 @@ export class CourseLibraryService {
         
         if (!didTimeout && result.data !== null) {
           if (result.error) {
-            console.error('[CourseLibraryService] Query returned error:', result.error);
+            logger.error('[CourseLibraryService] Query returned error:', result.error);
             lastError = result.error;
             continue; // retry on error
           }
@@ -401,10 +403,10 @@ export class CourseLibraryService {
       }
       
       // All retries failed
-      console.error('[CourseLibraryService] All query attempts failed:', lastError);
+      logger.error('[CourseLibraryService] All query attempts failed:', lastError);
       throw lastError || new Error('Query failed after retries');
     } catch (error) {
-      console.error('[CourseLibraryService] Error in fetchDiscoverableCourses:', error);
+      logger.error('[CourseLibraryService] Error in fetchDiscoverableCourses:', error);
       return [];
     }
   }
@@ -426,7 +428,7 @@ export class CourseLibraryService {
         .limit(limit);
 
       if (error) {
-        console.error(
+        logger.error(
           '[CourseLibraryService] Error fetching recently used:',
           error
         );
@@ -435,7 +437,7 @@ export class CourseLibraryService {
 
       return (data || []) as RaceCourse[];
     } catch (error) {
-      console.error('[CourseLibraryService] Error in getRecentlyUsed:', error);
+      logger.error('[CourseLibraryService] Error in getRecentlyUsed:', error);
       return [];
     }
   }

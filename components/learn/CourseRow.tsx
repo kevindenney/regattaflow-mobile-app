@@ -6,7 +6,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { Course } from '@/services/CourseCatalogService';
 import { ProgressRing } from './ProgressRing';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
@@ -75,7 +75,7 @@ function formatMetadata(course: Course): string {
 export function CourseRow({
   course,
   progress,
-  isInProgress = false,
+  isInProgress: _isInProgress = false,
   hasAccess = true,
   onPress
 }: CourseRowProps) {
@@ -134,7 +134,7 @@ export function CourseRow({
           {/* Pill-style badges */}
           {isComingSoon && (
             <View style={styles.comingSoonPill}>
-              <Text style={styles.comingSoonPillText}>COMING SOON</Text>
+              <Text style={styles.comingSoonPillText}>PLANNED</Text>
             </View>
           )}
           {isFree && !isComingSoon && (

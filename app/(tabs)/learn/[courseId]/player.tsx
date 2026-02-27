@@ -21,6 +21,8 @@ import { LearningService, type LearningCourse, type LearningLesson } from '@/ser
 import { LessonProgressService } from '@/services/LessonProgressService';
 import { useAuth } from '@/providers/AuthProvider';
 import { LessonPlayer } from '@/components/learn';
+import { BetterAtLessonPlayer } from '@/components/learn/BetterAtLessonPlayer';
+import { getCourseWithLessons, upsertLessonProgress, type BetterAtCourse, type BetterAtLesson } from '@/services/BetterAtCourseService';
 import CourseCatalogService, { type Course as CatalogCourse } from '@/services/CourseCatalogService';
 import { FLOATING_TAB_BAR_HEIGHT } from '@/components/navigation/FloatingTabBar';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
@@ -30,6 +32,8 @@ export default function LessonPlayerScreen() {
   const { user } = useAuth();
   const [course, setCourse] = useState<LearningCourse | null>(null);
   const [lesson, setLesson] = useState<LearningLesson | null>(null);
+  const [betterAtCourse, setBetterAtCourse] = useState<BetterAtCourse | null>(null);
+  const [betterAtLesson, setBetterAtLesson] = useState<BetterAtLesson | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [enrolled, setEnrolled] = useState(false);
@@ -59,10 +63,43 @@ export default function LessonPlayerScreen() {
 
       const loadAllData = async () => {
         // Load course with modules and lessons
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
+
+        // Try BetterAt DB-backed lesson first (nursing, drawing, fitness)
+        if (isUUID && lessonId) {
+          try {
+            const dbCourse = await getCourseWithLessons(courseId);
+            if (dbCourse && dbCourse.lessons) {
+              const dbLesson = dbCourse.lessons.find((l) => l.id === lessonId);
+              if (dbLesson) {
+                setBetterAtCourse(dbCourse);
+                setBetterAtLesson(dbLesson);
+                setCanAccess(true);
+                setEnrolled(true);
+
+                // Find lesson position
+                const sortedLessons = [...dbCourse.lessons].sort(
+                  (a, b) => a.sort_order - b.sort_order
+                );
+                const idx = sortedLessons.findIndex((l) => l.id === lessonId);
+                if (idx >= 0) {
+                  setLessonPosition({ current: idx + 1, total: sortedLessons.length });
+                }
+
+                // Mark progress (non-blocking)
+                if (user?.id) {
+                  upsertLessonProgress(user.id, lessonId, 'in_progress').catch(() => {});
+                }
+                return; // Early return — skip legacy flow
+              }
+            }
+          } catch (err) {
+            // Not a BetterAt course/lesson, continue with legacy flow
+          }
+        }
 
         // First, try to load from JSON catalog (single source of truth)
         let catalogCourse: CatalogCourse | undefined;
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId);
         
         if (isUUID) {
           catalogCourse = CourseCatalogService.getCourseById(courseId);
@@ -444,12 +481,64 @@ export default function LessonPlayerScreen() {
     }
   }, [courseId, getNextLesson, lessonId, course]);
 
+  // Handle BetterAt lesson completion (nursing, drawing, fitness)
+  const handleBetterAtComplete = useCallback(async () => {
+    if (user?.id && lessonId) {
+      await upsertLessonProgress(user.id, lessonId, 'completed').catch(() => {});
+    }
+    setIsCompleted(true);
+
+    // Navigate to next lesson in the BetterAt course
+    if (betterAtCourse?.lessons) {
+      const sorted = [...betterAtCourse.lessons].sort((a, b) => a.sort_order - b.sort_order);
+      const idx = sorted.findIndex((l) => l.id === lessonId);
+      if (idx >= 0 && idx < sorted.length - 1) {
+        const next = sorted[idx + 1];
+        router.push(`/(tabs)/learn/${courseId}/player?lessonId=${next.id}`);
+        return;
+      }
+    }
+    // No more lessons
+    router.push(`/(tabs)/learn/${courseId}`);
+  }, [user?.id, lessonId, courseId, betterAtCourse]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingState}>
           <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
           <Text style={styles.loadingText}>Loading lesson...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Render BetterAt lesson (nursing, drawing, fitness)
+  if (betterAtLesson && betterAtCourse) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push(`/(tabs)/learn/${courseId}`)}
+          >
+            <Ionicons name="arrow-back" size={24} color="#1E293B" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {betterAtLesson.title}
+            </Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>
+              {betterAtCourse.title}
+              {lessonPosition ? ` · Lesson ${lessonPosition.current} of ${lessonPosition.total}` : ''}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.content}>
+          <BetterAtLessonPlayer
+            lesson={betterAtLesson}
+            onComplete={handleBetterAtComplete}
+          />
         </View>
       </SafeAreaView>
     );

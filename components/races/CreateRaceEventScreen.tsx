@@ -20,6 +20,9 @@ import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import RaceEventService from '../../services/RaceEventService';
 import { DocumentType, SourceDocument } from '../../types/raceEvents';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CreateRaceEventScreen');
 
 export default function CreateRaceEventScreen() {
   const [raceName, setRaceName] = useState('');
@@ -71,7 +74,7 @@ export default function CreateRaceEventScreen() {
 
       setDocuments([...documents, doc]);
     } catch (err) {
-      console.error('Error picking document:', err);
+      logger.error('Error picking document', err);
       setError('Failed to pick document');
     }
   };
@@ -125,14 +128,14 @@ export default function CreateRaceEventScreen() {
         });
 
         if (processError) {
-          console.warn('Document processing error:', processError);
+          logger.warn('Document processing error', processError);
         }
       }
 
       // Navigate to validation screen
       router.push(`/race/validate/${raceEvent.id}`);
     } catch (err) {
-      console.error('Error creating race:', err);
+      logger.error('Error creating race', err);
       setError(err instanceof Error ? err.message : 'Failed to create race');
     } finally {
       setLoading(false);

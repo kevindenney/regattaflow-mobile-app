@@ -6,6 +6,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 import Constants from 'expo-constants';
+import { createLogger } from '@/lib/utils/logger';
 import type { GeoLocation } from '@/lib/types/map';
 import type { AdvancedWeatherConditions } from '@/lib/types/advanced-map';
 import type {
@@ -43,6 +44,7 @@ const USE_MOCK_DATA =
   process.env.EXPO_PUBLIC_USE_MOCK_WEATHER === 'true' ||
   process.env.EXPO_PUBLIC_USE_MOCK_WEATHER === '1' ||
   extraMockSetting;
+const logger = createLogger('StormGlassService');
 
 export class StormGlassService {
   private config: Required<StormGlassConfig>;
@@ -243,11 +245,11 @@ export class StormGlassService {
    * NOTE: This uses Storm Glass API quota. Cache is extended to 12 hours to minimize API calls.
    * For weather data, use OpenMeteoService instead (FREE, no quota).
    */
-  async getTideExtremes(location: GeoLocation, days: number = 7, referenceTime?: Date): Promise<Array<{
+  async getTideExtremes(location: GeoLocation, days: number = 7, referenceTime?: Date): Promise<{
     type: 'high' | 'low';
     time: Date;
     height: number;
-  }>> {
+  }[]> {
     // Use reference time if provided, otherwise use current time
     const centerTime = referenceTime || new Date();
     
@@ -258,7 +260,7 @@ export class StormGlassService {
     // Round time to nearest 6 hours for better cache hit rate (tides are predictable)
     const timeWindow = Math.floor(centerTime.getTime() / (6 * 60 * 60 * 1000));
     const cacheKey = `tide_extremes_${roundedLat}_${roundedLng}_${days}_${timeWindow}`;
-    const cached = this.getCached<Array<any>>(cacheKey);
+    const cached = this.getCached<any[]>(cacheKey);
 
     if (cached) {
       return cached;
@@ -366,7 +368,7 @@ export class StormGlassService {
    * Accuracy: ~95% for most locations; complex harbors may have larger errors
    */
   interpolateTideHeight(
-    extremes: Array<{ type: 'high' | 'low'; time: Date; height: number }>,
+    extremes: { type: 'high' | 'low'; time: Date; height: number }[],
     targetTime: Date
   ): number {
     if (extremes.length < 2) {
@@ -433,13 +435,13 @@ export class StormGlassService {
   /**
    * Get ocean currents
    */
-  async getCurrents(location: GeoLocation, hours: number = 24): Promise<Array<{
+  async getCurrents(location: GeoLocation, hours: number = 24): Promise<{
     time: Date;
     speed: number; // m/s
     direction: number; // degrees
-  }>> {
+  }[]> {
     const cacheKey = `currents_${location.latitude}_${location.longitude}_${hours}`;
-    const cached = this.getCached<Array<any>>(cacheKey);
+    const cached = this.getCached<any[]>(cacheKey);
 
     if (cached) {
       return cached;
@@ -518,21 +520,21 @@ export class StormGlassService {
       const result = response.data;
 
       if (result.status !== 'OK' || !result.results || result.results.length === 0) {
-        console.warn('[OpenTopoData] Invalid response:', result);
+        logger.warn('[OpenTopoData] Invalid response:', result);
         return 0;
       }
 
       // Elevation is already in meters (negative = below sea level)
       const elevation = result.results[0].elevation;
 
-      console.log('[OpenTopoData] Elevation fetched:', { location, elevation });
+      logger.info('[OpenTopoData] Elevation fetched:', { location, elevation });
 
       // Cache for 1 year - bathymetry doesn't change
       this.setCache(cacheKey, elevation, ELEVATION_CACHE_DURATION);
 
       return elevation;
     } catch (error: any) {
-      console.error('[OpenTopoData] Failed to fetch elevation:', {
+      logger.error('[OpenTopoData] Failed to fetch elevation:', {
         error: error?.message || error,
         status: error?.response?.status,
         location,
@@ -547,15 +549,15 @@ export class StormGlassService {
    * Supports up to 100 locations per request
    */
   async getElevationsBatch(
-    locations: Array<{ latitude: number; longitude: number }>
-  ): Promise<Array<{ lat: number; lng: number; elevation: number }>> {
+    locations: { latitude: number; longitude: number }[]
+  ): Promise<{ lat: number; lng: number; elevation: number }[]> {
     if (locations.length === 0) {
       return [];
     }
 
     // Check cache for each location
-    const results: Array<{ lat: number; lng: number; elevation: number; cached: boolean }> = [];
-    const uncachedLocations: Array<{ lat: number; lng: number; index: number }> = [];
+    const results: { lat: number; lng: number; elevation: number; cached: boolean }[] = [];
+    const uncachedLocations: { lat: number; lng: number; index: number }[] = [];
 
     for (let i = 0; i < locations.length; i++) {
       const loc = locations[i];
@@ -588,11 +590,11 @@ export class StormGlassService {
 
     // If all locations are cached, return immediately
     if (uncachedLocations.length === 0) {
-      console.log('[OpenTopoData] All', locations.length, 'locations served from cache');
+      logger.info('[OpenTopoData] All', locations.length, 'locations served from cache');
       return results.map(r => ({ lat: r.lat, lng: r.lng, elevation: r.elevation }));
     }
 
-    console.log('[OpenTopoData] Fetching', uncachedLocations.length, 'uncached locations (', locations.length - uncachedLocations.length, 'from cache)');
+    logger.info('[OpenTopoData] Fetching', uncachedLocations.length, 'uncached locations (', locations.length - uncachedLocations.length, 'from cache)');
 
     try {
       // Call edge function with batched locations
@@ -607,7 +609,7 @@ export class StormGlassService {
       const data = response.data;
 
       if (data.status !== 'OK' || !data.results) {
-        console.warn('[OpenTopoData] Batch request failed:', data.error || 'Unknown error');
+        logger.warn('[OpenTopoData] Batch request failed:', data.error || 'Unknown error');
         return results.map(r => ({ lat: r.lat, lng: r.lng, elevation: r.elevation }));
       }
 
@@ -627,10 +629,10 @@ export class StormGlassService {
         this.setCache(cacheKey, elevation, ELEVATION_CACHE_DURATION);
       }
 
-      console.log('[OpenTopoData] Successfully fetched', data.results.length, 'elevations');
+      logger.info('[OpenTopoData] Successfully fetched', data.results.length, 'elevations');
 
     } catch (error: any) {
-      console.error('[OpenTopoData] Batch request error:', {
+      logger.error('[OpenTopoData] Batch request error:', {
         error: error?.message || error,
         status: error?.response?.status
       });
@@ -656,7 +658,7 @@ export class StormGlassService {
     radiusKm: number = 5,
     gridSize: number = 10
   ): Promise<{
-    points: Array<{ lat: number; lng: number; elevation: number; depth: number }>;
+    points: { lat: number; lng: number; elevation: number; depth: number }[];
     bounds: { north: number; south: number; east: number; west: number };
     center: GeoLocation;
     minDepth: number;
@@ -667,7 +669,7 @@ export class StormGlassService {
     const cached = this.getCached<any>(cacheKey);
 
     if (cached) {
-      console.log('[StormGlass] Elevation grid served from cache');
+      logger.info('[StormGlass] Elevation grid served from cache');
       return cached;
     }
 
@@ -689,7 +691,7 @@ export class StormGlassService {
     const latStep = (bounds.north - bounds.south) / (gridSize - 1);
     const lngStep = (bounds.east - bounds.west) / (gridSize - 1);
 
-    const gridPoints: Array<{ latitude: number; longitude: number }> = [];
+    const gridPoints: { latitude: number; longitude: number }[] = [];
 
     for (let i = 0; i < gridSize; i++) {
       for (let j = 0; j < gridSize; j++) {
@@ -700,7 +702,7 @@ export class StormGlassService {
       }
     }
 
-    console.log('[StormGlass] Fetching elevation grid:', gridSize, 'x', gridSize, '=', gridPoints.length, 'points');
+    logger.info('[StormGlass] Fetching elevation grid:', gridSize, 'x', gridSize, '=', gridPoints.length, 'points');
 
     // Use batched request for efficiency (1 API call for up to 100 points)
     const batchResults = await this.getElevationsBatch(gridPoints);
@@ -722,7 +724,7 @@ export class StormGlassService {
       ? Math.max(...waterPoints.map(p => p.depth))
       : 0;
 
-    console.log('[StormGlass] Elevation grid complete:', waterPoints.length, 'water points,', 'depth range:', minDepth, '-', maxDepth, 'm');
+    logger.info('[StormGlass] Elevation grid complete:', waterPoints.length, 'water points,', 'depth range:', minDepth, '-', maxDepth, 'm');
 
     const result = {
       points,
@@ -766,7 +768,6 @@ export class StormGlassService {
     const visibilityMeters = visibilityKm * 1000;
 
     const currentSpeed = this.getFirstValue(hour.currentSpeed) || 0;
-    const currentDirection = this.getFirstValue(hour.currentDirection) || 0;
 
     const beaufortScale = this.calculateBeaufortScale(windSpeedKnots);
     const visibilityCondition = this.determineVisibilityCondition(visibilityKm);

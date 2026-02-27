@@ -80,7 +80,7 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
         logger.debug('No analysis found for session:', sessionId);
       }
     } catch (error: any) {
-      console.error('Error loading analysis:', error);
+      logger.error('Error loading analysis', error);
     } finally {
       setLoading(false);
     }
@@ -116,7 +116,7 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
                 Alert.alert('Error', 'Failed to generate analysis');
               }
             } catch (error: any) {
-              console.error('Error regenerating analysis:', error);
+              logger.error('Error regenerating analysis', error);
               Alert.alert('Error', error?.message || 'Failed to regenerate analysis');
             } finally {
               setRegenerating(false);
@@ -160,7 +160,7 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
                 Alert.alert('Error', 'Failed to generate analysis');
               }
             } catch (error: any) {
-              console.error('Error generating analysis:', error);
+              logger.error('Error generating analysis', error);
               Alert.alert('Error', error?.message || 'Failed to generate analysis. Please try again.');
             } finally {
               setRegenerating(false);

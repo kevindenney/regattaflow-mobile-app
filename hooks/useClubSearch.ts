@@ -7,7 +7,7 @@
  * - Join/leave functionality
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { ClubDiscoveryService } from '@/services/ClubDiscoveryService';
@@ -26,7 +26,17 @@ export function useClubSearch(options: UseClubSearchOptions = {}) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { query = '', filter, location, countryCode, boatClassId, limit = 50 } = options;
+  const isMountedRef = useRef(true);
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
   const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    activeUserIdRef.current = user?.id ?? null;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [user?.id]);
 
   // Fetch clubs
   const {
@@ -52,7 +62,7 @@ export function useClubSearch(options: UseClubSearchOptions = {}) {
 
   // Fetch user's joined clubs to check membership
   const { data: userClubs } = useQuery({
-    queryKey: ['user-clubs', user?.id],
+    queryKey: ['club-search-user-clubs', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
       return ClubDiscoveryService.getUserClubs(user.id);
@@ -62,10 +72,13 @@ export function useClubSearch(options: UseClubSearchOptions = {}) {
 
   // Update joined IDs when user clubs load
   useEffect(() => {
-    if (userClubs) {
-      setJoinedIds(new Set(userClubs.map((c: any) => c.id)));
+    if (!isMountedRef.current) return;
+    if (!user?.id || !userClubs) {
+      setJoinedIds(new Set());
+      return;
     }
-  }, [userClubs]);
+    setJoinedIds(new Set(userClubs.map((c: any) => c.id)));
+  }, [user?.id, userClubs]);
 
   // Transform to ClubSearchResult format
   const clubs: ClubSearchResult[] = useMemo(() => {
@@ -87,30 +100,36 @@ export function useClubSearch(options: UseClubSearchOptions = {}) {
   // Join mutation
   const joinMutation = useMutation({
     mutationFn: async (clubId: string) => {
-      if (!user?.id) throw new Error('Not authenticated');
-      await ClubDiscoveryService.joinClub(user.id, clubId);
+      const targetUserId = activeUserIdRef.current;
+      if (!targetUserId) throw new Error('Not authenticated');
+      await ClubDiscoveryService.joinClub(targetUserId, clubId);
       return clubId;
     },
     onSuccess: (clubId) => {
+      const targetUserId = activeUserIdRef.current;
+      if (!isMountedRef.current || !targetUserId) return;
       setJoinedIds((prev) => new Set([...prev, clubId]));
-      queryClient.invalidateQueries({ queryKey: ['user-clubs', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['club-search-user-clubs', targetUserId] });
     },
   });
 
   // Leave mutation
   const leaveMutation = useMutation({
     mutationFn: async (clubId: string) => {
-      if (!user?.id) throw new Error('Not authenticated');
-      await ClubDiscoveryService.leaveClub(user.id, clubId);
+      const targetUserId = activeUserIdRef.current;
+      if (!targetUserId) throw new Error('Not authenticated');
+      await ClubDiscoveryService.leaveClub(targetUserId, clubId);
       return clubId;
     },
     onSuccess: (clubId) => {
+      const targetUserId = activeUserIdRef.current;
+      if (!isMountedRef.current || !targetUserId) return;
       setJoinedIds((prev) => {
         const next = new Set(prev);
         next.delete(clubId);
         return next;
       });
-      queryClient.invalidateQueries({ queryKey: ['user-clubs', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['club-search-user-clubs', targetUserId] });
     },
   });
 

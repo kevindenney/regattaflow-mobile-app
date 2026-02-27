@@ -5,6 +5,7 @@
  */
 
 import { RaceBriefingService, type RaceBriefing } from '@/services/RaceBriefingService';
+import { createLogger } from '@/lib/utils/logger';
 import * as Clipboard from 'expo-clipboard';
 import {
     AlertTriangle,
@@ -37,10 +38,12 @@ interface PreRaceBriefingCardProps {
   userBoatClass?: string;
 }
 
+const logger = createLogger('PreRaceBriefingCard');
+
 export function PreRaceBriefingCard({
   raceId,
   raceName,
-  raceType = 'fleet',
+  raceType: _raceType = 'fleet',
   userBoatClass,
 }: PreRaceBriefingCardProps) {
   const [briefing, setBriefing] = useState<RaceBriefing | null>(null);
@@ -68,7 +71,7 @@ export function PreRaceBriefingCard({
         setError('Failed to generate briefing. Please try again.');
       }
     } catch (err) {
-      console.error('[PreRaceBriefingCard] Error:', err);
+      logger.error('Error generating briefing', err);
       setError('An error occurred while generating the briefing.');
     } finally {
       setLoading(false);
@@ -92,7 +95,7 @@ export function PreRaceBriefingCard({
         });
       }
     } catch (err) {
-      console.error('[PreRaceBriefingCard] Share error:', err);
+      logger.error('Share error', err);
     }
   }, [briefing, raceName]);
 
@@ -566,4 +569,3 @@ const styles = StyleSheet.create({
 });
 
 export default PreRaceBriefingCard;
-

@@ -24,18 +24,20 @@ import * as Clipboard from 'expo-clipboard';
 import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
 import { RaceCollaborator, AccessLevel } from '@/types/raceCollaboration';
 import { IOS_COLORS } from '@/components/cards/constants';
+import { createLogger } from '@/lib/utils/logger';
 import {
   UserPlus,
   Trash2,
   Copy,
   Share as ShareIcon,
   Clock,
-  CheckCircle2,
   Shield,
   Eye,
   Search,
 } from 'lucide-react-native';
 import { CoachFinderModal } from '@/components/crew/CoachFinderModal';
+
+const logger = createLogger('CollaboratorList');
 
 interface CollaboratorListProps {
   /** List of collaborators */
@@ -112,7 +114,7 @@ export function CollaboratorList({
       const code = await onCreateInvite('view');
       setInviteCode(code);
     } catch (error) {
-      console.error('Failed to create invite:', error);
+      logger.error('Failed to create invite', error);
     } finally {
       setIsCreatingInvite(false);
     }
@@ -145,7 +147,7 @@ export function CollaboratorList({
           await Share.share({ message, title: 'Join my race' });
         }
       } catch (error) {
-        console.error('Failed to share:', error);
+        logger.error('Failed to share', error);
       }
     }
   };
@@ -281,7 +283,7 @@ function CollaboratorRow({
   collaborator,
   isOwner,
   onRemove,
-  onUpdateAccess,
+  onUpdateAccess: _onUpdateAccess,
   isPending = false,
 }: CollaboratorRowProps) {
   return (

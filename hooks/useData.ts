@@ -5,8 +5,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import api from '@/services/apiService';
 import { getDemoWorkspace } from '@/services/demo/demoWorkspace';
 import { TablesInsert, TablesUpdate, UserType } from '@/services/supabase';
+import { isMissingRelationError } from '@/lib/utils/supabaseSchemaFallback';
 import type { AiCoachAnalysisSummary, RaceTimerSessionSummary } from '@/types/raceAnalysis';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApi, useMutation, usePullToRefresh } from './useApi';
 import { useLiveRaces } from './useRaceResults';
 
@@ -74,149 +75,231 @@ export function useSaveVenue() {
 
 export function useRaces() {
   const { user } = useAuth();
+  const activeUserIdRef = useRef<string | null>(user?.id ?? null);
 
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
 
   useEffect(() => {
-    if (!user?.id) {
+    activeUserIdRef.current = user?.id ?? null;
+  }, [user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
+  const fetchRacesForRun = useCallback(async (runId: number) => {
+    const targetUserId = user?.id ?? null;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === fetchRunIdRef.current &&
+      activeUserIdRef.current === targetUserId;
+
+    if (!targetUserId) {
+      if (!canCommit()) return;
+      setData([]);
+      setError(null);
       setLoading(false);
       return;
     }
 
+    if (!canCommit()) return;
     setLoading(true);
     setError(null);
 
-    // Execute query directly in useEffect
-    (async () => {
-      try {
-        // Fetch races owned by the user
-        const { data: ownedRaces, error: ownedError } = await api.supabase
-          .from('regattas')
-          .select('*')
-          .eq('created_by', user.id)
-          .order('start_date', { ascending: true })
-          .limit(100);
+    try {
+      // Fetch races owned by the user
+      const { data: ownedRaces, error: ownedError } = await api.supabase
+        .from('regattas')
+        .select('*')
+        .eq('created_by', targetUserId)
+        .order('start_date', { ascending: true })
+        .limit(100);
 
-        if (ownedError) {
-          logger.error('Database error fetching owned races:', ownedError);
-          setError(ownedError as Error);
-          setData([]);
-          setLoading(false);
-          return;
-        }
-
-        // Fetch races where user is a collaborator (accepted or pending)
-        const { data: collaboratorRows, error: collaboratorError } = await api.supabase
-          .from('race_collaborators')
-          .select('regatta_id, id, access_level, status, regattas(*)')
-          .eq('user_id', user.id)
-          .in('status', ['accepted', 'pending']);
-
-        if (collaboratorError) {
-          logger.warn('Error fetching collaborator races:', collaboratorError);
-        }
-
-        // Build collaboration info map
-        const collaborationInfo = new Map<string, {
-          isCollaborator: boolean;
-          isPendingInvite: boolean;
-          accessLevel: string;
-          collaboratorId: string;
-        }>();
-
-        const sharedRaces: any[] = [];
-        (collaboratorRows ?? []).forEach((row: any) => {
-          if (row.regatta_id && row.regattas) {
-            collaborationInfo.set(row.regatta_id, {
-              isCollaborator: row.status === 'accepted',
-              isPendingInvite: row.status === 'pending',
-              accessLevel: row.access_level,
-              collaboratorId: row.id,
-            });
-            // Only add if not already in owned races
-            if (!ownedRaces?.some(r => r.id === row.regatta_id)) {
-              sharedRaces.push(row.regattas);
-            }
-          }
-        });
-
-        // Combine owned and shared races
-        const allRaces = [...(ownedRaces || []), ...sharedRaces];
-
-        // Map to expected format
-        const mapped = allRaces.map((regatta: any) => {
-          // Extract time from start_date in 24-hour format (HH:MM:SS)
-          const extractTimeFrom24Hour = (isoDate: string): string => {
-            try {
-              const date = new Date(isoDate);
-              if (isNaN(date.getTime())) return '10:00:00';
-
-              const hours = date.getUTCHours().toString().padStart(2, '0');
-              const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-              const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-              return `${hours}:${minutes}:${seconds}`;
-            } catch (err) {
-              logger.error('Error extracting time from date:', err);
-              return '10:00:00';
-            }
-          };
-
-          const collabInfo = collaborationInfo.get(regatta.id);
-          const isOwner = regatta.created_by === user.id;
-
-          return {
-            id: regatta.id,
-            name: regatta.name,
-            // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
-            venue: regatta.metadata?.venue_name || regatta.metadata?.venue || 'Venue TBD',
-            date: regatta.start_date,
-            startTime: regatta.warning_signal_time || extractTimeFrom24Hour(regatta.start_date),
-            boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
-            status: regatta.status || 'upcoming',
-            wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
-            tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
-            strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
-            critical_details: regatta.metadata?.critical_details,
-            // Distance racing fields
-            route_waypoints: regatta.route_waypoints,
-            race_type: regatta.race_type,
-            total_distance_nm: regatta.total_distance_nm,
-            time_limit_hours: regatta.time_limit_hours,
-            // Boat/class for equipment features
-            boat_id: regatta.boat_id,
-            class_id: regatta.class_id,
-            // Permissions
-            created_by: regatta.created_by,
-            // Ownership/collaboration flags
-            isOwner,
-            isCollaborator: collabInfo?.isCollaborator ?? false,
-            isPendingInvite: collabInfo?.isPendingInvite ?? false,
-            accessLevel: collabInfo?.accessLevel ?? (isOwner ? 'full' : undefined),
-            collaboratorId: collabInfo?.collaboratorId,
-            // Full metadata for other uses
-            metadata: regatta.metadata,
-          };
-        });
-
-        // Sort by date
-        mapped.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-        setData(mapped);
-        setLoading(false);
-      } catch (err) {
-        logger.error('Exception during query:', err);
-        setError(err as Error);
+      if (ownedError) {
+        logger.error('Database error fetching owned races:', ownedError);
+        if (!canCommit()) return;
+        setError(ownedError as Error);
         setData([]);
         setLoading(false);
+        return;
       }
-    })();
+
+      // Fetch races where user is a collaborator (accepted or pending)
+      const collaboratorJoinQuery = await api.supabase
+        .from('race_collaborators')
+        .select('regatta_id, id, access_level, status, regattas(*)')
+        .eq('user_id', targetUserId)
+        .in('status', ['accepted', 'pending']);
+
+      let collaboratorRows = collaboratorJoinQuery.data || [];
+      let collaboratorError = collaboratorJoinQuery.error;
+
+      if (
+        collaboratorError &&
+        (isMissingRelationError(collaboratorError) ||
+          (typeof collaboratorError.message === 'string' &&
+            collaboratorError.message.includes('regattas')))
+      ) {
+        // Fallback for environments where FK-based join metadata is unavailable.
+          const collaboratorsOnlyQuery = await api.supabase
+            .from('race_collaborators')
+            .select('regatta_id, id, access_level, status')
+            .eq('user_id', targetUserId)
+            .in('status', ['accepted', 'pending']);
+
+        collaboratorRows = (collaboratorsOnlyQuery.data || []) as any[];
+        collaboratorError = collaboratorsOnlyQuery.error;
+
+        if (!collaboratorError) {
+          const regattaIds = Array.from(
+            new Set(collaboratorRows.map((row: any) => row.regatta_id).filter(Boolean))
+          ) as string[];
+
+          if (regattaIds.length > 0) {
+            const regattasById = new Map<string, any>();
+            const regattaLookup = await api.supabase
+              .from('regattas')
+              .select('*')
+              .in('id', regattaIds);
+
+            if (!regattaLookup.error && regattaLookup.data) {
+              (regattaLookup.data as any[]).forEach((regatta: any) => {
+                if (regatta?.id) {
+                  regattasById.set(regatta.id, regatta);
+                }
+              });
+            } else if (regattaLookup.error) {
+              logger.warn('Error fetching regattas for collaborator fallback:', regattaLookup.error);
+            }
+
+            collaboratorRows = collaboratorRows.map((row: any) => ({
+              ...row,
+              regattas: row?.regatta_id ? regattasById.get(row.regatta_id) || null : null,
+            }));
+          }
+        }
+      }
+
+      if (collaboratorError) {
+        logger.warn('Error fetching collaborator races:', collaboratorError);
+      }
+
+      // Build collaboration info map
+      const collaborationInfo = new Map<string, {
+        isCollaborator: boolean;
+        isPendingInvite: boolean;
+        accessLevel: string;
+        collaboratorId: string;
+      }>();
+
+      const sharedRaces: any[] = [];
+      (collaboratorRows ?? []).forEach((row: any) => {
+        if (row.regatta_id) {
+          collaborationInfo.set(row.regatta_id, {
+            isCollaborator: row.status === 'accepted',
+            isPendingInvite: row.status === 'pending',
+            accessLevel: row.access_level,
+            collaboratorId: row.id,
+          });
+        }
+
+        if (row.regatta_id && row.regattas) {
+          // Only add if not already in owned races
+          if (!ownedRaces?.some(r => r.id === row.regatta_id)) {
+            sharedRaces.push(row.regattas);
+          }
+        }
+      });
+
+      // Combine owned and shared races
+      const allRaces = [...(ownedRaces || []), ...sharedRaces];
+
+      // Map to expected format
+      const mapped = allRaces.map((regatta: any) => {
+        // Extract time from start_date in 24-hour format (HH:MM:SS)
+        const extractTimeFrom24Hour = (isoDate: string): string => {
+          try {
+            const date = new Date(isoDate);
+            if (isNaN(date.getTime())) return '10:00:00';
+
+            const hours = date.getUTCHours().toString().padStart(2, '0');
+            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+          } catch (err) {
+            logger.error('Error extracting time from date:', err);
+            return '10:00:00';
+          }
+        };
+
+        const collabInfo = collaborationInfo.get(regatta.id);
+        const isOwner = regatta.created_by === targetUserId;
+
+        return {
+          id: regatta.id,
+          name: regatta.name,
+          // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
+          venue: regatta.metadata?.venue_name || regatta.metadata?.venue || 'Venue TBD',
+          date: regatta.start_date,
+          startTime: regatta.warning_signal_time || extractTimeFrom24Hour(regatta.start_date),
+          boatClass: regatta.metadata?.class || regatta.metadata?.class_name || 'Class TBD',
+          status: regatta.status || 'upcoming',
+          wind: regatta.metadata?.wind || { direction: 'Variable', speedMin: 8, speedMax: 15 },
+          tide: regatta.metadata?.tide || { state: 'slack', height: 1.0 },
+          strategy: regatta.metadata?.strategy || 'Race strategy will be generated based on conditions.',
+          critical_details: regatta.metadata?.critical_details,
+          // Distance racing fields
+          route_waypoints: regatta.route_waypoints,
+          race_type: regatta.race_type,
+          total_distance_nm: regatta.total_distance_nm,
+          time_limit_hours: regatta.time_limit_hours,
+          // Boat/class for equipment features
+          boat_id: regatta.boat_id,
+          class_id: regatta.class_id,
+          // Permissions
+          created_by: regatta.created_by,
+          // Ownership/collaboration flags
+          isOwner,
+          isCollaborator: collabInfo?.isCollaborator ?? false,
+          isPendingInvite: collabInfo?.isPendingInvite ?? false,
+          accessLevel: collabInfo?.accessLevel ?? (isOwner ? 'full' : undefined),
+          collaboratorId: collabInfo?.collaboratorId,
+          // Full metadata for other uses
+          metadata: regatta.metadata,
+        };
+      });
+
+      // Sort by date
+      mapped.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      if (!canCommit()) return;
+      setData(mapped);
+      setLoading(false);
+    } catch (err) {
+      logger.error('Exception during query:', err);
+      if (!canCommit()) return;
+      setError(err as Error);
+      setData([]);
+      setLoading(false);
+    }
   }, [user?.id]);
 
+  useEffect(() => {
+    const runId = ++fetchRunIdRef.current;
+    void fetchRacesForRun(runId);
+  }, [fetchRacesForRun]);
+
   const refetch = useCallback(async () => {
-    setLoading(true);
-  }, []);
+    const runId = ++fetchRunIdRef.current;
+    await fetchRacesForRun(runId);
+  }, [fetchRacesForRun]);
 
   const mutate = useCallback(async (optimisticData?: any[]) => {
     if (optimisticData) {
@@ -550,7 +633,7 @@ export function useTriggerRaceAnalysis() {
 export function useRaceTimerSession(sessionId: string) {
   return useApi<RaceTimerSessionSummary | null>(
     async () => {
-      const { data, error } = await api.supabase
+      const primary = await api.supabase
         .from('race_timer_sessions')
         .select(`
           *,
@@ -559,8 +642,26 @@ export function useRaceTimerSession(sessionId: string) {
         .eq('id', sessionId)
         .single();
 
-      if (error) throw error;
-      return (data as RaceTimerSessionSummary) ?? null;
+      if (!primary.error) {
+        return (primary.data as RaceTimerSessionSummary) ?? null;
+      }
+
+      if (
+        primary.error.code === 'PGRST200' ||
+        (typeof primary.error.message === 'string' &&
+          primary.error.message.includes('regattas'))
+      ) {
+        const fallback = await api.supabase
+          .from('race_timer_sessions')
+          .select('*')
+          .eq('id', sessionId)
+          .single();
+
+        if (fallback.error) throw fallback.error;
+        return (fallback.data as RaceTimerSessionSummary) ?? null;
+      }
+
+      throw primary.error;
     },
     { enabled: !!sessionId }
   );
@@ -575,7 +676,7 @@ export function useRecentTimerSessions(limit: number = 5) {
 
   return useApi(
     async () => {
-      const { data, error } = await api.supabase
+      const primary = await api.supabase
         .from('race_timer_sessions')
         .select(`
           *,
@@ -586,8 +687,28 @@ export function useRecentTimerSessions(limit: number = 5) {
         .order('start_time', { ascending: false })
         .limit(limit);
 
-      if (error) throw error;
-      return data || [];
+      if (!primary.error) {
+        return primary.data || [];
+      }
+
+      if (
+        primary.error.code === 'PGRST200' ||
+        (typeof primary.error.message === 'string' &&
+          primary.error.message.includes('regattas'))
+      ) {
+        const fallback = await api.supabase
+          .from('race_timer_sessions')
+          .select('*')
+          .eq('sailor_id', user?.id)
+          .not('end_time', 'is', null)
+          .order('start_time', { ascending: false })
+          .limit(limit);
+
+        if (fallback.error) throw fallback.error;
+        return fallback.data || [];
+      }
+
+      throw primary.error;
     },
     { enabled: !!user?.id }
   );
@@ -609,8 +730,9 @@ export function useDashboardData() {
   const recentSessions = useRecentTimerSessions(5);
 
   // Map liveRaces to expected format (same format as useRaces)
+  // Memoize to avoid creating a new array on every render
   // Note: Don't apply placeholder wind/tide values - useEnrichedRaces will handle this
-  const mappedRaces = (liveRaces || []).map((regatta: any) => ({
+  const mappedRaces = useMemo(() => (liveRaces || []).map((regatta: any) => ({
     id: regatta.id,
     name: regatta.name,
     // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
@@ -632,12 +754,15 @@ export function useDashboardData() {
     accessLevel: regatta.accessLevel,
     collaboratorId: regatta.collaboratorId,
     created_by: regatta.created_by, // Preserve for permission checks
-  }));
+  })), [liveRaces]);
 
   const loading = profile.loading || racesLoading || performanceHistory.loading || boats.loading || fleets.loading || recentSessions.loading;
   const error = profile.error || performanceHistory.error || boats.error || fleets.error || recentSessions.error;
 
-  const refetch = useCallback(async () => {
+  // Stable refetch: use ref pattern so the callback identity doesn't change each render.
+  // Without this, useFocusEffect consumers re-run on every render → infinite loop.
+  const refetchFnsRef = useRef<() => Promise<void>>();
+  refetchFnsRef.current = async () => {
     await Promise.all([
       profile.refetch(),
       racesRefresh(),
@@ -646,27 +771,27 @@ export function useDashboardData() {
       fleets.refetch(),
       recentSessions.refetch()
     ]);
-  }, [profile.refetch, racesRefresh, performanceHistory.refetch, boats.refetch, fleets.refetch, recentSessions.refetch]);
+  };
+  const refetch = useCallback(async () => {
+    await refetchFnsRef.current?.();
+  }, []);
 
   const { refreshing, onRefresh } = usePullToRefresh(refetch);
 
-  // Find the next race (first future race)
-  // race.date is already an ISO datetime string (e.g., "2025-12-02T10:00:00.000Z")
-  // that includes the race start time
-  const now = new Date();
-
-  const nextRaceIndex = mappedRaces.findIndex((race: any) => {
-    // Parse the full race datetime from ISO string
-    const raceDateTime = new Date(race.date);
-    
-    // Race is "upcoming" if estimated end time (start + 3 hours) is still in the future
-    const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
-    return raceEndEstimate > now;
-  });
-  const nextRace = nextRaceIndex >= 0 ? mappedRaces[nextRaceIndex] : null;
-
-  // All races in chronological order (mappedRaces is already sorted by date ascending)
-  const recentRaces = mappedRaces;
+  // Find the next race and compute derived values — memoized for stable references
+  const { nextRace, recentRaces } = useMemo(() => {
+    const now = new Date();
+    const nextRaceIndex = mappedRaces.findIndex((race: any) => {
+      const raceDateTime = new Date(race.date);
+      // Race is "upcoming" if estimated end time (start + 3 hours) is still in the future
+      const raceEndEstimate = new Date(raceDateTime.getTime() + 3 * 60 * 60 * 1000);
+      return raceEndEstimate > now;
+    });
+    return {
+      nextRace: nextRaceIndex >= 0 ? mappedRaces[nextRaceIndex] : null,
+      recentRaces: mappedRaces,
+    };
+  }, [mappedRaces]);
 
   if (isDemo && demoWorkspace) {
     // Find the next upcoming race in demo data (not just the first one)
@@ -695,7 +820,7 @@ export function useDashboardData() {
     };
   }
 
-  return {
+  return useMemo(() => ({
     profile: profile.data,
     nextRace,
     recentRaces,
@@ -708,7 +833,7 @@ export function useDashboardData() {
     refreshing,
     onRefresh,
     refetch
-  };
+  }), [profile.data, nextRace, recentRaces, recentSessions.data, performanceHistory.data, boats.data, fleets.data, loading, error, refreshing, onRefresh, refetch]);
 }
 
 export function useBoatDetailData(boatId: string) {

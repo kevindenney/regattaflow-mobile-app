@@ -225,7 +225,7 @@ export default function Login() {
           </View>
 
           <Text testID="login-title" accessibilityRole="header" style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Sign in to continue to RegattaFlow</Text>
+          <Text style={styles.subtitle}>Sign in to continue to BetterAt</Text>
 
           {/* Error Message Banner */}
           {errorMessage && (
@@ -347,7 +347,7 @@ export default function Login() {
 
           {/* Marketing blurb */}
           <Text style={styles.marketingText}>
-            Manage regattas, get AI race strategy, book coaches, and sync results — all in one place.
+            Plan, Do, Review — get better at what matters to you.
           </Text>
         </View>
       </ScrollView>

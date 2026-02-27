@@ -6,7 +6,7 @@
  * New pricing: Free / Individual $120/yr / Team $480/yr
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Platform
+  Platform,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
@@ -71,10 +72,20 @@ const webStripeService = {
     }
   ],
   getSubscriptionStatus: async () => ({ active: false }),
-  createCheckoutSession: async () => ({ error: 'Subscription management coming soon for web' }),
-  createPortalSession: async () => ({ error: 'Billing portal coming soon for web' }),
-  cancelSubscription: async () => ({ success: false, error: 'Cancellation coming soon for web' }),
-  resumeSubscription: async () => ({ success: false, error: 'Resume coming soon for web' })
+  createCheckoutSession: async (_userId: string, _priceId: string) => ({
+    error: 'Web checkout currently routes through support.',
+  }),
+  createPortalSession: async (_userId: string) => ({
+    error: 'Web billing portal currently routes through support.',
+  }),
+  cancelSubscription: async (_userId: string) => ({
+    success: false,
+    error: 'Please contact support to cancel from web.',
+  }),
+  resumeSubscription: async (_userId: string) => ({
+    success: false,
+    error: 'Please contact support to resume from web.',
+  })
 };
 
 // Use web service for now to avoid Stripe React Native completely
@@ -95,9 +106,9 @@ export const SubscriptionManager: React.FC = () => {
 
   useEffect(() => {
     loadSubscriptionStatus();
-  }, [user]);
+  }, [loadSubscriptionStatus]);
 
-  const loadSubscriptionStatus = async () => {
+  const loadSubscriptionStatus = useCallback(async () => {
     if (!user?.id) return;
 
     setLoading(true);
@@ -109,7 +120,7 @@ export const SubscriptionManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   const handleSelectPlan = async (plan: SubscriptionPlan) => {
     if (!user?.id) {
@@ -144,7 +155,13 @@ export const SubscriptionManager: React.FC = () => {
           Alert.alert('Checkout', 'Opening payment page...');
         }
       } else {
-        Alert.alert('Error', result.error);
+        if (Platform.OS === 'web') {
+          void Linking.openURL(
+            `mailto:support@regattaflow.com?subject=Subscription%20Checkout%20Request&body=User%20ID%3A%20${encodeURIComponent(user.id)}%0APlan%3A%20${encodeURIComponent(plan.name)}`
+          );
+        } else {
+          Alert.alert('Error', result.error);
+        }
       }
     } catch (error: unknown) {
       Alert.alert('Error', 'Failed to start checkout process');
@@ -167,7 +184,13 @@ export const SubscriptionManager: React.FC = () => {
           Alert.alert('Billing Portal', 'Opening billing management...');
         }
       } else {
-        Alert.alert('Error', result.error);
+        if (Platform.OS === 'web') {
+          void Linking.openURL(
+            `mailto:support@regattaflow.com?subject=Billing%20Portal%20Request&body=User%20ID%3A%20${encodeURIComponent(user.id)}`
+          );
+        } else {
+          Alert.alert('Error', result.error);
+        }
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to open billing portal');
@@ -239,7 +262,7 @@ export const SubscriptionManager: React.FC = () => {
         <View style={styles.webNotice}>
           <Ionicons name="information-circle" size={20} color="#007AFF" />
           <Text style={styles.webNoticeText}>
-            Subscription management is optimized for mobile. Web features coming soon!
+            Web billing actions are handled by support. Tap checkout/manage and we will open an email request.
           </Text>
         </View>
       )}

@@ -15,6 +15,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TufteTokens } from '@/constants/designSystem';
 import { NavigationDrawer, getCurrentSectionName } from './NavigationDrawer';
 import { TUFTE_BACKGROUND } from '@/components/cards/constants';
+import { InterestSwitcher } from '@/components/InterestSwitcher';
+import { useVocabulary } from '@/hooks/useVocabulary';
 
 interface NavigationHeaderProps {
   backgroundColor?: string;
@@ -34,10 +36,11 @@ export function NavigationHeader({
   const { user, userType, isGuest } = useAuth();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  const { vocabulary } = useVocabulary();
   const [drawerVisible, setDrawerVisible] = useState(false);
 
-  // Get current section name for header
-  const sectionName = getCurrentSectionName(pathname, userType);
+  // Get current section name for header (vocabulary-aware)
+  const sectionName = getCurrentSectionName(pathname, userType, vocabulary);
 
   // Allow pages to hide the global header and render their own
   if (hidden) return null;
@@ -73,9 +76,12 @@ export function NavigationHeader({
             <View style={styles.spacer} />
           )}
 
-          {/* Center: Section Name (Tufte mode) */}
+          {/* Center: Interest Switcher + Section Name (Tufte mode) */}
           {showDrawer && (user || isGuest) && !isOnboardingPage ? (
-            <Text style={styles.sectionTitle}>{sectionName}</Text>
+            <View style={styles.centerGroup}>
+              <InterestSwitcher />
+              <Text style={styles.sectionTitle}>{sectionName}</Text>
+            </View>
           ) : (
             <View style={styles.spacer} />
           )}
@@ -139,6 +145,11 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
+  },
+  centerGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   navigationActions: {
     flexDirection: 'row',

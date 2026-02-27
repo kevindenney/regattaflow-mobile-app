@@ -18,9 +18,10 @@ import {
     Wind,
     XCircle,
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Linking,
     Platform,
     RefreshControl,
     ScrollView,
@@ -80,11 +81,7 @@ export default function PublicSchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchSchedule();
-  }, [regattaId]);
-
-  const fetchSchedule = async (isRefresh = false) => {
+  const fetchSchedule = useCallback(async (isRefresh = false) => {
     if (!regattaId) return;
     
     try {
@@ -117,7 +114,11 @@ export default function PublicSchedulePage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [regattaId]);
+
+  useEffect(() => {
+    void fetchSchedule();
+  }, [fetchSchedule]);
 
   const handleShare = async () => {
     const url = `${API_BASE}/p/schedule/${regattaId}`;
@@ -205,6 +206,19 @@ export default function PublicSchedulePage() {
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => fetchSchedule()}>
           <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push(`/p/${regattaId}`)}>
+          <Text style={styles.secondaryButtonText}>View Regatta</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() =>
+            Linking.openURL(
+              `mailto:support@regattaflow.com?subject=${encodeURIComponent('Public Schedule Unavailable')}&body=${encodeURIComponent(`Regatta: ${regattaId}\nError: ${error || 'Schedule unavailable'}`)}`
+            )
+          }
+        >
+          <Text style={styles.secondaryButtonText}>Contact Support</Text>
         </TouchableOpacity>
       </View>
     );
@@ -415,6 +429,19 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+  },
+  secondaryButtonText: {
+    color: '#374151',
     fontWeight: '600',
   },
   header: {
@@ -632,4 +659,3 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
-

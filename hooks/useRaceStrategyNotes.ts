@@ -10,8 +10,10 @@ import { supabase } from '@/services/supabase';
 import type { StrategyPhase, StrategySectionId } from '@/types/raceStrategy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createLogger } from '@/lib/utils/logger';
 
 const STORAGE_KEY_PREFIX = 'demo_strategy_';
+const logger = createLogger('useRaceStrategyNotes');
 
 interface StrategyEntry {
   id: string;
@@ -52,6 +54,14 @@ function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(
   const callbackRef = useRef(callback);
   callbackRef.current = callback;
 
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
   return useCallback(
     ((...args: Parameters<T>) => {
       if (timeoutRef.current) {
@@ -79,6 +89,24 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
 
   // Track entries by phase for updates
   const entriesRef = useRef<Record<string, StrategyEntry>>({});
+  const isMountedRef = useRef(true);
+  const activeRaceIdRef = useRef(raceId);
+  const activeUserIdRef = useRef(user?.id);
+  const loadRunIdRef = useRef(0);
+  const saveRunIdRef = useRef(0);
+
+  useEffect(() => {
+    activeRaceIdRef.current = raceId;
+    activeUserIdRef.current = user?.id;
+  }, [raceId, user?.id]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      saveRunIdRef.current += 1;
+    };
+  }, []);
 
   // Load existing strategy entries for this race
   useEffect(() => {
@@ -91,8 +119,17 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
     }
 
     const loadPlans = async () => {
-      setIsLoading(true);
-      setError(null);
+      const activeRaceId = raceId;
+      const activeUserId = user?.id || null;
+      const runId = ++loadRunIdRef.current;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === loadRunIdRef.current &&
+        activeRaceIdRef.current === activeRaceId &&
+        (activeUserIdRef.current || null) === activeUserId;
+
+      if (canCommit()) setIsLoading(true);
+      if (canCommit()) setError(null);
 
       // Handle non-UUID race IDs (demo races) with local storage
       if (isDemoRace) {
@@ -100,15 +137,16 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
           const userId = user?.id || 'guest';
           const key = `${STORAGE_KEY_PREFIX}${raceId}_${userId}`;
           const saved = await AsyncStorage.getItem(key);
+          if (!canCommit()) return;
           if (saved) {
             setPlans(JSON.parse(saved));
           } else {
             setPlans({});
           }
         } catch (err) {
-          console.error('[useRaceStrategyNotes] AsyncStorage load error', err);
+          logger.error('AsyncStorage load error', err);
         } finally {
-          setIsLoading(false);
+          if (canCommit()) setIsLoading(false);
         }
         return;
       }
@@ -120,6 +158,7 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
           .eq('domain', 'race')
           .eq('entity_id', raceId);
 
+        if (!canCommit()) return;
         if (fetchError) throw fetchError;
 
         // Build plans map from entries
@@ -138,13 +177,16 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
           }
         }
 
+        if (!canCommit()) return;
         entriesRef.current = entries;
         setPlans(loadedPlans);
       } catch (err) {
-        console.error('[useRaceStrategyNotes] Failed to load plans:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load strategy plans');
+        logger.error('Failed to load plans', err);
+        if (canCommit()) {
+          setError(err instanceof Error ? err.message : 'Failed to load strategy plans');
+        }
       } finally {
-        setIsLoading(false);
+        if (canCommit()) setIsLoading(false);
       }
     };
 
@@ -158,6 +200,15 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
       if (!raceId || (!user && !isDemoRace)) {
         return;
       }
+
+      const activeRaceId = raceId;
+      const activeUserId = user?.id || null;
+      const runId = ++saveRunIdRef.current;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === saveRunIdRef.current &&
+        activeRaceIdRef.current === activeRaceId &&
+        (activeUserIdRef.current || null) === activeUserId;
 
       const { phase, field } = parseSectionId(sectionId);
 
@@ -177,11 +228,61 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
           };
 
           await AsyncStorage.setItem(key, JSON.stringify(updated));
-          setHasUnsavedChanges(false);
+          if (canCommit()) setHasUnsavedChanges(false);
         } catch (err) {
-          console.error('[useRaceStrategyNotes] AsyncStorage save error', err);
+          logger.error('AsyncStorage save error', err);
         }
         return;
+      }
+
+      try {
+        const existingEntry = entriesRef.current[phase];
+        const nextPhasePlan = {
+          ...(existingEntry?.plan || {}),
+        };
+
+        const normalizedPlanText = planText.trim();
+        if (normalizedPlanText.length === 0) {
+          delete nextPhasePlan[field];
+        } else {
+          nextPhasePlan[field] = planText;
+        }
+
+        if (existingEntry?.id) {
+          const { data: updatedEntry, error: updateError } = await supabase
+            .from('strategy_entries')
+            .update({
+              plan: nextPhasePlan,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingEntry.id)
+            .select('id, phase, plan, updated_at')
+            .single();
+
+          if (updateError) throw updateError;
+          if (!canCommit()) return;
+          entriesRef.current[phase] = updatedEntry as StrategyEntry;
+          setHasUnsavedChanges(false);
+          return;
+        }
+
+        const { data: insertedEntry, error: insertError } = await supabase
+          .from('strategy_entries')
+          .insert({
+            domain: 'race',
+            entity_id: raceId,
+            phase,
+            plan: nextPhasePlan,
+          })
+          .select('id, phase, plan, updated_at')
+          .single();
+
+        if (insertError) throw insertError;
+        if (!canCommit()) return;
+        entriesRef.current[phase] = insertedEntry as StrategyEntry;
+        setHasUnsavedChanges(false);
+      } catch (err) {
+        logger.error('Failed to save plan', err);
       }
 
     },
@@ -201,7 +302,7 @@ export function useRaceStrategyNotes(raceId: string | undefined): UseRaceStrateg
       // Debounced save to database
       debouncedSave(sectionId, planText);
     },
-    [debouncedSave, raceId]
+    [debouncedSave]
   );
 
   return {

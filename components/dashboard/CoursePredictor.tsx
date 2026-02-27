@@ -1,10 +1,10 @@
 /**
  * Course Predictor Component
  * AI-powered race course prediction based on weather conditions
- * Powered by CoursePredictionAgent
+ * Powered by saved prediction data with deterministic fallback
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import { CoursePredictionAgent } from '@/services/agents/CoursePredictionAgent';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CoursePredictor');
 
 interface CoursePredictorProps {
   regattaId: string;
@@ -24,57 +27,114 @@ interface CoursePrediction {
   predictedCourse: string;
   confidence: number;
   reasoning: string;
-  alternatives?: Array<{
+  alternatives?: {
     course: string;
     probability: number;
-  }>;
+  }[];
 }
 
-export function CoursePredictor({ regattaId, venueId, raceDate }: CoursePredictorProps) {
+export function CoursePredictor({ regattaId, venueId, raceDate: _raceDate }: CoursePredictorProps) {
   const [prediction, setPrediction] = useState<CoursePrediction | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const predictCourse = async () => {
+  const deriveFallbackPrediction = useCallback(async (): Promise<CoursePrediction> => {
+    const { data: courses, error: coursesError } = await supabase
+      .from('race_courses')
+      .select('id, course_name, name, description')
+      .eq('venue_id', venueId)
+      .limit(3);
+
+    if (coursesError) {
+      throw coursesError;
+    }
+
+    const topCourse = courses?.[0];
+    const topCourseName = topCourse?.course_name || topCourse?.name || 'Most likely default course';
+    const alternatives = (courses || [])
+      .slice(1, 3)
+      .map((course: any) => ({
+        course: course.course_name || course.name || 'Alternative course',
+        probability: 0.2,
+      }));
+
+    return {
+      predictedCourse: topCourseName,
+      confidence: topCourse ? 0.6 : 0.35,
+      reasoning: topCourse
+        ? 'Using configured venue course data as fallback while AI prediction is unavailable.'
+        : 'No saved venue courses found. Prediction uses a conservative fallback.',
+      alternatives,
+    };
+  }, [venueId]);
+
+  const predictCourse = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const agent = new CoursePredictionAgent();
-      const result = await agent.predictCourse({
-        regattaId,
-        venueId,
-        raceDate,
-      });
+      const { data: latestPrediction, error: predictionError } = await supabase
+        .from('race_predictions')
+        .select(`
+          prediction_reasoning,
+          prediction_confidence,
+          alternative_courses,
+          race_courses:predicted_course_id (course_name, name)
+        `)
+        .eq('regatta_id', regattaId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (result.success && result.result) {
-        // Parse the agent's response for course prediction data
-        // The agent returns natural language, we'll extract structured data
-        // In production, this would parse the agent's response more thoroughly
+      if (predictionError) {
+        throw predictionError;
+      }
+
+      if (latestPrediction) {
+        const predictedCourseName =
+          (latestPrediction as any)?.race_courses?.course_name ||
+          (latestPrediction as any)?.race_courses?.name ||
+          'Predicted Course';
+        const confidenceRaw = Number((latestPrediction as any)?.prediction_confidence || 0);
+        const confidence = confidenceRaw > 1 ? confidenceRaw / 100 : confidenceRaw;
+        const alternativeCourses = Array.isArray((latestPrediction as any)?.alternative_courses)
+          ? (latestPrediction as any).alternative_courses
+          : [];
 
         setPrediction({
-          predictedCourse: 'Course A', // Placeholder - would be extracted from agent response
-          confidence: 0.85,
-          reasoning: result.result,
-          alternatives: [
-            { course: 'Course B', probability: 0.10 },
-            { course: 'Course C', probability: 0.05 },
-          ],
+          predictedCourse: predictedCourseName,
+          confidence: Math.max(0, Math.min(1, confidence || 0.65)),
+          reasoning:
+            (latestPrediction as any)?.prediction_reasoning ||
+            'Loaded latest saved course prediction.',
+          alternatives: alternativeCourses
+            .slice(0, 3)
+            .map((entry: any) => ({
+              course: entry.course_name || entry.course || 'Alternative',
+              probability: Number(entry.probability || 0),
+            })),
         });
       } else {
-        setError(result.error || 'Failed to predict course');
+        const fallback = await deriveFallbackPrediction();
+        setPrediction(fallback);
       }
     } catch (err: any) {
-      console.error('Course prediction error:', err);
-      setError(err.message || 'Failed to predict course');
+      logger.error('Course prediction error', err);
+      try {
+        const fallback = await deriveFallbackPrediction();
+        setPrediction(fallback);
+      } catch (fallbackError: any) {
+        logger.error('Fallback course prediction failed', fallbackError);
+        setError(fallbackError?.message || err.message || 'Failed to predict course');
+      }
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [deriveFallbackPrediction, regattaId]);
 
   useEffect(() => {
-    predictCourse();
-  }, [regattaId, venueId, raceDate]);
+    void predictCourse();
+  }, [predictCourse]);
 
   const getConfidenceColor = (confidence: number): string => {
     if (confidence >= 0.8) return '#4caf50'; // High confidence - green

@@ -9,8 +9,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingRelationError } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('useUserClubs');
+const ACTIVE_MEMBERSHIP_STATUSES = ['active', 'approved', 'confirmed', 'current'];
 
 export interface UserClub {
   id: string;
@@ -46,6 +48,106 @@ interface UseUserClubsReturn {
   hasClubs: boolean;
 }
 
+async function fetchClubsByIds(clubIds: string[]): Promise<UserClub[]> {
+  if (clubIds.length === 0) return [];
+
+  const clubsById = new Map<string, UserClub>();
+
+  const clubsResult = await supabase
+    .from('clubs')
+    .select('id, name, short_name, logo_url, website, city, country')
+    .in('id', clubIds);
+
+  if (!clubsResult.error && clubsResult.data) {
+    (clubsResult.data as UserClub[]).forEach((club) => {
+      if (club?.id) clubsById.set(club.id, club);
+    });
+  }
+
+  const unresolvedAfterClubs = clubIds.filter((clubId) => !clubsById.has(clubId));
+  if (unresolvedAfterClubs.length > 0 || isMissingRelationError(clubsResult.error)) {
+    const idsToResolve = unresolvedAfterClubs.length > 0 ? unresolvedAfterClubs : clubIds;
+    const profilesResult = await supabase
+      .from('club_profiles')
+      .select('id, club_name, organization_name, logo_url, website_url, city, country')
+      .in('id', idsToResolve);
+
+    if (!profilesResult.error && profilesResult.data) {
+      (profilesResult.data as any[]).forEach((profile) => {
+        if (!profile?.id) return;
+        clubsById.set(profile.id, {
+          id: profile.id,
+          name: profile.organization_name || profile.club_name || 'Sailing Club',
+          logo_url: profile.logo_url || undefined,
+          website: profile.website_url || undefined,
+          city: profile.city || undefined,
+          country: profile.country || undefined,
+        });
+      });
+    }
+  }
+
+  const unresolvedAfterProfiles = clubIds.filter((clubId) => !clubsById.has(clubId));
+  if (unresolvedAfterProfiles.length > 0 || isMissingRelationError(clubsResult.error)) {
+    const idsToResolve = unresolvedAfterProfiles.length > 0 ? unresolvedAfterProfiles : clubIds;
+    const yachtResult = await supabase
+      .from('yacht_clubs')
+      .select('id, name, logo_url, website, location, country')
+      .in('id', idsToResolve);
+
+    if (!yachtResult.error && yachtResult.data) {
+      (yachtResult.data as any[]).forEach((club) => {
+        if (!club?.id) return;
+        clubsById.set(club.id, {
+          id: club.id,
+          name: club.name || 'Sailing Club',
+          logo_url: club.logo_url || undefined,
+          website: club.website || undefined,
+          city: club.location || undefined,
+          country: club.country || undefined,
+        });
+      });
+    }
+  }
+
+  const unresolvedAfterYacht = clubIds.filter((clubId) => !clubsById.has(clubId));
+  if (unresolvedAfterYacht.length > 0 || isMissingRelationError(clubsResult.error)) {
+    const idsToResolve = unresolvedAfterYacht.length > 0 ? unresolvedAfterYacht : clubIds;
+    const globalResult = await supabase
+      .from('global_clubs')
+      .select('id, name, short_name, city, country, website, logo_url, platform_club_id')
+      .or(
+        `id.in.(${idsToResolve.join(',')}),platform_club_id.in.(${idsToResolve.join(',')})`
+      );
+
+    if (!globalResult.error && globalResult.data) {
+      (globalResult.data as any[]).forEach((club) => {
+        const name = club?.name || 'Sailing Club';
+        const clubData = {
+          id: club?.platform_club_id || club?.id,
+          name,
+          short_name: club?.short_name || undefined,
+          logo_url: club?.logo_url || undefined,
+          website: club?.website || undefined,
+          city: club?.city || undefined,
+          country: club?.country || undefined,
+        } satisfies UserClub;
+
+        if (club?.id && idsToResolve.includes(club.id)) {
+          clubsById.set(club.id, clubData);
+        }
+        if (club?.platform_club_id && idsToResolve.includes(club.platform_club_id)) {
+          clubsById.set(club.platform_club_id, clubData);
+        }
+      });
+    }
+  }
+
+  return clubIds
+    .map((clubId) => clubsById.get(clubId))
+    .filter((club): club is UserClub => Boolean(club));
+}
+
 export function useUserClubs(options: UseUserClubsOptions = {}): UseUserClubsReturn {
   const { includeHomeClubs = true, enabled = true } = options;
   const { user, ready: authReady } = useAuth();
@@ -72,23 +174,84 @@ export function useUserClubs(options: UseUserClubsOptions = {}): UseUserClubsRet
 
       // 1. Fetch clubs from club_members table
       try {
-        const { data: memberships, error: memberError } = await supabase
+        let memberships: { club_id?: string | null }[] | null = null;
+
+        const activeMembershipsResult = await supabase
           .from('club_members')
-          .select(`
-            club:clubs(id, name, short_name, logo_url, website, city, country)
-          `)
+          .select('club_id')
           .eq('user_id', user.id)
           .eq('is_active', true);
 
-        if (!memberError && memberships) {
-          for (const membership of memberships) {
-            const club = membership.club as any;
-            if (club?.id) {
+        if (!activeMembershipsResult.error) {
+          memberships = activeMembershipsResult.data as { club_id?: string | null }[];
+        } else {
+          // Fallback for schemas that use status instead of is_active.
+          const statusMembershipsResult = await supabase
+            .from('club_members')
+            .select('club_id')
+            .eq('user_id', user.id)
+            .in('status', ACTIVE_MEMBERSHIP_STATUSES);
+
+          if (!statusMembershipsResult.error) {
+            memberships = statusMembershipsResult.data as { club_id?: string | null }[];
+          } else {
+            const legacyMembershipsResult = await supabase
+              .from('club_memberships')
+              .select('club_id')
+              .eq('user_id', user.id);
+            if (!legacyMembershipsResult.error) {
+              memberships = legacyMembershipsResult.data as { club_id?: string | null }[];
+            }
+          }
+        }
+
+        if (memberships) {
+          const membershipClubIds = Array.from(
+            new Set((memberships as { club_id?: string | null }[])
+              .map((membership) => membership.club_id)
+              .filter(Boolean))
+          ) as string[];
+
+          const globalMembershipResult = await supabase
+            .from('global_club_members')
+            .select('global_club_id')
+            .eq('user_id', user.id);
+          if (!globalMembershipResult.error && globalMembershipResult.data) {
+            const globalClubIds = Array.from(
+              new Set(
+                (globalMembershipResult.data as any[])
+                  .map((row) => row?.global_club_id)
+                  .filter(Boolean)
+              )
+            ) as string[];
+
+            if (globalClubIds.length > 0) {
+              const globalClubsResult = await supabase
+                .from('global_clubs')
+                .select('id, platform_club_id')
+                .in('id', globalClubIds);
+
+              if (!globalClubsResult.error && globalClubsResult.data) {
+                (globalClubsResult.data as any[]).forEach((club) => {
+                  const resolvedClubId = club?.platform_club_id || club?.id;
+                  if (resolvedClubId) {
+                    membershipClubIds.push(resolvedClubId);
+                  }
+                });
+              }
+            }
+          }
+
+          const uniqueMembershipClubIds = Array.from(new Set(membershipClubIds));
+
+          if (uniqueMembershipClubIds.length > 0) {
+            const memberClubs = await fetchClubsByIds(uniqueMembershipClubIds);
+            memberClubs.forEach((club) => {
               clubMap.set(club.id, {
                 ...club,
                 isMember: true,
               });
-            }
+            });
           }
         }
       } catch (e) {
@@ -100,25 +263,30 @@ export function useUserClubs(options: UseUserClubsOptions = {}): UseUserClubsRet
         try {
           const { data: boats, error: boatError } = await supabase
             .from('sailor_boats')
-            .select(`
-              home_club:clubs!home_club_id(id, name, short_name, logo_url, website, city, country)
-            `)
+            .select('home_club_id')
             .eq('sailor_id', user.id)
             .not('home_club_id', 'is', null);
 
           if (!boatError && boats) {
-            for (const boat of boats) {
-              const club = boat.home_club as any;
-              if (club?.id && !clubMap.has(club.id)) {
-                clubMap.set(club.id, {
-                  ...club,
-                  isHomeClub: true,
-                });
-              } else if (club?.id) {
-                // Already in map, mark as home club too
-                const existing = clubMap.get(club.id)!;
-                existing.isHomeClub = true;
-              }
+            const homeClubIds = Array.from(
+              new Set((boats as { home_club_id?: string | null }[])
+                .map((boat) => boat.home_club_id)
+                .filter(Boolean))
+            ) as string[];
+
+            if (homeClubIds.length > 0) {
+              const homeClubs = await fetchClubsByIds(homeClubIds);
+              homeClubs.forEach((club) => {
+                if (!clubMap.has(club.id)) {
+                  clubMap.set(club.id, {
+                    ...club,
+                    isHomeClub: true,
+                  });
+                } else {
+                  const existing = clubMap.get(club.id)!;
+                  existing.isHomeClub = true;
+                }
+              });
             }
           }
         } catch (e) {
@@ -163,18 +331,75 @@ export function useAllClubs(options: { enabled?: boolean; limit?: number } = {})
   return useQuery({
     queryKey: ['all-clubs', limit],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const clubsResult = await supabase
         .from('clubs')
         .select('id, name, short_name, logo_url, city, country')
         .order('name', { ascending: true })
         .limit(limit);
 
-      if (error) {
-        logger.error('[useAllClubs] Error fetching clubs:', error);
-        throw error;
+      const globalResult = await supabase
+        .from('global_clubs')
+        .select('id, name, short_name, logo_url, city, country, platform_club_id')
+        .order('name', { ascending: true })
+        .limit(limit);
+
+      const globalClubs = !globalResult.error && globalResult.data
+        ? (globalResult.data as any[]).map((club) => ({
+            id: club.platform_club_id || club.id,
+            name: club.name || 'Sailing Club',
+            short_name: club.short_name || undefined,
+            logo_url: club.logo_url || undefined,
+            city: club.city || undefined,
+            country: club.country || undefined,
+          }))
+        : [];
+
+      if (!clubsResult.error && clubsResult.data && clubsResult.data.length > 0) {
+        const merged = [...globalClubs, ...(clubsResult.data as UserClub[])];
+        return Array.from(new Map(merged.map((club) => [club.id, club])).values());
       }
 
-      return (data || []) as UserClub[];
+      const yachtResult = await supabase
+        .from('yacht_clubs')
+        .select('id, name, logo_url, location, country')
+        .order('name', { ascending: true })
+        .limit(limit);
+      if (!yachtResult.error && yachtResult.data && yachtResult.data.length > 0) {
+        const mappedYacht = (yachtResult.data as any[]).map((club) => ({
+          id: club.id,
+          name: club.name,
+          logo_url: club.logo_url || undefined,
+          city: club.location || undefined,
+          country: club.country || undefined,
+        }));
+        const merged = [...globalClubs, ...mappedYacht];
+        return Array.from(new Map(merged.map((club) => [club.id, club])).values());
+      }
+
+      const profilesResult = await supabase
+        .from('club_profiles')
+        .select('id, club_name, organization_name, logo_url, city, country')
+        .order('organization_name', { ascending: true })
+        .limit(limit);
+      if (!profilesResult.error && profilesResult.data && profilesResult.data.length > 0) {
+        const mappedProfiles = (profilesResult.data as any[]).map((profile) => ({
+          id: profile.id,
+          name: profile.organization_name || profile.club_name || 'Sailing Club',
+          logo_url: profile.logo_url || undefined,
+          city: profile.city || undefined,
+          country: profile.country || undefined,
+        }));
+        const merged = [...globalClubs, ...mappedProfiles];
+        return Array.from(new Map(merged.map((club) => [club.id, club])).values());
+      }
+
+      const finalError = clubsResult.error || yachtResult.error || profilesResult.error;
+      if (finalError && !isMissingRelationError(finalError)) {
+        logger.error('[useAllClubs] Error fetching clubs:', finalError);
+        throw finalError;
+      }
+
+      return globalClubs;
     },
     enabled,
     staleTime: 10 * 60 * 1000, // 10 minutes - clubs don't change often

@@ -32,6 +32,7 @@ import type {
   CategorizedSuggestions,
   RaceSuggestion,
   RaceSuggestionType,
+  SuggestionDiagnostics,
 } from '@/services/RaceSuggestionService';
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
 
@@ -41,10 +42,13 @@ import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
 
 interface RaceSuggestionChipsProps {
   suggestions: CategorizedSuggestions | null;
+  diagnostics?: SuggestionDiagnostics | null;
   loading: boolean;
+  error?: Error | null;
   onUseSuggestion: (suggestion: RaceSuggestion) => void;
   onDismissSuggestion: (suggestionId: string) => void;
   onSeeAll?: () => void;
+  onRetry?: () => void;
 }
 
 // =============================================================================
@@ -81,12 +85,16 @@ const TYPE_PRIORITY: RaceSuggestionType[] = [
 
 export function RaceSuggestionChips({
   suggestions,
+  diagnostics,
   loading,
+  error,
   onUseSuggestion,
   onDismissSuggestion,
   onSeeAll,
+  onRetry,
 }: RaceSuggestionChipsProps) {
   const [selectedSuggestion, setSelectedSuggestion] = useState<RaceSuggestion | null>(null);
+  const failedSources = diagnostics?.failedSources || [];
 
   // Flatten and sort suggestions by type priority, then confidence
   const orderedSuggestions = useMemo(() => {
@@ -129,8 +137,28 @@ export function RaceSuggestionChips({
     }
   }, [selectedSuggestion, onDismissSuggestion]);
 
+  if (loading) {
+    return null;
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <AlertTriangle size={14} color="#B91C1C" />
+        <Text style={styles.errorText} numberOfLines={1}>
+          Suggestions unavailable
+        </Text>
+        {onRetry && (
+          <Pressable onPress={onRetry} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  }
+
   // Don't render anything when empty
-  if (loading || orderedSuggestions.length === 0) {
+  if (orderedSuggestions.length === 0) {
     return null;
   }
 
@@ -140,6 +168,14 @@ export function RaceSuggestionChips({
   return (
     <>
       <View style={styles.container}>
+        {failedSources.length > 0 && (
+          <View style={styles.sourceIssueBanner}>
+            <AlertTriangle size={12} color="#92400E" />
+            <Text style={styles.sourceIssueText} numberOfLines={2}>
+              Partial source issues: {failedSources.join(', ')}
+            </Text>
+          </View>
+        )}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -313,6 +349,53 @@ function SuggestionDetail({
 const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
+  },
+  sourceIssueBanner: {
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sourceIssueText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  errorContainer: {
+    marginBottom: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#991B1B',
+    fontWeight: '500',
+  },
+  retryButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#DC2626',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   scrollContent: {
     paddingHorizontal: 0,

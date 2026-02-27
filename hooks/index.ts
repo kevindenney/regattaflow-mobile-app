@@ -150,3 +150,16 @@ export {
   COMMON_MANUFACTURERS,
 } from './useEquipmentTemplates';
 export type { CategoryGroup, UseEquipmentTemplatesReturn } from './useEquipmentTemplates';
+
+// Interest Event Config (multi-interest event card system)
+export { useInterestEventConfig } from './useInterestEventConfig';
+
+// Activity Catalog (templates from orgs & coaches)
+export { useActivityCatalog } from './useActivityCatalog';
+
+// Cross-Interest AI Suggestions
+export { useAISuggestions } from './useAISuggestions';
+
+// Competency Tracking & Sign-Off Chain
+export { useCompetencyProgress } from './useCompetencyProgress';
+export { useCompetencyDetail } from './useCompetencyDetail';

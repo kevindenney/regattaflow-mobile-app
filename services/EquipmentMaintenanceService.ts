@@ -3,9 +3,9 @@
  * AI-powered maintenance guide generation and equipment care recommendations
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { equipmentService, type BoatEquipment, type AICareGuide, type LubricationSchedule } from './EquipmentService';
 import { createLogger } from '@/lib/utils/logger';
+import { supabase } from './supabase';
 
 const logger = createLogger('EquipmentMaintenanceService');
 
@@ -72,33 +72,48 @@ function getCacheKey(request: MaintenanceGuideRequest): string {
 // ============================================================================
 
 class EquipmentMaintenanceService {
-  private anthropic: Anthropic | null = null;
-  private hasValidApiKey = false;
+  private hasValidApiKey = true;
 
   constructor() {
-    this.initializeAnthropic();
+    this.initializeAI();
   }
 
-  private initializeAnthropic() {
-    try {
-      const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
-      if (apiKey) {
-        this.anthropic = new Anthropic({ apiKey });
-        this.hasValidApiKey = true;
-        logger.debug('Anthropic client initialized for maintenance guides');
-      } else {
-        logger.warn('No Anthropic API key found, AI maintenance guides will be unavailable');
-      }
-    } catch (error) {
-      logger.error('Error initializing Anthropic client', { error });
+  private initializeAI() {
+    this.hasValidApiKey = Boolean(
+      process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+    );
+    if (!this.hasValidApiKey) {
+      logger.warn('Supabase configuration missing, AI maintenance guides will use fallback');
+      return;
     }
+    logger.debug('AI maintenance guides configured via secure edge function');
   }
 
   /**
    * Check if AI guide generation is available
    */
   isAvailable(): boolean {
-    return this.hasValidApiKey && this.anthropic !== null;
+    return this.hasValidApiKey;
+  }
+
+  private async invokeMaintenanceChat(prompt: string, maxTokens = 2000): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+      body: {
+        prompt,
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'race-coaching-chat invocation failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text.trim() : '';
+    if (!text) {
+      throw new Error('race-coaching-chat returned no text');
+    }
+
+    return text;
   }
 
   /**
@@ -121,23 +136,8 @@ class EquipmentMaintenanceService {
     try {
       const prompt = this.buildCareGuidePrompt(request);
       
-      const response = await this.anthropic!.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      });
-
-      const content = response.content[0];
-      if (content.type !== 'text') {
-        throw new Error('Unexpected response type');
-      }
-
-      const guide = this.parseGuideResponse(content.text, request);
+      const responseText = await this.invokeMaintenanceChat(prompt, 2000);
+      const guide = this.parseGuideResponse(responseText, request);
       
       // Cache the result
       GUIDE_CACHE.set(cacheKey, {
@@ -545,4 +545,3 @@ Return ONLY valid JSON, no additional text.`;
 // Export singleton instance
 export const equipmentMaintenanceService = new EquipmentMaintenanceService();
 export default equipmentMaintenanceService;
-

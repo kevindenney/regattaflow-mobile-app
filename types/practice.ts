@@ -1226,3 +1226,81 @@ export function rowToDrillCrewTask(row: DrillCrewTaskRow): DrillCrewTask {
     updatedAt: row.updated_at,
   };
 }
+
+// =============================================================================
+// INTEREST-AWARE HELPERS
+// =============================================================================
+
+/**
+ * Build a drill category lookup map from an interest's config.
+ * Returns the same shape as DRILL_CATEGORY_META but driven by the interest config.
+ *
+ * Usage:
+ *   const config = useInterestEventConfig();
+ *   const categoryMeta = buildDrillCategoryMap(config.drillCategories);
+ *   const label = categoryMeta['starting']?.label;
+ */
+export function buildDrillCategoryMap(
+  categories: Array<{ id: string; label: string; icon: string }>
+): Record<string, { label: string; icon: string }> {
+  const map: Record<string, { label: string; icon: string }> = {};
+  for (const cat of categories) {
+    map[cat.id] = { label: cat.label, icon: cat.icon };
+  }
+  return map;
+}
+
+/**
+ * Build a skill area label map from an interest's config.
+ * Returns the same shape as SKILL_AREA_LABELS but driven by the interest config.
+ *
+ * Usage:
+ *   const config = useInterestEventConfig();
+ *   const skillLabels = buildSkillAreaLabelMap(config.skillAreas);
+ *   const label = skillLabels['equipment-prep'];
+ */
+export function buildSkillAreaLabelMap(
+  skillAreas: Array<{ id: string; label: string }>
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const area of skillAreas) {
+    map[area.id] = area.label;
+  }
+  return map;
+}
+
+/**
+ * Build a skill area config map from an interest's config.
+ * Returns the same shape as SKILL_AREA_CONFIG but driven by the interest config.
+ */
+export function buildSkillAreaConfigMap(
+  skillAreas: Array<{ id: string; label: string }>
+): Record<string, { label: string }> {
+  const map: Record<string, { label: string }> = {};
+  for (const area of skillAreas) {
+    map[area.id] = { label: area.label };
+  }
+  return map;
+}
+
+/**
+ * Get a drill category label from config, with fallback.
+ * Convenience function for components that only need a single label.
+ */
+export function getDrillCategoryLabel(
+  categoryId: string,
+  categories: Array<{ id: string; label: string; icon: string }>
+): string {
+  return categories.find((c) => c.id === categoryId)?.label ?? categoryId;
+}
+
+/**
+ * Get a skill area label from config, with fallback.
+ * Convenience function for components that only need a single label.
+ */
+export function getSkillAreaLabel(
+  skillAreaId: string,
+  skillAreas: Array<{ id: string; label: string }>
+): string {
+  return skillAreas.find((s) => s.id === skillAreaId)?.label ?? skillAreaId;
+}

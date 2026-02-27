@@ -8,9 +8,32 @@
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
 import type { RaceDocumentType } from './RaceDocumentService';
-import type { ComprehensiveRaceData } from './agents/ComprehensiveRaceExtractionAgent';
 
 const logger = createLogger('DocumentExtractionService');
+
+interface ComprehensiveRaceData extends Record<string, any> {
+  venue?: string;
+  raceName?: string;
+  raceDate?: string;
+  warningSignalTime?: string;
+  vhfChannel?: string;
+  vhfChannels?: { channel: string }[];
+  raceType?: string;
+  startSequence?: { warning: string }[];
+  racingAreaName?: string;
+  classDivisions?: { name: string }[];
+  expectedFleetSize?: number;
+  potentialCourses?: string[];
+  totalDistanceNm?: number;
+  timeLimitHours?: number;
+  startFinishSameLocation?: boolean;
+  routeWaypoints?: unknown[];
+  racingAreaDescription?: string;
+  marks?: { latitude?: number; longitude?: number }[];
+  description?: string;
+  venueSpecificNotes?: string;
+  eventSeriesName?: string;
+}
 
 export interface ExtractionResult {
   success: boolean;

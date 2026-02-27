@@ -5,8 +5,11 @@
  * Analyzes photos of sails for damage, wear, and condition issues.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import * as FileSystem from 'expo-file-system/legacy';
+import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SailAnalysisAIService');
 
 // =============================================================================
 // Types
@@ -298,10 +301,31 @@ Focus on:
 // =============================================================================
 
 export class SailAnalysisAIService {
-  private static client = new Anthropic({
-    apiKey: process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '',
-    dangerouslyAllowBrowser: true,
-  });
+  private static async invokeSailAnalysisVision(
+    prompt: string,
+    photoBase64: string,
+    maxTokens = 2048
+  ): Promise<string> {
+    const { data, error } = await supabase.functions.invoke('sail-analysis-chat', {
+      body: {
+        prompt,
+        imageBase64: photoBase64,
+        mediaType: 'image/jpeg',
+        max_tokens: maxTokens,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Sail analysis edge function failed');
+    }
+
+    const text = typeof data?.text === 'string' ? data.text : '';
+    if (!text) {
+      throw new Error('Sail analysis returned empty response');
+    }
+
+    return text;
+  }
 
   /**
    * Analyze a specific zone of the sail from a photo
@@ -355,30 +379,7 @@ Damage types: uv_damage, stitching_failure, delamination, chafe, tear, mildew, h
 Be conservative on race_ready - if there's any safety concern, set to false.
 `;
 
-      const message = await this.client.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2048,
-        temperature: 0.2,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: photoBase64,
-              },
-            },
-            {
-              type: 'text',
-              text: prompt,
-            },
-          ],
-        }],
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeSailAnalysisVision(prompt, photoBase64, 2048);
       const jsonMatch = response.match(/\{[\s\S]*\}/);
 
       if (jsonMatch) {
@@ -403,7 +404,7 @@ Be conservative on race_ready - if there's any safety concern, set to false.
 
       return this.generateFallbackZoneResult(zone, startTime);
     } catch (error) {
-      console.error(`Error analyzing ${zone} zone:`, error);
+      logger.error(`Error analyzing ${zone} zone`, error);
       return this.generateFallbackZoneResult(zone, startTime);
     }
   }
@@ -457,30 +458,7 @@ Respond with this JSON structure:
 Note: This is a quick assessment. Flag any areas that warrant detailed inspection.
 `;
 
-      const message = await this.client.messages.create({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 2048,
-        temperature: 0.2,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: 'image/jpeg',
-                data: photoBase64,
-              },
-            },
-            {
-              type: 'text',
-              text: prompt,
-            },
-          ],
-        }],
-      });
-
-      const response = message.content[0].type === 'text' ? message.content[0].text : '';
+      const response = await this.invokeSailAnalysisVision(prompt, photoBase64, 2048);
       const jsonMatch = response.match(/\{[\s\S]*\}/);
 
       if (jsonMatch) {
@@ -502,7 +480,7 @@ Note: This is a quick assessment. Flag any areas that warrant detailed inspectio
 
       return this.generateFallbackQuickResult();
     } catch (error) {
-      console.error('Error in quick inspection:', error);
+      logger.error('Error in quick inspection', error);
       return this.generateFallbackQuickResult();
     }
   }
@@ -588,7 +566,7 @@ Note: This is a quick assessment. Flag any areas that warrant detailed inspectio
       });
       return base64;
     } catch (error) {
-      console.error('Error converting image to base64:', error);
+      logger.error('Error converting image to base64', error);
       throw error;
     }
   }
@@ -641,7 +619,7 @@ Note: This is a quick assessment. Flag any areas that warrant detailed inspectio
 
   private static estimateRemainingLife(
     score: number,
-    context?: SailContext
+    _context?: SailContext
   ): string {
     if (score >= 90) return 'Excellent - 2+ seasons of racing remaining';
     if (score >= 80) return 'Good - 1-2 seasons of competitive racing';

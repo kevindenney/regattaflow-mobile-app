@@ -6,6 +6,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('MessagingService');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -253,7 +256,7 @@ class MessagingService {
       );
     } catch (error) {
       // Non-fatal — don't let push failure break messaging
-      console.error('[MessagingService] Push notification error:', error);
+      logger.error('[MessagingService] Push notification error:', error);
     }
   }
 

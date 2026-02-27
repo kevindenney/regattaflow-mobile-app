@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet, Pressable, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { FleetCard } from '@/components/fleets/FleetCard';
 import { FleetFeed } from '@/components/fleets/FleetFeed';
 import { MembersList } from '@/components/fleets/MembersList';
@@ -26,6 +27,7 @@ interface Fleet {
 }
 
 export default function FleetsScreen() {
+  const router = useRouter();
   const { user } = useAuth();
   const [selectedFleet, setSelectedFleet] = useState<Fleet | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
@@ -272,8 +274,19 @@ export default function FleetsScreen() {
             {activeTab === 'tuning' && <TuningLibrary fleetId={selectedFleet.id} />}
             {activeTab === 'events' && (
               <View style={styles.comingSoon}>
-                <Ionicons name="calendar-outline" size={64} color="#D1D5DB" />
-                <Text style={styles.comingSoonText}>Events Coming Soon</Text>
+                <Ionicons name="calendar-outline" size={52} color="#3B82F6" />
+                <Text style={styles.comingSoonText}>Fleet Events</Text>
+                <Text style={styles.comingSoonSubtext}>
+                  Open event operations and race management for this fleet.
+                </Text>
+                <View style={styles.eventsActions}>
+                  <Pressable style={styles.eventsActionPrimary} onPress={() => router.push('/(tabs)/events')}>
+                    <Text style={styles.eventsActionPrimaryText}>Open Events</Text>
+                  </Pressable>
+                  <Pressable style={styles.eventsActionSecondary} onPress={() => router.push('/(tabs)/race-management')}>
+                    <Text style={styles.eventsActionSecondaryText}>Race Ops</Text>
+                  </Pressable>
+                </View>
               </View>
             )}
             {activeTab === 'leaderboard' && <Leaderboard fleetId={selectedFleet.id} />}
@@ -583,8 +596,45 @@ const styles = StyleSheet.create({
   },
   comingSoonText: {
     fontSize: 18,
-    color: '#9CA3AF',
-    marginTop: 16,
+    color: '#1E3A8A',
+    marginTop: 12,
+    fontWeight: '600',
+  },
+  comingSoonSubtext: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+    paddingHorizontal: 24,
+  },
+  eventsActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  eventsActionPrimary: {
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  eventsActionPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  eventsActionSecondary: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  eventsActionSecondaryText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    fontWeight: '600',
   },
   // Join Fleet Modal styles
   searchContainer: {

@@ -6,6 +6,7 @@
  */
 
 import { supabase } from '@/services/supabase';
+import { createLogger } from '@/lib/utils/logger';
 import type {
   Community,
   CommunityCategory,
@@ -20,6 +21,8 @@ import type {
   CommunityListResponse,
   UserCommunitiesResponse,
 } from '@/types/community';
+
+const logger = createLogger('CommunityService');
 
 class CommunityServiceClass {
   // ============================================================================
@@ -36,7 +39,7 @@ class CommunityServiceClass {
       .order('sort_order', { ascending: true });
 
     if (error) {
-      console.error('[CommunityService] Error fetching categories:', error);
+      logger.error('[CommunityService] Error fetching categories:', error);
       throw error;
     }
 
@@ -59,7 +62,7 @@ class CommunityServiceClass {
 
     if (error) {
       if (error.code === 'PGRST116') return null; // Not found
-      console.error('[CommunityService] Error fetching community:', error);
+      logger.error('[CommunityService] Error fetching community:', error);
       throw error;
     }
 
@@ -89,7 +92,7 @@ class CommunityServiceClass {
 
     if (error) {
       if (error.code === 'PGRST116') return null;
-      console.error('[CommunityService] Error fetching community:', error);
+      logger.error('[CommunityService] Error fetching community:', error);
       throw error;
     }
 
@@ -123,7 +126,7 @@ class CommunityServiceClass {
 
     if (error) {
       if (error.code === 'PGRST116') return null;
-      console.error('[CommunityService] Error fetching community by entity:', error);
+      logger.error('[CommunityService] Error fetching community by entity:', error);
       throw error;
     }
 
@@ -176,7 +179,7 @@ class CommunityServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[CommunityService] Error listing communities:', error);
+      logger.error('[CommunityService] Error listing communities:', error);
       throw error;
     }
 
@@ -230,7 +233,7 @@ class CommunityServiceClass {
     const { data, error, count } = await query;
 
     if (error) {
-      console.error('[CommunityService] Error searching communities:', error);
+      logger.error('[CommunityService] Error searching communities:', error);
       throw error;
     }
 
@@ -272,7 +275,7 @@ class CommunityServiceClass {
       .single();
 
     if (error) {
-      console.error('[CommunityService] Error creating community:', error);
+      logger.error('[CommunityService] Error creating community:', error);
       throw error;
     }
 
@@ -297,7 +300,7 @@ class CommunityServiceClass {
       .single();
 
     if (error) {
-      console.error('[CommunityService] Error updating community:', error);
+      logger.error('[CommunityService] Error updating community:', error);
       throw error;
     }
 
@@ -320,7 +323,7 @@ class CommunityServiceClass {
       .maybeSingle();
 
     if (error) {
-      console.error('[CommunityService] Error getting membership:', error);
+      logger.error('[CommunityService] Error getting membership:', error);
       return null;
     }
 
@@ -331,17 +334,17 @@ class CommunityServiceClass {
    * Join a community
    */
   async joinCommunity(communityId: string, role: CommunityMemberRole = 'member'): Promise<void> {
-    console.log('[CommunityService] joinCommunity called, communityId:', communityId, 'role:', role);
+    logger.info('[CommunityService] joinCommunity called, communityId:', communityId, 'role:', role);
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    console.log('[CommunityService] getUser result, user:', user?.id, 'authError:', authError);
+    logger.info('[CommunityService] getUser result, user:', user?.id, 'authError:', authError);
 
     if (!user) {
-      console.error('[CommunityService] No user found - must be logged in to join');
+      logger.error('[CommunityService] No user found - must be logged in to join');
       throw new Error('Must be logged in to join a community');
     }
 
-    console.log('[CommunityService] Upserting membership for user:', user.id);
+    logger.info('[CommunityService] Upserting membership for user:', user.id);
     const { data, error } = await supabase
       .from('community_memberships')
       .upsert({
@@ -354,14 +357,14 @@ class CommunityServiceClass {
       })
       .select();
 
-    console.log('[CommunityService] Upsert result, data:', data, 'error:', error);
+    logger.info('[CommunityService] Upsert result, data:', data, 'error:', error);
 
     if (error) {
-      console.error('[CommunityService] Error joining community:', error);
+      logger.error('[CommunityService] Error joining community:', error);
       throw error;
     }
 
-    console.log('[CommunityService] Successfully joined community');
+    logger.info('[CommunityService] Successfully joined community');
   }
 
   /**
@@ -378,7 +381,7 @@ class CommunityServiceClass {
       .eq('community_id', communityId);
 
     if (error) {
-      console.error('[CommunityService] Error leaving community:', error);
+      logger.error('[CommunityService] Error leaving community:', error);
       throw error;
     }
   }
@@ -393,28 +396,28 @@ class CommunityServiceClass {
   async autoJoinCommunityBySlug(slug: string): Promise<Community | null> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      console.warn('[CommunityService] Cannot auto-join: not logged in');
+      logger.warn('[CommunityService] Cannot auto-join: not logged in');
       return null;
     }
 
     // Find the community
     const community = await this.getCommunityBySlug(slug);
     if (!community) {
-      console.warn(`[CommunityService] Community not found: ${slug}`);
+      logger.warn(`[CommunityService] Community not found: ${slug}`);
       return null;
     }
 
     // Check if already a member
     const membership = await this.getMembership(user.id, community.id);
     if (membership) {
-      console.log(`[CommunityService] Already a member of ${slug}`);
+      logger.info(`[CommunityService] Already a member of ${slug}`);
       return community;
     }
 
     // Join the community
     try {
       await this.joinCommunity(community.id);
-      console.log(`[CommunityService] Auto-joined community: ${slug}`);
+      logger.info(`[CommunityService] Auto-joined community: ${slug}`);
 
       // Return the community with updated membership status
       return {
@@ -423,7 +426,7 @@ class CommunityServiceClass {
         user_role: 'member',
       };
     } catch (error) {
-      console.error(`[CommunityService] Failed to auto-join ${slug}:`, error);
+      logger.error(`[CommunityService] Failed to auto-join ${slug}:`, error);
       return null;
     }
   }
@@ -494,7 +497,7 @@ class CommunityServiceClass {
       .order('joined_at', { ascending: false });
 
     if (error) {
-      console.error('[CommunityService] Error getting user communities:', error);
+      logger.error('[CommunityService] Error getting user communities:', error);
       throw error;
     }
 
@@ -542,7 +545,7 @@ class CommunityServiceClass {
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('[CommunityService] Error getting community members:', error);
+      logger.error('[CommunityService] Error getting community members:', error);
       throw error;
     }
 
@@ -566,7 +569,7 @@ class CommunityServiceClass {
       .eq('community_id', communityId);
 
     if (error) {
-      console.error('[CommunityService] Error toggling notifications:', error);
+      logger.error('[CommunityService] Error toggling notifications:', error);
       throw error;
     }
   }
@@ -586,7 +589,7 @@ class CommunityServiceClass {
       .order('sort_order', { ascending: true });
 
     if (error) {
-      console.error('[CommunityService] Error getting flairs:', error);
+      logger.error('[CommunityService] Error getting flairs:', error);
       return [];
     }
 
@@ -614,7 +617,7 @@ class CommunityServiceClass {
       .single();
 
     if (error) {
-      console.error('[CommunityService] Error creating flair:', error);
+      logger.error('[CommunityService] Error creating flair:', error);
       throw error;
     }
 
@@ -636,7 +639,7 @@ class CommunityServiceClass {
       .limit(limit);
 
     if (error) {
-      console.error('[CommunityService] Error getting popular communities:', error);
+      logger.error('[CommunityService] Error getting popular communities:', error);
       return [];
     }
 
@@ -655,7 +658,7 @@ class CommunityServiceClass {
       .limit(limit);
 
     if (error) {
-      console.error('[CommunityService] Error getting trending communities:', error);
+      logger.error('[CommunityService] Error getting trending communities:', error);
       return [];
     }
 
@@ -674,7 +677,7 @@ class CommunityServiceClass {
       .limit(limit);
 
     if (error) {
-      console.error('[CommunityService] Error getting communities by category:', error);
+      logger.error('[CommunityService] Error getting communities by category:', error);
       return [];
     }
 
@@ -693,7 +696,7 @@ class CommunityServiceClass {
       .limit(limit);
 
     if (error) {
-      console.error('[CommunityService] Error getting communities by type:', error);
+      logger.error('[CommunityService] Error getting communities by type:', error);
       return [];
     }
 

@@ -7,18 +7,38 @@ import { createLogger } from '@/lib/utils/logger';
 import type { RaceWeatherMetadata } from '@/services/RaceWeatherService';
 import { RaceWeatherService } from '@/services/RaceWeatherService';
 import { supabase } from '@/services/supabase';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const logger = createLogger('useEnrichedRaces');
 
 const FALLBACK_WARNING_TIME = '10:00';
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toCoordinatePair(latValue: unknown, lngValue: unknown): { lat: number; lng: number } | null {
+  const lat = toFiniteNumber(latValue);
+  const lng = toFiniteNumber(lngValue);
+  if (lat === null || lng === null) {
+    return null;
+  }
+  return { lat, lng };
+}
 
 /**
  * Calculate race duration in hours from schedule array
  * Looks for "Race Start" and "Race Finish Deadline" events
  */
 function calculateDurationFromSchedule(
-  schedule: Array<{ date: string; time: string; event: string }> | undefined,
+  schedule: { date: string; time: string; event: string }[] | undefined,
   startDate: string
 ): number | null {
   if (!schedule || !Array.isArray(schedule)) {
@@ -92,16 +112,13 @@ async function fetchVenueCoordinatesFromDB(venueIds: string[]): Promise<Map<stri
 
     if (data) {
       data.forEach(venue => {
-        if (venue.coordinates_lat && venue.coordinates_lng) {
-          const coords = {
-            lat: parseFloat(venue.coordinates_lat),
-            lng: parseFloat(venue.coordinates_lng)
-          };
+        const coords = toCoordinatePair(venue.coordinates_lat, venue.coordinates_lng);
+        if (coords) {
           result.set(venue.id, coords);
           venueCoordinatesCache.set(venue.id, coords);
-        } else {
-          venueCoordinatesCache.set(venue.id, null);
+          return;
         }
+        venueCoordinatesCache.set(venue.id, null);
       });
     }
 
@@ -187,14 +204,9 @@ interface Race {
 function extractVenueCoordinates(regatta: RegattaRaw): { lat: number; lng: number } | null {
   // 0. Check top-level latitude/longitude columns on race_events table
   // Note: Supabase may return these as strings if the column type is numeric
-  const lat = regatta.latitude;
-  const lng = regatta.longitude;
-  if (lat !== null && lat !== undefined && lng !== null && lng !== undefined) {
-    const latNum = typeof lat === 'string' ? parseFloat(lat) : lat;
-    const lngNum = typeof lng === 'string' ? parseFloat(lng) : lng;
-    if (!isNaN(latNum) && !isNaN(lngNum)) {
-      return { lat: latNum, lng: lngNum };
-    }
+  const topLevelCoords = toCoordinatePair(regatta.latitude, regatta.longitude);
+  if (topLevelCoords) {
+    return topLevelCoords;
   }
 
   const metadata = regatta.metadata;
@@ -204,31 +216,36 @@ function extractVenueCoordinates(regatta: RegattaRaw): { lat: number; lng: numbe
   }
 
   // 1. Check explicit venue_lat/venue_lng
-  if (typeof metadata.venue_lat === 'number' && typeof metadata.venue_lng === 'number') {
-    return { lat: metadata.venue_lat, lng: metadata.venue_lng };
+  const explicitVenueCoords = toCoordinatePair(metadata.venue_lat, metadata.venue_lng);
+  if (explicitVenueCoords) {
+    return explicitVenueCoords;
   }
 
   // 2. Check racing_area_coordinates
   const racingAreaCoords = metadata.racing_area_coordinates;
-  if (racingAreaCoords?.lat && racingAreaCoords?.lng) {
-    return { lat: racingAreaCoords.lat, lng: racingAreaCoords.lng };
+  const racingAreaCoordinates = toCoordinatePair(racingAreaCoords?.lat, racingAreaCoords?.lng);
+  if (racingAreaCoordinates) {
+    return racingAreaCoordinates;
   }
 
   // 3. Check venue_coordinates
   const venueCoords = metadata.venue_coordinates;
-  if (venueCoords?.lat && venueCoords?.lng) {
-    return { lat: venueCoords.lat, lng: venueCoords.lng };
+  const metadataVenueCoordinates = toCoordinatePair(venueCoords?.lat, venueCoords?.lng);
+  if (metadataVenueCoordinates) {
+    return metadataVenueCoordinates;
   }
 
   // 3b. Check start_coordinates (from add-tufte form)
   const startCoords = metadata.start_coordinates;
-  if (startCoords?.lat && startCoords?.lng) {
-    return { lat: startCoords.lat, lng: startCoords.lng };
+  const startCoordinates = toCoordinatePair(startCoords?.lat, startCoords?.lng);
+  if (startCoordinates) {
+    return startCoordinates;
   }
 
   // 3c. Check direct latitude/longitude in metadata (legacy sample race format)
-  if (typeof metadata.latitude === 'number' && typeof metadata.longitude === 'number') {
-    return { lat: metadata.latitude, lng: metadata.longitude };
+  const legacyCoords = toCoordinatePair(metadata.latitude, metadata.longitude);
+  if (legacyCoords) {
+    return legacyCoords;
   }
 
   // 4. Check route_waypoints (distance racing) - calculate centroid
@@ -349,7 +366,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
       // Collect all cache updates to batch them
       const cacheUpdates = new Map<string, RaceWeatherMetadata | null>();
       // Collect weather data to persist to database
-      const persistenceQueue: Array<{ regattaId: string; weather: RaceWeatherMetadata; metadata: any }> = [];
+      const persistenceQueue: { regattaId: string; weather: RaceWeatherMetadata; metadata: any }[] = [];
 
       const enrichedPromises = races.map(async (regatta) => {
         // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
@@ -577,8 +594,9 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
             || null;
 
           // Create timeout promise
+          let timeoutId: ReturnType<typeof setTimeout> | null = null;
           const timeoutPromise = new Promise<null>((resolve) => {
-            setTimeout(() => {
+            timeoutId = setTimeout(() => {
               logger.warn(`[useEnrichedRaces] Weather fetch timeout for ${regatta.name}`);
               resolve(null);
             }, 5000); // 5 second timeout
@@ -651,6 +669,10 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
 
           // Race between weather fetch and timeout
           const weather = await Promise.race([weatherPromise, timeoutPromise]);
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
 
           // Collect cache update (don't set state in loop)
           cacheUpdates.set(cacheKey, weather);
@@ -789,7 +811,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
     } finally {
       setLoading(false);
     }
-  }, [races]);
+  }, [persistWeatherToDatabase, races, weatherCache]);
 
   useEffect(() => {
     // Create a stable key based on race IDs and dates to detect actual changes
@@ -803,9 +825,9 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [races]);
 
-  return {
+  return useMemo(() => ({
     races: enrichedRaces,
     loading,
     refresh: enrichRaces,
-  };
+  }), [enrichedRaces, loading, enrichRaces]);
 }

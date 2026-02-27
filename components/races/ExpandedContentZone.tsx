@@ -15,6 +15,7 @@ import { Settings2, FileText, Map, BookOpen } from 'lucide-react-native';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { RacePhase, CardRaceData } from '@/components/cards/types';
 import { useContentModules } from '@/hooks/useContentModules';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { ContentModuleRenderer } from '@/components/cards/content/ContentModuleRenderer';
 import { ContentConfigModal } from '@/components/races/ContentConfigModal';
 import { AccordionSection } from '@/components/races/AccordionSection';
@@ -50,6 +51,7 @@ export function ExpandedContentZone({
   raceId,
 }: ExpandedContentZoneProps) {
   const [showConfig, setShowConfig] = useState(false);
+  const eventConfig = useInterestEventConfig();
 
   // Get resolved modules and controls
   const {
@@ -92,7 +94,7 @@ export function ExpandedContentZone({
       {/* Header with config button */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {getPhaseTitle(phase)} Content
+          {eventConfig.phaseLabels[phase]?.full ?? phase} Content
         </Text>
         <TouchableOpacity
           style={styles.configButton}
@@ -198,22 +200,6 @@ export function ExpandedContentZone({
       />
     </View>
   );
-}
-
-/**
- * Get human-readable title for a phase
- */
-function getPhaseTitle(phase: RacePhase): string {
-  switch (phase) {
-    case 'days_before':
-      return 'Preparation';
-    case 'on_water':
-      return 'On Water';
-    case 'after_race':
-      return 'Post Race';
-    default:
-      return 'Race';
-  }
 }
 
 const styles = StyleSheet.create({

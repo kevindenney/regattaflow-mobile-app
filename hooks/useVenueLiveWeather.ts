@@ -4,8 +4,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { regionalWeatherService, WeatherForecast, MarineConditions } from '@/services/weather/RegionalWeatherService';
+import { regionalWeatherService, WeatherForecast } from '@/services/weather/RegionalWeatherService';
 import type { SailingVenue as GlobalSailingVenue } from '@/lib/types/global-venues';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface LiveWeatherData {
   // Current conditions
@@ -44,6 +45,8 @@ export interface UseVenueLiveWeatherResult {
   refresh: () => Promise<void>;
   lastUpdated: Date | null;
 }
+
+const logger = createLogger('useVenueLiveWeather');
 
 /**
  * Calculate race readiness based on conditions
@@ -97,13 +100,39 @@ export function useVenueLiveWeather(
   
   // Track if we've already loaded for these coordinates
   const lastCoordsRef = useRef<string>('');
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const activeCoordsRef = useRef<string>('');
+
+  useEffect(() => {
+    activeCoordsRef.current = `${latitude ?? ''}|${longitude ?? ''}|${venueId ?? ''}|${venueName ?? ''}`;
+  }, [latitude, longitude, venueId, venueName]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+    };
+  }, []);
   
   const loadWeather = useCallback(async () => {
+    const runId = ++loadRunIdRef.current;
+    const targetCoords = `${latitude ?? ''}|${longitude ?? ''}|${venueId ?? ''}|${venueName ?? ''}`;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeCoordsRef.current === targetCoords;
+
     if (!latitude || !longitude) {
+      if (!canCommit()) return;
+      setWeather(null);
+      setLastUpdated(null);
       setError('No coordinates provided');
+      setIsLoading(false);
       return;
     }
     
+    if (!canCommit()) return;
     setIsLoading(true);
     setError(null);
     
@@ -208,13 +237,16 @@ export function useVenueLiveWeather(
         source: weatherData.sources.primary,
       };
       
+      if (!canCommit()) return;
       setWeather(liveWeather);
       setLastUpdated(weatherData.lastUpdated);
       setError(null);
     } catch (err: any) {
-      console.error('[useVenueLiveWeather] Error loading weather:', err);
+      logger.error('Error loading weather', err);
+      if (!canCommit()) return;
       setError(err.message || 'Failed to load weather data');
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [latitude, longitude, venueId, venueName]);
@@ -225,7 +257,7 @@ export function useVenueLiveWeather(
     
     if (latitude && longitude && coordsKey !== lastCoordsRef.current) {
       lastCoordsRef.current = coordsKey;
-      loadWeather();
+      void loadWeather();
     }
   }, [latitude, longitude, loadWeather]);
   
@@ -244,4 +276,3 @@ export function useVenueLiveWeather(
 }
 
 export default useVenueLiveWeather;
-

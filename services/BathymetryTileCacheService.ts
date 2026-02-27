@@ -8,6 +8,7 @@
 import { Platform } from 'react-native';
 import type { SailingVenue } from '@/lib/types/global-venues';
 import { createLogger } from '@/lib/utils/logger';
+import { BathymetryTileService } from './BathymetryTileService';
 
 /**
  * Tile identifier
@@ -96,7 +97,7 @@ export class BathymetryTileCacheService {
           logger.debug(`   Progress: ${downloaded}/${total} (${((downloaded / total) * 100).toFixed(0)}%)`);
         }
       } catch (error) {
-        console.error(`   Failed to cache tile z${tile.z}/${tile.x}/${tile.y}:`, error);
+        logger.error(`   Failed to cache tile z${tile.z}/${tile.x}/${tile.y}:`, error);
       }
     }
 
@@ -128,7 +129,7 @@ export class BathymetryTileCacheService {
 
       return blob;
     } catch (error) {
-      console.error(`Failed to fetch tile z${tile.z}/${tile.x}/${tile.y}:`, error);
+      logger.error(`Failed to fetch tile z${tile.z}/${tile.x}/${tile.y}:`, error);
       return null;
     }
   }
@@ -149,9 +150,9 @@ export class BathymetryTileCacheService {
   /**
    * Cache tile on web (Cache API)
    */
-  private async cacheWebTile(url: string, tile: TileCoordinate): Promise<void> {
+  private async cacheWebTile(url: string, _tile: TileCoordinate): Promise<void> {
     if (!('caches' in window)) {
-      console.warn('Cache API not available');
+      logger.warn('Cache API not available');
       return;
     }
 
@@ -159,7 +160,7 @@ export class BathymetryTileCacheService {
       const cache = await caches.open(this.cacheDir);
       await cache.add(url);
     } catch (error) {
-      console.error('Web cache error:', error);
+      logger.error('Web cache error:', error);
     }
   }
 
@@ -178,7 +179,7 @@ export class BathymetryTileCacheService {
 
       await FileSystem.default.downloadAsync(url, filePath);
     } catch (error) {
-      console.error('Mobile cache error:', error);
+      logger.error('Mobile cache error:', error);
     }
   }
 
@@ -210,7 +211,7 @@ export class BathymetryTileCacheService {
         return await response.blob();
       }
     } catch (error) {
-      console.error('Web cache retrieval error:', error);
+      logger.error('Web cache retrieval error:', error);
     }
 
     return null;
@@ -244,7 +245,7 @@ export class BathymetryTileCacheService {
         return new Blob([bytes], { type: 'image/png' });
       }
     } catch (error) {
-      console.error('Mobile cache retrieval error:', error);
+      logger.error('Mobile cache retrieval error:', error);
     }
 
     return null;
@@ -264,14 +265,14 @@ export class BathymetryTileCacheService {
   /**
    * Cache tile blob on web
    */
-  private async cacheWebTileBlob(tile: TileCoordinate, blob: Blob): Promise<void> {
+  private async cacheWebTileBlob(_tile: TileCoordinate, _blob: Blob): Promise<void> {
     // Web caching handled by Cache API during fetch
   }
 
   /**
    * Cache tile blob on mobile
    */
-  private async cacheMobileTileBlob(venue: SailingVenue, tile: TileCoordinate, blob: Blob): Promise<void> {
+  private async cacheMobileTileBlob(_venue: SailingVenue, _tile: TileCoordinate, _blob: Blob): Promise<void> {
     // Mobile caching handled during download
   }
 
@@ -279,7 +280,6 @@ export class BathymetryTileCacheService {
    * Get tile URL based on venue
    */
   private getTileUrl(venue: SailingVenue, tile: TileCoordinate): string {
-    const { BathymetryTileService } = require('./BathymetryTileService');
     const service = new BathymetryTileService();
     const sources = service.getBathymetrySources(venue);
 
@@ -403,7 +403,7 @@ export class BathymetryTileCacheService {
         lastUpdated: new Date()
       };
     } catch (error) {
-      console.error('Failed to get web cache stats:', error);
+      logger.error('Failed to get web cache stats:', error);
       return {
         tileCount: 0,
         totalSize: 0,
@@ -462,7 +462,7 @@ export class BathymetryTileCacheService {
         lastUpdated: new Date()
       };
     } catch (error) {
-      console.error('Failed to get mobile cache stats:', error);
+      logger.error('Failed to get mobile cache stats:', error);
       return {
         tileCount: 0,
         totalSize: 0,
@@ -504,7 +504,7 @@ export class BathymetryTileCacheService {
 
       await FileSystem.default.deleteAsync(venuePath, { idempotent: true });
     } catch (error) {
-      console.error('Failed to clear mobile venue cache:', error);
+      logger.error('Failed to clear mobile venue cache:', error);
     }
   }
 
@@ -531,7 +531,7 @@ export class BathymetryTileCacheService {
 
       await FileSystem.default.deleteAsync(basePath, { idempotent: true });
     } catch (error) {
-      console.error('Failed to clear all mobile cache:', error);
+      logger.error('Failed to clear all mobile cache:', error);
     }
   }
 }

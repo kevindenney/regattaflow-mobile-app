@@ -6,6 +6,10 @@
 
 import { supabase } from './supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('RaceSignalService');
 
 // ============================================================================
 // TYPES
@@ -128,7 +132,9 @@ export interface SignalInput {
 
 class RaceSignalService {
   private subscriptions: Map<string, RealtimeChannel> = new Map();
-  private listeners: Map<string, ((signal: RaceSignal) => void)[]> = new Map();
+  private listeners: Map<string, Set<(signal: RaceSignal) => void>> = new Map();
+  private raceSignalsIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
+  private liveRaceStateIdColumn: 'regatta_id' | 'race_id' = 'regatta_id';
 
   // -------------------------------------------------------------------------
   // SIGNAL BROADCASTING
@@ -155,27 +161,47 @@ class RaceSignalService {
       fleetName = fleet?.name;
     }
 
-    const { data: signal, error } = await supabase
+    const buildSignalPayload = (column: 'regatta_id' | 'race_id') => ({
+      [column]: input.regatta_id,
+      race_number: input.race_number,
+      fleet_id: input.fleet_id,
+      fleet_name: fleetName,
+      signal_type: input.signal_type,
+      flags: input.flags,
+      sounds: input.sounds,
+      status: input.status,
+      title: input.title,
+      message: input.message,
+      course_designation: input.course_designation,
+      signal_time: new Date().toISOString(),
+      expires_at: expiresAt,
+      signaled_by: user.user?.id,
+      is_active: true,
+    });
+
+    let insertResult = await supabase
       .from('race_signals')
-      .insert({
-        regatta_id: input.regatta_id,
-        race_number: input.race_number,
-        fleet_id: input.fleet_id,
-        fleet_name: fleetName,
-        signal_type: input.signal_type,
-        flags: input.flags,
-        sounds: input.sounds,
-        status: input.status,
-        title: input.title,
-        message: input.message,
-        course_designation: input.course_designation,
-        signal_time: new Date().toISOString(),
-        expires_at: expiresAt,
-        signaled_by: user.user?.id,
-        is_active: true,
-      })
+      .insert(buildSignalPayload(this.raceSignalsIdColumn))
       .select()
       .single();
+
+    if (
+      insertResult.error &&
+      this.raceSignalsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(insertResult.error, 'race_signals', 'regatta_id')
+    ) {
+      insertResult = await supabase
+        .from('race_signals')
+        .insert(buildSignalPayload('race_id'))
+        .select()
+        .single();
+      if (!insertResult.error) {
+        this.raceSignalsIdColumn = 'race_id';
+      }
+    }
+
+    const signal = insertResult.data;
+    const error = insertResult.error;
 
     if (error) throw error;
 
@@ -362,20 +388,39 @@ class RaceSignalService {
     updates: Partial<LiveRaceState>,
     fleetId?: string
   ): Promise<void> {
-    const { error } = await supabase
+    const buildStatePayload = (column: 'regatta_id' | 'race_id') => ({
+      [column]: regattaId,
+      race_number: raceNumber,
+      fleet_id: fleetId,
+      ...updates,
+      last_updated: new Date().toISOString(),
+    });
+
+    let stateResult = await supabase
       .from('live_race_state')
-      .upsert({
-        regatta_id: regattaId,
-        race_number: raceNumber,
-        fleet_id: fleetId,
-        ...updates,
-        last_updated: new Date().toISOString(),
-      }, {
-        onConflict: 'regatta_id,race_number,fleet_id',
+      .upsert(buildStatePayload(this.liveRaceStateIdColumn), {
+        onConflict: `${this.liveRaceStateIdColumn},race_number,fleet_id`,
       });
 
+    if (
+      stateResult.error &&
+      this.liveRaceStateIdColumn === 'regatta_id' &&
+      isMissingIdColumn(stateResult.error, 'live_race_state', 'regatta_id')
+    ) {
+      stateResult = await supabase
+        .from('live_race_state')
+        .upsert(buildStatePayload('race_id'), {
+          onConflict: 'race_id,race_number,fleet_id',
+        });
+      if (!stateResult.error) {
+        this.liveRaceStateIdColumn = 'race_id';
+      }
+    }
+
+    const { error } = stateResult;
+
     if (error) {
-      console.error('Error updating race state:', error);
+      logger.error('Error updating race state:', error);
     }
   }
 
@@ -390,7 +435,7 @@ class RaceSignalService {
     let query = supabase
       .from('live_race_state')
       .select('*')
-      .eq('regatta_id', regattaId)
+      .eq(this.liveRaceStateIdColumn, regattaId)
       .eq('race_number', raceNumber);
 
     if (fleetId) {
@@ -399,7 +444,27 @@ class RaceSignalService {
       query = query.is('fleet_id', null);
     }
 
-    const { data, error } = await query.single();
+    let result = await query.single();
+    if (
+      result.error &&
+      this.liveRaceStateIdColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'live_race_state', 'regatta_id')
+    ) {
+      this.liveRaceStateIdColumn = 'race_id';
+      let fallbackQuery = supabase
+        .from('live_race_state')
+        .select('*')
+        .eq('race_id', regattaId)
+        .eq('race_number', raceNumber);
+      if (fleetId) {
+        fallbackQuery = fallbackQuery.eq('fleet_id', fleetId);
+      } else {
+        fallbackQuery = fallbackQuery.is('fleet_id', null);
+      }
+      result = await fallbackQuery.single();
+    }
+
+    const { data, error } = result;
     if (error) return null;
     return data;
   }
@@ -408,13 +473,30 @@ class RaceSignalService {
    * Get active signals for a regatta
    */
   async getActiveSignals(regattaId: string): Promise<RaceSignal[]> {
-    const { data, error } = await supabase
+    let result = await supabase
       .from('race_signals')
       .select('*')
-      .eq('regatta_id', regattaId)
+      .eq(this.raceSignalsIdColumn, regattaId)
       .eq('is_active', true)
       .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
       .order('signal_time', { ascending: false });
+
+    if (
+      result.error &&
+      this.raceSignalsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_signals', 'regatta_id')
+    ) {
+      this.raceSignalsIdColumn = 'race_id';
+      result = await supabase
+        .from('race_signals')
+        .select('*')
+        .eq('race_id', regattaId)
+        .eq('is_active', true)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+        .order('signal_time', { ascending: false });
+    }
+
+    const { data, error } = result;
 
     if (error) throw error;
     return data || [];
@@ -431,7 +513,7 @@ class RaceSignalService {
     let query = supabase
       .from('race_signals')
       .select('*')
-      .eq('regatta_id', regattaId)
+      .eq(this.raceSignalsIdColumn, regattaId)
       .order('signal_time', { ascending: false })
       .limit(limit);
 
@@ -439,7 +521,25 @@ class RaceSignalService {
       query = query.eq('race_number', raceNumber);
     }
 
-    const { data, error } = await query;
+    let result = await query;
+    if (
+      result.error &&
+      this.raceSignalsIdColumn === 'regatta_id' &&
+      isMissingIdColumn(result.error, 'race_signals', 'regatta_id')
+    ) {
+      this.raceSignalsIdColumn = 'race_id';
+      let fallbackQuery = supabase
+        .from('race_signals')
+        .select('*')
+        .eq('race_id', regattaId)
+        .order('signal_time', { ascending: false })
+        .limit(limit);
+      if (raceNumber) {
+        fallbackQuery = fallbackQuery.eq('race_number', raceNumber);
+      }
+      result = await fallbackQuery;
+    }
+    const { data, error } = result;
     if (error) throw error;
     return data || [];
   }
@@ -470,8 +570,8 @@ class RaceSignalService {
     const channelKey = `signals:${regattaId}`;
     
     // Add callback to listeners
-    const existing = this.listeners.get(channelKey) || [];
-    existing.push(callback);
+    const existing = this.listeners.get(channelKey) || new Set<(signal: RaceSignal) => void>();
+    existing.add(callback);
     this.listeners.set(channelKey, existing);
 
     // Create subscription if not exists
@@ -484,12 +584,14 @@ class RaceSignalService {
             event: 'INSERT',
             schema: 'public',
             table: 'race_signals',
-            filter: `regatta_id=eq.${regattaId}`,
           },
           (payload) => {
             const signal = payload.new as RaceSignal;
-            const listeners = this.listeners.get(channelKey) || [];
-            listeners.forEach(cb => cb(signal));
+            const signalRaceId = (signal as any).regatta_id || (signal as any).race_id;
+            if (signalRaceId !== regattaId) return;
+            const listeners = this.listeners.get(channelKey);
+            if (!listeners || listeners.size === 0) return;
+            listeners.forEach((cb) => cb(signal));
           }
         )
         .subscribe();
@@ -499,16 +601,13 @@ class RaceSignalService {
 
     // Return unsubscribe function
     return () => {
-      const listeners = this.listeners.get(channelKey) || [];
-      const index = listeners.indexOf(callback);
-      if (index > -1) {
-        listeners.splice(index, 1);
-      }
+      const listeners = this.listeners.get(channelKey);
+      listeners?.delete(callback);
 
-      if (listeners.length === 0) {
+      if (!listeners || listeners.size === 0) {
         const channel = this.subscriptions.get(channelKey);
         if (channel) {
-          channel.unsubscribe();
+          void supabase.removeChannel(channel);
           this.subscriptions.delete(channelKey);
         }
         this.listeners.delete(channelKey);
@@ -521,7 +620,7 @@ class RaceSignalService {
    */
   unsubscribeAll(): void {
     for (const channel of this.subscriptions.values()) {
-      channel.unsubscribe();
+      void supabase.removeChannel(channel);
     }
     this.subscriptions.clear();
     this.listeners.clear();
@@ -572,4 +671,3 @@ class RaceSignalService {
 // Export singleton
 export const raceSignalService = new RaceSignalService();
 export default RaceSignalService;
-

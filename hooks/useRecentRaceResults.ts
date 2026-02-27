@@ -6,8 +6,10 @@
  * ordered by start_time desc, excluding the current race.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/services/supabase';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { createLogger } from '@/lib/utils/logger';
 
 export interface RecentRacePosition {
   raceId: string;
@@ -23,6 +25,8 @@ interface UseRecentRaceResultsResult {
   isLoading: boolean;
 }
 
+const logger = createLogger('useRecentRaceResults');
+
 export function useRecentRaceResults(
   userId?: string,
   currentRaceId?: string,
@@ -30,44 +34,87 @@ export function useRecentRaceResults(
 ): UseRecentRaceResultsResult {
   const [recentResults, setRecentResults] = useState<RecentRacePosition[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const isMountedRef = useRef(true);
+  const fetchRunIdRef = useRef(0);
+  const activeUserIdRef = useRef<string | undefined>(userId);
+  const activeRaceIdRef = useRef<string | undefined>(currentRaceId);
 
   useEffect(() => {
-    let isMounted = true;
+    activeUserIdRef.current = userId;
+    activeRaceIdRef.current = currentRaceId;
+  }, [userId, currentRaceId]);
 
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      fetchRunIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
     async function fetchRecentResults() {
-      if (!userId) {
+      const runId = ++fetchRunIdRef.current;
+      const targetUserId = userId;
+      const targetRaceId = currentRaceId;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === fetchRunIdRef.current &&
+        activeUserIdRef.current === targetUserId &&
+        activeRaceIdRef.current === targetRaceId;
+
+      if (!targetUserId) {
+        if (!canCommit()) return;
         setRecentResults([]);
+        setIsLoading(false);
         return;
       }
 
+      if (!canCommit()) return;
       setIsLoading(true);
 
       try {
         let query = supabase
           .from('race_timer_sessions')
-          .select('regatta_id, start_time, self_reported_position, self_reported_fleet_size')
-          .eq('sailor_id', userId)
+          .select('regatta_id, race_id, start_time, self_reported_position, self_reported_fleet_size')
+          .eq('sailor_id', targetUserId)
           .not('self_reported_position', 'is', null)
           .not('self_reported_fleet_size', 'is', null)
           .order('start_time', { ascending: false })
           .limit(limit + 1); // fetch one extra in case we need to filter current race
 
-        if (currentRaceId) {
-          query = query.neq('regatta_id', currentRaceId);
+        if (targetRaceId) {
+          query = query.neq('regatta_id', targetRaceId);
         }
 
-        const { data, error } = await query.limit(limit);
+        let { data, error } = await query.limit(limit);
+        if (isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')) {
+          let fallbackQuery = supabase
+            .from('race_timer_sessions')
+            .select('race_id, start_time, self_reported_position, self_reported_fleet_size')
+            .eq('sailor_id', targetUserId)
+            .not('self_reported_position', 'is', null)
+            .not('self_reported_fleet_size', 'is', null)
+            .order('start_time', { ascending: false })
+            .limit(limit + 1);
+          if (targetRaceId) {
+            fallbackQuery = fallbackQuery.neq('race_id', targetRaceId);
+          }
+          const fallback = await fallbackQuery.limit(limit);
+          data = fallback.data as any;
+          error = fallback.error;
+        }
 
         if (error) {
-          console.warn('[useRecentRaceResults] Query error:', error);
-          if (isMounted) setRecentResults([]);
+          logger.warn('Query error', error);
+          if (!canCommit()) return;
+          setRecentResults([]);
           return;
         }
 
-        if (!isMounted) return;
+        if (!canCommit()) return;
 
         const results: RecentRacePosition[] = (data || []).map((row) => ({
-          raceId: row.regatta_id,
+          raceId: row.regatta_id || row.race_id,
           raceName: '', // Not needed for sparkline
           date: row.start_time,
           position: row.self_reported_position as number,
@@ -79,18 +126,16 @@ export function useRecentRaceResults(
 
         setRecentResults(results);
       } catch (err) {
-        console.error('[useRecentRaceResults] Error:', err);
-        if (isMounted) setRecentResults([]);
+        logger.error('Error loading recent race results', err);
+        if (!canCommit()) return;
+        setRecentResults([]);
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (!canCommit()) return;
+        setIsLoading(false);
       }
     }
 
-    fetchRecentResults();
-
-    return () => {
-      isMounted = false;
-    };
+    void fetchRecentResults();
   }, [userId, currentRaceId, limit]);
 
   // Compute average position

@@ -14,12 +14,13 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import {
-  DEBRIEF_PHASES,
   getFlatQuestions,
   getActiveQuestions,
   type FlatQuestion,
 } from '@/components/races/review/debriefQuestions';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 
 const logger = createLogger('useDebriefInterview');
 
@@ -103,8 +104,11 @@ export function useDebriefInterview({
   userId,
   debounceMs = 1500,
 }: UseDebriefInterviewParams): UseDebriefInterviewReturn {
-  // All questions (unfiltered)
-  const allQuestions = useMemo(() => getFlatQuestions(), []);
+  const eventConfig = useInterestEventConfig();
+  const debriefPhases = eventConfig.debriefPhases;
+
+  // All questions (unfiltered) — uses current interest's debrief phases
+  const allQuestions = useMemo(() => getFlatQuestions(debriefPhases), [debriefPhases]);
 
   // State
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -118,8 +122,8 @@ export function useDebriefInterview({
   // Active questions (filtered by current responses)
   // This list updates as responses are given (follow-ups appear/disappear)
   const questions = useMemo(
-    () => getActiveQuestions(responses),
-    [responses]
+    () => getActiveQuestions(responses, debriefPhases),
+    [responses, debriefPhases]
   );
 
   // Track current question ID to maintain position when questions list changes
@@ -128,6 +132,24 @@ export function useDebriefInterview({
   // Refs for debouncing
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingResponsesRef = useRef<DebriefResponses | null>(null);
+  const isMountedRef = useRef(true);
+  const loadRunIdRef = useRef(0);
+  const saveRunIdRef = useRef(0);
+  const activeRaceIdRef = useRef<string | null | undefined>(raceId);
+  const activeUserIdRef = useRef<string | null | undefined>(userId);
+
+  useEffect(() => {
+    activeRaceIdRef.current = raceId;
+    activeUserIdRef.current = userId;
+  }, [raceId, userId]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+      loadRunIdRef.current += 1;
+      saveRunIdRef.current += 1;
+    };
+  }, []);
 
   // ==========================================================================
   // Adjust current index when question list changes
@@ -207,8 +229,18 @@ export function useDebriefInterview({
 
   // Extracted load function for reuse in useEffect and refetch
   const loadResponsesFromDb = useCallback(async (skipResumePosition = false) => {
+    const runId = ++loadRunIdRef.current;
+    const targetRaceId = raceId;
+    const targetUserId = userId;
+    const canCommit = () =>
+      isMountedRef.current &&
+      runId === loadRunIdRef.current &&
+      activeRaceIdRef.current === targetRaceId &&
+      activeUserIdRef.current === targetUserId;
+
     // Skip for demo races or missing params
-    if (!raceId || !userId || raceId.startsWith('demo-')) {
+    if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
+      if (!canCommit()) return;
       setResponses({});
       setSessionId(null);
       setIsComplete(false);
@@ -224,15 +256,33 @@ export function useDebriefInterview({
 
     try {
       // Find existing timer session for this race
-      const { data: session, error: sessionError } = await supabase
+      let session: any = null;
+      let sessionError: any = null;
+      const primarySession = await supabase
         .from('race_timer_sessions')
         .select('id, debrief_responses, debrief_complete')
-        .eq('regatta_id', raceId)
-        .eq('sailor_id', userId)
+        .eq('regatta_id', targetRaceId)
+        .eq('sailor_id', targetUserId)
         .order('end_time', { ascending: false })
         .limit(1)
         .maybeSingle();
+      session = primarySession.data;
+      sessionError = primarySession.error;
 
+      if (isMissingIdColumn(sessionError, 'race_timer_sessions', 'regatta_id')) {
+        const fallbackSession = await supabase
+          .from('race_timer_sessions')
+          .select('id, debrief_responses, debrief_complete')
+          .eq('race_id', targetRaceId)
+          .eq('sailor_id', targetUserId)
+          .order('end_time', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        session = fallbackSession.data;
+        sessionError = fallbackSession.error;
+      }
+
+      if (!canCommit()) return;
       if (sessionError) {
         logger.warn('[useDebriefInterview] Session query error:', sessionError);
         setError('Failed to load interview');
@@ -240,6 +290,7 @@ export function useDebriefInterview({
       }
 
       if (session) {
+        if (!canCommit()) return;
         setSessionId(session.id);
         // Parse debrief_responses JSONB
         const savedResponses = session.debrief_responses as DebriefResponses | null;
@@ -249,7 +300,7 @@ export function useDebriefInterview({
         // Resume from last answered question (only on initial load, not refetch)
         if (savedResponses && !skipResumePosition) {
           // Get active questions based on saved responses
-          const activeQs = getActiveQuestions(savedResponses);
+          const activeQs = getActiveQuestions(savedResponses, debriefPhases);
           const answeredIds = Object.keys(savedResponses).filter(
             (k) => savedResponses[k] !== null && savedResponses[k] !== undefined
           );
@@ -264,12 +315,14 @@ export function useDebriefInterview({
             }, -1);
             // Resume at next question (or last if at end)
             const resumeIndex = Math.min(lastAnsweredIndex + 1, activeQs.length - 1);
+            if (!canCommit()) return;
             setCurrentIndex(resumeIndex);
             currentQuestionIdRef.current = activeQs[resumeIndex]?.id || null;
           }
         }
       } else {
         // No session exists yet - will be created on first save
+        if (!canCommit()) return;
         setSessionId(null);
         setResponses({});
         setIsComplete(false);
@@ -280,15 +333,17 @@ export function useDebriefInterview({
       }
     } catch (err) {
       logger.error('[useDebriefInterview] Unexpected error:', err);
+      if (!canCommit()) return;
       setError('Unexpected error loading interview');
     } finally {
+      if (!canCommit()) return;
       setIsLoading(false);
     }
   }, [raceId, userId]);
 
   // Initial load on mount
   useEffect(() => {
-    loadResponsesFromDb(false);
+    void loadResponsesFromDb(false);
   }, [loadResponsesFromDb]);
 
   // Refetch function for external callers
@@ -303,13 +358,24 @@ export function useDebriefInterview({
 
   const saveResponses = useCallback(
     async (responsesToSave: DebriefResponses, markAsComplete = false) => {
-      if (!raceId || !userId || raceId.startsWith('demo-')) {
+      const runId = ++saveRunIdRef.current;
+      const targetRaceId = raceId;
+      const targetUserId = userId;
+      const canCommit = () =>
+        isMountedRef.current &&
+        runId === saveRunIdRef.current &&
+        activeRaceIdRef.current === targetRaceId &&
+        activeUserIdRef.current === targetUserId;
+
+      if (!targetRaceId || !targetUserId || targetRaceId.startsWith('demo-')) {
         logger.warn('[useDebriefInterview] Cannot save: missing raceId or userId');
         return;
       }
 
-      setIsSaving(true);
-      setError(null);
+      if (canCommit()) {
+        setIsSaving(true);
+        setError(null);
+      }
 
       try {
         let currentSessionId = sessionId;
@@ -320,13 +386,29 @@ export function useDebriefInterview({
         if (!currentSessionId) {
           logger.debug('[useDebriefInterview] No sessionId in state, fetching fresh session data...');
 
-          const { data: freshSessions, error: fetchError } = await supabase
+          let freshSessions: any[] | null = null;
+          let fetchError: any = null;
+          const primaryFresh = await supabase
             .from('race_timer_sessions')
             .select('*')
-            .eq('regatta_id', raceId)
-            .eq('sailor_id', userId)
+            .eq('regatta_id', targetRaceId)
+            .eq('sailor_id', targetUserId)
             .order('end_time', { ascending: false })
             .limit(1);
+          freshSessions = primaryFresh.data;
+          fetchError = primaryFresh.error;
+
+          if (isMissingIdColumn(fetchError, 'race_timer_sessions', 'regatta_id')) {
+            const fallbackFresh = await supabase
+              .from('race_timer_sessions')
+              .select('*')
+              .eq('race_id', targetRaceId)
+              .eq('sailor_id', targetUserId)
+              .order('end_time', { ascending: false })
+              .limit(1);
+            freshSessions = fallbackFresh.data;
+            fetchError = fallbackFresh.error;
+          }
 
           if (fetchError) {
             logger.error('[useDebriefInterview] Error fetching fresh session:', fetchError);
@@ -335,7 +417,9 @@ export function useDebriefInterview({
 
           if (freshSessions && freshSessions.length > 0) {
             currentSessionId = freshSessions[0].id;
-            setSessionId(currentSessionId);
+            if (isMountedRef.current) {
+              setSessionId(currentSessionId);
+            }
             logger.debug('[useDebriefInterview] Found existing session:', currentSessionId);
           }
         }
@@ -343,11 +427,11 @@ export function useDebriefInterview({
         // Create session only if it truly doesn't exist
         if (!currentSessionId) {
           const nowIso = new Date().toISOString();
-          const { data: newSession, error: createError } = await supabase
+          const primaryCreate = await supabase
             .from('race_timer_sessions')
             .insert({
-              sailor_id: userId,
-              regatta_id: raceId,
+              sailor_id: targetUserId,
+              regatta_id: targetRaceId,
               start_time: nowIso,
               end_time: nowIso,
               duration_seconds: 0,
@@ -356,13 +440,35 @@ export function useDebriefInterview({
             })
             .select('id')
             .single();
+          let newSession = primaryCreate.data;
+          let createError = primaryCreate.error;
+
+          if (isMissingIdColumn(createError, 'race_timer_sessions', 'regatta_id')) {
+            const fallbackCreate = await supabase
+              .from('race_timer_sessions')
+              .insert({
+                sailor_id: targetUserId,
+                race_id: targetRaceId,
+                start_time: nowIso,
+                end_time: nowIso,
+                duration_seconds: 0,
+                debrief_responses: responsesToSave,
+                debrief_complete: markAsComplete,
+              })
+              .select('id')
+              .single();
+            newSession = fallbackCreate.data;
+            createError = fallbackCreate.error;
+          }
 
           if (createError) {
             throw createError;
           }
 
           currentSessionId = newSession.id;
-          setSessionId(currentSessionId);
+          if (canCommit()) {
+            setSessionId(currentSessionId);
+          }
           logger.debug('[useDebriefInterview] Created new session:', currentSessionId);
         } else {
           // Update existing session
@@ -387,14 +493,20 @@ export function useDebriefInterview({
 
         pendingResponsesRef.current = null;
         if (markAsComplete) {
-          setIsComplete(true);
+          if (canCommit()) {
+            setIsComplete(true);
+          }
         }
       } catch (err) {
         logger.error('[useDebriefInterview] Save error:', err);
-        setError('Failed to save responses');
+        if (canCommit()) {
+          setError('Failed to save responses');
+        }
         throw err; // Re-throw so callers know the save failed
       } finally {
-        setIsSaving(false);
+        if (canCommit()) {
+          setIsSaving(false);
+        }
       }
     },
     [raceId, userId, sessionId]
@@ -413,7 +525,7 @@ export function useDebriefInterview({
       // Set new timeout
       saveTimeoutRef.current = setTimeout(() => {
         if (pendingResponsesRef.current) {
-          saveResponses(pendingResponsesRef.current);
+          void saveResponses(pendingResponsesRef.current);
         }
       }, debounceMs);
     },
@@ -426,12 +538,9 @@ export function useDebriefInterview({
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      // Save any pending changes immediately on unmount
-      if (pendingResponsesRef.current) {
-        saveResponses(pendingResponsesRef.current);
-      }
+      pendingResponsesRef.current = null;
     };
-  }, [saveResponses]);
+  }, []);
 
   // ==========================================================================
   // Response setter
@@ -505,7 +614,7 @@ export function useDebriefInterview({
       total: questions.length,
       answeredCount,
       currentPhaseIndex: currentQuestion?.phaseIndex ?? 0,
-      totalPhases: DEBRIEF_PHASES.length,
+      totalPhases: debriefPhases.length,
       percentComplete: questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0,
     };
   }, [currentIndex, questions.length, answeredCount, currentQuestion]);

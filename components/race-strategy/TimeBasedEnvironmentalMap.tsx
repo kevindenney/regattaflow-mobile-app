@@ -14,6 +14,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { TimeSlider } from '@/components/map/controls/TimeSlider';
 import type { EnvironmentalLayers } from '@/services/EnvironmentalVisualizationService';
+import { ensureMapLibreCss, ensureMapLibreScript } from '@/lib/maplibreWeb';
 
 interface TimeBasedEnvironmentalMapProps {
   /** Sailing venue */
@@ -45,9 +46,14 @@ export function TimeBasedEnvironmentalMap({
   forecastDuration = 24,
   onLayersUpdate,
 }: TimeBasedEnvironmentalMapProps) {
+  const maplibreRef = useRef<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const playTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+  const initRunIdRef = useRef(0);
   const windParticlesRef = useRef<WindParticleSystem | null>(null);
   const currentParticlesRef = useRef<CurrentParticleSystem | null>(null);
 
@@ -56,122 +62,7 @@ export function TimeBasedEnvironmentalMap({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentEnvironment, setCurrentEnvironment] = useState<any>(null);
 
-  // Initialize MapLibre GL map
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !mapContainerRef.current) return;
-
-    // Only run on web
-    if (typeof window === 'undefined') return;
-
-    try {
-
-      // Import MapLibre GL synchronously (Metro compatible)
-      const maplibregl = require('maplibre-gl');
-      require('maplibre-gl/dist/maplibre-gl.css');
-
-      // Calculate racing area center
-      const coords = racingArea.coordinates[0];
-      const centerLng = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
-      const centerLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
-
-      // Create map with nautical style
-      const map = new maplibregl.Map({
-        container: mapContainerRef.current,
-        style: createNauticalStyle(),
-        center: [centerLng, centerLat],
-        zoom: 13,
-        pitch: 0, // Top-down view for environmental layers
-        bearing: 0,
-        attributionControl: true,
-      });
-
-      mapRef.current = map;
-
-      map.on('load', () => {
-
-        setMapLoaded(true);
-
-        // Add racing area outline
-        addRacingAreaOutline(map, racingArea);
-
-        // Initialize particle systems
-        initializeParticleSystems(map);
-
-        // Load initial environmental data
-        updateEnvironmentalLayers(currentTime);
-
-      });
-
-      map.on('error', (e) => {
-
-      });
-
-      // Add navigation controls
-      map.addControl(
-        new maplibregl.NavigationControl({
-          showCompass: true,
-          showZoom: true,
-        }),
-        'top-right'
-      );
-    } catch (error) {
-
-    }
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, []);
-
-  // Initialize particle systems
-  const initializeParticleSystems = (map: any) => {
-
-    const container = map.getContainer();
-
-    // Create canvas overlay for wind particles
-    const windCanvas = document.createElement('canvas');
-    windCanvas.style.position = 'absolute';
-    windCanvas.style.top = '0';
-    windCanvas.style.left = '0';
-    windCanvas.style.width = '100%';
-    windCanvas.style.height = '100%';
-    windCanvas.style.pointerEvents = 'none';
-    windCanvas.style.zIndex = '1000';
-    container.appendChild(windCanvas);
-
-    // Create canvas overlay for current particles
-    const currentCanvas = document.createElement('canvas');
-    currentCanvas.style.position = 'absolute';
-    currentCanvas.style.top = '0';
-    currentCanvas.style.left = '0';
-    currentCanvas.style.width = '100%';
-    currentCanvas.style.height = '100%';
-    currentCanvas.style.pointerEvents = 'none';
-    currentCanvas.style.zIndex = '999'; // Below wind particles
-    container.appendChild(currentCanvas);
-
-    // Initialize wind particle system
-    windParticlesRef.current = new WindParticleSystem(windCanvas, map);
-
-    // Initialize current particle system
-    currentParticlesRef.current = new CurrentParticleSystem(currentCanvas, map);
-
-  };
-
-  // Handle time change from slider
-  const handleTimeChange = useCallback((newTime: Date) => {
-    setCurrentTime(newTime);
-    updateEnvironmentalLayers(newTime);
-  }, []);
-
-  // Update environmental layers for new time
-  const updateEnvironmentalLayers = async (time: Date) => {
+  const updateEnvironmentalLayers = useCallback(async (time: Date) => {
     if (!mapRef.current || !mapLoaded) return;
 
     try {
@@ -212,10 +103,193 @@ export function TimeBasedEnvironmentalMap({
         });
       }
 
-    } catch (error) {
-
+    } catch (_error) {
+      // Non-fatal: keep the map interactive even if one environmental frame fails.
     }
+  }, [mapLoaded, onLayersUpdate, racingArea, venue]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      initRunIdRef.current += 1;
+      if (playTimeoutRef.current) {
+        clearTimeout(playTimeoutRef.current);
+        playTimeoutRef.current = null;
+      }
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+        initTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  // Initialize MapLibre GL map
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !mapContainerRef.current) return;
+
+    // Only run on web
+    if (typeof window === 'undefined') return;
+
+    const runId = ++initRunIdRef.current;
+    const isCancelled = () => !isMountedRef.current || initRunIdRef.current !== runId;
+    const mapContainerEl = mapContainerRef.current;
+
+    const initialize = async () => {
+      try {
+        setMapLoaded(false);
+
+        try {
+          const maplibreModule = await import('maplibre-gl');
+          maplibreRef.current = (maplibreModule as any).default || maplibreModule;
+        } catch (_moduleError) {
+          await ensureMapLibreScript('maplibre-gl-script-time-environment');
+          maplibreRef.current = typeof window !== 'undefined' ? (window as any).maplibregl : null;
+        }
+        try {
+          await import('maplibre-gl/dist/maplibre-gl.css');
+        } catch {
+          ensureMapLibreCss('maplibre-gl-css-time-environment');
+        }
+
+        const MapConstructor = maplibreRef.current?.Map;
+        const NavigationControl = maplibreRef.current?.NavigationControl;
+        if (!MapConstructor || !NavigationControl) {
+          throw new Error('MapLibre constructors are unavailable');
+        }
+
+        // Calculate racing area center
+        const coords = racingArea.coordinates[0];
+        const centerLng = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
+        const centerLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
+
+        // Create map with nautical style
+        const map = new MapConstructor({
+          container: mapContainerEl,
+          style: createNauticalStyle(),
+          center: [centerLng, centerLat],
+          zoom: 13,
+          pitch: 0, // Top-down view for environmental layers
+          bearing: 0,
+          attributionControl: true,
+        });
+
+        mapRef.current = map;
+        initTimeoutRef.current = setTimeout(() => {
+          if (isCancelled()) return;
+          setMapLoaded(false);
+        }, 12000);
+
+        map.on('load', () => {
+          if (isCancelled()) return;
+          if (initTimeoutRef.current) {
+            clearTimeout(initTimeoutRef.current);
+            initTimeoutRef.current = null;
+          }
+
+          setMapLoaded(true);
+
+          // Add racing area outline
+          addRacingAreaOutline(map, racingArea);
+
+          // Initialize particle systems
+          initializeParticleSystems(map);
+
+          // Load initial environmental data
+          updateEnvironmentalLayers(currentTime);
+        });
+
+        map.on('error', (_e: any) => {
+          if (isCancelled()) return;
+        });
+
+        // Add navigation controls
+        map.addControl(
+          new NavigationControl({
+            showCompass: true,
+            showZoom: true,
+          }),
+          'top-right'
+        );
+      } catch (_error) {
+        if (!isCancelled()) {
+          setMapLoaded(false);
+        }
+      }
+    };
+
+    void initialize();
+
+    return () => {
+      if (playTimeoutRef.current) {
+        clearTimeout(playTimeoutRef.current);
+        playTimeoutRef.current = null;
+      }
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+        initTimeoutRef.current = null;
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      if (windParticlesRef.current) {
+        windParticlesRef.current.destroy();
+        windParticlesRef.current = null;
+      }
+      if (currentParticlesRef.current) {
+        currentParticlesRef.current.destroy();
+        currentParticlesRef.current = null;
+      }
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+    // updateEnvironmentalLayers closes over map/session state and is intentionally called after map load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [racingArea, startTime, venue.id]);
+
+  // Initialize particle systems
+  const initializeParticleSystems = (map: any) => {
+
+    const container = map.getContainer();
+
+    // Create canvas overlay for wind particles
+    const windCanvas = document.createElement('canvas');
+    windCanvas.style.position = 'absolute';
+    windCanvas.style.top = '0';
+    windCanvas.style.left = '0';
+    windCanvas.style.width = '100%';
+    windCanvas.style.height = '100%';
+    windCanvas.style.pointerEvents = 'none';
+    windCanvas.style.zIndex = '1000';
+    container.appendChild(windCanvas);
+
+    // Create canvas overlay for current particles
+    const currentCanvas = document.createElement('canvas');
+    currentCanvas.style.position = 'absolute';
+    currentCanvas.style.top = '0';
+    currentCanvas.style.left = '0';
+    currentCanvas.style.width = '100%';
+    currentCanvas.style.height = '100%';
+    currentCanvas.style.pointerEvents = 'none';
+    currentCanvas.style.zIndex = '999'; // Below wind particles
+    container.appendChild(currentCanvas);
+
+    // Initialize wind particle system
+    windParticlesRef.current = new WindParticleSystem(windCanvas, map);
+
+    // Initialize current particle system
+    currentParticlesRef.current = new CurrentParticleSystem(currentCanvas, map);
+
   };
+
+  // Handle time change from slider
+  const handleTimeChange = useCallback((newTime: Date) => {
+    setCurrentTime(newTime);
+    updateEnvironmentalLayers(newTime);
+  }, [updateEnvironmentalLayers]);
 
   // Play/pause animation
   const handlePlayPause = () => {
@@ -278,19 +352,26 @@ export function TimeBasedEnvironmentalMap({
 
       // Continue time advancement
       if (isPlaying) {
-        setTimeout(advanceTime, 100);
+        playTimeoutRef.current = setTimeout(advanceTime, 100);
       }
     };
 
     advanceTime();
-  }, [isPlaying, currentTime]);
+
+    return () => {
+      if (playTimeoutRef.current) {
+        clearTimeout(playTimeoutRef.current);
+        playTimeoutRef.current = null;
+      }
+    };
+  }, [currentTime, forecastDuration, isPlaying, startTime, updateEnvironmentalLayers]);
 
   if (Platform.OS !== 'web') {
     return (
       <View style={styles.container}>
         <Text style={styles.mobileMessage}>
           Environmental map visualization is currently web-only.
-          Mobile support coming soon!
+          Use web for interactive layers and timeline playback.
         </Text>
       </View>
     );
@@ -456,7 +537,7 @@ function addRacingAreaOutline(map: any, racingArea: GeoJSON.Polygon) {
 }
 
 /** Update depth overlay */
-function updateDepthOverlay(map: any, depth: { average: number; min: number; max: number }) {
+function updateDepthOverlay(map: any, _depth: { average: number; min: number; max: number }) {
   // Remove existing depth overlay
   if (map.getLayer('depth-overlay')) {
     map.removeLayer('depth-overlay');
@@ -503,7 +584,7 @@ function updateWindShadowZones(map: any, shadows: any[]) {
 }
 
 /** Generate mock environmental data for a specific time */
-function generateMockEnvironment(time: Date, venue: any, racingArea: GeoJSON.Polygon) {
+function generateMockEnvironment(time: Date, _venue: any, _racingArea: GeoJSON.Polygon) {
   const hourOffset = (time.getTime() - new Date().getTime()) / (1000 * 60 * 60);
 
   // Generate realistic wind data (varies with time)
@@ -544,10 +625,11 @@ class WindParticleSystem {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
   private map: any;
-  private particles: Array<{ x: number; y: number; age: number }> = [];
+  private particles: { x: number; y: number; age: number }[] = [];
   private windSpeed = 10;
   private windDirection = 0;
   private maxParticles = 1000;
+  private resizeHandler: () => void;
 
   constructor(canvas: HTMLCanvasElement, map: any) {
     this.canvas = canvas;
@@ -556,7 +638,8 @@ class WindParticleSystem {
 
     // Resize canvas to match map
     this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    this.resizeHandler = () => this.resizeCanvas();
+    window.addEventListener('resize', this.resizeHandler);
 
     // Initialize particles
     this.initializeParticles();
@@ -632,6 +715,13 @@ class WindParticleSystem {
   getParticles() {
     return this.particles;
   }
+
+  destroy() {
+    window.removeEventListener('resize', this.resizeHandler);
+    if (this.canvas.parentElement) {
+      this.canvas.parentElement.removeChild(this.canvas);
+    }
+  }
 }
 
 /** Current particle system (blue particles flowing with current) */
@@ -639,10 +729,11 @@ class CurrentParticleSystem {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null;
   private map: any;
-  private particles: Array<{ x: number; y: number; age: number }> = [];
+  private particles: { x: number; y: number; age: number }[] = [];
   private currentSpeed = 0.5;
   private currentDirection = 0;
   private maxParticles = 500; // Fewer particles than wind for performance
+  private resizeHandler: () => void;
 
   constructor(canvas: HTMLCanvasElement, map: any) {
     this.canvas = canvas;
@@ -651,7 +742,8 @@ class CurrentParticleSystem {
 
     // Resize canvas to match map
     this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    this.resizeHandler = () => this.resizeCanvas();
+    window.addEventListener('resize', this.resizeHandler);
 
     // Initialize particles
     this.initializeParticles();
@@ -726,6 +818,13 @@ class CurrentParticleSystem {
 
   getParticles() {
     return this.particles;
+  }
+
+  destroy() {
+    window.removeEventListener('resize', this.resizeHandler);
+    if (this.canvas.parentElement) {
+      this.canvas.parentElement.removeChild(this.canvas);
+    }
   }
 }
 

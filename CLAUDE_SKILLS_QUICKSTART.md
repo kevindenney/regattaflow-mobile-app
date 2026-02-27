@@ -90,7 +90,7 @@ LIMIT 5;
 ## Troubleshooting
 
 ### "Skill initialization failed"
-- Check your `EXPO_PUBLIC_ANTHROPIC_API_KEY` in `.env`
+- Check your `ANTHROPIC_API_KEY` in `.env`
 - Verify API key has access to Skills API (Beta feature)
 - System will fallback to prompt-based approach automatically
 

@@ -4,6 +4,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('ClubVerificationService');
 
 export interface VerificationResult {
   success: boolean;
@@ -15,8 +18,8 @@ export interface VerificationResult {
 export interface ClubExtractedData {
   clubName?: string;
   established?: number;
-  fleets?: Array<{ name: string; boats: number }>;
-  races?: Array<{ name: string; frequency: string }>;
+  fleets?: { name: string; boats: number }[];
+  races?: { name: string; frequency: string }[];
   regattas?: string[];
   adminUsers?: string[];
   memberCount?: number;
@@ -25,6 +28,12 @@ export interface ClubExtractedData {
 export class ClubVerificationService {
   private static VERIFICATION_TOKEN_META = 'regattaflow-verification';
   private static VERIFICATION_TXT_PREFIX = 'regattaflow-verify=';
+
+  private static normalizeWebsiteUrl(rawUrl: string): string {
+    return rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+      ? rawUrl
+      : `https://${rawUrl}`;
+  }
 
   /**
    * Generate a unique verification token for a club
@@ -45,7 +54,7 @@ export class ClubVerificationService {
       });
 
     if (error) {
-      console.error('Error storing verification token:', error);
+      logger.error('Error storing verification token:', error);
       throw new Error('Failed to generate verification token');
     }
 
@@ -77,8 +86,10 @@ export class ClubVerificationService {
 
       const expectedToken = profile.verification_token;
 
+      const normalizedUrl = this.normalizeWebsiteUrl(websiteUrl);
+
       // Fetch the website HTML
-      const response = await fetch(websiteUrl, {
+      const response = await fetch(normalizedUrl, {
         headers: {
           'User-Agent': 'RegattaFlow-Verifier/1.0',
         },
@@ -106,7 +117,7 @@ export class ClubVerificationService {
       await this.logVerificationAttempt(
         userId,
         'meta_tag',
-        websiteUrl,
+        normalizedUrl,
         isVerified,
         isVerified ? undefined : 'Meta tag not found or token mismatch'
       );
@@ -127,13 +138,13 @@ export class ClubVerificationService {
         error: 'Meta tag not found. Please add the verification meta tag to your website.',
       };
     } catch (error: any) {
-      console.error('Meta tag verification error:', error);
+      logger.error('Meta tag verification error:', error);
 
       // Log the failed attempt
       await this.logVerificationAttempt(
         userId,
         'meta_tag',
-        websiteUrl,
+        this.normalizeWebsiteUrl(websiteUrl),
         false,
         error.message
       );
@@ -169,34 +180,67 @@ export class ClubVerificationService {
       }
 
       const expectedToken = profile.verification_token;
+      const normalizedUrl = this.normalizeWebsiteUrl(websiteUrl);
+      const hostname = new URL(normalizedUrl).hostname.replace(/^www\./i, '');
+      const expectedTxt = `${this.VERIFICATION_TXT_PREFIX}${expectedToken}`;
 
-      // Extract domain from URL
-      const domain = new URL(websiteUrl).hostname;
+      // Query TXT records through DNS-over-HTTPS (Google resolver).
+      const lookupNames = [hostname, `_regattaflow.${hostname}`];
+      let found = false;
 
-      // Note: DNS verification requires a backend API or service
-      // This is a placeholder - in production, you'd call a backend endpoint
-      // that performs DNS lookups using node's dns module or external DNS API
+      for (const name of lookupNames) {
+        const dnsResponse = await fetch(
+          `https://dns.google/resolve?name=${encodeURIComponent(name)}&type=TXT`,
+          {
+            headers: {
+              Accept: 'application/dns-json',
+            },
+          }
+        );
 
-      // For now, we'll return an error indicating this needs backend support
+        if (!dnsResponse.ok) {
+          continue;
+        }
+
+        const dnsPayload = await dnsResponse.json();
+        const answers: string[] = Array.isArray(dnsPayload?.Answer)
+          ? dnsPayload.Answer.map((answer: any) => String(answer?.data || ''))
+          : [];
+
+        // TXT values often come wrapped in quotes and split across chunks.
+        const normalizedAnswers = answers
+          .map((value) => value.replace(/"/g, '').trim())
+          .filter(Boolean);
+
+        if (normalizedAnswers.some((value) => value.includes(expectedTxt))) {
+          found = true;
+          break;
+        }
+      }
+
+      await this.logVerificationAttempt(
+        userId,
+        'dns',
+        websiteUrl,
+        found,
+        found ? undefined : `TXT record not found. Expected value: ${expectedTxt}`
+      );
+
+      if (!found) {
+        return {
+          success: false,
+          error: `DNS TXT record not found. Add "${expectedTxt}" to your domain and try again.`,
+        };
+      }
+
+      await this.updateVerificationStatus(userId, 'verified', 'dns');
       return {
-        success: false,
-        error: 'DNS verification requires backend API support. Please use meta tag verification instead.',
+        success: true,
+        method: 'dns',
+        verificationToken: expectedToken,
       };
-
-      // Production implementation would look like:
-      // const response = await fetch('/api/verify-dns', {
-      //   method: 'POST',
-      //   body: JSON.stringify({ domain, expectedToken }),
-      // });
-      //
-      // const { verified } = await response.json();
-      //
-      // if (verified) {
-      //   await this.updateVerificationStatus(userId, 'verified', 'dns');
-      //   return { success: true, method: 'dns', verificationToken: expectedToken };
-      // }
     } catch (error: any) {
-      console.error('DNS verification error:', error);
+      logger.error('DNS verification error:', error);
 
       await this.logVerificationAttempt(
         userId,
@@ -220,35 +264,55 @@ export class ClubVerificationService {
     websiteUrl: string
   ): Promise<ClubExtractedData | null> {
     try {
-      // Fetch website HTML
-      const response = await fetch(websiteUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch website: ${response.status}`);
+      const normalizedUrl = this.normalizeWebsiteUrl(websiteUrl);
+      const { data, error } = await supabase.functions.invoke('club-scrape', {
+        body: { url: normalizedUrl },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Club scrape failed');
+      }
+      if (!data?.success || !data?.data) {
+        throw new Error(data?.error || 'Club scrape returned no data');
       }
 
-      const html = await response.text();
+      const extracted = data.data;
+      const classes = Array.isArray(extracted.classes) ? extracted.classes : [];
+      const events = Array.isArray(extracted.events) ? extracted.events : [];
+      const contacts = Array.isArray(extracted.contacts) ? extracted.contacts : [];
 
-      // In production, this would use Anthropic Claude or similar to extract data
-      // For now, return mock data as placeholder
-      // TODO: Integrate with Anthropic Claude for extraction
+      const races = events
+        .filter((event: any) => event?.name)
+        .slice(0, 20)
+        .map((event: any) => ({
+          name: String(event.name),
+          frequency: event.date ? String(event.date) : (event.notes ? String(event.notes) : 'Scheduled'),
+        }));
+
+      const adminUsers = contacts
+        .map((contact: any) => contact?.email)
+        .filter((email: unknown): email is string => typeof email === 'string' && email.length > 0);
 
       return {
-        clubName: 'Extracted Club Name',
-        established: new Date().getFullYear() - 50,
-        memberCount: 250,
-        fleets: [
-          { name: 'Laser Fleet', boats: 24 },
-          { name: 'J/24 Fleet', boats: 12 },
-        ],
-        races: [
-          { name: 'Wednesday Series', frequency: 'Weekly' },
-          { name: 'Weekend Regatta', frequency: 'Monthly' },
-        ],
-        regattas: ['Annual Championship', 'Harbor Regatta'],
-        adminUsers: ['admin@example.com'],
+        clubName: extracted.club_name || undefined,
+        memberCount: undefined,
+        established: undefined,
+        fleets: classes
+          .filter((item: any) => item?.name)
+          .slice(0, 20)
+          .map((item: any) => ({
+            name: String(item.name),
+            boats: 0,
+          })),
+        races,
+        regattas: events
+          .filter((event: any) => event?.name)
+          .slice(0, 20)
+          .map((event: any) => String(event.name)),
+        adminUsers,
       };
     } catch (error: any) {
-      console.error('Error extracting club data:', error);
+      logger.error('Error extracting club data:', error);
       return null;
     }
   }
@@ -258,10 +322,11 @@ export class ClubVerificationService {
    */
   static async findMatchingYachtClub(websiteUrl: string): Promise<string | null> {
     try {
+      const normalizedUrl = this.normalizeWebsiteUrl(websiteUrl);
       const { data, error } = await supabase
         .from('yacht_clubs')
         .select('id, website')
-        .ilike('website', `%${new URL(websiteUrl).hostname}%`)
+        .ilike('website', `%${new URL(normalizedUrl).hostname}%`)
         .limit(1)
         .single();
 
@@ -271,7 +336,7 @@ export class ClubVerificationService {
 
       return data.id;
     } catch (error) {
-      console.error('Error finding matching yacht club:', error);
+      logger.error('Error finding matching yacht club:', error);
       return null;
     }
   }
@@ -302,7 +367,7 @@ export class ClubVerificationService {
       .eq('user_id', userId);
 
     if (error) {
-      console.error('Error updating verification status:', error);
+      logger.error('Error updating verification status:', error);
       throw new Error('Failed to update verification status');
     }
   }
@@ -326,7 +391,7 @@ export class ClubVerificationService {
         .single();
 
       if (!profile) {
-        console.error('No club profile found for user');
+        logger.error('No club profile found for user');
         return;
       }
 
@@ -338,7 +403,7 @@ export class ClubVerificationService {
         error_message: errorMessage,
       });
     } catch (error) {
-      console.error('Error logging verification attempt:', error);
+      logger.error('Error logging verification attempt:', error);
       // Don't throw - logging failures shouldn't break verification flow
     }
   }

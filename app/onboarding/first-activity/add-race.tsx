@@ -33,7 +33,6 @@ import { OnboardingStateService } from '@/services/onboarding/OnboardingStateSer
 
 function SuccessIllustration() {
   const scale = useSharedValue(1);
-  const rotate = useSharedValue(0);
 
   useEffect(() => {
     // Gentle pulse animation
@@ -45,7 +44,7 @@ function SuccessIllustration() {
       -1,
       true
     );
-  }, []);
+  }, [scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -77,10 +76,9 @@ export default function AddRaceScreen() {
   const handleAddRace = async () => {
     // Mark onboarding as seen for returning user detection
     await OnboardingStateService.markOnboardingSeen();
-    // Clear onboarding state and navigate to add race flow
+    // Clear onboarding state and navigate directly into add-race flow
     await OnboardingStateService.clearState();
-    router.replace('/(tabs)/races');
-    // TODO: Open add race modal after navigation
+    router.replace('/(tabs)/race/add-tufte');
   };
 
   const handleExplore = async () => {

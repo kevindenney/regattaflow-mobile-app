@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('usePostRaceInterview');
 
@@ -111,7 +112,9 @@ export function usePostRaceInterview({
 
     setLoadingUserPostRaceSession(true);
     try {
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+      let error: any = null;
+      const primary = await supabase
         .from('race_timer_sessions')
         .select('*')
         .eq('regatta_id', selectedRaceId)
@@ -119,6 +122,21 @@ export function usePostRaceInterview({
         .order('end_time', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(1);
+      data = primary.data;
+      error = primary.error;
+
+      if (isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')) {
+        const fallback = await supabase
+          .from('race_timer_sessions')
+          .select('*')
+          .eq('race_id', selectedRaceId)
+          .eq('sailor_id', user.id)
+          .order('end_time', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(1);
+        data = fallback.data;
+        error = fallback.error;
+      }
 
       logger.debug('[POST_RACE_LOAD] Query result', {
         error: error ? { message: error.message, code: error.code } : null,
@@ -191,13 +209,29 @@ export function usePostRaceInterview({
       // This is critical because another component (StructuredDebriefInterview) may have
       // created a session since we last loaded, and we want to use that same session
       logger.debug('[POST_RACE_OPEN] Fetching fresh session data to avoid duplicates');
-      const { data: freshSessions, error: fetchError } = await supabase
+      let freshSessions: any[] | null = null;
+      let fetchError: any = null;
+      const primaryFresh = await supabase
         .from('race_timer_sessions')
         .select('*')
         .eq('regatta_id', effectiveRaceId)
         .eq('sailor_id', user.id)
         .order('end_time', { ascending: false })
         .limit(1);
+      freshSessions = primaryFresh.data;
+      fetchError = primaryFresh.error;
+
+      if (isMissingIdColumn(fetchError, 'race_timer_sessions', 'regatta_id')) {
+        const fallbackFresh = await supabase
+          .from('race_timer_sessions')
+          .select('*')
+          .eq('race_id', effectiveRaceId)
+          .eq('sailor_id', user.id)
+          .order('end_time', { ascending: false })
+          .limit(1);
+        freshSessions = fallbackFresh.data;
+        fetchError = fallbackFresh.error;
+      }
 
       let session: RaceTimerSession | null = null;
 
@@ -220,7 +254,7 @@ export function usePostRaceInterview({
         const nowIso = new Date().toISOString();
         const startTime = effectiveRaceData.start_date || nowIso;
 
-        const { data: createdSession, error } = await supabase
+        const primaryCreate = await supabase
           .from('race_timer_sessions')
           .insert({
             sailor_id: user.id,
@@ -231,6 +265,24 @@ export function usePostRaceInterview({
           })
           .select()
           .single();
+        let createdSession = primaryCreate.data;
+        let error = primaryCreate.error;
+
+        if (isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')) {
+          const fallbackCreate = await supabase
+            .from('race_timer_sessions')
+            .insert({
+              sailor_id: user.id,
+              race_id: effectiveRaceId,
+              start_time: startTime,
+              end_time: nowIso,
+              duration_seconds: 0,
+            })
+            .select()
+            .single();
+          createdSession = fallbackCreate.data;
+          error = fallbackCreate.error;
+        }
 
         if (error) {
           logger.error('[POST_RACE_OPEN] Failed to create session', error);

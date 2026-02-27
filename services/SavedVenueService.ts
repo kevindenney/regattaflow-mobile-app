@@ -4,6 +4,9 @@
  */
 
 import { supabase } from './supabase';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('SavedVenueService');
 
 export interface SavedVenue {
   id: string;
@@ -48,7 +51,7 @@ export class SavedVenueService {
 
     // If view doesn't exist, fall back to direct table query
     if (error && (error.code === '42P01' || error.message?.includes('does not exist'))) {
-      console.warn('[SavedVenueService] View not found, using fallback query');
+      logger.warn('[SavedVenueService] View not found, using fallback query');
       
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('saved_venues')
@@ -60,7 +63,7 @@ export class SavedVenueService {
       if (fallbackError) {
         // If table doesn't exist either, return empty array
         if (fallbackError.code === '42P01' || fallbackError.message?.includes('does not exist')) {
-          console.warn('[SavedVenueService] saved_venues table not found');
+          logger.warn('[SavedVenueService] saved_venues table not found');
           return [];
         }
         throw fallbackError;

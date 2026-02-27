@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import {
   View,
   ScrollView,
@@ -37,6 +38,7 @@ import {
   normalizeClubRole,
 } from '@/types/club';
 import { ensureUuid, generateUuid } from '@/utils/uuid';
+import { createLogger } from '@/lib/utils/logger';
 import rhkycClubData from '@/data/demo/rhkycClubData.json';
 
 type ManualClub = {
@@ -80,8 +82,19 @@ type ClubMetadataExtras = {
   [key: string]: any;
 };
 
+type ConnectedClubOption = {
+  clubId: string;
+  name: string;
+  membershipType?: string | null;
+  paymentStatus?: string | null;
+  joinedDate?: string | null;
+  memberNumber?: string | null;
+  source: 'snapshot' | 'membership_fallback';
+};
+
 const MANUAL_STORAGE_KEY = '@regattaflow/manual_clubs_tracker';
 const MANUAL_CLUB_COLLECTION = 'user_manual_clubs';
+const logger = createLogger('ClubsScreen');
 
 const demoClubMetadataById: Record<string, ClubMetadataExtras> = {};
 if (rhkycClubData?.club?.id && rhkycClubData?.club?.metadata) {
@@ -184,49 +197,49 @@ const ADMIN_ACTIONS: AdminActionConfig[] = [
     title: 'Create Regatta',
     description: 'Set dates, fleets, scoring, and registration windows.',
     emoji: '📅',
-    roles: ['admin', 'race_officer', 'sailing_manager'],
+    roles: ['admin', 'race_admin'],
   },
   {
     id: 'manage-entries',
     title: 'Manage Entries & Payments',
     description: 'Review entries, reconcile payments, issue refunds.',
     emoji: '💳',
-    roles: ['admin', 'treasurer'],
+    roles: ['admin', 'race_admin'],
   },
   {
     id: 'publish-documents',
     title: 'Publish Race Documents',
     description: 'Upload NORs, SIs, and automate expiry reminders.',
     emoji: '📄',
-    roles: ['admin', 'communications', 'race_officer'],
+    roles: ['admin', 'race_admin'],
   },
   {
     id: 'configure-microsite',
     title: 'Configure Microsite & Widgets',
     description: 'Brand the public site and embed live widgets.',
     emoji: '🖥️',
-    roles: ['admin', 'communications'],
+    roles: ['admin'],
   },
   {
     id: 'membership-approvals',
     title: 'Membership & Roles',
     description: 'Approve applications and assign club roles.',
     emoji: '✅',
-    roles: ['admin', 'membership_manager'],
+    roles: ['admin'],
   },
   {
     id: 'volunteer-roster',
     title: 'Volunteer & RC Roster',
     description: 'Assign PRO, signal boats, and volunteer shifts.',
     emoji: '🚩',
-    roles: ['admin', 'race_officer', 'sailing_manager', 'race_committee'],
+    roles: ['admin', 'race_admin'],
   },
   {
     id: 'results-center',
     title: 'Results & Scoring Center',
     description: 'Validate finishes and publish standings.',
     emoji: '🏆',
-    roles: ['admin', 'scorer', 'race_officer'],
+    roles: ['admin', 'race_admin', 'volunteer_results'],
   },
 ];
 
@@ -268,21 +281,34 @@ export default function ClubsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [regionFilter, setRegionFilter] = useState<'all' | 'asia-pacific' | 'americas' | 'europe' | 'other'>('all');
   const [connectingClubId, setConnectingClubId] = useState<string | null>(null);
+  const [showClubDiagnostics, setShowClubDiagnostics] = useState(false);
   const manualClubsRef = useRef<ManualClub[]>([]);
+  const lastMembershipErrorAlertRef = useRef<string | null>(null);
+  const lastIntegrationErrorAlertRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
+  const refreshRunIdRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      refreshRunIdRef.current += 1;
+    };
+  }, []);
 
   const persistManualClubs = useCallback(async (records: ManualClub[]) => {
     try {
       const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
       await AsyncStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(records));
     } catch (storageError) {
-      console.warn('[ClubsScreen] Failed to persist manual clubs', storageError);
+      logger.warn('Failed to persist manual clubs', storageError);
     }
   }, []);
 
   useEffect(() => {
     let isMounted = true;
 
-    (async () => {
+    void (async () => {
       try {
         const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
         const stored = await AsyncStorage.getItem(MANUAL_STORAGE_KEY);
@@ -298,13 +324,13 @@ export default function ClubsScreen() {
               try {
                 await MutationQueueService.clearCollection(MANUAL_CLUB_COLLECTION);
               } catch (queueError) {
-                console.warn('[ClubsScreen] Failed to reset manual club queue', queueError);
+                logger.warn('Failed to reset manual club queue', queueError);
               }
             }
           }
         }
       } catch (storageError) {
-        console.warn('[ClubsScreen] Failed to load manual clubs', storageError);
+        logger.warn('Failed to load manual clubs', storageError);
       }
     })();
 
@@ -415,7 +441,7 @@ export default function ClubsScreen() {
 
     let cancelled = false;
 
-    (async () => {
+    void (async () => {
       const result = await fetchUserManualClubs(user.id);
 
       if (cancelled) {
@@ -427,7 +453,7 @@ export default function ClubsScreen() {
       }
 
       if (result.error) {
-        console.warn('[ClubsScreen] Failed to fetch manual clubs from Supabase', result.error);
+        logger.warn('Failed to fetch manual clubs from Supabase', result.error);
         return;
       }
 
@@ -440,6 +466,9 @@ export default function ClubsScreen() {
       }));
 
       if (remoteClubs.length > 0) {
+        if (cancelled) {
+          return;
+        }
         remoteClubs.sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
         setManualClubs(remoteClubs);
         await persistManualClubs(remoteClubs);
@@ -454,19 +483,19 @@ export default function ClubsScreen() {
           try {
             await MutationQueueService.clearCollection(MANUAL_CLUB_COLLECTION);
           } catch (queueError) {
-            console.warn('[ClubsScreen] Failed to clear manual club queue after RLS violation', queueError);
+            logger.warn('Failed to clear manual club queue after RLS violation', queueError);
           }
           Alert.alert(
             'Cleaned up personal clubs',
             'Some locally stored clubs could not be synced and were removed because they belonged to a different account.'
           );
         } else if (syncResult.error && !syncResult.missingTable) {
-          console.warn('[ClubsScreen] Failed to push local manual clubs to Supabase', syncResult.error);
+          logger.warn('Failed to push local manual clubs to Supabase', syncResult.error);
         }
       }
     })().catch((err) => {
       if (!cancelled) {
-        console.warn('[ClubsScreen] Error syncing manual clubs', err);
+        logger.warn('Error syncing manual clubs', err);
       }
     });
 
@@ -476,33 +505,220 @@ export default function ClubsScreen() {
   }, [user?.id, persistManualClubs]);
 
   useEffect(() => {
-    if (snapshots.length === 0) {
+    const message = error?.message;
+    if (!message) {
+      lastMembershipErrorAlertRef.current = null;
+      return;
+    }
+    if (message.includes('relation') || message.includes('does not exist')) return;
+    if (lastMembershipErrorAlertRef.current === message) return;
+    lastMembershipErrorAlertRef.current = message;
+    Alert.alert('Error', `Failed to load clubs: ${message}`);
+  }, [error]);
+
+  useEffect(() => {
+    if (!integrationError) {
+      lastIntegrationErrorAlertRef.current = null;
+      return;
+    }
+    if (lastIntegrationErrorAlertRef.current === integrationError) return;
+    lastIntegrationErrorAlertRef.current = integrationError;
+    Alert.alert('Club data unavailable', integrationError);
+  }, [integrationError]);
+
+  const rawMembershipCount = memberships?.length || 0;
+  const fallbackConnectedClubs = useMemo<ConnectedClubOption[]>(() => {
+    const deduped = new Map<string, ConnectedClubOption>();
+    (memberships || []).forEach((membership: any) => {
+      const clubIdRaw =
+        membership?.club_id ||
+        membership?.clubs?.id ||
+        membership?.club?.id ||
+        membership?.club_profiles?.id ||
+        membership?.yacht_clubs?.id;
+      if (!clubIdRaw) return;
+
+      const clubId = String(clubIdRaw);
+      const name =
+        membership?.club?.name ||
+        membership?.clubs?.name ||
+        membership?.club_profiles?.name ||
+        membership?.club_profiles?.club_name ||
+        membership?.club_profiles?.organization_name ||
+        membership?.yacht_clubs?.name ||
+        `Club ${clubId.slice(0, 8)}`;
+
+      deduped.set(clubId, {
+        clubId,
+        name,
+        membershipType:
+          membership?.membership_type ||
+          membership?.membershipType ||
+          membership?.type ||
+          membership?.role ||
+          'Member',
+        paymentStatus:
+          membership?.payment_status || membership?.paymentStatus || membership?.status || 'current',
+        joinedDate:
+          membership?.joined_at ||
+          membership?.joined_date ||
+          membership?.created_at ||
+          null,
+        memberNumber: membership?.member_number || membership?.memberNumber || null,
+        source: 'membership_fallback',
+      });
+    });
+    return Array.from(deduped.values());
+  }, [memberships]);
+  const connectedClubOptions = useMemo<ConnectedClubOption[]>(() => {
+    if (snapshots.length > 0) {
+      return snapshots.map((snapshot) => ({
+        clubId: snapshot.clubId,
+        name: snapshot.club.name,
+        membershipType: snapshot.membership.membershipType || 'Member',
+        paymentStatus: snapshot.membership.paymentStatus || 'current',
+        joinedDate: snapshot.membership.joinedDate || null,
+        memberNumber: snapshot.membership.memberNumber || null,
+        source: 'snapshot',
+      }));
+    }
+    return fallbackConnectedClubs;
+  }, [snapshots, fallbackConnectedClubs]);
+  useEffect(() => {
+    if (connectedClubOptions.length === 0) {
       setSelectedClubId(null);
       return;
     }
 
-    if (!selectedClubId || !snapshots.some((snapshot) => snapshot.clubId === selectedClubId)) {
-      setSelectedClubId(snapshots[0].clubId);
+    if (!selectedClubId || !connectedClubOptions.some((club) => club.clubId === selectedClubId)) {
+      setSelectedClubId(connectedClubOptions[0].clubId);
     }
-  }, [snapshots, selectedClubId]);
-
-  useEffect(() => {
-    if (error && error.message && !error.message.includes('relation') && !error.message.includes('does not exist')) {
-      Alert.alert('Error', `Failed to load clubs: ${error.message}`);
+  }, [connectedClubOptions, selectedClubId]);
+  const rawMembershipsWithClubIdCount = useMemo(() => {
+    return (memberships || []).filter((membership: any) => {
+      return Boolean(
+        membership?.club_id ||
+          membership?.clubs?.id ||
+          membership?.club?.id ||
+          membership?.club_profiles?.id ||
+          membership?.yacht_clubs?.id
+      );
+    }).length;
+  }, [memberships]);
+  const rawMembershipsMissingClubDetailsCount = useMemo(() => {
+    return (memberships || []).filter((membership: any) => {
+      const hasClubId = Boolean(
+        membership?.club_id ||
+          membership?.clubs?.id ||
+          membership?.club?.id ||
+          membership?.club_profiles?.id ||
+          membership?.yacht_clubs?.id
+      );
+      const hasClubDetails = Boolean(
+        membership?.club?.name ||
+          membership?.clubs?.name ||
+          membership?.club_profiles?.name ||
+          membership?.club_profiles?.club_name ||
+          membership?.club_profiles?.organization_name ||
+          membership?.yacht_clubs?.name
+      );
+      return hasClubId && !hasClubDetails;
+    }).length;
+  }, [memberships]);
+  const usingMembershipFallback = snapshots.length === 0 && connectedClubOptions.length > 0;
+  const hasConnectedClub = connectedClubOptions.length > 0;
+  const emptyClubStateReason = useMemo(() => {
+    if (membershipsLoading || integrationLoading) {
+      return 'Loading club memberships...';
     }
-  }, [error]);
-
-  useEffect(() => {
+    if (error?.message) {
+      return `Membership query issue: ${error.message}`;
+    }
     if (integrationError) {
-      Alert.alert('Club data unavailable', integrationError);
+      return `Club snapshot issue: ${integrationError}`;
     }
-  }, [integrationError]);
+    if (rawMembershipCount === 0) {
+      return 'No club memberships found for this account yet.';
+    }
+    if (rawMembershipsWithClubIdCount === 0) {
+      return `Found ${rawMembershipCount} membership record(s), but none include a club ID.`;
+    }
+    if (rawMembershipsMissingClubDetailsCount > 0) {
+      return `Found ${rawMembershipCount} membership record(s); ${rawMembershipsMissingClubDetailsCount} are missing club details.`;
+    }
+    if (usingMembershipFallback) {
+      return 'Connected via membership records. Snapshot enrichment is unavailable, so fallback club data is displayed.';
+    }
+    return `Found ${rawMembershipCount} membership record(s), but no connected club snapshots were generated.`;
+  }, [
+    membershipsLoading,
+    integrationLoading,
+    error?.message,
+    integrationError,
+    rawMembershipCount,
+    rawMembershipsWithClubIdCount,
+    rawMembershipsMissingClubDetailsCount,
+    usingMembershipFallback,
+  ]);
+  const clubDiagnosticLines = useMemo(() => {
+    const lines = [
+      'Membership query: club_members (fallback: club_memberships)',
+      'Club enrichment: clubs -> club_profiles -> yacht_clubs',
+      `Membership records: ${rawMembershipCount}`,
+      `With club ID: ${rawMembershipsWithClubIdCount}`,
+      `Missing club details: ${rawMembershipsMissingClubDetailsCount}`,
+    ];
 
-  const hasConnectedClub = snapshots.length > 0;
+    if (error?.message) {
+      lines.push(`Membership error: ${error.message}`);
+    }
+    if (integrationError) {
+      lines.push(`Snapshot error: ${integrationError}`);
+    }
+    if (usingMembershipFallback) {
+      lines.push('Snapshot status: unavailable; membership fallback active');
+    }
+
+    return lines;
+  }, [
+    error?.message,
+    integrationError,
+    rawMembershipCount,
+    rawMembershipsWithClubIdCount,
+    rawMembershipsMissingClubDetailsCount,
+    usingMembershipFallback,
+  ]);
+  const copyClubDiagnostics = useCallback(async () => {
+    const payload = [`Reason: ${emptyClubStateReason}`, ...clubDiagnosticLines].join('\n');
+    try {
+      await Clipboard.setStringAsync(payload);
+      Alert.alert('Copied', 'Club diagnostics copied to clipboard.');
+    } catch (_error) {
+      Alert.alert('Copy failed', 'Clipboard is unavailable on this device.');
+    }
+  }, [emptyClubStateReason, clubDiagnosticLines]);
   const selectedSnapshot = useMemo<ClubIntegrationSnapshot | null>(() => {
     if (!selectedClubId) return null;
     return snapshots.find((snapshot) => snapshot.clubId === selectedClubId) || null;
   }, [selectedClubId, snapshots]);
+  const selectedFallbackClub = useMemo<ConnectedClubOption | null>(() => {
+    if (!selectedClubId) return null;
+    return fallbackConnectedClubs.find((club) => club.clubId === selectedClubId) || null;
+  }, [selectedClubId, fallbackConnectedClubs]);
+  const selectedConnectedClub = useMemo<ConnectedClubOption | null>(() => {
+    if (selectedSnapshot) {
+      return {
+        clubId: selectedSnapshot.clubId,
+        name: selectedSnapshot.club.name,
+        membershipType: selectedSnapshot.membership.membershipType || 'Member',
+        paymentStatus: selectedSnapshot.membership.paymentStatus || 'current',
+        joinedDate: selectedSnapshot.membership.joinedDate || null,
+        memberNumber: selectedSnapshot.membership.memberNumber || null,
+        source: 'snapshot',
+      };
+    }
+    return selectedFallbackClub;
+  }, [selectedSnapshot, selectedFallbackClub]);
   const selectedRole = useMemo<ClubRole | null>(() => {
     if (!selectedSnapshot) return null;
     return normalizeClubRole(selectedSnapshot.membership.role);
@@ -549,8 +765,12 @@ export default function ClubsScreen() {
   }, [selectedSnapshot]);
 
   const onRefresh = useCallback(async () => {
+    const runId = ++refreshRunIdRef.current;
     setRefreshing(true);
     await Promise.allSettled([refetch?.(), refetchSnapshots(), refetchDirectory()]);
+    if (!isMountedRef.current || runId !== refreshRunIdRef.current) {
+      return;
+    }
     setRefreshing(false);
   }, [refetch, refetchSnapshots, refetchDirectory]);
 
@@ -669,7 +889,7 @@ export default function ClubsScreen() {
         );
         await Promise.allSettled([refetch?.(), refetchSnapshots()]);
       } catch (err: any) {
-        console.error('[ClubsScreen] Failed to connect to club:', err);
+        logger.error('Failed to connect to club', err);
         Alert.alert('Unable to connect', err?.message || 'Please try again later.');
       } finally {
         setConnectingClubId(null);
@@ -754,7 +974,7 @@ export default function ClubsScreen() {
           Alert.alert('Coming soon', 'Club control center modules are being assembled.');
       }
     },
-    [selectedSnapshot]
+    [router, selectedSnapshot]
   );
 
   const renderAdminPanel = () => {
@@ -1112,7 +1332,7 @@ export default function ClubsScreen() {
           await Linking.openURL(document.url);
           return;
         } catch (err) {
-          console.warn('[ClubsScreen] Failed to open document URL', err);
+          logger.warn('Failed to open document URL', err);
         }
       }
 
@@ -1224,55 +1444,74 @@ export default function ClubsScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>My Connected Clubs</Text>
-              <Text style={styles.sectionHeaderMeta}>{snapshots.length} linked</Text>
+              <Text style={styles.sectionHeaderMeta}>
+                {connectedClubOptions.length} linked
+              </Text>
             </View>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.selectorStrip}
-            >
-              {snapshots.map((snapshot) => {
-                const isSelected = snapshot.clubId === selectedClubId;
-                const chipStyle = StyleSheet.flatten([
-                  styles.clubChip,
-                  isSelected ? { backgroundColor: '#0A84FF' } : null,
-                ]);
-                return (
-                  <TouchableOpacity
-                    key={snapshot.clubId}
-                    style={chipStyle}
-                    onPress={() => setSelectedClubId(snapshot.clubId)}
-                  >
-                    <Text style={isSelected ? styles.clubChipNameSelected : styles.clubChipName}>
-                      {snapshot.club.name}
-                    </Text>
-                    <Text style={isSelected ? styles.clubChipMetaSelected : styles.clubChipMeta}>
-                      {snapshot.membership.membershipType || 'Member'}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            {connectedClubOptions.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.selectorStrip}
+              >
+                {connectedClubOptions.map((club) => {
+                  const isSelected = club.clubId === selectedClubId;
+                  const chipStyle = StyleSheet.flatten([
+                    styles.clubChip,
+                    isSelected ? { backgroundColor: '#0A84FF' } : null,
+                  ]);
+                  return (
+                    <TouchableOpacity
+                      key={club.clubId}
+                      style={chipStyle}
+                      onPress={() => setSelectedClubId(club.clubId)}
+                    >
+                      <Text style={isSelected ? styles.clubChipNameSelected : styles.clubChipName}>
+                        {club.name}
+                      </Text>
+                      <Text style={isSelected ? styles.clubChipMetaSelected : styles.clubChipMeta}>
+                        {club.membershipType || 'Member'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptyDiagnosticPanel}>
+                <Text style={styles.emptyDiagnosticPanelText}>
+                  Memberships are connected, but detailed club snapshots are unavailable.
+                </Text>
+                <Text style={styles.emptyDiagnosticPanelText}>{emptyClubStateReason}</Text>
+                <TouchableOpacity onPress={onRefresh}>
+                  <Text style={styles.emptyDiagnosticPanelActionText}>Retry club snapshot sync</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-            {selectedSnapshot && (
+            {selectedConnectedClub && (
               <View style={styles.membershipCard}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.membershipTitle}>{selectedSnapshot.club.name}</Text>
+                  <Text style={styles.membershipTitle}>{selectedConnectedClub.name}</Text>
                   <Text style={styles.membershipMeta}>
-                    Member since {formatLongDate(selectedSnapshot.membership.joinedDate)}
+                    Member since {formatLongDate(selectedConnectedClub.joinedDate)}
                   </Text>
                   <Text style={styles.membershipMeta}>
-                    Status: {selectedSnapshot.membership.paymentStatus || 'current'}
+                    Status: {selectedConnectedClub.paymentStatus || 'current'}
                   </Text>
                   {roleDefinition && (
                     <Text style={styles.membershipMeta}>
                       Role: {roleDefinition.label}
                     </Text>
                   )}
-                  {selectedSnapshot.membership.memberNumber && (
+                  {selectedConnectedClub.memberNumber && (
                     <Text style={styles.membershipMeta}>
-                      Member #{selectedSnapshot.membership.memberNumber}
+                      Member #{selectedConnectedClub.memberNumber}
+                    </Text>
+                  )}
+                  {selectedConnectedClub.source === 'membership_fallback' && (
+                    <Text style={styles.membershipMeta}>
+                      Snapshot unavailable. Showing membership fallback data.
                     </Text>
                   )}
                 </View>
@@ -1292,6 +1531,7 @@ export default function ClubsScreen() {
                           params: { clubId: selectedSnapshot.clubId },
                         });
                       }}
+                      disabled={!selectedSnapshot}
                     >
                       <Text style={styles.primaryButtonText}>
                         {hasManagementPrivileges ? 'Open Club Workspace' : 'View Club Workspace'}
@@ -1366,6 +1606,40 @@ export default function ClubsScreen() {
                 Invite your club to RegattaFlow to unlock live race management, volunteer scheduling,
                 and automated results.
               </Text>
+              <View style={styles.emptyDiagnosticBadge}>
+                <Text style={styles.emptyDiagnosticText}>{emptyClubStateReason}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.diagnosticToggleButton}
+                onPress={() => setShowClubDiagnostics((prev) => !prev)}
+              >
+                <Text style={styles.diagnosticToggleButtonText}>
+                  {showClubDiagnostics ? 'Hide diagnostics' : 'Show diagnostics'}
+                </Text>
+              </TouchableOpacity>
+              {showClubDiagnostics && (
+                <View style={styles.emptyDiagnosticPanel}>
+                  <View style={styles.emptyDiagnosticPanelActions}>
+                    <TouchableOpacity onPress={copyClubDiagnostics}>
+                      <Text style={styles.emptyDiagnosticPanelActionText}>Copy diagnostics</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {clubDiagnosticLines.map((line) => (
+                    <Text key={line} style={styles.emptyDiagnosticPanelText}>
+                      {line}
+                    </Text>
+                  ))}
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={onRefresh}
+                disabled={refreshing}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {refreshing ? 'Syncing...' : 'Retry Club Sync'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={() => router.push('/club-dashboard')}
@@ -2105,6 +2379,57 @@ const styles = StyleSheet.create({
     color: '#6e6e73',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  emptyDiagnosticBadge: {
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    maxWidth: 540,
+  },
+  emptyDiagnosticText: {
+    fontSize: 12,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  diagnosticToggleButton: {
+    marginTop: -4,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  diagnosticToggleButtonText: {
+    fontSize: 12,
+    color: '#0369A1',
+    fontWeight: '600',
+  },
+  emptyDiagnosticPanel: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  emptyDiagnosticPanelActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 2,
+  },
+  emptyDiagnosticPanelActionText: {
+    fontSize: 12,
+    color: '#1D4ED8',
+    fontWeight: '600',
+  },
+  emptyDiagnosticPanelText: {
+    fontSize: 12,
+    color: '#1E3A8A',
+    lineHeight: 16,
   },
   primaryButton: {
     marginTop: 8,

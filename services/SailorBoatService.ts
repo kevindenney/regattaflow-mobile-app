@@ -498,7 +498,7 @@ export class SailorBoatService {
       .single();
 
     if (fetchError) {
-      console.error('Error fetching boat before delete:', fetchError);
+      logger.error('Error fetching boat before delete:', fetchError);
       throw fetchError;
     }
 
@@ -508,7 +508,7 @@ export class SailorBoatService {
       .eq('id', boatId);
 
     if (error) {
-      console.error('Error deleting boat:', error);
+      logger.error('Error deleting boat:', error);
       throw error;
     }
 
@@ -553,7 +553,7 @@ export class SailorBoatService {
       .order('category');
 
     if (error) {
-      console.error('Error fetching boat equipment:', error);
+      logger.error('Error fetching boat equipment:', error);
       throw error;
     }
 
@@ -571,7 +571,7 @@ export class SailorBoatService {
       .order('role');
 
     if (error) {
-      console.error('Error fetching boat crew:', error);
+      logger.error('Error fetching boat crew:', error);
       throw error;
     }
 
@@ -590,7 +590,7 @@ export class SailorBoatService {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching boat tuning settings:', error);
+      logger.error('Error fetching boat tuning settings:', error);
       throw error;
     }
 

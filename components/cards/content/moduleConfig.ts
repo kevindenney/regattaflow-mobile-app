@@ -3,6 +3,10 @@
  *
  * Defines which content modules are available and shown by default
  * for each race phase and race type combination.
+ *
+ * The sailing-specific constants (PHASE_MODULE_CONFIG, RACE_TYPE_MODULE_CONFIG)
+ * remain as the default/legacy path. Interest-aware resolution uses the
+ * InterestEventConfig from configs/*.ts via useInterestEventConfig().
  */
 
 import { RacePhase } from '@/components/cards/types';
@@ -12,6 +16,7 @@ import {
   RaceType,
   RaceTypeModuleConfig,
 } from '@/types/raceCardContent';
+import type { InterestEventConfig } from '@/types/interestEventConfig';
 
 // =============================================================================
 // PHASE MODULE CONFIGURATION
@@ -234,4 +239,117 @@ export function isModuleAvailable(
 ): boolean {
   const available = getAvailableModules(phase, raceType);
   return available.includes(moduleId);
+}
+
+// =============================================================================
+// INTEREST-AWARE MODULE RESOLUTION
+// =============================================================================
+
+/**
+ * Get available modules for a phase/subtype using the interest event config.
+ * Replaces getAvailableModules for non-sailing interests.
+ */
+export function getAvailableModulesForInterest(
+  config: InterestEventConfig,
+  phase: RacePhase,
+  subtypeId: string,
+): string[] {
+  const phaseConfig = config.phaseModuleConfig[phase];
+  if (!phaseConfig) return [];
+
+  let modules = [...phaseConfig.availableModules];
+
+  // Apply subtype overrides
+  const subtypeOverride = config.subtypeOverrides[subtypeId];
+  if (subtypeOverride) {
+    // Add additional modules
+    if (subtypeOverride.additionalModules) {
+      for (const m of subtypeOverride.additionalModules) {
+        if (!modules.includes(m)) {
+          modules.push(m);
+        }
+      }
+    }
+    // Remove excluded modules
+    if (subtypeOverride.excludedModules) {
+      modules = modules.filter((m) => !subtypeOverride.excludedModules!.includes(m));
+    }
+  }
+
+  return modules;
+}
+
+/**
+ * Get default modules for a phase/subtype using the interest event config.
+ * Replaces getDefaultModules for non-sailing interests.
+ */
+export function getDefaultModulesForInterest(
+  config: InterestEventConfig,
+  phase: RacePhase,
+  subtypeId: string,
+): string[] {
+  const phaseConfig = config.phaseModuleConfig[phase];
+  if (!phaseConfig) return [];
+
+  const subtypeOverride = config.subtypeOverrides[subtypeId];
+
+  // Check for phase-level default overrides in the subtype config
+  if (subtypeOverride?.phaseDefaultOverrides?.[phase]) {
+    return subtypeOverride.phaseDefaultOverrides[phase]!.slice(0, phaseConfig.maxModules);
+  }
+
+  let modules = [...phaseConfig.defaultModules];
+
+  // Remove defaults that are excluded for this subtype
+  if (subtypeOverride?.excludedModules) {
+    modules = modules.filter((m) => !subtypeOverride.excludedModules!.includes(m));
+  }
+
+  // Add subtype-specific modules to defaults if available in this phase
+  if (subtypeOverride?.additionalModules) {
+    const available = getAvailableModulesForInterest(config, phase, subtypeId);
+    for (const m of subtypeOverride.additionalModules) {
+      if (available.includes(m) && !modules.includes(m)) {
+        modules.splice(1, 0, m);
+      }
+    }
+  }
+
+  return modules.slice(0, phaseConfig.maxModules);
+}
+
+/**
+ * Get max modules for a phase using the interest event config.
+ */
+export function getMaxModulesForInterest(
+  config: InterestEventConfig,
+  phase: RacePhase,
+): number {
+  return config.phaseModuleConfig[phase]?.maxModules ?? 6;
+}
+
+/**
+ * Get the label for a module using the interest event config.
+ * Respects subtype label overrides, then falls back to moduleInfo.
+ */
+export function getModuleLabelForInterest(
+  config: InterestEventConfig,
+  moduleId: string,
+  subtypeId?: string,
+): string {
+  // Check subtype-specific label overrides first
+  if (subtypeId) {
+    const subtypeOverride = config.subtypeOverrides[subtypeId];
+    if (subtypeOverride?.labelOverrides?.[moduleId]) {
+      return subtypeOverride.labelOverrides[moduleId];
+    }
+  }
+
+  // Fall back to module info
+  const info = config.moduleInfo[moduleId];
+  if (info) {
+    return info.label;
+  }
+
+  return moduleId;
 }

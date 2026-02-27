@@ -25,6 +25,25 @@ export function CourseMapVisualization({
   racingAreaBoundary,
   height = 300
 }: CourseMapVisualizationProps) {
+  const getMarkCoordinates = (mark: any): { lat: number; lng: number } | null => {
+    if (typeof mark?.latitude === 'number' && typeof mark?.longitude === 'number') {
+      return { lat: mark.latitude, lng: mark.longitude };
+    }
+    if (typeof mark?.lat === 'number' && typeof mark?.lng === 'number') {
+      return { lat: mark.lat, lng: mark.lng };
+    }
+    return CourseVisualizationService['extractCoordinates'](mark?.position);
+  };
+
+  const getMarkSequence = (mark: any, fallbackIndex: number): number => {
+    const sequence = mark?.sequence_number ?? mark?.sequence;
+    return typeof sequence === 'number' && Number.isFinite(sequence) ? sequence : fallbackIndex + 1;
+  };
+
+  const sortedMarks = marks
+    .filter((mark) => getMarkCoordinates(mark))
+    .sort((a, b) => getMarkSequence(a, 998) - getMarkSequence(b, 999));
+
   // Calculate map bounds
   const bounds = CourseVisualizationService.calculateMapBounds(marks);
 
@@ -37,11 +56,8 @@ export function CourseMapVisualization({
   }
 
   // Calculate scale for positioning marks
-  const latRange = bounds.north - bounds.south;
-  const lngRange = bounds.east - bounds.west;
-  const maxRange = Math.max(latRange, lngRange);
-
-  const scale = (height - 40) / maxRange; // Leave margin
+  const latRange = Math.max(bounds.north - bounds.south, 0.000001);
+  const lngRange = Math.max(bounds.east - bounds.west, 0.000001);
 
   /**
    * Convert GPS coordinates to canvas position
@@ -58,15 +74,12 @@ export function CourseMapVisualization({
       {/* Simple 2D visualization */}
       <View style={styles.canvas}>
         {/* Render course line */}
-        {marks
-          .filter(mark => mark.position && mark.sequence_number)
-          .sort((a, b) => (a.sequence_number || 0) - (b.sequence_number || 0))
-          .map((mark, index, array) => {
+        {sortedMarks.map((mark, index, array) => {
             if (index === array.length - 1) return null;
 
-            const startCoords = CourseVisualizationService['extractCoordinates'](mark.position);
+            const startCoords = getMarkCoordinates(mark);
             const nextMark = array[index + 1];
-            const endCoords = CourseVisualizationService['extractCoordinates'](nextMark.position);
+            const endCoords = getMarkCoordinates(nextMark);
 
             if (!startCoords || !endCoords) return null;
 
@@ -93,13 +106,15 @@ export function CourseMapVisualization({
           })}
 
         {/* Render marks */}
-        {marks.map((mark, index) => {
-          const coords = CourseVisualizationService['extractCoordinates'](mark.position);
+        {sortedMarks.map((mark, index) => {
+          const coords = getMarkCoordinates(mark);
           if (!coords) return null;
 
           const position = coordsToPosition(coords.lat, coords.lng);
-          const icon = CourseVisualizationService.getMarkIcon(mark.mark_type);
-          const isStartOrFinish = mark.mark_type === 'start' || mark.mark_type === 'finish';
+          const markType = mark.mark_type || mark.type;
+          const icon = CourseVisualizationService.getMarkIcon(markType);
+          const isStartOrFinish = markType === 'start' || markType === 'finish';
+          const markName = mark.mark_name || mark.name || `Mark ${index + 1}`;
 
           return (
             <View
@@ -120,7 +135,7 @@ export function CourseMapVisualization({
               >
                 <Text style={styles.markIcon}>{icon}</Text>
               </View>
-              <Text style={styles.markLabel}>{mark.mark_name}</Text>
+              <Text style={styles.markLabel}>{markName}</Text>
             </View>
           );
         })}

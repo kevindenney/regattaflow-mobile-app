@@ -5,16 +5,14 @@
  * Advanced control panel for professional sailing race strategy
  */
 
-import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomSheet } from '@gorhom/bottom-sheet';
 import type {
   MapInteractionMode,
-  AdvancedMapConfig,
-  MapLayer,
-  OfflineRegion
+  AdvancedMapConfig
 } from '@/lib/types/advanced-map';
 
 interface ProfessionalMapControlsProps {
@@ -139,28 +137,28 @@ export function ProfessionalMapControls({
       id: 'tactical',
       icon: '🎯',
       label: 'Tactical Analysis',
-      onPress: () => Alert.alert('Tactical Analysis', 'Coming soon - AI-powered race strategy'),
+      onPress: () => onModeChange('weather-analysis'),
       description: 'AI race strategy analysis'
     },
     {
       id: 'performance',
       icon: '📊',
       label: 'Performance',
-      onPress: () => Alert.alert('Performance', 'Coming soon - Boat performance metrics'),
+      onPress: onOpenMeasurementTools,
       description: 'Performance analytics'
     },
     {
       id: 'fleet',
       icon: '🚤',
       label: 'Fleet Tracking',
-      onPress: () => Alert.alert('Fleet', 'Coming soon - Live fleet positions'),
+      onPress: () => router.push('/(tabs)/connect'),
       description: 'Track racing fleet'
     },
     {
       id: 'history',
       icon: '📈',
       label: 'Race History',
-      onPress: () => Alert.alert('History', 'Coming soon - Historical race data'),
+      onPress: () => router.push('/(tabs)/reflect'),
       description: 'Historical analysis'
     }
   ];
@@ -363,7 +361,7 @@ function QuickActionButton({
 
 // Performance Indicator Component
 function PerformanceIndicator({ config }: { config: AdvancedMapConfig }) {
-  const [performance, setPerformance] = useState({
+  const [performance, _setPerformance] = useState({
     fps: 60,
     memory: 45,
     quality: config.rendering.quality
