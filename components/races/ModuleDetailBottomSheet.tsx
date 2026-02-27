@@ -1206,7 +1206,7 @@ export function ModuleDetailBottomSheet({
   return (
     <Actionsheet isOpen={isOpen} onClose={handleClose} closeOnOverlayClick={Platform.OS !== 'web'}>
       <ActionsheetBackdrop style={{ backgroundColor: 'rgba(0,0,0,0.15)' }} />
-      <ActionsheetContent className="max-h-[90%] bg-background-0" focusScope={false}>
+      <ActionsheetContent className="max-h-[90%] bg-background-0 web:select-auto" focusScope={false}>
         <ActionsheetDragIndicatorWrapper>
           <ActionsheetDragIndicator />
         </ActionsheetDragIndicatorWrapper>
