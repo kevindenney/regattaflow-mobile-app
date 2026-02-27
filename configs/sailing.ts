@@ -28,6 +28,8 @@ export const SAILING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   addEventLabel: 'Add Race',
   eventNoun: 'Race',
+  catalogRoute: '/catalog-race',
+  catalogSubtitle: 'Find and follow races',
 
   // ---------------------------------------------------------------------------
   // Event subtypes
@@ -471,6 +473,20 @@ export const SAILING_EVENT_CONFIG: InterestEventConfig = {
       hoursLabel: 'Hours on Water',
       skillsLabel: 'Skills Tracked',
       streakLabel: 'Race Streak',
+    },
+    progressLabels: {
+      seeMoreText: 'See more of your sailing',
+      primaryLegend: 'Race',
+      secondaryLegend: 'Training',
+      eventVerb: 'raced',
+      stat1Label: 'Races',
+      stat2Label: 'Podiums',
+      stat3Label: 'On Water',
+      stat4Label: 'Avg Finish',
+      comparisonNoun: 'races',
+      performanceSubtitle: 'Your average finish position over time',
+      performanceEmpty: 'Complete some races to see your performance trend',
+      emptyIcon: 'boat-outline',
     },
   },
 

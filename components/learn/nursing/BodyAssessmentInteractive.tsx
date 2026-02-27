@@ -18,6 +18,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native'
@@ -31,6 +32,12 @@ import Svg, {
 } from 'react-native-svg'
 import { Ionicons } from '@expo/vector-icons'
 import type { NursingLessonData, NursingStep } from './NursingStepViewer'
+import { useStepAnnotations, type ConfidenceLevel } from '@/hooks/useStepAnnotations'
+import {
+  useCompetencyConnection,
+  computeAggregateConfidence,
+} from '@/hooks/useCompetencyConnection'
+import { COMPETENCY_STATUS_CONFIG } from '@/types/competency'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +45,8 @@ import type { NursingLessonData, NursingStep } from './NursingStepViewer'
 
 interface BodyAssessmentInteractiveProps {
   lessonData: NursingLessonData
+  /** DB UUID for this lesson (used for persisting annotations) */
+  lessonId?: string
   accentColor?: string
   onComplete?: () => void
 }
@@ -66,6 +75,14 @@ const BODY_REGIONS: BodyRegion[] = [
   { id: 'lower_extremities', label: 'Lower Extremities', competencyAreas: ['Musculoskeletal', 'Lower Extremity'], color: '#0891B2' },
   { id: 'skin', label: 'Skin & Integumentary', competencyAreas: ['Skin Assessment', 'Wound Assessment'], color: '#D97706' },
   { id: 'general', label: 'General / Vitals', competencyAreas: ['General Assessment', 'Vital Signs', 'Pain Assessment'], color: '#6B7280' },
+]
+
+// Confidence levels — ordered from lowest to highest
+const CONFIDENCE_OPTIONS: { level: ConfidenceLevel; label: string; color: string; bg: string; icon: string }[] = [
+  { level: 'needs_practice', label: 'Needs Practice', color: '#DC2626', bg: '#FEF2F2', icon: 'flame-outline' },
+  { level: 'developing', label: 'Developing', color: '#D97706', bg: '#FFFBEB', icon: 'trending-up-outline' },
+  { level: 'proficient', label: 'Proficient', color: '#0369A1', bg: '#EFF6FF', icon: 'thumbs-up-outline' },
+  { level: 'confident', label: 'Confident', color: '#16A34A', bg: '#F0FDF4', icon: 'shield-checkmark-outline' },
 ]
 
 // Action badge config — mirrors NursingStepViewer exactly
@@ -109,6 +126,7 @@ const BUTTON_REGION_IDS = ['skin', 'general']
 
 export function BodyAssessmentInteractive({
   lessonData,
+  lessonId,
   accentColor = DEFAULT_ACCENT,
   onComplete,
 }: BodyAssessmentInteractiveProps) {
@@ -118,6 +136,28 @@ export function BodyAssessmentInteractive({
   const [regionStepIndex, setRegionStepIndex] = useState(0)
   const [viewedSteps, setViewedSteps] = useState<Set<string>>(new Set())
   const [showCompletion, setShowCompletion] = useState(false)
+  const [expandedNoteStep, setExpandedNoteStep] = useState<number | null>(null)
+
+  // Step annotations (notes + confidence ratings)
+  const { annotations, getAnnotation, saveNote, setConfidence, stats } = useStepAnnotations(lessonId)
+
+  // Competency connection — links annotations to competency progress
+  const competencyNumbers = useMemo(
+    () => (lessonData as any).competencyIds ?? [],
+    [lessonData],
+  )
+  const { connections: competencyConnections } = useCompetencyConnection(
+    lessonId,
+    competencyNumbers,
+    stats,
+    lessonData.steps.length,
+  )
+
+  // Compute real aggregate confidence from annotations
+  const aggregateConfidence = useMemo(
+    () => computeAggregateConfidence(annotations, lessonData.steps.length),
+    [annotations, lessonData.steps.length],
+  )
 
   const svgWidth = Math.min(screenWidth - 48, 280)
   const svgHeight = svgWidth * (440 / 200)
@@ -729,6 +769,101 @@ export function BodyAssessmentInteractive({
             <Text style={styles.preceptorText}>{step.preceptorCue}</Text>
           </View>
         )}
+
+        {/* ── Self-Assessment: Confidence Rating ── */}
+        {lessonId && (
+          <View style={styles.confidenceSection}>
+            <Text style={styles.confidenceLabel}>How confident are you?</Text>
+            <View style={styles.confidencePills}>
+              {CONFIDENCE_OPTIONS.map((opt) => {
+                const annotation = getAnnotation(step.stepNumber)
+                const isActive = annotation?.confidence === opt.level
+                return (
+                  <Pressable
+                    key={opt.level}
+                    style={[
+                      styles.confidencePill,
+                      { borderColor: opt.color },
+                      isActive && { backgroundColor: opt.bg, borderColor: opt.color },
+                    ]}
+                    onPress={() => setConfidence(step.stepNumber, opt.level)}
+                    accessibilityLabel={`Rate confidence: ${opt.label}`}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons
+                      name={opt.icon as any}
+                      size={14}
+                      color={isActive ? opt.color : '#9CA3AF'}
+                    />
+                    <Text
+                      style={[
+                        styles.confidencePillText,
+                        isActive && { color: opt.color, fontWeight: '600' },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* ── Clinical Notes ── */}
+        {lessonId && (
+          <View style={styles.noteSection}>
+            <Pressable
+              style={styles.noteToggle}
+              onPress={() =>
+                setExpandedNoteStep((prev) =>
+                  prev === step.stepNumber ? null : step.stepNumber,
+                )
+              }
+            >
+              <Ionicons
+                name="create-outline"
+                size={15}
+                color={getAnnotation(step.stepNumber)?.note ? '#0369A1' : '#9CA3AF'}
+              />
+              <Text
+                style={[
+                  styles.noteToggleText,
+                  getAnnotation(step.stepNumber)?.note && styles.noteToggleTextActive,
+                ]}
+              >
+                {getAnnotation(step.stepNumber)?.note
+                  ? 'My Clinical Note'
+                  : 'Add Clinical Note'}
+              </Text>
+              <Ionicons
+                name={expandedNoteStep === step.stepNumber ? 'chevron-up' : 'chevron-down'}
+                size={14}
+                color="#9CA3AF"
+              />
+            </Pressable>
+
+            {expandedNoteStep === step.stepNumber && (
+              <TextInput
+                style={styles.noteInput}
+                placeholder="Add your clinical observations, tips, or things to remember..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                value={getAnnotation(step.stepNumber)?.note ?? ''}
+                onChangeText={(text) => saveNote(step.stepNumber, text)}
+                textAlignVertical="top"
+              />
+            )}
+
+            {/* Show note preview when collapsed */}
+            {expandedNoteStep !== step.stepNumber &&
+              getAnnotation(step.stepNumber)?.note && (
+                <Text style={styles.notePreview} numberOfLines={2}>
+                  {getAnnotation(step.stepNumber)!.note}
+                </Text>
+              )}
+          </View>
+        )}
       </View>
     )
   }
@@ -774,9 +909,27 @@ export function BodyAssessmentInteractive({
                 </View>
               )}
             </View>
-            <Text style={styles.detailSubtitle}>
-              Step {regionStepIndex + 1} of {steps.length}
-            </Text>
+            <View style={styles.detailSubtitleRow}>
+              <Text style={styles.detailSubtitle}>
+                Step {regionStepIndex + 1} of {steps.length}
+              </Text>
+              {lessonId && stats.ratedCount > 0 && (
+                <View style={styles.annotationStatsBadge}>
+                  <Ionicons name="shield-checkmark-outline" size={11} color="#16A34A" />
+                  <Text style={styles.annotationStatsText}>
+                    {stats.ratedCount} rated
+                  </Text>
+                </View>
+              )}
+              {lessonId && stats.notesCount > 0 && (
+                <View style={styles.annotationStatsBadge}>
+                  <Ionicons name="create-outline" size={11} color="#0369A1" />
+                  <Text style={styles.annotationStatsText}>
+                    {stats.notesCount} note{stats.notesCount !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
@@ -903,6 +1056,45 @@ export function BodyAssessmentInteractive({
         {/* Progress */}
         {renderProgress()}
 
+        {/* Competency connection banner */}
+        {competencyConnections.length > 0 && (
+          <View style={styles.competencyBanner}>
+            {competencyConnections.map((conn) => {
+              const statusCfg = COMPETENCY_STATUS_CONFIG[
+                conn.progress?.status ?? 'not_started'
+              ]
+              return (
+                <View key={conn.competency.id} style={styles.competencyBannerRow}>
+                  <View style={styles.competencyBannerLeft}>
+                    <Ionicons name="ribbon-outline" size={16} color={accentColor} />
+                    <View style={styles.competencyBannerText}>
+                      <Text style={styles.competencyBannerTitle} numberOfLines={1}>
+                        {conn.competency.title}
+                      </Text>
+                      <Text style={styles.competencyBannerCategory}>
+                        {conn.competency.category}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.competencyBannerRight}>
+                    <View style={[styles.competencyStatusPill, { backgroundColor: statusCfg.bg }]}>
+                      <Ionicons name={statusCfg.icon as any} size={12} color={statusCfg.color} />
+                      <Text style={[styles.competencyStatusText, { color: statusCfg.color }]}>
+                        {statusCfg.label}
+                      </Text>
+                    </View>
+                    {aggregateConfidence && (
+                      <Text style={styles.competencyConfidenceText}>
+                        {aggregateConfidence.ratedCount}/{lessonData.steps.length} steps rated
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+        )}
+
         {/* Body diagram */}
         <View style={styles.diagramSection}>
           {renderBodySvg()}
@@ -959,6 +1151,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     lineHeight: 20,
+  },
+
+  // Competency connection banner
+  competencyBanner: {
+    marginHorizontal: 16,
+    marginBottom: 4,
+    gap: 8,
+  },
+  competencyBannerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: CARD_BG,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    ...Platform.select({
+      web: { boxShadow: '0px 1px 3px rgba(0,0,0,0.05)' },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 1,
+      },
+    }),
+  },
+  competencyBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  competencyBannerText: {
+    flex: 1,
+  },
+  competencyBannerTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1A1A1A',
+  },
+  competencyBannerCategory: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 1,
+  },
+  competencyBannerRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  competencyStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  competencyStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  competencyConfidenceText: {
+    fontSize: 10,
+    color: '#9CA3AF',
   },
 
   // Progress
@@ -1404,6 +1663,106 @@ const styles = StyleSheet.create({
   preceptorText: {
     fontSize: 13,
     color: '#5B21B6',
+    lineHeight: 18,
+  },
+
+  // Detail subtitle row (step counter + annotation stats)
+  detailSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  annotationStatsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#F3F4F6',
+  },
+  annotationStatsText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+
+  // Confidence rating section
+  confidenceSection: {
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  confidenceLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+  },
+  confidencePills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  confidencePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  confidencePillText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9CA3AF',
+  },
+
+  // Clinical notes section
+  noteSection: {
+    marginBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    paddingTop: 10,
+  },
+  noteToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  noteToggleText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    flex: 1,
+  },
+  noteToggleTextActive: {
+    color: '#0369A1',
+  },
+  noteInput: {
+    marginTop: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    fontSize: 14,
+    color: '#374151',
+    lineHeight: 20,
+    minHeight: 80,
+    maxHeight: 160,
+  },
+  notePreview: {
+    marginTop: 6,
+    fontSize: 13,
+    color: '#6B7280',
+    fontStyle: 'italic',
     lineHeight: 18,
   },
 

@@ -17,6 +17,8 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
 
   addEventLabel: 'Add Clinical',
   eventNoun: 'Clinical',
+  catalogRoute: '/(tabs)/learn',
+  catalogSubtitle: 'Browse courses and clinical skills',
 
   // ---------------------------------------------------------------------------
   // EVENT SUBTYPES
@@ -798,6 +800,20 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
       hoursLabel: 'Clinical Hours',
       skillsLabel: 'Competencies',
       streakLabel: 'Shift Streak',
+    },
+    progressLabels: {
+      seeMoreText: 'See more of your clinical work',
+      primaryLegend: 'Clinical',
+      secondaryLegend: 'Study',
+      eventVerb: 'completed',
+      stat1Label: 'Shifts',
+      stat2Label: 'Skills Practiced',
+      stat3Label: 'Clinical Hours',
+      stat4Label: 'Competencies',
+      comparisonNoun: 'shifts',
+      performanceSubtitle: 'Your skill confidence over time',
+      performanceEmpty: 'Complete some shifts to see your progress trend',
+      emptyIcon: 'medkit-outline',
     },
   },
 

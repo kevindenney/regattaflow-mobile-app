@@ -14,6 +14,9 @@ import type { RelativeEffort } from '@/hooks/useReflectData';
 interface RelativeEffortCardProps {
   effort: RelativeEffort[];
   onSeeMore?: () => void;
+  effortSubtitle?: string;
+  eventNounSingular?: string;
+  eventNounPlural?: string;
 }
 
 function getEffortColor(score: number): string {
@@ -37,6 +40,9 @@ function formatWeekLabel(dateString: string): string {
 
 export function RelativeEffortCard({
   effort,
+  effortSubtitle = 'Your racing intensity based on weekly activity',
+  eventNounSingular = 'race',
+  eventNounPlural = 'races',
   onSeeMore,
 }: RelativeEffortCardProps) {
   const currentWeek = effort[effort.length - 1];
@@ -48,7 +54,7 @@ export function RelativeEffortCard({
         <View>
           <Text style={styles.title}>Relative Effort</Text>
           <Text style={styles.subtitle}>
-            Your racing intensity based on weekly activity
+            {effortSubtitle}
           </Text>
         </View>
         <Ionicons name="help-circle-outline" size={20} color={IOS_COLORS.tertiaryLabel} />
@@ -90,7 +96,7 @@ export function RelativeEffortCard({
 
           {currentWeek.raceCount > 0 && (
             <Text style={styles.raceCountText}>
-              {currentWeek.raceCount} {currentWeek.raceCount === 1 ? 'race' : 'races'}{' '}
+              {currentWeek.raceCount} {currentWeek.raceCount === 1 ? eventNounSingular : eventNounPlural}{' '}
               this week
             </Text>
           )}

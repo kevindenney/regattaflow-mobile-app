@@ -3290,7 +3290,7 @@ export default function RacesScreen() {
           onAddRace={handleShowAddRaceSheet}
           onAddPractice={handleAddPractice}
           onNewSeason={() => setShowSeasonSettings(true)}
-          onBrowseCatalog={() => router.push('/catalog-race')}
+          onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}
           onAddButtonLayout={setAddButtonLayout}
           totalRaces={headerTotalRaces}
           upcomingRaces={upcomingRacesCount}

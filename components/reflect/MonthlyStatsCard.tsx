@@ -14,6 +14,12 @@ import type { MonthlyStats } from '@/hooks/useReflectData';
 interface MonthlyStatsCardProps {
   stats: MonthlyStats;
   onSeeMore?: () => void;
+  eventVerb?: string;
+  stat1Label?: string;
+  stat2Label?: string;
+  stat3Label?: string;
+  stat4Label?: string;
+  comparisonNoun?: string;
 }
 
 function formatDuration(minutes: number): string {
@@ -59,13 +65,22 @@ function ComparisonBadge({
   );
 }
 
-export function MonthlyStatsCard({ stats, onSeeMore }: MonthlyStatsCardProps) {
+export function MonthlyStatsCard({
+  stats,
+  onSeeMore,
+  eventVerb = 'raced',
+  stat1Label = 'Races',
+  stat2Label = 'Podiums',
+  stat3Label = 'On Water',
+  stat4Label = 'Avg Finish',
+  comparisonNoun = 'races',
+}: MonthlyStatsCardProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Monthly Activities</Text>
         <Text style={styles.subtitle}>
-          You raced {stats.racesSailed} {stats.racesSailed === 1 ? 'time' : 'times'} this month
+          You {eventVerb} {stats.racesSailed} {stats.racesSailed === 1 ? 'time' : 'times'} this month
           {stats.comparedToLastMonth.racesSailed !== 0 && (
             <Text style={styles.subtitleMuted}>
               {' '}&mdash; {stats.comparedToLastMonth.racesSailed > 0 ? 'up' : 'down'}{' '}
@@ -82,28 +97,28 @@ export function MonthlyStatsCard({ stats, onSeeMore }: MonthlyStatsCardProps) {
             <Ionicons name="flag" size={18} color={IOS_COLORS.systemBlue} />
           </View>
           <Text style={styles.statValue}>{stats.racesSailed}</Text>
-          <Text style={styles.statLabel}>Races</Text>
+          <Text style={styles.statLabel}>{stat1Label}</Text>
         </View>
 
-        {/* Podiums */}
+        {/* Secondary stat */}
         <View style={styles.statItem}>
           <View style={styles.statIconContainer}>
             <Ionicons name="trophy" size={18} color={IOS_COLORS.systemOrange} />
           </View>
           <Text style={styles.statValue}>{stats.podiums}</Text>
-          <Text style={styles.statLabel}>Podiums</Text>
+          <Text style={styles.statLabel}>{stat2Label}</Text>
         </View>
 
-        {/* Time on Water */}
+        {/* Hours stat */}
         <View style={styles.statItem}>
           <View style={styles.statIconContainer}>
             <Ionicons name="time" size={18} color={IOS_COLORS.systemTeal} />
           </View>
           <Text style={styles.statValue}>{formatDuration(stats.timeOnWater)}</Text>
-          <Text style={styles.statLabel}>On Water</Text>
+          <Text style={styles.statLabel}>{stat3Label}</Text>
         </View>
 
-        {/* Average Finish */}
+        {/* Performance stat */}
         <View style={styles.statItem}>
           <View style={styles.statIconContainer}>
             <Ionicons name="stats-chart" size={18} color={IOS_COLORS.systemPurple} />
@@ -111,7 +126,7 @@ export function MonthlyStatsCard({ stats, onSeeMore }: MonthlyStatsCardProps) {
           <Text style={styles.statValue}>
             {stats.averageFinish !== null ? stats.averageFinish.toFixed(1) : '-'}
           </Text>
-          <Text style={styles.statLabel}>Avg Finish</Text>
+          <Text style={styles.statLabel}>{stat4Label}</Text>
         </View>
       </View>
 
@@ -121,11 +136,11 @@ export function MonthlyStatsCard({ stats, onSeeMore }: MonthlyStatsCardProps) {
         <View style={styles.comparisons}>
           <ComparisonBadge
             value={stats.comparedToLastMonth.racesSailed}
-            label="races"
+            label={comparisonNoun}
           />
           <ComparisonBadge
             value={stats.comparedToLastMonth.podiums}
-            label="podiums"
+            label={stat2Label.toLowerCase()}
           />
         </View>
       )}

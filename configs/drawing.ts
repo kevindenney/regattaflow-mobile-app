@@ -27,6 +27,8 @@ export const DRAWING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   addEventLabel: 'Add Session',
   eventNoun: 'Session',
+  catalogRoute: '/(tabs)/learn',
+  catalogSubtitle: 'Browse drawing courses and techniques',
 
   // ---------------------------------------------------------------------------
   // Event subtypes
@@ -889,6 +891,20 @@ export const DRAWING_EVENT_CONFIG: InterestEventConfig = {
       hoursLabel: 'Drawing Hours',
       skillsLabel: 'Techniques',
       streakLabel: 'Drawing Streak',
+    },
+    progressLabels: {
+      seeMoreText: 'See more of your drawing',
+      primaryLegend: 'Session',
+      secondaryLegend: 'Study',
+      eventVerb: 'practiced',
+      stat1Label: 'Sessions',
+      stat2Label: 'Pieces',
+      stat3Label: 'In Studio',
+      stat4Label: 'Critique Score',
+      comparisonNoun: 'sessions',
+      performanceSubtitle: 'Your technique progress over time',
+      performanceEmpty: 'Complete some sessions to see your progress trend',
+      emptyIcon: 'brush-outline',
     },
   },
 

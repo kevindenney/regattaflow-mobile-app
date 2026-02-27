@@ -153,6 +153,25 @@ export interface ReflectSegmentConfig {
   label: string
 }
 
+export interface ReflectProgressLabels {
+  /** Weekly calendar */
+  seeMoreText: string        // "See more of your sailing" / "See more of your clinical work"
+  primaryLegend: string      // "Race" / "Clinical"
+  secondaryLegend: string    // "Training" / "Study"
+  /** Monthly card */
+  eventVerb: string          // "raced" / "completed" / "practiced" / "trained"
+  stat1Label: string         // "Races" / "Shifts" / "Sessions" / "Workouts"
+  stat2Label: string         // "Podiums" / "Skills Practiced" / "Pieces" / "PRs"
+  stat3Label: string         // "On Water" / "Clinical Hours" / "In Studio" / "Training"
+  stat4Label: string         // "Avg Finish" / "Competencies" / "Critique Score" / "Avg Intensity"
+  comparisonNoun: string     // "races" / "shifts" / "sessions" / "workouts"
+  /** Performance chart */
+  performanceSubtitle: string // "Your average finish position over time"
+  performanceEmpty: string    // "Complete some races to see your performance trend"
+  /** Empty state */
+  emptyIcon: string           // "boat-outline" / "medkit-outline" / "brush-outline" / "barbell-outline"
+}
+
 export interface ReflectTabConfig {
   /** Segment labels (e.g., Progress / Race Log / Profile → Progress / Shift Log / Profile) */
   segments: ReflectSegmentConfig[]
@@ -163,6 +182,8 @@ export interface ReflectTabConfig {
     skillsLabel: string
     streakLabel: string
   }
+  /** Labels used by progress view components (weekly calendar, monthly card, etc.) */
+  progressLabels?: ReflectProgressLabels
 }
 
 // =============================================================================
@@ -204,6 +225,12 @@ export interface InterestEventConfig {
 
   /** Event type noun (e.g., "Race", "Shift", "Session", "Workout") */
   eventNoun: string
+
+  /** Route to navigate when "Browse {eventNoun} Catalog" is tapped */
+  catalogRoute?: string
+
+  /** Subtitle shown below "Browse {eventNoun} Catalog" menu option */
+  catalogSubtitle?: string
 
   /** Event subtypes (e.g., fleet/match/team/distance for sailing) */
   eventSubtypes: EventSubtypeConfig[]

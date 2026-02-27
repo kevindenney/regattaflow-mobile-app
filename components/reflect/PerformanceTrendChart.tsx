@@ -14,6 +14,8 @@ import type { PerformanceTrend } from '@/hooks/useReflectData';
 interface PerformanceTrendChartProps {
   trend: PerformanceTrend[];
   onSeeMore?: () => void;
+  subtitle?: string;
+  emptyText?: string;
 }
 
 const CHART_HEIGHT = 120;
@@ -22,6 +24,8 @@ const CHART_PADDING = 24;
 export function PerformanceTrendChart({
   trend,
   onSeeMore,
+  subtitle = 'Your average finish position over time',
+  emptyText = 'Complete some races to see your performance trend',
 }: PerformanceTrendChartProps) {
   // Calculate chart dimensions and scales
   const chartData = useMemo(() => {
@@ -77,7 +81,7 @@ export function PerformanceTrendChart({
         <View>
           <Text style={styles.title}>Performance</Text>
           <Text style={styles.subtitle}>
-            Your average finish position over time
+            {subtitle}
           </Text>
         </View>
         {improvement !== null && (
@@ -178,7 +182,7 @@ export function PerformanceTrendChart({
               color={IOS_COLORS.systemGray3}
             />
             <Text style={styles.emptyText}>
-              Complete some races to see your performance trend
+              {emptyText}
             </Text>
           </View>
         )}

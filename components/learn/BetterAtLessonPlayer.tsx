@@ -46,7 +46,7 @@ function hasSteps(data: Record<string, unknown>): data is NursingLessonData {
  */
 const SPECIALIZED_VIEWERS: Record<
   string,
-  React.ComponentType<{ lessonData: NursingLessonData; accentColor?: string; onComplete?: () => void }>
+  React.ComponentType<{ lessonData: NursingLessonData; lessonId?: string; accentColor?: string; onComplete?: () => void }>
 > = {
   'body-assessment': BodyAssessmentInteractive,
   'auscultation-simulator': AuscultationSimulator,
@@ -67,6 +67,7 @@ export function BetterAtLessonPlayer({ lesson, onComplete }: BetterAtLessonPlaye
       return (
         <Specialized
           lessonData={data}
+          lessonId={lesson.id}
           accentColor={accentColor}
           onComplete={onComplete}
         />
@@ -79,6 +80,7 @@ export function BetterAtLessonPlayer({ lesson, onComplete }: BetterAtLessonPlaye
     return (
       <NursingStepViewer
         lessonData={data}
+        lessonId={lesson.id}
         interactiveType={lesson.interactive_type ?? undefined}
         accentColor={accentColor}
         onComplete={onComplete}

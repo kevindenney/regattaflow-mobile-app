@@ -102,6 +102,8 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
   const { userProfile } = useAuth();
   const { currentInterest } = useInterest();
   const progressEventConfig = useInterestEventConfig();
+  const labels = progressEventConfig.reflectConfig?.progressLabels;
+  const pStats = progressEventConfig.reflectConfig?.progressStats;
   const isNursing = currentInterest?.slug === 'nursing' || currentInterest?.slug === 'jhu-msn-nursing';
   const { competencies, summary } = useCompetencyProgress();
   const [refreshing, setRefreshing] = useState(false);
@@ -139,7 +141,7 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
   if (!data) {
     return (
       <View style={[styles.emptyContainer, { paddingTop: toolbarHeight + 20 }]}>
-        <Ionicons name="boat-outline" size={48} color={IOS_COLORS.systemGray3} />
+        <Ionicons name={(labels?.emptyIcon ?? 'boat-outline') as any} size={48} color={IOS_COLORS.systemGray3} />
         <Text style={styles.emptyTitle}>No Data Yet</Text>
         <Text style={styles.emptySubtitle}>
           Start adding {progressEventConfig.eventNoun.toLowerCase()}s to see your progress here
@@ -170,22 +172,33 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
       }
     >
       <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-        {/* Weekly Sailing Calendar */}
+        {/* Weekly Activity Calendar */}
         <WeeklyCalendar
           sailingDays={data.sailingDays}
           onSeeMore={handleSeeCalendar}
+          seeMoreText={labels?.seeMoreText}
+          primaryLegend={labels?.primaryLegend}
+          secondaryLegend={labels?.secondaryLegend}
         />
 
         {/* Monthly Stats */}
         <MonthlyStatsCard
           stats={data.currentMonthStats}
           onSeeMore={handleSeeMonthStats}
+          eventVerb={labels?.eventVerb}
+          stat1Label={labels?.stat1Label}
+          stat2Label={labels?.stat2Label}
+          stat3Label={labels?.stat3Label}
+          stat4Label={labels?.stat4Label}
+          comparisonNoun={labels?.comparisonNoun}
         />
 
         {/* Performance Trend Chart */}
         <PerformanceTrendChart
           trend={data.performanceTrend}
           onSeeMore={handleSeePerformance}
+          subtitle={labels?.performanceSubtitle}
+          emptyText={labels?.performanceEmpty}
         />
 
         {/* AI Coaching Insight - Pattern-based recommendations */}
@@ -207,6 +220,9 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
         <RelativeEffortCard
           effort={data.relativeEffort}
           onSeeMore={handleSeeEffort}
+          effortSubtitle={`Your ${(labels?.comparisonNoun ?? 'racing').replace(/s$/, '')} intensity based on weekly activity`}
+          eventNounSingular={labels?.comparisonNoun?.replace(/s$/, '') ?? 'race'}
+          eventNounPlural={labels?.comparisonNoun ?? 'races'}
         />
 
         {/* Year Stats Summary */}
@@ -219,25 +235,25 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
               <Text style={styles.yearStatValue}>
                 {data.stats.totalRacesThisYear}
               </Text>
-              <Text style={styles.yearStatLabel}>Races</Text>
+              <Text style={styles.yearStatLabel}>{pStats?.eventsLabel ?? 'Races'}</Text>
             </View>
             <View style={styles.yearStatItem}>
               <Text style={styles.yearStatValue}>
                 {data.stats.totalPodiumsThisYear}
               </Text>
-              <Text style={styles.yearStatLabel}>Podiums</Text>
+              <Text style={styles.yearStatLabel}>{labels?.stat2Label ?? 'Podiums'}</Text>
             </View>
             <View style={styles.yearStatItem}>
               <Text style={styles.yearStatValue}>
                 {Math.round(data.stats.totalTimeOnWaterThisYear / 60)}h
               </Text>
-              <Text style={styles.yearStatLabel}>On Water</Text>
+              <Text style={styles.yearStatLabel}>{pStats?.hoursLabel ?? 'On Water'}</Text>
             </View>
             <View style={styles.yearStatItem}>
               <Text style={styles.yearStatValue}>
                 {data.stats.currentStreak}
               </Text>
-              <Text style={styles.yearStatLabel}>Week Streak</Text>
+              <Text style={styles.yearStatLabel}>{pStats?.streakLabel ?? 'Week Streak'}</Text>
             </View>
           </View>
         </View>

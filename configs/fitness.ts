@@ -27,6 +27,8 @@ export const FITNESS_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   addEventLabel: 'Add Workout',
   eventNoun: 'Workout',
+  catalogRoute: '/(tabs)/learn',
+  catalogSubtitle: 'Browse workout programs and plans',
 
   // ---------------------------------------------------------------------------
   // Event subtypes
@@ -781,6 +783,20 @@ export const FITNESS_EVENT_CONFIG: InterestEventConfig = {
       hoursLabel: 'Training Hours',
       skillsLabel: 'Movements',
       streakLabel: 'Training Streak',
+    },
+    progressLabels: {
+      seeMoreText: 'See more of your training',
+      primaryLegend: 'Workout',
+      secondaryLegend: 'Recovery',
+      eventVerb: 'trained',
+      stat1Label: 'Workouts',
+      stat2Label: 'PRs',
+      stat3Label: 'Training',
+      stat4Label: 'Avg Intensity',
+      comparisonNoun: 'workouts',
+      performanceSubtitle: 'Your training intensity over time',
+      performanceEmpty: 'Complete some workouts to see your progress trend',
+      emptyIcon: 'barbell-outline',
     },
   },
 

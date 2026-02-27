@@ -367,7 +367,7 @@ export function RacesFloatingHeader({
                     <View style={styles.menuOptionContent}>
                       <Text style={styles.menuOptionTitle}>Browse {config.eventNoun} Catalog</Text>
                       <Text style={styles.menuOptionSubtitle}>
-                        Find and follow {config.eventNoun.toLowerCase()}s
+                        {config.catalogSubtitle ?? `Find and follow ${config.eventNoun.toLowerCase()}s`}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />

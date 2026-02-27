@@ -939,56 +939,60 @@ export default function AddRaceScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Race Suggestion Chips */}
-          <RaceSuggestionChips
-            suggestions={suggestions}
-            diagnostics={suggestionDiagnostics}
-            loading={suggestionsLoading}
-            error={suggestionsError}
-            onUseSuggestion={applySuggestion}
-            onDismissSuggestion={handleDismissSuggestion}
-            onSeeAll={() => setShowAllSuggestions(true)}
-            onRetry={refreshSuggestions}
-          />
-          {(suggestionsError || suggestionFailureSources.length > 0) && (
-            <View style={styles.suggestionDiagnosticCard}>
-              <View style={styles.suggestionDiagnosticHeader}>
-                <Text style={styles.suggestionDiagnosticTitle}>Suggestion diagnostics</Text>
-                <View style={styles.suggestionDiagnosticActions}>
-                  <Pressable onPress={copySuggestionDiagnostics}>
-                    <Text style={styles.suggestionDiagnosticToggle}>Copy</Text>
-                  </Pressable>
-                  <Pressable onPress={() => setShowSuggestionDiagnostics((prev) => !prev)}>
-                    <Text style={styles.suggestionDiagnosticToggle}>
-                      {showSuggestionDiagnostics ? 'Hide' : 'Show'}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-              {suggestionsError ? (
-                <Text style={styles.suggestionDiagnosticLine}>
-                  Last error: {suggestionsError.message}
-                </Text>
-              ) : null}
-              {showSuggestionDiagnostics && (
-                <View style={styles.suggestionDiagnosticDetails}>
-                  <Text style={styles.suggestionDiagnosticLine}>
-                    Query path: race_suggestions_cache -&gt; source generators -&gt; race_suggestions_cache upsert
-                  </Text>
-                  {suggestionFailureSources.length > 0 ? (
-                    suggestionFailureSources.map((source) => (
-                      <Text key={source} style={styles.suggestionDiagnosticLine}>
-                        {source}: {SUGGESTION_SOURCE_HINTS[source] || 'unknown source path'}
-                      </Text>
-                    ))
-                  ) : (
+          {/* Race Suggestion Chips — sailing only (uses catalog_races + club_events) */}
+          {isSailing && (
+            <>
+              <RaceSuggestionChips
+                suggestions={suggestions}
+                diagnostics={suggestionDiagnostics}
+                loading={suggestionsLoading}
+                error={suggestionsError}
+                onUseSuggestion={applySuggestion}
+                onDismissSuggestion={handleDismissSuggestion}
+                onSeeAll={() => setShowAllSuggestions(true)}
+                onRetry={refreshSuggestions}
+              />
+              {(suggestionsError || suggestionFailureSources.length > 0) && (
+                <View style={styles.suggestionDiagnosticCard}>
+                  <View style={styles.suggestionDiagnosticHeader}>
+                    <Text style={styles.suggestionDiagnosticTitle}>Suggestion diagnostics</Text>
+                    <View style={styles.suggestionDiagnosticActions}>
+                      <Pressable onPress={copySuggestionDiagnostics}>
+                        <Text style={styles.suggestionDiagnosticToggle}>Copy</Text>
+                      </Pressable>
+                      <Pressable onPress={() => setShowSuggestionDiagnostics((prev) => !prev)}>
+                        <Text style={styles.suggestionDiagnosticToggle}>
+                          {showSuggestionDiagnostics ? 'Hide' : 'Show'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  {suggestionsError ? (
                     <Text style={styles.suggestionDiagnosticLine}>
-                      Source-level failure details unavailable.
+                      Last error: {suggestionsError.message}
                     </Text>
+                  ) : null}
+                  {showSuggestionDiagnostics && (
+                    <View style={styles.suggestionDiagnosticDetails}>
+                      <Text style={styles.suggestionDiagnosticLine}>
+                        Query path: race_suggestions_cache -&gt; source generators -&gt; race_suggestions_cache upsert
+                      </Text>
+                      {suggestionFailureSources.length > 0 ? (
+                        suggestionFailureSources.map((source) => (
+                          <Text key={source} style={styles.suggestionDiagnosticLine}>
+                            {source}: {SUGGESTION_SOURCE_HINTS[source] || 'unknown source path'}
+                          </Text>
+                        ))
+                      ) : (
+                        <Text style={styles.suggestionDiagnosticLine}>
+                          Source-level failure details unavailable.
+                        </Text>
+                      )}
+                    </View>
                   )}
                 </View>
               )}
-            </View>
+            </>
           )}
 
           {/* Activity Catalog — templates from orgs & coaches */}

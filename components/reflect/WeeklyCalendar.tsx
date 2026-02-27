@@ -14,6 +14,9 @@ interface WeeklyCalendarProps {
   sailingDays: SailingDay[];
   onDayPress?: (date: string) => void;
   onSeeMore?: () => void;
+  seeMoreText?: string;
+  primaryLegend?: string;
+  secondaryLegend?: string;
 }
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -39,6 +42,9 @@ export function WeeklyCalendar({
   sailingDays,
   onDayPress,
   onSeeMore,
+  seeMoreText = 'See more of your sailing',
+  primaryLegend = 'Race',
+  secondaryLegend = 'Training',
 }: WeeklyCalendarProps) {
   const weekDates = useMemo(() => getWeekDates(), []);
   const today = new Date().toISOString().split('T')[0];
@@ -56,7 +62,7 @@ export function WeeklyCalendar({
         <Text style={styles.title}>This Week</Text>
         {onSeeMore && (
           <Pressable onPress={onSeeMore} hitSlop={8}>
-            <Text style={styles.seeMore}>See more of your sailing</Text>
+            <Text style={styles.seeMore}>{seeMoreText}</Text>
           </Pressable>
         )}
       </View>
@@ -113,11 +119,11 @@ export function WeeklyCalendar({
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.dotRace]} />
-          <Text style={styles.legendText}>Race</Text>
+          <Text style={styles.legendText}>{primaryLegend}</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.dotTraining]} />
-          <Text style={styles.legendText}>Training</Text>
+          <Text style={styles.legendText}>{secondaryLegend}</Text>
         </View>
       </View>
     </View>
