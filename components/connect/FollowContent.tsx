@@ -12,6 +12,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -30,6 +31,8 @@ import {
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useVocabulary } from '@/hooks/useVocabulary';
 
 // =============================================================================
 // TYPES & CONSTANTS
@@ -62,6 +65,9 @@ interface FollowContentProps {
 
 export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToDiscuss }: FollowContentProps) {
   const { isGuest } = useAuth();
+  const eventConfig = useInterestEventConfig();
+  const { vocab } = useVocabulary();
+  const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
 
   const [feedSubTab, setFeedSubTab] = useState<FeedSubTab>(isGuest ? 'following' : 'posts');
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,6 +94,22 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
       setSearchQuery('');
     }
   };
+
+  // Non-sailing interests: show interest-appropriate empty state
+  if (!isSailingInterest) {
+    const communityLabel = vocab('Community');
+    return (
+      <View style={styles.container}>
+        <View style={[styles.comingSoonContainer, { marginTop: toolbarOffset + 40 }]}>
+          <Ionicons name="people-outline" size={48} color={IOS_COLORS.tertiaryLabel} />
+          <Text style={styles.comingSoonTitle}>{communityLabel} Coming Soon</Text>
+          <Text style={styles.comingSoonSubtitle}>
+            Connect with others in your {communityLabel.toLowerCase()} and share your progress.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -192,5 +214,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: IOS_COLORS.label,
     paddingVertical: 0,
+  },
+  // Coming soon state for non-sailing interests
+  comingSoonContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  comingSoonTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  comingSoonSubtitle: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });

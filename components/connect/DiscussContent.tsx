@@ -57,6 +57,8 @@ import {
 import type { Community } from '@/types/community';
 import type { FeedPost, FeedSortType, PostType } from '@/types/community-feed';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useVocabulary } from '@/hooks/useVocabulary';
 
 // =============================================================================
 // TYPES & CONSTANTS
@@ -101,6 +103,9 @@ interface DiscussContentProps {
 export function DiscussContent({ toolbarOffset, onScroll }: DiscussContentProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const eventConfig = useInterestEventConfig();
+  const { vocab } = useVocabulary();
+  const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
 
   // Segment state
   const [segment, setSegment] = useState<CommunitySegment>('feed');
@@ -259,6 +264,22 @@ export function DiscussContent({ toolbarOffset, onScroll }: DiscussContentProps)
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+
+  // Non-sailing interests: show interest-appropriate empty state
+  if (!isSailingInterest) {
+    const communityLabel = vocab('Community');
+    return (
+      <View style={styles.container}>
+        <View style={[styles.comingSoonContainer, { marginTop: toolbarOffset + 40 }]}>
+          <Ionicons name="chatbubbles-outline" size={48} color={IOS_COLORS.tertiaryLabel} />
+          <Text style={styles.comingSoonTitle}>{communityLabel} Discussions</Text>
+          <Text style={styles.comingSoonSubtitle}>
+            Join {communityLabel.toLowerCase()} discussions, share tips, and learn from peers. Coming soon.
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -788,5 +809,23 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 15,
     color: IOS_COLORS.tertiaryLabel,
+  },
+  // Coming soon state for non-sailing interests
+  comingSoonContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  comingSoonTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  comingSoonSubtitle: {
+    fontSize: 15,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });
