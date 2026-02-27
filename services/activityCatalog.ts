@@ -191,14 +191,26 @@ export async function enrollInTemplate(
     .single();
 
   if (error) {
+    // Duplicate enrollment — return existing enrollment instead of throwing
+    if (error.code === '23505') {
+      logger.info('[enrollInTemplate] Already enrolled in template:', templateId);
+      const { data: existing } = await supabase
+        .from('betterat_activity_enrollments')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('template_id', templateId)
+        .single();
+      if (existing) {
+        return rowToActivityEnrollment(existing as ActivityEnrollmentRow);
+      }
+    }
     logger.error('[enrollInTemplate] Error:', error);
     throw error;
   }
 
-  // Increment enrollment count on the template
-  await supabase.rpc('increment_enrollment_count', { template_id: templateId }).catch(() => {
-    // Non-critical — just a counter
-    logger.warn('[enrollInTemplate] Failed to increment count for:', templateId);
+  // Increment enrollment count on the template (non-critical)
+  supabase.rpc('increment_enrollment_count', { template_id: templateId }).then(({ error: rpcErr }) => {
+    if (rpcErr) logger.warn('[enrollInTemplate] Failed to increment count for:', templateId);
   });
 
   return rowToActivityEnrollment(data as ActivityEnrollmentRow);
