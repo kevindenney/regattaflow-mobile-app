@@ -405,15 +405,20 @@ export default function RacesScreen() {
       }
       : authenticatedRacesResult;
 
-  // Filter races by interest: the regattas table contains only sailing data,
-  // so non-sailing interests should see an empty timeline (which shows the
-  // interest-appropriate demo event card instead).
+  // Filter races by interest: show sailing regattas for sailing interest,
+  // and events matching the active interest's slug for all others.
   const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
+  const interestSlug = eventConfig.interestSlug;
   const interestFilteredRaces = useMemo(() => {
     if (isSailingInterest) return liveRaces;
-    // For non-sailing interests, don't show sailing regattas from the DB
-    return EMPTY_RACES;
-  }, [liveRaces, isSailingInterest]);
+    // For non-sailing interests, show events whose metadata.interest_slug matches
+    if (!liveRaces) return EMPTY_RACES;
+    const filtered = liveRaces.filter((race: any) => {
+      const meta = race.metadata;
+      return meta && meta.interest_slug === interestSlug;
+    });
+    return filtered.length > 0 ? filtered : EMPTY_RACES;
+  }, [liveRaces, isSailingInterest, interestSlug]);
 
   // Track if races have been loaded at least once to prevent flash of demo content
   const hasLoadedRacesOnce = useRef(false);
