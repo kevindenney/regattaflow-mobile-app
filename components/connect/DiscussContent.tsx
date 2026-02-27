@@ -59,6 +59,8 @@ import type { FeedPost, FeedSortType, PostType } from '@/types/community-feed';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useVocabulary } from '@/hooks/useVocabulary';
+import { getConnectDemoData } from '@/configs/connectDemoData';
+import { DemoPostCard, DemoCommunityCard } from './DemoCards';
 
 // =============================================================================
 // TYPES & CONSTANTS
@@ -94,6 +96,136 @@ const POST_TYPE_FILTERS: (PostType | 'all')[] = [
 interface DiscussContentProps {
   toolbarOffset: number;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+}
+
+// =============================================================================
+// DEMO DISCUSS VIEW (non-sailing interests)
+// =============================================================================
+
+import type { InterestConnectData } from '@/configs/connectDemoData';
+
+function DemoDiscussView({
+  toolbarOffset,
+  onScroll,
+  demoData,
+  vocab,
+}: {
+  toolbarOffset: number;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  demoData: InterestConnectData;
+  vocab: (term: string) => string;
+}) {
+  type DemoSegment = 'feed' | 'communities';
+  const DEMO_SEGMENTS: { value: DemoSegment; label: string }[] = [
+    { value: 'feed', label: 'Feed' },
+    { value: 'communities', label: vocab('Community') },
+  ];
+
+  const [segment, setSegment] = React.useState<DemoSegment>('feed');
+  const [joinedIds, setJoinedIds] = React.useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = React.useState('');
+
+  const toggleJoin = React.useCallback((id: string) => {
+    setJoinedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const filteredCommunities = searchQuery
+    ? demoData.communities.filter((c) =>
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : demoData.communities;
+
+  return (
+    <View style={styles.container}>
+      {/* Segment + sort */}
+      <View style={{ marginTop: toolbarOffset }}>
+        <View style={styles.segmentContainer}>
+          <IOSSegmentedControl
+            segments={DEMO_SEGMENTS}
+            selectedValue={segment}
+            onValueChange={setSegment}
+          />
+        </View>
+        {segment === 'feed' && (
+          <View style={styles.sortPillRow}>
+            {SORT_OPTIONS.map((opt) => (
+              <View
+                key={opt.key}
+                style={[styles.sortPill, opt.key === 'hot' && styles.sortPillActive]}
+              >
+                <Text style={[styles.sortPillText, opt.key === 'hot' && styles.sortPillTextActive]}>
+                  {opt.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {segment === 'feed' ? (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingHorizontal: 16, paddingTop: 8 }]}
+          showsVerticalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+        >
+          {demoData.posts.map((post) => (
+            <DemoPostCard key={post.id} post={post} />
+          ))}
+        </ScrollView>
+      ) : (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+        >
+          {/* Search */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={16} color={IOS_COLORS.tertiaryLabel} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={`Search ${vocab('Community').toLowerCase()}...`}
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+            />
+          </View>
+
+          {/* Community list */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>DISCOVER</Text>
+            {filteredCommunities.map((community) => (
+              <DemoCommunityCard
+                key={community.id}
+                community={community}
+                isJoined={joinedIds.has(community.id)}
+                onToggleJoin={toggleJoin}
+              />
+            ))}
+            {filteredCommunities.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No communities found</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      )}
+    </View>
+  );
 }
 
 // =============================================================================
@@ -265,19 +397,16 @@ export function DiscussContent({ toolbarOffset, onScroll }: DiscussContentProps)
   // Render
   // ---------------------------------------------------------------------------
 
-  // Non-sailing interests: show interest-appropriate empty state
-  if (!isSailingInterest) {
-    const communityLabel = vocab('Community');
+  // Non-sailing interests: render demo communities and posts
+  const demoData = getConnectDemoData(eventConfig.interestSlug);
+  if (!isSailingInterest && demoData) {
     return (
-      <View style={styles.container}>
-        <View style={[styles.comingSoonContainer, { marginTop: toolbarOffset + 40 }]}>
-          <Ionicons name="chatbubbles-outline" size={48} color={IOS_COLORS.tertiaryLabel} />
-          <Text style={styles.comingSoonTitle}>{communityLabel} Discussions</Text>
-          <Text style={styles.comingSoonSubtitle}>
-            Join {communityLabel.toLowerCase()} discussions, share tips, and learn from peers. Coming soon.
-          </Text>
-        </View>
-      </View>
+      <DemoDiscussView
+        toolbarOffset={toolbarOffset}
+        onScroll={onScroll}
+        demoData={demoData}
+        vocab={vocab}
+      />
     );
   }
 
@@ -809,23 +938,5 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 15,
     color: IOS_COLORS.tertiaryLabel,
-  },
-  // Coming soon state for non-sailing interests
-  comingSoonContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  comingSoonTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  comingSoonSubtitle: {
-    fontSize: 15,
-    color: IOS_COLORS.secondaryLabel,
-    textAlign: 'center',
-    lineHeight: 22,
   },
 });
