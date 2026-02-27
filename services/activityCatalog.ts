@@ -208,10 +208,8 @@ export async function enrollInTemplate(
     throw error;
   }
 
-  // Increment enrollment count on the template (non-critical)
-  supabase.rpc('increment_enrollment_count', { template_id: templateId }).then(({ error: rpcErr }) => {
-    if (rpcErr) logger.warn('[enrollInTemplate] Failed to increment count for:', templateId);
-  });
+  // TODO: increment enrollment_count when RPC function is created
+  // For now, skip to avoid 404 noise in console
 
   return rowToActivityEnrollment(data as ActivityEnrollmentRow);
 }

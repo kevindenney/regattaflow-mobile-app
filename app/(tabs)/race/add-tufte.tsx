@@ -631,8 +631,11 @@ export default function AddRaceScreen() {
       // For non-sailing: validate required subtype fields
       if (!form.eventSubtype) return false;
       const subtypeConfig = eventConfig.eventSubtypes.find(s => s.id === form.eventSubtype);
+      // Fields covered by the main form (date/time pickers) — skip in subtype validation
+      const mainFormFields = new Set(['date', 'start_time', 'end_time']);
       if (subtypeConfig?.formFields) {
         for (const field of subtypeConfig.formFields) {
+          if (mainFormFields.has(field.id)) continue;
           if (field.required && !form.subtypeFields[field.id]?.trim()) return false;
         }
       }
@@ -732,6 +735,9 @@ export default function AddRaceScreen() {
         // Non-sailing: store event subtype and dynamic fields in metadata
         metadata.event_subtype = form.eventSubtype;
         metadata.interest_slug = currentInterest?.slug;
+        // Sync main form date/time into metadata for subtype compatibility
+        metadata.date = form.date;
+        metadata.start_time = form.time;
         // Copy all subtype-specific form values
         for (const [key, value] of Object.entries(form.subtypeFields)) {
           if (value) metadata[key] = value;
@@ -1448,7 +1454,9 @@ export default function AddRaceScreen() {
             return (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>{subtypeConfig.label.toUpperCase()}</Text>
-                {subtypeConfig.formFields.map((field: EventFormField) => {
+                {subtypeConfig.formFields
+                  .filter((field: EventFormField) => !['date', 'start_time', 'end_time'].includes(field.id))
+                  .map((field: EventFormField) => {
                   if (field.type === 'select' && field.options) {
                     return (
                       <View key={field.id} style={{ marginBottom: 12 }}>
@@ -1642,6 +1650,19 @@ export default function AddRaceScreen() {
                 if (template.location) updates.location = template.location;
                 if (template.eventType && ['fleet', 'distance', 'match', 'team'].includes(template.eventType)) {
                   updates.raceType = template.eventType as RaceType;
+                }
+                // Non-sailing: pre-fill eventSubtype and subtype-specific fields
+                if (template.eventSubtype) {
+                  updates.eventSubtype = template.eventSubtype;
+                }
+                if (template.prefilledData && Object.keys(template.prefilledData).length > 0) {
+                  const subtypeFields: Record<string, string> = {};
+                  for (const [key, value] of Object.entries(template.prefilledData)) {
+                    if (typeof value === 'string') subtypeFields[key] = value;
+                  }
+                  if (Object.keys(subtypeFields).length > 0) {
+                    updates.subtypeFields = subtypeFields;
+                  }
                 }
                 setForm(prev => ({ ...prev, ...updates }));
               }}
