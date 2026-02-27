@@ -40,6 +40,9 @@ const logger = createLogger('CourseMapTile');
 
 const isWeb = Platform.OS === 'web';
 
+// Module-level flag: skip map init once MapLibre is confirmed unavailable
+let mapInitFailed = false;
+
 // Mark colors by type
 const MARK_COLORS: Record<string, string> = {
   windward: '#eab308',
@@ -168,6 +171,10 @@ export function CourseMapTile({
     }
 
     const initMap = async () => {
+      if (mapInitFailed) {
+        setLoading(false);
+        return;
+      }
       let mapLoadTimeout: ReturnType<typeof setTimeout> | null = null;
       try {
         setLoading(true);
@@ -381,7 +388,8 @@ export function CourseMapTile({
               .addTo(map);
         }
       } catch (error) {
-        logger.error('Failed to initialize map', error);
+        logger.warn('Failed to initialize map (suppressing future attempts)', error);
+        mapInitFailed = true;
         setLoading(false);
       }
     };
