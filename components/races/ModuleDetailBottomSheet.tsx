@@ -26,7 +26,28 @@ import {
   EBPConnectionTool,
   UnitProtocolsTool,
 } from './tools/NursingTools';
+import {
+  ReferenceImagesTool,
+  TechniqueFocusTool,
+  ColorStudyTool,
+  MaterialsTool,
+} from './tools/DrawingTools';
+import {
+  WorkoutPlanTool,
+  WarmupTool,
+  NutritionTool,
+  BodyStatusTool,
+} from './tools/FitnessTools';
+import {
+  ConditionsTool,
+  StrategyTool,
+  RigSetupTool,
+  StartSequenceTool,
+} from './tools/SailingTools';
 import { DrillableItemsSection, LAB_LESSON_ITEMS, PROTOCOL_LESSON_ITEMS } from './tools/LessonDrillDown';
+import { DRAWING_MODULE_CONTENT } from './tools/content/DrawingContent';
+import { FITNESS_MODULE_CONTENT } from './tools/content/FitnessContent';
+import { SAILING_MODULE_CONTENT } from './tools/content/SailingContent';
 import {
   StyleSheet,
   View,
@@ -177,6 +198,50 @@ function resolveIcon(name: string): React.ComponentType<any> {
 }
 
 // =============================================================================
+// TOOL REGISTRY — maps tool id → component. Avoids long ternary chains.
+// All tool components share ToolProps: { values, onChange, accent }
+// =============================================================================
+
+type ToolComponent = React.ComponentType<{
+  values: Record<string, string>;
+  onChange: (stepId: string, text: string) => void;
+  accent: string;
+}>;
+
+const TOOL_REGISTRY: Record<string, ToolComponent> = {
+  // Nursing (inline tools defined below)
+  // These are added dynamically after their definitions — see addInlineTools()
+
+  // Nursing (imported)
+  patient_overview: PatientOverviewTool,
+  medications: MedicationsTool,
+  lab_values: LabValuesTool,
+  procedures: ProceduresTool,
+  care_plan: CarePlanTool,
+  clinical_objectives: ClinicalObjectivesTool,
+  ebp_connection: EBPConnectionTool,
+  unit_protocols: UnitProtocolsTool,
+
+  // Drawing
+  reference_images: ReferenceImagesTool,
+  technique_focus: TechniqueFocusTool,
+  color_study: ColorStudyTool,
+  materials: MaterialsTool,
+
+  // Fitness
+  workout_plan: WorkoutPlanTool,
+  warmup: WarmupTool,
+  nutrition: NutritionTool,
+  body_status: BodyStatusTool,
+
+  // Sailing
+  conditions: ConditionsTool,
+  strategy: StrategyTool,
+  rig_setup: RigSetupTool,
+  start_sequence: StartSequenceTool,
+};
+
+// =============================================================================
 // MODULE-SPECIFIC CONTENT DATA
 // =============================================================================
 
@@ -198,9 +263,7 @@ interface ModuleContent {
   /** Enable rich content toolbar (photos, videos, documents, links, ideas) */
   richContent?: boolean;
   /** Render as an interactive guided tool instead of a free-form text area */
-  tool?: 'gibbs_reflection' | 'clinical_reasoning' | 'self_assessment' | 'learning_notes'
-    | 'patient_overview' | 'medications' | 'lab_values' | 'procedures' | 'care_plan' | 'clinical_objectives' | 'ebp_connection'
-    | 'unit_protocols';
+  tool?: string;
 }
 
 /**
@@ -692,24 +755,32 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
       detail: 'Your evidence-based practice connections will appear here, building a personal knowledge base over time.',
     },
   },
+  // Merge in content from other interests
+  ...DRAWING_MODULE_CONTENT,
+  ...FITNESS_MODULE_CONTENT,
+  ...SAILING_MODULE_CONTENT,
 };
 
 // Fallback for any module not explicitly defined above
-const DEFAULT_CONTENT: ModuleContent = {
-  notesPrompt: 'What\'s your approach for this area? What are you planning, and what questions do you have?',
-  aiCoach: {
-    title: 'Prepare With Intention',
-    body: 'Every module is an opportunity to practice clinical reasoning before you\'re under pressure. Write your plan, identify your gaps, and address them now.',
-    question: 'What\'s the one thing about this topic that, if you mastered it today, would make the biggest difference?',
-  },
-  network: [
-    { name: 'Your peers', role: 'Community', tip: 'Follow experienced practitioners to see how they approach this area. Their shared insights appear here.' },
-  ],
-  history: {
-    summary: 'No previous entries yet',
-    detail: 'After your first shift, your history and patterns will appear here to help you prepare smarter.',
-  },
-};
+/** Interest-aware default content — avoids nursing-specific language for other interests */
+function getDefaultContent(eventNoun: string): ModuleContent {
+  const noun = eventNoun.toLowerCase();
+  return {
+    notesPrompt: `What's your approach for this area? What are you planning, and what questions do you have?`,
+    aiCoach: {
+      title: 'Prepare With Intention',
+      body: `Every module is an opportunity to think through your approach before you're in the moment. Write your plan, identify your gaps, and address them now — before the ${noun} starts.`,
+      question: 'What\'s the one thing about this topic that, if you mastered it today, would make the biggest difference?',
+    },
+    network: [
+      { name: 'Your peers', role: 'Community', tip: 'Follow experienced people in your field to see how they approach this area. Their shared insights appear here.' },
+    ],
+    history: {
+      summary: 'No previous entries yet',
+      detail: `After your first ${noun}, your history and patterns will appear here to help you prepare smarter.`,
+    },
+  };
+}
 
 // =============================================================================
 // ATTACHMENT TYPES
@@ -1627,6 +1698,12 @@ const toolStyles = StyleSheet.create({
   },
 });
 
+// Register inline tools into the tool registry
+TOOL_REGISTRY.gibbs_reflection = GibbsReflectionTool;
+TOOL_REGISTRY.clinical_reasoning = ClinicalReasoningTool;
+TOOL_REGISTRY.self_assessment = SelfAssessmentTool;
+TOOL_REGISTRY.learning_notes = LearningNotesTool;
+
 // =============================================================================
 // SECTION COMPONENTS
 // =============================================================================
@@ -2119,7 +2196,7 @@ export function ModuleDetailBottomSheet({
 
   const IconComponent = resolveIcon(moduleInfo.icon);
   const accent = MODULE_COLORS[moduleId] || C.blue;
-  const content = MODULE_CONTENT[moduleId] || DEFAULT_CONTENT;
+  const content = MODULE_CONTENT[moduleId] || getDefaultContent(config.eventNoun);
   const currentNotes = notes[moduleId] || '';
   const currentAttachments = attachments[moduleId] || [];
 
@@ -2178,78 +2255,12 @@ export function ModuleDetailBottomSheet({
               ) : null}
 
               {/* Interactive Tool OR Your Plan text area */}
-              {content.tool === 'gibbs_reflection' ? (
-                <GibbsReflectionTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'clinical_reasoning' ? (
-                <ClinicalReasoningTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'self_assessment' ? (
-                <SelfAssessmentTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'learning_notes' ? (
-                <LearningNotesTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'patient_overview' ? (
-                <PatientOverviewTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'medications' ? (
-                <MedicationsTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'lab_values' ? (
-                <LabValuesTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'procedures' ? (
-                <ProceduresTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'care_plan' ? (
-                <CarePlanTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'clinical_objectives' ? (
-                <ClinicalObjectivesTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'ebp_connection' ? (
-                <EBPConnectionTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
-              ) : content.tool === 'unit_protocols' ? (
-                <UnitProtocolsTool
-                  values={toolValues[moduleId] || {}}
-                  onChange={handleToolStepChange}
-                  accent={accent}
-                />
+              {content.tool && TOOL_REGISTRY[content.tool] ? (
+                React.createElement(TOOL_REGISTRY[content.tool], {
+                  values: toolValues[moduleId] || {},
+                  onChange: handleToolStepChange,
+                  accent,
+                })
               ) : (
                 <YourPlanSection
                   prompt={content.notesPrompt}
