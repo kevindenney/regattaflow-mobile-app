@@ -184,6 +184,8 @@ interface ModuleContent {
   alert?: { title: string; body: string };
   /** Enable rich content toolbar (photos, videos, documents, links, ideas) */
   richContent?: boolean;
+  /** Render as an interactive guided tool instead of a free-form text area */
+  tool?: 'gibbs_reflection' | 'clinical_reasoning';
 }
 
 /**
@@ -604,7 +606,8 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   // ===========================================================================
 
   gibbs_reflection: {
-    notesPrompt: 'Walk through the Gibbs Reflective Cycle: Description \u2192 Feelings \u2192 Evaluation \u2192 Analysis \u2192 Conclusion \u2192 Action Plan. What happened? How did you feel? What was good and bad? What sense can you make of it? What will you do differently?',
+    tool: 'gibbs_reflection',
+    notesPrompt: '',
     aiCoach: {
       title: 'Structured Reflection Deepens Learning',
       body: 'Gibbs\' Reflective Cycle moves you from "what happened" to "what will I do differently." Each stage builds on the last. Don\'t skip the feelings stage \u2014 emotional awareness is clinical intelligence.',
@@ -620,7 +623,8 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   clinical_reasoning: {
-    notesPrompt: 'Document your clinical reasoning process. What did you observe? What did you hypothesize? What actions did you take? What was the outcome?',
+    tool: 'clinical_reasoning',
+    notesPrompt: '',
     aiCoach: {
       title: 'Make Your Thinking Visible',
       body: 'Clinical reasoning is the invisible skill that separates good nurses from great ones. By writing down your thought process \u2014 not just your actions \u2014 you make it available for reflection, feedback, and growth.',
@@ -773,6 +777,430 @@ function AttachmentList({
     </View>
   );
 }
+
+// =============================================================================
+// INTERACTIVE TOOL COMPONENTS
+// =============================================================================
+
+/** Gibbs Reflective Cycle steps */
+const GIBBS_STEPS = [
+  {
+    id: 'description',
+    label: 'Description',
+    icon: LucideIcons.FileText,
+    color: '#007AFF',
+    prompt: 'What happened? Describe the situation factually — who, what, where, when.',
+    hint: 'Stick to facts. Save your feelings for the next step.',
+  },
+  {
+    id: 'feelings',
+    label: 'Feelings',
+    icon: LucideIcons.Heart,
+    color: '#FF2D55',
+    prompt: 'How did you feel at the time? How do you feel now looking back?',
+    hint: 'Name specific emotions — anxious, confident, overwhelmed, proud.',
+  },
+  {
+    id: 'evaluation',
+    label: 'Evaluation',
+    icon: LucideIcons.Scale,
+    color: '#FF9500',
+    prompt: 'What went well? What didn\'t go well?',
+    hint: 'Be balanced — acknowledge both positives and negatives.',
+  },
+  {
+    id: 'analysis',
+    label: 'Analysis',
+    icon: LucideIcons.Brain,
+    color: '#5856D6',
+    prompt: 'Why did things go the way they did? What sense can you make of the situation?',
+    hint: 'Connect to theory, past experience, or evidence-based practice.',
+  },
+  {
+    id: 'conclusion',
+    label: 'Conclusion',
+    icon: LucideIcons.Lightbulb,
+    color: '#34C759',
+    prompt: 'What have you learned? What could you have done differently?',
+    hint: 'Be specific — vague conclusions don\'t improve practice.',
+  },
+  {
+    id: 'action_plan',
+    label: 'Action Plan',
+    icon: LucideIcons.Target,
+    color: '#0D9488',
+    prompt: 'What will you do differently next time? What specific steps will you take?',
+    hint: 'Make it SMART — specific, measurable, achievable.',
+  },
+] as const;
+
+/** Gibbs Reflective Cycle — interactive step-by-step guided tool */
+function GibbsReflectionTool({
+  values,
+  onChange,
+  accent,
+}: {
+  values: Record<string, string>;
+  onChange: (stepId: string, text: string) => void;
+  accent: string;
+}) {
+  const [expandedStep, setExpandedStep] = React.useState<string | null>('description');
+  const completedCount = GIBBS_STEPS.filter((step) => (values[step.id] || '').trim().length > 0).length;
+
+  return (
+    <View style={toolStyles.container}>
+      <View style={toolStyles.header}>
+        <LucideIcons.RefreshCw size={15} color={accent} />
+        <Text style={[s.sectionTitle, { color: accent }]}>Gibbs Reflective Cycle</Text>
+      </View>
+
+      {/* Progress indicator */}
+      <View style={toolStyles.progressRow}>
+        <View style={toolStyles.progressBar}>
+          <View style={[toolStyles.progressFill, { width: `${(completedCount / 6) * 100}%`, backgroundColor: accent }]} />
+        </View>
+        <Text style={toolStyles.progressLabel}>{completedCount}/6</Text>
+      </View>
+
+      {/* Steps */}
+      {GIBBS_STEPS.map((step, index) => {
+        const isExpanded = expandedStep === step.id;
+        const hasContent = (values[step.id] || '').trim().length > 0;
+        const Icon = step.icon;
+
+        return (
+          <Pressable
+            key={step.id}
+            style={[
+              toolStyles.stepCard,
+              isExpanded && toolStyles.stepCardExpanded,
+              hasContent && !isExpanded && toolStyles.stepCardComplete,
+            ]}
+            onPress={() => setExpandedStep(isExpanded ? null : step.id)}
+          >
+            {/* Step header */}
+            <View style={toolStyles.stepHeader}>
+              <View style={[toolStyles.stepNumber, { backgroundColor: hasContent ? step.color : C.gray5 }]}>
+                {hasContent ? (
+                  <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
+                ) : (
+                  <Text style={[toolStyles.stepNumberText, { color: hasContent ? '#FFF' : C.gray }]}>
+                    {index + 1}
+                  </Text>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[toolStyles.stepLabel, hasContent && { color: step.color }]}>
+                  {step.label}
+                </Text>
+                {!isExpanded && hasContent && (
+                  <Text style={toolStyles.stepPreview} numberOfLines={1}>
+                    {values[step.id]}
+                  </Text>
+                )}
+              </View>
+              <Icon size={16} color={isExpanded ? step.color : C.gray3} />
+            </View>
+
+            {/* Expanded content */}
+            {isExpanded && (
+              <View style={toolStyles.stepBody}>
+                <Text style={[toolStyles.stepHint, { color: step.color }]}>{step.hint}</Text>
+                <TextInput
+                  style={[toolStyles.stepInput, { borderColor: `${step.color}40` }]}
+                  placeholder={step.prompt}
+                  placeholderTextColor={C.gray}
+                  value={values[step.id] || ''}
+                  onChangeText={(text) => onChange(step.id, text)}
+                  multiline
+                  textAlignVertical="top"
+                  scrollEnabled={false}
+                />
+                {index < GIBBS_STEPS.length - 1 && (
+                  <Pressable
+                    style={[toolStyles.nextButton, { backgroundColor: step.color }]}
+                    onPress={() => setExpandedStep(GIBBS_STEPS[index + 1].id)}
+                  >
+                    <Text style={toolStyles.nextButtonText}>
+                      Next: {GIBBS_STEPS[index + 1].label}
+                    </Text>
+                    <LucideIcons.ChevronRight size={16} color="#FFF" />
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Clinical Reasoning steps */
+const REASONING_STEPS = [
+  {
+    id: 'cues',
+    label: 'Cue Recognition',
+    icon: LucideIcons.Eye,
+    color: '#007AFF',
+    prompt: 'What did you notice? What cues caught your attention — vitals, patient behavior, lab values, context?',
+    hint: 'What data triggered your clinical thinking?',
+  },
+  {
+    id: 'hypothesis',
+    label: 'Hypothesis Generation',
+    icon: LucideIcons.Brain,
+    color: '#FF9500',
+    prompt: 'What did you think was happening? What were your differential considerations?',
+    hint: 'List what you were considering and why.',
+  },
+  {
+    id: 'actions',
+    label: 'Actions Taken',
+    icon: LucideIcons.Activity,
+    color: '#5856D6',
+    prompt: 'What did you do? What interventions or assessments did you prioritize and why?',
+    hint: 'Connect each action to your reasoning.',
+  },
+  {
+    id: 'outcome',
+    label: 'Outcome & Evaluation',
+    icon: LucideIcons.Target,
+    color: '#34C759',
+    prompt: 'What happened? Did the outcome confirm or challenge your hypothesis? What would you do differently?',
+    hint: 'Did your reasoning hold up? What did you learn?',
+  },
+] as const;
+
+/** Clinical Reasoning — interactive step-by-step decision chain tool */
+function ClinicalReasoningTool({
+  values,
+  onChange,
+  accent,
+}: {
+  values: Record<string, string>;
+  onChange: (stepId: string, text: string) => void;
+  accent: string;
+}) {
+  const [expandedStep, setExpandedStep] = React.useState<string | null>('cues');
+  const completedCount = REASONING_STEPS.filter((step) => (values[step.id] || '').trim().length > 0).length;
+
+  return (
+    <View style={toolStyles.container}>
+      <View style={toolStyles.header}>
+        <LucideIcons.GitBranch size={15} color={accent} />
+        <Text style={[s.sectionTitle, { color: accent }]}>Clinical Reasoning Chain</Text>
+      </View>
+
+      {/* Progress indicator */}
+      <View style={toolStyles.progressRow}>
+        <View style={toolStyles.progressBar}>
+          <View style={[toolStyles.progressFill, { width: `${(completedCount / 4) * 100}%`, backgroundColor: accent }]} />
+        </View>
+        <Text style={toolStyles.progressLabel}>{completedCount}/4</Text>
+      </View>
+
+      {/* Connection line visualization */}
+      {REASONING_STEPS.map((step, index) => {
+        const isExpanded = expandedStep === step.id;
+        const hasContent = (values[step.id] || '').trim().length > 0;
+        const Icon = step.icon;
+        const isLast = index === REASONING_STEPS.length - 1;
+
+        return (
+          <View key={step.id}>
+            <Pressable
+              style={[
+                toolStyles.stepCard,
+                isExpanded && toolStyles.stepCardExpanded,
+                hasContent && !isExpanded && toolStyles.stepCardComplete,
+              ]}
+              onPress={() => setExpandedStep(isExpanded ? null : step.id)}
+            >
+              {/* Step header */}
+              <View style={toolStyles.stepHeader}>
+                <View style={[toolStyles.stepNumber, { backgroundColor: hasContent ? step.color : C.gray5 }]}>
+                  {hasContent ? (
+                    <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
+                  ) : (
+                    <Icon size={12} color={C.gray} />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[toolStyles.stepLabel, hasContent && { color: step.color }]}>
+                    {step.label}
+                  </Text>
+                  {!isExpanded && hasContent && (
+                    <Text style={toolStyles.stepPreview} numberOfLines={1}>
+                      {values[step.id]}
+                    </Text>
+                  )}
+                </View>
+                {isExpanded ? (
+                  <LucideIcons.ChevronDown size={16} color={step.color} />
+                ) : (
+                  <LucideIcons.ChevronRight size={16} color={C.gray3} />
+                )}
+              </View>
+
+              {/* Expanded content */}
+              {isExpanded && (
+                <View style={toolStyles.stepBody}>
+                  <Text style={[toolStyles.stepHint, { color: step.color }]}>{step.hint}</Text>
+                  <TextInput
+                    style={[toolStyles.stepInput, { borderColor: `${step.color}40` }]}
+                    placeholder={step.prompt}
+                    placeholderTextColor={C.gray}
+                    value={values[step.id] || ''}
+                    onChangeText={(text) => onChange(step.id, text)}
+                    multiline
+                    textAlignVertical="top"
+                    scrollEnabled={false}
+                  />
+                  {!isLast && (
+                    <Pressable
+                      style={[toolStyles.nextButton, { backgroundColor: step.color }]}
+                      onPress={() => setExpandedStep(REASONING_STEPS[index + 1].id)}
+                    >
+                      <Text style={toolStyles.nextButtonText}>
+                        Next: {REASONING_STEPS[index + 1].label}
+                      </Text>
+                      <LucideIcons.ChevronRight size={16} color="#FFF" />
+                    </Pressable>
+                  )}
+                </View>
+              )}
+            </Pressable>
+
+            {/* Arrow connector between steps */}
+            {!isLast && (
+              <View style={toolStyles.connector}>
+                <LucideIcons.ChevronDown size={14} color={hasContent ? step.color : C.gray3} />
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Tool styles shared by both Gibbs and Clinical Reasoning */
+const toolStyles = StyleSheet.create({
+  container: {
+    gap: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  progressBar: {
+    flex: 1,
+    height: 4,
+    backgroundColor: C.gray5,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.gray,
+    minWidth: 24,
+    textAlign: 'right',
+  },
+  stepCard: {
+    backgroundColor: C.gray6,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.gray5,
+  },
+  stepCardExpanded: {
+    backgroundColor: '#FFFFFF',
+    borderColor: C.gray3,
+  },
+  stepCardComplete: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stepNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stepLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: C.label,
+  },
+  stepPreview: {
+    fontSize: 13,
+    color: C.gray,
+    marginTop: 2,
+  },
+  stepBody: {
+    marginTop: 12,
+    gap: 8,
+  },
+  stepHint: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    lineHeight: 16,
+  },
+  stepInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    lineHeight: 22,
+    color: C.label,
+    minHeight: 80,
+    borderWidth: 1,
+  },
+  nextButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignSelf: 'flex-end',
+  },
+  nextButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  connector: {
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+});
 
 // =============================================================================
 // SECTION COMPONENTS
@@ -1029,21 +1457,37 @@ export function ModuleDetailBottomSheet({
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
 
+  // Tool step values: moduleId → { stepId → text }
+  const [toolValues, setToolValues] = useState<Record<string, Record<string, string>>>({});
+
   // Refs to avoid stale closure issues in attachment handlers
   const notesRef = useRef(notes);
   notesRef.current = notes;
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+  const toolValuesRef = useRef(toolValues);
+  toolValuesRef.current = toolValues;
 
-  // Notify parent whenever module content changes
+  // Notify parent whenever module content changes (notes, attachments, or tool steps)
   const notifyContentChange = useCallback((modId: string, currentNotes: Record<string, string>, currentAttachments: Record<string, Attachment[]>) => {
     if (!onContentChange) return;
     const noteText = currentNotes[modId] || '';
     const atts = currentAttachments[modId] || [];
+    // For tool modules, aggregate step text as the "notes" for tile preview
+    const toolSteps = toolValuesRef.current[modId];
+    const toolText = toolSteps
+      ? Object.values(toolSteps).filter(Boolean).join(' | ')
+      : '';
+    const combinedNotes = toolText || noteText;
+    const completedSteps = toolSteps
+      ? Object.values(toolSteps).filter((v) => v.trim().length > 0).length
+      : 0;
     onContentChange(modId, {
-      notes: noteText,
-      attachmentCount: atts.length,
-      firstAttachmentLabel: atts[0]?.label,
+      notes: combinedNotes,
+      attachmentCount: atts.length + completedSteps,
+      firstAttachmentLabel: completedSteps > 0
+        ? `${completedSteps} step${completedSteps > 1 ? 's' : ''} complete`
+        : atts[0]?.label,
     });
   }, [onContentChange]);
 
@@ -1229,6 +1673,20 @@ export function ModuleDetailBottomSheet({
     setLinkUrl('');
   }, []);
 
+  // Handler for tool step changes (Gibbs / Clinical Reasoning)
+  const handleToolStepChange = useCallback((stepId: string, text: string) => {
+    if (!moduleId) return;
+    setToolValues((prev) => {
+      const updated = {
+        ...prev,
+        [moduleId]: { ...(prev[moduleId] || {}), [stepId]: text },
+      };
+      toolValuesRef.current = updated;
+      setTimeout(() => notifyContentChange(moduleId, notesRef.current, attachmentsRef.current), 0);
+      return updated;
+    });
+  }, [moduleId, notifyContentChange]);
+
   if (!moduleId) return null;
 
   const moduleInfo = config.moduleInfo[moduleId];
@@ -1289,28 +1747,42 @@ export function ModuleDetailBottomSheet({
                 <ItemsSection items={content.items} accent={accent} />
               )}
 
-              {/* Your Plan */}
-              <YourPlanSection
-                prompt={content.notesPrompt}
-                value={currentNotes}
-                onChange={(text) => {
-                  setNotes((prev) => {
-                    const updated = { ...prev, [moduleId]: text };
-                    setTimeout(() => notifyContentChange(moduleId, updated, attachmentsRef.current), 0);
-                    return updated;
-                  });
-                }}
-                accent={accent}
-                richContent={content.richContent}
-                attachments={currentAttachments}
-                onAddAttachment={handleAddAttachment}
-                onRemoveAttachment={(id) => removeAttachment(moduleId, id)}
-                showLinkInput={showLinkInput}
-                linkUrl={linkUrl}
-                onLinkUrlChange={setLinkUrl}
-                onLinkSubmit={handleLinkSubmit}
-                onLinkCancel={handleLinkCancel}
-              />
+              {/* Interactive Tool OR Your Plan text area */}
+              {content.tool === 'gibbs_reflection' ? (
+                <GibbsReflectionTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'clinical_reasoning' ? (
+                <ClinicalReasoningTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : (
+                <YourPlanSection
+                  prompt={content.notesPrompt}
+                  value={currentNotes}
+                  onChange={(text) => {
+                    setNotes((prev) => {
+                      const updated = { ...prev, [moduleId]: text };
+                      setTimeout(() => notifyContentChange(moduleId, updated, attachmentsRef.current), 0);
+                      return updated;
+                    });
+                  }}
+                  accent={accent}
+                  richContent={content.richContent}
+                  attachments={currentAttachments}
+                  onAddAttachment={handleAddAttachment}
+                  onRemoveAttachment={(id) => removeAttachment(moduleId, id)}
+                  showLinkInput={showLinkInput}
+                  linkUrl={linkUrl}
+                  onLinkUrlChange={setLinkUrl}
+                  onLinkSubmit={handleLinkSubmit}
+                  onLinkCancel={handleLinkCancel}
+                />
+              )}
 
               {/* AI Coach */}
               <AICoachSection
