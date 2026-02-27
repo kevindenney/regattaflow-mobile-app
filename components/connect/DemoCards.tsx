@@ -168,9 +168,9 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
         </View>
       </View>
 
-      {/* Expanded comment thread */}
+      {/* Expanded comment thread — wrapped in Pressable to stop propagation to card toggle */}
       {expanded && (
-        <View style={s.commentSection}>
+        <Pressable onPress={(e) => e.stopPropagation()} style={s.commentSection}>
           <View style={s.commentDivider} />
 
           {allComments.length > 0 ? (
@@ -221,7 +221,7 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
               </Pressable>
             )}
           </View>
-        </View>
+        </Pressable>
       )}
     </Pressable>
   );
