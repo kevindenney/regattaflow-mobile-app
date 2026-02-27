@@ -60,6 +60,49 @@ export function DemoPeerCard({ peer, isFollowing, onToggleFollow }: DemoPeerCard
 }
 
 // =============================================================================
+// COMMENT ROW (with interactive upvote)
+// =============================================================================
+
+function DemoCommentRow({ comment }: { comment: DemoComment }) {
+  const [upvoted, setUpvoted] = useState(false);
+  const displayUpvotes = upvoted ? comment.upvotes + 1 : comment.upvotes;
+
+  return (
+    <View style={s.commentRow}>
+      <View style={[s.commentAvatar, { backgroundColor: comment.authorColor }]}>
+        <Text style={s.commentAvatarText}>{comment.authorInitials}</Text>
+      </View>
+      <View style={s.commentContent}>
+        <View style={s.commentHeader}>
+          <Text style={s.commentAuthor}>{comment.authorName}</Text>
+          <Text style={s.commentTime}>{comment.timeAgo}</Text>
+        </View>
+        <Text style={s.commentBody}>{comment.body}</Text>
+        <View style={s.commentActions}>
+          <Pressable
+            style={s.commentUpvoteButton}
+            onPress={() => {
+              triggerHaptic('selection');
+              setUpvoted((v) => !v);
+            }}
+          >
+            <Ionicons
+              name={upvoted ? 'arrow-up' : 'arrow-up-outline'}
+              size={12}
+              color={upvoted ? '#2563EB' : IOS_COLORS.tertiaryLabel}
+            />
+            <Text style={[s.commentUpvotes, upvoted && { color: '#2563EB', fontWeight: '600' }]}>
+              {displayUpvotes}
+            </Text>
+          </Pressable>
+          <Text style={s.commentReply}>Reply</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// =============================================================================
 // POST CARD (with interactive upvote)
 // =============================================================================
 
@@ -175,23 +218,7 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
 
           {allComments.length > 0 ? (
             allComments.map((comment) => (
-              <View key={comment.id} style={s.commentRow}>
-                <View style={[s.commentAvatar, { backgroundColor: comment.authorColor }]}>
-                  <Text style={s.commentAvatarText}>{comment.authorInitials}</Text>
-                </View>
-                <View style={s.commentContent}>
-                  <View style={s.commentHeader}>
-                    <Text style={s.commentAuthor}>{comment.authorName}</Text>
-                    <Text style={s.commentTime}>{comment.timeAgo}</Text>
-                  </View>
-                  <Text style={s.commentBody}>{comment.body}</Text>
-                  <View style={s.commentActions}>
-                    <Ionicons name="arrow-up-outline" size={12} color={IOS_COLORS.tertiaryLabel} />
-                    <Text style={s.commentUpvotes}>{comment.upvotes}</Text>
-                    <Text style={s.commentReply}>Reply</Text>
-                  </View>
-                </View>
-              </View>
+              <DemoCommentRow key={comment.id} comment={comment} />
             ))
           ) : (
             <Text style={s.noCommentsText}>No comments yet — be the first to reply.</Text>
@@ -506,10 +533,16 @@ const s = StyleSheet.create({
     gap: 4,
     marginTop: 4,
   },
+  commentUpvoteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 2,
+    paddingRight: 8,
+  },
   commentUpvotes: {
     fontSize: 11,
     color: IOS_COLORS.tertiaryLabel,
-    marginRight: 8,
   },
   commentReply: {
     fontSize: 11,
