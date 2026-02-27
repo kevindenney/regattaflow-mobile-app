@@ -185,7 +185,7 @@ interface ModuleContent {
   /** Enable rich content toolbar (photos, videos, documents, links, ideas) */
   richContent?: boolean;
   /** Render as an interactive guided tool instead of a free-form text area */
-  tool?: 'gibbs_reflection' | 'clinical_reasoning';
+  tool?: 'gibbs_reflection' | 'clinical_reasoning' | 'self_assessment' | 'learning_notes';
 }
 
 /**
@@ -412,7 +412,8 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   learning_notes: {
-    notesPrompt: 'What did you learn today that you didn\'t know before? What surprised you? What clinical reasoning moments stand out? What would you do differently?',
+    tool: 'learning_notes',
+    notesPrompt: '',
     aiCoach: {
       title: 'Reflection Is Where Learning Solidifies',
       body: 'The shift is over, but the learning isn\'t. The students who reflect within 30 minutes of a shift retain 3x more than those who wait. Write what you felt, not just what you did. The emotional texture of a clinical moment is what makes it stick.',
@@ -640,7 +641,8 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   self_assessment: {
-    notesPrompt: 'Honestly assess your performance. What went well? Where did you struggle? Rate your confidence, competence, and areas for growth.',
+    tool: 'self_assessment',
+    notesPrompt: '',
     aiCoach: {
       title: 'Honest Self-Assessment Accelerates Growth',
       body: 'The gap between how you think you performed and how you actually performed is where the most powerful learning lives. Be honest \u2014 rate yourself before you get external feedback.',
@@ -1085,7 +1087,394 @@ function ClinicalReasoningTool({
   );
 }
 
-/** Tool styles shared by both Gibbs and Clinical Reasoning */
+/** Self-Assessment dimensions */
+const ASSESSMENT_DIMENSIONS = [
+  {
+    id: 'confidence',
+    label: 'Confidence',
+    icon: LucideIcons.Shield,
+    color: '#007AFF',
+    description: 'How confident did you feel during this activity?',
+    lowLabel: 'Very unsure',
+    highLabel: 'Very confident',
+  },
+  {
+    id: 'competence',
+    label: 'Competence',
+    icon: LucideIcons.Award,
+    color: '#34C759',
+    description: 'How competent do you think you actually were?',
+    lowLabel: 'Needed help',
+    highLabel: 'Could teach it',
+  },
+  {
+    id: 'independence',
+    label: 'Independence',
+    icon: LucideIcons.UserCheck,
+    color: '#FF9500',
+    description: 'How independently did you work?',
+    lowLabel: 'Fully guided',
+    highLabel: 'Fully independent',
+  },
+] as const;
+
+const ASSESSMENT_REFLECTIONS = [
+  {
+    id: 'went_well',
+    label: 'What Went Well',
+    icon: LucideIcons.ThumbsUp,
+    color: '#34C759',
+    prompt: 'What are you proud of? What skills did you demonstrate effectively?',
+  },
+  {
+    id: 'struggled',
+    label: 'Where I Struggled',
+    icon: LucideIcons.AlertCircle,
+    color: '#FF9500',
+    prompt: 'What was difficult? Where did you feel uncertain or make mistakes?',
+  },
+  {
+    id: 'growth_areas',
+    label: 'Growth Areas',
+    icon: LucideIcons.TrendingUp,
+    color: '#5856D6',
+    prompt: 'What specific skills or knowledge do you need to develop? What\'s your plan?',
+  },
+] as const;
+
+/** Self-Assessment — interactive rating + reflection tool */
+function SelfAssessmentTool({
+  values,
+  onChange,
+  accent,
+}: {
+  values: Record<string, string>;
+  onChange: (stepId: string, text: string) => void;
+  accent: string;
+}) {
+  const ratingsComplete = ASSESSMENT_DIMENSIONS.filter((d) => (values[d.id] || '') !== '').length;
+  const reflectionsComplete = ASSESSMENT_REFLECTIONS.filter((r) => (values[r.id] || '').trim().length > 0).length;
+  const totalComplete = ratingsComplete + reflectionsComplete;
+  const totalSteps = ASSESSMENT_DIMENSIONS.length + ASSESSMENT_REFLECTIONS.length;
+
+  return (
+    <View style={toolStyles.container}>
+      <View style={toolStyles.header}>
+        <LucideIcons.BarChart3 size={15} color={accent} />
+        <Text style={[s.sectionTitle, { color: accent }]}>Self-Assessment</Text>
+      </View>
+
+      <View style={toolStyles.progressRow}>
+        <View style={toolStyles.progressBar}>
+          <View style={[toolStyles.progressFill, { width: `${(totalComplete / totalSteps) * 100}%`, backgroundColor: accent }]} />
+        </View>
+        <Text style={toolStyles.progressLabel}>{totalComplete}/{totalSteps}</Text>
+      </View>
+
+      {/* Rating dimensions */}
+      {ASSESSMENT_DIMENSIONS.map((dim) => {
+        const Icon = dim.icon;
+        const currentRating = parseInt(values[dim.id] || '0', 10);
+
+        return (
+          <View key={dim.id} style={[assessStyles.ratingCard, currentRating > 0 && assessStyles.ratingCardComplete]}>
+            <View style={assessStyles.ratingHeader}>
+              <Icon size={16} color={dim.color} />
+              <Text style={[assessStyles.ratingLabel, { color: dim.color }]}>{dim.label}</Text>
+            </View>
+            <Text style={assessStyles.ratingDescription}>{dim.description}</Text>
+            <View style={assessStyles.ratingRow}>
+              <Text style={assessStyles.ratingEndLabel}>{dim.lowLabel}</Text>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable
+                  key={n}
+                  style={[
+                    assessStyles.ratingDot,
+                    { borderColor: dim.color },
+                    currentRating === n && { backgroundColor: dim.color },
+                  ]}
+                  onPress={() => onChange(dim.id, String(n))}
+                >
+                  <Text style={[
+                    assessStyles.ratingDotText,
+                    currentRating === n && { color: '#FFFFFF' },
+                  ]}>
+                    {n}
+                  </Text>
+                </Pressable>
+              ))}
+              <Text style={assessStyles.ratingEndLabel}>{dim.highLabel}</Text>
+            </View>
+          </View>
+        );
+      })}
+
+      {/* Confidence-Competence gap indicator */}
+      {values.confidence && values.competence && (
+        <View style={assessStyles.gapCard}>
+          <LucideIcons.ArrowLeftRight size={14} color={C.orange} />
+          <Text style={assessStyles.gapText}>
+            {parseInt(values.confidence, 10) === parseInt(values.competence, 10)
+              ? 'Your confidence matches your competence — good calibration!'
+              : parseInt(values.confidence, 10) > parseInt(values.competence, 10)
+                ? `Gap detected: You felt more confident (${values.confidence}) than competent (${values.competence}). This awareness is valuable.`
+                : `You rated competence (${values.competence}) higher than confidence (${values.confidence}). You may be more capable than you feel!`
+            }
+          </Text>
+        </View>
+      )}
+
+      {/* Reflection prompts */}
+      {ASSESSMENT_REFLECTIONS.map((ref) => {
+        const Icon = ref.icon;
+        const hasContent = (values[ref.id] || '').trim().length > 0;
+        return (
+          <View key={ref.id} style={[toolStyles.stepCard, hasContent && toolStyles.stepCardComplete]}>
+            <View style={toolStyles.stepHeader}>
+              <View style={[toolStyles.stepNumber, { backgroundColor: hasContent ? ref.color : C.gray5 }]}>
+                {hasContent ? (
+                  <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
+                ) : (
+                  <Icon size={12} color={C.gray} />
+                )}
+              </View>
+              <Text style={[toolStyles.stepLabel, hasContent && { color: ref.color }]}>{ref.label}</Text>
+            </View>
+            <TextInput
+              style={[toolStyles.stepInput, { borderColor: `${ref.color}40`, marginTop: 8 }]}
+              placeholder={ref.prompt}
+              placeholderTextColor={C.gray}
+              value={values[ref.id] || ''}
+              onChangeText={(text) => onChange(ref.id, text)}
+              multiline
+              textAlignVertical="top"
+              scrollEnabled={false}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const assessStyles = StyleSheet.create({
+  ratingCard: {
+    backgroundColor: C.gray6,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.gray5,
+    gap: 8,
+  },
+  ratingCardComplete: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  ratingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ratingLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  ratingDescription: {
+    fontSize: 13,
+    color: C.gray,
+    lineHeight: 18,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingTop: 4,
+  },
+  ratingEndLabel: {
+    fontSize: 10,
+    color: C.gray,
+    width: 52,
+    textAlign: 'center',
+  },
+  ratingDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  ratingDotText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.secondaryLabel,
+  },
+  gapCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FFF8E1',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  gapText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#92400E',
+    lineHeight: 18,
+  },
+});
+
+/** Learning Notes steps */
+const LEARNING_STEPS = [
+  {
+    id: 'key_learning',
+    label: 'Key Learning',
+    icon: LucideIcons.Lightbulb,
+    color: '#007AFF',
+    prompt: 'What did you learn today that you didn\'t know before? What new understanding did you gain?',
+    hint: 'Focus on insights, not just facts.',
+  },
+  {
+    id: 'surprises',
+    label: 'What Surprised Me',
+    icon: LucideIcons.Zap,
+    color: '#FF9500',
+    prompt: 'What surprised you? What challenged your assumptions or expectations?',
+    hint: 'Surprises reveal gaps between theory and practice.',
+  },
+  {
+    id: 'clinical_moments',
+    label: 'Clinical Reasoning Moment',
+    icon: LucideIcons.Brain,
+    color: '#5856D6',
+    prompt: 'Describe a moment where you had to think critically. What cues did you notice? What decision did you make?',
+    hint: 'These moments are where clinical judgment develops.',
+  },
+  {
+    id: 'mistakes',
+    label: 'I Was Wrong About...',
+    icon: LucideIcons.AlertCircle,
+    color: '#FF2D55',
+    prompt: 'What did you get wrong or misunderstand? What would you do differently next time?',
+    hint: 'This is the most powerful growth prompt. Be honest.',
+  },
+  {
+    id: 'questions',
+    label: 'Questions to Explore',
+    icon: LucideIcons.HelpCircle,
+    color: '#0D9488',
+    prompt: 'What questions came up that you want to research? What do you still not understand?',
+    hint: 'Good questions are as valuable as good answers.',
+  },
+] as const;
+
+/** Learning Notes — structured reflection tool with guided prompts */
+function LearningNotesTool({
+  values,
+  onChange,
+  accent,
+}: {
+  values: Record<string, string>;
+  onChange: (stepId: string, text: string) => void;
+  accent: string;
+}) {
+  const [expandedStep, setExpandedStep] = React.useState<string | null>('key_learning');
+  const completedCount = LEARNING_STEPS.filter((step) => (values[step.id] || '').trim().length > 0).length;
+
+  return (
+    <View style={toolStyles.container}>
+      <View style={toolStyles.header}>
+        <LucideIcons.BookOpen size={15} color={accent} />
+        <Text style={[s.sectionTitle, { color: accent }]}>Learning Notes</Text>
+      </View>
+
+      <View style={toolStyles.progressRow}>
+        <View style={toolStyles.progressBar}>
+          <View style={[toolStyles.progressFill, { width: `${(completedCount / LEARNING_STEPS.length) * 100}%`, backgroundColor: accent }]} />
+        </View>
+        <Text style={toolStyles.progressLabel}>{completedCount}/{LEARNING_STEPS.length}</Text>
+      </View>
+
+      {LEARNING_STEPS.map((step, index) => {
+        const isExpanded = expandedStep === step.id;
+        const hasContent = (values[step.id] || '').trim().length > 0;
+        const Icon = step.icon;
+
+        return (
+          <Pressable
+            key={step.id}
+            style={[
+              toolStyles.stepCard,
+              isExpanded && toolStyles.stepCardExpanded,
+              hasContent && !isExpanded && toolStyles.stepCardComplete,
+            ]}
+            onPress={() => setExpandedStep(isExpanded ? null : step.id)}
+          >
+            <View style={toolStyles.stepHeader}>
+              <View style={[toolStyles.stepNumber, { backgroundColor: hasContent ? step.color : C.gray5 }]}>
+                {hasContent ? (
+                  <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
+                ) : (
+                  <Icon size={12} color={C.gray} />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[toolStyles.stepLabel, hasContent && { color: step.color }]}>
+                  {step.label}
+                </Text>
+                {!isExpanded && hasContent && (
+                  <Text style={toolStyles.stepPreview} numberOfLines={1}>
+                    {values[step.id]}
+                  </Text>
+                )}
+              </View>
+              {isExpanded ? (
+                <LucideIcons.ChevronDown size={16} color={step.color} />
+              ) : (
+                <LucideIcons.ChevronRight size={16} color={C.gray3} />
+              )}
+            </View>
+
+            {isExpanded && (
+              <View style={toolStyles.stepBody}>
+                <Text style={[toolStyles.stepHint, { color: step.color }]}>{step.hint}</Text>
+                <TextInput
+                  style={[toolStyles.stepInput, { borderColor: `${step.color}40` }]}
+                  placeholder={step.prompt}
+                  placeholderTextColor={C.gray}
+                  value={values[step.id] || ''}
+                  onChangeText={(text) => onChange(step.id, text)}
+                  multiline
+                  textAlignVertical="top"
+                  scrollEnabled={false}
+                />
+                {index < LEARNING_STEPS.length - 1 && (
+                  <Pressable
+                    style={[toolStyles.nextButton, { backgroundColor: step.color }]}
+                    onPress={() => setExpandedStep(LEARNING_STEPS[index + 1].id)}
+                  >
+                    <Text style={toolStyles.nextButtonText}>
+                      Next: {LEARNING_STEPS[index + 1].label}
+                    </Text>
+                    <LucideIcons.ChevronRight size={16} color="#FFF" />
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Tool styles shared by all interactive tools */
 const toolStyles = StyleSheet.create({
   container: {
     gap: 8,
@@ -1756,6 +2145,18 @@ export function ModuleDetailBottomSheet({
                 />
               ) : content.tool === 'clinical_reasoning' ? (
                 <ClinicalReasoningTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'self_assessment' ? (
+                <SelfAssessmentTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'learning_notes' ? (
+                <LearningNotesTool
                   values={toolValues[moduleId] || {}}
                   onChange={handleToolStepChange}
                   accent={accent}
