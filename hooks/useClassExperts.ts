@@ -135,7 +135,7 @@ export function useClassExperts(
     const [{ data: profiles, error: profilesError }, { data: follows }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, full_name, avatar_emoji, avatar_color')
+        .select('id, full_name')
         .in('id', candidateIds),
       userId
         ? supabase.from('user_follows').select('following_id').eq('follower_id', userId)

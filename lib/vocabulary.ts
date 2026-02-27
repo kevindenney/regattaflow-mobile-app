@@ -12,6 +12,9 @@
 
 import { supabase } from '@/services/supabase';
 
+// Module-level flag: skip Supabase calls once the table is confirmed missing
+let tableUnavailable = false;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -121,6 +124,8 @@ export function getFallbackVocabulary(interestSlug?: string | null): VocabularyM
  */
 export async function fetchVocabulary(interestId: string, interestSlug?: string): Promise<VocabularyMap> {
   const fallback = getFallbackVocabulary(interestSlug);
+  if (tableUnavailable) return fallback;
+
   try {
     const { data, error } = await supabase
       .from('betterat_vocabulary')
@@ -129,7 +134,8 @@ export async function fetchVocabulary(interestId: string, interestSlug?: string)
       .order('sort_order', { ascending: true });
 
     if (error) {
-      console.warn('[vocabulary] Supabase query failed, using fallback:', error.message);
+      console.warn('[vocabulary] Supabase query failed, using fallback (suppressing future calls):', error.message);
+      tableUnavailable = true;
       return fallback;
     }
 

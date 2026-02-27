@@ -11,6 +11,9 @@ import { supabase } from '@/services/supabase';
 import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { createLogger } from '@/lib/utils/logger';
 
+// Module-level cache: skip all queries once the table/columns are confirmed missing
+let tableUnavailable = false;
+
 export interface RecentRacePosition {
   raceId: string;
   raceName: string;
@@ -62,7 +65,7 @@ export function useRecentRaceResults(
         activeUserIdRef.current === targetUserId &&
         activeRaceIdRef.current === targetRaceId;
 
-      if (!targetUserId) {
+      if (!targetUserId || tableUnavailable) {
         if (!canCommit()) return;
         setRecentResults([]);
         setIsLoading(false);
@@ -105,7 +108,8 @@ export function useRecentRaceResults(
         }
 
         if (error) {
-          logger.warn('Query error', error);
+          logger.warn('Query error (suppressing future calls)', error);
+          tableUnavailable = true;
           if (!canCommit()) return;
           setRecentResults([]);
           return;

@@ -898,8 +898,8 @@ function TabLayoutInner() {
 
   return (
     <View style={styles.container}>
-      {/* Show navigation header with interest switcher */}
-      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={true} hidden={false} />
+      {/* Navigation header: hidden on web (interest switcher + sidebar toggle live in TabScreenToolbar) */}
+      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={true} hidden={Platform.OS === 'web'} />
 
       <View style={useWebSidebar ? styles.webShelfRow : styles.nativeRow}>
         {/* Shelf panel — persistent on web, pushes content right */}
@@ -1307,12 +1307,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderWidth: 1,
     borderColor: 'rgba(147, 197, 253, 0.35)',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
     elevation: 6,
     zIndex: 1150,
+    ...Platform.select({
+      web: { boxShadow: '0 6px 12px rgba(15, 23, 26, 0.18)' } as any,
+      default: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.18, shadowRadius: 12 },
+    }),
   },
   tabSweepProgressText: {
     color: '#EFF6FF',
@@ -1360,11 +1360,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(59, 130, 246, 0.95)',
     backgroundColor: 'rgba(59, 130, 246, 0.08)',
     zIndex: 1095,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
     elevation: 8,
+    ...Platform.select({
+      web: { boxShadow: '0 0 10px rgba(59, 130, 246, 0.35)' } as any,
+      default: { shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.35, shadowRadius: 10 },
+    }),
   },
   resumeHintContainer: {
     position: 'absolute',
@@ -1378,12 +1378,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
     elevation: 6,
     zIndex: 1160,
+    ...Platform.select({
+      web: { boxShadow: '0 8px 14px rgba(15, 23, 26, 0.16)' } as any,
+      default: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.16, shadowRadius: 14 },
+    }),
   },
   resumeHintText: {
     color: '#DBEAFE',
@@ -1404,12 +1404,12 @@ const styles = StyleSheet.create({
     padding: 15,
     borderWidth: 1,
     borderColor: '#BFDBFE',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
     elevation: 5,
     zIndex: 1160,
+    ...Platform.select({
+      web: { boxShadow: '0 10px 16px rgba(15, 23, 26, 0.12)' } as any,
+      default: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 16 },
+    }),
   },
   readinessIssueTitle: {
     fontSize: 15,

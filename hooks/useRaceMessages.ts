@@ -164,7 +164,7 @@ export function useRaceMessages({
       if (userIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, full_name, avatar_emoji, avatar_color')
+          .select('id, full_name')
           .in('id', userIds);
 
         if (profiles) {
