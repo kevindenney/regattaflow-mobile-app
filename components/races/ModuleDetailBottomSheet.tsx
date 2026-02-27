@@ -24,7 +24,9 @@ import {
   CarePlanTool,
   ClinicalObjectivesTool,
   EBPConnectionTool,
+  UnitProtocolsTool,
 } from './tools/NursingTools';
+import { DrillableItemsSection, LAB_LESSON_ITEMS, PROTOCOL_LESSON_ITEMS } from './tools/LessonDrillDown';
 import {
   StyleSheet,
   View,
@@ -189,13 +191,16 @@ interface ModuleContent {
   history: { summary: string; detail: string };
   /** Optional: structured items to display (checklists, med lists, etc.) */
   items?: Array<{ label: string; detail: string; status?: 'alert' | 'ok' | 'info' }>;
+  /** Optional: drillable lesson items (replaces static items with interactive lessons) */
+  drillableItems?: boolean;
   /** Optional: alert or safety callout */
   alert?: { title: string; body: string };
   /** Enable rich content toolbar (photos, videos, documents, links, ideas) */
   richContent?: boolean;
   /** Render as an interactive guided tool instead of a free-form text area */
   tool?: 'gibbs_reflection' | 'clinical_reasoning' | 'self_assessment' | 'learning_notes'
-    | 'patient_overview' | 'medications' | 'lab_values' | 'procedures' | 'care_plan' | 'clinical_objectives' | 'ebp_connection';
+    | 'patient_overview' | 'medications' | 'lab_values' | 'procedures' | 'care_plan' | 'clinical_objectives' | 'ebp_connection'
+    | 'unit_protocols';
 }
 
 /**
@@ -260,12 +265,7 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
       summary: 'Tracked labs for 8 patients across 3 shifts',
       detail: 'You\'re getting stronger at correlating lab values with clinical presentation. Last shift you connected the dots between low albumin and wound healing delay.',
     },
-    items: [
-      { label: 'BMP (Basic Metabolic Panel)', detail: 'Na, K, Cl, CO2, BUN, Cr, Glucose', status: 'info' },
-      { label: 'CBC', detail: 'WBC, Hgb, Hct, Platelets', status: 'info' },
-      { label: 'PT/INR', detail: 'Check if patient on anticoagulants', status: 'alert' },
-      { label: 'BNP', detail: 'Heart failure marker — check trend', status: 'info' },
-    ],
+    drillableItems: true,
   },
 
   procedures: {
@@ -346,6 +346,8 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   unit_protocols: {
+    tool: 'unit_protocols',
+    drillableItems: true,
     notesPrompt: 'What unit-specific protocols should you review? Any isolation patients? Code team responsibilities? Fall risk protocols for your patients?',
     aiCoach: {
       title: 'Know the Rules Before You Break Stride',
@@ -2165,10 +2167,15 @@ export function ModuleDetailBottomSheet({
                 <AlertSection title={content.alert.title} body={content.alert.body} />
               )}
 
-              {/* Structured items (if any) */}
-              {content.items && (
+              {/* Structured items — drillable or static */}
+              {content.drillableItems ? (
+                <DrillableItemsSection
+                  items={moduleId === 'unit_protocols' ? PROTOCOL_LESSON_ITEMS : LAB_LESSON_ITEMS}
+                  accent={accent}
+                />
+              ) : content.items ? (
                 <ItemsSection items={content.items} accent={accent} />
-              )}
+              ) : null}
 
               {/* Interactive Tool OR Your Plan text area */}
               {content.tool === 'gibbs_reflection' ? (
@@ -2233,6 +2240,12 @@ export function ModuleDetailBottomSheet({
                 />
               ) : content.tool === 'ebp_connection' ? (
                 <EBPConnectionTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'unit_protocols' ? (
+                <UnitProtocolsTool
                   values={toolValues[moduleId] || {}}
                   onChange={handleToolStepChange}
                   accent={accent}

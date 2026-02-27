@@ -101,55 +101,56 @@ function AccordionStepTool({
         const Icon = step.icon;
 
         return (
-          <Pressable
+          <View
             key={step.id}
             style={[
               toolStyles.stepCard,
               isExpanded && toolStyles.stepCardExpanded,
               hasContent && !isExpanded && toolStyles.stepCardComplete,
             ]}
-            onPress={() => setExpandedStep(isExpanded ? null : step.id)}
           >
-            {/* Step header */}
-            <View style={toolStyles.stepHeader}>
-              <View
-                style={[
-                  toolStyles.stepNumber,
-                  { backgroundColor: hasContent ? step.color : C.gray5 },
-                ]}
-              >
-                {hasContent ? (
-                  <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
-                ) : (
-                  <Text
-                    style={[
-                      toolStyles.stepNumberText,
-                      { color: hasContent ? '#FFF' : C.gray },
-                    ]}
-                  >
-                    {index + 1}
-                  </Text>
-                )}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
+            {/* Step header — only this part toggles expand/collapse */}
+            <Pressable onPress={() => setExpandedStep(isExpanded ? null : step.id)}>
+              <View style={toolStyles.stepHeader}>
+                <View
                   style={[
-                    toolStyles.stepLabel,
-                    hasContent && { color: step.color },
+                    toolStyles.stepNumber,
+                    { backgroundColor: hasContent ? step.color : C.gray5 },
                   ]}
                 >
-                  {step.label}
-                </Text>
-                {!isExpanded && hasContent && (
-                  <Text style={toolStyles.stepPreview} numberOfLines={1}>
-                    {values[step.id]}
+                  {hasContent ? (
+                    <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
+                  ) : (
+                    <Text
+                      style={[
+                        toolStyles.stepNumberText,
+                        { color: hasContent ? '#FFF' : C.gray },
+                      ]}
+                    >
+                      {index + 1}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      toolStyles.stepLabel,
+                      hasContent && { color: step.color },
+                    ]}
+                  >
+                    {step.label}
                   </Text>
-                )}
+                  {!isExpanded && hasContent && (
+                    <Text style={toolStyles.stepPreview} numberOfLines={1}>
+                      {values[step.id]}
+                    </Text>
+                  )}
+                </View>
+                <Icon size={16} color={isExpanded ? step.color : C.gray3} />
               </View>
-              <Icon size={16} color={isExpanded ? step.color : C.gray3} />
-            </View>
+            </Pressable>
 
-            {/* Expanded content */}
+            {/* Expanded content — outside the Pressable so TextInput clicks don't collapse */}
             {isExpanded && (
               <View style={toolStyles.stepBody}>
                 <Text style={[toolStyles.stepHint, { color: step.color }]}>
@@ -184,7 +185,7 @@ function AccordionStepTool({
                 )}
               </View>
             )}
-          </Pressable>
+          </View>
         );
       })}
     </View>
@@ -452,6 +453,41 @@ const EBP_CONNECTION_STEPS: StepDefinition[] = [
   },
 ];
 
+const UNIT_PROTOCOLS_STEPS: StepDefinition[] = [
+  {
+    id: 'protocol_review',
+    label: 'Protocol Review',
+    icon: LucideIcons.BookOpen,
+    color: C.red,
+    prompt: 'Which unit-specific protocols apply to your patients today?',
+    hint: 'Isolation types, fall risk levels, safety protocols for your assigned patients.',
+  },
+  {
+    id: 'communication_chain',
+    label: 'Communication Chain',
+    icon: LucideIcons.PhoneCall,
+    color: C.blue,
+    prompt: 'Who do you call and in what order if something goes wrong?',
+    hint: 'Charge nurse → Provider → Rapid response. Know the numbers.',
+  },
+  {
+    id: 'safety_environment',
+    label: 'Safety Environment',
+    icon: LucideIcons.Shield,
+    color: C.green,
+    prompt: 'What safety checks will you perform for each patient?',
+    hint: 'Bed position, call light, fall risk, wristband verification, equipment check.',
+  },
+  {
+    id: 'emergency_prep',
+    label: 'Emergency Preparedness',
+    icon: LucideIcons.Siren,
+    color: C.orange,
+    prompt: 'Where is the code cart? Fire exits? Do you know the rapid response criteria?',
+    hint: 'Walk the unit mentally. Know where everything is BEFORE you need it.',
+  },
+];
+
 // =============================================================================
 // TOOL COMPONENTS
 // =============================================================================
@@ -540,6 +576,19 @@ export function EBPConnectionTool({ values, onChange, accent }: ToolProps) {
       title="Evidence-Based Practice"
       headerIcon={<LucideIcons.Search size={15} color={accent} />}
       steps={EBP_CONNECTION_STEPS}
+      values={values}
+      onChange={onChange}
+      accent={accent}
+    />
+  );
+}
+
+export function UnitProtocolsTool({ values, onChange, accent }: ToolProps) {
+  return (
+    <AccordionStepTool
+      title="Unit Protocols"
+      headerIcon={<LucideIcons.BookOpen size={15} color={accent} />}
+      steps={UNIT_PROTOCOLS_STEPS}
       values={values}
       onChange={onChange}
       accent={accent}
