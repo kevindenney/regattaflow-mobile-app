@@ -22,8 +22,9 @@ import { ChevronLeft } from 'lucide-react-native';
 import { usePracticeSuggestions } from '@/hooks/usePracticeSuggestions';
 import { practiceSessionService } from '@/services/PracticeSessionService';
 import { useAuth } from '@/providers/AuthProvider';
-import { SKILL_AREA_LABELS } from '@/types/practice';
+import { SKILL_AREA_LABELS, buildSkillAreaLabelMap } from '@/types/practice';
 import type { PracticeSuggestion, SkillArea } from '@/types/practice';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 
 // Ink-like color palette
 const COLORS = {
@@ -35,14 +36,16 @@ const COLORS = {
   rule: '#e5e5e5',
 };
 
-// Default suggestions for new users
-const DEFAULT_SUGGESTIONS: Array<{
+// Default suggestions per interest
+type DefaultSuggestion = {
   id: string;
-  skillArea: SkillArea;
+  skillArea: string;
   reason: string;
   drillName: string;
   estimatedDuration: number;
-}> = [
+};
+
+const SAILING_DEFAULTS: DefaultSuggestion[] = [
   {
     id: 'default-starts',
     skillArea: 'start-execution',
@@ -73,15 +76,80 @@ const DEFAULT_SUGGESTIONS: Array<{
   },
 ];
 
+const NURSING_DEFAULTS: DefaultSuggestion[] = [
+  {
+    id: 'default-assessment',
+    skillArea: 'assessment',
+    reason: 'Systematic head-to-toe assessment is the foundation of clinical care.',
+    drillName: 'Head-to-Toe Assessment',
+    estimatedDuration: 30,
+  },
+  {
+    id: 'default-meds',
+    skillArea: 'medication_administration',
+    reason: 'Safe medication practices prevent errors. Practice the 6 Rights consistently.',
+    drillName: '6 Rights Verification',
+    estimatedDuration: 20,
+  },
+  {
+    id: 'default-iv',
+    skillArea: 'iv_therapy',
+    reason: 'IV insertion confidence comes from repetition and proper technique.',
+    drillName: 'IV Insertion Simulation',
+    estimatedDuration: 30,
+  },
+  {
+    id: 'default-communication',
+    skillArea: 'communication',
+    reason: 'Clear SBAR handoffs improve patient safety and team coordination.',
+    drillName: 'SBAR Handoff Practice',
+    estimatedDuration: 15,
+  },
+];
+
+const INTEREST_DEFAULTS: Record<string, DefaultSuggestion[]> = {
+  'sail-racing': SAILING_DEFAULTS,
+  nursing: NURSING_DEFAULTS,
+};
+
+const INTEREST_VOCABULARY: Record<string, { loadingText: string; aiSubtitle: string; defaultSubtitle: string }> = {
+  'sail-racing': {
+    loadingText: 'Analyzing your races...',
+    aiSubtitle: 'Based on your recent race analysis',
+    defaultSubtitle: 'Suggestions improve as you complete races',
+  },
+  nursing: {
+    loadingText: 'Analyzing your clinical activity...',
+    aiSubtitle: 'Based on your recent clinical performance',
+    defaultSubtitle: 'Suggestions improve as you complete shifts',
+  },
+  drawing: {
+    loadingText: 'Analyzing your sessions...',
+    aiSubtitle: 'Based on your recent session analysis',
+    defaultSubtitle: 'Suggestions improve as you complete sessions',
+  },
+  fitness: {
+    loadingText: 'Analyzing your workouts...',
+    aiSubtitle: 'Based on your recent workout analysis',
+    defaultSubtitle: 'Suggestions improve as you complete workouts',
+  },
+};
+
 export default function PracticeCreateScreen() {
   const { user } = useAuth();
   const { suggestions, isLoading } = usePracticeSuggestions();
+  const eventConfig = useInterestEventConfig();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [duration, setDuration] = useState(30);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Use AI suggestions if available, otherwise default suggestions
+  const slug = eventConfig.interestSlug;
+  const vocab = INTEREST_VOCABULARY[slug] ?? INTEREST_VOCABULARY['sail-racing'];
+  const defaultSuggestions = INTEREST_DEFAULTS[slug] ?? SAILING_DEFAULTS;
+  const skillLabels = buildSkillAreaLabelMap(eventConfig.skillAreas);
+
+  // Use AI suggestions if available, otherwise interest-specific defaults
   const hasAISuggestions = suggestions.length > 0;
   const displaySuggestions = hasAISuggestions
     ? suggestions.map((s) => ({
@@ -91,7 +159,7 @@ export default function PracticeCreateScreen() {
         drillName: s.suggestedDrills[0]?.drill.name || '',
         estimatedDuration: s.estimatedDuration,
       }))
-    : DEFAULT_SUGGESTIONS;
+    : defaultSuggestions;
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -168,7 +236,7 @@ export default function PracticeCreateScreen() {
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={COLORS.muted} />
               <Text style={styles.loadingText}>
-                Analyzing your races...
+                {vocab.loadingText}
               </Text>
             </View>
           ) : (
@@ -176,8 +244,8 @@ export default function PracticeCreateScreen() {
               {/* Subtitle changes based on whether we have AI suggestions */}
               <Text style={styles.subtitle}>
                 {hasAISuggestions
-                  ? 'Based on your recent race analysis'
-                  : 'Suggestions improve as you complete races'}
+                  ? vocab.aiSubtitle
+                  : vocab.defaultSubtitle}
               </Text>
 
               {/* Suggestions list */}
@@ -197,7 +265,7 @@ export default function PracticeCreateScreen() {
                             styles.suggestionSkillSelected,
                         ]}
                       >
-                        {SKILL_AREA_LABELS[suggestion.skillArea]}
+                        {skillLabels[suggestion.skillArea] ?? SKILL_AREA_LABELS[suggestion.skillArea as SkillArea] ?? suggestion.skillArea}
                       </Text>
                       <Text style={styles.suggestionReason}>
                         {suggestion.reason}
