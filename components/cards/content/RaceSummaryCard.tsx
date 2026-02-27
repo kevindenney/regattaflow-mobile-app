@@ -1234,7 +1234,10 @@ export function RaceSummaryCard({
           ) : (
             <View style={styles.raceTypeBadge}>
               <Text style={styles.raceTypeBadgeText}>
-                {detectedRaceType?.toUpperCase() || 'FLEET'}
+                {isSailing
+                  ? (detectedRaceType?.toUpperCase() || 'FLEET')
+                  : (eventConfig.eventSubtypes.find(s => s.id === (race as any)?.metadata?.event_subtype)?.label
+                    ?? eventConfig.eventNoun)?.toUpperCase()}
               </Text>
             </View>
           )}
