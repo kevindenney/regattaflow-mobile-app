@@ -10,7 +10,10 @@
  */
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
+
+/** Sidebar starts pinned open at this width; below it starts collapsed */
+const SIDEBAR_PIN_BREAKPOINT = 1024;
 
 interface WebDrawerContextValue {
   isDrawerOpen: boolean;
@@ -33,9 +36,12 @@ const WebDrawerContext = createContext<WebDrawerContextValue>({
 });
 
 export function WebDrawerProvider({ children }: { children: React.ReactNode }) {
-  // Default to open and pinned on web
-  const [isDrawerOpen, setIsDrawerOpen] = useState(Platform.OS === 'web');
-  const [isPinned, setIsPinned] = useState(Platform.OS === 'web');
+  const { width } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  // On wide web: start open + pinned. On narrow web: start closed + unpinned.
+  const isWide = isWeb && width >= SIDEBAR_PIN_BREAKPOINT;
+  const [isDrawerOpen, setIsDrawerOpen] = useState(isWide);
+  const [isPinned, setIsPinned] = useState(isWide);
 
   const openDrawer = useCallback(() => {
     if (Platform.OS === 'web') setIsDrawerOpen(true);
@@ -50,10 +56,12 @@ export function WebDrawerProvider({ children }: { children: React.ReactNode }) {
 
   const toggleDrawer = useCallback(() => {
     if (Platform.OS === 'web') {
-      // If pinned and open, unpinning will allow toggle
-      // If pinned and trying to close, don't close
-      if (isPinned) return;
-      setIsDrawerOpen((prev) => !prev);
+      setIsDrawerOpen((prev) => {
+        const next = !prev;
+        // If closing while pinned, also unpin
+        if (!next && isPinned) setIsPinned(false);
+        return next;
+      });
     }
   }, [isPinned]);
 

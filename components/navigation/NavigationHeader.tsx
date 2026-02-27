@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { useAuth } from '@/providers/AuthProvider';
+import { useWebDrawer } from '@/providers/WebDrawerProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import React, { useState } from 'react';
@@ -34,6 +35,7 @@ export function NavigationHeader({
 }: NavigationHeaderProps) {
   // All hooks must be called unconditionally (React Rules of Hooks)
   const { user, userType, isGuest } = useAuth();
+  const { toggleDrawer, isDrawerOpen } = useWebDrawer();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const { vocabulary } = useVocabulary();
@@ -61,16 +63,16 @@ export function NavigationHeader({
         borderBottom && styles.withBorder
       ]}>
         <View style={styles.navigationContent}>
-          {/* Left: Hamburger Menu (Tufte mode) */}
-          {showDrawer && (user || isGuest) && !isOnboardingPage ? (
+          {/* Left: Hamburger Menu (web only — mobile uses bottom tab bar) */}
+          {showDrawer && (user || isGuest) && !isOnboardingPage && Platform.OS === 'web' ? (
             <TouchableOpacity
               style={styles.hamburgerButton}
-              onPress={() => setDrawerVisible(true)}
+              onPress={toggleDrawer}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel="Open navigation menu"
+              accessibilityLabel={isDrawerOpen ? 'Close sidebar' : 'Open sidebar'}
             >
-              <Ionicons name="menu" size={24} color="#374151" />
+              <Ionicons name={isDrawerOpen ? 'close' : 'menu'} size={24} color="#374151" />
             </TouchableOpacity>
           ) : (
             <View style={styles.spacer} />

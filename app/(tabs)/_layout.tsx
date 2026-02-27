@@ -81,10 +81,11 @@ function TabLayoutInner() {
   pathnameRef.current = pathname;
   const { isDrawerOpen, closeDrawer } = useWebDrawer();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const useWebSidebar =
-    Platform.OS === 'web' &&
-    FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT &&
-    windowWidth >= WEB_SIDEBAR_MIN_WIDTH;
+  // On web: always use sidebar nav (no bottom tab bar).
+  // On narrow web (< 768px) the sidebar starts collapsed; on wide (>= 1024px) it's pinned open.
+  const isWeb = Platform.OS === 'web';
+  const useWebSidebar = isWeb && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
+  const isWideWeb = isWeb && windowWidth >= WEB_SIDEBAR_MIN_WIDTH;
   const insets = useSafeAreaInsets();
   const {
     isTourActive,
