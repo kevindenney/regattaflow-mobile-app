@@ -44,18 +44,18 @@ export const FALLBACK_VOCABULARY: VocabularyMap = {
 // ---------------------------------------------------------------------------
 
 const NURSING_VOCABULARY: VocabularyMap = {
-  'Learning Event': 'Shift',
-  'Plan Phase': 'Pre-Shift',
+  'Learning Event': 'Clinical',
+  'Plan Phase': 'Pre-Clinical',
   'Do Phase': 'On Shift',
-  'Review Phase': 'Post-Shift',
+  'Review Phase': 'Debrief',
   'Practice': 'Skills Lab',
-  'Institution': 'Hospital',
+  'Institution': 'Clinical Site',
   'Coach': 'Preceptor',
-  'Passport': 'Clinical Record',
+  'Passport': 'Clinical Portfolio',
   'Period': 'Rotation',
   'Milestone': 'Competency',
   'Skill': 'Clinical Skill',
-  'Community': 'Unit Forum',
+  'Community': 'Forum',
   'Equipment': 'Clinical Gear',
 };
 

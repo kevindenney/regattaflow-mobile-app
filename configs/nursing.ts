@@ -10,13 +10,13 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   // PHASE LABELS
   // ---------------------------------------------------------------------------
   phaseLabels: {
-    days_before: { full: 'Pre-Shift', short: 'Prep' },
+    days_before: { full: 'Pre-Clinical', short: 'Prep' },
     on_water: { full: 'On Shift', short: 'Clinical' },
-    after_race: { full: 'Post-Shift', short: 'Review' },
+    after_race: { full: 'Debrief', short: 'Debrief' },
   },
 
-  addEventLabel: 'Add Shift',
-  eventNoun: 'Shift',
+  addEventLabel: 'Add Clinical',
+  eventNoun: 'Clinical',
 
   // ---------------------------------------------------------------------------
   // EVENT SUBTYPES
