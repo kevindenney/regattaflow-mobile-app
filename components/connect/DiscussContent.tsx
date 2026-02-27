@@ -96,6 +96,9 @@ const POST_TYPE_FILTERS: (PostType | 'all')[] = [
 interface DiscussContentProps {
   toolbarOffset: number;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  /** Lifted join state from parent */
+  joinedIds: Set<string>;
+  onToggleJoin: (id: string) => void;
 }
 
 // =============================================================================
@@ -141,24 +144,18 @@ function DemoDiscussView({
   onScroll,
   demoData,
   vocab,
+  joinedIds,
+  toggleJoin,
 }: {
   toolbarOffset: number;
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   demoData: InterestConnectData;
   vocab: (term: string) => string;
+  joinedIds: Set<string>;
+  toggleJoin: (id: string) => void;
 }) {
-  const [joinedIds, setJoinedIds] = React.useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = React.useState('');
   const [feedSort, setFeedSort] = React.useState<DemoSortKey>('hot');
-
-  const toggleJoin = React.useCallback((id: string) => {
-    setJoinedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   // Build set of joined community names for filtering posts
   const joinedCommunityNames = React.useMemo(
@@ -365,7 +362,7 @@ const ds = StyleSheet.create({
 // MAIN COMPONENT
 // =============================================================================
 
-export function DiscussContent({ toolbarOffset, onScroll }: DiscussContentProps) {
+export function DiscussContent({ toolbarOffset, onScroll, joinedIds, onToggleJoin }: DiscussContentProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const eventConfig = useInterestEventConfig();
@@ -539,6 +536,8 @@ export function DiscussContent({ toolbarOffset, onScroll }: DiscussContentProps)
         onScroll={onScroll}
         demoData={demoData}
         vocab={vocab}
+        joinedIds={joinedIds}
+        toggleJoin={onToggleJoin}
       />
     );
   }

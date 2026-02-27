@@ -1,14 +1,14 @@
 /**
- * Connect Tab — Merged Follow + Discuss
+ * Connect Tab — People + Forums
  *
  * Two top-level segments:
- * - Follow (default): Discover sailors, manage follows, view activity posts
- * - Discuss: Community feed, browse and join communities
+ * - People (default): Discover peers, manage follows, view activity posts
+ * - Forums: Community feed, browse and join communities
  *
- * Follows the Learn tab pattern with IOSSegmentedControl + conditional render.
+ * Follow/join state is lifted here so it survives tab switches.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,6 +33,8 @@ const CONNECT_SEGMENTS = [
 ];
 
 const STORAGE_KEY = 'regattaflow_connect_segment';
+const FOLLOWED_IDS_KEY = 'regattaflow_connect_followed_ids';
+const JOINED_IDS_KEY = 'regattaflow_connect_joined_ids';
 
 // =============================================================================
 // MAIN COMPONENT
@@ -45,13 +47,51 @@ export default function ConnectTab() {
   const { toolbarHidden, handleScroll } = useScrollToolbarHide();
   const [activeSegment, setActiveSegment] = useState<ConnectSegment>('follow');
 
+  // Shared follow/join state (lifted so it survives People↔Forums tab switches)
+  const [followedIds, setFollowedIds] = useState<Set<string>>(new Set());
+  const [joinedIds, setJoinedIds] = useState<Set<string>>(new Set());
+
+  const toggleFollow = useCallback((id: string) => {
+    setFollowedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      // Persist
+      AsyncStorage.setItem(FOLLOWED_IDS_KEY, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const toggleJoin = useCallback((id: string) => {
+    setJoinedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      // Persist
+      AsyncStorage.setItem(JOINED_IDS_KEY, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const routeSegment = params.segment === 'discuss' ? 'discuss' : params.segment === 'follow' ? 'follow' : null;
 
-  // Load persisted segment on mount
+  // Load persisted state on mount
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((stored) => {
       if (stored === 'follow' || stored === 'discuss') {
         setActiveSegment(stored);
+      }
+    }).catch(() => {});
+
+    AsyncStorage.getItem(FOLLOWED_IDS_KEY).then((stored) => {
+      if (stored) {
+        try { setFollowedIds(new Set(JSON.parse(stored))); } catch {}
+      }
+    }).catch(() => {});
+
+    AsyncStorage.getItem(JOINED_IDS_KEY).then((stored) => {
+      if (stored) {
+        try { setJoinedIds(new Set(JSON.parse(stored))); } catch {}
       }
     }).catch(() => {});
   }, []);
@@ -81,11 +121,15 @@ export default function ConnectTab() {
           toolbarOffset={toolbarHeight}
           onScroll={handleScroll}
           onGoToDiscuss={() => handleSegmentChange('discuss')}
+          followedIds={followedIds}
+          onToggleFollow={toggleFollow}
         />
       ) : (
         <DiscussContent
           toolbarOffset={toolbarHeight}
           onScroll={handleScroll}
+          joinedIds={joinedIds}
+          onToggleJoin={toggleJoin}
         />
       )}
 
