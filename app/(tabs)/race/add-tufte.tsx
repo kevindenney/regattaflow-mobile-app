@@ -687,7 +687,7 @@ export default function AddRaceScreen() {
         start_date: startTime,
         created_by: user.id,
         status: 'planned',
-        race_type: isSailing ? form.raceType : form.eventSubtype,
+        race_type: isSailing ? form.raceType : null,
         vhf_channel: isSailing ? (form.vhfChannel || null) : null,
       };
 
