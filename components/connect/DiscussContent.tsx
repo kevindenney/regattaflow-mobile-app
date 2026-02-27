@@ -147,13 +147,6 @@ function DemoDiscussView({
   demoData: InterestConnectData;
   vocab: (term: string) => string;
 }) {
-  type DemoSegment = 'feed' | 'communities';
-  const DEMO_SEGMENTS: { value: DemoSegment; label: string }[] = [
-    { value: 'feed', label: 'Your Feed' },
-    { value: 'communities', label: 'Browse' },
-  ];
-
-  const [segment, setSegment] = React.useState<DemoSegment>('feed');
   const [joinedIds, setJoinedIds] = React.useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = React.useState('');
   const [feedSort, setFeedSort] = React.useState<DemoSortKey>('hot');
@@ -180,9 +173,13 @@ function DemoDiscussView({
     return sortDemoPosts(filtered, feedSort);
   }, [demoData.posts, joinedCommunityNames, joinedIds.size, feedSort]);
 
-  // Separate joined vs unjoinable communities for the Forum tab
+  // Separate joined vs discoverable communities
   const joinedCommunities = React.useMemo(
     () => demoData.communities.filter((c) => joinedIds.has(c.id)),
+    [demoData.communities, joinedIds],
+  );
+  const discoverCommunities = React.useMemo(
+    () => demoData.communities.filter((c) => !joinedIds.has(c.id)),
     [demoData.communities, joinedIds],
   );
 
@@ -191,141 +188,178 @@ function DemoDiscussView({
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.description.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : demoData.communities;
+    : null; // null = not searching
+
+  const hasJoined = joinedIds.size > 0;
 
   return (
     <View style={styles.container}>
-      {/* Segment + sort */}
-      <View style={{ marginTop: toolbarOffset }}>
-        <View style={styles.segmentContainer}>
-          <IOSSegmentedControl
-            segments={DEMO_SEGMENTS}
-            selectedValue={segment}
-            onValueChange={setSegment}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: toolbarOffset }]}
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+      >
+        {/* Search forums */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={16} color={IOS_COLORS.tertiaryLabel} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={`Search ${vocab('Community').toLowerCase()}s...`}
+            placeholderTextColor={IOS_COLORS.tertiaryLabel}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+            returnKeyType="search"
           />
-          <Text style={styles.segmentHint}>
-            {segment === 'feed'
-              ? 'Posts from forums you\'ve joined'
-              : 'Find and join forums to discuss'}
-          </Text>
         </View>
-        {segment === 'feed' && joinedIds.size > 0 && (
-          <View style={styles.sortPillRow}>
-            {DEMO_SORT_OPTIONS.map((opt) => {
-              const isActive = feedSort === opt.key;
-              return (
-                <Pressable
-                  key={opt.key}
-                  style={[styles.sortPill, isActive && styles.sortPillActive]}
-                  onPress={() => {
-                    triggerHaptic('selection');
-                    setFeedSort(opt.key);
-                  }}
-                >
-                  <Text style={[styles.sortPillText, isActive && styles.sortPillTextActive]}>
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-      </View>
 
-      {segment === 'feed' ? (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingHorizontal: 16, paddingTop: 8 }]}
-          showsVerticalScrollIndicator={false}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-        >
-          {joinedIds.size === 0 ? (
-            <DemoEmptyState
-              icon="chatbubbles-outline"
-              title="Your feed is empty"
-              subtitle={`Join forums to see posts from their members in your feed.`}
-              actionLabel={`Browse ${vocab('Community').toLowerCase()}s`}
-              onAction={() => setSegment('communities')}
-            />
-          ) : feedPosts.length === 0 ? (
-            <DemoEmptyState
-              icon="newspaper-outline"
-              title="No posts yet"
-              subtitle="The forums you joined don't have posts yet. Try joining more forums."
-              actionLabel={`Browse ${vocab('Community').toLowerCase()}s`}
-              onAction={() => setSegment('communities')}
-            />
-          ) : (
-            feedPosts.map((post) => (
-              <DemoPostCard key={post.id} post={post} />
-            ))
-          )}
-        </ScrollView>
-      ) : (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-        >
-          {/* Search */}
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={16} color={IOS_COLORS.tertiaryLabel} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder={`Search ${vocab('Community').toLowerCase()}s...`}
-              placeholderTextColor={IOS_COLORS.tertiaryLabel}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-              clearButtonMode="while-editing"
-              returnKeyType="search"
-            />
-          </View>
-
-          {/* Your Forums (joined) */}
-          {!searchQuery && joinedCommunities.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>YOUR FORUMS</Text>
-              {joinedCommunities.map((community) => (
+        {/* Search results mode */}
+        {filteredCommunities ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>SEARCH RESULTS</Text>
+            {filteredCommunities.length > 0 ? (
+              filteredCommunities.map((community) => (
                 <DemoCommunityCard
                   key={community.id}
                   community={community}
-                  isJoined={true}
+                  isJoined={joinedIds.has(community.id)}
                   onToggleJoin={toggleJoin}
                 />
-              ))}
-            </View>
-          )}
-
-          {/* Discover */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              {searchQuery ? 'SEARCH RESULTS' : 'DISCOVER'}
-            </Text>
-            {filteredCommunities.map((community) => (
-              <DemoCommunityCard
-                key={community.id}
-                community={community}
-                isJoined={joinedIds.has(community.id)}
-                onToggleJoin={toggleJoin}
-              />
-            ))}
-            {filteredCommunities.length === 0 && (
+              ))
+            ) : (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No forums found</Text>
               </View>
             )}
           </View>
-        </ScrollView>
-      )}
+        ) : (
+          <>
+            {/* Your Forums — horizontal chips when joined */}
+            {hasJoined && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  YOUR FORUMS · {joinedCommunities.length}
+                </Text>
+                {joinedCommunities.map((community) => (
+                  <DemoCommunityCard
+                    key={community.id}
+                    community={community}
+                    isJoined={true}
+                    onToggleJoin={toggleJoin}
+                  />
+                ))}
+              </View>
+            )}
+
+            {/* Feed — posts from joined forums */}
+            {hasJoined && (
+              <View style={styles.section}>
+                <View style={ds.feedHeader}>
+                  <Text style={styles.sectionTitle}>DISCUSSION FEED</Text>
+                  <View style={styles.sortPillRow}>
+                    {DEMO_SORT_OPTIONS.map((opt) => {
+                      const isActive = feedSort === opt.key;
+                      return (
+                        <Pressable
+                          key={opt.key}
+                          style={[styles.sortPill, isActive && styles.sortPillActive]}
+                          onPress={() => {
+                            triggerHaptic('selection');
+                            setFeedSort(opt.key);
+                          }}
+                        >
+                          <Text style={[styles.sortPillText, isActive && styles.sortPillTextActive]}>
+                            {opt.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+                <View style={ds.feedContainer}>
+                  {feedPosts.length > 0 ? (
+                    feedPosts.map((post) => (
+                      <DemoPostCard key={post.id} post={post} />
+                    ))
+                  ) : (
+                    <View style={ds.inlineEmpty}>
+                      <Ionicons name="newspaper-outline" size={28} color={IOS_COLORS.tertiaryLabel} />
+                      <Text style={ds.inlineEmptyText}>
+                        No posts in your forums yet. Check back soon.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {/* Discover more forums */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                {hasJoined ? 'DISCOVER MORE FORUMS' : 'JOIN FORUMS TO GET STARTED'}
+              </Text>
+              {!hasJoined && (
+                <Text style={ds.discoverSubtitle}>
+                  Join forums to see posts from their members in your discussion feed.
+                </Text>
+              )}
+              {discoverCommunities.map((community) => (
+                <DemoCommunityCard
+                  key={community.id}
+                  community={community}
+                  isJoined={false}
+                  onToggleJoin={toggleJoin}
+                />
+              ))}
+              {discoverCommunities.length === 0 && (
+                <View style={ds.inlineEmpty}>
+                  <Ionicons name="checkmark-circle-outline" size={28} color={IOS_COLORS.tertiaryLabel} />
+                  <Text style={ds.inlineEmptyText}>You've joined all available forums!</Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
     </View>
   );
 }
+
+/** DemoDiscussView-specific styles */
+const ds = StyleSheet.create({
+  feedHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingRight: IOS_SPACING.lg,
+  },
+  feedContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  inlineEmpty: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  inlineEmptyText: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+  },
+  discoverSubtitle: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    paddingHorizontal: IOS_SPACING.lg,
+    marginBottom: IOS_SPACING.sm,
+    lineHeight: 20,
+  },
+});
 
 // =============================================================================
 // MAIN COMPONENT
@@ -519,11 +553,6 @@ export function DiscussContent({ toolbarOffset, onScroll }: DiscussContentProps)
             selectedValue={segment}
             onValueChange={setSegment}
           />
-          <Text style={styles.segmentHint}>
-            {segment === 'feed'
-              ? 'Posts from communities you\'ve joined'
-              : 'Find and join communities to discuss'}
-          </Text>
         </View>
         {segment === 'feed' && filtersActive && (
           <View style={styles.activeFilterHint}>

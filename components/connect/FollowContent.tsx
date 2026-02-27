@@ -1,9 +1,8 @@
 /**
- * FollowContent — Follow segment for the Connect tab
+ * FollowContent — People segment for the Connect tab
  *
- * Two sub-tabs:
- * - Following (default): Discover peers and manage follows
- * - Posts: Activity timeline from followed peers
+ * Single unified scroll: search → suggested people → activity from followed.
+ * No sub-tabs — discovery is inline, not a separate mode.
  *
  * For sailing: uses live data (SuggestedSailorsSection, WatchFeed).
  * For other interests: renders config-driven demo peers and posts.
@@ -11,6 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,7 +23,6 @@ import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { WatchFeed, DiscoveryFeed } from '@/components/follow';
 import { useFollowActivityFeed } from '@/hooks/useFollowActivityFeed';
 import { SuggestedSailorsSection } from '@/components/search/SuggestedSailorsSection';
-import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 
 import { useSailorSuggestions } from '@/hooks/useSailorSuggestions';
 import {
@@ -34,21 +33,7 @@ import {
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { getConnectDemoData } from '@/configs/connectDemoData';
-import { DemoPeerCard, DemoPostCard, DemoEmptyState } from './DemoCards';
-
-// =============================================================================
-// TYPES & CONSTANTS
-// =============================================================================
-
-type FeedSubTab = 'posts' | 'following';
-
-const FEED_SEGMENTS: { value: FeedSubTab; label: string }[] = [
-  { value: 'following', label: 'Discover' },
-  { value: 'posts', label: 'Activity' },
-];
-
-/** Show search bar when follower count reaches this threshold */
-const SEARCH_THRESHOLD = 20;
+import { DemoPeerCard, DemoPostCard } from './DemoCards';
 
 // =============================================================================
 // PROPS
@@ -71,7 +56,6 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
   const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
   const demoData = useMemo(() => getConnectDemoData(eventConfig.interestSlug), [eventConfig.interestSlug]);
 
-  const [feedSubTab, setFeedSubTab] = useState<FeedSubTab>('following');
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
 
@@ -86,24 +70,15 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
     });
   }, []);
 
+  // Whether to collapse the peer list (show only followed + a "show all" toggle)
+  const [showAllPeers, setShowAllPeers] = useState(true);
+
   // Sailing-specific hooks (only used when sailing is active)
   const { hasFollowing } = useFollowActivityFeed();
   const showDiscoveryFeed = isGuest || !hasFollowing;
   const { suggestions } = useSailorSuggestions();
-  const showSearch = suggestions.length >= SEARCH_THRESHOLD;
 
-  useEffect(() => {
-    if (isGuest && isSailingInterest) {
-      setFeedSubTab((prev) => (prev === 'posts' ? 'following' : prev));
-    }
-  }, [isGuest, isSailingInterest]);
-
-  const handleSubTabChange = (tab: FeedSubTab) => {
-    setFeedSubTab(tab);
-    if (tab !== 'following') setSearchQuery('');
-  };
-
-  // ----- Non-sailing interests: render demo data -----
+  // ----- Non-sailing interests: unified single scroll -----
   if (!isSailingInterest && demoData) {
     const filteredPeers = searchQuery
       ? demoData.peers.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -115,162 +90,146 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
     );
     const followedPosts = demoData.posts.filter((p) => followedNames.has(p.authorName));
 
+    // When user has follows and isn't searching, collapse unfollow'd peers
+    const hasFollows = followedIds.size > 0;
+    const peersToShow = (!searchQuery && hasFollows && !showAllPeers)
+      ? filteredPeers.filter((p) => followedIds.has(p.id))
+      : filteredPeers;
+
     return (
       <View style={styles.container}>
-        <View style={[styles.segmentContainer, { marginTop: toolbarOffset }]}>
-          <IOSSegmentedControl<FeedSubTab>
-            segments={FEED_SEGMENTS}
-            selectedValue={feedSubTab}
-            onValueChange={handleSubTabChange}
-          />
-          <Text style={styles.segmentHint}>
-            {feedSubTab === 'following'
-              ? 'Find classmates and preceptors to follow'
-              : 'Updates from people you follow'}
-          </Text>
-        </View>
-
-        {feedSubTab === 'following' ? (
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Search */}
-            <View style={styles.searchContainer}>
-              <View style={styles.searchBar}>
-                <Ionicons name="search" size={16} color={IOS_COLORS.secondaryLabel} style={styles.searchIcon} />
-                <TextInput
-                  ref={searchInputRef}
-                  style={styles.searchInput}
-                  placeholder={demoData.searchPlaceholder}
-                  placeholderTextColor={IOS_COLORS.secondaryLabel}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  clearButtonMode="while-editing"
-                  returnKeyType="search"
-                />
-              </View>
-            </View>
-
-            {/* Header */}
-            <View style={s.peerHeader}>
-              <Text style={s.peerHeaderText}>
-                {filteredPeers.length} {demoData.peersHeader}
-              </Text>
-              {followedIds.size > 0 && (
-                <Text style={s.followingCount}>
-                  {followedIds.size} following
-                </Text>
-              )}
-            </View>
-
-            {/* Peer cards */}
-            {filteredPeers.map((peer) => (
-              <DemoPeerCard
-                key={peer.id}
-                peer={peer}
-                isFollowing={followedIds.has(peer.id)}
-                onToggleFollow={toggleFollow}
-              />
-            ))}
-          </ScrollView>
-        ) : (
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={[styles.scrollContent, { paddingHorizontal: 16, paddingTop: 8 }]}
-            showsVerticalScrollIndicator={false}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-          >
-            {followedIds.size === 0 ? (
-              <DemoEmptyState
-                icon="newspaper-outline"
-                title="No posts yet"
-                subtitle="Follow classmates and preceptors to see their activity and shared reflections here."
-                actionLabel="Find people to follow"
-                onAction={() => handleSubTabChange('following')}
-              />
-            ) : (
-              <>
-                {/* Show posts from followed peers */}
-                {followedPosts.length > 0 ? (
-                  followedPosts.map((post) => (
-                    <DemoPostCard key={post.id} post={post} />
-                  ))
-                ) : (
-                  <DemoEmptyState
-                    icon="newspaper-outline"
-                    title="No posts from people you follow"
-                    subtitle="The people you follow haven't posted yet. Check back soon."
-                  />
-                )}
-              </>
-            )}
-          </ScrollView>
-        )}
-      </View>
-    );
-  }
-
-  // ----- Sailing: live data -----
-  return (
-    <View style={styles.container}>
-      <View style={[styles.segmentContainer, { marginTop: toolbarOffset }]}>
-        <IOSSegmentedControl<FeedSubTab>
-          segments={FEED_SEGMENTS}
-          selectedValue={feedSubTab}
-          onValueChange={handleSubTabChange}
-        />
-        <Text style={styles.segmentHint}>
-          {feedSubTab === 'following'
-            ? 'Find sailors to follow'
-            : 'Updates from people you follow'}
-        </Text>
-      </View>
-
-      {feedSubTab === 'following' ? (
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: toolbarOffset }]}
           showsVerticalScrollIndicator={false}
           onScroll={onScroll}
           scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
         >
-          {showSearch && (
-            <View style={styles.searchContainer}>
-              <View style={styles.searchBar}>
-                <Ionicons name="search" size={16} color={IOS_COLORS.secondaryLabel} style={styles.searchIcon} />
-                <TextInput
-                  ref={searchInputRef}
-                  style={styles.searchInput}
-                  placeholder="Search sailors"
-                  placeholderTextColor={IOS_COLORS.secondaryLabel}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  clearButtonMode="while-editing"
-                  returnKeyType="search"
-                />
-              </View>
+          {/* Search */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <Ionicons name="search" size={16} color={IOS_COLORS.secondaryLabel} style={styles.searchIcon} />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder={demoData.searchPlaceholder}
+                placeholderTextColor={IOS_COLORS.secondaryLabel}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                returnKeyType="search"
+              />
             </View>
+          </View>
+
+          {/* People section */}
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionHeaderText}>
+              {searchQuery ? 'SEARCH RESULTS' : demoData.peersHeader.toUpperCase()}
+            </Text>
+            {hasFollows && !searchQuery && (
+              <Text style={s.followingCount}>
+                {followedIds.size} following
+              </Text>
+            )}
+          </View>
+
+          {peersToShow.map((peer) => (
+            <DemoPeerCard
+              key={peer.id}
+              peer={peer}
+              isFollowing={followedIds.has(peer.id)}
+              onToggleFollow={toggleFollow}
+            />
+          ))}
+
+          {/* Show all / show less toggle when user has follows */}
+          {hasFollows && !searchQuery && (
+            <Pressable
+              style={s.showToggle}
+              onPress={() => setShowAllPeers((v) => !v)}
+            >
+              <Text style={s.showToggleText}>
+                {showAllPeers
+                  ? `Show only following (${followedIds.size})`
+                  : `Show all ${demoData.peersHeader.toLowerCase()} (${demoData.peers.length})`}
+              </Text>
+              <Ionicons
+                name={showAllPeers ? 'chevron-up' : 'chevron-down'}
+                size={14}
+                color="#2563EB"
+              />
+            </Pressable>
           )}
-          <SuggestedSailorsSection searchQuery={searchQuery} />
+
+          {/* Activity section — posts from followed people */}
+          {hasFollows && (
+            <>
+              <View style={[s.sectionHeader, { marginTop: 8 }]}>
+                <Text style={s.sectionHeaderText}>RECENT ACTIVITY</Text>
+              </View>
+
+              <View style={s.activityContainer}>
+                {followedPosts.length > 0 ? (
+                  followedPosts.map((post) => (
+                    <DemoPostCard key={post.id} post={post} />
+                  ))
+                ) : (
+                  <View style={s.inlineEmpty}>
+                    <Ionicons name="newspaper-outline" size={28} color={IOS_COLORS.tertiaryLabel} />
+                    <Text style={s.inlineEmptyText}>
+                      No posts from people you follow yet. Check back soon.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </>
+          )}
         </ScrollView>
-      ) : (
+      </View>
+    );
+  }
+
+  // ----- Sailing: live data (keep existing dual-view for now) -----
+  return (
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: toolbarOffset }]}
+        showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
+      >
+        {suggestions.length > 0 && (
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <Ionicons name="search" size={16} color={IOS_COLORS.secondaryLabel} style={styles.searchIcon} />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Search sailors"
+                placeholderTextColor={IOS_COLORS.secondaryLabel}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                returnKeyType="search"
+              />
+            </View>
+          </View>
+        )}
+        <SuggestedSailorsSection searchQuery={searchQuery} />
+      </ScrollView>
+
+      {/* Sailing activity feed overlays below if user has follows */}
+      {!isGuest && hasFollowing && (
         <View style={styles.watchFeedContainer}>
-          {showDiscoveryFeed ? (
-            <DiscoveryFeed onScroll={onScroll} />
-          ) : (
-            <WatchFeed hideEmptySuggestions />
-          )}
+          <WatchFeed hideEmptySuggestions />
         </View>
       )}
     </View>
@@ -286,20 +245,9 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 120 },
   watchFeedContainer: { flex: 1 },
-  segmentContainer: {
-    paddingHorizontal: IOS_SPACING.lg,
-    paddingTop: IOS_SPACING.xs,
-    paddingBottom: IOS_SPACING.sm,
-  },
-  segmentHint: {
-    fontSize: 12,
-    color: IOS_COLORS.secondaryLabel,
-    textAlign: 'center',
-    marginTop: 6,
-  },
   searchContainer: {
     paddingHorizontal: IOS_SPACING.lg,
-    paddingTop: IOS_SPACING.md,
+    paddingTop: IOS_SPACING.sm,
     paddingBottom: IOS_SPACING.xs,
   },
   searchBar: {
@@ -321,7 +269,7 @@ const styles = StyleSheet.create({
 
 /** Demo-specific styles */
 const s = StyleSheet.create({
-  peerHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -329,16 +277,44 @@ const s = StyleSheet.create({
     paddingTop: IOS_SPACING.md,
     paddingBottom: IOS_SPACING.sm,
   },
-  peerHeaderText: {
+  sectionHeaderText: {
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.5,
-    textTransform: 'uppercase',
     color: IOS_COLORS.secondaryLabel,
   },
   followingCount: {
     fontSize: 13,
     fontWeight: '600',
     color: '#2563EB',
+  },
+  showToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: IOS_COLORS.separator,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+  },
+  showToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#2563EB',
+  },
+  activityContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  inlineEmpty: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  inlineEmptyText: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
   },
 });
