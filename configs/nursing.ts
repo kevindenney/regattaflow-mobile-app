@@ -25,6 +25,16 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   eventSubtypes: [
     {
+      id: 'blank_activity',
+      label: 'Blank Activity',
+      icon: 'add-circle-outline',
+      description: 'Create your own — define what, why, who, and how',
+      formFields: [
+        { id: 'date', type: 'date', label: 'Date', required: true },
+        { id: 'title', type: 'text', label: 'Activity Title', placeholder: 'Name this activity', required: true },
+      ],
+    },
+    {
       id: 'clinical_shift',
       label: 'Clinical Shift',
       icon: 'medical-bag',
@@ -175,12 +185,42 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
     },
   ],
 
-  defaultSubtype: 'clinical_shift',
+  defaultSubtype: 'blank_activity',
 
   // ---------------------------------------------------------------------------
   // MODULE INFO
   // ---------------------------------------------------------------------------
   moduleInfo: {
+    // ── What / Why / Who / How plan modules ──
+    plan_what: {
+      id: 'plan_what',
+      label: 'What',
+      shortLabel: 'What',
+      icon: 'help-circle-outline',
+      description: 'What activity are you doing? Describe the task or skill',
+    },
+    plan_why: {
+      id: 'plan_why',
+      label: 'Why',
+      shortLabel: 'Why',
+      icon: 'bulb-outline',
+      description: 'Why are you doing this? Learning objectives and rationale',
+    },
+    plan_who: {
+      id: 'plan_who',
+      label: 'Who',
+      shortLabel: 'Who',
+      icon: 'people-outline',
+      description: 'Who is involved? Patients, preceptor, team members',
+    },
+    plan_how: {
+      id: 'plan_how',
+      label: 'How',
+      shortLabel: 'How',
+      icon: 'map-outline',
+      description: 'How will you approach it? Resources, tools, technique',
+    },
+    // ── Existing prep modules ──
     patient_overview: {
       id: 'patient_overview',
       label: 'Patient Overview',
@@ -258,6 +298,36 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
       icon: 'share-variant',
       description: 'Share plan before shift',
     },
+    // ── Experience / media capture modules ──
+    progress_photos: {
+      id: 'progress_photos',
+      label: 'Photos',
+      shortLabel: 'Photos',
+      icon: 'camera',
+      description: 'De-identified photos of skills, setups, or documentation',
+    },
+    voice_memo: {
+      id: 'voice_memo',
+      label: 'Voice Memo',
+      shortLabel: 'Voice',
+      icon: 'mic',
+      description: 'Quick voice notes and verbal reflections',
+    },
+    video_capture: {
+      id: 'video_capture',
+      label: 'Video',
+      shortLabel: 'Video',
+      icon: 'videocam',
+      description: 'Record skill demonstrations or sim scenarios',
+    },
+    text_notes: {
+      id: 'text_notes',
+      label: 'Notes',
+      shortLabel: 'Notes',
+      icon: 'create',
+      description: 'Written observations and clinical reasoning',
+    },
+    // ── Existing during-shift modules ──
     competency_log: {
       id: 'competency_log',
       label: 'Competency Log',
@@ -293,12 +363,45 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
       icon: 'timer',
       description: 'Clinical hours tracking auto-running',
     },
+    // ── Reflect / debrief modules ──
+    gibbs_reflection: {
+      id: 'gibbs_reflection',
+      label: 'Gibbs Reflection',
+      shortLabel: 'Gibbs',
+      icon: 'sync-circle',
+      description: 'Structured reflection using the Gibbs reflective cycle',
+    },
+    clinical_reasoning: {
+      id: 'clinical_reasoning',
+      label: 'Clinical Reasoning',
+      shortLabel: 'Reasoning',
+      icon: 'git-network',
+      description: 'Document your clinical decision-making process',
+    },
+    ebp_connection: {
+      id: 'ebp_connection',
+      label: 'Evidence-Based Practice',
+      shortLabel: 'EBP',
+      icon: 'library',
+      description: 'Connect your experience to research and best practices',
+    },
+    self_assessment: {
+      id: 'self_assessment',
+      label: 'Self-Assessment',
+      shortLabel: 'Self',
+      icon: 'analytics',
+      description: 'Rate your confidence and identify growth areas',
+    },
   },
 
   // ---------------------------------------------------------------------------
   // MODULE HEIGHTS (uniform for nursing)
   // ---------------------------------------------------------------------------
   moduleHeights: {
+    plan_what: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    plan_why: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    plan_who: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    plan_how: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     patient_overview: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     medications: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     procedures: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
@@ -310,11 +413,19 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
     preceptor_goals: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     drug_reference: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     share_with_preceptor: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    progress_photos: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    voice_memo: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    video_capture: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    text_notes: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     competency_log: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     learning_notes: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     preceptor_feedback: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     clinical_hours: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
     time_log: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    gibbs_reflection: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    clinical_reasoning: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    ebp_connection: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
+    self_assessment: { collapsed: 48, minExpanded: 100, maxExpanded: 200 },
   },
 
   // ---------------------------------------------------------------------------
@@ -324,6 +435,10 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
     days_before: {
       phase: 'days_before',
       availableModules: [
+        'plan_what',
+        'plan_why',
+        'plan_who',
+        'plan_how',
         'patient_overview',
         'medications',
         'procedures',
@@ -337,45 +452,57 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
         'share_with_preceptor',
       ],
       defaultModules: [
-        'patient_overview',
-        'medications',
-        'procedures',
-        'clinical_objectives',
-        'checklist',
+        'plan_what',
+        'plan_why',
+        'plan_who',
+        'plan_how',
       ],
-      maxModules: 6,
+      maxModules: 8,
     },
     on_water: {
       phase: 'on_water',
       availableModules: [
+        'progress_photos',
+        'voice_memo',
+        'video_capture',
+        'text_notes',
+        'time_log',
+        'competency_log',
         'patient_overview',
         'clinical_objectives',
         'medications',
         'procedures',
-        'time_log',
       ],
       defaultModules: [
-        'patient_overview',
-        'clinical_objectives',
+        'progress_photos',
+        'voice_memo',
+        'text_notes',
+        'time_log',
       ],
-      maxModules: 3,
+      maxModules: 6,
     },
     after_race: {
       phase: 'after_race',
       availableModules: [
+        'gibbs_reflection',
+        'clinical_reasoning',
+        'ebp_connection',
+        'self_assessment',
         'competency_log',
         'learning_notes',
-        'patient_overview',
-        'clinical_objectives',
         'preceptor_feedback',
         'clinical_hours',
+        'patient_overview',
+        'clinical_objectives',
         'medications',
       ],
       defaultModules: [
-        'competency_log',
+        'gibbs_reflection',
+        'clinical_reasoning',
+        'self_assessment',
         'learning_notes',
       ],
-      maxModules: 4,
+      maxModules: 6,
     },
   },
 
@@ -383,9 +510,33 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   // SUBTYPE OVERRIDES
   // ---------------------------------------------------------------------------
   subtypeOverrides: {
+    blank_activity: {
+      subtypeId: 'blank_activity',
+      // Uses the What/Why/Who/How defaults — no overrides needed
+    },
     clinical_shift: {
       subtypeId: 'clinical_shift',
-      // No overrides — uses defaults
+      phaseDefaultOverrides: {
+        days_before: [
+          'patient_overview',
+          'medications',
+          'procedures',
+          'clinical_objectives',
+          'checklist',
+        ],
+        on_water: [
+          'text_notes',
+          'time_log',
+          'competency_log',
+        ],
+        after_race: [
+          'gibbs_reflection',
+          'competency_log',
+          'learning_notes',
+          'preceptor_feedback',
+          'clinical_hours',
+        ],
+      },
     },
     skills_lab: {
       subtypeId: 'skills_lab',
@@ -464,83 +615,35 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   // DEBRIEF PHASES
   // ---------------------------------------------------------------------------
   debriefPhases: [
-    // Phase 1: Preparation
+    // Phase 1: Description (Gibbs Stage 1)
     {
-      id: 'preparation',
-      title: 'Preparation',
-      emoji: '\u2699\uFE0F',
-      description: 'How prepared were you for this shift?',
+      id: 'description',
+      title: 'Description',
+      emoji: '\uD83D\uDCCB',
+      description: 'What happened?',
       questions: [
         {
-          id: 'prep_readiness',
+          id: 'desc_what_happened',
+          type: 'textarea',
+          label: 'Describe the key event or experience',
+          placeholder: 'What happened? Who was involved? What did you do? What was the outcome?',
+        },
+        {
+          id: 'desc_context',
           type: 'select',
-          label: 'How prepared were you?',
+          label: 'What type of experience was this?',
           options: [
-            { value: 'fully', label: 'Fully prepared \u2014 reviewed everything' },
-            { value: 'mostly', label: 'Mostly prepared \u2014 a few gaps' },
-            { value: 'somewhat', label: 'Somewhat prepared \u2014 ran out of time' },
-            { value: 'underprepared', label: 'Underprepared \u2014 need to improve' },
+            { value: 'routine', label: 'Routine care \u2014 expected situation' },
+            { value: 'challenging', label: 'Challenging \u2014 stretched my abilities' },
+            { value: 'critical', label: 'Critical moment \u2014 required quick thinking' },
+            { value: 'new', label: 'First time \u2014 new skill or situation' },
+            { value: 'collaborative', label: 'Collaborative \u2014 team-based care' },
           ],
         },
         {
-          id: 'prep_meds_reviewed',
-          type: 'boolean',
-          label: 'Did you review all patient medications?',
-        },
-        {
-          id: 'prep_meds_issues',
-          type: 'textarea',
-          label: 'What medication questions did you have?',
-          placeholder: 'Describe any medication concerns or questions...',
-          showWhen: { questionId: 'prep_meds_reviewed', answerIn: ['false'] },
-        },
-      ],
-    },
-
-    // Phase 2: Assessment
-    {
-      id: 'assessment',
-      title: 'Assessment',
-      emoji: '\uD83E\uDE7A',
-      description: 'How were your patient assessments?',
-      questions: [
-        {
-          id: 'assessment_confidence',
-          type: 'select',
-          label: 'How confident were you in your assessments?',
-          options: [
-            { value: 'very_confident', label: 'Very confident \u2014 thorough and systematic' },
-            { value: 'confident', label: 'Confident \u2014 covered the essentials' },
-            { value: 'somewhat', label: 'Somewhat confident \u2014 missed some areas' },
-            { value: 'not_confident', label: 'Not confident \u2014 need more practice' },
-          ],
-        },
-        {
-          id: 'assessment_changes',
-          type: 'boolean',
-          label: 'Did you notice changes in patient condition?',
-        },
-        {
-          id: 'assessment_changes_detail',
-          type: 'textarea',
-          label: 'What changes did you notice and how did you respond?',
-          placeholder: 'Describe the changes and your response...',
-          showWhen: { questionId: 'assessment_changes', answerIn: ['true'] },
-        },
-      ],
-    },
-
-    // Phase 3: Interventions
-    {
-      id: 'interventions',
-      title: 'Interventions',
-      emoji: '\uD83D\uDC89',
-      description: 'Procedures and medications',
-      questions: [
-        {
-          id: 'interventions_performed',
+          id: 'desc_interventions',
           type: 'multi-select',
-          label: 'What interventions did you perform?',
+          label: 'Skills or interventions involved',
           hint: 'Select all that apply',
           options: [
             { value: 'vital_signs', label: 'Vital Signs' },
@@ -550,165 +653,178 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
             { value: 'foley_catheter', label: 'Foley Catheter' },
             { value: 'blood_draw', label: 'Blood Draw' },
             { value: 'patient_education', label: 'Patient Education' },
-            { value: 'nasogastric_tube', label: 'Nasogastric Tube' },
-            { value: 'blood_glucose_monitoring', label: 'Blood Glucose Monitoring' },
-            { value: 'other_procedure', label: 'Other Procedure' },
-          ],
-        },
-        {
-          id: 'interventions_confidence',
-          type: 'select',
-          label: 'How confident were you performing interventions?',
-          options: [
-            { value: 'very_confident', label: 'Very confident \u2014 smooth execution' },
-            { value: 'confident', label: 'Confident \u2014 minor hesitations' },
-            { value: 'somewhat', label: 'Somewhat confident \u2014 needed guidance' },
-            { value: 'not_confident', label: 'Not confident \u2014 struggled' },
-          ],
-        },
-        {
-          id: 'interventions_med_events',
-          type: 'boolean',
-          label: 'Any medication-related events or near-misses?',
-        },
-        {
-          id: 'interventions_med_detail',
-          type: 'textarea',
-          label: 'Describe what happened',
-          placeholder: 'Describe the medication event or near-miss...',
-          showWhen: { questionId: 'interventions_med_events', answerIn: ['true'] },
-        },
-      ],
-    },
-
-    // Phase 4: Communication
-    {
-      id: 'communication',
-      title: 'Communication',
-      emoji: '\uD83D\uDCAC',
-      description: 'Team and patient communication',
-      questions: [
-        {
-          id: 'communication_sbar',
-          type: 'select',
-          label: 'How was your SBAR communication?',
-          options: [
-            { value: 'excellent', label: 'Excellent \u2014 clear and complete' },
-            { value: 'good', label: 'Good \u2014 covered main points' },
-            { value: 'fair', label: 'Fair \u2014 missed some details' },
-            { value: 'needs_improvement', label: 'Needs improvement' },
-          ],
-        },
-        {
-          id: 'communication_team',
-          type: 'boolean',
-          label: 'Any difficult team interactions?',
-        },
-        {
-          id: 'communication_team_detail',
-          type: 'textarea',
-          label: 'What happened?',
-          placeholder: 'Describe the team interaction...',
-          showWhen: { questionId: 'communication_team', answerIn: ['true'] },
-        },
-      ],
-    },
-
-    // Phase 5: Time Management
-    {
-      id: 'time_management',
-      title: 'Time Management',
-      emoji: '\u23F1\uFE0F',
-      description: 'How did you manage your time?',
-      questions: [
-        {
-          id: 'time_organized',
-          type: 'select',
-          label: 'How organized were you?',
-          options: [
-            { value: 'very_organized', label: 'Very organized \u2014 ahead of schedule' },
-            { value: 'organized', label: 'Organized \u2014 on time' },
-            { value: 'somewhat', label: 'Somewhat organized \u2014 fell behind' },
-            { value: 'disorganized', label: 'Disorganized \u2014 need a better system' },
-          ],
-        },
-        {
-          id: 'time_documentation',
-          type: 'boolean',
-          label: 'Did you complete documentation during the shift?',
-        },
-      ],
-    },
-
-    // Phase 6: Safety
-    {
-      id: 'safety',
-      title: 'Safety',
-      emoji: '\uD83D\uDEE1\uFE0F',
-      description: 'Patient safety awareness',
-      questions: [
-        {
-          id: 'safety_concerns',
-          type: 'boolean',
-          label: 'Any safety concerns during the shift?',
-        },
-        {
-          id: 'safety_concern_detail',
-          type: 'textarea',
-          label: 'What safety concerns did you have?',
-          placeholder: 'Describe any safety concerns...',
-          showWhen: { questionId: 'safety_concerns', answerIn: ['true'] },
-        },
-        {
-          id: 'safety_protocols',
-          type: 'select',
-          label: 'How well did you follow safety protocols?',
-          options: [
-            { value: 'followed_all', label: 'Followed all protocols' },
-            { value: 'minor_deviations', label: 'Minor protocol deviations' },
-            { value: 'missed_step', label: 'Missed a protocol step' },
-            { value: 'unsure', label: 'Unsure about a protocol' },
+            { value: 'assessment', label: 'Head-to-Toe Assessment' },
+            { value: 'sbar_handoff', label: 'SBAR Handoff' },
+            { value: 'documentation', label: 'Documentation' },
+            { value: 'other', label: 'Other' },
           ],
         },
       ],
     },
 
-    // Phase 7: Overall Reflection
+    // Phase 2: Feelings (Gibbs Stage 2)
     {
-      id: 'overall',
-      title: 'Overall Reflection',
-      emoji: '\uD83D\uDCDD',
-      description: 'Looking back at the whole shift',
+      id: 'feelings',
+      title: 'Feelings',
+      emoji: '\uD83D\uDCAD',
+      description: 'What were you thinking and feeling?',
       questions: [
         {
-          id: 'overall_feeling',
+          id: 'feelings_during',
           type: 'select',
-          label: 'How do you feel about this shift overall?',
+          label: 'How did you feel during the experience?',
           options: [
-            { value: 'great', label: 'Great \u2014 confident and capable' },
-            { value: 'good', label: 'Good \u2014 solid learning day' },
-            { value: 'mixed', label: 'Mixed \u2014 some wins some struggles' },
-            { value: 'tough', label: 'Tough \u2014 challenging shift' },
-            { value: 'learning_moment', label: 'Learning moment \u2014 significant growth' },
+            { value: 'confident', label: 'Confident \u2014 I knew what to do' },
+            { value: 'nervous', label: 'Nervous \u2014 but managed it' },
+            { value: 'overwhelmed', label: 'Overwhelmed \u2014 a lot happening at once' },
+            { value: 'curious', label: 'Curious \u2014 wanted to learn more' },
+            { value: 'uncertain', label: 'Uncertain \u2014 unsure of my decisions' },
+            { value: 'empowered', label: 'Empowered \u2014 making a real difference' },
           ],
         },
         {
-          id: 'overall_strongest',
+          id: 'feelings_now',
           type: 'textarea',
-          label: 'What was your strongest moment?',
-          placeholder: 'Describe your best moment from this shift...',
+          label: 'How do you feel about it now, looking back?',
+          placeholder: 'Has your perspective changed since the experience?',
+        },
+      ],
+    },
+
+    // Phase 3: Evaluation (Gibbs Stage 3)
+    {
+      id: 'evaluation',
+      title: 'Evaluation',
+      emoji: '\u2696\uFE0F',
+      description: 'What was good and bad about the experience?',
+      questions: [
+        {
+          id: 'eval_went_well',
+          type: 'textarea',
+          label: 'What went well?',
+          placeholder: 'What aspects of the experience were positive?',
         },
         {
-          id: 'overall_improve',
+          id: 'eval_challenges',
           type: 'textarea',
-          label: 'One thing to improve for next shift?',
-          placeholder: 'What would you focus on improving...',
+          label: 'What was challenging or could have gone better?',
+          placeholder: 'What aspects were difficult or did not go as planned?',
         },
         {
-          id: 'overall_key_learning',
+          id: 'eval_safety',
+          type: 'select',
+          label: 'Patient safety during this experience',
+          options: [
+            { value: 'no_concerns', label: 'No safety concerns' },
+            { value: 'minor_concern', label: 'Minor concern \u2014 caught and addressed' },
+            { value: 'near_miss', label: 'Near miss \u2014 important learning moment' },
+            { value: 'concern_raised', label: 'Safety concern raised with preceptor' },
+          ],
+        },
+      ],
+    },
+
+    // Phase 4: Analysis (Gibbs Stage 4)
+    {
+      id: 'analysis',
+      title: 'Analysis',
+      emoji: '\uD83D\uDD2C',
+      description: 'What sense can you make of the situation?',
+      questions: [
+        {
+          id: 'analysis_clinical_reasoning',
           type: 'textarea',
-          label: 'Key learning from this shift?',
-          placeholder: 'What is the most important thing you learned...',
+          label: 'What was your clinical reasoning?',
+          placeholder: 'Walk through your thought process. What data did you gather? What did you prioritize and why?',
+        },
+        {
+          id: 'analysis_theory_connection',
+          type: 'textarea',
+          label: 'How does this connect to what you have learned in class?',
+          placeholder: 'Link to nursing theory, pathophysiology, pharmacology, or evidence-based practice...',
+        },
+        {
+          id: 'analysis_communication',
+          type: 'select',
+          label: 'How effective was your communication?',
+          options: [
+            { value: 'excellent', label: 'Excellent \u2014 clear SBAR, good therapeutic communication' },
+            { value: 'good', label: 'Good \u2014 conveyed main points effectively' },
+            { value: 'developing', label: 'Developing \u2014 some gaps in communication' },
+            { value: 'needs_work', label: 'Needs work \u2014 significant communication challenges' },
+          ],
+        },
+      ],
+    },
+
+    // Phase 5: Conclusion (Gibbs Stage 5)
+    {
+      id: 'conclusion',
+      title: 'Conclusion',
+      emoji: '\uD83C\uDFAF',
+      description: 'What else could you have done?',
+      questions: [
+        {
+          id: 'conclusion_key_learning',
+          type: 'textarea',
+          label: 'What is the most important thing you learned?',
+          placeholder: 'The single biggest takeaway from this experience...',
+        },
+        {
+          id: 'conclusion_different',
+          type: 'textarea',
+          label: 'What would you do differently next time?',
+          placeholder: 'If you faced the same situation again, what would you change?',
+        },
+        {
+          id: 'conclusion_confidence',
+          type: 'select',
+          label: 'How has this experience affected your confidence?',
+          options: [
+            { value: 'much_more', label: 'Much more confident' },
+            { value: 'somewhat_more', label: 'Somewhat more confident' },
+            { value: 'same', label: 'About the same' },
+            { value: 'identified_gaps', label: 'Identified gaps to work on' },
+          ],
+        },
+      ],
+    },
+
+    // Phase 6: Action Plan (Gibbs Stage 6)
+    {
+      id: 'action_plan',
+      title: 'Action Plan',
+      emoji: '\uD83D\uDE80',
+      description: 'What will you do going forward?',
+      questions: [
+        {
+          id: 'action_next_steps',
+          type: 'textarea',
+          label: 'What specific steps will you take to improve?',
+          placeholder: 'Concrete actions: review a topic, practice a skill, discuss with preceptor...',
+        },
+        {
+          id: 'action_resources',
+          type: 'textarea',
+          label: 'What resources do you need?',
+          placeholder: 'Textbook chapters, articles, simulation time, preceptor mentoring...',
+        },
+        {
+          id: 'action_ebp',
+          type: 'boolean',
+          label: 'Did this experience prompt you to look up evidence or guidelines?',
+        },
+        {
+          id: 'action_ebp_detail',
+          type: 'textarea',
+          label: 'What did you find?',
+          placeholder: 'Summarize the evidence or guideline and how it applies...',
+          showWhen: { questionId: 'action_ebp', answerIn: ['true'] },
+        },
+        {
+          id: 'action_preceptor_discuss',
+          type: 'boolean',
+          label: 'Would you like to discuss this with your preceptor?',
         },
       ],
     },
@@ -747,26 +863,33 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   evidenceCapture: {
     primaryCapture: {
-      id: 'activity_log',
-      label: 'Activity Log',
-      icon: 'list',
-      type: 'activity_log',
-      description: 'Structured tap-based activity logging during shift',
+      id: 'progress_photos',
+      label: 'Photos',
+      icon: 'camera',
+      type: 'photo',
+      description: 'De-identified photos of skills, setups, or documentation',
     },
     secondaryCapture: [
       {
         id: 'voice_memo',
         label: 'Voice Memo',
-        icon: 'microphone',
+        icon: 'mic',
         type: 'audio',
-        description: 'Quick voice notes during shift',
+        description: 'Quick voice notes and verbal reflections',
+      },
+      {
+        id: 'video_capture',
+        label: 'Video',
+        icon: 'videocam',
+        type: 'video',
+        description: 'Record skill demonstrations or sim scenarios',
       },
       {
         id: 'text_notes',
-        label: 'Text Notes',
-        icon: 'pencil',
+        label: 'Notes',
+        icon: 'create',
         type: 'text',
-        description: 'Written notes and observations',
+        description: 'Written observations and clinical reasoning',
       },
       {
         id: 'clinical_hours_timer',
@@ -777,13 +900,13 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
       },
       {
         id: 'competency_attempt_markers',
-        label: 'Competency Attempt Markers',
+        label: 'Competency Markers',
         icon: 'checkbox-marked-outline',
         type: 'activity_log',
-        description: 'Mark competency attempts during shift',
+        description: 'Mark competency attempts during activity',
       },
     ],
-    privacyNote: 'HIPAA \u2014 No photos, video, or patient names. Reference patients by assigned number only.',
+    privacyNote: 'HIPAA — No patient identifiers in photos or video. De-identify all media. Reference patients by assigned number only.',
   },
 
   // ---------------------------------------------------------------------------
@@ -823,6 +946,12 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   tileSections: {
     days_before: [
       {
+        id: 'plan-framework',
+        label: 'Your Plan',
+        subtitle: 'Define what, why, who, and how',
+        moduleIds: ['plan_what', 'plan_why', 'plan_who', 'plan_how'],
+      },
+      {
         id: 'patient-care',
         label: 'Patient Care',
         subtitle: 'Patients, medications, and lab values',
@@ -843,17 +972,29 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
     ],
     on_water: [
       {
-        id: 'active-shift',
-        label: 'Active Shift',
-        subtitle: 'Patient status and clinical tasks',
-        moduleIds: ['patient_overview', 'clinical_objectives', 'medications', 'time_log'],
+        id: 'capture',
+        label: 'Capture',
+        subtitle: 'Record your experience as it happens',
+        moduleIds: ['progress_photos', 'voice_memo', 'video_capture', 'text_notes'],
+      },
+      {
+        id: 'track',
+        label: 'Track',
+        subtitle: 'Time, skills, and clinical tasks',
+        moduleIds: ['time_log', 'competency_log', 'clinical_objectives'],
       },
     ],
     after_race: [
       {
-        id: 'shift-review',
-        label: 'Shift Review',
-        subtitle: 'Competencies, notes, and feedback',
+        id: 'reflection',
+        label: 'Structured Reflection',
+        subtitle: 'Gibbs cycle, clinical reasoning, and evidence connection',
+        moduleIds: ['gibbs_reflection', 'clinical_reasoning', 'ebp_connection', 'self_assessment'],
+      },
+      {
+        id: 'outcomes',
+        label: 'Outcomes',
+        subtitle: 'Competencies, feedback, and hours',
         moduleIds: ['competency_log', 'learning_notes', 'preceptor_feedback', 'clinical_hours'],
       },
     ],
