@@ -17,6 +17,7 @@ import { PrepTile } from '@/components/races/prep/PrepTile';
 import type { InterestEventConfig, TileSectionConfig } from '@/types/interestEventConfig';
 import type { RacePhase } from '@/components/cards/types';
 import type { CardRaceData } from '@/components/cards/types';
+import type { ModuleContentSummary } from '@/components/races/ModuleDetailBottomSheet';
 
 // =============================================================================
 // ICON MAPPING
@@ -180,6 +181,7 @@ function GenericModuleTile({
   description,
   accentColor,
   onPress,
+  content,
 }: {
   moduleId: string;
   label: string;
@@ -188,21 +190,53 @@ function GenericModuleTile({
   description: string;
   accentColor: string;
   onPress: () => void;
+  content?: ModuleContentSummary;
 }) {
   const IconComponent = resolveIcon(icon);
+  const hasContent = content && (content.notes.trim().length > 0 || content.attachmentCount > 0);
+
+  // Build hint text: show content preview when available, otherwise description
+  let hintText: string;
+  if (hasContent) {
+    const parts: string[] = [];
+    if (content.notes.trim()) {
+      const preview = content.notes.trim().replace(/\n/g, ' ');
+      parts.push(preview.length > 24 ? preview.slice(0, 22) + '...' : preview);
+    }
+    if (content.attachmentCount > 0) {
+      parts.push(`${content.attachmentCount} file${content.attachmentCount > 1 ? 's' : ''}`);
+    }
+    hintText = parts.join(' · ');
+  } else {
+    hintText = description.length > 30 ? description.slice(0, 28) + '...' : description;
+  }
 
   return (
     <PrepTile
       label={shortLabel}
       icon={IconComponent}
       iconColor={accentColor}
-      isComplete={false}
+      isComplete={!!hasContent}
       onPress={onPress}
-      hint={description.length > 30 ? description.slice(0, 28) + '...' : description}
+      hint={hintText}
     >
-      <Text style={genericTileStyles.label} numberOfLines={2}>
-        {label}
-      </Text>
+      {hasContent ? (
+        <View style={genericTileStyles.contentPreview}>
+          {content.notes.trim() ? (
+            <Text style={genericTileStyles.previewText} numberOfLines={2}>
+              {content.notes.trim()}
+            </Text>
+          ) : (
+            <Text style={genericTileStyles.previewAttachment} numberOfLines={1}>
+              {content.firstAttachmentLabel || `${content.attachmentCount} attachment${content.attachmentCount > 1 ? 's' : ''}`}
+            </Text>
+          )}
+        </View>
+      ) : (
+        <Text style={genericTileStyles.label} numberOfLines={2}>
+          {label}
+        </Text>
+      )}
     </PrepTile>
   );
 }
@@ -212,6 +246,24 @@ const genericTileStyles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#000000',
+    textAlign: 'center',
+  },
+  contentPreview: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  previewText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#3C3C43',
+    lineHeight: 16,
+    textAlign: 'left',
+  },
+  previewAttachment: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#8E8E93',
     textAlign: 'center',
   },
 });
@@ -229,6 +281,8 @@ interface ConfigDrivenPhaseContentProps {
   race?: CardRaceData;
   /** Callback when a module tile is pressed */
   onModulePress?: (moduleId: string) => void;
+  /** User-entered content per module (keyed by moduleId) */
+  moduleContent?: Record<string, ModuleContentSummary>;
 }
 
 export function ConfigDrivenPhaseContent({
@@ -236,6 +290,7 @@ export function ConfigDrivenPhaseContent({
   config,
   race,
   onModulePress,
+  moduleContent,
 }: ConfigDrivenPhaseContentProps) {
   // Determine the event subtype from race data (e.g., 'blank_activity', 'clinical_shift')
   // Prefer metadata.event_subtype (explicit) over race_type (may be constrained to sailing values)
@@ -306,6 +361,7 @@ export function ConfigDrivenPhaseContent({
                     description={mod.description}
                     accentColor={color}
                     onPress={() => onModulePress?.(moduleId)}
+                    content={moduleContent?.[moduleId]}
                   />
                 );
               })}

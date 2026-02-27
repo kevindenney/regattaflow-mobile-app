@@ -15,7 +15,7 @@
  * what experienced practitioners in their network have shared.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -1000,11 +1000,21 @@ function HistorySection({
 // MAIN COMPONENT
 // =============================================================================
 
+/** Summary of user-entered content for a single module */
+export interface ModuleContentSummary {
+  notes: string;
+  attachmentCount: number;
+  /** First attachment label for preview */
+  firstAttachmentLabel?: string;
+}
+
 export interface ModuleDetailBottomSheetProps {
   moduleId: string | null;
   isOpen: boolean;
   onClose: () => void;
   config: InterestEventConfig;
+  /** Called whenever module content changes (notes or attachments) */
+  onContentChange?: (moduleId: string, summary: ModuleContentSummary) => void;
 }
 
 export function ModuleDetailBottomSheet({
@@ -1012,11 +1022,30 @@ export function ModuleDetailBottomSheet({
   isOpen,
   onClose,
   config,
+  onContentChange,
 }: ModuleDetailBottomSheetProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({});
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+
+  // Refs to avoid stale closure issues in attachment handlers
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+
+  // Notify parent whenever module content changes
+  const notifyContentChange = useCallback((modId: string, currentNotes: Record<string, string>, currentAttachments: Record<string, Attachment[]>) => {
+    if (!onContentChange) return;
+    const noteText = currentNotes[modId] || '';
+    const atts = currentAttachments[modId] || [];
+    onContentChange(modId, {
+      notes: noteText,
+      attachmentCount: atts.length,
+      firstAttachmentLabel: atts[0]?.label,
+    });
+  }, [onContentChange]);
 
   React.useEffect(() => {
     if (isOpen && Platform.OS !== 'web') {
@@ -1036,18 +1065,26 @@ export function ModuleDetailBottomSheet({
   // ---- Attachment handlers ----
 
   const addAttachment = useCallback((moduleKey: string, att: Attachment) => {
-    setAttachments((prev) => ({
-      ...prev,
-      [moduleKey]: [...(prev[moduleKey] || []), att],
-    }));
-  }, []);
+    setAttachments((prev) => {
+      const updated = {
+        ...prev,
+        [moduleKey]: [...(prev[moduleKey] || []), att],
+      };
+      setTimeout(() => notifyContentChange(moduleKey, notesRef.current, updated), 0);
+      return updated;
+    });
+  }, [notifyContentChange]);
 
   const removeAttachment = useCallback((moduleKey: string, attachmentId: string) => {
-    setAttachments((prev) => ({
-      ...prev,
-      [moduleKey]: (prev[moduleKey] || []).filter((a) => a.id !== attachmentId),
-    }));
-  }, []);
+    setAttachments((prev) => {
+      const updated = {
+        ...prev,
+        [moduleKey]: (prev[moduleKey] || []).filter((a) => a.id !== attachmentId),
+      };
+      setTimeout(() => notifyContentChange(moduleKey, notesRef.current, updated), 0);
+      return updated;
+    });
+  }, [notifyContentChange]);
 
   const handleAddAttachment = useCallback(async (type: Attachment['type']) => {
     if (!moduleId) return;
@@ -1256,7 +1293,13 @@ export function ModuleDetailBottomSheet({
               <YourPlanSection
                 prompt={content.notesPrompt}
                 value={currentNotes}
-                onChange={(text) => setNotes((prev) => ({ ...prev, [moduleId]: text }))}
+                onChange={(text) => {
+                  setNotes((prev) => {
+                    const updated = { ...prev, [moduleId]: text };
+                    setTimeout(() => notifyContentChange(moduleId, updated, attachmentsRef.current), 0);
+                    return updated;
+                  });
+                }}
                 accent={accent}
                 richContent={content.richContent}
                 attachments={currentAttachments}

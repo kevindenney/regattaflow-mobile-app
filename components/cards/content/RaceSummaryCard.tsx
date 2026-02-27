@@ -35,6 +35,7 @@ import { useRouter } from 'expo-router';
 import { CrewHub } from '@/components/crew';
 import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
 import { ModuleDetailBottomSheet } from '@/components/races/ModuleDetailBottomSheet';
+import type { ModuleContentSummary } from '@/components/races/ModuleDetailBottomSheet';
 import { RaceChatDrawer } from '@/components/races/RaceChatDrawer';
 import { RaceStartInfoBar } from '@/components/races/RaceStartInfoBar';
 import { CrewAvatarStack } from '@/components/races/CrewAvatarStack';
@@ -637,6 +638,12 @@ export function RaceSummaryCard({
   // Module detail sheet state (non-sailing interests)
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
 
+  // Module content state (tracks user-entered content for tile previews)
+  const [moduleContent, setModuleContent] = useState<Record<string, ModuleContentSummary>>({});
+  const handleModuleContentChange = useCallback((modId: string, summary: ModuleContentSummary) => {
+    setModuleContent((prev) => ({ ...prev, [modId]: summary }));
+  }, []);
+
   // Detailed Review modal state
   const [showDetailedReview, setShowDetailedReview] = useState(false);
 
@@ -1056,6 +1063,7 @@ export function RaceSummaryCard({
           config={eventConfig}
           race={cardRaceData}
           onModulePress={handleModulePress}
+          moduleContent={moduleContent}
         />
       );
     }
@@ -1476,6 +1484,7 @@ export function RaceSummaryCard({
           isOpen={activeModuleId !== null}
           onClose={handleCloseModuleSheet}
           config={eventConfig}
+          onContentChange={handleModuleContentChange}
         />
       )}
 

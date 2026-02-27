@@ -29,6 +29,7 @@ import { RaceDetailHeroHeader } from '@/components/races/RaceDetailHeroHeader';
 import { CollaborationPopover } from '@/components/races/CollaborationPopover';
 import { RaceCrewChat } from '@/components/races/RaceCrewChat';
 import { ModuleDetailBottomSheet } from '@/components/races/ModuleDetailBottomSheet';
+import type { ModuleContentSummary } from '@/components/races/ModuleDetailBottomSheet';
 import {
   DaysBeforeContent,
   OnWaterContent,
@@ -90,6 +91,12 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
   const [showCollabPopover, setShowCollabPopover] = useState(false);
   const [showCrewChat, setShowCrewChat] = useState(false);
   const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
+
+  // Module content state (tracks user-entered content for tile previews)
+  const [moduleContent, setModuleContent] = useState<Record<string, ModuleContentSummary>>({});
+  const handleModuleContentChange = useCallback((modId: string, summary: ModuleContentSummary) => {
+    setModuleContent((prev) => ({ ...prev, [modId]: summary }));
+  }, []);
 
   // ---------------------------------------------------------------------------
   // DATA FETCHING
@@ -322,6 +329,7 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
               }
               config={eventConfig}
               race={raceData}
+              moduleContent={moduleContent}
               onModulePress={(moduleId) => {
                 logger.info('[RaceDetailContent] Module pressed:', moduleId);
                 setActiveModuleId(moduleId);
@@ -365,6 +373,7 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
           isOpen={activeModuleId !== null}
           onClose={() => setActiveModuleId(null)}
           config={eventConfig}
+          onContentChange={handleModuleContentChange}
         />
       )}
     </View>
