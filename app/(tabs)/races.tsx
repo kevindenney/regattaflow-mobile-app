@@ -1117,7 +1117,6 @@ export default function RacesScreen() {
           created_by: user.id,
           status: 'planned',
           race_type: 'blank_activity',
-          interest_id: currentInterest?.id ?? null,
           metadata: {
             event_subtype: 'blank_activity',
             interest_slug: currentInterest?.slug ?? 'nursing',
@@ -1137,7 +1136,7 @@ export default function RacesScreen() {
       console.error('Failed to create blank step:', err);
       showAlert('Error', 'Failed to create step. Please try again.');
     }
-  }, [user?.id, currentInterest?.id, currentInterest?.slug]);
+  }, [user?.id, currentInterest?.slug]);
 
   // Navigate to the next upcoming race when "X upcoming" is tapped
   const handleUpcomingPress = useCallback(() => {
