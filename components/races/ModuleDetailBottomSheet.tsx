@@ -1204,9 +1204,9 @@ export function ModuleDetailBottomSheet({
   const currentAttachments = attachments[moduleId] || [];
 
   return (
-    <Actionsheet isOpen={isOpen} onClose={handleClose}>
+    <Actionsheet isOpen={isOpen} onClose={handleClose} closeOnOverlayClick={Platform.OS !== 'web'}>
       <ActionsheetBackdrop style={{ backgroundColor: 'rgba(0,0,0,0.15)' }} />
-      <ActionsheetContent className="max-h-[90%] bg-background-0">
+      <ActionsheetContent className="max-h-[90%] bg-background-0" focusScope={false}>
         <ActionsheetDragIndicatorWrapper>
           <ActionsheetDragIndicator />
         </ActionsheetDragIndicatorWrapper>
