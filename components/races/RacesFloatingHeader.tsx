@@ -57,6 +57,8 @@ export interface RacesFloatingHeaderProps {
   isOnline: boolean;
   /** Callback when add race is pressed */
   onAddRace: () => void;
+  /** Callback when add blank step is pressed */
+  onAddStep?: () => void;
   /** Callback when add practice is pressed */
   onAddPractice?: () => void;
   /** Callback when new season is pressed */
@@ -102,6 +104,7 @@ export function RacesFloatingHeader({
   weatherLoading = false,
   isOnline,
   onAddRace,
+  onAddStep,
   onAddPractice,
   onNewSeason,
   onBrowseCatalog,
@@ -169,7 +172,7 @@ export function RacesFloatingHeader({
   // Handle add button press
   const handleAddPress = () => {
     triggerHaptic('impactLight');
-    if (!onAddPractice && !onNewSeason) {
+    if (!onAddStep && !onAddPractice && !onNewSeason) {
       onAddRace();
       return;
     }
@@ -305,6 +308,29 @@ export function RacesFloatingHeader({
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
               </TouchableOpacity>
+
+              {/* Add Step Option */}
+              {onAddStep && (
+                <>
+                  <View style={styles.menuSeparator} />
+                  <TouchableOpacity
+                    style={styles.menuOption}
+                    onPress={() => handleMenuOption(onAddStep)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemTeal}15` }]}>
+                      <MaterialCommunityIcons name="plus-circle-outline" size={24} color={IOS_COLORS.systemTeal} />
+                    </View>
+                    <View style={styles.menuOptionContent}>
+                      <Text style={styles.menuOptionTitle}>Add Step</Text>
+                      <Text style={styles.menuOptionSubtitle}>
+                        Blank step — define what, why, who, and how
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                  </TouchableOpacity>
+                </>
+              )}
 
               {/* Separator */}
               <View style={styles.menuSeparator} />

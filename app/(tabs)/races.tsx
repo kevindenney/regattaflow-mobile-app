@@ -97,6 +97,7 @@ import {
 import { createLogger } from '@/lib/utils/logger';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useVocabulary } from '@/hooks/useVocabulary';
 import { useFeatureTourContext } from '@/providers/FeatureTourProvider';
@@ -142,6 +143,7 @@ export default function RacesScreen() {
   const { user, userProfile, signedIn, ready, isDemoSession, userType, isGuest, enterGuestMode } = auth;
   const { isTourActive, currentStep, triggerPricingPrompt } = useFeatureTourContext();
   const eventConfig = useInterestEventConfig();
+  const { currentInterest } = useInterest();
   const { vocab } = useVocabulary();
 
   // Safe area insets for proper header spacing
@@ -1097,6 +1099,45 @@ export default function RacesScreen() {
   const handleAddPractice = useCallback(() => {
     routerRef.current.push('/practice/create');
   }, []);
+
+  // Quick-create a blank activity step and navigate to its detail
+  const handleAddStep = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      const timeStr = now.toTimeString().slice(0, 5);
+
+      const { data: newEvent, error } = await supabase
+        .from('regattas')
+        .insert({
+          name: `Activity — ${dateStr}`,
+          start_date: `${dateStr}T${timeStr}:00`,
+          created_by: user.id,
+          status: 'planned',
+          race_type: 'blank_activity',
+          interest_id: currentInterest?.id ?? null,
+          metadata: {
+            event_subtype: 'blank_activity',
+            interest_slug: currentInterest?.slug ?? 'nursing',
+          },
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Navigate to the new event's detail view
+      routerRef.current.push({
+        pathname: '/(tabs)/races',
+        params: { selected: newEvent.id },
+      });
+    } catch (err) {
+      console.error('Failed to create blank step:', err);
+      showAlert('Error', 'Failed to create step. Please try again.');
+    }
+  }, [user?.id, currentInterest?.id, currentInterest?.slug]);
 
   // Navigate to the next upcoming race when "X upcoming" is tapped
   const handleUpcomingPress = useCallback(() => {
@@ -3288,6 +3329,7 @@ export default function RacesScreen() {
           weatherLoading={weatherLoading}
           isOnline={isOnline}
           onAddRace={handleShowAddRaceSheet}
+          onAddStep={handleAddStep}
           onAddPractice={handleAddPractice}
           onNewSeason={() => setShowSeasonSettings(true)}
           onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}

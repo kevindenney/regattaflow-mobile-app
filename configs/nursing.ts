@@ -25,16 +25,6 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   eventSubtypes: [
     {
-      id: 'blank_activity',
-      label: 'Blank Activity',
-      icon: 'add-circle-outline',
-      description: 'Create your own — define what, why, who, and how',
-      formFields: [
-        { id: 'date', type: 'date', label: 'Date', required: true },
-        { id: 'title', type: 'text', label: 'Activity Title', placeholder: 'Name this activity', required: true },
-      ],
-    },
-    {
       id: 'clinical_shift',
       label: 'Clinical Shift',
       icon: 'medical-bag',
@@ -183,9 +173,19 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
         },
       ],
     },
+    {
+      id: 'blank_activity',
+      label: 'Blank Activity',
+      icon: 'add-circle-outline',
+      description: 'Create your own — define what, why, who, and how',
+      formFields: [
+        { id: 'date', type: 'date', label: 'Date', required: true },
+        { id: 'title', type: 'text', label: 'Activity Title', placeholder: 'Name this activity', required: true },
+      ],
+    },
   ],
 
-  defaultSubtype: 'blank_activity',
+  defaultSubtype: 'clinical_shift',
 
   // ---------------------------------------------------------------------------
   // MODULE INFO
@@ -452,10 +452,11 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
         'share_with_preceptor',
       ],
       defaultModules: [
-        'plan_what',
-        'plan_why',
-        'plan_who',
-        'plan_how',
+        'patient_overview',
+        'medications',
+        'procedures',
+        'clinical_objectives',
+        'checklist',
       ],
       maxModules: 8,
     },
@@ -512,31 +513,30 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   subtypeOverrides: {
     blank_activity: {
       subtypeId: 'blank_activity',
-      // Uses the What/Why/Who/How defaults — no overrides needed
-    },
-    clinical_shift: {
-      subtypeId: 'clinical_shift',
       phaseDefaultOverrides: {
         days_before: [
-          'patient_overview',
-          'medications',
-          'procedures',
-          'clinical_objectives',
-          'checklist',
+          'plan_what',
+          'plan_why',
+          'plan_who',
+          'plan_how',
         ],
         on_water: [
+          'progress_photos',
+          'voice_memo',
           'text_notes',
           'time_log',
-          'competency_log',
         ],
         after_race: [
           'gibbs_reflection',
-          'competency_log',
+          'clinical_reasoning',
+          'self_assessment',
           'learning_notes',
-          'preceptor_feedback',
-          'clinical_hours',
         ],
       },
+    },
+    clinical_shift: {
+      subtypeId: 'clinical_shift',
+      // Uses the global defaults (patient_overview, medications, etc.)
     },
     skills_lab: {
       subtypeId: 'skills_lab',
@@ -945,12 +945,6 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   tileSections: {
     days_before: [
-      {
-        id: 'plan-framework',
-        label: 'Your Plan',
-        subtitle: 'Define what, why, who, and how',
-        moduleIds: ['plan_what', 'plan_why', 'plan_who', 'plan_how'],
-      },
       {
         id: 'patient-care',
         label: 'Patient Care',

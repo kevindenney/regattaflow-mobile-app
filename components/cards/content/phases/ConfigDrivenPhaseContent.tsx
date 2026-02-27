@@ -52,6 +52,7 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
 
   // Nursing
   people: LucideIcons.Users,
+  'people-outline': LucideIcons.Users,
   medkit: LucideIcons.Heart,
   bandage: LucideIcons.Activity,
   ribbon: LucideIcons.Award,
@@ -62,6 +63,17 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   trophy: LucideIcons.Trophy,
   timer: LucideIcons.Timer,
   time: LucideIcons.Clock,
+  // Nursing: What/Why/Who/How plan + media + reflect
+  'help-circle-outline': LucideIcons.HelpCircle,
+  'bulb-outline': LucideIcons.Lightbulb,
+  'map-outline': LucideIcons.Map,
+  mic: LucideIcons.Mic,
+  videocam: LucideIcons.Video,
+  create: LucideIcons.Pencil,
+  'sync-circle': LucideIcons.RefreshCw,
+  'git-network': LucideIcons.GitBranch,
+  library: LucideIcons.BookOpen,
+  analytics: LucideIcons.BarChart3,
 
   // Drawing
   images: LucideIcons.Image,
@@ -225,7 +237,29 @@ export function ConfigDrivenPhaseContent({
   race,
   onModulePress,
 }: ConfigDrivenPhaseContentProps) {
-  const sections = config.tileSections?.[phase];
+  // Determine the event subtype from race data (e.g., 'blank_activity', 'clinical_shift')
+  const eventSubtype = (race as any)?.race_type ?? (race as any)?.metadata?.event_subtype;
+  const subtypeOverride = eventSubtype ? config.subtypeOverrides?.[eventSubtype] : undefined;
+  const phaseOverrideModules = subtypeOverride?.phaseDefaultOverrides?.[phase];
+
+  // If this subtype has specific phase overrides, build sections from those modules
+  // instead of the static tileSections (e.g., blank_activity → What/Why/Who/How)
+  let sections = config.tileSections?.[phase];
+
+  if (phaseOverrideModules && phaseOverrideModules.length > 0) {
+    // Build a dynamic section from the subtype's overridden modules
+    const subtypeLabel = config.eventSubtypes?.find(s => s.id === eventSubtype)?.label ?? 'Your Plan';
+    sections = [
+      {
+        id: `${eventSubtype}-override`,
+        label: subtypeLabel === 'Blank Activity' ? 'Your Plan' : subtypeLabel,
+        subtitle: subtypeLabel === 'Blank Activity'
+          ? 'Define what, why, who, and how'
+          : `${config.phaseLabels[phase]?.short ?? 'Phase'} modules`,
+        moduleIds: phaseOverrideModules,
+      },
+    ];
+  }
 
   // Fallback: if no tileSections defined, create a single section from defaultModules
   const effectiveSections: TileSectionConfig[] = sections ?? [
