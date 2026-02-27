@@ -102,7 +102,39 @@ interface DiscussContentProps {
 // DEMO DISCUSS VIEW (non-sailing interests)
 // =============================================================================
 
-import type { InterestConnectData } from '@/configs/connectDemoData';
+import type { InterestConnectData, DemoPost as DemoPostType } from '@/configs/connectDemoData';
+import { DemoEmptyState } from './DemoCards';
+
+type DemoSortKey = 'hot' | 'new' | 'top';
+const DEMO_SORT_OPTIONS: { key: DemoSortKey; label: string }[] = [
+  { key: 'hot', label: 'Hot' },
+  { key: 'new', label: 'New' },
+  { key: 'top', label: 'Top' },
+];
+
+function sortDemoPosts(posts: DemoPostType[], sort: DemoSortKey): DemoPostType[] {
+  switch (sort) {
+    case 'new':
+      // "Newer" = earlier in the timeAgo string; rough approximation: sort by timeAgo ascending
+      return [...posts].sort((a, b) => {
+        const order = (t: string) => {
+          if (t.includes('h')) return parseInt(t);
+          if (t.includes('d')) return parseInt(t) * 24;
+          return 999;
+        };
+        return order(a.timeAgo) - order(b.timeAgo);
+      });
+    case 'top':
+      return [...posts].sort((a, b) => b.upvotes - a.upvotes);
+    case 'hot':
+    default:
+      // Hot = engagement score: upvotes + comments×3, biased toward recent
+      return [...posts].sort((a, b) => {
+        const score = (p: DemoPostType) => p.upvotes + p.commentCount * 3;
+        return score(b) - score(a);
+      });
+  }
+}
 
 function DemoDiscussView({
   toolbarOffset,
@@ -124,6 +156,7 @@ function DemoDiscussView({
   const [segment, setSegment] = React.useState<DemoSegment>('feed');
   const [joinedIds, setJoinedIds] = React.useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [feedSort, setFeedSort] = React.useState<DemoSortKey>('hot');
 
   const toggleJoin = React.useCallback((id: string) => {
     setJoinedIds((prev) => {
@@ -133,6 +166,25 @@ function DemoDiscussView({
       return next;
     });
   }, []);
+
+  // Build set of joined community names for filtering posts
+  const joinedCommunityNames = React.useMemo(
+    () => new Set(demoData.communities.filter((c) => joinedIds.has(c.id)).map((c) => c.name)),
+    [joinedIds, demoData.communities],
+  );
+
+  // Feed posts: only from joined communities, sorted
+  const feedPosts = React.useMemo(() => {
+    if (joinedIds.size === 0) return [];
+    const filtered = demoData.posts.filter((p) => joinedCommunityNames.has(p.communityName));
+    return sortDemoPosts(filtered, feedSort);
+  }, [demoData.posts, joinedCommunityNames, joinedIds.size, feedSort]);
+
+  // Separate joined vs unjoinable communities for the Forum tab
+  const joinedCommunities = React.useMemo(
+    () => demoData.communities.filter((c) => joinedIds.has(c.id)),
+    [demoData.communities, joinedIds],
+  );
 
   const filteredCommunities = searchQuery
     ? demoData.communities.filter((c) =>
@@ -152,18 +204,25 @@ function DemoDiscussView({
             onValueChange={setSegment}
           />
         </View>
-        {segment === 'feed' && (
+        {segment === 'feed' && joinedIds.size > 0 && (
           <View style={styles.sortPillRow}>
-            {SORT_OPTIONS.map((opt) => (
-              <View
-                key={opt.key}
-                style={[styles.sortPill, opt.key === 'hot' && styles.sortPillActive]}
-              >
-                <Text style={[styles.sortPillText, opt.key === 'hot' && styles.sortPillTextActive]}>
-                  {opt.label}
-                </Text>
-              </View>
-            ))}
+            {DEMO_SORT_OPTIONS.map((opt) => {
+              const isActive = feedSort === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  style={[styles.sortPill, isActive && styles.sortPillActive]}
+                  onPress={() => {
+                    triggerHaptic('selection');
+                    setFeedSort(opt.key);
+                  }}
+                >
+                  <Text style={[styles.sortPillText, isActive && styles.sortPillTextActive]}>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
       </View>
@@ -176,9 +235,27 @@ function DemoDiscussView({
           onScroll={onScroll}
           scrollEventThrottle={16}
         >
-          {demoData.posts.map((post) => (
-            <DemoPostCard key={post.id} post={post} />
-          ))}
+          {joinedIds.size === 0 ? (
+            <DemoEmptyState
+              icon="chatbubbles-outline"
+              title="Your feed is empty"
+              subtitle={`Join forums to see posts from their members in your feed.`}
+              actionLabel={`Browse ${vocab('Community').toLowerCase()}s`}
+              onAction={() => setSegment('communities')}
+            />
+          ) : feedPosts.length === 0 ? (
+            <DemoEmptyState
+              icon="newspaper-outline"
+              title="No posts yet"
+              subtitle="The forums you joined don't have posts yet. Try joining more forums."
+              actionLabel={`Browse ${vocab('Community').toLowerCase()}s`}
+              onAction={() => setSegment('communities')}
+            />
+          ) : (
+            feedPosts.map((post) => (
+              <DemoPostCard key={post.id} post={post} />
+            ))
+          )}
         </ScrollView>
       ) : (
         <ScrollView
@@ -194,7 +271,7 @@ function DemoDiscussView({
             <Ionicons name="search" size={16} color={IOS_COLORS.tertiaryLabel} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
-              placeholder={`Search ${vocab('Community').toLowerCase()}...`}
+              placeholder={`Search ${vocab('Community').toLowerCase()}s...`}
               placeholderTextColor={IOS_COLORS.tertiaryLabel}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -205,9 +282,26 @@ function DemoDiscussView({
             />
           </View>
 
-          {/* Community list */}
+          {/* Your Forums (joined) */}
+          {!searchQuery && joinedCommunities.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>YOUR FORUMS</Text>
+              {joinedCommunities.map((community) => (
+                <DemoCommunityCard
+                  key={community.id}
+                  community={community}
+                  isJoined={true}
+                  onToggleJoin={toggleJoin}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Discover */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>DISCOVER</Text>
+            <Text style={styles.sectionTitle}>
+              {searchQuery ? 'SEARCH RESULTS' : 'DISCOVER'}
+            </Text>
             {filteredCommunities.map((community) => (
               <DemoCommunityCard
                 key={community.id}
@@ -218,7 +312,7 @@ function DemoDiscussView({
             ))}
             {filteredCommunities.length === 0 && (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No communities found</Text>
+                <Text style={styles.emptyText}>No forums found</Text>
               </View>
             )}
           </View>

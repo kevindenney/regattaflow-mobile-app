@@ -5,7 +5,7 @@
  * demo data for non-sailing interests.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING, IOS_RADIUS } from '@/lib/design-tokens-ios';
@@ -60,13 +60,16 @@ export function DemoPeerCard({ peer, isFollowing, onToggleFollow }: DemoPeerCard
 }
 
 // =============================================================================
-// POST CARD
+// POST CARD (with interactive upvote)
 // =============================================================================
 
 export function DemoPostCard({ post }: { post: DemoPost }) {
   const typeStyle = POST_TYPE_STYLES[post.postType] || POST_TYPE_STYLES.discussion;
+  const [upvoted, setUpvoted] = useState(false);
+  const displayUpvotes = upvoted ? post.upvotes + 1 : post.upvotes;
+
   return (
-    <View style={s.postCard}>
+    <Pressable style={s.postCard}>
       {/* Author row */}
       <View style={s.postAuthorRow}>
         <View style={[s.postAuthorAvatar, { backgroundColor: post.authorColor }]}>
@@ -82,7 +85,7 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
       </View>
       {/* Title + body */}
       <Text style={s.postTitle} numberOfLines={2}>{post.title}</Text>
-      <Text style={s.postBody} numberOfLines={2}>{post.body}</Text>
+      <Text style={s.postBody} numberOfLines={3}>{post.body}</Text>
       {/* Tags */}
       {post.topicTags.length > 0 && (
         <View style={s.postTags}>
@@ -95,10 +98,22 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
       )}
       {/* Footer metrics */}
       <View style={s.postFooter}>
-        <View style={s.postMetric}>
-          <Ionicons name="arrow-up-outline" size={14} color={IOS_COLORS.secondaryLabel} />
-          <Text style={s.postMetricText}>{post.upvotes}</Text>
-        </View>
+        <Pressable
+          style={s.postMetric}
+          onPress={() => {
+            triggerHaptic('selection');
+            setUpvoted((v) => !v);
+          }}
+        >
+          <Ionicons
+            name={upvoted ? 'arrow-up' : 'arrow-up-outline'}
+            size={15}
+            color={upvoted ? '#2563EB' : IOS_COLORS.secondaryLabel}
+          />
+          <Text style={[s.postMetricText, upvoted && { color: '#2563EB', fontWeight: '600' }]}>
+            {displayUpvotes}
+          </Text>
+        </Pressable>
         <View style={s.postMetric}>
           <Ionicons name="chatbubble-outline" size={13} color={IOS_COLORS.secondaryLabel} />
           <Text style={s.postMetricText}>{post.commentCount}</Text>
@@ -108,7 +123,7 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
           <Text style={s.postMetricText}>{post.viewCount}</Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -123,8 +138,9 @@ interface DemoCommunityCardProps {
 }
 
 export function DemoCommunityCard({ community, isJoined, onToggleJoin }: DemoCommunityCardProps) {
+  const displayMembers = isJoined ? community.memberCount + 1 : community.memberCount;
   return (
-    <View style={s.communityCard}>
+    <Pressable style={s.communityCard}>
       <View style={[s.communityIcon, { backgroundColor: community.iconBgColor }]}>
         <Ionicons name={community.icon as any} size={22} color={community.iconColor} />
       </View>
@@ -134,7 +150,7 @@ export function DemoCommunityCard({ community, isJoined, onToggleJoin }: DemoCom
         <View style={s.communityMeta}>
           <Ionicons name="people-outline" size={12} color={IOS_COLORS.tertiaryLabel} />
           <Text style={s.communityMetaText}>
-            {community.memberCount.toLocaleString()} members · {community.postCount} posts
+            {displayMembers.toLocaleString()} members · {community.postCount} posts
           </Text>
         </View>
       </View>
@@ -149,6 +165,33 @@ export function DemoCommunityCard({ community, isJoined, onToggleJoin }: DemoCom
           {isJoined ? 'Joined' : 'Join'}
         </Text>
       </Pressable>
+    </Pressable>
+  );
+}
+
+// =============================================================================
+// EMPTY STATE
+// =============================================================================
+
+interface EmptyStateProps {
+  icon: string;
+  title: string;
+  subtitle: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
+export function DemoEmptyState({ icon, title, subtitle, actionLabel, onAction }: EmptyStateProps) {
+  return (
+    <View style={s.emptyState}>
+      <Ionicons name={icon as any} size={44} color={IOS_COLORS.tertiaryLabel} />
+      <Text style={s.emptyStateTitle}>{title}</Text>
+      <Text style={s.emptyStateSubtitle}>{subtitle}</Text>
+      {actionLabel && onAction && (
+        <Pressable style={s.emptyStateCta} onPress={onAction}>
+          <Text style={s.emptyStateCtaText}>{actionLabel}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -366,5 +409,38 @@ const s = StyleSheet.create({
   },
   joinButtonTextActive: {
     color: IOS_COLORS.label,
+  },
+
+  // Empty state
+  emptyState: {
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 48,
+    paddingBottom: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    color: IOS_COLORS.secondaryLabel,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyStateCta: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#2563EB',
+  },
+  emptyStateCtaText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });

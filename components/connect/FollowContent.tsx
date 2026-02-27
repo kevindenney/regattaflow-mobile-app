@@ -34,7 +34,7 @@ import {
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { getConnectDemoData } from '@/configs/connectDemoData';
-import { DemoPeerCard, DemoPostCard } from './DemoCards';
+import { DemoPeerCard, DemoPostCard, DemoEmptyState } from './DemoCards';
 
 // =============================================================================
 // TYPES & CONSTANTS
@@ -109,6 +109,12 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
       ? demoData.peers.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
       : demoData.peers;
 
+    // Build set of followed peer names for filtering posts
+    const followedNames = new Set(
+      demoData.peers.filter((p) => followedIds.has(p.id)).map((p) => p.name)
+    );
+    const followedPosts = demoData.posts.filter((p) => followedNames.has(p.authorName));
+
     return (
       <View style={styles.container}>
         <View style={[styles.segmentContainer, { marginTop: toolbarOffset }]}>
@@ -152,6 +158,11 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
               <Text style={s.peerHeaderText}>
                 {filteredPeers.length} {demoData.peersHeader}
               </Text>
+              {followedIds.size > 0 && (
+                <Text style={s.followingCount}>
+                  {followedIds.size} following
+                </Text>
+              )}
             </View>
 
             {/* Peer cards */}
@@ -172,9 +183,30 @@ export function FollowContent({ toolbarOffset, onScroll, onGoToDiscuss: _onGoToD
             onScroll={onScroll}
             scrollEventThrottle={16}
           >
-            {demoData.posts.map((post) => (
-              <DemoPostCard key={post.id} post={post} />
-            ))}
+            {followedIds.size === 0 ? (
+              <DemoEmptyState
+                icon="newspaper-outline"
+                title="No posts yet"
+                subtitle="Follow classmates and preceptors to see their activity and shared reflections here."
+                actionLabel="Find people to follow"
+                onAction={() => handleSubTabChange('following')}
+              />
+            ) : (
+              <>
+                {/* Show posts from followed peers */}
+                {followedPosts.length > 0 ? (
+                  followedPosts.map((post) => (
+                    <DemoPostCard key={post.id} post={post} />
+                  ))
+                ) : (
+                  <DemoEmptyState
+                    icon="newspaper-outline"
+                    title="No posts from people you follow"
+                    subtitle="The people you follow haven't posted yet. Check back soon."
+                  />
+                )}
+              </>
+            )}
           </ScrollView>
         )}
       </View>
@@ -274,6 +306,9 @@ const styles = StyleSheet.create({
 /** Demo-specific styles */
 const s = StyleSheet.create({
   peerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: IOS_SPACING.lg,
     paddingTop: IOS_SPACING.md,
     paddingBottom: IOS_SPACING.sm,
@@ -284,5 +319,10 @@ const s = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     color: IOS_COLORS.secondaryLabel,
+  },
+  followingCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2563EB',
   },
 });
