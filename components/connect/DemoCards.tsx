@@ -5,12 +5,12 @@
  * demo data for non-sailing interests.
  */
 
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING, IOS_RADIUS } from '@/lib/design-tokens-ios';
 import { triggerHaptic } from '@/lib/haptics';
-import type { DemoPeer, DemoPost, DemoCommunity } from '@/configs/connectDemoData';
+import type { DemoPeer, DemoPost, DemoComment, DemoCommunity } from '@/configs/connectDemoData';
 
 // =============================================================================
 // POST TYPE BADGE STYLES
@@ -66,10 +66,40 @@ export function DemoPeerCard({ peer, isFollowing, onToggleFollow }: DemoPeerCard
 export function DemoPostCard({ post }: { post: DemoPost }) {
   const typeStyle = POST_TYPE_STYLES[post.postType] || POST_TYPE_STYLES.discussion;
   const [upvoted, setUpvoted] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [localComments, setLocalComments] = useState<DemoComment[]>([]);
   const displayUpvotes = upvoted ? post.upvotes + 1 : post.upvotes;
 
+  const allComments = [...(post.comments ?? []), ...localComments];
+  const displayCommentCount = post.commentCount + localComments.length;
+
+  const handleSubmitComment = useCallback(() => {
+    const text = commentText.trim();
+    if (!text) return;
+    triggerHaptic('selection');
+    setLocalComments((prev) => [
+      ...prev,
+      {
+        id: `local-${Date.now()}`,
+        authorName: 'You',
+        authorInitials: 'ME',
+        authorColor: '#2563EB',
+        body: text,
+        timeAgo: 'just now',
+        upvotes: 0,
+      },
+    ]);
+    setCommentText('');
+  }, [commentText]);
+
+  const handleCardPress = useCallback(() => {
+    triggerHaptic('selection');
+    setExpanded((v) => !v);
+  }, []);
+
   return (
-    <Pressable style={s.postCard}>
+    <Pressable style={s.postCard} onPress={handleCardPress}>
       {/* Author row */}
       <View style={s.postAuthorRow}>
         <View style={[s.postAuthorAvatar, { backgroundColor: post.authorColor }]}>
@@ -84,8 +114,8 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
         </View>
       </View>
       {/* Title + body */}
-      <Text style={s.postTitle} numberOfLines={2}>{post.title}</Text>
-      <Text style={s.postBody} numberOfLines={3}>{post.body}</Text>
+      <Text style={s.postTitle} numberOfLines={expanded ? undefined : 2}>{post.title}</Text>
+      <Text style={s.postBody} numberOfLines={expanded ? undefined : 3}>{post.body}</Text>
       {/* Tags */}
       {post.topicTags.length > 0 && (
         <View style={s.postTags}>
@@ -100,7 +130,8 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
       <View style={s.postFooter}>
         <Pressable
           style={s.postMetric}
-          onPress={() => {
+          onPress={(e) => {
+            e.stopPropagation();
             triggerHaptic('selection');
             setUpvoted((v) => !v);
           }}
@@ -114,15 +145,84 @@ export function DemoPostCard({ post }: { post: DemoPost }) {
             {displayUpvotes}
           </Text>
         </Pressable>
-        <View style={s.postMetric}>
-          <Ionicons name="chatbubble-outline" size={13} color={IOS_COLORS.secondaryLabel} />
-          <Text style={s.postMetricText}>{post.commentCount}</Text>
-        </View>
+        <Pressable
+          style={s.postMetric}
+          onPress={(e) => {
+            e.stopPropagation();
+            triggerHaptic('selection');
+            setExpanded(true);
+          }}
+        >
+          <Ionicons
+            name={expanded ? 'chatbubble' : 'chatbubble-outline'}
+            size={13}
+            color={expanded ? '#2563EB' : IOS_COLORS.secondaryLabel}
+          />
+          <Text style={[s.postMetricText, expanded && { color: '#2563EB', fontWeight: '600' }]}>
+            {displayCommentCount}
+          </Text>
+        </Pressable>
         <View style={s.postMetric}>
           <Ionicons name="eye-outline" size={14} color={IOS_COLORS.secondaryLabel} />
           <Text style={s.postMetricText}>{post.viewCount}</Text>
         </View>
       </View>
+
+      {/* Expanded comment thread */}
+      {expanded && (
+        <View style={s.commentSection}>
+          <View style={s.commentDivider} />
+
+          {allComments.length > 0 ? (
+            allComments.map((comment) => (
+              <View key={comment.id} style={s.commentRow}>
+                <View style={[s.commentAvatar, { backgroundColor: comment.authorColor }]}>
+                  <Text style={s.commentAvatarText}>{comment.authorInitials}</Text>
+                </View>
+                <View style={s.commentContent}>
+                  <View style={s.commentHeader}>
+                    <Text style={s.commentAuthor}>{comment.authorName}</Text>
+                    <Text style={s.commentTime}>{comment.timeAgo}</Text>
+                  </View>
+                  <Text style={s.commentBody}>{comment.body}</Text>
+                  <View style={s.commentActions}>
+                    <Ionicons name="arrow-up-outline" size={12} color={IOS_COLORS.tertiaryLabel} />
+                    <Text style={s.commentUpvotes}>{comment.upvotes}</Text>
+                    <Text style={s.commentReply}>Reply</Text>
+                  </View>
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={s.noCommentsText}>No comments yet — be the first to reply.</Text>
+          )}
+
+          {/* Comment input */}
+          <View style={s.commentInputRow}>
+            <View style={[s.commentAvatar, { backgroundColor: '#2563EB' }]}>
+              <Text style={s.commentAvatarText}>ME</Text>
+            </View>
+            <View style={s.commentInputWrapper}>
+              <TextInput
+                style={s.commentInput}
+                placeholder="Add a comment..."
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                value={commentText}
+                onChangeText={setCommentText}
+                multiline
+                returnKeyType="send"
+                blurOnSubmit
+                onSubmitEditing={handleSubmitComment}
+              />
+            </View>
+            {commentText.trim().length > 0 && (
+              <Pressable onPress={handleSubmitComment} style={s.commentSendButton}>
+                <Ionicons name="send" size={18} color="#2563EB" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -348,6 +448,103 @@ const s = StyleSheet.create({
   postMetricText: {
     fontSize: 12,
     color: IOS_COLORS.secondaryLabel,
+  },
+
+  // Comment section
+  commentSection: {
+    marginTop: 4,
+  },
+  commentDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+    marginVertical: 12,
+  },
+  commentRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  commentAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  commentAvatarText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  commentContent: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  commentAuthor: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  commentTime: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  commentBody: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    lineHeight: 19,
+  },
+  commentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  commentUpvotes: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
+    marginRight: 8,
+  },
+  commentReply: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  noCommentsText: {
+    fontSize: 13,
+    color: IOS_COLORS.tertiaryLabel,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  commentInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
+  commentInputWrapper: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.tertiarySystemFill,
+    borderRadius: IOS_RADIUS.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minHeight: 34,
+    justifyContent: 'center',
+  },
+  commentInput: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    paddingVertical: 0,
+    maxHeight: 80,
+  },
+  commentSendButton: {
+    padding: 4,
   },
 
   // Community cards

@@ -31,6 +31,16 @@ export interface DemoCommunity {
   postCount: number;
 }
 
+export interface DemoComment {
+  id: string;
+  authorName: string;
+  authorInitials: string;
+  authorColor: string;
+  body: string;
+  timeAgo: string;
+  upvotes: number;
+}
+
 export interface DemoPost {
   id: string;
   communityName: string;
@@ -45,6 +55,7 @@ export interface DemoPost {
   commentCount: number;
   viewCount: number;
   timeAgo: string;
+  comments?: DemoComment[];
 }
 
 export interface InterestConnectData {
@@ -209,6 +220,11 @@ const NURSING_DATA: InterestConnectData = {
       commentCount: 11,
       viewCount: 78,
       timeAgo: '2h ago',
+      comments: [
+        { id: 'c-n1-1', authorName: 'Emily Watson', authorInitials: 'EW', authorColor: '#059669', body: 'I\'m at Sibley too! Peds NP track, starting in March. Let\'s definitely coordinate — the parking garage on the south side is free before 7am.', timeAgo: '1h ago', upvotes: 8 },
+        { id: 'c-n1-2', authorName: 'James Rodriguez', authorInitials: 'JR', authorColor: '#DC2626', body: 'I was there last semester. Ask for Dr. Pham as your preceptor if you can — she\'s incredible and lets students run the assessment independently.', timeAgo: '45m ago', upvotes: 14 },
+        { id: 'c-n1-3', authorName: 'Rachel Kim', authorInitials: 'RK', authorColor: '#EC4899', body: 'Not at Sibley but I\'m at Suburban — close enough for study sessions! DM me.', timeAgo: '30m ago', upvotes: 3 },
+      ],
     },
     {
       id: 'post-nursing-2',
@@ -227,6 +243,10 @@ const NURSING_DATA: InterestConnectData = {
       commentCount: 16,
       viewCount: 290,
       timeAgo: '4h ago',
+      comments: [
+        { id: 'c-n2-1', authorName: 'Dr. Linda Rojas', authorInitials: 'LR', authorColor: '#0891B2', body: 'Good PICOT structure, Emily. Consider narrowing "hospitalized" to a specific unit (e.g., general peds) — it\'ll make your data collection much more feasible for the capstone timeline.', timeAgo: '3h ago', upvotes: 22 },
+        { id: 'c-n2-2', authorName: 'Maria Santos', authorInitials: 'MS', authorColor: '#6366F1', body: 'Teach-back is a great intervention. We use it in the ICU and readmission data is easy to pull from Epic. Happy to connect you with our QI team.', timeAgo: '2h ago', upvotes: 11 },
+      ],
     },
     {
       id: 'post-nursing-3',
@@ -245,6 +265,11 @@ const NURSING_DATA: InterestConnectData = {
       commentCount: 29,
       viewCount: 1840,
       timeAgo: '1d ago',
+      comments: [
+        { id: 'c-n3-1', authorName: 'Aisha Patel', authorInitials: 'AP', authorColor: '#D97706', body: 'The "Can I try that?" tip is so good. I started doing this and my preceptor immediately gave me more autonomy with patient assessments.', timeAgo: '20h ago', upvotes: 34 },
+        { id: 'c-n3-2', authorName: 'Rachel Kim', authorInitials: 'RK', authorColor: '#EC4899', body: 'Writing down 3 learning goals changed everything for me. It gives the preceptor something concrete to work with instead of "what do you want to learn today?"', timeAgo: '18h ago', upvotes: 28 },
+        { id: 'c-n3-3', authorName: 'James Rodriguez', authorInitials: 'JR', authorColor: '#DC2626', body: 'Also — review your patients the night before if your preceptor sends the list. Showing up knowing the meds and history makes a huge impression.', timeAgo: '16h ago', upvotes: 19 },
+      ],
     },
     {
       id: 'post-nursing-4',
@@ -263,6 +288,10 @@ const NURSING_DATA: InterestConnectData = {
       commentCount: 21,
       viewCount: 580,
       timeAgo: '1d ago',
+      comments: [
+        { id: 'c-n4-1', authorName: 'Emily Watson', authorInitials: 'EW', authorColor: '#059669', body: 'Please share! I\'m drowning in the anticoag section. The renal dosing adjustments alone are a nightmare.', timeAgo: '22h ago', upvotes: 9 },
+        { id: 'c-n4-2', authorName: 'Marcus Thompson', authorInitials: 'MT', authorColor: '#7C3AED', body: 'Great resource, James. One thing to add — always check for heparin-induced thrombocytopenia history before bridging. It\'s a common miss on boards.', timeAgo: '20h ago', upvotes: 15 },
+      ],
     },
     {
       id: 'post-nursing-5',
@@ -281,6 +310,10 @@ const NURSING_DATA: InterestConnectData = {
       commentCount: 13,
       viewCount: 720,
       timeAgo: '2d ago',
+      comments: [
+        { id: 'c-n5-1', authorName: 'Aisha Patel', authorInitials: 'AP', authorColor: '#D97706', body: 'That was me who reported it! My preceptor helped me write it up as a QI case study. It\'s now part of my clinical portfolio. So glad I spoke up.', timeAgo: '1d ago', upvotes: 42 },
+        { id: 'c-n5-2', authorName: 'Maria Santos', authorInitials: 'MS', authorColor: '#6366F1', body: 'As a preceptor, I want to emphasize — we WANT students to report. Fresh eyes catch things we\'ve become blind to. It\'s not tattling, it\'s patient advocacy.', timeAgo: '1d ago', upvotes: 31 },
+      ],
     },
     {
       id: 'post-nursing-6',
@@ -299,6 +332,11 @@ const NURSING_DATA: InterestConnectData = {
       commentCount: 47,
       viewCount: 4100,
       timeAgo: '3d ago',
+      comments: [
+        { id: 'c-n6-1', authorName: 'Emily Watson', authorInitials: 'EW', authorColor: '#059669', body: 'Rachel this is incredibly helpful! Did you do the Fitzgerald live review or just the audio? Trying to decide if the live session is worth the $$$.', timeAgo: '2d ago', upvotes: 18 },
+        { id: 'c-n6-2', authorName: 'Rachel Kim', authorInitials: 'RK', authorColor: '#EC4899', body: 'Just the audio — saved $400 and honestly it was enough. Pair it with Leik for the content gaps. The APEA predictor is the real secret weapon though.', timeAgo: '2d ago', upvotes: 26 },
+        { id: 'c-n6-3', authorName: 'James Rodriguez', authorInitials: 'JR', authorColor: '#DC2626', body: 'Congrats Rachel! How did you handle the pharm section? That\'s where I\'m weakest.', timeAgo: '2d ago', upvotes: 7 },
+      ],
     },
   ],
 };
@@ -427,6 +465,10 @@ const DRAWING_DATA: InterestConnectData = {
       commentCount: 28,
       viewCount: 940,
       timeAgo: '3h ago',
+      comments: [
+        { id: 'c-d1-1', authorName: 'Sophie Turner', authorInitials: 'ST', authorColor: '#2563EB', body: 'I switched to Reilly last year and it really helped with gesture. Loomis is great for static poses but Reilly captures movement better IMO.', timeAgo: '2h ago', upvotes: 14 },
+        { id: 'c-d1-2', authorName: 'Kenji Tanaka', authorInitials: 'KT', authorColor: '#059669', body: 'I use a hybrid — Loomis for the basic form, then Reilly rhythms for the features. Best of both worlds.', timeAgo: '1h ago', upvotes: 21 },
+      ],
     },
     {
       id: 'post-drawing-2',
@@ -618,6 +660,10 @@ const FITNESS_DATA: InterestConnectData = {
       commentCount: 38,
       viewCount: 2800,
       timeAgo: '4h ago',
+      comments: [
+        { id: 'c-f1-1', authorName: 'Chris Hensley', authorInitials: 'CH', authorColor: '#374151', body: 'How long did it take to adjust? I tried sumo once and my hips were screaming for a week.', timeAgo: '3h ago', upvotes: 8 },
+        { id: 'c-f1-2', authorName: 'Alex Turner', authorInitials: 'AT', authorColor: '#DC2626', body: 'Honestly about 3 weeks of feeling weak. The 90/90 hip stretch and frog stretch daily made the biggest difference. Stick with it!', timeAgo: '2h ago', upvotes: 19 },
+      ],
     },
     {
       id: 'post-fitness-2',
