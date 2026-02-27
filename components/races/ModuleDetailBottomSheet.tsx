@@ -17,6 +17,15 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import {
+  PatientOverviewTool,
+  MedicationsTool,
+  LabValuesTool,
+  ProceduresTool,
+  CarePlanTool,
+  ClinicalObjectivesTool,
+  EBPConnectionTool,
+} from './tools/NursingTools';
+import {
   StyleSheet,
   View,
   Text,
@@ -185,7 +194,8 @@ interface ModuleContent {
   /** Enable rich content toolbar (photos, videos, documents, links, ideas) */
   richContent?: boolean;
   /** Render as an interactive guided tool instead of a free-form text area */
-  tool?: 'gibbs_reflection' | 'clinical_reasoning' | 'self_assessment' | 'learning_notes';
+  tool?: 'gibbs_reflection' | 'clinical_reasoning' | 'self_assessment' | 'learning_notes'
+    | 'patient_overview' | 'medications' | 'lab_values' | 'procedures' | 'care_plan' | 'clinical_objectives' | 'ebp_connection';
 }
 
 /**
@@ -195,6 +205,7 @@ interface ModuleContent {
  */
 const MODULE_CONTENT: Record<string, ModuleContent> = {
   patient_overview: {
+    tool: 'patient_overview',
     notesPrompt: 'What do you already know about your patients? What questions will you ask during handoff? What are you watching for today?',
     aiCoach: {
       title: 'Build Your Patient Mental Model',
@@ -212,6 +223,7 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   medications: {
+    tool: 'medications',
     notesPrompt: 'List your patients\' key meds. Any high-alerts? Interactions you want to double-check? What\'s your administration plan and timing?',
     aiCoach: {
       title: 'Think Like a Pharmacist',
@@ -233,6 +245,7 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   lab_values: {
+    tool: 'lab_values',
     notesPrompt: 'What labs are you expecting today? What would abnormal values mean for your patients? What trends are you tracking?',
     aiCoach: {
       title: 'Read the Story in the Numbers',
@@ -256,6 +269,7 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   procedures: {
+    tool: 'procedures',
     notesPrompt: 'What procedures do you expect today? What\'s your approach for each? Where do you need help vs. where are you confident?',
     aiCoach: {
       title: 'Visualize Before You Do',
@@ -273,6 +287,7 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   clinical_objectives: {
+    tool: 'clinical_objectives',
     notesPrompt: 'What are you focused on learning today? What competency are you working toward? What would make this shift a success for your development?',
     aiCoach: {
       title: 'Intentional Practice > Passive Hours',
@@ -313,6 +328,7 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
   },
 
   care_plan: {
+    tool: 'care_plan',
     notesPrompt: 'Draft your nursing care plan here. What are the priority nursing diagnoses? What interventions will you implement? What outcomes are you targeting?',
     aiCoach: {
       title: 'Think in Diagnoses, Not Tasks',
@@ -654,6 +670,24 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
     history: {
       summary: 'No self-assessments yet',
       detail: 'Your self-assessment history will appear here, showing your growing self-awareness and calibration.',
+    },
+  },
+
+  ebp_connection: {
+    tool: 'ebp_connection',
+    notesPrompt: 'What clinical question arose from your experience? What evidence did you find?',
+    aiCoach: {
+      title: 'Bridge Practice and Evidence',
+      body: 'Evidence-based practice isn\'t just for research papers — it\'s for every shift. When something surprises you, when a protocol seems outdated, when you wonder "why do we do it this way?" — that\'s your signal to look it up. Even a 5-minute search can change your practice.',
+      question: 'What happened today that made you think "I should look that up"?',
+    },
+    network: [
+      { name: 'Emma R.', role: '3rd year BSN', tip: 'I keep a running list of clinical questions on my phone. Even if I can\'t look them up right away, writing the question helps me remember to follow up.' },
+      { name: 'Preceptor Lisa', role: 'RN, 12 years', tip: 'The best nurses I know are always asking "what does the evidence say?" It\'s not about doubting your training — it\'s about staying current.' },
+    ],
+    history: {
+      summary: 'No EBP connections yet',
+      detail: 'Your evidence-based practice connections will appear here, building a personal knowledge base over time.',
     },
   },
 };
@@ -2157,6 +2191,48 @@ export function ModuleDetailBottomSheet({
                 />
               ) : content.tool === 'learning_notes' ? (
                 <LearningNotesTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'patient_overview' ? (
+                <PatientOverviewTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'medications' ? (
+                <MedicationsTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'lab_values' ? (
+                <LabValuesTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'procedures' ? (
+                <ProceduresTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'care_plan' ? (
+                <CarePlanTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'clinical_objectives' ? (
+                <ClinicalObjectivesTool
+                  values={toolValues[moduleId] || {}}
+                  onChange={handleToolStepChange}
+                  accent={accent}
+                />
+              ) : content.tool === 'ebp_connection' ? (
+                <EBPConnectionTool
                   values={toolValues[moduleId] || {}}
                   onChange={handleToolStepChange}
                   accent={accent}
