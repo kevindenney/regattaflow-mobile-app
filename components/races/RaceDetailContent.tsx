@@ -296,7 +296,7 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
 
         {/* Phase Content */}
         <View style={styles.phaseContent}>
-          {isSailing ? (
+          {isSailing && raceData?.metadata?.event_subtype !== 'blank_activity' ? (
             <>
               {selectedPhase === 'prep' && (
                 <DaysBeforeContent
@@ -366,8 +366,8 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
         />
       )}
 
-      {/* Module Detail Bottom Sheet (non-sailing interests) */}
-      {!isSailing && (
+      {/* Module Detail Bottom Sheet (non-sailing interests + sailing blank_activity) */}
+      {(!isSailing || raceData?.metadata?.event_subtype === 'blank_activity') && (
         <ModuleDetailBottomSheet
           moduleId={activeModuleId}
           isOpen={activeModuleId !== null}

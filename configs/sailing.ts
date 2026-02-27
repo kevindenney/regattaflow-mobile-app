@@ -59,6 +59,16 @@ export const SAILING_EVENT_CONFIG: InterestEventConfig = {
       icon: 'map-marker-multiple',
       description: 'Offshore or distance racing',
     },
+    {
+      id: 'blank_activity',
+      label: 'Blank Step',
+      icon: 'add-circle-outline',
+      description: 'Create your own — define what, why, who, and how',
+      formFields: [
+        { id: 'date', type: 'date', label: 'Date', required: true },
+        { id: 'title', type: 'text', label: 'Activity Title', placeholder: 'Name this activity', required: true },
+      ],
+    },
   ],
 
   defaultSubtype: 'fleet',
@@ -179,6 +189,18 @@ export const SAILING_EVENT_CONFIG: InterestEventConfig = {
       icon: 'share-variant',
       description: 'Share race prep with coach and crew',
     },
+    // Blank step modules (What/Why/Who/How + media + reflection)
+    plan_what: { id: 'plan_what', label: 'What', shortLabel: 'What', icon: 'help-circle-outline', description: 'Define what you\'re working on' },
+    plan_why: { id: 'plan_why', label: 'Why', shortLabel: 'Why', icon: 'bulb-outline', description: 'Why does this matter?' },
+    plan_who: { id: 'plan_who', label: 'Who', shortLabel: 'Who', icon: 'people-outline', description: 'Who\'s involved?' },
+    plan_how: { id: 'plan_how', label: 'How', shortLabel: 'How', icon: 'map-outline', description: 'How will you approach this?' },
+    progress_photos: { id: 'progress_photos', label: 'Photos', shortLabel: 'Photos', icon: 'camera', description: 'Capture visual evidence' },
+    voice_memo: { id: 'voice_memo', label: 'Voice Memo', shortLabel: 'Voice', icon: 'mic', description: 'Record audio notes' },
+    text_notes: { id: 'text_notes', label: 'Notes', shortLabel: 'Notes', icon: 'create', description: 'Written observations' },
+    time_log: { id: 'time_log', label: 'Time Log', shortLabel: 'Timer', icon: 'timer', description: 'Track time spent' },
+    gibbs_reflection: { id: 'gibbs_reflection', label: 'Gibbs Reflection', shortLabel: 'Gibbs', icon: 'sync-circle', description: 'Structured reflective cycle' },
+    clinical_reasoning: { id: 'clinical_reasoning', label: 'Reasoning', shortLabel: 'Reason', icon: 'git-network', description: 'Document your reasoning' },
+    self_assessment: { id: 'self_assessment', label: 'Self-Assessment', shortLabel: 'Assess', icon: 'analytics', description: 'Rate your performance' },
   },
 
   // ---------------------------------------------------------------------------
@@ -295,6 +317,14 @@ export const SAILING_EVENT_CONFIG: InterestEventConfig = {
         rig_setup: 'Boat Prep',
         regulatory: 'Safety & Docs',
         checklist: 'Departure Checklist',
+      },
+    },
+    blank_activity: {
+      subtypeId: 'blank_activity',
+      phaseDefaultOverrides: {
+        days_before: ['plan_what', 'plan_why', 'plan_who', 'plan_how'],
+        on_water: ['progress_photos', 'voice_memo', 'text_notes', 'time_log'],
+        after_race: ['gibbs_reflection', 'clinical_reasoning', 'self_assessment', 'learning_notes'],
       },
     },
   },

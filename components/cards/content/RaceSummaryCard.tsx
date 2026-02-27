@@ -1055,8 +1055,10 @@ export function RaceSummaryCard({
 
   // Helper to render phase-specific content
   const renderPhaseContent = () => {
-    // Non-sailing interests use config-driven rendering
-    if (!isSailing) {
+    // Non-sailing interests use config-driven rendering;
+    // blank_activity events also use config-driven rendering even for sailing
+    const isBlankActivity = (race as any)?.metadata?.event_subtype === 'blank_activity';
+    if (!isSailing || isBlankActivity) {
       return (
         <ConfigDrivenPhaseContent
           phase={selectedPhase}
@@ -1477,8 +1479,8 @@ export function RaceSummaryCard({
         raceData={raceDataForDetailCards}
       />
 
-      {/* Module Detail Bottom Sheet for non-sailing interests */}
-      {!isSailing && (
+      {/* Module Detail Bottom Sheet for non-sailing interests + sailing blank_activity */}
+      {(!isSailing || (race as any)?.metadata?.event_subtype === 'blank_activity') && (
         <ModuleDetailBottomSheet
           moduleId={activeModuleId}
           isOpen={activeModuleId !== null}
