@@ -24,10 +24,16 @@ import {
   Platform,
   TextInput,
   KeyboardAvoidingView,
+  Alert,
+  Image,
+  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { X } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 
 import {
   Actionsheet,
@@ -88,6 +94,20 @@ const MODULE_COLORS: Record<string, string> = {
   preceptor_feedback: C.green,
   clinical_hours: C.purple,
   time_log: C.red,
+  // Plan modules (What/Why/Who/How)
+  plan_what: C.blue,
+  plan_why: C.orange,
+  plan_who: C.purple,
+  plan_how: C.teal,
+  // Media modules
+  progress_photos: C.green,
+  voice_memo: C.red,
+  video_capture: C.indigo,
+  text_notes: C.pink,
+  // Reflection modules
+  gibbs_reflection: C.purple,
+  clinical_reasoning: C.blue,
+  self_assessment: C.teal,
 };
 
 // Icon mapping (mirrors ConfigDrivenPhaseContent)
@@ -125,6 +145,20 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   calendar: LucideIcons.Calendar,
   settings: LucideIcons.Settings,
   'heart-pulse': LucideIcons.HeartPulse,
+  // Plan modules (What/Why/Who/How)
+  'help-circle-outline': LucideIcons.HelpCircle,
+  'bulb-outline': LucideIcons.Lightbulb,
+  'people-outline': LucideIcons.Users,
+  'map-outline': LucideIcons.Map,
+  // Media modules
+  mic: LucideIcons.Mic,
+  videocam: LucideIcons.Video,
+  create: LucideIcons.Pencil,
+  // Reflection modules
+  'sync-circle': LucideIcons.RefreshCw,
+  'git-network': LucideIcons.GitBranch,
+  library: LucideIcons.BookOpen,
+  analytics: LucideIcons.BarChart3,
 };
 
 function resolveIcon(name: string): React.ComponentType<any> {
@@ -148,6 +182,8 @@ interface ModuleContent {
   items?: Array<{ label: string; detail: string; status?: 'alert' | 'ok' | 'info' }>;
   /** Optional: alert or safety callout */
   alert?: { title: string; body: string };
+  /** Enable rich content toolbar (photos, videos, documents, links, ideas) */
+  richContent?: boolean;
 }
 
 /**
@@ -437,6 +473,183 @@ const MODULE_CONTENT: Record<string, ModuleContent> = {
       detail: 'Last shift: Medication passes took 45 min (down from 60 min on first shift). Documentation still a bottleneck at 20 min per patient.',
     },
   },
+
+  // ===========================================================================
+  // PLAN MODULES (What / Why / Who / How) — Rich content enabled
+  // ===========================================================================
+
+  plan_what: {
+    notesPrompt: 'Describe what you\'re planning to do. What activity, task, skill, or experience are you working on? Add photos, documents, links, or anything that helps capture your plan.',
+    richContent: true,
+    aiCoach: {
+      title: 'Define Your "What" Clearly',
+      body: 'The clearer you define what you\'re doing, the more focused your preparation becomes. Think beyond just the task name \u2014 what does success look like? What are the key steps? Attach reference materials, photos of the workspace, links to protocols, or documents you\'ll need.',
+      question: 'Can you describe this activity in one sentence to someone who\'s never done it? That clarity will guide everything else.',
+    },
+    network: [
+      { name: 'Your peers', role: 'Community', tip: 'Share what you\'re working on and discover who else is tackling similar activities. Collaboration starts with visibility.' },
+    ],
+    history: {
+      summary: 'No previous entries yet',
+      detail: 'Your past activities and plans will appear here, helping you build on previous experience and track your growth.',
+    },
+  },
+
+  plan_why: {
+    notesPrompt: 'Why are you doing this? What are your learning objectives, goals, or motivations? Add links to standards, competency frameworks, or any resources that define the "why."',
+    richContent: true,
+    aiCoach: {
+      title: 'Connect Purpose to Practice',
+      body: 'Understanding your "why" transforms routine tasks into intentional learning. Are you building a new competency? Deepening an existing skill? Preparing for an assessment? Link to course objectives, competency frameworks, or personal goals that drive this activity.',
+      question: 'If you could only achieve one thing from this activity, what would make the biggest difference in your development?',
+    },
+    network: [
+      { name: 'Your mentors', role: 'Faculty & preceptors', tip: 'Your mentors can help align your goals with program competencies. Share your "why" and get feedback on whether your objectives are hitting the right level.' },
+    ],
+    history: {
+      summary: 'No previous entries yet',
+      detail: 'As you document your learning objectives across activities, patterns will emerge showing your growth trajectory and focus areas.',
+    },
+  },
+
+  plan_who: {
+    notesPrompt: 'Who is involved? Patients, clients, team members, preceptors, peers, mentors? Add photos, contact cards, or notes about the people involved.',
+    richContent: true,
+    aiCoach: {
+      title: 'People Are the Context',
+      body: 'Every activity happens within a web of relationships. Knowing who you\'re working with \u2014 their experience level, their expectations, their needs \u2014 changes how you prepare. A procedure with a nervous first-time patient is different from one with a veteran who\'s done it ten times.',
+      question: 'Who is the one person whose input would most improve your plan? Have you connected with them yet?',
+    },
+    network: [
+      { name: 'Your team', role: 'Collaborators', tip: 'Tag team members so they can see your plan and contribute their expertise. Learning is better together.' },
+    ],
+    history: {
+      summary: 'No previous entries yet',
+      detail: 'Your collaboration history will appear here \u2014 who you\'ve worked with, in what contexts, and what you learned from each person.',
+    },
+  },
+
+  plan_how: {
+    notesPrompt: 'How will you approach this? What resources, tools, techniques, or methods will you use? Add links to guidelines, upload reference documents, or attach photos of your setup.',
+    richContent: true,
+    aiCoach: {
+      title: 'Your Approach Is Your Strategy',
+      body: 'The "how" is where preparation meets execution. Think about the resources you\'ll need, the sequence of steps, any tools or equipment, and potential obstacles. Upload checklists, link to procedure videos, attach guidelines \u2014 build a reference kit you can review right before you begin.',
+      question: 'What\'s the step you\'re least confident about? That\'s where extra preparation pays off the most.',
+    },
+    network: [
+      { name: 'Your community', role: 'Practitioners', tip: 'Experienced practitioners often have approaches and shortcuts that aren\'t in the textbook. Follow them to see how they tackle similar activities.' },
+    ],
+    history: {
+      summary: 'No previous entries yet',
+      detail: 'Your approach history will appear here, showing how your methods evolve and improve across activities.',
+    },
+  },
+
+  // ===========================================================================
+  // MEDIA / CAPTURE MODULES
+  // ===========================================================================
+
+  progress_photos: {
+    notesPrompt: 'Capture photos during your activity. Document your workspace, procedures, patient interactions (with consent), or anything worth reviewing later.',
+    richContent: true,
+    aiCoach: {
+      title: 'Visual Documentation Builds Recall',
+      body: 'Photos captured in the moment carry context that written notes can\'t. A photo of your setup, your wound assessment, or your team\'s whiteboard becomes a powerful study tool when you review it later.',
+      question: 'What moment during this activity would be most valuable to capture visually for later reflection?',
+    },
+    network: [
+      { name: 'Your peers', role: 'Community', tip: 'Shared photos (with appropriate consent and de-identification) help the whole cohort learn from each other\'s experiences.' },
+    ],
+    history: {
+      summary: 'No photos yet',
+      detail: 'Your photo timeline will appear here, creating a visual record of your clinical journey.',
+    },
+  },
+
+  voice_memo: {
+    notesPrompt: 'Record voice memos during or after your activity. Capture quick reflections, observations, or notes when you can\'t type.',
+    aiCoach: {
+      title: 'Speak Your Thoughts',
+      body: 'Voice memos are perfect for capturing raw, unfiltered reflections in the moment. The emotion and nuance in your voice often reveals insights that get lost when you write them down later.',
+      question: 'What just happened that you want to remember? Hit record and talk it through.',
+    },
+    network: [
+      { name: 'Your peers', role: 'Community', tip: 'Some students share anonymized voice reflections as a study tool. Hearing someone else\'s clinical reasoning process is uniquely valuable.' },
+    ],
+    history: {
+      summary: 'No voice memos yet',
+      detail: 'Your voice memo timeline will appear here.',
+    },
+  },
+
+  text_notes: {
+    notesPrompt: 'Write notes during or after your activity. Quick observations, clinical reasoning, things to follow up on, questions that came up.',
+    aiCoach: {
+      title: 'Write Now, Organize Later',
+      body: 'Don\'t worry about structure \u2014 just capture your thoughts in the moment. Raw notes written close to the experience are more valuable than polished reflections written hours later.',
+      question: 'What\'s the most important thing that happened in the last hour that you want to remember?',
+    },
+    network: [
+      { name: 'Your peers', role: 'Community', tip: 'Quick notes turn into rich reflections. The students who write the most, learn the most.' },
+    ],
+    history: {
+      summary: 'No notes yet',
+      detail: 'Your notes timeline will appear here.',
+    },
+  },
+
+  // ===========================================================================
+  // REFLECTION MODULES
+  // ===========================================================================
+
+  gibbs_reflection: {
+    notesPrompt: 'Walk through the Gibbs Reflective Cycle: Description \u2192 Feelings \u2192 Evaluation \u2192 Analysis \u2192 Conclusion \u2192 Action Plan. What happened? How did you feel? What was good and bad? What sense can you make of it? What will you do differently?',
+    aiCoach: {
+      title: 'Structured Reflection Deepens Learning',
+      body: 'Gibbs\' Reflective Cycle moves you from "what happened" to "what will I do differently." Each stage builds on the last. Don\'t skip the feelings stage \u2014 emotional awareness is clinical intelligence.',
+      question: 'Start with Description: What happened, in factual terms? Then move to Feelings: How did you feel at the time and after?',
+    },
+    network: [
+      { name: 'Study Group', role: 'Peer cohort', tip: 'Sharing reflections (appropriately) with your study group helps you see experiences through others\' eyes. Different perspectives deepen everyone\'s learning.' },
+    ],
+    history: {
+      summary: 'No reflections yet',
+      detail: 'Your Gibbs reflections will appear here, showing how your reflective practice deepens over time.',
+    },
+  },
+
+  clinical_reasoning: {
+    notesPrompt: 'Document your clinical reasoning process. What did you observe? What did you hypothesize? What actions did you take? What was the outcome?',
+    aiCoach: {
+      title: 'Make Your Thinking Visible',
+      body: 'Clinical reasoning is the invisible skill that separates good nurses from great ones. By writing down your thought process \u2014 not just your actions \u2014 you make it available for reflection, feedback, and growth.',
+      question: 'Walk through your decision chain: What cue triggered your thinking? What did you consider? Why did you choose the action you took?',
+    },
+    network: [
+      { name: 'Preceptor', role: 'Clinical mentor', tip: 'I want to hear your reasoning, not just your actions. Tell me what you were thinking and why. That\'s how I can help you think better.' },
+    ],
+    history: {
+      summary: 'No entries yet',
+      detail: 'Your clinical reasoning entries will appear here, forming a portfolio of your developing judgment.',
+    },
+  },
+
+  self_assessment: {
+    notesPrompt: 'Honestly assess your performance. What went well? Where did you struggle? Rate your confidence, competence, and areas for growth.',
+    aiCoach: {
+      title: 'Honest Self-Assessment Accelerates Growth',
+      body: 'The gap between how you think you performed and how you actually performed is where the most powerful learning lives. Be honest \u2014 rate yourself before you get external feedback.',
+      question: 'On a scale of 1-5, how confident were you during this activity? And how competent do you think you actually were? Note any gap.',
+    },
+    network: [
+      { name: 'Your peers', role: 'Community', tip: 'Self-assessment is more accurate when calibrated against peers. Share your ratings and see how others assess similar experiences.' },
+    ],
+    history: {
+      summary: 'No self-assessments yet',
+      detail: 'Your self-assessment history will appear here, showing your growing self-awareness and calibration.',
+    },
+  },
 };
 
 // Fallback for any module not explicitly defined above
@@ -457,20 +670,143 @@ const DEFAULT_CONTENT: ModuleContent = {
 };
 
 // =============================================================================
+// ATTACHMENT TYPES
+// =============================================================================
+
+interface Attachment {
+  id: string;
+  type: 'photo' | 'video' | 'document' | 'link' | 'idea';
+  label: string;
+  uri?: string;
+}
+
+// =============================================================================
+// RICH CONTENT TOOLBAR
+// =============================================================================
+
+const TOOLBAR_ACTIONS: Array<{
+  type: Attachment['type'];
+  icon: React.ComponentType<any>;
+  label: string;
+  color: string;
+}> = [
+  { type: 'photo', icon: LucideIcons.Camera, label: 'Photo', color: '#34C759' },
+  { type: 'video', icon: LucideIcons.Video, label: 'Video', color: '#FF2D55' },
+  { type: 'document', icon: LucideIcons.FileText, label: 'Document', color: '#5856D6' },
+  { type: 'link', icon: LucideIcons.Link, label: 'Link', color: '#007AFF' },
+  { type: 'idea', icon: LucideIcons.Lightbulb, label: 'Idea', color: '#FF9500' },
+];
+
+function RichContentToolbar({
+  onAdd,
+}: {
+  onAdd: (type: Attachment['type']) => void;
+}) {
+  return (
+    <View style={s.toolbar}>
+      {TOOLBAR_ACTIONS.map((action) => {
+        const Icon = action.icon;
+        return (
+          <TouchableOpacity
+            key={action.type}
+            style={s.toolbarButton}
+            onPress={() => onAdd(action.type)}
+            activeOpacity={0.7}
+          >
+            <View style={[s.toolbarIconCircle, { backgroundColor: `${action.color}12` }]}>
+              <Icon size={18} color={action.color} />
+            </View>
+            <Text style={[s.toolbarLabel, { color: action.color }]}>{action.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+// =============================================================================
+// ATTACHMENT PREVIEW
+// =============================================================================
+
+function AttachmentList({
+  attachments,
+  onRemove,
+}: {
+  attachments: Attachment[];
+  onRemove: (id: string) => void;
+}) {
+  if (attachments.length === 0) return null;
+
+  const typeConfig: Record<Attachment['type'], { icon: React.ComponentType<any>; bg: string; color: string }> = {
+    photo: { icon: LucideIcons.Image, bg: '#E8F5E9', color: '#34C759' },
+    video: { icon: LucideIcons.Play, bg: '#FCE4EC', color: '#FF2D55' },
+    document: { icon: LucideIcons.FileText, bg: '#EDE7F6', color: '#5856D6' },
+    link: { icon: LucideIcons.ExternalLink, bg: '#E3F2FD', color: '#007AFF' },
+    idea: { icon: LucideIcons.Lightbulb, bg: '#FFF8E1', color: '#FF9500' },
+  };
+
+  return (
+    <View style={s.attachmentList}>
+      {attachments.map((att) => {
+        const cfg = typeConfig[att.type];
+        const Icon = cfg.icon;
+        return (
+          <View key={att.id} style={[s.attachmentCard, { backgroundColor: cfg.bg }]}>
+            {att.type === 'photo' && att.uri ? (
+              <Image source={{ uri: att.uri }} style={s.attachmentThumb} />
+            ) : (
+              <View style={[s.attachmentIconBox, { backgroundColor: `${cfg.color}20` }]}>
+                <Icon size={16} color={cfg.color} />
+              </View>
+            )}
+            <Text style={s.attachmentLabel} numberOfLines={1}>{att.label}</Text>
+            <Pressable
+              style={s.attachmentRemove}
+              onPress={() => onRemove(att.id)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <LucideIcons.X size={14} color={C.gray} />
+            </Pressable>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// =============================================================================
 // SECTION COMPONENTS
 // =============================================================================
 
-/** Your Plan — student input area */
+/** Your Plan — student input area with optional rich content toolbar */
 function YourPlanSection({
   prompt,
   value,
   onChange,
   accent,
+  richContent,
+  attachments,
+  onAddAttachment,
+  onRemoveAttachment,
+  showLinkInput,
+  linkUrl,
+  onLinkUrlChange,
+  onLinkSubmit,
+  onLinkCancel,
 }: {
   prompt: string;
   value: string;
   onChange: (text: string) => void;
   accent: string;
+  richContent?: boolean;
+  attachments?: Attachment[];
+  onAddAttachment?: (type: Attachment['type']) => void;
+  onRemoveAttachment?: (id: string) => void;
+  showLinkInput?: boolean;
+  linkUrl?: string;
+  onLinkUrlChange?: (text: string) => void;
+  onLinkSubmit?: () => void;
+  onLinkCancel?: () => void;
 }) {
   return (
     <View style={s.section}>
@@ -488,6 +824,41 @@ function YourPlanSection({
         textAlignVertical="top"
         scrollEnabled={false}
       />
+
+      {/* Rich content toolbar */}
+      {richContent && onAddAttachment && (
+        <RichContentToolbar onAdd={onAddAttachment} />
+      )}
+
+      {/* Link URL inline input */}
+      {showLinkInput && (
+        <View style={s.linkInputRow}>
+          <TextInput
+            style={s.linkInput}
+            placeholder="Paste a URL..."
+            placeholderTextColor={C.gray}
+            value={linkUrl}
+            onChangeText={onLinkUrlChange}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            returnKeyType="done"
+            onSubmitEditing={onLinkSubmit}
+            autoFocus
+          />
+          <TouchableOpacity style={s.linkSubmitButton} onPress={onLinkSubmit} activeOpacity={0.7}>
+            <LucideIcons.Check size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.linkCancelButton} onPress={onLinkCancel} activeOpacity={0.7}>
+            <LucideIcons.X size={16} color={C.gray} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Attached items */}
+      {attachments && onRemoveAttachment && (
+        <AttachmentList attachments={attachments} onRemove={onRemoveAttachment} />
+      )}
     </View>
   );
 }
@@ -643,6 +1014,9 @@ export function ModuleDetailBottomSheet({
   config,
 }: ModuleDetailBottomSheetProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({});
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
 
   React.useEffect(() => {
     if (isOpen && Platform.OS !== 'web') {
@@ -654,8 +1028,169 @@ export function ModuleDetailBottomSheet({
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    setShowLinkInput(false);
+    setLinkUrl('');
     onClose();
   }, [onClose]);
+
+  // ---- Attachment handlers ----
+
+  const addAttachment = useCallback((moduleKey: string, att: Attachment) => {
+    setAttachments((prev) => ({
+      ...prev,
+      [moduleKey]: [...(prev[moduleKey] || []), att],
+    }));
+  }, []);
+
+  const removeAttachment = useCallback((moduleKey: string, attachmentId: string) => {
+    setAttachments((prev) => ({
+      ...prev,
+      [moduleKey]: (prev[moduleKey] || []).filter((a) => a.id !== attachmentId),
+    }));
+  }, []);
+
+  const handleAddAttachment = useCallback(async (type: Attachment['type']) => {
+    if (!moduleId) return;
+
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    switch (type) {
+      case 'photo': {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please allow access to your photo library.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+          allowsMultipleSelection: true,
+        });
+        if (!result.canceled && result.assets) {
+          result.assets.forEach((asset) => {
+            const fileName = asset.fileName || `Photo ${new Date().toLocaleTimeString()}`;
+            addAttachment(moduleId, {
+              id: `photo-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              type: 'photo',
+              label: fileName,
+              uri: asset.uri,
+            });
+          });
+        }
+        break;
+      }
+
+      case 'video': {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please allow access to your photo library.');
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['videos'],
+          quality: 0.8,
+        });
+        if (!result.canceled && result.assets?.[0]) {
+          const asset = result.assets[0];
+          addAttachment(moduleId, {
+            id: `video-${Date.now()}`,
+            type: 'video',
+            label: asset.fileName || `Video ${new Date().toLocaleTimeString()}`,
+            uri: asset.uri,
+          });
+        }
+        break;
+      }
+
+      case 'document': {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: '*/*',
+          copyToCacheDirectory: true,
+          multiple: true,
+        });
+        if (!result.canceled && result.assets) {
+          result.assets.forEach((asset) => {
+            addAttachment(moduleId, {
+              id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              type: 'document',
+              label: asset.name || 'Document',
+              uri: asset.uri,
+            });
+          });
+        }
+        break;
+      }
+
+      case 'link': {
+        setShowLinkInput(true);
+        break;
+      }
+
+      case 'idea': {
+        if (Platform.OS === 'ios') {
+          Alert.prompt(
+            'Add Idea',
+            'Capture a quick thought, insight, or idea.',
+            (text) => {
+              if (text && text.trim()) {
+                addAttachment(moduleId, {
+                  id: `idea-${Date.now()}`,
+                  type: 'idea',
+                  label: text.trim(),
+                });
+              }
+            },
+            'plain-text',
+            '',
+            'default',
+          );
+        } else {
+          // Android fallback — add a note attachment with placeholder
+          addAttachment(moduleId, {
+            id: `idea-${Date.now()}`,
+            type: 'idea',
+            label: 'New idea — tap to edit',
+          });
+        }
+        break;
+      }
+    }
+  }, [moduleId, addAttachment]);
+
+  const handleLinkSubmit = useCallback(() => {
+    if (!moduleId || !linkUrl.trim()) {
+      setShowLinkInput(false);
+      setLinkUrl('');
+      return;
+    }
+    let url = linkUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    // Extract a display label from the URL
+    let label: string;
+    try {
+      const parsed = new URL(url);
+      label = parsed.hostname + (parsed.pathname !== '/' ? parsed.pathname : '');
+    } catch {
+      label = url;
+    }
+    addAttachment(moduleId, {
+      id: `link-${Date.now()}`,
+      type: 'link',
+      label,
+      uri: url,
+    });
+    setShowLinkInput(false);
+    setLinkUrl('');
+  }, [moduleId, linkUrl, addAttachment]);
+
+  const handleLinkCancel = useCallback(() => {
+    setShowLinkInput(false);
+    setLinkUrl('');
+  }, []);
 
   if (!moduleId) return null;
 
@@ -666,6 +1201,7 @@ export function ModuleDetailBottomSheet({
   const accent = MODULE_COLORS[moduleId] || C.blue;
   const content = MODULE_CONTENT[moduleId] || DEFAULT_CONTENT;
   const currentNotes = notes[moduleId] || '';
+  const currentAttachments = attachments[moduleId] || [];
 
   return (
     <Actionsheet isOpen={isOpen} onClose={handleClose}>
@@ -717,6 +1253,15 @@ export function ModuleDetailBottomSheet({
                 value={currentNotes}
                 onChange={(text) => setNotes((prev) => ({ ...prev, [moduleId]: text }))}
                 accent={accent}
+                richContent={content.richContent}
+                attachments={currentAttachments}
+                onAddAttachment={handleAddAttachment}
+                onRemoveAttachment={(id) => removeAttachment(moduleId, id)}
+                showLinkInput={showLinkInput}
+                linkUrl={linkUrl}
+                onLinkUrlChange={setLinkUrl}
+                onLinkSubmit={handleLinkSubmit}
+                onLinkCancel={handleLinkCancel}
               />
 
               {/* AI Coach */}
@@ -982,6 +1527,114 @@ const s = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: '#1976D2',
+  },
+
+  // Rich content toolbar
+  toolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    backgroundColor: C.gray6,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  toolbarButton: {
+    alignItems: 'center',
+    gap: 4,
+    flex: 1,
+  },
+  toolbarIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toolbarLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Link input
+  linkInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  linkInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: C.bg,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: C.label,
+    borderWidth: 1,
+    borderColor: C.blue,
+  },
+  linkSubmitButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  linkCancelButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.gray5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Attachment list
+  attachmentList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  attachmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingLeft: 8,
+    paddingRight: 10,
+    borderRadius: 10,
+    gap: 8,
+    maxWidth: '100%',
+  },
+  attachmentThumb: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+  },
+  attachmentIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachmentLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: C.label,
+    flexShrink: 1,
+    maxWidth: 180,
+  },
+  attachmentRemove: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
   },
 });
 

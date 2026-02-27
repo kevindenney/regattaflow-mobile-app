@@ -28,6 +28,7 @@ import { IOSSegmentedControl } from '@/components/ui/ios';
 import { RaceDetailHeroHeader } from '@/components/races/RaceDetailHeroHeader';
 import { CollaborationPopover } from '@/components/races/CollaborationPopover';
 import { RaceCrewChat } from '@/components/races/RaceCrewChat';
+import { ModuleDetailBottomSheet } from '@/components/races/ModuleDetailBottomSheet';
 import {
   DaysBeforeContent,
   OnWaterContent,
@@ -88,6 +89,7 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
   // Collaboration UI state
   const [showCollabPopover, setShowCollabPopover] = useState(false);
   const [showCrewChat, setShowCrewChat] = useState(false);
+  const [activeModuleId, setActiveModuleId] = useState<string | null>(null);
 
   // ---------------------------------------------------------------------------
   // DATA FETCHING
@@ -322,6 +324,7 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
               race={raceData}
               onModulePress={(moduleId) => {
                 logger.info('[RaceDetailContent] Module pressed:', moduleId);
+                setActiveModuleId(moduleId);
               }}
             />
           )}
@@ -352,6 +355,16 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
           onDeleteMessage={deleteMessage}
           isSending={isSending}
           isLoading={messagesLoading}
+        />
+      )}
+
+      {/* Module Detail Bottom Sheet (non-sailing interests) */}
+      {!isSailing && (
+        <ModuleDetailBottomSheet
+          moduleId={activeModuleId}
+          isOpen={activeModuleId !== null}
+          onClose={() => setActiveModuleId(null)}
+          config={eventConfig}
         />
       )}
     </View>
