@@ -17,6 +17,7 @@ export const NURSING_EVENT_CONFIG: InterestEventConfig = {
 
   addEventLabel: 'Add Clinical',
   eventNoun: 'Clinical',
+  teamNoun: 'Team',
   catalogRoute: '/(tabs)/learn',
   catalogSubtitle: 'Browse courses and clinical skills',
 

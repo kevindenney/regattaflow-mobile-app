@@ -226,6 +226,9 @@ export interface InterestEventConfig {
   /** Event type noun (e.g., "Race", "Shift", "Session", "Workout") */
   eventNoun: string
 
+  /** Team/group noun for chat labels (e.g., "Crew", "Team", "Group") */
+  teamNoun?: string
+
   /** Route to navigate when "Browse {eventNoun} Catalog" is tapped */
   catalogRoute?: string
 

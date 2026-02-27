@@ -922,23 +922,25 @@ export function RaceSummaryCard({
   });
 
   // Build menu items for card management - permission-aware
+  const noun = eventConfig.eventNoun;
+  const teamNoun = eventConfig.teamNoun ?? 'Team';
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
-    // Crew Chat — fallback entry point when no avatar row is visible
+    // Team/Crew Chat — fallback entry point when no avatar row is visible
     if (FEATURE_FLAGS.ENABLE_RACE_CREW_CHAT) {
-      items.push({ label: 'Crew Chat', icon: 'chatbubbles-outline', onPress: () => setShowChat(true) });
+      items.push({ label: `${teamNoun} Chat`, icon: 'chatbubbles-outline', onPress: () => setShowChat(true) });
     }
     // Share is always available
-    items.push({ label: 'Share Race', icon: 'share-outline', onPress: handleShare });
-    // Race Detail (scrollable view)
-    items.push({ label: 'Race Detail', icon: 'flag-outline', onPress: () => router.push(`/race/${race.id}` as any) });
+    items.push({ label: `Share ${noun}`, icon: 'share-outline', onPress: handleShare });
+    // Detail (scrollable view)
+    items.push({ label: `${noun} Detail`, icon: 'flag-outline', onPress: () => router.push(`/race/${race.id}` as any) });
     // Only show edit/delete for owners
     if (isOwner) {
       if (onEdit) {
-        items.push({ label: 'Edit Race', icon: 'create-outline', onPress: onEdit });
+        items.push({ label: `Edit ${noun}`, icon: 'create-outline', onPress: onEdit });
       }
       if (onDelete) {
-        items.push({ label: 'Delete Race', icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
+        items.push({ label: `Delete ${noun}`, icon: 'trash-outline', onPress: onDelete, variant: 'destructive' });
       }
     }
     // For demo races, show dismiss option instead of edit/delete
@@ -946,7 +948,7 @@ export function RaceSummaryCard({
       items.push({ label: 'Dismiss sample', icon: 'close-outline', onPress: onDismiss });
     }
     return items;
-  }, [onEdit, onDelete, race, onDismiss, isOwner, handleShare, router]);
+  }, [onEdit, onDelete, race, onDismiss, isOwner, handleShare, router, noun, teamNoun]);
 
   // Long-press handler to show context menu
   const handleLongPress = useCallback(() => {

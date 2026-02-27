@@ -27,6 +27,7 @@ export const FITNESS_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   addEventLabel: 'Add Workout',
   eventNoun: 'Workout',
+  teamNoun: 'Team',
   catalogRoute: '/(tabs)/learn',
   catalogSubtitle: 'Browse workout programs and plans',
 

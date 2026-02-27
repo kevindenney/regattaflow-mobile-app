@@ -28,6 +28,7 @@ export const SAILING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   addEventLabel: 'Add Race',
   eventNoun: 'Race',
+  teamNoun: 'Crew',
   catalogRoute: '/catalog-race',
   catalogSubtitle: 'Find and follow races',
 

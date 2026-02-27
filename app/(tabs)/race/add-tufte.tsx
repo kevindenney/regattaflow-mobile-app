@@ -660,6 +660,7 @@ export default function AddRaceScreen() {
       // Build metadata
       const metadata: Record<string, any> = {
         venue_name: form.location || null,
+        interest_id: currentInterest?.id ?? null,
       };
 
       // Guest Restriction: Prevent saving for guests and prompt to sign up
@@ -688,7 +689,6 @@ export default function AddRaceScreen() {
         status: 'planned',
         race_type: isSailing ? form.raceType : form.eventSubtype,
         vhf_channel: isSailing ? (form.vhfChannel || null) : null,
-        interest_id: currentInterest?.id ?? null,
       };
 
       // ... (rest of the existing Supabase logic) ...

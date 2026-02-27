@@ -27,6 +27,7 @@ export const DRAWING_EVENT_CONFIG: InterestEventConfig = {
   // ---------------------------------------------------------------------------
   addEventLabel: 'Add Session',
   eventNoun: 'Session',
+  teamNoun: 'Group',
   catalogRoute: '/(tabs)/learn',
   catalogSubtitle: 'Browse drawing courses and techniques',
 
