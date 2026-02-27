@@ -24,9 +24,10 @@ import { IOS_COLORS } from '@/components/cards/constants';
 import { useCoachSpotlights } from '@/hooks/useCoachData';
 import { useCoachingStatus } from '@/hooks/useCoachingStatus';
 import { CoachRecruitmentBanner } from '@/components/learn/CoachRecruitmentBanner';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import {
   TufteSection,
-  MOCK_COACHES,
+  getMockCoachesForInterest,
   styles as sharedStyles,
 } from './shared';
 
@@ -38,6 +39,9 @@ interface SailorDiscoveryViewProps {
 export function SailorDiscoveryView({ toolbarOffset = 0, onScroll }: SailorDiscoveryViewProps) {
   const router = useRouter();
   const { relationship, seasonCount } = useCoachingStatus();
+  const eventConfig = useInterestEventConfig();
+  const interestSlug = eventConfig.interestSlug;
+  const isSailing = interestSlug === 'sail-racing';
 
   const {
     data: coaches = [],
@@ -46,13 +50,22 @@ export function SailorDiscoveryView({ toolbarOffset = 0, onScroll }: SailorDisco
 
   const [refreshing, setRefreshing] = React.useState(false);
 
+  const mockCoaches = getMockCoachesForInterest(interestSlug);
   const coachesToUse = coaches.length > 0
     ? coaches.map((coach) => ({
         ...coach,
         hourly_rate_usd: coach.hourly_rate ?? null,
         rating: coach.average_rating ?? null,
       }))
-    : MOCK_COACHES;
+    : mockCoaches;
+
+  // Interest-aware hero copy
+  const heroTitle = 'Find Your Coach';
+  const heroSubtitle = isSailing
+    ? 'Get matched with expert sailing coaches who specialize in your goals and boat class.'
+    : interestSlug === 'nursing'
+      ? 'Get matched with experienced clinical preceptors and NCLEX prep coaches who specialize in your learning goals.'
+      : 'Get matched with expert coaches who specialize in your goals and skill level.';
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -73,9 +86,9 @@ export function SailorDiscoveryView({ toolbarOffset = 0, onScroll }: SailorDisco
     >
       {/* Discovery Hero */}
       <View style={sharedStyles.discoveryHero}>
-        <Text style={sharedStyles.discoveryTitle}>Find Your Coach</Text>
+        <Text style={sharedStyles.discoveryTitle}>{heroTitle}</Text>
         <Text style={sharedStyles.discoverySubtitle}>
-          Get matched with expert sailing coaches who specialize in your goals and boat class.
+          {heroSubtitle}
         </Text>
         <TouchableOpacity
           style={sharedStyles.ctaButton}
@@ -142,9 +155,13 @@ export function SailorDiscoveryView({ toolbarOffset = 0, onScroll }: SailorDisco
             <View style={sharedStyles.becomeCoachContent}>
               <Text style={sharedStyles.becomeCoachTitle}>Share Your Knowledge</Text>
               <Text style={sharedStyles.becomeCoachDescription}>
-                {seasonCount > 0
-                  ? `You\u2019ve been racing for ${seasonCount} season${seasonCount === 1 ? '' : 's'}. Share your knowledge\u00a0\u2014 become a RegattaFlow coach.`
-                  : 'Turn your sailing knowledge into income. Coach sailors worldwide, set your own rates, and build your reputation on RegattaFlow.'}
+                {isSailing
+                  ? (seasonCount > 0
+                      ? `You\u2019ve been racing for ${seasonCount} season${seasonCount === 1 ? '' : 's'}. Share your knowledge\u00a0\u2014 become a RegattaFlow coach.`
+                      : 'Turn your sailing knowledge into income. Coach sailors worldwide, set your own rates, and build your reputation on RegattaFlow.')
+                  : interestSlug === 'nursing'
+                    ? 'Help nursing students build confidence before clinical rotations. Share your expertise as a preceptor or NCLEX coach.'
+                    : 'Turn your expertise into impact. Coach others, set your own rates, and build your reputation on BetterAt.'}
               </Text>
               <TouchableOpacity
                 style={sharedStyles.becomeCoachButton}

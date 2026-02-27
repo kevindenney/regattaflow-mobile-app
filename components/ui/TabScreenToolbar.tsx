@@ -36,6 +36,7 @@ import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { triggerHaptic } from '@/lib/haptics';
 import { useWebDrawer } from '@/providers/WebDrawerProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { InterestSwitcher } from '@/components/InterestSwitcher';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -318,8 +319,9 @@ export function TabScreenToolbar({
           </Pressable>
         ) : null}
 
-        {/* Right: custom content or default action capsule + profile avatar */}
+        {/* Right: interest switcher + custom content or default action capsule + profile avatar */}
         <View style={styles.rightSection}>
+          <InterestSwitcher />
           {rightContent
             ? rightContent
             : hasActions && (

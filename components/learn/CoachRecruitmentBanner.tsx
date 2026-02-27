@@ -10,6 +10,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCoachRecruitment } from '@/hooks/useCoachRecruitment';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { IOS_COLORS } from '@/components/cards/constants';
 
 interface CoachRecruitmentBannerProps {
@@ -25,8 +26,11 @@ export function CoachRecruitmentBanner({
 }: CoachRecruitmentBannerProps) {
   const router = useRouter();
   const { shouldShowPrompt, dismiss, getBannerMessage, isLoading, error } = useCoachRecruitment();
+  const eventConfig = useInterestEventConfig();
 
-  if (error && context === 'coaches_tab') {
+  // Only show the error banner for sail-racing; other interests don't have
+  // coaching tables yet so errors are expected and not useful to surface.
+  if (error && context === 'coaches_tab' && eventConfig.interestSlug === 'sail-racing') {
     return (
       <View style={[styles.errorContainer, style]}>
         <Ionicons name="warning-outline" size={16} color="#9A3412" />
@@ -35,6 +39,11 @@ export function CoachRecruitmentBanner({
         </Text>
       </View>
     );
+  }
+
+  // For non-sailing interests, suppress errors silently
+  if (error) {
+    return null;
   }
 
   if (isLoading || !shouldShowPrompt(context)) {

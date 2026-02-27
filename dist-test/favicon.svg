@@ -1,16 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Background -->
-  <rect width="32" height="32" rx="6" fill="#0066CC"/>
-  
-  <!-- Sailboat -->
-  <g transform="translate(5, 4)">
-    <!-- Main sail (mainsail) -->
-    <path d="M11 3 L11 19 L4 19 Q4 10 11 3Z" fill="white"/>
-    
-    <!-- Jib sail -->
-    <path d="M11 6 L11 16 L16 16 Q16 11 11 6Z" fill="white" opacity="0.85"/>
-    
-    <!-- Hull -->
-    <path d="M3 20 L19 20 L17 24 L5 24 Z" fill="white"/>
-  </g>
+  <!-- Blue gradient background -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#007AFF"/>
+      <stop offset="100%" stop-color="#5856D6"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
+
+  <!-- B letter -->
+  <text x="16" y="22" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-size="20" font-weight="700" fill="white">B</text>
 </svg>

@@ -142,7 +142,7 @@ export const MOCK_SESSIONS: CoachingSession[] = [
   },
 ] as CoachingSession[];
 
-export const MOCK_COACHES = [
+export const MOCK_COACHES_SAILING = [
   {
     id: 'coach_emily',
     user_id: 'user_emily',
@@ -213,6 +213,92 @@ export const MOCK_COACHES = [
     rating: 5,
   },
 ];
+
+export const MOCK_COACHES_NURSING = [
+  {
+    id: 'coach_dr_chen',
+    user_id: 'user_dr_chen',
+    display_name: 'Dr. Rachel Chen',
+    profile_photo_url: null,
+    bio: 'ICU Clinical Nurse Specialist \u00B7 Physical assessment expert',
+    specialties: ['physical_assessment', 'critical_care', 'clinical_reasoning'],
+    experience_years: 14,
+    certifications: ['CNS-BC', 'CCRN'],
+    available_for_sessions: true,
+    hourly_rate: 18000,
+    currency: 'USD',
+    based_at: 'Baltimore',
+    available_locations: ['Remote', 'Baltimore'],
+    total_sessions: 286,
+    total_clients: 72,
+    average_rating: 4.9,
+    verified: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    hourly_rate_usd: 18000,
+    rating: 4.9,
+  },
+  {
+    id: 'coach_marcus',
+    user_id: 'user_marcus',
+    display_name: 'Marcus Thompson',
+    profile_photo_url: null,
+    bio: 'Med-Surg NP \u00B7 NCLEX prep specialist',
+    specialties: ['nclex_prep', 'med_surg', 'pharmacology'],
+    experience_years: 9,
+    certifications: ['MSN', 'FNP-BC'],
+    available_for_sessions: true,
+    hourly_rate: 15000,
+    currency: 'USD',
+    based_at: 'Atlanta',
+    available_locations: ['Remote', 'Atlanta'],
+    total_sessions: 192,
+    total_clients: 48,
+    average_rating: 4.8,
+    verified: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    hourly_rate_usd: 15000,
+    rating: 4.8,
+  },
+  {
+    id: 'coach_priya',
+    user_id: 'user_priya',
+    display_name: 'Priya Patel',
+    profile_photo_url: null,
+    bio: 'Simulation Lab Director \u00B7 Skills competency coach',
+    specialties: ['clinical_skills', 'simulation', 'iv_therapy'],
+    experience_years: 11,
+    certifications: ['MSN', 'CHSE'],
+    available_for_sessions: true,
+    hourly_rate: 16000,
+    currency: 'USD',
+    based_at: 'Houston',
+    available_locations: ['Remote', 'Houston'],
+    total_sessions: 345,
+    total_clients: 89,
+    average_rating: 5.0,
+    verified: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    hourly_rate_usd: 16000,
+    rating: 5.0,
+  },
+];
+
+/** Interest-keyed map of mock coaches */
+const MOCK_COACHES_BY_INTEREST: Record<string, typeof MOCK_COACHES_SAILING> = {
+  'sail-racing': MOCK_COACHES_SAILING,
+  nursing: MOCK_COACHES_NURSING,
+};
+
+/** Returns the mock coaches for a given interest slug. Falls back to sailing. */
+export function getMockCoachesForInterest(interestSlug: string) {
+  return MOCK_COACHES_BY_INTEREST[interestSlug] ?? MOCK_COACHES_SAILING;
+}
+
+/** @deprecated Use getMockCoachesForInterest() instead */
+export const MOCK_COACHES = MOCK_COACHES_SAILING;
 
 export const MOCK_FEEDBACK: FeedbackItem[] = [
   {
