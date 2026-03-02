@@ -54,10 +54,11 @@ const resolveClubId = async (supabase: SupabaseClient, userId: string): Promise<
       break;
     }
 
+    const row = (data || {}) as Record<string, unknown>;
     const candidate =
-      data?.active_organization_id ??
-      data?.organization_id ??
-      data?.club_id ??
+      row.active_organization_id ??
+      row.organization_id ??
+      row.club_id ??
       null;
     if (candidate && typeof candidate === 'string') {
       return candidate;

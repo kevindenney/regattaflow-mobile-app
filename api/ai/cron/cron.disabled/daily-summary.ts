@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ClaudeClient } from '../../../services/ai/ClaudeClient';
-import { AIActivityLogger } from '../../../services/ai/AIActivityLogger';
-import { resolveClubSummary } from '../../../services/ai/ContextResolvers';
-import { buildDailySummaryPrompt } from '../../../services/ai/PromptBuilder';
-import { parseDailySummary } from '../../../services/ai/OutputValidator';
+import { ClaudeClient } from '../../../../services/ai/ClaudeClient';
+import { AIActivityLogger } from '../../../../services/ai/AIActivityLogger';
+import { resolveClubSummary } from '../../../../services/ai/ContextResolvers';
+import { buildDailySummaryPrompt } from '../../../../services/ai/PromptBuilder';
+import { parseDailySummary } from '../../../../services/ai/OutputValidator';
 import { createClient } from '@supabase/supabase-js';
 
 const handler = async (req: VercelRequest, res: VercelResponse) => {
@@ -131,4 +131,3 @@ async function loadDailyStats(supabase: ReturnType<typeof createServiceClient>, 
 }
 
 export default handler;
-
