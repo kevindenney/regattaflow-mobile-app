@@ -6,14 +6,31 @@ function readApiSource(relativePath: string): string {
   return fs.readFileSync(target, 'utf8');
 }
 
+function collectActiveAiRoutes(dir: string): string[] {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectActiveAiRoutes(abs));
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.ts')) continue;
+    const rel = path.relative(process.cwd(), abs).replace(/\\/g, '/');
+    if (rel.includes('/__tests__/')) continue;
+    if (rel.includes('/cron.disabled/')) continue;
+    files.push(rel);
+  }
+
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
 describe('AI domain gate contract', () => {
-  const aiRouteFiles = [
-    'api/ai/club/support.ts',
-    'api/ai/events/[id]/documents/draft.ts',
-    'api/ai/races/[id]/comms/draft.ts',
-  ];
+  const aiRouteFiles = collectActiveAiRoutes(path.resolve(process.cwd(), 'api/ai'));
 
   it('enforces explicit sailing-domain gate and DOMAIN_GATED response in each active AI route', () => {
+    expect(aiRouteFiles.length).toBeGreaterThan(0);
     for (const file of aiRouteFiles) {
       const source = readApiSource(file);
       expect(source).toContain("organization.organization_type !== 'club'");
@@ -23,4 +40,3 @@ describe('AI domain gate contract', () => {
     }
   });
 });
-

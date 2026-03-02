@@ -11,6 +11,7 @@ const expectedSkipIds =
 const steps = [
   { script: 'typecheck', env: {} },
   { script: 'validate:imports:tracked', env: {} },
+  { script: 'validate:ai-domain-gates', env: {} },
   { script: 'test:jest:key', env: {} },
   { script: 'report:migration-object-collision-audit', env: {} },
   {
