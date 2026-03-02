@@ -5,11 +5,12 @@
 
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { useAllBoatClasses, type BrowseBoatClass } from '@/hooks/useAllBoatClasses';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import type { BoatClassSelection } from '@/types/onboarding';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,12 +24,28 @@ import {
 
 export default function BoatClassScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string }>();
+  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string; domain?: string }>();
+  const { activeDomain } = useWorkspaceDomain();
+  const paramDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const resolvedDomain = paramDomain || activeDomain;
+  const isSailingDomain = String(resolvedDomain || '').toLowerCase().trim() === 'sailing';
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState<BrowseBoatClass | null>(null);
   const [hasNoBoat, setHasNoBoat] = useState(false);
 
   const { classes, isLoading, error } = useAllBoatClasses({ limit: 50 });
+
+  useEffect(() => {
+    if (isSailingDomain) return;
+    router.replace({
+      pathname: '/onboarding/profile/name-photo',
+      params: {
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        ...(resolvedDomain ? { domain: resolvedDomain } : {}),
+      },
+    });
+  }, [isSailingDomain, router, params.name, params.avatarUrl, resolvedDomain]);
 
   // Filter classes based on search
   const filteredClasses = useMemo(() => {
@@ -69,9 +86,13 @@ export default function BoatClassScreen() {
 
     router.push({
       pathname: '/onboarding/home-club',
-      params: { name: params.name, avatarUrl: params.avatarUrl },
+      params: {
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        ...(resolvedDomain ? { domain: resolvedDomain } : {}),
+      },
     });
-  }, [selectedClass, hasNoBoat, router, params]);
+  }, [selectedClass, hasNoBoat, router, params, resolvedDomain]);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -117,6 +138,19 @@ export default function BoatClassScreen() {
   );
 
   const canContinue = selectedClass !== null || hasNoBoat;
+
+  if (!isSailingDomain) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#3B82F6" />
+            <Text style={styles.loadingText}>Redirecting to institution onboarding...</Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

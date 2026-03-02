@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/hooks/useInterest';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { supabase } from '@/services/supabase';
 import {
   NotificationService,
@@ -60,6 +62,8 @@ interface UserPrefNotifications {
   venue_intelligence: boolean;
 }
 
+type NotificationPreset = 'essential' | 'operational' | 'all';
+
 const DEFAULT_USER_PREFS: UserPrefNotifications = {
   race_reminders: true,
   weather_alerts: true,
@@ -67,6 +71,81 @@ const DEFAULT_USER_PREFS: UserPrefNotifications = {
   fleet_activity: true,
   coaching_updates: true,
   venue_intelligence: true,
+};
+
+const PRESET_CONFIG: Record<
+  NotificationPreset,
+  {
+    userPrefs: UserPrefNotifications;
+    notifPrefs: Pick<
+      NotificationPreferences,
+      | 'newFollower'
+      | 'followedUserRace'
+      | 'raceLikes'
+      | 'raceComments'
+      | 'achievements'
+      | 'directMessages'
+      | 'groupMessages'
+    >;
+  }
+> = {
+  essential: {
+    userPrefs: {
+      race_reminders: true,
+      weather_alerts: false,
+      race_results: true,
+      fleet_activity: false,
+      coaching_updates: true,
+      venue_intelligence: false,
+    },
+    notifPrefs: {
+      newFollower: false,
+      followedUserRace: false,
+      raceLikes: false,
+      raceComments: false,
+      achievements: true,
+      directMessages: true,
+      groupMessages: true,
+    },
+  },
+  operational: {
+    userPrefs: {
+      race_reminders: true,
+      weather_alerts: true,
+      race_results: true,
+      fleet_activity: true,
+      coaching_updates: true,
+      venue_intelligence: true,
+    },
+    notifPrefs: {
+      newFollower: false,
+      followedUserRace: true,
+      raceLikes: false,
+      raceComments: false,
+      achievements: true,
+      directMessages: true,
+      groupMessages: true,
+    },
+  },
+  all: {
+    userPrefs: {
+      race_reminders: true,
+      weather_alerts: true,
+      race_results: true,
+      fleet_activity: true,
+      coaching_updates: true,
+      venue_intelligence: true,
+    },
+    notifPrefs: {
+      newFollower: true,
+      followedUserRace: true,
+      raceLikes: true,
+      raceComments: true,
+      achievements: true,
+      directMessages: true,
+      groupMessages: true,
+    },
+  },
 };
 
 // =============================================================================
@@ -102,7 +181,12 @@ function dateToTimeString(date: Date): string {
 // =============================================================================
 
 export default function NotificationsScreen(): React.ReactElement {
-  const { user } = useAuth();
+  const { user, userType } = useAuth();
+  const { currentInterest } = useInterest();
+  const { isSailingDomain } = useWorkspaceDomain();
+  const interestSlug = currentInterest?.slug ?? 'sail-racing';
+  const isSailingCopy = isSailingDomain && interestSlug === 'sail-racing';
+  const isClubPersona = userType === 'club';
 
   // Source A: user_preferences JSONB
   const [userPrefs, setUserPrefs] = useState<UserPrefNotifications>(DEFAULT_USER_PREFS);
@@ -110,6 +194,7 @@ export default function NotificationsScreen(): React.ReactElement {
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
 
   const [loading, setLoading] = useState(true);
+  const [presetSaving, setPresetSaving] = useState(false);
 
   // Time picker state
   const [activeTimePicker, setActiveTimePicker] = useState<'start' | 'end' | null>(null);
@@ -212,6 +297,69 @@ export default function NotificationsScreen(): React.ReactElement {
       }
     },
     [user, notifPrefs],
+  );
+
+  const getActivePreset = useCallback((): NotificationPreset | null => {
+    if (!notifPrefs) return null;
+
+    const matchesPreset = (preset: NotificationPreset): boolean => {
+      const config = PRESET_CONFIG[preset];
+
+      const userMatches = (Object.keys(config.userPrefs) as (keyof UserPrefNotifications)[]).every(
+        (key) => userPrefs[key] === config.userPrefs[key]
+      );
+      if (!userMatches) return false;
+
+      const notifMatches = (Object.keys(config.notifPrefs) as (keyof typeof config.notifPrefs)[]).every(
+        (key) => notifPrefs[key] === config.notifPrefs[key]
+      );
+      return notifMatches;
+    };
+
+    if (matchesPreset('essential')) return 'essential';
+    if (matchesPreset('operational')) return 'operational';
+    if (matchesPreset('all')) return 'all';
+    return null;
+  }, [notifPrefs, userPrefs]);
+
+  const activePreset = getActivePreset();
+
+  const applyPreset = useCallback(
+    async (preset: NotificationPreset) => {
+      if (!user || !notifPrefs || presetSaving) return;
+
+      const config = PRESET_CONFIG[preset];
+      const previousUserPrefs = userPrefs;
+      const previousNotifPrefs = notifPrefs;
+
+      setPresetSaving(true);
+      setUserPrefs(config.userPrefs);
+      setNotifPrefs((prev) => (prev ? { ...prev, ...config.notifPrefs } : prev));
+
+      try {
+        await Promise.all([
+          supabase.from('user_preferences').upsert({
+            user_id: user.id,
+            notification_preferences: config.userPrefs,
+            updated_at: new Date().toISOString(),
+          }),
+          NotificationService.updatePreferences(user.id, config.notifPrefs),
+        ]);
+        prevUserPrefs.current = config.userPrefs;
+        prevNotifPrefs.current = {
+          ...previousNotifPrefs,
+          ...config.notifPrefs,
+        };
+      } catch (err) {
+        logger.error('Failed to apply notification preset', { preset, error: err });
+        setUserPrefs(previousUserPrefs);
+        setNotifPrefs(previousNotifPrefs);
+        showAlert('Error', 'Failed to apply preset. Please try again.');
+      } finally {
+        setPresetSaving(false);
+      }
+    },
+    [notifPrefs, presetSaving, user, userPrefs],
   );
 
   // ---------------------------------------------------------------------------
@@ -324,13 +472,59 @@ export default function NotificationsScreen(): React.ReactElement {
           />
         </IOSListSection>
 
-        {/* ── RACING & WEATHER ── */}
+        {/* ── ORGANIZATION PRESETS ── */}
+        {isClubPersona && (
+          <IOSListSection
+            header="ORGANIZATION PRESETS"
+            footer="Apply a simple notification profile for your workspace role. You can still customize below."
+          >
+            <IOSListItem
+              title="Essential"
+              subtitle="Critical reminders, outcomes, and direct/group messages only."
+              leadingIcon="flash"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+              trailingAccessory="badge"
+              badgeText={activePreset === 'essential' ? 'active' : 'apply'}
+              badgeColor={activePreset === 'essential' ? IOS_COLORS.systemGreen : IOS_COLORS.systemBlue}
+              onPress={() => applyPreset('essential')}
+              disabled={presetSaving}
+            />
+            <IOSListItem
+              title="Operational"
+              subtitle="Adds operational updates and intelligence for day-to-day management."
+              leadingIcon="construct"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
+              trailingAccessory="badge"
+              badgeText={activePreset === 'operational' ? 'active' : 'apply'}
+              badgeColor={activePreset === 'operational' ? IOS_COLORS.systemGreen : IOS_COLORS.systemBlue}
+              onPress={() => applyPreset('operational')}
+              disabled={presetSaving}
+            />
+            <IOSListItem
+              title="All Notifications"
+              subtitle="Enable all activity, social, and operational notifications."
+              leadingIcon="checkmark-done"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+              trailingAccessory="badge"
+              badgeText={activePreset === 'all' ? 'active' : 'apply'}
+              badgeColor={activePreset === 'all' ? IOS_COLORS.systemGreen : IOS_COLORS.systemBlue}
+              onPress={() => applyPreset('all')}
+              disabled={presetSaving}
+            />
+          </IOSListSection>
+        )}
+
+        {/* ── EVENT UPDATES ── */}
         <IOSListSection
-          header="RACING & WEATHER"
-          footer="Stay informed about upcoming races and conditions on the water."
+          header={isSailingCopy ? 'RACING & WEATHER' : 'EVENT UPDATES'}
+          footer={
+            isSailingCopy
+              ? 'Stay informed about upcoming races and conditions on the water.'
+              : 'Stay informed about upcoming sessions, outcomes, and key context alerts.'
+          }
         >
           <IOSListItem
-            title="Race Reminders"
+            title={isSailingCopy ? 'Race Reminders' : isClubPersona ? 'Event Reminders' : 'Session Reminders'}
             leadingIcon="alarm"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
             trailingAccessory="switch"
@@ -338,7 +532,7 @@ export default function NotificationsScreen(): React.ReactElement {
             onSwitchChange={(v) => updateUserPref('race_reminders', v)}
           />
           <IOSListItem
-            title="Race Results"
+            title={isSailingCopy ? 'Race Results' : isClubPersona ? 'Event Outcome Updates' : 'Outcome Summaries'}
             leadingIcon="trophy"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.yellow}
             trailingAccessory="switch"
@@ -346,7 +540,7 @@ export default function NotificationsScreen(): React.ReactElement {
             onSwitchChange={(v) => updateUserPref('race_results', v)}
           />
           <IOSListItem
-            title="Weather Alerts"
+            title={isSailingCopy ? 'Weather Alerts' : isClubPersona ? 'Operational Alerts' : 'Context Alerts'}
             leadingIcon="thunderstorm"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.teal}
             trailingAccessory="switch"
@@ -355,57 +549,59 @@ export default function NotificationsScreen(): React.ReactElement {
           />
         </IOSListSection>
 
-        {/* ── SOCIAL ── */}
-        <IOSListSection
-          header="SOCIAL"
-          footer="Activity from sailors you follow and your race posts."
-        >
-          <IOSListItem
-            title="New Followers"
-            leadingIcon="person-add"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
-            trailingAccessory="switch"
-            switchValue={notifPrefs.newFollower}
-            onSwitchChange={(v) => updateNotifPref({ newFollower: v })}
-          />
-          <IOSListItem
-            title="Race Activity"
-            leadingIcon="boat"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.green}
-            trailingAccessory="switch"
-            switchValue={notifPrefs.followedUserRace}
-            onSwitchChange={(v) => updateNotifPref({ followedUserRace: v })}
-          />
-          <IOSListItem
-            title="Likes"
-            leadingIcon="heart"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.red}
-            trailingAccessory="switch"
-            switchValue={notifPrefs.raceLikes}
-            onSwitchChange={(v) => updateNotifPref({ raceLikes: v })}
-          />
-          <IOSListItem
-            title="Comments"
-            leadingIcon="chatbubble"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
-            trailingAccessory="switch"
-            switchValue={notifPrefs.raceComments}
-            onSwitchChange={(v) => updateNotifPref({ raceComments: v })}
-          />
-          <IOSListItem
-            title="Achievements"
-            leadingIcon="ribbon"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
-            trailingAccessory="switch"
-            switchValue={notifPrefs.achievements}
-            onSwitchChange={(v) => updateNotifPref({ achievements: v })}
-          />
-        </IOSListSection>
+        {/* ── SOCIAL (not organization-admin focused) ── */}
+        {!isClubPersona && (
+          <IOSListSection
+            header="SOCIAL"
+            footer="Activity from people you follow and your published updates."
+          >
+            <IOSListItem
+              title="New Followers"
+              leadingIcon="person-add"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+              trailingAccessory="switch"
+              switchValue={notifPrefs.newFollower}
+              onSwitchChange={(v) => updateNotifPref({ newFollower: v })}
+            />
+            <IOSListItem
+              title={isSailingCopy ? 'Race Activity' : 'Following Activity'}
+              leadingIcon="pulse"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.green}
+              trailingAccessory="switch"
+              switchValue={notifPrefs.followedUserRace}
+              onSwitchChange={(v) => updateNotifPref({ followedUserRace: v })}
+            />
+            <IOSListItem
+              title="Likes"
+              leadingIcon="heart"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.red}
+              trailingAccessory="switch"
+              switchValue={notifPrefs.raceLikes}
+              onSwitchChange={(v) => updateNotifPref({ raceLikes: v })}
+            />
+            <IOSListItem
+              title="Comments"
+              leadingIcon="chatbubble"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+              trailingAccessory="switch"
+              switchValue={notifPrefs.raceComments}
+              onSwitchChange={(v) => updateNotifPref({ raceComments: v })}
+            />
+            <IOSListItem
+              title="Achievements"
+              leadingIcon="ribbon"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+              trailingAccessory="switch"
+              switchValue={notifPrefs.achievements}
+              onSwitchChange={(v) => updateNotifPref({ achievements: v })}
+            />
+          </IOSListSection>
+        )}
 
         {/* ── MESSAGES ── */}
         <IOSListSection
           header="MESSAGES"
-          footer="Crew threads and direct messages."
+          footer={isSailingCopy ? 'Crew threads and direct messages.' : 'Direct and group messages.'}
         >
           <IOSListItem
             title="Direct Messages"
@@ -416,30 +612,36 @@ export default function NotificationsScreen(): React.ReactElement {
             onSwitchChange={(v) => updateNotifPref({ directMessages: v })}
           />
           <IOSListItem
-            title="Crew & Group Messages"
+            title={isSailingCopy ? 'Crew & Group Messages' : 'Group Messages'}
             leadingIcon="people"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.teal}
             trailingAccessory="switch"
             switchValue={notifPrefs.groupMessages}
             onSwitchChange={(v) => updateNotifPref({ groupMessages: v })}
           />
-          <IOSListItem
-            title="Fleet Activity"
-            leadingIcon="flag"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
-            trailingAccessory="switch"
-            switchValue={userPrefs.fleet_activity}
-            onSwitchChange={(v) => updateUserPref('fleet_activity', v)}
-          />
+          {isSailingCopy && !isClubPersona && (
+            <IOSListItem
+              title="Fleet Activity"
+              leadingIcon="flag"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.orange}
+              trailingAccessory="switch"
+              switchValue={userPrefs.fleet_activity}
+              onSwitchChange={(v) => updateUserPref('fleet_activity', v)}
+            />
+          )}
         </IOSListSection>
 
         {/* ── COACHING & LEARNING ── */}
         <IOSListSection
           header="COACHING & LEARNING"
-          footer="Updates from coaches and AI-powered insights."
+          footer={
+            isClubPersona
+              ? 'Updates from instructors and workspace intelligence.'
+              : 'Updates from coaches and AI-powered insights.'
+          }
         >
           <IOSListItem
-            title="Coaching Updates"
+            title={isClubPersona ? 'Instructor Updates' : 'Coaching Updates'}
             leadingIcon="school"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
             trailingAccessory="switch"
@@ -447,7 +649,7 @@ export default function NotificationsScreen(): React.ReactElement {
             onSwitchChange={(v) => updateUserPref('coaching_updates', v)}
           />
           <IOSListItem
-            title="Venue Intelligence"
+            title={isSailingCopy ? 'Venue Intelligence' : 'AI Insights'}
             leadingIcon="analytics"
             leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
             trailingAccessory="switch"
