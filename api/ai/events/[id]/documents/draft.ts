@@ -1,18 +1,12 @@
-import type { VercelResponse } from '@vercel/node';
-import { withAuth, AuthenticatedRequest } from '../../../../middleware/auth';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { withAuth, type AuthenticatedRequest } from '../../../../middleware/auth';
 import { ClaudeClient } from '../../../../../services/ai/ClaudeClient';
 import { AIActivityLogger } from '../../../../../services/ai/AIActivityLogger';
 import { resolveEventContext, resolveClubSummary } from '../../../../../services/ai/ContextResolvers';
 import { buildEventDocumentPrompt } from '../../../../../services/ai/PromptBuilder';
 import { parseDocumentDraft } from '../../../../../services/ai/OutputValidator';
 
-const handler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) => {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-
+const authedHandler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) => {
   const { id } = req.query;
   const { document_type: documentType = 'nor' } = typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {};
 
@@ -22,6 +16,24 @@ const handler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) 
   }
 
   const supabase = req.supabase;
+  const activeOrganizationId = req.auth.clubId ?? null;
+
+  if (activeOrganizationId) {
+    const { data: organization, error: organizationError } = await supabase
+      .from('organizations')
+      .select('organization_type')
+      .eq('id', activeOrganizationId)
+      .maybeSingle();
+
+    if (!organizationError && organization && organization.organization_type !== 'club') {
+      res.status(403).json({
+        error: 'Event document drafting is only available in sailing workspaces.',
+        code: 'DOMAIN_GATED',
+      });
+      return;
+    }
+  }
+
   const logger = new AIActivityLogger(supabase);
   const client = new ClaudeClient();
 
@@ -84,5 +96,15 @@ const handler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) 
     res.status(500).json({ error: 'Unable to generate document', detail: error?.message });
   }
 }, { requireClub: true });
+
+const handler = async (req: VercelRequest, res: VercelResponse) => {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  await authedHandler(req, res);
+};
 
 export default handler;

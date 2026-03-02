@@ -1,18 +1,12 @@
-import type { VercelResponse } from '@vercel/node';
-import { withAuth, AuthenticatedRequest } from '../../middleware/auth';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { withAuth, type AuthenticatedRequest } from '../../middleware/auth';
 import { ClaudeClient } from '../../../services/ai/ClaudeClient';
 import { AIActivityLogger } from '../../../services/ai/AIActivityLogger';
 import { resolveClubSummary } from '../../../services/ai/ContextResolvers';
 import { buildSupportPrompt } from '../../../services/ai/PromptBuilder';
 import { parseSupportReply } from '../../../services/ai/OutputValidator';
 
-const handler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) => {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-
+const authedHandler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) => {
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {};
   const message = body.message;
   if (!message || typeof message !== 'string') {
@@ -24,6 +18,20 @@ const handler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) 
   const clubId = req.auth.clubId;
   if (!clubId) {
     res.status(400).json({ error: 'club_id missing on profile' });
+    return;
+  }
+
+  const { data: organization, error: organizationError } = await supabase
+    .from('organizations')
+    .select('organization_type')
+    .eq('id', clubId)
+    .maybeSingle();
+
+  if (!organizationError && organization && organization.organization_type !== 'club') {
+    res.status(403).json({
+      error: 'Club support AI is only available in sailing workspaces.',
+      code: 'DOMAIN_GATED',
+    });
     return;
   }
 
@@ -105,5 +113,14 @@ const handler = withAuth(async (req: AuthenticatedRequest, res: VercelResponse) 
   }
 }, { requireClub: true });
 
-export default handler;
+const handler = async (req: VercelRequest, res: VercelResponse) => {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
 
+  await authedHandler(req, res);
+};
+
+export default handler;
