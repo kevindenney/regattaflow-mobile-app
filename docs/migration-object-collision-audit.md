@@ -1,6 +1,6 @@
 # Migration Object Collision Audit (20260302*)
 
-- Generated: 2026-03-02T22:15:39.879Z
+- Generated: 2026-03-02T22:23:50.635Z
 - Scope: `supabase/migrations/^20260302\d+.*\.sql$`
 - Migration files scanned: 10
 - Symbols scanned: 46 (indexes=35, triggers=10, constraints=1)
