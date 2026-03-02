@@ -163,14 +163,13 @@ class OrganizationInviteService {
   }
 
   async acceptInviteForCurrentUser(inviteId: string): Promise<OrganizationInviteRecord> {
-    const { data: inviteData, error: inviteError } = await supabase
-      .from('organization_invites')
-      .select('invite_token')
-      .eq('id', inviteId)
-      .single();
+    const { data: inviteToken, error: inviteError } = await supabase.rpc(
+      'get_organization_invite_token_by_id',
+      { p_invite_id: inviteId }
+    );
     if (inviteError) throw inviteError;
 
-    const token = String((inviteData as Pick<OrganizationInviteRecord, 'invite_token'>)?.invite_token || '').trim();
+    const token = String(inviteToken || '').trim();
     if (!token) {
       throw new Error('Invite token is missing.');
     }
@@ -220,28 +219,12 @@ class OrganizationInviteService {
   }
 
   async declineInviteForCurrentUser(inviteId: string): Promise<OrganizationInviteRecord> {
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError) throw authError;
-    const user = authData?.user;
-    if (!user?.id || !user?.email) {
-      throw new Error('You must be signed in to decline this invite.');
-    }
-
-    const { data: inviteData, error: inviteError } = await supabase
-      .from('organization_invites')
-      .select('*')
-      .eq('id', inviteId)
-      .single();
+    const { data: inviteToken, error: inviteError } = await supabase.rpc(
+      'get_organization_invite_token_by_id',
+      { p_invite_id: inviteId }
+    );
     if (inviteError) throw inviteError;
-    const invite = inviteData as OrganizationInviteRecord;
-
-    if (!invite?.invitee_email) {
-      throw new Error('This invite does not have an invitee email.');
-    }
-    if (String(invite.invitee_email).trim().toLowerCase() !== String(user.email).trim().toLowerCase()) {
-      throw new Error('You are signed in with a different email than this invite.');
-    }
-    const token = String(invite.invite_token || '').trim();
+    const token = String(inviteToken || '').trim();
     if (!token) {
       throw new Error('Invite token is missing.');
     }

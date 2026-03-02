@@ -81,26 +81,21 @@ describe('OrganizationInviteService security regressions', () => {
       status: 'accepted',
     };
 
-    const single = jest.fn().mockResolvedValue({
-      data: { invite_token: inviteToken },
-      error: null,
-    });
-    const eq = jest.fn(() => ({ single }));
-    const select = jest.fn(() => ({ eq }));
-
-    mockFrom.mockReturnValue({
-      select,
-    });
-    mockRpc.mockResolvedValue({
-      data: acceptedInvite,
-      error: null,
-    });
+    mockRpc
+      .mockResolvedValueOnce({
+        data: inviteToken,
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: acceptedInvite,
+        error: null,
+      });
 
     const result = await organizationInviteService.acceptInviteForCurrentUser(inviteId);
 
-    expect(mockFrom).toHaveBeenCalledWith('organization_invites');
-    expect(select).toHaveBeenCalledWith('invite_token');
-    expect(eq).toHaveBeenCalledWith('id', inviteId);
+    expect(mockRpc).toHaveBeenNthCalledWith(1, 'get_organization_invite_token_by_id', {
+      p_invite_id: inviteId,
+    });
     expect(mockRpc).toHaveBeenCalledWith('respond_to_organization_invite', {
       p_invite_token: inviteToken,
       p_decision: 'accepted',
