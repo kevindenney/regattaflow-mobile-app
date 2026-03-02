@@ -30,6 +30,7 @@
     "seed:sailors": "node scripts/seed-sailors-tab-demo.mjs",
     "lint": "npx eslint . --ext .js,.jsx,.ts,.tsx",
     "typecheck": "npx tsc --noEmit",
+    "validate:imports:tracked": "node scripts/check-tracked-import-targets.mjs",
     "test:ci:gates:unit": "npx jest scripts/__tests__/check-integration-validation-gate.test.ts --runInBand",
     "test:ci:gates": "npm run test:ci:gates:unit && npm run smoke:gate:integration-validation",
     "test:jest:key": "npx jest services/__tests__/OrganizationInviteService.security.test.ts services/__tests__/OrganizationInviteRoleIssuance.sql-security.test.ts services/__tests__/InviteTokenGeneration.compatibility.test.ts services/__tests__/OrganizationInviteRpcFlow.db-runtime.test.ts services/__tests__/OrganizationInviteRoleIssuance.db-runtime.test.ts services/__tests__/OrganizationInviteTokenQuality.db-runtime.test.ts --runInBand",
