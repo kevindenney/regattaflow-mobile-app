@@ -129,6 +129,12 @@ const REQUIRED_TABLE_SIGNATURES = [
 
 const REQUIRED_RPC_SIGNATURES = [
   {
+    name: 'get_organization_invite_token_by_id',
+    args: { p_invite_id: '00000000-0000-0000-0000-000000000000' },
+    argSignature: 'p_invite_id:uuid',
+    allowedRuntimeErrorSubstrings: [],
+  },
+  {
     name: 'get_organization_invite_by_token',
     args: { p_invite_token: 'integration-validation-nonexistent-token' },
     argSignature: 'p_invite_token:text',
@@ -344,6 +350,7 @@ async function run() {
     'supabase/migrations/20260302190000_invite_tokens_and_role_presets.sql',
     'supabase/migrations/20260302193000_org_invite_invitee_status_updates.sql',
     'supabase/migrations/20260302200000_org_invite_completion_flow.sql',
+    'supabase/migrations/20260302223000_invite_token_lookup_by_id_rpc.sql',
   ];
   let inviteMigrationsExist = true;
   for (const migrationFile of inviteMigrationFiles) {
@@ -362,9 +369,10 @@ async function run() {
 
   const inviteServiceSource = await readFile('services/OrganizationInviteService.ts');
   const inviteRpcOk =
-    inviteServiceSource.includes("rpc('get_organization_invite_by_token'") &&
-    inviteServiceSource.includes("rpc('mark_organization_invite_opened'") &&
-    inviteServiceSource.includes("rpc('respond_to_organization_invite'");
+    /rpc\(\s*'get_organization_invite_token_by_id'/.test(inviteServiceSource) &&
+    /rpc\(\s*'get_organization_invite_by_token'/.test(inviteServiceSource) &&
+    /rpc\(\s*'mark_organization_invite_opened'/.test(inviteServiceSource) &&
+    /rpc\(\s*'respond_to_organization_invite'/.test(inviteServiceSource);
   add({
     id: 'invite-rpc-wiring',
     category: 'Invite Flow',
