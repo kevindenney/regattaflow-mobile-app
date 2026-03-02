@@ -1,0 +1,252 @@
+import { supabase } from './supabase';
+
+export type OrganizationInviteStatus =
+  | 'draft'
+  | 'sent'
+  | 'opened'
+  | 'accepted'
+  | 'declined'
+  | 'revoked'
+  | 'failed';
+
+export type OrganizationInviteRecord = {
+  id: string;
+  organization_id: string;
+  program_id: string | null;
+  session_id: string | null;
+  participant_id: string | null;
+  invitee_name: string | null;
+  invitee_email: string | null;
+  invite_token: string | null;
+  role_key: string | null;
+  role_label: string;
+  channel: 'email' | 'sms' | 'link';
+  status: OrganizationInviteStatus;
+  invited_by: string;
+  sent_at: string | null;
+  responded_at: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateOrganizationInviteInput = {
+  organization_id: string;
+  program_id?: string | null;
+  session_id?: string | null;
+  participant_id?: string | null;
+  invitee_name?: string | null;
+  invitee_email?: string | null;
+  invite_token?: string | null;
+  role_key?: string | null;
+  role_label: string;
+  channel?: 'email' | 'sms' | 'link';
+  status?: OrganizationInviteStatus;
+  sent_at?: string | null;
+  notes?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+class OrganizationInviteService {
+  async listOrganizationInvites(
+    organizationId: string,
+    limit: number = 100
+  ): Promise<OrganizationInviteRecord[]> {
+    const { data, error } = await supabase
+      .from('organization_invites')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data || []) as OrganizationInviteRecord[];
+  }
+
+  async listPendingOrganizationInvites(
+    organizationId: string,
+    limit: number = 100
+  ): Promise<OrganizationInviteRecord[]> {
+    const { data, error } = await supabase
+      .from('organization_invites')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .in('status', ['draft', 'sent', 'opened'])
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data || []) as OrganizationInviteRecord[];
+  }
+
+  async createInvite(input: CreateOrganizationInviteInput): Promise<OrganizationInviteRecord> {
+    const metadata = ((input.metadata || {}) as Record<string, unknown>);
+    const roleKeyFromMetadata = typeof metadata.role_key === 'string' ? metadata.role_key : null;
+    const roleLabelFromMetadata = typeof metadata.role_label === 'string' ? metadata.role_label : null;
+    const resolvedRoleKey = input.role_key ?? roleKeyFromMetadata;
+    const resolvedRoleLabel = input.role_label || roleLabelFromMetadata || 'Team Member';
+
+    const { data, error } = await supabase
+      .from('organization_invites')
+      .insert({
+        organization_id: input.organization_id,
+        program_id: input.program_id ?? null,
+        session_id: input.session_id ?? null,
+        participant_id: input.participant_id ?? null,
+        invitee_name: input.invitee_name ?? null,
+        invitee_email: input.invitee_email ?? null,
+        invite_token: input.invite_token ?? null,
+        role_key: resolvedRoleKey,
+        role_label: resolvedRoleLabel,
+        channel: input.channel ?? 'email',
+        status: input.status ?? 'sent',
+        sent_at: input.sent_at ?? new Date().toISOString(),
+        notes: input.notes ?? null,
+        metadata: {
+          ...metadata,
+          role_key: resolvedRoleKey,
+          role_label: resolvedRoleLabel,
+        },
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as OrganizationInviteRecord;
+  }
+
+  async getInviteByToken(inviteToken: string): Promise<OrganizationInviteRecord | null> {
+    const token = String(inviteToken || '').trim();
+    if (!token) return null;
+
+    const { data, error } = await supabase.rpc('get_organization_invite_by_token', {
+      p_invite_token: token,
+    });
+
+    if (error) {
+      throw error;
+    }
+    return (data as OrganizationInviteRecord | null) ?? null;
+  }
+
+  async markInviteOpenedByToken(inviteToken: string): Promise<OrganizationInviteRecord | null> {
+    const token = String(inviteToken || '').trim();
+    if (!token) return null;
+
+    const { data, error } = await supabase.rpc('mark_organization_invite_opened', {
+      p_invite_token: token,
+    });
+    if (error) throw error;
+    return (data as OrganizationInviteRecord | null) ?? null;
+  }
+
+  async updateInviteStatus(
+    inviteId: string,
+    status: OrganizationInviteStatus,
+    respondedAt: string | null = null,
+    notes: string | null = null
+  ): Promise<OrganizationInviteRecord> {
+    const updates: Record<string, unknown> = {
+      status,
+      responded_at: respondedAt,
+    };
+    if (notes !== null) {
+      updates.notes = notes;
+    }
+
+    const { data, error } = await supabase
+      .from('organization_invites')
+      .update(updates)
+      .eq('id', inviteId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as OrganizationInviteRecord;
+  }
+
+  async acceptInviteForCurrentUser(inviteId: string): Promise<OrganizationInviteRecord> {
+    const { data: inviteData, error: inviteError } = await supabase
+      .from('organization_invites')
+      .select('invite_token')
+      .eq('id', inviteId)
+      .single();
+    if (inviteError) throw inviteError;
+
+    const token = String((inviteData as Pick<OrganizationInviteRecord, 'invite_token'>)?.invite_token || '').trim();
+    if (!token) {
+      throw new Error('Invite token is missing.');
+    }
+
+    return this.respondToInviteToken(token, 'accepted');
+  }
+
+  async acceptInviteTokenForCurrentUser(inviteToken: string): Promise<OrganizationInviteRecord> {
+    const token = String(inviteToken || '').trim();
+    if (!token) {
+      throw new Error('Invite token is missing.');
+    }
+    return this.respondToInviteToken(token, 'accepted');
+  }
+
+  async respondToInviteToken(
+    inviteToken: string,
+    decision: 'accepted' | 'declined'
+  ): Promise<OrganizationInviteRecord> {
+    const token = String(inviteToken || '').trim();
+    if (!token) {
+      throw new Error('Invite token is missing.');
+    }
+
+    const { data, error } = await supabase.rpc('respond_to_organization_invite', {
+      p_invite_token: token,
+      p_decision: decision,
+    });
+    if (error) throw error;
+
+    if (!data) {
+      throw new Error('Invite not found.');
+    }
+    return data as OrganizationInviteRecord;
+  }
+
+  async acceptInviteByTokenForCurrentUser(inviteToken: string): Promise<OrganizationInviteRecord> {
+    return this.acceptInviteTokenForCurrentUser(inviteToken);
+  }
+
+  async declineInviteByTokenForCurrentUser(inviteToken: string): Promise<OrganizationInviteRecord> {
+    const token = String(inviteToken || '').trim();
+    if (!token) {
+      throw new Error('Invite token is missing.');
+    }
+    return this.respondToInviteToken(token, 'declined');
+  }
+
+  async declineInviteForCurrentUser(inviteId: string): Promise<OrganizationInviteRecord> {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    const user = authData?.user;
+    if (!user?.id || !user?.email) {
+      throw new Error('You must be signed in to decline this invite.');
+    }
+
+    const { data: inviteData, error: inviteError } = await supabase
+      .from('organization_invites')
+      .select('*')
+      .eq('id', inviteId)
+      .single();
+    if (inviteError) throw inviteError;
+    const invite = inviteData as OrganizationInviteRecord;
+
+    if (!invite?.invitee_email) {
+      throw new Error('This invite does not have an invitee email.');
+    }
+    if (String(invite.invitee_email).trim().toLowerCase() !== String(user.email).trim().toLowerCase()) {
+      throw new Error('You are signed in with a different email than this invite.');
+    }
+    const token = String(invite.invite_token || '').trim();
+    if (!token) {
+      throw new Error('Invite token is missing.');
+    }
+    return this.respondToInviteToken(token, 'declined');
+  }
+}
+
+export const organizationInviteService = new OrganizationInviteService();
