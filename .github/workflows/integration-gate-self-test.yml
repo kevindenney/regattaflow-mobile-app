@@ -1,0 +1,78 @@
+name: Integration Gate Self-Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prompt-7-gate-self-test:
+    name: Prompt #7 Gate Self-Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build synthetic integration fixtures
+        run: |
+          mkdir -p .tmp/integration-gate-self-test
+
+          cat > .tmp/integration-gate-self-test/pass.md <<'EOF'
+          # Integration Validation Summary
+
+          | Check | Category | Status | Details | Reference |
+          |---|---|---|---|---|
+          | api-smoke-domain-gate-race-comms | API Smoke | PASS | Responded correctly | n/a |
+          | api-smoke-domain-gate-event-doc | API Smoke | PASS | Responded correctly | n/a |
+          EOF
+
+          cat > .tmp/integration-gate-self-test/fail.md <<'EOF'
+          # Integration Validation Summary
+
+          | Check | Category | Status | Details | Reference |
+          |---|---|---|---|---|
+          | api-smoke-domain-gate-race-comms | API Smoke | FAIL | Endpoint errored | n/a |
+          | api-smoke-domain-gate-event-doc | API Smoke | PASS | Responded correctly | n/a |
+          EOF
+
+          cat > .tmp/integration-gate-self-test/unexpected-skip.md <<'EOF'
+          # Integration Validation Summary
+
+          | Check | Category | Status | Details | Reference |
+          |---|---|---|---|---|
+          | api-smoke-domain-gate-race-comms | API Smoke | SKIP | Temporary outage | n/a |
+          | api-smoke-domain-gate-event-doc | API Smoke | PASS | Responded correctly | n/a |
+          EOF
+
+      - name: Assert gate exit codes for PASS/FAIL/unexpected SKIP
+        run: |
+          set -euo pipefail
+
+          run_case() {
+            local label="$1"
+            local expected="$2"
+            local report="$3"
+
+            set +e
+            node scripts/check-integration-validation-gate.mjs --report "$report"
+            local code=$?
+            set -e
+
+            if [ "$code" -ne "$expected" ]; then
+              echo "Case '$label' failed: expected exit $expected, got $code"
+              exit 1
+            fi
+
+            echo "Case '$label' passed (exit $code)"
+          }
+
+          run_case "PASS fixture" 0 ".tmp/integration-gate-self-test/pass.md"
+          run_case "FAIL fixture" 1 ".tmp/integration-gate-self-test/fail.md"
+          run_case "unexpected SKIP fixture" 1 ".tmp/integration-gate-self-test/unexpected-skip.md"
