@@ -31,17 +31,8 @@ import {
 } from '@/services/OrganizationInviteRolePresetService';
 
 const FALLBACK_ROLE_OPTIONS = [
-  'student',
-  'learner',
-  'faculty',
-  'instructor',
-  'preceptor',
-  'tutor',
-  'coordinator',
-  'observer',
-  'staff',
+  'Team Member',
 ] as const;
-const FALLBACK_ROLE_FILTER_OPTIONS = ['student', 'faculty', 'instructor', 'preceptor', 'coordinator'] as const;
 
 const STATUS_OPTIONS: ParticipantStatus[] = ['invited', 'active', 'completed', 'inactive'];
 const STAFF_QUEUE_ROLES = new Set(['faculty', 'instructor', 'preceptor', 'tutor', 'coordinator']);
@@ -224,7 +215,11 @@ export default function ProgramAssignmentsScreen() {
   }, [inviteRolePresets]);
 
   const roleFilterOptions = useMemo(() => {
-    const options = ['all', ...resolvedRoleOptions, ...FALLBACK_ROLE_FILTER_OPTIONS];
+    const activeParticipantRoles = participants
+      .filter((row) => !selectedProgramId || row.program_id === selectedProgramId)
+      .map((row) => row.role)
+      .filter(Boolean) as string[];
+    const options = ['all', ...resolvedRoleOptions, ...activeParticipantRoles];
     const deduped: string[] = [];
     const seen = new Set<string>();
     for (const option of options) {
@@ -234,7 +229,7 @@ export default function ProgramAssignmentsScreen() {
       deduped.push(option);
     }
     return deduped;
-  }, [resolvedRoleOptions]);
+  }, [participants, resolvedRoleOptions, selectedProgramId]);
 
   useEffect(() => {
     setRole((current) => {
