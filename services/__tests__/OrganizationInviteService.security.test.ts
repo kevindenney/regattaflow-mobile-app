@@ -19,16 +19,27 @@ describe('OrganizationInviteService security regressions', () => {
     jest.clearAllMocks();
   });
 
-  it('enforces invitee update policy guard: invitee path can only set status transitions', () => {
-    const migrationPath = path.resolve(
+  it('enforces canonical invite update policy: no invitee direct table update path', () => {
+    const transitionalMigrationPath = path.resolve(
       process.cwd(),
       'supabase/migrations/20260302193000_org_invite_invitee_status_updates.sql'
     );
-    const sql = fs.readFileSync(migrationPath, 'utf8');
-    const normalized = sql.replace(/\s+/g, ' ').toLowerCase();
+    const canonicalMigrationPath = path.resolve(
+      process.cwd(),
+      'supabase/migrations/20260302213000_harden_org_invite_rls.sql'
+    );
 
-    expect(normalized).toContain('and status in (\'opened\', \'accepted\', \'declined\')');
-    expect(normalized).toContain('lower(invitee_email) = lower(coalesce(auth.jwt() ->> \'email\', \'\'))');
+    const transitionalSql = fs.readFileSync(transitionalMigrationPath, 'utf8').replace(/\s+/g, ' ').toLowerCase();
+    const canonicalSql = fs.readFileSync(canonicalMigrationPath, 'utf8').replace(/\s+/g, ' ').toLowerCase();
+
+    // Transitional policy explicitly allowed invitee status-only transitions.
+    expect(transitionalSql).toContain('and status in (\'opened\', \'accepted\', \'declined\')');
+    expect(transitionalSql).toContain('lower(invitee_email) = lower(coalesce(auth.jwt() ->> \'email\', \'\'))');
+
+    // Canonical policy removes invitee direct updates from table RLS.
+    expect(canonicalSql).toContain('create policy "organization_invites_update_org_staff"');
+    expect(canonicalSql).not.toContain('invitee_email');
+    expect(canonicalSql).not.toContain('status in (\'opened\', \'accepted\', \'declined\')');
   });
 
   it('throws when non-management role is denied by RLS while creating invites', async () => {
