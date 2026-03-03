@@ -13,10 +13,13 @@ describe('race-only domain gates', () => {
     const resultsDetail = readSource('app/club/results/[raceId].tsx');
 
     for (const source of [raceControl, resultsIndex, resultsEntry, resultsDetail]) {
-      expect(source).toContain('useWorkspaceDomain');
-      expect(source).toContain('if (!isSailingDomain) {');
-      expect(source).toContain('getOrganizationOnboardingRoute(activeDomain)');
-      expect(source).toContain('<Redirect href={getOrganizationOnboardingRoute(activeDomain)} />');
+      expect(source).toContain('useClubWorkspace');
+    }
+
+    for (const source of [raceControl, resultsIndex, resultsDetail]) {
+      expect(source).toContain('if (!clubId)');
+      expect(source).toContain('Connect Your Club Workspace');
+      expect(source).toContain('Open Club Onboarding');
     }
   });
 
@@ -26,7 +29,7 @@ describe('race-only domain gates', () => {
     const clubSupport = readSource('api/ai/club/support.ts');
 
     for (const source of [raceCommsDraft, eventDocumentsDraft, clubSupport]) {
-      expect(source).toContain("organization.organization_type !== 'club'");
+      expect(source).toContain('resolveWorkspaceDomainForAuth');
       expect(source).toContain("code: 'DOMAIN_GATED'");
       expect(source).toContain('res.status(403).json');
     }

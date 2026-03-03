@@ -331,19 +331,19 @@ async function run() {
     {
       id: 'domain-gate-club-support',
       file: 'api/ai/club/support.ts',
-      needleA: "organization.organization_type !== 'club'",
+      needleA: 'resolveWorkspaceDomainForAuth',
       needleB: "code: 'DOMAIN_GATED'",
     },
     {
       id: 'domain-gate-event-doc-draft',
       file: 'api/ai/events/[id]/documents/draft.ts',
-      needleA: "organization.organization_type !== 'club'",
+      needleA: 'resolveWorkspaceDomainForAuth',
       needleB: "code: 'DOMAIN_GATED'",
     },
     {
       id: 'domain-gate-race-comms-draft',
       file: 'api/ai/races/[id]/comms/draft.ts',
-      needleA: "organization.organization_type !== 'club'",
+      needleA: 'resolveWorkspaceDomainForAuth',
       needleB: "code: 'DOMAIN_GATED'",
     },
   ];
@@ -361,6 +361,22 @@ async function run() {
       reference: gateCheck.file,
     });
   }
+
+  const domainResolverSource = await readFile('api/middleware/domain.ts');
+  const domainResolverContractOk =
+    domainResolverSource.includes('resolveWorkspaceDomainForAuth') &&
+    domainResolverSource.includes('resolveWorkspaceDomainForPresentation') &&
+    domainResolverSource.includes("if (orgType === 'club') return 'sailing'") &&
+    domainResolverSource.includes("if (orgType === 'institution') return 'nursing'");
+  add({
+    id: 'domain-resolver-precedence-contract',
+    category: 'Domain Gating',
+    status: domainResolverContractOk ? 'PASS' : 'FAIL',
+    details: domainResolverContractOk
+      ? 'Domain resolver enforces organization_type precedence for auth gating and supports presentation fallback.'
+      : 'Domain resolver precedence markers are missing.',
+    reference: 'api/middleware/domain.ts',
+  });
 
   const programsFile = await readFile('app/(tabs)/programs.tsx');
   const raceManagementFile = await readFile('app/(tabs)/race-management.tsx');

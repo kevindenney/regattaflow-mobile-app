@@ -33,7 +33,7 @@ describe('AI domain gate contract', () => {
     expect(aiRouteFiles.length).toBeGreaterThan(0);
     for (const file of aiRouteFiles) {
       const source = readApiSource(file);
-      expect(source).toContain("organization.organization_type !== 'club'");
+      expect(source).toContain('resolveWorkspaceDomainForAuth');
       expect(source).toContain("code: 'DOMAIN_GATED'");
       expect(source).toContain('withAuth(');
       expect(source).toContain('requireClub: true');

@@ -12,10 +12,16 @@ Source: `docs/BLUEPRINT_V2_JHU_NURSING_SAILING.md`
 
 Status: In progress
 
-- [ ] Add explicit resolver utility contract tests for precedence (`organization_type` over `active_interest_id` for auth/gating).
-- [ ] Audit and patch remaining API handlers to use resolver consistently.
+- [x] Add explicit resolver utility contract tests for precedence (`organization_type` over `active_interest_id` for auth/gating).
+  - Shipped via `api/middleware/domain.ts` + `api/__tests__/domain-resolution.contract.test.ts`.
+- [x] Audit and patch remaining API handlers to use resolver consistently.
+  - Shipped for active AI routes in:
+    - `api/ai/races/[id]/comms/draft.ts`
+    - `api/ai/events/[id]/documents/draft.ts`
+    - `api/ai/club/support.ts`
 - [ ] Audit and patch UI-only copy paths to use `active_interest_id` where safe.
-- [ ] Add integration check row for resolver precedence assumptions.
+- [x] Add integration check row for resolver precedence assumptions.
+  - Shipped via `domain-resolver-precedence-contract` in `scripts/run-integration-validation.mjs`.
 
 Acceptance:
 - Security-sensitive paths always follow `organization_type`.

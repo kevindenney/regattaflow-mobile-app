@@ -48,4 +48,12 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain("ARRAY['owner', 'admin', 'manager', 'faculty', 'instructor', 'preceptor', 'coach']::text[]");
     expect(source).toContain('user_id = auth.uid()');
   });
+
+  it('emits domain resolver precedence contract check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'domain-resolver-precedence-contract'");
+    expect(source).toContain("reference: 'api/middleware/domain.ts'");
+    expect(source).toContain("if (orgType === 'club') return 'sailing'");
+    expect(source).toContain("if (orgType === 'institution') return 'nursing'");
+  });
 });

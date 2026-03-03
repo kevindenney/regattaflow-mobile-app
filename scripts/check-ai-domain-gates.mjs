@@ -38,7 +38,7 @@ function isActiveAiRoute(repoPath) {
 const requiredMarkers = [
   'withAuth(',
   'requireClub: true',
-  "organization.organization_type !== 'club'",
+  'resolveWorkspaceDomainForAuth',
   "code: 'DOMAIN_GATED'",
 ];
 

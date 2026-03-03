@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { withAuth, type AuthenticatedRequest } from '../../../../middleware/auth';
+import { resolveWorkspaceDomainForAuth } from '../../../../middleware/domain';
 import { ClaudeClient } from '../../../../../services/ai/ClaudeClient';
 import { AIActivityLogger } from '../../../../../services/ai/AIActivityLogger';
 import { resolveEventContext, resolveClubSummary } from '../../../../../services/ai/ContextResolvers';
@@ -21,11 +22,18 @@ const authedHandler = withAuth(async (req: AuthenticatedRequest, res: VercelResp
   if (activeOrganizationId) {
     const { data: organization, error: organizationError } = await supabase
       .from('organizations')
-      .select('organization_type')
+      .select('organization_type, metadata')
       .eq('id', activeOrganizationId)
       .maybeSingle();
 
-    if (!organizationError && organization && organization.organization_type !== 'club') {
+    const metadata = ((organization as { metadata?: Record<string, unknown> | null } | null)?.metadata) || {};
+    const resolvedDomain = resolveWorkspaceDomainForAuth({
+      organizationType: (organization as { organization_type?: string | null } | null)?.organization_type ?? null,
+      activeInterestId: String(metadata.active_interest_id || ''),
+      activeInterestSlug: String(metadata.active_interest_slug || metadata.interest_slug || ''),
+    });
+
+    if (!organizationError && organization && resolvedDomain !== 'sailing') {
       res.status(403).json({
         error: 'Event document drafting is only available in sailing workspaces.',
         code: 'DOMAIN_GATED',
