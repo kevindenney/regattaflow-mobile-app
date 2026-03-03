@@ -3,6 +3,12 @@
 ## Purpose
 Use this file as the integration lane checklist while parallel Codex terminals implement plan blocks.
 
+## Current Validation Snapshot (2026-03-03)
+- `npm run validate:pre-ship:bundle`: PASS (`steps=6/6`)
+- `npm run validate:integration:strict`: PASS (`26 pass, 0 fail, 0 skip`)
+- `npm run gate:integration-validation`: PASS
+- `npm run typecheck`: PASS
+
 ## Current Parallel Streams
 | Stream | Scope | Owner/Terminal | Status | Notes |
 |---|---|---|---|---|
