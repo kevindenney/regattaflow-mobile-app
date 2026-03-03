@@ -3,10 +3,7 @@
 import { spawnSync } from 'node:child_process';
 
 const expectedSkipIds =
-  process.env.EXPECTED_SKIP_IDS ??
-  (process.env.INTEGRATION_BASE_URL
-    ? 'db-assertions-availability'
-    : 'db-assertions-availability,api-smoke-availability');
+  process.env.EXPECTED_SKIP_IDS ?? 'db-assertions-availability';
 
 const steps = [
   { script: 'typecheck', env: {} },

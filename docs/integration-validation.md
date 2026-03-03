@@ -91,10 +91,8 @@ Allowed skip ids by environment:
 - CI deployment smoke (`.github/workflows/deployment-smoke.yml`):
   - `EXPECTED_SKIP_IDS=db-assertions-availability`
 - Local pre-ship bundle (`npm run validate:pre-ship:bundle`):
-  - if `INTEGRATION_BASE_URL` is set:
-    - `EXPECTED_SKIP_IDS=db-assertions-availability`
-  - if `INTEGRATION_BASE_URL` is not set:
-    - `EXPECTED_SKIP_IDS=db-assertions-availability,api-smoke-availability`
+  - `EXPECTED_SKIP_IDS=db-assertions-availability`
+  - strict validator uses production fallback base URL when `INTEGRATION_BASE_URL` is unset, so `api-smoke-availability` is not expected in strict mode.
 
 ### Check row examples: BLOCK vs PASS
 Example report table rows (`| Check | Category | Status | Details | Reference |`):
@@ -103,10 +101,8 @@ BLOCK examples:
 ```md
 | api-smoke-domain-gate-race-comms-post | API Smoke | FAIL | ... x-vercel-error=FUNCTION_INVOCATION_FAILED ... treated as FAIL in strict API smoke mode. | https://regattaflow-app.vercel.app/api/ai/races/integration-smoke/comms/draft |
 | db-invite-rpc-lookup | DB Assertions | FAIL | get_organization_invite_by_token RPC failed: ... | rpc:get_organization_invite_by_token |
-| api-smoke-availability | API Smoke | SKIP | Set INTEGRATION_BASE_URL ... | - |
 ```
 - First two rows block because `Status=FAIL`.
-- Third row blocks when `api-smoke-availability` is not in `EXPECTED_SKIP_IDS`.
 
 PASS examples:
 ```md
