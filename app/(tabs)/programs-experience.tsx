@@ -21,6 +21,7 @@ import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { useOrganizationCommunicationsUnread } from '@/hooks/useOrganizationCommunicationsUnread';
 import { formatBadgeCount } from '@/lib/utils/formatBadgeCount';
 import { buildProgramCommunicationsHref } from '@/lib/communications/drillDown';
+import { buildProgramAssessmentHref } from '@/lib/assessments/drillDown';
 import { buildInstitutionProgramItems, type InstitutionProgramItems } from '@/lib/programs/dashboardSections';
 import {
   programService,
@@ -568,7 +569,18 @@ export default function RaceManagementScreen() {
           <View style={styles.activeActions}>
             <TouchableOpacity
               style={styles.controlPrimary}
-              onPress={() => router.push((isInstitutionWorkspace ? '/assessments' : '/club/results/entry') as any)}
+              onPress={() =>
+                router.push(
+                  (
+                    isInstitutionWorkspace
+                      ? buildProgramAssessmentHref({
+                          programId: race.id,
+                          programTitle: race.name,
+                        })
+                      : '/club/results/entry'
+                  ) as any
+                )
+              }
             >
               <Ionicons name="flag-outline" size={20} color="#FFFFFF" />
               <ThemedText style={styles.controlPrimaryText}>
@@ -657,7 +669,18 @@ export default function RaceManagementScreen() {
           <View style={styles.cardActions}>
             <TouchableOpacity
               style={styles.cardButton}
-              onPress={() => router.push((isInstitutionWorkspace ? '/assessments' : `/club/results/${race.id}`) as any)}
+              onPress={() =>
+                router.push(
+                  (
+                    isInstitutionWorkspace
+                      ? buildProgramAssessmentHref({
+                          programId: race.id,
+                          programTitle: race.name,
+                        })
+                      : `/club/results/${race.id}`
+                  ) as any
+                )
+              }
             >
               <Ionicons name="cloud-upload-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>{isInstitutionWorkspace ? 'Publish evaluations' : 'Publish'}</ThemedText>
@@ -684,7 +707,18 @@ export default function RaceManagementScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.cardButtonPrimary}
-              onPress={() => router.push((isInstitutionWorkspace ? '/assessments' : `/race/analysis/${race.id}`) as any)}
+              onPress={() =>
+                router.push(
+                  (
+                    isInstitutionWorkspace
+                      ? buildProgramAssessmentHref({
+                          programId: race.id,
+                          programTitle: race.name,
+                        })
+                      : `/race/analysis/${race.id}`
+                  ) as any
+                )
+              }
             >
               <Ionicons name="analytics-outline" size={18} color="#FFFFFF" />
               <ThemedText style={styles.cardButtonPrimaryText}>
