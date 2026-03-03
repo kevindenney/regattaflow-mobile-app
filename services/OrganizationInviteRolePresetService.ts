@@ -4,6 +4,7 @@ export type InviteRolePreset = {
   key: string;
   role: string;
   label: string;
+  roleType?: string;
 };
 
 const FALLBACK_PRESET: InviteRolePreset = {
@@ -27,6 +28,40 @@ const normalizeRoleText = (value?: string | null): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const DEFAULT_STAFF_ROLE_LABELS = new Set([
+  'owner',
+  'admin',
+  'manager',
+  'coordinator',
+  'coach',
+  'faculty',
+  'preceptor',
+  'instructor',
+]);
+
+const STAFF_ROLE_TYPES = new Set([
+  'owner',
+  'admin',
+  'manager',
+  'coordinator',
+  'coach',
+  'faculty',
+  'preceptor',
+  'instructor',
+  'staff',
+]);
+
+const DEFAULT_ROLE_TYPE_PRIORITY = [
+  'faculty',
+  'preceptor',
+  'instructor',
+  'coach',
+  'coordinator',
+  'manager',
+  'staff',
+  'member',
+] as const;
+
 class OrganizationInviteRolePresetService {
   private cache = new Map<WorkspaceDomain, InviteRolePreset[]>();
 
@@ -47,6 +82,7 @@ class OrganizationInviteRolePresetService {
         key,
         role,
         label: inviteLabel || `Invite ${role}`,
+        roleType: normalizeRoleText(String(metadata.role_type || '')),
       });
     }
 
@@ -56,11 +92,11 @@ class OrganizationInviteRolePresetService {
     return next;
   }
 
-  resolvePreset(
+  private findMatchingPreset(
     presets: InviteRolePreset[],
     role?: string | null,
     roleKey?: string | null
-  ): InviteRolePreset {
+  ): InviteRolePreset | null {
     const normalizedRoleKey = normalizeRoleKey(roleKey);
     if (normalizedRoleKey) {
       const byKey = presets.find((preset) => preset.key === normalizedRoleKey);
@@ -68,12 +104,22 @@ class OrganizationInviteRolePresetService {
     }
 
     const normalizedRole = normalizeRoleText(role);
-    if (normalizedRole) {
-      const byRoleValue = presets.find((preset) => normalizeRoleText(preset.role) === normalizedRole);
-      if (byRoleValue) return byRoleValue;
-      const byRoleKey = presets.find((preset) => normalizeRoleText(preset.key) === normalizedRole);
-      if (byRoleKey) return byRoleKey;
-    }
+    if (!normalizedRole) return null;
+
+    return (
+      presets.find((preset) => normalizeRoleText(preset.role) === normalizedRole) ||
+      presets.find((preset) => normalizeRoleText(preset.key) === normalizedRole) ||
+      null
+    );
+  }
+
+  resolvePreset(
+    presets: InviteRolePreset[],
+    role?: string | null,
+    roleKey?: string | null
+  ): InviteRolePreset {
+    const matchedPreset = this.findMatchingPreset(presets, role, roleKey);
+    if (matchedPreset) return matchedPreset;
 
     return (
       presets.find((preset) => preset.key === 'team_member') ||
@@ -92,6 +138,26 @@ class OrganizationInviteRolePresetService {
       roleLabel: preset.role,
       roleKey: preset.key,
     };
+  }
+
+  isStaffRole(role: string | null | undefined, presets: InviteRolePreset[]): boolean {
+    const matchedPreset = this.findMatchingPreset(presets, role, null);
+    if (matchedPreset?.roleType && STAFF_ROLE_TYPES.has(normalizeRoleText(matchedPreset.roleType))) {
+      return true;
+    }
+    return DEFAULT_STAFF_ROLE_LABELS.has(normalizeRoleText(role));
+  }
+
+  resolveDefaultRoleLabel(presets: InviteRolePreset[]): string {
+    for (const roleType of DEFAULT_ROLE_TYPE_PRIORITY) {
+      const preset = presets.find((row) => normalizeRoleText(row.roleType) === roleType);
+      if (preset?.role) return preset.role;
+    }
+    return (
+      presets.find((row) => row.key === 'team_member')?.role ||
+      presets[0]?.role ||
+      FALLBACK_PRESET.role
+    );
   }
 }
 

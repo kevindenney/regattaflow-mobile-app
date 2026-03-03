@@ -35,7 +35,6 @@ const FALLBACK_ROLE_OPTIONS = [
 ] as const;
 
 const STATUS_OPTIONS: ParticipantStatus[] = ['invited', 'active', 'completed', 'inactive'];
-const STAFF_QUEUE_ROLES = new Set(['faculty', 'instructor', 'preceptor', 'tutor', 'coordinator']);
 type SortMode = 'newest' | 'oldest' | 'name' | 'role' | 'status';
 
 export default function ProgramAssignmentsScreen() {
@@ -54,7 +53,7 @@ export default function ProgramAssignmentsScreen() {
 
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [role, setRole] = useState<string>('faculty');
+  const [role, setRole] = useState<string>('');
   const [status, setStatus] = useState<ParticipantStatus>('active');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -234,9 +233,11 @@ export default function ProgramAssignmentsScreen() {
   useEffect(() => {
     setRole((current) => {
       if (resolvedRoleOptions.includes(current)) return current;
-      return resolvedRoleOptions[0] || current;
+      const preferred = organizationInviteRolePresetService.resolveDefaultRoleLabel(inviteRolePresets);
+      if (resolvedRoleOptions.includes(preferred)) return preferred;
+      return resolvedRoleOptions[0] || preferred || current;
     });
-  }, [resolvedRoleOptions]);
+  }, [inviteRolePresets, resolvedRoleOptions]);
 
   const sessionOptions = useMemo(
     () => sessions.filter((row) => !selectedProgramId || row.program_id === selectedProgramId),
@@ -282,9 +283,11 @@ export default function ProgramAssignmentsScreen() {
   const staffQueue = useMemo(
     () =>
       filteredParticipants.filter(
-        (row) => STAFF_QUEUE_ROLES.has(String(row.role || '').toLowerCase()) && row.status !== 'inactive'
+        (row) =>
+          organizationInviteRolePresetService.isStaffRole(row.role, inviteRolePresets) &&
+          row.status !== 'inactive'
       ),
-    [filteredParticipants]
+    [filteredParticipants, inviteRolePresets]
   );
 
   useEffect(() => {
