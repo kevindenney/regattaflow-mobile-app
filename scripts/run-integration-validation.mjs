@@ -775,6 +775,20 @@ async function run() {
     reference: 'services/AdaptiveLearningService.ts, components/progress/ProgressContent.tsx, hooks/useSignaturePrinciples.ts',
   });
 
+  const packageJsonSource = await readFile('package.json');
+  const signatureInsightBehaviorGateOk =
+    packageJsonSource.includes('services/__tests__/RaceChecklistSignatureInsight.behavior.test.ts') &&
+    packageJsonSource.includes('hooks/__tests__/signature-insight-interest-threading.contract.test.ts');
+  add({
+    id: 'signature-insight-behavior-gate-contract',
+    category: 'Signature Insight',
+    status: signatureInsightBehaviorGateOk ? 'PASS' : 'FAIL',
+    details: signatureInsightBehaviorGateOk
+      ? 'CI gate unit suite includes signature-insight behavior + interest-threading tests.'
+      : 'Signature-insight behavior tests are not fully wired into test:ci:gates:unit.',
+    reference: 'package.json#scripts.test:ci:gates:unit',
+  });
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const lineageTableFilterRaw = process.env.INTEGRATION_REQUIRED_TABLES || '';

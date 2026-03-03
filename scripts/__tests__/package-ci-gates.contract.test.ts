@@ -36,7 +36,9 @@ describe('package CI gates contract', () => {
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/race-management-alias-lifecycle.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/secondary-packs-route-api.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('hooks/__tests__/useWorkspaceDomain.test.ts');
+    expect(scripts['test:ci:gates:unit']).toContain('hooks/__tests__/signature-insight-interest-threading.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('services/__tests__/ProgramService.contract.test.ts');
+    expect(scripts['test:ci:gates:unit']).toContain('services/__tests__/RaceChecklistSignatureInsight.behavior.test.ts');
     expect(scripts['report:coach-home-query-baseline']).toContain('scripts/report-coach-home-query-baseline.mjs');
     expect(scripts['report:coach-home-endpoint-profile']).toContain('scripts/report-coach-home-endpoint-profile.mjs');
     expect(scripts['gate:coach-home-baseline-budget']).toContain('scripts/check-coach-home-baseline-budget.mjs');

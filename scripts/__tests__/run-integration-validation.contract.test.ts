@@ -47,6 +47,14 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('hooks/useSignaturePrinciples.ts');
   });
 
+  it('emits signature insight behavior gate contract row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'signature-insight-behavior-gate-contract'");
+    expect(source).toContain('RaceChecklistSignatureInsight.behavior.test.ts');
+    expect(source).toContain('signature-insight-interest-threading.contract.test.ts');
+    expect(source).toContain('test:ci:gates:unit');
+  });
+
   it('emits assessment RLS semantic role-scope check row', () => {
     const source = readScript('scripts/run-integration-validation.mjs');
     expect(source).toContain("id: 'assessment-rls-policy-semantics'");
