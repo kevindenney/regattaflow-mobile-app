@@ -254,7 +254,10 @@ describe('check-integration-validation-gate', () => {
 
     fs.writeFileSync(
       reportPath,
-      buildReport([{ checkId: 'api-smoke', status: 'FAIL' }]),
+      buildReport([
+        { checkId: 'db-assertions-availability', status: 'SKIP' },
+        { checkId: 'api-smoke', status: 'PASS' },
+      ]),
       'utf8'
     );
     writeJsonReport(
@@ -269,5 +272,36 @@ describe('check-integration-validation-gate', () => {
     const result = runGate(reportPath, 'db-assertions-availability');
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('parsed as json');
+  });
+
+  it('blocks when JSON and markdown reports diverge', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'integration-gate-json-md-mismatch-'));
+    const reportPath = path.join(tempDir, 'integration-validation-latest.md');
+    const reportJsonPath = path.join(tempDir, 'integration-validation-latest.json');
+
+    fs.writeFileSync(
+      reportPath,
+      [
+        '# Integration Validation Latest',
+        '',
+        '- Overall: **PASS**',
+        '',
+        '## Results',
+        '| Check | Category | Status | Details | Reference |',
+        '|---|---|---|---|---|',
+        '| api-smoke | API Smoke | PASS | ok | n/a |',
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+    writeJsonReport(
+      reportJsonPath,
+      [{ id: 'api-smoke', status: 'FAIL' }],
+      'PASS'
+    );
+
+    const result = runGate(reportPath);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('JSON/markdown integration report mismatch detected');
   });
 });
