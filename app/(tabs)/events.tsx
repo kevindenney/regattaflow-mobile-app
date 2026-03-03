@@ -1,5 +1,6 @@
 /**
- * Operations dashboard for club and program workspaces.
+ * Club Operations HQ - Events Dashboard
+ * Premium yacht club administration experience
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
@@ -21,18 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { ClubEvent, EventRegistrationStats } from '@/services/eventService';
-import {
-  programService,
-  ProgramParticipantRecord,
-  ProgramRecord,
-  ProgramSessionRecord,
-} from '@/services/ProgramService';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
-import { useOrganization } from '@/providers/OrganizationProvider';
-import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
-import { useOrganizationCommunicationsUnread } from '@/hooks/useOrganizationCommunicationsUnread';
-import { formatBadgeCount } from '@/lib/utils/formatBadgeCount';
-import { getOrganizationOnboardingRoute } from '@/lib/utils/onboardingRouting';
 import { Toast, ToastTitle, ToastDescription, useToast } from '@/components/ui/toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -42,7 +32,7 @@ const isWideScreen = SCREEN_WIDTH > 768;
 // Mock Data for Demo
 // =====================================================
 
-const _MOCK_CLUB_PROFILE = {
+const MOCK_CLUB_PROFILE = {
   id: 'demo-club-001',
   name: 'Royal Harbour Yacht Club',
   logo_url: null,
@@ -170,26 +160,11 @@ const MOCK_RECENT_ACTIVITY = [
   { id: 'act-5', type: 'message', message: 'PRO confirmed for Summer Twilight Series', time: '3 hrs ago', icon: 'checkmark-circle' },
 ];
 
-const MOCK_PROGRAM_ACTIVITY = [
-  { id: 'pact-1', type: 'registration', message: '12 participants enrolled in Program Session A', time: '8 min ago', icon: 'person-add' },
-  { id: 'pact-2', type: 'document', message: 'Assessment rubric updated for skills lab', time: '28 min ago', icon: 'document-text' },
-  { id: 'pact-3', type: 'message', message: 'Facilitator approvals completed for Group B', time: '1 hr ago', icon: 'checkmark-circle' },
-  { id: 'pact-4', type: 'registration', message: '4 assignment requests pending coordinator review', time: '2 hrs ago', icon: 'time' },
-  { id: 'pact-5', type: 'payment', message: 'Program fee payment batch reconciled', time: '3 hrs ago', icon: 'card' },
-];
-
 const MOCK_TEAM_MEMBERS = [
   { id: 'tm-1', name: 'James Morrison', role: 'Race Officer', avatar: null, initials: 'JM', status: 'active' },
   { id: 'tm-2', name: 'Emily Watson', role: 'Scorer', avatar: null, initials: 'EW', status: 'active' },
   { id: 'tm-3', name: 'David Chen', role: 'Safety Officer', avatar: null, initials: 'DC', status: 'pending' },
   { id: 'tm-4', name: 'Lisa Park', role: 'Registration', avatar: null, initials: 'LP', status: 'active' },
-];
-
-const MOCK_PROGRAM_TEAM_MEMBERS = [
-  { id: 'ptm-1', name: 'Maya Johnson', role: 'Program Instructor', avatar: null, initials: 'MJ', status: 'active' },
-  { id: 'ptm-2', name: 'Aaron Lee', role: 'Session Facilitator', avatar: null, initials: 'AL', status: 'active' },
-  { id: 'ptm-3', name: 'Cynthia Parker', role: 'Program Coordinator', avatar: null, initials: 'CP', status: 'pending' },
-  { id: 'ptm-4', name: 'Noah Kim', role: 'Assessment Lead', avatar: null, initials: 'NK', status: 'active' },
 ];
 
 const MOCK_FINANCIAL_SUMMARY = {
@@ -205,15 +180,6 @@ const MOCK_ONBOARDING_STEPS = [
   { id: 'event', label: 'Create first event', completed: true },
   { id: 'nor', label: 'Upload NOR/SI', completed: true },
   { id: 'members', label: 'Import members', completed: true },
-];
-
-const MOCK_INSTITUTION_ONBOARDING_STEPS = [
-  { id: 'profile', label: 'Organization profile', completed: true },
-  { id: 'policy', label: 'Configure access policy', completed: true },
-  { id: 'staff', label: 'Invite program staff', completed: true },
-  { id: 'program', label: 'Create first program', completed: true },
-  { id: 'rubric', label: 'Publish assessment rubric', completed: true },
-  { id: 'participants', label: 'Import participants', completed: true },
 ];
 
 // =====================================================
@@ -241,22 +207,6 @@ type QuickAction = {
   badge?: string;
 };
 
-type ActivityItem = {
-  id: string;
-  type: 'registration' | 'payment' | 'document' | 'message';
-  message: string;
-  time: string;
-  icon: keyof typeof Ionicons.glyphMap;
-};
-
-type TeamMemberItem = {
-  id: string;
-  name: string;
-  role: string;
-  initials: string;
-  status: 'active' | 'pending';
-};
-
 // =====================================================
 // Component
 // =====================================================
@@ -264,99 +214,18 @@ type TeamMemberItem = {
 export default function EventsScreen() {
   const router = useRouter();
   const toast = useToast();
-  const { clubProfile, isConnected, loading: workspaceLoading } = useClubWorkspace();
-  const { activeOrganization, ready: orgReady } = useOrganization();
-  const { activeDomain, isSailingDomain } = useWorkspaceDomain();
-  const { unreadCount: communicationsUnreadCount } = useOrganizationCommunicationsUnread();
-  const isInstitutionWorkspace = Boolean(activeOrganization?.id) && !isSailingDomain;
+  const { clubProfile } = useClubWorkspace();
   
   const [events, setEvents] = useState<ClubEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [eventStats, setEventStats] = useState<Record<string, EventRegistrationStats>>({});
-  const [institutionActivity, setInstitutionActivity] = useState<ActivityItem[]>([]);
-  const [institutionTeamMembers, setInstitutionTeamMembers] = useState<TeamMemberItem[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(true);
-  const useMockData = false;
-
-  const mapProgramToEvent = useCallback((program: ProgramRecord): ClubEvent => {
-    const nowIso = new Date().toISOString();
-    const inferredType =
-      program.type?.includes('simulation') || program.type?.includes('skills')
-        ? 'training'
-        : program.type?.includes('meeting')
-          ? 'meeting'
-          : 'race_series';
-
-    const inferredStatus =
-      program.status === 'active'
-        ? 'registration_open'
-        : program.status === 'completed'
-          ? 'completed'
-          : program.status === 'cancelled'
-            ? 'cancelled'
-            : 'draft';
-
-    return {
-      id: program.id,
-      club_id: program.organization_id,
-      title: program.title,
-      description: program.description ?? undefined,
-      event_type: inferredType,
-      start_date: program.start_at ?? nowIso,
-      end_date: program.end_at ?? program.start_at ?? nowIso,
-      allow_waitlist: true,
-      status: inferredStatus,
-      visibility: 'club',
-      created_at: program.created_at,
-      updated_at: program.updated_at,
-      max_participants:
-        typeof program.metadata?.max_participants === 'number'
-          ? (program.metadata.max_participants as number)
-          : undefined,
-      boat_classes: [],
-      registration_fee:
-        typeof program.metadata?.program_fee === 'number'
-          ? (program.metadata.program_fee as number)
-          : undefined,
-      currency: 'USD',
-      payment_required: false,
-    };
-  }, []);
-
-  const relativeTime = useCallback((isoLike?: string | null): string => {
-    if (!isoLike) return 'just now';
-    const parsed = new Date(isoLike);
-    if (Number.isNaN(parsed.getTime())) return 'just now';
-    return formatDistanceToNow(parsed, { addSuffix: true });
-  }, []);
-
-  const initialsForName = useCallback((name: string): string => {
-    return (
-      name
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase() ?? '')
-        .join('') || 'TM'
-    );
-  }, []);
+  const useMockData = true;
 
   // Use mock data for demo purposes
-  const effectiveClubProfile = clubProfile as any;
-  const clubDisplayName =
-    (isInstitutionWorkspace ? activeOrganization?.name : null) ||
-    effectiveClubProfile?.organization_name ||
-    effectiveClubProfile?.club_name ||
-    effectiveClubProfile?.name ||
-    'Organization Workspace';
-  const clubInitials = clubDisplayName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part: string) => part[0]?.toUpperCase() ?? '')
-    .join('') || 'OR';
+  const effectiveClubProfile = useMockData ? MOCK_CLUB_PROFILE : clubProfile;
 
   // Toast helper function
   const showToast = useCallback((title: string, description: string, action: 'info' | 'success' | 'warning' | 'error' = 'info') => {
@@ -384,99 +253,15 @@ export default function EventsScreen() {
   const loadEvents = useCallback(async () => {
     try {
       setLoading(true);
-      if (isInstitutionWorkspace && activeOrganization?.id) {
-        const [programs, participantCounts, participants, sessions] = await Promise.all([
-          programService.listPrograms(activeOrganization.id),
-          programService.getProgramParticipantCounts(activeOrganization.id),
-          programService.listOrganizationProgramParticipants(activeOrganization.id),
-          programService.listOrganizationProgramSessions(activeOrganization.id),
-        ]);
-        const mapped = programs.map(mapProgramToEvent);
-        const statsMap: Record<string, EventRegistrationStats> = {};
-        for (const program of programs) {
-          const count = participantCounts[program.id] || 0;
-          statsMap[program.id] = {
-            total_registrations: count,
-            approved_count: count,
-            pending_count: 0,
-            waitlist_count: 0,
-            total_paid: 0,
-          };
-        }
-
-        const staffRoles = new Set([
-          'coach',
-          'faculty',
-          'instructor',
-          'preceptor',
-          'tutor',
-          'coordinator',
-          'manager',
-          'observer',
-          'staff',
-        ]);
-
-        const seenStaff = new Set<string>();
-        const teamRows: TeamMemberItem[] = [];
-        for (const row of participants) {
-          const role = String(row.role || '').toLowerCase();
-          if (!staffRoles.has(role)) continue;
-          const rawName = row.display_name || row.email || 'Team Member';
-          const key = (row.user_id || row.email || rawName).toLowerCase();
-          if (seenStaff.has(key)) continue;
-          seenStaff.add(key);
-          teamRows.push({
-            id: row.id,
-            name: rawName,
-            role: role.split('_').map((p) => p[0]?.toUpperCase() + p.slice(1)).join(' '),
-            initials: initialsForName(rawName),
-            status: row.status === 'invited' ? 'pending' : 'active',
-          });
-          if (teamRows.length >= 8) break;
-        }
-
-        const sessionActivities: ActivityItem[] = sessions.slice(0, 3).map((s: ProgramSessionRecord) => ({
-          id: `session-${s.id}`,
-          type: 'document',
-          message: `Session planned: ${s.title}`,
-          time: relativeTime(s.starts_at || s.created_at),
-          icon: 'document-text',
-        }));
-
-        const participantActivities: ActivityItem[] = participants.slice(0, 3).map((p: ProgramParticipantRecord) => {
-          const name = p.display_name || p.email || 'Participant';
-          return {
-            id: `participant-${p.id}`,
-            type: 'registration',
-            message: `${name} added as ${String(p.role || 'participant').replace(/_/g, ' ')}`,
-            time: relativeTime(p.created_at),
-            icon: 'person-add',
-          };
-        });
-
-        const combinedActivities = [...participantActivities, ...sessionActivities]
-          .slice(0, 5);
-
-        setEvents(mapped);
-        setEventStats(statsMap);
-        setInstitutionTeamMembers(teamRows);
-        setInstitutionActivity(combinedActivities);
-        return;
-      }
-
-      if (!isConnected || !effectiveClubProfile?.id) {
-        setEvents([]);
-        setEventStats({});
-        return;
-      }
       
       if (useMockData) {
         // Use mock data
         setEvents(MOCK_EVENTS);
         setEventStats(MOCK_STATS);
       } else {
-        const data = await EventService.getClubEvents(effectiveClubProfile.id);
-        setEvents(data);
+        // Real data
+      const data = await EventService.getUpcomingEvents(20);
+      setEvents(data);
 
       const statsPromises = data.map(async (event) => {
         try {
@@ -496,21 +281,13 @@ export default function EventsScreen() {
       }
     } catch (error) {
       console.error('Error loading events:', error);
-      setEvents([]);
-      setEventStats({});
-      setInstitutionTeamMembers([]);
-      setInstitutionActivity([]);
+      // Fallback to mock data on error
+      setEvents(MOCK_EVENTS);
+      setEventStats(MOCK_STATS);
     } finally {
       setLoading(false);
     }
-  }, [
-    activeOrganization?.id,
-    effectiveClubProfile?.id,
-    isConnected,
-    isInstitutionWorkspace,
-    mapProgramToEvent,
-    useMockData,
-  ]);
+  }, [useMockData]);
 
   useEffect(() => {
     void loadEvents();
@@ -538,17 +315,17 @@ export default function EventsScreen() {
   const getEventTypeConfig = (type: string) => {
     switch (type) {
       case 'regatta':
-        return { icon: 'trophy', color: '#F59E0B', label: isInstitutionWorkspace ? 'Program' : 'Regatta' };
+        return { icon: 'trophy', color: '#F59E0B', label: 'Regatta' };
       case 'race_series':
-        return { icon: 'flag', color: '#3B82F6', label: isInstitutionWorkspace ? 'Clinical Rotation' : 'Race Series' };
+        return { icon: 'flag', color: '#3B82F6', label: 'Race Series' };
       case 'training':
-        return { icon: 'school', color: '#10B981', label: isInstitutionWorkspace ? 'Skills / Simulation' : 'Training' };
+        return { icon: 'school', color: '#10B981', label: 'Training' };
       case 'social':
-        return { icon: 'wine', color: '#EC4899', label: isInstitutionWorkspace ? 'Cohort Session' : 'Social' };
+        return { icon: 'wine', color: '#EC4899', label: 'Social' };
       case 'meeting':
-        return { icon: 'people', color: '#6366F1', label: isInstitutionWorkspace ? 'Program Meeting' : 'Meeting' };
+        return { icon: 'people', color: '#6366F1', label: 'Meeting' };
       default:
-        return { icon: 'calendar', color: '#6B7280', label: isInstitutionWorkspace ? 'Program' : 'Event' };
+        return { icon: 'calendar', color: '#6B7280', label: 'Event' };
     }
   };
 
@@ -583,16 +360,13 @@ export default function EventsScreen() {
     const pendingApprovals = Object.values(eventStats).reduce((sum, s) => sum + (s?.pending_count ?? 0), 0);
     const totalRevenue = Object.values(eventStats).reduce((sum, s) => sum + (s?.total_paid ?? 0), 0);
     const openRegistration = events.filter((e) => e.status === 'registration_open').length;
-    const totalCapacity = events.reduce((sum, e) => sum + (e.max_participants ?? 0), 0);
 
     return [
       {
         key: 'events',
-        label: isInstitutionWorkspace ? 'Active Programs' : 'Active Events',
+        label: 'Active Events',
         value: `${upcomingEvents.length}`,
-        subValue: isInstitutionWorkspace
-          ? `${openRegistration} accepting participants`
-          : `${openRegistration} accepting entries`,
+        subValue: `${openRegistration} accepting entries`,
         trend: 'up',
         trendValue: '+3 this month',
         icon: 'calendar',
@@ -600,11 +374,9 @@ export default function EventsScreen() {
       },
       {
         key: 'entries',
-        label: isInstitutionWorkspace ? 'Total Participants' : 'Total Entries',
+        label: 'Total Entries',
         value: `${totalRegistrations}`,
-        subValue: isInstitutionWorkspace
-          ? `${pendingApprovals} pending review`
-          : `${pendingApprovals} pending approval`,
+        subValue: `${pendingApprovals} pending approval`,
         trend: pendingApprovals > 0 ? 'neutral' : 'up',
         trendValue: pendingApprovals > 0 ? 'Action needed' : 'All processed',
         icon: 'people',
@@ -612,37 +384,28 @@ export default function EventsScreen() {
       },
       {
         key: 'revenue',
-        label: isInstitutionWorkspace ? 'Program Capacity' : 'Revenue',
-        value: isInstitutionWorkspace
-          ? `${totalRegistrations}/${totalCapacity || 0}`
-          : `$${totalRevenue.toLocaleString()}`,
-        subValue: isInstitutionWorkspace ? 'Enrolled / total seats' : 'This season',
+        label: 'Revenue',
+        value: `$${totalRevenue.toLocaleString()}`,
+        subValue: 'This season',
         trend: 'up',
         trendValue: '+18% vs last year',
         icon: 'trending-up',
         color: '#8B5CF6',
       },
     ];
-  }, [eventStats, events, upcomingEvents.length, isInstitutionWorkspace]);
+  }, [eventStats, events, upcomingEvents.length]);
 
-  const quickActions: QuickAction[] = isInstitutionWorkspace
-    ? [
-        { key: 'program', icon: 'layers-outline', label: 'Program Session', route: '/programs/create', color: '#3B82F6' },
-        { key: 'simulation', icon: 'document-text-outline', label: 'Simulation Lab', route: '/programs/create?type=simulation_lab', color: '#8B5CF6' },
-        { key: 'cohort', icon: 'people-outline', label: 'Group Session', route: '/programs/create?type=cohort_session', color: '#10B981' },
-        { key: 'orientation', icon: 'school', label: 'Orientation', route: '/programs/create?type=orientation', color: '#F59E0B' },
-        { key: 'communications', icon: 'chatbubble-ellipses-outline', label: 'Comms', route: '/communications', color: '#0EA5E9', badge: communicationsUnreadCount },
-      ]
-    : [
-        { key: 'regatta', icon: 'trophy', label: 'New Regatta', route: '/club/event/create?type=regatta', color: '#F59E0B' },
-        { key: 'series', icon: 'flag', label: 'Race Series', route: '/club/event/create?type=race_series', color: '#3B82F6' },
-        { key: 'training', icon: 'school', label: 'Training', route: '/club/event/create?type=training', color: '#10B981' },
-        { key: 'social', icon: 'wine', label: 'Social Event', route: '/club/event/create?type=social', color: '#EC4899' },
-      ];
+  const quickActions: QuickAction[] = [
+    { key: 'regatta', icon: 'trophy', label: 'New Regatta', route: '/club/event/create?type=regatta', color: '#F59E0B' },
+    { key: 'series', icon: 'flag', label: 'Race Series', route: '/club/event/create?type=race_series', color: '#3B82F6' },
+    { key: 'training', icon: 'school', label: 'Training', route: '/club/event/create?type=training', color: '#10B981' },
+    { key: 'social', icon: 'wine', label: 'Social Event', route: '/club/event/create?type=social', color: '#EC4899' },
+  ];
 
-  const onboardingProgress = 100;
-  const templatesRoute = isInstitutionWorkspace ? '/programs/templates' : '/(tabs)/programs';
-  const viewAllUpcomingRoute = '/(tabs)/programs';
+  const onboardingProgress = useMemo(() => {
+    const completed = MOCK_ONBOARDING_STEPS.filter(s => s.completed).length;
+    return Math.round((completed / MOCK_ONBOARDING_STEPS.length) * 100);
+  }, []);
 
   // Calendar logic
   const calendarDays = useMemo(() => {
@@ -697,9 +460,7 @@ export default function EventsScreen() {
             </View>
 
             <View style={styles.onboardingSteps}>
-              {(isInstitutionWorkspace ? MOCK_INSTITUTION_ONBOARDING_STEPS : MOCK_ONBOARDING_STEPS)
-                .slice(0, 3)
-                .map((step) => (
+              {MOCK_ONBOARDING_STEPS.slice(0, 3).map((step) => (
                 <View key={step.id} style={styles.onboardingStep}>
                   <View style={[styles.stepIcon, step.completed && styles.stepIconComplete]}>
                     <Ionicons 
@@ -734,35 +495,29 @@ export default function EventsScreen() {
         <View style={styles.heroContent}>
           <View style={styles.heroLeft}>
             <View style={styles.clubBadge}>
-                <ThemedText style={styles.clubInitials}>{clubInitials}</ThemedText>
+              <ThemedText style={styles.clubInitials}>RH</ThemedText>
             </View>
             <View style={styles.heroText}>
               <ThemedText style={styles.heroTitle}>
-                {clubDisplayName}
+                {effectiveClubProfile?.name || 'Club Operations HQ'}
               </ThemedText>
             <ThemedText style={styles.heroSubtitle}>
               {highlightEvent
                   ? `Next up: ${highlightEvent.title} ${formatDistanceToNow(new Date(highlightEvent.start_date), { addSuffix: true })}`
-                  : isInstitutionWorkspace
-                    ? 'Manage programs, sessions, and participant operations'
-                    : 'Manage events, entries, and race operations'}
+                  : 'Manage events, entries, and race operations'}
             </ThemedText>
             </View>
           </View>
           <TouchableOpacity
             style={styles.heroButton}
-            onPress={() =>
-              router.push((isInstitutionWorkspace ? '/programs/create' : '/club/event/create') as any)
-            }
+            onPress={() => router.push('/club/event/create')}
           >
             <LinearGradient
               colors={['#3B82F6', '#2563EB']}
               style={styles.heroButtonGradient}
             >
               <Ionicons name="add" size={20} color="#FFF" />
-            <ThemedText style={styles.heroButtonText}>
-              {isInstitutionWorkspace ? 'Create Program' : 'Create Event'}
-            </ThemedText>
+            <ThemedText style={styles.heroButtonText}>Create Event</ThemedText>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -770,19 +525,13 @@ export default function EventsScreen() {
         {/* Stats strip */}
         <View style={styles.statsStrip}>
           <View style={styles.statItem}>
-            <ThemedText style={styles.statValue}>{effectiveClubProfile?.member_count || 0}</ThemedText>
-            <ThemedText style={styles.statLabel}>
-              {isInstitutionWorkspace ? 'People' : 'Members'}
-            </ThemedText>
+            <ThemedText style={styles.statValue}>{effectiveClubProfile?.member_count || 342}</ThemedText>
+            <ThemedText style={styles.statLabel}>Members</ThemedText>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <ThemedText style={styles.statValue}>
-              {isInstitutionWorkspace ? upcomingEvents.length : effectiveClubProfile?.active_boats || 0}
-            </ThemedText>
-            <ThemedText style={styles.statLabel}>
-              {isInstitutionWorkspace ? 'Active Cohorts' : 'Active Boats'}
-            </ThemedText>
+            <ThemedText style={styles.statValue}>{effectiveClubProfile?.active_boats || 127}</ThemedText>
+            <ThemedText style={styles.statLabel}>Active Boats</ThemedText>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
@@ -829,7 +578,7 @@ export default function EventsScreen() {
     <View style={styles.section}>
           <View style={styles.sectionHeader}>
         <ThemedText style={styles.sectionTitle}>Quick Actions</ThemedText>
-        <TouchableOpacity style={styles.seeAllButton} onPress={() => router.push(templatesRoute as any)}>
+        <TouchableOpacity style={styles.seeAllButton}>
           <ThemedText style={styles.seeAllText}>All templates</ThemedText>
           <Ionicons name="chevron-forward" size={16} color="#6B7280" />
         </TouchableOpacity>
@@ -848,7 +597,7 @@ export default function EventsScreen() {
             <ThemedText style={styles.quickActionLabel}>{action.label}</ThemedText>
             {action.badge && (
               <View style={styles.quickActionBadge}>
-                <ThemedText style={styles.quickActionBadgeText}>{formatBadgeCount(action.badge)}</ThemedText>
+                <ThemedText style={styles.quickActionBadgeText}>{action.badge}</ThemedText>
               </View>
             )}
           </TouchableOpacity>
@@ -860,7 +609,12 @@ export default function EventsScreen() {
   const [selectedEvent, setSelectedEvent] = useState<ClubEvent | null>(null);
 
   const handleEventPress = (event: ClubEvent) => {
-    router.push(`/event/${event.id}`);
+    // Check if this is a mock event (mock IDs start with 'evt-')
+    if (useMockData && event.id.startsWith('evt-')) {
+      setSelectedEvent(event);
+    } else {
+      router.push(`/event/${event.id}`);
+    }
   };
 
   const closeEventPreview = () => setSelectedEvent(null);
@@ -936,7 +690,7 @@ export default function EventsScreen() {
           </View>
         )}
 
-        {!isInstitutionWorkspace && event.boat_classes && event.boat_classes.length > 0 && (
+        {event.boat_classes && event.boat_classes.length > 0 && (
           <View style={styles.classesRow}>
             {event.boat_classes.slice(0, 3).map((cls, idx) => (
               <View key={idx} style={styles.classBadge}>
@@ -958,12 +712,8 @@ export default function EventsScreen() {
     <View style={styles.section}>
           <View style={styles.sectionHeader}>
         <View>
-          <ThemedText style={styles.sectionTitle}>
-            {isInstitutionWorkspace ? 'Upcoming Programs' : 'Upcoming Events'}
-          </ThemedText>
-          <ThemedText style={styles.sectionSubtitle}>
-            {upcomingEvents.length} {isInstitutionWorkspace ? 'programs' : 'events'} scheduled
-          </ThemedText>
+          <ThemedText style={styles.sectionTitle}>Upcoming Events</ThemedText>
+          <ThemedText style={styles.sectionSubtitle}>{upcomingEvents.length} events scheduled</ThemedText>
         </View>
         <TouchableOpacity onPress={loadEvents} style={styles.refreshButton}>
           <Ionicons name="refresh" size={18} color="#3B82F6" />
@@ -973,32 +723,22 @@ export default function EventsScreen() {
           {loading ? (
             <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#3B82F6" />
-          <ThemedText style={styles.loadingText}>
-            {isInstitutionWorkspace ? 'Loading programs...' : 'Loading events...'}
-          </ThemedText>
+          <ThemedText style={styles.loadingText}>Loading events...</ThemedText>
             </View>
           ) : upcomingEvents.length === 0 ? (
         <View style={styles.emptyState}>
               <View style={styles.emptyIcon}>
             <Ionicons name="calendar-outline" size={48} color="#CBD5E1" />
               </View>
-          <ThemedText style={styles.emptyTitle}>
-            {isInstitutionWorkspace ? 'No upcoming programs' : 'No upcoming events'}
-          </ThemedText>
+          <ThemedText style={styles.emptyTitle}>No upcoming events</ThemedText>
           <ThemedText style={styles.emptyText}>
-            {isInstitutionWorkspace
-              ? 'Create your first program to start managing sessions and participants'
-              : 'Create your first event to start managing registrations'}
+            Create your first event to start managing registrations
               </ThemedText>
               <TouchableOpacity
             style={styles.emptyButton}
-            onPress={() =>
-              router.push((isInstitutionWorkspace ? '/programs/create' : '/club/event/create') as any)
-            }
+                onPress={() => router.push('/club/event/create')}
               >
-            <ThemedText style={styles.emptyButtonText}>
-              {isInstitutionWorkspace ? 'Create Program' : 'Create Event'}
-            </ThemedText>
+            <ThemedText style={styles.emptyButtonText}>Create Event</ThemedText>
               </TouchableOpacity>
             </View>
           ) : (
@@ -1008,10 +748,8 @@ export default function EventsScreen() {
       )}
 
       {upcomingEvents.length > 6 && (
-        <TouchableOpacity style={styles.viewAllButton} onPress={() => router.push(viewAllUpcomingRoute as any)}>
-          <ThemedText style={styles.viewAllText}>
-            View all {upcomingEvents.length} {isInstitutionWorkspace ? 'programs' : 'events'}
-          </ThemedText>
+        <TouchableOpacity style={styles.viewAllButton}>
+          <ThemedText style={styles.viewAllText}>View all {upcomingEvents.length} events</ThemedText>
           <Ionicons name="arrow-forward" size={16} color="#3B82F6" />
         </TouchableOpacity>
       )}
@@ -1027,11 +765,7 @@ export default function EventsScreen() {
         </TouchableOpacity>
                     </View>
       <View style={styles.activityList}>
-        {(
-          isInstitutionWorkspace
-            ? institutionActivity
-            : MOCK_RECENT_ACTIVITY
-        ).map((activity) => (
+        {MOCK_RECENT_ACTIVITY.map((activity) => (
           <View key={activity.id} style={styles.activityItem}>
             <View style={[styles.activityIcon, { backgroundColor: activity.type === 'payment' ? '#D1FAE5' : activity.type === 'registration' ? '#DBEAFE' : '#F3E8FF' }]}>
               <Ionicons 
@@ -1046,21 +780,6 @@ export default function EventsScreen() {
                         </View>
                     </View>
         ))}
-        {isInstitutionWorkspace && institutionActivity.length === 0 ? (
-          <View style={styles.activityItem}>
-            <View style={[styles.activityIcon, { backgroundColor: '#EEF2FF' }]}>
-              <Ionicons name="information-circle" size={16} color="#6366F1" />
-            </View>
-            <View style={styles.activityContent}>
-              <ThemedText style={styles.activityMessage}>
-                No recent program activity yet.
-              </ThemedText>
-              <ThemedText style={styles.activityTime}>
-                Add participants or publish sessions to populate this feed.
-              </ThemedText>
-            </View>
-          </View>
-        ) : null}
                   </View>
     </View>
   );
@@ -1068,25 +787,14 @@ export default function EventsScreen() {
   const renderTeamSection = () => (
     <View style={styles.teamSection}>
       <View style={styles.sectionHeader}>
-        <ThemedText style={styles.sectionTitle}>
-          {isInstitutionWorkspace ? 'Program Staff' : 'Race Team'}
-        </ThemedText>
-        <TouchableOpacity
-          style={styles.addTeamButton}
-          onPress={() =>
-            router.push((isInstitutionWorkspace ? '/settings/organization-access' : '/members/requests') as any)
-          }
-        >
+        <ThemedText style={styles.sectionTitle}>Race Team</ThemedText>
+        <TouchableOpacity style={styles.addTeamButton} onPress={() => showToast('Invite Team Member', 'Invite race officers, scorers, and safety coordinators to collaborate on your events.', 'info')}>
           <Ionicons name="person-add-outline" size={16} color="#3B82F6" />
           <ThemedText style={styles.addTeamText}>Invite</ThemedText>
         </TouchableOpacity>
       </View>
       <View style={styles.teamGrid}>
-        {(
-          isInstitutionWorkspace
-            ? institutionTeamMembers
-            : MOCK_TEAM_MEMBERS
-        ).map((member) => (
+        {MOCK_TEAM_MEMBERS.map((member) => (
           <View key={member.id} style={styles.teamMember}>
             <View style={[styles.memberAvatar, member.status === 'pending' && styles.memberAvatarPending]}>
               <ThemedText style={styles.memberInitials}>{member.initials}</ThemedText>
@@ -1102,19 +810,6 @@ export default function EventsScreen() {
           )}
         </View>
         ))}
-        {isInstitutionWorkspace && institutionTeamMembers.length === 0 ? (
-          <View style={styles.teamMember}>
-            <View style={styles.memberAvatar}>
-              <Ionicons name="people-outline" size={16} color="#64748B" />
-            </View>
-            <View style={styles.memberInfo}>
-              <ThemedText style={styles.memberName}>No staff assigned yet</ThemedText>
-              <ThemedText style={styles.memberRole}>
-                Invite program staff or coordinators to get started.
-              </ThemedText>
-            </View>
-          </View>
-        ) : null}
       </View>
     </View>
   );
@@ -1123,7 +818,13 @@ export default function EventsScreen() {
     <View style={styles.financialSection}>
             <View style={styles.sectionHeader}>
         <ThemedText style={styles.sectionTitle}>Financial Summary</ThemedText>
-        <TouchableOpacity onPress={() => router.push('/club/earnings')}>
+        <TouchableOpacity onPress={() => {
+          if (useMockData) {
+            showToast('Demo Mode', 'Financial details and Stripe payouts would be available here in production with a connected club account.', 'info');
+          } else {
+            router.push('/club/earnings');
+          }
+        }}>
           <ThemedText style={styles.seeAllText}>Details</ThemedText>
         </TouchableOpacity>
             </View>
@@ -1203,11 +904,7 @@ export default function EventsScreen() {
                     );
                   } else {
                     setSelectedCalendarDate(day);
-                    showToast(
-                      format(day, 'EEEE, MMMM d'),
-                      isInstitutionWorkspace ? 'No programs scheduled' : 'No events scheduled',
-                      'info'
-                    );
+                    showToast(format(day, 'EEEE, MMMM d'), 'No events scheduled', 'info');
                   }
                 }}
                 activeOpacity={0.7}
@@ -1243,34 +940,8 @@ export default function EventsScreen() {
     );
   };
 
-  const hasWorkspaceConnection = isInstitutionWorkspace
-    ? Boolean(activeOrganization?.id)
-    : Boolean(isConnected);
-  const isWorkspaceResolving = isInstitutionWorkspace ? !orgReady : workspaceLoading;
-
   return (
     <ThemedView style={styles.container}>
-      {!isWorkspaceResolving && !hasWorkspaceConnection ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="business-outline" size={48} color="#CBD5E1" />
-          </View>
-          <ThemedText style={styles.emptyTitle}>Set up your organization workspace</ThemedText>
-          <ThemedText style={styles.emptyText}>
-            {isInstitutionWorkspace
-              ? 'Finish organization setup before managing programs and participant operations.'
-              : 'Finish organization setup before managing events and publishing content.'}
-          </ThemedText>
-          <TouchableOpacity
-            style={styles.emptyButton}
-            onPress={() => router.push(getOrganizationOnboardingRoute(activeDomain) as any)}
-          >
-            <ThemedText style={styles.emptyButtonText}>Continue Setup</ThemedText>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-      {!isWorkspaceResolving && !hasWorkspaceConnection ? null : (
-      <>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -1290,7 +961,7 @@ export default function EventsScreen() {
               {renderCalendar()}
               {renderActivityFeed()}
               {renderTeamSection()}
-              {!isInstitutionWorkspace ? renderFinancialSummary() : null}
+              {renderFinancialSummary()}
         </View>
           )}
         </View>
@@ -1300,7 +971,7 @@ export default function EventsScreen() {
             {renderCalendar()}
             {renderActivityFeed()}
             {renderTeamSection()}
-            {!isInstitutionWorkspace ? renderFinancialSummary() : null}
+            {renderFinancialSummary()}
           </>
         )}
       </ScrollView>
@@ -1347,7 +1018,7 @@ export default function EventsScreen() {
                   <View style={styles.modalDetailRow}>
                     <Ionicons name="people-outline" size={18} color="#6B7280" />
                     <ThemedText style={styles.modalDetailText}>
-                      {eventStats[selectedEvent.id]?.approved_count ?? 0} {isInstitutionWorkspace ? 'enrolled' : 'registered'}
+                      {eventStats[selectedEvent.id]?.approved_count ?? 0} registered
                       {selectedEvent.max_participants ? ` of ${selectedEvent.max_participants}` : ''}
                     </ThemedText>
                   </View>
@@ -1355,7 +1026,7 @@ export default function EventsScreen() {
                     <View style={styles.modalDetailRow}>
                       <Ionicons name="pricetag-outline" size={18} color="#6B7280" />
                       <ThemedText style={styles.modalDetailText}>
-                        ${selectedEvent.registration_fee} {isInstitutionWorkspace ? 'program fee' : 'entry fee'}
+                        ${selectedEvent.registration_fee} entry fee
                       </ThemedText>
                     </View>
                   )}
@@ -1372,9 +1043,7 @@ export default function EventsScreen() {
                 <View style={styles.modalDemoBanner}>
                   <Ionicons name="information-circle" size={18} color="#3B82F6" />
                   <ThemedText style={styles.modalDemoText}>
-                    {isInstitutionWorkspace
-                      ? 'Open this program to manage participants, assessments, and session operations.'
-                      : "This is demo data. In production, you'd see full event management tools here."}
+                    This is demo data. In production, you'd see full event management tools here.
                   </ThemedText>
                 </View>
 
@@ -1387,9 +1056,7 @@ export default function EventsScreen() {
                     }}
                   >
                     <Ionicons name="list-outline" size={18} color="#3B82F6" />
-                    <ThemedText style={styles.modalActionText}>
-                      {isInstitutionWorkspace ? 'Manage Participants' : 'Manage Entries'}
-                    </ThemedText>
+                    <ThemedText style={styles.modalActionText}>Manage Entries</ThemedText>
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={[styles.modalActionButton, styles.modalActionPrimary]}
@@ -1399,9 +1066,7 @@ export default function EventsScreen() {
                     }}
                   >
                     <Ionicons name="create-outline" size={18} color="#FFF" />
-                    <ThemedText style={styles.modalActionTextPrimary}>
-                      {isInstitutionWorkspace ? 'Edit Program' : 'Edit Event'}
-                    </ThemedText>
+                    <ThemedText style={styles.modalActionTextPrimary}>Edit Event</ThemedText>
             </TouchableOpacity>
           </View>
               </>
@@ -1409,8 +1074,6 @@ export default function EventsScreen() {
         </View>
         </Pressable>
       </Modal>
-      </>
-      )}
     </ThemedView>
   );
 }

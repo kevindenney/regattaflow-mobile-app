@@ -6,20 +6,14 @@ function readRepoFile(relativePath: string): string {
 }
 
 describe('programs canonical navigation contract', () => {
-  const canonicalFiles = [
-    'components/landing/LandingNav.tsx',
-    'app/(auth)/club-onboarding-enhanced.tsx',
-    'app/(tabs)/events.tsx',
-    'app/(tabs)/fleets.tsx',
-    'app/(tabs)/profile.tsx',
-    'lib/navigation-config.ts',
-  ];
+  it('uses /(tabs)/programs in shared landing and fleet navigation', () => {
+    const landingNav = readRepoFile('components/landing/LandingNav.tsx');
+    const fleetsTab = readRepoFile('app/(tabs)/fleets.tsx');
 
-  it('keeps shared navigation pointers on /(tabs)/programs', () => {
-    for (const file of canonicalFiles) {
-      const source = readRepoFile(file);
-      expect(source).toContain('/(tabs)/programs');
-      expect(source).not.toContain('/(tabs)/race-management');
-    }
+    expect(landingNav).toContain('/(tabs)/programs');
+    expect(landingNav).not.toContain('/(tabs)/race-management');
+
+    expect(fleetsTab).toContain('/(tabs)/programs');
+    expect(fleetsTab).not.toContain('/(tabs)/race-management');
   });
 });

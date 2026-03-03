@@ -4,20 +4,20 @@
  */
 
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { EnhancedClubOnboarding } from '@/components/onboarding/EnhancedClubOnboarding';
 
 export default function ClubOnboardingEnhancedScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ domain?: string }>();
-  const domainHint = Array.isArray(params.domain) ? params.domain[0] : params.domain;
-  const normalizedDomainHint = String(domainHint || '').toLowerCase().trim();
 
-  const handleComplete = (workspaceId: string) => {
-    void workspaceId;
-    router.replace('/(tabs)/programs' as any);
+  const handleComplete = (clubId: string) => {
+    // Navigate to club dashboard or event creation
+    router.replace({
+      pathname: '/club/event/create',
+      params: { clubId },
+    });
   };
 
   const handleCancel = () => {
@@ -28,7 +28,7 @@ export default function ClubOnboardingEnhancedScreen() {
     <>
       <Stack.Screen
         options={{
-          title: 'Organization Setup',
+          title: 'Club Setup',
           headerShown: true,
           headerBackTitle: 'Back',
           headerShadowVisible: false,
@@ -36,7 +36,6 @@ export default function ClubOnboardingEnhancedScreen() {
       />
       <SafeAreaView style={styles.container}>
         <EnhancedClubOnboarding
-          domainHint={normalizedDomainHint || null}
           onComplete={handleComplete}
           onCancel={handleCancel}
         />

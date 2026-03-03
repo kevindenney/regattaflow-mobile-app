@@ -3,9 +3,9 @@
  * OnX Maps-style navigation for landing pages
  * 
  * Features:
- * - Product sections (For Learners, For Coaches, For Organizations)
+ * - Product sections (For Sailors, For Coaches, For Clubs)
  * - Content sections (Racing Academy, Podcast)
- * - Utility links (Pricing, Sign In, Get Started Free)
+ * - Utility links (Pricing, Sign In, Start Free Trial)
  * - Active state highlighting
  * - Mobile hamburger menu
  * - Sticky nav with transparent/solid states
@@ -26,7 +26,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
-import { BetterAtLogo } from '@/components/BetterAtLogo';
+import { RegattaFlowLogo } from '@/components/RegattaFlowLogo';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 
 interface NavItem {
@@ -57,13 +57,6 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [appTabsMenuOpen, setAppTabsMenuOpen] = useState(false);
-  const domainHint =
-    userProfile?.active_domain ||
-    userProfile?.active_interest_slug ||
-    userProfile?.metadata?.domain;
-  const normalizedDomain = String(domainHint || '').toLowerCase().trim();
-  const isSailingDomain = normalizedDomain === 'sailing' || !normalizedDomain;
-  const learnerPrimaryLabel = isSailingDomain ? 'Race' : 'Event';
 
   // Close app tabs dropdown when clicking outside (desktop only)
   useEffect(() => {
@@ -85,16 +78,30 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
 
   // Product sections (user types)
   const productSections: NavItem[] = [
-    { label: 'For Learners', route: '/sail-racing', icon: 'school-outline' },
+    { label: 'For Sailors', route: '/', icon: 'boat-outline' },
     { label: 'For Coaches', route: '/coaches', icon: 'people-outline' },
-    { label: 'For Organizations', route: '/for-organizations', icon: 'business-outline' },
+    { label: 'For Clubs', route: '/club-solutions', icon: 'business-outline' },
   ];
 
   // Content sections
   const contentSections: NavItem[] = [
-    { label: 'Support', route: '/support', icon: 'help-circle-outline' },
+    { label: 'Learn', route: '/learn', icon: 'school-outline' },
     { label: 'Podcast', route: '/podcasts', icon: 'mic-outline' },
   ];
+
+  // Handle smooth scroll to Learn section on landing page
+  const handleRacingAcademyClick = () => {
+    if (pathname === '/' && Platform.OS === 'web') {
+      // Smooth scroll to Learn section
+      const element = document.getElementById('learn-section');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+    // Otherwise navigate to learn page (use tabs route)
+    handleNavClick('/(tabs)/learn');
+  };
 
   // Get app tabs for authenticated users based on user type
   const _getAppTabs = (): { label: string; route: string; icon: string }[] => {
@@ -105,7 +112,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
     switch (userType) {
       case 'sailor':
         return [
-          { label: learnerPrimaryLabel, route: getDashboardRoute('sailor', domainHint) as string, icon: 'flag-outline' },
+          { label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
           { label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
           { label: 'Courses', route: '/(tabs)/courses', icon: 'map-outline' },
           { label: 'Boats', route: '/(tabs)/boat/index', icon: 'boat-outline' },
@@ -125,7 +132,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
         ];
       default:
         return [
-          { label: learnerPrimaryLabel, route: getDashboardRoute(userProfile?.user_type ?? null, domainHint) as string, icon: 'flag-outline' },
+          { label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
         ];
     }
   };
@@ -164,9 +171,14 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
   const renderNavLink = (item: NavItem, isMobile = false) => {
     const isActive = isActiveRoute(item.route);
     const isComingSoon = item.comingSoon;
+  const isLearnLink = item.label === 'Learn';
 
     const handleClick = () => {
-      handleNavClick(item.route, isComingSoon);
+      if (isLearnLink) {
+        handleRacingAcademyClick();
+      } else {
+        handleNavClick(item.route, isComingSoon);
+      }
     };
 
     return (
@@ -236,8 +248,8 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
             style={styles.logoContainer}
             onPress={() => handleNavClick('/')}
           >
-            <BetterAtLogo size={28} variant="filled" />
-            <Text style={styles.logoText}>BetterAt</Text>
+            <RegattaFlowLogo size={28} variant="filled" />
+            <Text style={styles.logoText}>RegattaFlow</Text>
           </TouchableOpacity>
 
           {/* Visual Separator */}
@@ -274,7 +286,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
                   style={styles.ctaButton}
                   onPress={() => handleNavClick('/(auth)/signup')}
                 >
-                  <Text style={styles.ctaButtonText}>Get Started Free</Text>
+                  <Text style={styles.ctaButtonText}>Start Free Trial</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -282,7 +294,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
                 <TouchableOpacity
                   style={styles.utilityLink}
                   onPress={() => {
-                    const destination = getDashboardRoute(userProfile?.user_type ?? null, domainHint);
+                    const destination = getDashboardRoute(userProfile?.user_type ?? null);
                     router.push(destination as any);
                   }}
                 >
@@ -323,8 +335,8 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
               style={styles.logoContainer}
               onPress={() => handleNavClick('/')}
             >
-              <BetterAtLogo size={24} variant="filled" />
-              <Text style={[styles.logoText, styles.logoTextMobile]}>BetterAt</Text>
+              <RegattaFlowLogo size={24} variant="filled" />
+              <Text style={[styles.logoText, styles.logoTextMobile]}>RegattaFlow</Text>
             </TouchableOpacity>
 
             {/* Right side: Sign In + Hamburger */}
@@ -340,7 +352,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
                 <TouchableOpacity
                   style={styles.mobileUserButton}
                   onPress={() => {
-                    const destination = getDashboardRoute(userProfile?.user_type ?? null, domainHint);
+                    const destination = getDashboardRoute(userProfile?.user_type ?? null);
                     router.push(destination as any);
                   }}
                 >
@@ -381,8 +393,8 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
               {/* Header */}
               <View style={styles.mobileMenuHeader}>
                 <View style={styles.logoContainer}>
-                  <BetterAtLogo size={28} variant="filled" />
-                  <Text style={styles.logoText}>BetterAt</Text>
+                  <RegattaFlowLogo size={28} variant="filled" />
+                  <Text style={styles.logoText}>RegattaFlow</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.menuCloseButton}
@@ -421,7 +433,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
                         style={[styles.mobileCtaButton, styles.mobileCtaButtonPrimary]}
                         onPress={() => handleNavClick('/(auth)/signup')}
                       >
-                        <Text style={styles.mobileCtaButtonText}>Get Started Free</Text>
+                        <Text style={styles.mobileCtaButtonText}>Start Free Trial</Text>
                         <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
                       </TouchableOpacity>
                     </>
@@ -430,7 +442,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
                       style={styles.mobileUtilityLink}
                       onPress={() => {
                         setMobileMenuOpen(false);
-                        const destination = getDashboardRoute(userProfile?.user_type ?? null, domainHint);
+                        const destination = getDashboardRoute(userProfile?.user_type ?? null);
                         router.push(destination as any);
                       }}
                     >
