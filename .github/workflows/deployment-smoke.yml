@@ -39,6 +39,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Reset generated report artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f docs/integration-validation-latest.md
+          rm -f docs/integration-validation-latest.json
+          rm -f docs/api-smoke-deploy.md
+          rm -f docs/deployment-readiness.md
+
       - name: Lint 20260302 migration header conventions
         run: npm run lint:migrations:20260302
 

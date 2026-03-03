@@ -19,6 +19,9 @@ describe('deployment-smoke workflow contract', () => {
 
   it('runs migration convention lint and strict smoke gates', () => {
     const source = readWorkflow();
+    expect(source).toContain('Reset generated report artifacts');
+    expect(source).toContain('rm -f docs/integration-validation-latest.md');
+    expect(source).toContain('rm -f docs/integration-validation-latest.json');
     expect(source).toContain('Lint 20260302 migration header conventions');
     expect(source).toContain('npm run lint:migrations:20260302');
     expect(source).toContain('npm run validate:integration:strict');
