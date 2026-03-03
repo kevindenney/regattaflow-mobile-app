@@ -52,3 +52,8 @@ bugreport-*.zip
 
 # Google Play service account credentials
 google-play-service-account.json
+
+# generated validation reports
+docs/integration-validation-latest.md
+docs/integration-validation-latest.json
+docs/deployment-readiness.md
