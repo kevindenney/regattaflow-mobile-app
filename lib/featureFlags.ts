@@ -5,6 +5,14 @@
  * These can be toggled without code changes via environment variables.
  */
 
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const raw = String(process.env[name] ?? '').trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') return true;
+  if (raw === '0' || raw === 'false' || raw === 'no' || raw === 'off') return false;
+  return fallback;
+}
+
 // =============================================================================
 // FEATURE FLAGS
 // =============================================================================
@@ -181,25 +189,25 @@ export const FEATURE_FLAGS = {
    * Gate programs/program_sessions/program_participants backed paths.
    * Disable to revert UI to pre-program-model compatibility behavior.
    */
-  PROGRAM_DATA_MODEL_V1: true,
+  PROGRAM_DATA_MODEL_V1: readBooleanEnv('EXPO_PUBLIC_FF_PROGRAM_DATA_MODEL_V1', true),
 
   /**
    * Gate coach-home shell features (counts, trends, retention loop).
    * Disable to fall back to legacy clients shell experience.
    */
-  COACH_SHELL_V1: true,
+  COACH_SHELL_V1: readBooleanEnv('EXPO_PUBLIC_FF_COACH_SHELL_V1', true),
 
   /**
    * Gate strict domain checks on sailing-only AI endpoints.
    * Disable only for emergency rollback.
    */
-  DOMAIN_GATE_AI_STRICT_V1: true,
+  DOMAIN_GATE_AI_STRICT_V1: readBooleanEnv('EXPO_PUBLIC_FF_DOMAIN_GATE_AI_STRICT_V1', true),
 
   /**
    * Gate secondary domain packs (drawing/fitness) on shared skeleton routes.
    * Keep false until secondary pack validation is complete.
    */
-  SECONDARY_PACKS_V1: false,
+  SECONDARY_PACKS_V1: readBooleanEnv('EXPO_PUBLIC_FF_SECONDARY_PACKS_V1', false),
 } as const;
 
 // =============================================================================

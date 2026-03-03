@@ -12,6 +12,13 @@ This runbook defines rollback actions for Blueprint v2 gating flags:
 - `DOMAIN_GATE_AI_STRICT_V1`
 - `SECONDARY_PACKS_V1`
 
+Env overrides (runtime switch interface):
+
+- `EXPO_PUBLIC_FF_PROGRAM_DATA_MODEL_V1`
+- `EXPO_PUBLIC_FF_COACH_SHELL_V1`
+- `EXPO_PUBLIC_FF_DOMAIN_GATE_AI_STRICT_V1`
+- `EXPO_PUBLIC_FF_SECONDARY_PACKS_V1`
+
 ## Rollback Triggers
 
 - P0/P1 production incident linked to a gated surface.

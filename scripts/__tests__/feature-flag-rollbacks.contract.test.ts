@@ -14,11 +14,19 @@ describe('feature flag rollback contract', () => {
     expect(flagsSource).toContain('COACH_SHELL_V1');
     expect(flagsSource).toContain('DOMAIN_GATE_AI_STRICT_V1');
     expect(flagsSource).toContain('SECONDARY_PACKS_V1');
+    expect(flagsSource).toContain('EXPO_PUBLIC_FF_PROGRAM_DATA_MODEL_V1');
+    expect(flagsSource).toContain('EXPO_PUBLIC_FF_COACH_SHELL_V1');
+    expect(flagsSource).toContain('EXPO_PUBLIC_FF_DOMAIN_GATE_AI_STRICT_V1');
+    expect(flagsSource).toContain('EXPO_PUBLIC_FF_SECONDARY_PACKS_V1');
 
     expect(runbookSource).toContain('PROGRAM_DATA_MODEL_V1');
     expect(runbookSource).toContain('COACH_SHELL_V1');
     expect(runbookSource).toContain('DOMAIN_GATE_AI_STRICT_V1');
     expect(runbookSource).toContain('SECONDARY_PACKS_V1');
+    expect(runbookSource).toContain('EXPO_PUBLIC_FF_PROGRAM_DATA_MODEL_V1');
+    expect(runbookSource).toContain('EXPO_PUBLIC_FF_COACH_SHELL_V1');
+    expect(runbookSource).toContain('EXPO_PUBLIC_FF_DOMAIN_GATE_AI_STRICT_V1');
+    expect(runbookSource).toContain('EXPO_PUBLIC_FF_SECONDARY_PACKS_V1');
     expect(runbookSource).toContain('Rollback Procedure');
     expect(runbookSource).toContain('Restore Procedure');
   });

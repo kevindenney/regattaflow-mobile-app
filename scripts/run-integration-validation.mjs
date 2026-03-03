@@ -454,6 +454,10 @@ async function run() {
     featureFlagsSource.includes('COACH_SHELL_V1') &&
     featureFlagsSource.includes('DOMAIN_GATE_AI_STRICT_V1') &&
     featureFlagsSource.includes('SECONDARY_PACKS_V1') &&
+    featureFlagsSource.includes('EXPO_PUBLIC_FF_PROGRAM_DATA_MODEL_V1') &&
+    featureFlagsSource.includes('EXPO_PUBLIC_FF_COACH_SHELL_V1') &&
+    featureFlagsSource.includes('EXPO_PUBLIC_FF_DOMAIN_GATE_AI_STRICT_V1') &&
+    featureFlagsSource.includes('EXPO_PUBLIC_FF_SECONDARY_PACKS_V1') &&
     rollbackRunbookSource.includes('Rollback Procedure') &&
     rollbackRunbookSource.includes('Restore Procedure');
   add({

@@ -91,6 +91,10 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('COACH_SHELL_V1');
     expect(source).toContain('DOMAIN_GATE_AI_STRICT_V1');
     expect(source).toContain('SECONDARY_PACKS_V1');
+    expect(source).toContain('EXPO_PUBLIC_FF_PROGRAM_DATA_MODEL_V1');
+    expect(source).toContain('EXPO_PUBLIC_FF_COACH_SHELL_V1');
+    expect(source).toContain('EXPO_PUBLIC_FF_DOMAIN_GATE_AI_STRICT_V1');
+    expect(source).toContain('EXPO_PUBLIC_FF_SECONDARY_PACKS_V1');
     expect(source).toContain('docs/feature-flag-rollback-runbook.md');
   });
 
