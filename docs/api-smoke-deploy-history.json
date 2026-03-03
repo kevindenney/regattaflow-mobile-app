@@ -1,0 +1,11 @@
+{
+  "runs": [
+    {
+      "signature": "[{\"id\":\"ai-race-comms-get\",\"status\":\"PASS\",\"httpStatus\":405,\"vercelError\":\"-\",\"bodySnippet\":\"json: error=Method not allowed\"},{\"id\":\"ai-event-doc-get\",\"status\":\"PASS\",\"httpStatus\":405,\"vercelError\":\"-\",\"bodySnippet\":\"json: error=Method not allowed\"},{\"id\":\"ai-club-support-get\",\"status\":\"PASS\",\"httpStatus\":405,\"vercelError\":\"-\",\"bodySnippet\":\"json: error=Method not allowed\"},{\"id\":\"cron-coach-retention-get\",\"status\":\"PASS\",\"httpStatus\":401,\"vercelError\":\"-\",\"bodySnippet\":\"json: error=Unauthorized\"},{\"id\":\"cron-coach-retention-post\",\"status\":\"PASS\",\"httpStatus\":401,\"vercelError\":\"-\",\"bodySnippet\":\"json: error=Unauthorized\"}]",
+      "overall": "PASS",
+      "pass": 5,
+      "fail": 0,
+      "invocation_failures": 0
+    }
+  ]
+}

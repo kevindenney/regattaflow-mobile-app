@@ -4,8 +4,8 @@
 Use this file as the integration lane checklist while parallel Codex terminals implement plan blocks.
 
 ## Current Validation Snapshot (2026-03-03)
-- `npm run validate:pre-ship:bundle`: PASS (`steps=6/6`)
-- `npm run validate:integration:strict`: PASS (latest run; current snapshot: `26 pass, 0 fail, 0 skip`)
+- `npm run validate:pre-ship:bundle`: PASS (`steps=7/7`)
+- `npm run validate:integration:strict`: PASS (latest run; current snapshot: `29 pass, 0 fail, 0 skip`)
 - `npm run gate:integration-validation`: PASS
 - `npm run test:ci:gates`: PASS
 - `npm run typecheck`: PASS
@@ -149,18 +149,27 @@ All in-scope migration streams are shipped. Any additional hardening should be e
 1. Deploy/runtime diagnostics bundle
    - Improve failure-body extraction in strict deploy smoke without changing pass/fail semantics.
    - Keep report output deterministic (no volatile timestamps, no churn on unchanged content).
+   - Status (2026-03-03): shipped (`scripts/run-api-smoke-deploy.mjs` now captures richer JSON/HTML/text snippets and reports a rolling distinct-run trend; workflow now resets/ensures/uploads `docs/api-smoke-deploy-history.json`).
 
 2. RLS regression-prevention bundle
    - Add targeted tests for `assessment_records` visibility matrices by role and organization type.
    - Add migration-lint checks for policy naming collisions and canonical-owner drift.
+   - Status (2026-03-03): shipped for SQL policy matrix coverage (`services/__tests__/AssessmentRecordsRls.sql-security.test.ts`) plus strict semantic role-scope assertion in integration validation (`assessment-rls-policy-semantics`).
 
 3. Domain-gating regression bundle
    - Add incremental contract probes for route/middleware ordering on newly added AI endpoints.
    - Ensure unauthenticated probes remain controlled `401`/`405` responses, never runtime `500`.
+   - Status (2026-03-03): shipped; `withAuth` now checks bearer token before env config for unauthenticated requests, plus regression tests for missing-token/missing-env ordering (`api/__tests__/auth.middleware.regression.test.ts`).
 
 4. Retention loop reliability bundle
    - Expand cron dispatch tests for idempotent channel dispatch retries.
    - Validate weekly recap payload completeness before channel fanout.
+   - Status (2026-03-03): shipped in code-level coverage and integration validation checks.
+
+5. Migration/DDL hygiene automation bundle
+   - Extend collision audit to enforce canonical 20260302* ownership/header conventions.
+   - Add CI guard so convention and ownership drift cannot regress silently.
+   - Status (2026-03-03): shipped (`scripts/lint-20260302-migration-conventions.mjs` + `scripts/migration-object-collision-audit.mjs` with CI gate wiring and tests).
 
 ## 2026-03-02 Invite Flow Reconciliation
 - Reviewed migrations:

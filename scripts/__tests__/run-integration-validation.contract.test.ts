@@ -13,5 +13,20 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('INTEGRATION_AUTH_SAILING_BEARER');
     expect(source).toContain('INTEGRATION_AUTH_INSTITUTION_BEARER');
   });
-});
 
+  it('emits weekly recap payload completeness guard check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'coach-retention-weekly-recap-payload-guard'");
+    expect(source).toContain("category: 'Retention Loop'");
+    expect(source).toContain('isCompleteWeeklyRecapPayload');
+    expect(source).toContain('invalid_weekly_recap_payload');
+  });
+
+  it('emits assessment RLS semantic role-scope check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'assessment-rls-policy-semantics'");
+    expect(source).toContain("ARRAY['owner', 'admin']::text[]");
+    expect(source).toContain("pp.user_id = auth.uid()");
+    expect(source).toContain("viewer.role IN ('faculty', 'instructor', 'preceptor', 'coordinator')");
+  });
+});

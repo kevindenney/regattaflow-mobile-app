@@ -84,6 +84,44 @@ describe('api/middleware/auth withAuth regression', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('returns 401 when bearer token is missing even if auth env is not configured', async () => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_ANON_KEY;
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    delete process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+    const handler = jest.fn();
+    const wrapped = withAuth(handler);
+    const req = createReq(undefined);
+    const res = createRes();
+
+    await wrapped(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    expect(mockCreateClient).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 when bearer token exists but auth env is missing', async () => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_ANON_KEY;
+    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
+    delete process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+    const handler = jest.fn();
+    const wrapped = withAuth(handler);
+    const req = createReq('Bearer any-token');
+    const res = createRes();
+
+    await wrapped(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Server auth is not configured' });
+    expect(mockCreateClient).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when token is invalid', async () => {
     const supabase = createSupabaseMock({
       getUserResult: {

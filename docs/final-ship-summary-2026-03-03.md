@@ -8,6 +8,7 @@
 - Strict deployment API smoke tooling with endpoint diagnostics and Vercel runtime-failure detection:
   - `scripts/run-api-smoke-deploy.mjs`
   - `docs/api-smoke-deploy.md`
+  - `docs/api-smoke-deploy-history.json` (rolling distinct-run trend summary support)
   - optional authenticated probes for sailing + institution domains when CI secrets are present
 - CI deployment-smoke workflow hardening:
   - strict integration validation against production base URL
@@ -15,6 +16,7 @@
   - migration header convention lint gate for `20260302*` files
   - artifact uploads for integration and deploy smoke reports/logs
   - explicit concurrency and permissions hardening
+  - deploy-smoke history artifact lifecycle hardening (`reset`/`ensure`/`upload`)
 - Mandatory retention loop shipped end-to-end:
   - streaks
   - reminders
@@ -44,6 +46,15 @@
   - aligned pre-ship expected skip policy with strict fallback behavior.
   - synchronized integration runbook with actual pre-ship bundle step order.
   - reconciled migration/readiness docs (mandatory retention gate explicit, canonical migration ordering/list completeness, No-Go checklist semantics).
+  - retention delivery confidence checks expanded:
+    - per-channel retry/idempotency test coverage for `in_app`/`push`/`email`
+    - strict integration assertion for weekly recap payload completeness/guard path.
+  - assessment RLS regression prevention strengthened:
+    - integration semantic assertion (`assessment-rls-policy-semantics`)
+    - dedicated SQL security matrix test (`services/__tests__/AssessmentRecordsRls.sql-security.test.ts`).
+  - deployment smoke contract coverage expanded:
+    - script contract test added (`scripts/__tests__/run-api-smoke-deploy.contract.test.ts`)
+    - CI gates now include dedicated SQL security suite (`npm run test:security:sql`) as part of `npm run test:ci:gates`.
 
 ## Deferred
 - No additional blockers deferred from the migration/CI hardening lane as of 2026-03-03.
@@ -58,5 +69,5 @@
 ## Validation Snapshot (2026-03-03)
 - `npm run typecheck`: PASS
 - `npm run test:ci:gates`: PASS
-- `npm run validate:integration:strict`: PASS (latest run; current snapshot: `26 pass, 0 fail, 0 skip`)
-- `npm run validate:pre-ship:bundle`: PASS (`steps=6/6`)
+- `npm run validate:integration:strict`: PASS (latest run; current snapshot: `29 pass, 0 fail, 0 skip`)
+- `npm run validate:pre-ship:bundle`: PASS (`steps=7/7`)

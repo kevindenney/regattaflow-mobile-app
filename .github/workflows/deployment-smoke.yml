@@ -46,6 +46,7 @@ jobs:
           rm -f docs/integration-validation-latest.md
           rm -f docs/integration-validation-latest.json
           rm -f docs/api-smoke-deploy.md
+          rm -f docs/api-smoke-deploy-history.json
           rm -f docs/deployment-readiness.md
 
       - name: Lint 20260302 migration header conventions
@@ -152,6 +153,18 @@ jobs:
             } > docs/api-smoke-deploy.md
           fi
 
+      - name: Ensure deploy API smoke history JSON exists
+        if: always()
+        run: |
+          if [ ! -f docs/api-smoke-deploy-history.json ]; then
+            mkdir -p docs
+            {
+              echo '{'
+              echo '  "runs": []'
+              echo '}'
+            } > docs/api-smoke-deploy-history.json
+          fi
+
       - name: Ensure integration validation markdown exists
         if: always()
         run: |
@@ -218,7 +231,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: api-smoke-deploy
-          path: docs/api-smoke-deploy.md
+          path: |
+            docs/api-smoke-deploy.md
+            docs/api-smoke-deploy-history.json
           if-no-files-found: error
 
       - name: Upload deployment readiness artifact

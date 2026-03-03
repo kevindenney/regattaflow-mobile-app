@@ -6,7 +6,7 @@
 ## Current Signal Snapshot
 
 - Pre-ship bundle: PASS (`npm run validate:pre-ship:bundle`)
-- Integration validation strict: PASS (latest run; current snapshot: 26 PASS, 0 FAIL, 0 SKIP)
+- Integration validation strict: PASS (latest run; current snapshot: 29 PASS, 0 FAIL, 0 SKIP)
 - Integration gate: PASS (JSON-first parsing path)
 - Integration report schema check: PASS
 - Migration object collision audit (`20260302*`, indexes/triggers/constraints): PASS (0 duplicates)
@@ -101,18 +101,23 @@ The merge lane is in `Go` state. Remaining follow-ups can run independently as g
    - Expand deploy smoke failure snippets for additional edge payload formats.
    - Add lightweight trend summary (pass rate over last N runs) to deployment docs.
    - Keep strict failure condition unchanged (`FAIL` or unexpected `SKIP` remains blocking).
+   - Status (2026-03-03): shipped; contract coverage added in `scripts/__tests__/run-api-smoke-deploy.contract.test.ts` and wired into `npm run test:ci:gates:unit`.
+   - CI guard wiring is contract-tested in `scripts/__tests__/package-ci-gates.contract.test.ts`.
 
 2. Authenticated API smoke expansion
    - Add token-backed probes for one representative endpoint per domain (`sailing`, `nursing/institution`).
    - Preserve existing unauthenticated runtime-failure guard probes.
    - Record authenticated diagnostics in a separate report section to avoid mixing with public smoke semantics.
+   - Status (2026-03-03): shipped; guard-order API contract tests (`api/__tests__/auth.middleware.regression.test.ts`, `api/__tests__/ai-endpoints.contract.test.ts`) are now enforced in `npm run test:ci:gates:unit`.
 
 3. Retention loop delivery confidence
    - Add focused tests for per-channel dispatch idempotency (`in_app`, `push`, `email`) on retries.
    - Add one integration assertion for weekly recap payload field completeness.
    - Keep mandatory loop contract unchanged: `streaks`, `reminders`, `weekly recap`.
+   - Status (2026-03-03): shipped; SQL/security regression suite is also included in `npm run test:ci:gates`.
 
 4. Migration/DDL hygiene automation
    - Extend collision audit to flag missing canonical header fields on new migrations.
    - Add CI guard so `20260302*` canonical ownership rules cannot regress silently.
    - Continue no-rewrite behavior for unchanged audit outputs to minimize churn.
+   - Status (2026-03-03): shipped via `npm run lint:migrations:20260302` + `npm run report:migration-object-collision-audit` with contract coverage in CI gates.

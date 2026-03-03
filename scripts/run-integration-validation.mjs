@@ -402,6 +402,45 @@ async function run() {
     reference: assessmentRlsMigrationPath,
   });
 
+  const assessmentRlsSemanticClauses = [
+    "ARRAY['owner', 'admin']::text[]",
+    "pp.user_id = auth.uid()",
+    "viewer.role IN ('faculty', 'instructor', 'preceptor', 'coordinator')",
+    "viewer.program_id = assessed.program_id",
+    "o.organization_type <> 'institution'",
+  ];
+  const assessmentRlsSemanticsOk = assessmentRlsSemanticClauses.every((clause) =>
+    assessmentRlsMigration.includes(clause)
+  );
+  add({
+    id: 'assessment-rls-policy-semantics',
+    category: 'Assessment RLS',
+    status: assessmentRlsSemanticsOk ? 'PASS' : 'FAIL',
+    details: assessmentRlsSemanticsOk
+      ? 'Assessment RLS migration preserves owner/admin org-wide access, learner self-only access, assigned staff program scope, and non-institution member visibility split.'
+      : 'Assessment RLS migration is missing one or more required role-scoping semantic clauses.',
+    reference: assessmentRlsMigrationPath,
+  });
+
+  const retentionDispatchSource = await readFile('lib/coach/retentionDispatch.ts');
+  const retentionCronSource = await readFile('api/cron/coach-retention-loop.ts');
+  const weeklyRecapPayloadGuardOk =
+    retentionDispatchSource.includes('completedActions') &&
+    retentionDispatchSource.includes('pendingActions') &&
+    retentionDispatchSource.includes('activeDays') &&
+    retentionDispatchSource.includes('trendDelta') &&
+    retentionCronSource.includes('isCompleteWeeklyRecapPayload') &&
+    retentionCronSource.includes('invalid_weekly_recap_payload');
+  add({
+    id: 'coach-retention-weekly-recap-payload-guard',
+    category: 'Retention Loop',
+    status: weeklyRecapPayloadGuardOk ? 'PASS' : 'FAIL',
+    details: weeklyRecapPayloadGuardOk
+      ? 'Weekly recap dispatch includes payload completeness validation + invalid payload guard path.'
+      : 'Weekly recap payload guard is incomplete (missing required fields or runtime validation path).',
+    reference: 'lib/coach/retentionDispatch.ts, api/cron/coach-retention-loop.ts',
+  });
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const lineageTableFilterRaw = process.env.INTEGRATION_REQUIRED_TABLES || '';
@@ -771,6 +810,7 @@ async function run() {
   reportLines.push('- Invite flow schema/RPC/service checks');
   reportLines.push('- Programs route alias checks');
   reportLines.push('- Assessment RLS assumption checks (migration + table shape)');
+  reportLines.push('- Coach retention weekly recap payload completeness guard checks');
   reportLines.push('- API smoke checks (when `INTEGRATION_BASE_URL` is available; strict mode adds unauthenticated POST probes for AI endpoints)');
   reportLines.push('- Optional authenticated smoke probes (enabled when domain bearer env vars are provided)');
   reportLines.push('');

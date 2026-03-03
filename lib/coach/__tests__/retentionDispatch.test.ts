@@ -65,6 +65,51 @@ describe('retentionDispatch helpers', () => {
     };
     expect(hasPendingChannel(inAppDone, 'in_app')).toBe(false);
     expect(hasPendingChannel(inAppDone, 'push')).toBe(true);
+
+    const pushDone: RetentionDispatchRow = {
+      ...base,
+      push_dispatched_at: '2026-03-03T14:31:00.000Z',
+    };
+    expect(hasPendingChannel(pushDone, 'push')).toBe(false);
+    expect(hasPendingChannel(pushDone, 'email')).toBe(true);
+
+    const emailDone: RetentionDispatchRow = {
+      ...base,
+      email_dispatched_at: '2026-03-03T14:32:00.000Z',
+    };
+    expect(hasPendingChannel(emailDone, 'email')).toBe(false);
+    expect(hasPendingChannel(emailDone, 'in_app')).toBe(true);
+  });
+
+  it('keeps retries idempotent by channel once dispatch timestamp is set', () => {
+    const firstAttempt: RetentionDispatchRow = {
+      id: 'row-retry',
+      delivery_type: 'reminders',
+      payload: {},
+      in_app_dispatched_at: '2026-03-03T14:30:00.000Z',
+      push_dispatched_at: null,
+      email_dispatched_at: null,
+    };
+    expect(hasPendingChannel(firstAttempt, 'in_app')).toBe(false);
+    expect(hasPendingChannel(firstAttempt, 'push')).toBe(true);
+    expect(hasPendingChannel(firstAttempt, 'email')).toBe(true);
+
+    const secondAttempt: RetentionDispatchRow = {
+      ...firstAttempt,
+      push_dispatched_at: '2026-03-03T14:31:00.000Z',
+    };
+    expect(hasPendingChannel(secondAttempt, 'in_app')).toBe(false);
+    expect(hasPendingChannel(secondAttempt, 'push')).toBe(false);
+    expect(hasPendingChannel(secondAttempt, 'email')).toBe(true);
+
+    const finalAttempt: RetentionDispatchRow = {
+      ...secondAttempt,
+      email_dispatched_at: '2026-03-03T14:32:00.000Z',
+    };
+    expect(hasPendingChannel(finalAttempt, 'in_app')).toBe(false);
+    expect(hasPendingChannel(finalAttempt, 'push')).toBe(false);
+    expect(hasPendingChannel(finalAttempt, 'email')).toBe(false);
+    expect(isFullyDispatched(finalAttempt)).toBe(true);
   });
 
   it('marks delivery complete only when all channels are dispatched', () => {
@@ -85,4 +130,3 @@ describe('retentionDispatch helpers', () => {
     ).toBe(false);
   });
 });
-

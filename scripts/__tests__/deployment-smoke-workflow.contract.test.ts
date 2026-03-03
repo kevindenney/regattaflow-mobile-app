@@ -22,12 +22,15 @@ describe('deployment-smoke workflow contract', () => {
     expect(source).toContain('Reset generated report artifacts');
     expect(source).toContain('rm -f docs/integration-validation-latest.md');
     expect(source).toContain('rm -f docs/integration-validation-latest.json');
+    expect(source).toContain('rm -f docs/api-smoke-deploy-history.json');
     expect(source).toContain('Lint 20260302 migration header conventions');
     expect(source).toContain('npm run lint:migrations:20260302');
     expect(source).toContain('npm run validate:integration:strict');
     expect(source).toContain('npm run validate:api-smoke:deploy');
     expect(source).toContain('npm run gate:integration-validation');
+    expect(source).toContain('Ensure deploy API smoke history JSON exists');
     expect(source).toContain('Upload deployment readiness artifact');
+    expect(source).toContain('docs/api-smoke-deploy-history.json');
     expect(source).toContain('docs/deployment-readiness.md');
     expect(source).toContain('Ensure integration validation JSON exists');
     expect(source).toContain('docs/integration-validation-latest.json');

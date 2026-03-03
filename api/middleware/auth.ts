@@ -93,17 +93,17 @@ const resolveClubId = async (supabase: SupabaseClient, userId: string): Promise<
 
 export const withAuth = (handler: Handler, options: AuthOptions = {}) => {
   return async (req: VercelRequest, res: VercelResponse) => {
+    const token = extractBearerToken(req.headers.authorization);
+    if (!token) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
     const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
       res.status(500).json({ error: 'Server auth is not configured' });
-      return;
-    }
-
-    const token = extractBearerToken(req.headers.authorization);
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
