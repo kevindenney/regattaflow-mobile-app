@@ -56,7 +56,7 @@ export default function CommunicationsScreen() {
         programService.listOrganizationCommunicationThreads(organizationId, 100, {
           program_id: selectedProgramId,
         }),
-        programService.listUnreadThreadIds(organizationId, userId, 1000),
+        programService.listUnreadThreadIds(organizationId, userId, 1000, selectedProgramId),
       ]);
       setThreads(threadRows);
       setUnreadIds(unreadThreadIds);
