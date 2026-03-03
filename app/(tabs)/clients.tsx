@@ -150,18 +150,30 @@ export default function ClientsScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.statsContainer}>
-            <View style={styles.statCard}>
+            <TouchableOpacity
+              style={styles.statCard}
+              onPress={() => router.push('/programs/assign' as any)}
+              activeOpacity={0.85}
+            >
               <ThemedText style={styles.statValue}>{coachHomeCounts.assignedPrograms}</ThemedText>
               <ThemedText style={styles.statLabel}>Assigned Programs</ThemedText>
-            </View>
-            <View style={styles.statCard}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.statCard}
+              onPress={() => router.push('/assessments?status=all&focus=all' as any)}
+              activeOpacity={0.85}
+            >
               <ThemedText style={styles.statValue}>{coachHomeCounts.dueAssessments}</ThemedText>
               <ThemedText style={styles.statLabel}>Due Assessments</ThemedText>
-            </View>
-            <View style={styles.statCard}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.statCard}
+              onPress={() => router.push('/communications?focus=unread' as any)}
+              activeOpacity={0.85}
+            >
               <ThemedText style={styles.statValue}>{coachHomeCounts.unreadThreads}</ThemedText>
               <ThemedText style={styles.statLabel}>Unread Threads</ThemedText>
-            </View>
+            </TouchableOpacity>
           </View>
           <View style={styles.coachHomeLinksRow}>
             <TouchableOpacity
