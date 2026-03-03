@@ -4,6 +4,7 @@ import { useOrganization } from '@/providers/OrganizationProvider';
 import { CompetencyProgressTrend, programService } from '@/services/ProgramService';
 import { supabase } from '@/services/supabase';
 import { createCoachHomeRealtimeController } from '@/hooks/coachHomeRealtimeController';
+import { resolveCoachUnreadThreadCount } from '@/lib/coach/unreadScope';
 
 type CoachHomeCounts = {
   assignedPrograms: number;
@@ -66,10 +67,10 @@ export function useCoachHomeData() {
 
     setLoading(true);
     try {
-      const [assignedProgramIds, dueSummary, unreadThreadIds, trends] = await Promise.all([
+      const [assignedProgramIds, dueSummary, unreadThreadCountsByProgram, trends] = await Promise.all([
         programService.listAssignedProgramIdsForStaff(organizationId, userId),
         programService.getEvaluatorDueAssessmentSummary(organizationId, userId),
-        programService.listUnreadThreadIds(organizationId, userId),
+        programService.getUnreadThreadCountsByProgram(organizationId, userId),
         programService.listCompetencyProgressTrendsForEvaluator(organizationId, userId, {
           weeks: 8,
           limitCompetencies: 4,
@@ -90,7 +91,7 @@ export function useCoachHomeData() {
       setCounts({
         assignedPrograms: assignedProgramIds.length,
         dueAssessments: dueSummary.totalDue,
-        unreadThreads: unreadThreadIds.length,
+        unreadThreads: resolveCoachUnreadThreadCount(unreadThreadCountsByProgram, assignedProgramIds),
         dueTodayAssessments: dueSummary.dueToday,
         overdueAssessments: dueSummary.overdue,
       });
