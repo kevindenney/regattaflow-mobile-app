@@ -612,6 +612,13 @@ async function run() {
         okStatuses: [404],
         note: 'Public widget endpoint should cleanly return not-found for bogus token.',
       },
+      {
+        id: 'api-smoke-cron-coach-retention',
+        path: '/api/cron/coach-retention-loop',
+        method: 'GET',
+        okStatuses: [401, 405],
+        note: 'Cron endpoint should return controlled auth/method response without runtime crash.',
+      },
     ];
 
     const apiChecks = strictApiSmoke
