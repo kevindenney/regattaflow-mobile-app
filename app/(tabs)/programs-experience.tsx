@@ -20,6 +20,7 @@ import { useOrganization } from '@/providers/OrganizationProvider';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { useOrganizationCommunicationsUnread } from '@/hooks/useOrganizationCommunicationsUnread';
 import { formatBadgeCount } from '@/lib/utils/formatBadgeCount';
+import { buildProgramCommunicationsHref } from '@/lib/communications/drillDown';
 import { buildInstitutionProgramItems, type InstitutionProgramItems } from '@/lib/programs/dashboardSections';
 import {
   programService,
@@ -479,7 +480,17 @@ export default function RaceManagementScreen() {
               <ThemedText style={styles.cardButtonText}>{isInstitutionWorkspace ? 'Program docs' : 'Docs'}</ThemedText>
             </TouchableOpacity>
             {isInstitutionWorkspace ? (
-              <TouchableOpacity style={styles.cardButtonPrimary} onPress={() => router.push('/communications')}>
+              <TouchableOpacity
+                style={styles.cardButtonPrimary}
+                onPress={() =>
+                  router.push(
+                    buildProgramCommunicationsHref({
+                      programId: race.id,
+                      programTitle: race.name,
+                    }) as any
+                  )
+                }
+              >
                 <Ionicons name="mail-outline" size={18} color="#FFFFFF" />
                 <ThemedText style={styles.cardButtonPrimaryText}>
                   Notify group{communicationsUnreadCount > 0 ? ` (${formatBadgeCount(communicationsUnreadCount)})` : ''}
@@ -577,7 +588,18 @@ export default function RaceManagementScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.controlSecondary}
-              onPress={() => router.push((isInstitutionWorkspace ? '/communications' : `/club/race/control/${race.id}`) as any)}
+              onPress={() =>
+                router.push(
+                  (
+                    isInstitutionWorkspace
+                      ? buildProgramCommunicationsHref({
+                          programId: race.id,
+                          programTitle: race.name,
+                        })
+                      : `/club/race/control/${race.id}`
+                  ) as any
+                )
+              }
             >
               <Ionicons name="chatbubble-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.controlSecondaryText}>
@@ -642,7 +664,18 @@ export default function RaceManagementScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.cardButton}
-              onPress={() => router.push((isInstitutionWorkspace ? '/communications' : '/(tabs)/community') as any)}
+              onPress={() =>
+                router.push(
+                  (
+                    isInstitutionWorkspace
+                      ? buildProgramCommunicationsHref({
+                          programId: race.id,
+                          programTitle: race.name,
+                        })
+                      : '/(tabs)/community'
+                  ) as any
+                )
+              }
             >
               <Ionicons name="mail-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>
