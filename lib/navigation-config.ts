@@ -31,6 +31,21 @@ export interface NavItem {
   icon: keyof typeof Ionicons.glyphMap;
 }
 
+type WorkspaceNavContext = {
+  organizationType?: string | null;
+  activeDomain?: string | null;
+};
+
+const isProgramWorkspace = (
+  organizationType?: string | null,
+  activeDomain?: string | null
+): boolean => {
+  const domain = String(activeDomain || '').toLowerCase().trim();
+  if (domain === 'sailing') return false;
+  if (domain === 'nursing' || domain === 'drawing' || domain === 'fitness') return true;
+  return organizationType === 'institution';
+};
+
 // =============================================================================
 // TAB CONFIGURATION (for tab bar / bottom nav)
 // =============================================================================
@@ -39,10 +54,15 @@ export interface NavItem {
  * Get the vocabulary-aware event tab title.
  * Maps "Learning Event" vocabulary term to a short tab label.
  */
-const getEventTabTitle = (vocabulary?: VocabularyMap): string => {
-  if (!vocabulary) return 'Race';
+const getEventTabTitle = (
+  vocabulary?: VocabularyMap,
+  activeDomain?: string | null
+): string => {
+  const domain = String(activeDomain || '').toLowerCase().trim();
+  const defaultLabel = domain === 'sailing' ? 'Race' : 'Event';
+  if (!vocabulary) return defaultLabel;
   const term = vocabulary['Learning Event'];
-  if (!term) return 'Race';
+  if (!term) return defaultLabel;
   // Use the first word for short tab labels (e.g., "Clinical Shift" → "Shift")
   const words = term.split(' ');
   return words.length > 1 ? words[words.length - 1] : term;
@@ -57,9 +77,10 @@ export const getTabsForUserType = (
   userType: string | null,
   isGuest: boolean = false,
   capabilities?: UserCapabilities,
-  vocabulary?: VocabularyMap
+  vocabulary?: VocabularyMap,
+  workspaceContext?: WorkspaceNavContext
 ): TabConfig[] => {
-  const eventTitle = getEventTabTitle(vocabulary);
+  const eventTitle = getEventTabTitle(vocabulary, workspaceContext?.activeDomain);
 
   // Guests get full learner-style tabs (same as logged-in learners)
   if (isGuest) {
@@ -74,10 +95,20 @@ export const getTabsForUserType = (
 
   // Club/institution admins get their own dedicated tabs (unchanged)
   if (userType === 'club') {
+    if (isProgramWorkspace(workspaceContext?.organizationType, workspaceContext?.activeDomain)) {
+      return [
+        { name: 'events', title: 'Workspace', icon: 'grid-outline', iconFocused: 'grid' },
+        { name: 'members', title: 'People', icon: 'people-outline', iconFocused: 'people' },
+        { name: 'programs', title: 'Programs & Placements', icon: 'school-outline', iconFocused: 'school' },
+        { name: 'profile', title: 'Org', icon: 'business-outline', iconFocused: 'business' },
+        { name: 'settings', title: 'Settings', icon: 'cog-outline', iconFocused: 'cog' },
+      ];
+    }
+
     return [
       { name: 'events', title: 'Events', icon: 'calendar-outline', iconFocused: 'calendar' },
       { name: 'members', title: 'Members', icon: 'people-outline', iconFocused: 'people' },
-      { name: 'race-management', title: 'Racing', icon: 'flag-outline', iconFocused: 'flag' },
+      { name: 'race-management', title: 'Programs & Placements', icon: 'flag-outline', iconFocused: 'flag' },
       { name: 'profile', title: 'Club', icon: 'business-outline', iconFocused: 'business' },
       { name: 'settings', title: 'Settings', icon: 'cog-outline', iconFocused: 'cog' },
     ];
@@ -142,12 +173,18 @@ export const COACH_NAV_ITEMS: NavItem[] = [
 export const CLUB_NAV_ITEMS: NavItem[] = [
   { key: 'events', label: 'Events', route: '/(tabs)/events', icon: 'calendar-outline' },
   { key: 'members', label: 'Members', route: '/(tabs)/members', icon: 'people-outline' },
-  { key: 'racing', label: 'Racing', route: '/(tabs)/race-management', icon: 'flag-outline' },
+  { key: 'racing', label: 'Programs & Placements', route: '/(tabs)/programs', icon: 'flag-outline' },
   { key: 'club', label: 'Club', route: '/(tabs)/profile', icon: 'business-outline' },
 ];
 
 export const COMMON_FOOTER_ITEMS: NavItem[] = [
-  { key: 'account', label: 'Account', route: '/(tabs)/account', icon: 'person-outline' },
+  { key: 'settings', label: 'Settings', route: '/(tabs)/settings', icon: 'settings-outline' },
+  { key: 'account', label: 'Account', route: '/account', icon: 'person-outline' },
+];
+
+export const INSTITUTION_FOOTER_ITEMS: NavItem[] = [
+  { key: 'settings', label: 'Organization Access', route: '/settings/organization-access', icon: 'settings-outline' },
+  { key: 'account', label: 'Organization', route: '/(tabs)/profile', icon: 'business-outline' },
 ];
 
 // =============================================================================
@@ -161,23 +198,42 @@ export const COMMON_FOOTER_ITEMS: NavItem[] = [
  */
 export function getNavItemsForUserType(
   userType: string | null,
-  vocabulary?: VocabularyMap
+  vocabulary?: VocabularyMap,
+  workspaceContext?: WorkspaceNavContext
 ): {
   primary: NavItem[];
   secondary: NavItem[];
 } {
+  const normalizedDomain = String(workspaceContext?.activeDomain || '').toLowerCase().trim();
+  const hasExplicitDomain = normalizedDomain.length > 0;
+  const learnerPrimaryRoute =
+    hasExplicitDomain && normalizedDomain !== 'sailing' ? '/(tabs)/learn' : '/(tabs)/races';
+
   switch (userType) {
     case 'coach':
-      return { primary: COACH_NAV_ITEMS, secondary: [] };
+      return { primary: COACH_NAV_ITEMS, secondary: COMMON_FOOTER_ITEMS };
     case 'club':
-      return { primary: CLUB_NAV_ITEMS, secondary: [] };
+      if (isProgramWorkspace(workspaceContext?.organizationType, workspaceContext?.activeDomain)) {
+        return {
+          primary: [
+            { key: 'events', label: 'Workspace', route: '/(tabs)/events', icon: 'grid-outline' },
+            { key: 'members', label: 'People', route: '/(tabs)/members', icon: 'people-outline' },
+            { key: 'programs', label: 'Programs & Placements', route: '/(tabs)/programs', icon: 'school-outline' },
+            { key: 'organization', label: 'Organization', route: '/(tabs)/profile', icon: 'business-outline' },
+          ],
+          secondary: INSTITUTION_FOOTER_ITEMS,
+        };
+      }
+      return { primary: CLUB_NAV_ITEMS, secondary: COMMON_FOOTER_ITEMS };
     case 'sailor':
     default: {
-      const eventTitle = getEventTabTitle(vocabulary);
+      const eventTitle = getEventTabTitle(vocabulary, workspaceContext?.activeDomain);
       const primary = SAILOR_NAV_ITEMS.map((item) =>
-        item.key === 'races' ? { ...item, label: eventTitle } : item
+        item.key === 'races'
+          ? { ...item, label: eventTitle, route: learnerPrimaryRoute }
+          : item
       );
-      return { primary, secondary: SAILOR_SECONDARY_ITEMS };
+      return { primary, secondary: [...SAILOR_SECONDARY_ITEMS, ...COMMON_FOOTER_ITEMS] };
     }
   }
 }
