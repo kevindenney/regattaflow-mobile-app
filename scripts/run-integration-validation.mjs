@@ -483,6 +483,25 @@ async function run() {
     reference: secondaryPacksDocPath,
   });
 
+  const secondaryPacksCatalogMigrationPath = 'supabase/migrations/20260303143000_seed_secondary_pack_domain_catalog_stubs.sql';
+  const secondaryPacksCatalogMigration = await readFile(secondaryPacksCatalogMigrationPath);
+  const secondaryPacksCatalogStubsOk =
+    secondaryPacksCatalogMigration.includes("INSERT INTO public.domain_catalog") &&
+    secondaryPacksCatalogMigration.includes("'drawing'") &&
+    secondaryPacksCatalogMigration.includes("'fitness'") &&
+    secondaryPacksCatalogMigration.includes("'Golf'") &&
+    secondaryPacksCatalogMigration.includes("'Studio Sprint Template'") &&
+    secondaryPacksCatalogMigration.includes("'Lesson Block Template'");
+  add({
+    id: 'secondary-packs-domain-catalog-stubs',
+    category: 'Secondary Packs',
+    status: secondaryPacksCatalogStubsOk ? 'PASS' : 'FAIL',
+    details: secondaryPacksCatalogStubsOk
+      ? 'Secondary pack domain_catalog stubs are seeded for drawing and golf(fitness-mapped).'
+      : 'Secondary pack domain_catalog stub migration markers are missing.',
+    reference: secondaryPacksCatalogMigrationPath,
+  });
+
   const tabRegistrationOk =
     tabsLayoutFile.includes('name="programs"') &&
     tabsLayoutFile.includes('name="race-management"');

@@ -102,4 +102,12 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('1. `drawing`');
     expect(source).toContain('2. `golf`');
   });
+
+  it('emits secondary-packs domain-catalog stubs check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'secondary-packs-domain-catalog-stubs'");
+    expect(source).toContain('20260303143000_seed_secondary_pack_domain_catalog_stubs.sql');
+    expect(source).toContain('Studio Sprint Template');
+    expect(source).toContain('Lesson Block Template');
+  });
 });

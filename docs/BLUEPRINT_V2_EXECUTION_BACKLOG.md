@@ -134,7 +134,8 @@ Status: Pending
 
 - [x] Lock canonical secondary packs list (`drawing`, `golf`) in docs/contracts.
   - Shipped via `docs/secondary-packs-canonical.md` + `secondary-packs-canonical-contract`.
-- [ ] Create pack templates and vocabulary stubs in `domain_catalog`.
+- [x] Create pack templates and vocabulary stubs in `domain_catalog`.
+  - Shipped via `supabase/migrations/20260303143000_seed_secondary_pack_domain_catalog_stubs.sql`.
 - [x] Add one route-level and one API-level contract test per secondary pack.
   - Shipped via `app/__tests__/secondary-packs-route-api.contract.test.ts`.
 
