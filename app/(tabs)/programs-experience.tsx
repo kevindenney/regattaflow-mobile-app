@@ -184,6 +184,16 @@ export default function RaceManagementScreen() {
       null
     );
   }, [institutionProgramItems.active, institutionProgramItems.completed, institutionProgramItems.upcoming, isInstitutionWorkspace]);
+  const quickActionCommunicationsBadgeCount = useMemo(() => {
+    if (!isInstitutionWorkspace) return undefined;
+    if (!quickActionCommunicationsTarget) return communicationsUnreadCount;
+    return getProgramUnreadCount(quickActionCommunicationsTarget.id);
+  }, [
+    communicationsUnreadCount,
+    getProgramUnreadCount,
+    isInstitutionWorkspace,
+    quickActionCommunicationsTarget,
+  ]);
   const getProgramUnreadCount = useCallback(
     (programId: string) => {
       const key = String(programId || '').trim();
@@ -388,7 +398,7 @@ export default function RaceManagementScreen() {
       icon: 'document-text-outline',
       label: isInstitutionWorkspace ? 'Post schedule updates' : 'Post course updates',
       subtitle: isInstitutionWorkspace ? 'Share program and session changes' : 'Share mark changes instantly',
-      badge: isInstitutionWorkspace ? communicationsUnreadCount : undefined,
+      badge: quickActionCommunicationsBadgeCount,
       onPress: () => {
         if (isInstitutionWorkspace) {
           router.push(
