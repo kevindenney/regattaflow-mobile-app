@@ -22,6 +22,8 @@ describe('package CI gates contract', () => {
     expect(scripts['test:ci:gates:unit']).toContain('api/__tests__/auth.middleware.regression.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('api/__tests__/ai-endpoints.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/run-api-smoke-deploy.contract.test.ts');
+    expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/report-coach-home-query-baseline.contract.test.ts');
+    expect(scripts['report:coach-home-query-baseline']).toContain('scripts/report-coach-home-query-baseline.mjs');
 
     expect(scripts['test:ci:gates']).toContain('npm run test:ci:gates:unit');
     expect(scripts['test:ci:gates']).toContain('npm run test:security:sql');
