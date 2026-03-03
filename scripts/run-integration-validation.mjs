@@ -125,6 +125,52 @@ const REQUIRED_TABLE_SIGNATURES = [
       'updated_at',
     ],
   },
+  {
+    table: 'programs',
+    requiredColumns: [
+      'id',
+      'organization_id',
+      'domain',
+      'title',
+      'status',
+      'start_at',
+      'end_at',
+      'metadata',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  {
+    table: 'program_sessions',
+    requiredColumns: [
+      'id',
+      'program_id',
+      'organization_id',
+      'title',
+      'session_type',
+      'status',
+      'starts_at',
+      'ends_at',
+      'metadata',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  {
+    table: 'program_participants',
+    requiredColumns: [
+      'id',
+      'organization_id',
+      'program_id',
+      'session_id',
+      'user_id',
+      'role',
+      'status',
+      'metadata',
+      'created_at',
+      'updated_at',
+    ],
+  },
 ];
 
 const REQUIRED_RPC_SIGNATURES = [

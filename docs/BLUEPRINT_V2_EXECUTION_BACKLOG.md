@@ -32,7 +32,7 @@ Status: Pending
 - [ ] Add missing indexes for assignment and due-work queries.
 - [ ] Implement/verify service layer CRUD and assignment APIs.
 - [ ] Remove remaining mock fallbacks from program UI paths.
-- [ ] Add DB signature assertions in integration validation for program tables/columns.
+- [x] Add DB signature assertions in integration validation for program tables/columns.
 
 Acceptance:
 - Program UI reads/writes real data only.

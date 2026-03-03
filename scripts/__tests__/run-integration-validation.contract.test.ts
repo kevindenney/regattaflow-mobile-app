@@ -29,4 +29,14 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain("pp.user_id = auth.uid()");
     expect(source).toContain("viewer.role IN ('faculty', 'instructor', 'preceptor', 'coordinator')");
   });
+
+  it('requires program table signatures in DB assertions matrix', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("table: 'programs'");
+    expect(source).toContain("table: 'program_sessions'");
+    expect(source).toContain("table: 'program_participants'");
+    expect(source).toContain("'program_id'");
+    expect(source).toContain("'starts_at'");
+    expect(source).toContain("'session_id'");
+  });
 });
