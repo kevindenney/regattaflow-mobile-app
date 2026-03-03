@@ -82,4 +82,15 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain("id: 'programs-alias-removal-checklist'");
     expect(source).toContain("reference: aliasReleaseNotesPath");
   });
+
+  it('emits feature-flag rollback contract check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'feature-flag-rollback-contract'");
+    expect(source).toContain("category: 'Feature Flags'");
+    expect(source).toContain('PROGRAM_DATA_MODEL_V1');
+    expect(source).toContain('COACH_SHELL_V1');
+    expect(source).toContain('DOMAIN_GATE_AI_STRICT_V1');
+    expect(source).toContain('SECONDARY_PACKS_V1');
+    expect(source).toContain('docs/feature-flag-rollback-runbook.md');
+  });
 });

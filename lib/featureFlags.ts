@@ -176,6 +176,30 @@ export const FEATURE_FLAGS = {
    * When false: alias path renders Programs Experience directly.
    */
   RACE_MANAGEMENT_ALIAS_REDIRECT_ONLY: false,
+
+  /**
+   * Gate programs/program_sessions/program_participants backed paths.
+   * Disable to revert UI to pre-program-model compatibility behavior.
+   */
+  PROGRAM_DATA_MODEL_V1: true,
+
+  /**
+   * Gate coach-home shell features (counts, trends, retention loop).
+   * Disable to fall back to legacy clients shell experience.
+   */
+  COACH_SHELL_V1: true,
+
+  /**
+   * Gate strict domain checks on sailing-only AI endpoints.
+   * Disable only for emergency rollback.
+   */
+  DOMAIN_GATE_AI_STRICT_V1: true,
+
+  /**
+   * Gate secondary domain packs (drawing/fitness) on shared skeleton routes.
+   * Keep false until secondary pack validation is complete.
+   */
+  SECONDARY_PACKS_V1: false,
 } as const;
 
 // =============================================================================

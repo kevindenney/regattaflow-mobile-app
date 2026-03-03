@@ -115,13 +115,15 @@ Acceptance:
 
 Status: Pending
 
-- [ ] Add flags:
+- [x] Add flags:
   - `program_data_model_v1`
   - `coach_shell_v1`
   - `domain_gate_ai_strict_v1`
   - `secondary_packs_v1`
-- [ ] Add rollback runbook for each flag.
-- [ ] Add smoke checks per flag state where applicable.
+- [x] Add rollback runbook for each flag.
+  - Shipped via `docs/feature-flag-rollback-runbook.md`.
+- [x] Add smoke checks per flag state where applicable.
+  - Shipped via integration check row `feature-flag-rollback-contract` and CI contract `scripts/__tests__/feature-flag-rollbacks.contract.test.ts`.
 
 Acceptance:
 - Any major lane can be disabled without data loss or lockout.

@@ -446,6 +446,26 @@ async function run() {
     reference: aliasReleaseNotesPath,
   });
 
+  const featureFlagsSource = await readFile('lib/featureFlags.ts');
+  const rollbackRunbookPath = 'docs/feature-flag-rollback-runbook.md';
+  const rollbackRunbookSource = await readFile(rollbackRunbookPath);
+  const featureFlagRollbackContractOk =
+    featureFlagsSource.includes('PROGRAM_DATA_MODEL_V1') &&
+    featureFlagsSource.includes('COACH_SHELL_V1') &&
+    featureFlagsSource.includes('DOMAIN_GATE_AI_STRICT_V1') &&
+    featureFlagsSource.includes('SECONDARY_PACKS_V1') &&
+    rollbackRunbookSource.includes('Rollback Procedure') &&
+    rollbackRunbookSource.includes('Restore Procedure');
+  add({
+    id: 'feature-flag-rollback-contract',
+    category: 'Feature Flags',
+    status: featureFlagRollbackContractOk ? 'PASS' : 'FAIL',
+    details: featureFlagRollbackContractOk
+      ? 'Required Blueprint v2 flags and rollback runbook markers are present.'
+      : 'Feature flag or rollback runbook markers are missing.',
+    reference: `lib/featureFlags.ts, ${rollbackRunbookPath}`,
+  });
+
   const tabRegistrationOk =
     tabsLayoutFile.includes('name="programs"') &&
     tabsLayoutFile.includes('name="race-management"');
