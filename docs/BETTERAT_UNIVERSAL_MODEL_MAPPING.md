@@ -451,6 +451,20 @@ The RegattaFlow analysis exposes several concepts that don't have a clean home i
 
 ## 6. Key Architectural Decisions
 
+### 6.x BetterAt Signature Insight Moment (Required Cross-Interest Pattern)
+
+After a learner completes a timeline step and AI analysis finishes, BetterAt should emit a single evidence-backed "getting better at" insight plus a reusable principle.
+
+Required pattern:
+- Trigger: `timeline_step_completed` + `analysis_ready`
+- Output 1: signature insight ("You are getting better at ... because ...")
+- Output 2: principle extraction ("Principle: ...")
+- Memory: store and update user principles over time (reinforced/challenged state)
+
+Universal implication:
+- This belongs in Passport/learning memory, not just one-off feed notifications.
+- Interest implementations (sailing, nursing, drawing, fitness) should share one contract and schema shape.
+
 ### 6.1 LearningEvents are user-owned, optionally linked to Institutions
 
 RegattaFlow proves this pattern works. Sailors create races independently; clubs are optional. This is critical — learners shouldn't need an institution to track improvement.

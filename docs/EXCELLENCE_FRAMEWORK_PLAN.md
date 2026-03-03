@@ -18,6 +18,9 @@ Transform RegattaFlow into a comprehensive excellence tracking platform where ev
 - [ ] Adaptive learning from race feedback
 - [ ] Excellence tracking dashboard (new Progress tab)
 - [ ] AI-powered personalized recommendations
+- [ ] **BetterAt Signature Insight Moment (MANDATORY)**
+  - After timeline step completion + AI analysis, surface one clear "you're getting better at X" insight.
+  - Persist and evolve personal principles ("how I improve") over time.
 
 ---
 
@@ -156,6 +159,51 @@ Transform RegattaFlow into a comprehensive excellence tracking platform where ev
   - [x] getPersonalizedItems(raceEventId, phase)
   - [x] dismissNudge()
   - [x] rateNudge()
+
+---
+
+## Milestone 4.5: BetterAt Signature Insight Moment (MANDATORY)
+
+### 4.5.1 Product Contract
+- [ ] Trigger moment only when both are true:
+  - [ ] user completes a timeline step
+  - [ ] AI analysis for that step/race is available
+- [ ] Show one concise signature insight:
+  - [ ] "You're getting better at `<interest skill>` because `<evidence>`"
+- [ ] Include one "principle extracted" line:
+  - [ ] "Principle: `<repeatable rule>`"
+- [ ] Allow user actions:
+  - [ ] Keep principle
+  - [ ] Edit principle wording
+  - [ ] Dismiss insight
+
+### 4.5.2 Data Model
+- [ ] Add persistent principle memory table (or extend existing learnable events model):
+  - [ ] `user_id`, `interest_id`, `principle_text`
+  - [ ] `evidence_refs` (timeline step ids / event ids)
+  - [ ] `confidence_score`
+  - [ ] `times_reinforced`, `times_challenged`
+  - [ ] `last_seen_at`
+- [ ] Add signature-insight event log:
+  - [ ] insight text, principle snapshot, accepted/edited/dismissed outcome
+
+### 4.5.3 AI Generation Rules
+- [ ] Insight must be evidence-backed (no generic praise).
+- [ ] Principle must be transferable to next events.
+- [ ] Confidence threshold required to auto-surface.
+- [ ] Low-confidence insights are withheld or shown as draft suggestions.
+
+### 4.5.4 UX Placement
+- [ ] Timeline step completion confirmation surface
+- [ ] Post-analysis summary card
+- [ ] Progress tab "My Principles" list with trend/reinforcement indicators
+
+### 4.5.5 Acceptance Criteria (Release Gate)
+- [ ] At least one signature insight is generated for a completed timeline step with analysis.
+- [ ] Accepted principles persist and are reused in future nudges/checklists.
+- [ ] Dismissed insights do not resurface unchanged.
+- [ ] Principle history is visible in Progress.
+- [ ] Works for sailing now, with schema/path ready for other interests (nursing, drawing, fitness).
 
 ---
 
@@ -337,4 +385,3 @@ hooks/useRacePreparation.ts
 _Add implementation notes, decisions, and learnings as we build:_
 
 -
-
