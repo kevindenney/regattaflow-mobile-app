@@ -21,7 +21,10 @@ describe('communications route contract', () => {
 
   it('wires coach-home unread thread drill-down to communications unread focus', () => {
     const source = readAppFile('app/(tabs)/clients.tsx');
-    expect(source).toContain("router.push('/communications?focus=unread' as any)");
+    expect(source).toContain("buildProgramCommunicationsHref");
+    expect(source).toContain("focus: 'unread'");
+    expect(source).toContain("return '/communications?focus=unread'");
+    expect(source).toContain('router.push(unreadThreadDrillDownHref as any)');
   });
 
   it('exposes thread detail route with read + reply flow', () => {
