@@ -128,6 +128,8 @@ export default function AssessmentsScreen() {
   const [newScoreText, setNewScoreText] = useState('');
   const [newRubricLevel, setNewRubricLevel] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  const [newActionPlan, setNewActionPlan] = useState('');
+  const [newNextCheckInAt, setNewNextCheckInAt] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -267,6 +269,8 @@ export default function AssessmentsScreen() {
     setNewScoreText('');
     setNewRubricLevel('');
     setNewNotes('');
+    setNewActionPlan('');
+    setNewNextCheckInAt('');
   };
 
   const applyAssessmentTemplate = (template: ProgramTemplateRecord | null) => {
@@ -294,6 +298,16 @@ export default function AssessmentsScreen() {
       setNewNotes(contentNotes);
     } else if (typeof template.description === 'string') {
       setNewNotes(template.description);
+    }
+
+    const contentActionPlan = content.action_plan;
+    if (typeof contentActionPlan === 'string') {
+      setNewActionPlan(contentActionPlan);
+    }
+
+    const contentNextCheckIn = content.next_check_in_at;
+    if (typeof contentNextCheckIn === 'string') {
+      setNewNextCheckInAt(contentNextCheckIn);
     }
   };
 
@@ -330,11 +344,11 @@ export default function AssessmentsScreen() {
         status: newStatus,
         score: parsedScore,
         notes: newNotes.trim() || null,
-        evidence: selectedTemplateId
-          ? {
-              template_id: selectedTemplateId,
-            }
-          : {},
+        evidence: {
+          ...(selectedTemplateId ? { template_id: selectedTemplateId } : {}),
+          ...(newActionPlan.trim() ? { action_plan: newActionPlan.trim() } : {}),
+          ...(newNextCheckInAt.trim() ? { next_check_in_at: newNextCheckInAt.trim() } : {}),
+        },
         assessed_at: new Date().toISOString(),
       });
 
@@ -692,6 +706,25 @@ export default function AssessmentsScreen() {
               placeholderTextColor="#94A3B8"
             />
 
+            <ThemedText style={styles.fieldLabel}>Action plan (optional)</ThemedText>
+            <TextInput
+              value={newActionPlan}
+              onChangeText={setNewActionPlan}
+              placeholder="Next concrete steps for learner"
+              multiline
+              style={[styles.input, styles.notesInput]}
+              placeholderTextColor="#94A3B8"
+            />
+
+            <ThemedText style={styles.fieldLabel}>Next check-in at (optional)</ThemedText>
+            <TextInput
+              value={newNextCheckInAt}
+              onChangeText={setNewNextCheckInAt}
+              placeholder="ISO date/time e.g. 2026-03-10T15:00:00Z"
+              style={styles.input}
+              placeholderTextColor="#94A3B8"
+            />
+
             <View style={styles.createActions}>
               <TouchableOpacity style={styles.secondaryButton} onPress={resetCreate} disabled={saving}>
                 <ThemedText style={styles.secondaryButtonText}>Reset</ThemedText>
@@ -725,6 +758,8 @@ export default function AssessmentsScreen() {
               const participantLabel = participant?.display_name || participant?.email || null;
               const templateId = String((row.evidence as Record<string, unknown> | null)?.template_id || '');
               const template = templateId ? templateById.get(templateId) : null;
+              const actionPlan = String((row.evidence as Record<string, unknown> | null)?.action_plan || '').trim();
+              const nextCheckInAt = String((row.evidence as Record<string, unknown> | null)?.next_check_in_at || '').trim();
 
               return (
                 <View key={row.id} style={styles.recordCard}>
@@ -743,6 +778,8 @@ export default function AssessmentsScreen() {
                     {template ? ` • ${template.title}` : ''}
                   </ThemedText>
                   {row.notes ? <ThemedText style={styles.recordNotes}>{row.notes}</ThemedText> : null}
+                  {actionPlan ? <ThemedText style={styles.recordPlan}>Action plan: {actionPlan}</ThemedText> : null}
+                  {nextCheckInAt ? <ThemedText style={styles.recordPlan}>Next check-in: {nextCheckInAt}</ThemedText> : null}
                 </View>
               );
             })}
@@ -876,6 +913,7 @@ const styles = StyleSheet.create({
   recordTitle: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
   recordMeta: { fontSize: 12, color: '#64748B' },
   recordNotes: { fontSize: 12, color: '#334155', lineHeight: 18 },
+  recordPlan: { fontSize: 12, color: '#1E40AF', lineHeight: 18 },
   emptyState: {
     borderRadius: 16,
     borderWidth: 1,
