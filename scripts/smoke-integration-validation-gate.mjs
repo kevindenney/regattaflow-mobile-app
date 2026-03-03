@@ -31,6 +31,8 @@ async function main() {
 
   const passReportPath = path.join(tempDir, 'integration-pass.md');
   const failReportPath = path.join(tempDir, 'integration-fail.md');
+  const jsonOverallFailReportPath = path.join(tempDir, 'integration-json-overall-fail.md');
+  const jsonOverallFailReportJsonPath = path.join(tempDir, 'integration-json-overall-fail.json');
 
   await fs.writeFile(
     passReportPath,
@@ -48,6 +50,23 @@ async function main() {
     ]),
     'utf8'
   );
+  await fs.writeFile(
+    jsonOverallFailReportPath,
+    buildReport([{ checkId: 'api-smoke', status: 'PASS' }]),
+    'utf8'
+  );
+  await fs.writeFile(
+    jsonOverallFailReportJsonPath,
+    JSON.stringify(
+      {
+        overall: 'FAIL',
+        results: [{ id: 'api-smoke', status: 'PASS' }],
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
 
   const passResult = runGate(passReportPath, 'db-assertions-availability');
   if (passResult.status !== 0) {
@@ -58,6 +77,12 @@ async function main() {
   const failResult = runGate(failReportPath);
   if (failResult.status !== 1) {
     process.stderr.write('Gate fail smoke did not block as expected.\n');
+    process.exit(1);
+  }
+
+  const jsonOverallFailResult = runGate(jsonOverallFailReportPath);
+  if (jsonOverallFailResult.status !== 1) {
+    process.stderr.write('Gate JSON overall fail smoke did not block as expected.\n');
     process.exit(1);
   }
 
