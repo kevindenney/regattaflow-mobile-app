@@ -23,6 +23,7 @@ describe('package CI gates contract', () => {
     expect(scripts['test:ci:gates:unit']).toContain('api/__tests__/ai-endpoints.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/run-api-smoke-deploy.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/report-coach-home-query-baseline.contract.test.ts');
+    expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/report-coach-home-endpoint-profile.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/check-coach-home-baseline-budget.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/coach-home-index-migration.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/feature-flag-rollbacks.contract.test.ts');
@@ -37,6 +38,7 @@ describe('package CI gates contract', () => {
     expect(scripts['test:ci:gates:unit']).toContain('hooks/__tests__/useWorkspaceDomain.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('services/__tests__/ProgramService.contract.test.ts');
     expect(scripts['report:coach-home-query-baseline']).toContain('scripts/report-coach-home-query-baseline.mjs');
+    expect(scripts['report:coach-home-endpoint-profile']).toContain('scripts/report-coach-home-endpoint-profile.mjs');
     expect(scripts['gate:coach-home-baseline-budget']).toContain('scripts/check-coach-home-baseline-budget.mjs');
 
     expect(scripts['test:ci:gates']).toContain('npm run test:ci:gates:unit');

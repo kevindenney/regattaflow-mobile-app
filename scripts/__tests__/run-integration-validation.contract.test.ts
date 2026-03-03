@@ -120,4 +120,12 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('async listAssignedProgramIdsForStaff(');
     expect(source).toContain('programService.listPrograms(activeOrganization.id');
   });
+
+  it('emits coach-home endpoint profile report contract row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'coach-home-endpoint-profile-report'");
+    expect(source).toContain("category: 'Coach Home'");
+    expect(source).toContain('docs/coach-home-endpoint-profile.md');
+    expect(source).toContain('## Bottleneck Summary');
+  });
 });

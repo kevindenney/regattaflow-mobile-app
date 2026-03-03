@@ -542,6 +542,22 @@ async function run() {
     reference: 'app/(tabs)/programs-experience.tsx',
   });
 
+  const coachHomeEndpointProfilePath = 'docs/coach-home-endpoint-profile.md';
+  const coachHomeEndpointProfile = await readFile(coachHomeEndpointProfilePath);
+  const coachHomeEndpointProfileOk =
+    coachHomeEndpointProfile.includes('# Coach Home Endpoint Profile') &&
+    coachHomeEndpointProfile.includes('## Bottleneck Summary') &&
+    coachHomeEndpointProfile.includes('## Step Ranking (Avg ms)');
+  add({
+    id: 'coach-home-endpoint-profile-report',
+    category: 'Coach Home',
+    status: coachHomeEndpointProfileOk ? 'PASS' : 'FAIL',
+    details: coachHomeEndpointProfileOk
+      ? 'Coach Home endpoint profiling report artifact is present with bottleneck summary and ranked steps.'
+      : 'Coach Home endpoint profile report markers are missing.',
+    reference: coachHomeEndpointProfilePath,
+  });
+
   const tabRegistrationOk =
     tabsLayoutFile.includes('name="programs"') &&
     tabsLayoutFile.includes('name="race-management"');
