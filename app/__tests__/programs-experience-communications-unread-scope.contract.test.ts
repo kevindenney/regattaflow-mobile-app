@@ -21,4 +21,13 @@ describe('programs experience communications unread scope contract', () => {
     expect(source).toContain('Send recap');
     expect(source).toContain('Post schedule updates');
   });
+
+  it('declares getProgramUnreadCount before quick-action badge memoization to avoid TDZ runtime errors', () => {
+    const source = readAppFile('app/(tabs)/programs-experience.tsx');
+    const callbackIndex = source.indexOf('const getProgramUnreadCount = useCallback');
+    const badgeMemoIndex = source.indexOf('const quickActionCommunicationsBadgeCount = useMemo');
+    expect(callbackIndex).toBeGreaterThan(-1);
+    expect(badgeMemoIndex).toBeGreaterThan(-1);
+    expect(callbackIndex).toBeLessThan(badgeMemoIndex);
+  });
 });

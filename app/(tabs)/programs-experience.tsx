@@ -184,6 +184,14 @@ export default function RaceManagementScreen() {
       null
     );
   }, [institutionProgramItems.active, institutionProgramItems.completed, institutionProgramItems.upcoming, isInstitutionWorkspace]);
+  const getProgramUnreadCount = useCallback(
+    (programId: string) => {
+      const key = String(programId || '').trim();
+      if (!key) return 0;
+      return unreadCountByProgram[key] || 0;
+    },
+    [unreadCountByProgram]
+  );
   const quickActionCommunicationsBadgeCount = useMemo(() => {
     if (!isInstitutionWorkspace) return undefined;
     if (!quickActionCommunicationsTarget) return communicationsUnreadCount;
@@ -194,14 +202,6 @@ export default function RaceManagementScreen() {
     isInstitutionWorkspace,
     quickActionCommunicationsTarget,
   ]);
-  const getProgramUnreadCount = useCallback(
-    (programId: string) => {
-      const key = String(programId || '').trim();
-      if (!key) return 0;
-      return unreadCountByProgram[key] || 0;
-    },
-    [unreadCountByProgram]
-  );
   const {
     draft: commsDraft,
     isGenerating: commsGenerating,
