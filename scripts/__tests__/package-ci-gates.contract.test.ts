@@ -15,8 +15,9 @@ describe('package CI gates contract', () => {
     const pkg = readPackageJson();
     const scripts = pkg.scripts || {};
 
-    expect(scripts['test:security:sql']).toContain('AssessmentRecordsRls.sql-security.test.ts');
-    expect(scripts['test:security:sql']).toContain('OrganizationInviteTokenLookup.sql-security.test.ts');
+    expect(scripts['test:security:sql:full']).toContain('AssessmentRecordsRls.sql-security.test.ts');
+    expect(scripts['test:security:sql:full']).toContain('OrganizationInviteTokenLookup.sql-security.test.ts');
+    expect(scripts['test:security:sql']).toContain('npm run test:security:sql:full');
 
     expect(scripts['test:ci:gates:unit']).toContain('api/__tests__/auth.middleware.regression.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('api/__tests__/ai-endpoints.contract.test.ts');

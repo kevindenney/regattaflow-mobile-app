@@ -52,7 +52,7 @@ Status: In progress
   - `services/__tests__/ProgramsCoreRls.sql-security.test.ts`
   - `services/__tests__/CommunicationTemplatesRls.sql-security.test.ts`
 - [x] Add integration semantic checks for each table’s critical role clauses.
-- [ ] Add CI script alias for full SQL security matrix suite.
+- [x] Add CI script alias for full SQL security matrix suite.
 
 Acceptance:
 - Role-scoped access is contract-tested and enforced in CI.
