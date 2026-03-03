@@ -25,6 +25,15 @@
   - strict integration mode now uses deterministic production fallback base URL when `INTEGRATION_BASE_URL` is unset.
   - optional token-backed authenticated smoke probes added to strict integration/deploy smoke runners (`INTEGRATION_AUTH_SAILING_BEARER`, `INTEGRATION_AUTH_INSTITUTION_BEARER`).
   - migration convention lint automation added (`scripts/lint-20260302-migration-conventions.mjs`) and wired into pre-ship/deployment CI gates.
+  - explicit auth-probe availability reporting enforced in strict integration reports (`api-smoke-auth-probe-configuration`) with schema-level required-check validation.
+  - deployment-smoke artifact set expanded and hardened:
+    - guaranteed fallbacks for integration markdown/json + deploy smoke + deployment readiness docs
+    - upload of integration markdown+json bundle and deployment readiness artifact
+    - reset step clears generated report files pre-run to prevent stale artifact reuse.
+  - gate strictness strengthened for JSON-first parsing:
+    - blocks when JSON `overall` is not `PASS`
+    - blocks on JSON/markdown mismatch (rows and/or overall)
+    - self-test workflow expanded to include JSON failure/mismatch fixtures.
   - generated validation reports are excluded from default working-tree noise via `.gitignore`.
 - Post-summary hardening/consistency updates merged on `main`:
   - normalized strict DB assertion skip behavior to canonical `db-assertions-availability` id.
