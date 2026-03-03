@@ -68,6 +68,8 @@ Status: Pending
   - Shipped via `scripts/report-coach-home-query-baseline.mjs` and contract test coverage.
 - [x] Add profile-summary export helper for real in-app sample capture to report input shape.
   - Shipped via `toCoachHomeBaselineInput(...)` in `lib/coach/coachHomeProfiling.ts`.
+- [x] Add baseline budget gate script for repeatable budget checks from latest report artifact.
+  - Shipped via `scripts/check-coach-home-baseline-budget.mjs` and `gate:coach-home-baseline-budget`.
 - [ ] Optimize queries/indexes for:
   - due assessments
   - unread threads
