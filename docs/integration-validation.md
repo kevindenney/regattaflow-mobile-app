@@ -133,7 +133,8 @@ npm run validate:pre-ship:bundle
 ```
 Bundle executes:
 1. `npm run typecheck`
-2. `npm run test:jest:key`
-3. `npm run validate:integration:strict`
-4. `npm run gate:integration-validation`
-5. `npm run report:deployment-readiness`
+2. `npm run validate:imports:tracked`
+3. `npm run validate:ai-domain-gates`
+4. `npm run test:jest:key`
+5. `npm run report:migration-object-collision-audit`
+6. `npm run validate:integration:strict`
