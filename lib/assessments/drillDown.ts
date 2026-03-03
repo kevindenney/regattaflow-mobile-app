@@ -12,6 +12,8 @@ export type AssessmentRouteParams = {
   date_window?: string | string[];
   date_from?: string | string[];
   date_to?: string | string[];
+  participant_user_id?: string | string[];
+  participant_name?: string | string[];
 };
 
 export type AssessmentRouteState = {
@@ -20,6 +22,8 @@ export type AssessmentRouteState = {
   selectedDateWindow: AssessmentDateWindow;
   selectedCompetencyId: string | null;
   selectedCompetencyTitle: string | null;
+  selectedParticipantUserId: string | null;
+  selectedParticipantName: string | null;
   dateFromOverride: string | null;
   dateToOverride: string | null;
 };
@@ -36,12 +40,19 @@ export type CompetencyTrendDrillDownInput = {
   periodStartIso?: string | null;
 };
 
+export type LearnerProgressDrillDownInput = {
+  participantUserId: string;
+  participantName?: string | null;
+};
+
 const DRILL_DOWN_PARAM_KEYS = new Set([
   'competency_id',
   'competency_title',
   'date_window',
   'date_from',
   'date_to',
+  'participant_user_id',
+  'participant_name',
 ]);
 
 function normalizeRouteParamValue(value: unknown): string {
@@ -107,9 +118,17 @@ export function parseCompetencyIdParam(value: unknown): string | null {
   return raw;
 }
 
+export function parseParticipantUserIdParam(value: unknown): string | null {
+  const raw = normalizeRouteParamValue(value);
+  if (!raw) return null;
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(raw)) return null;
+  return raw;
+}
+
 export function parseAssessmentRouteState(params: AssessmentRouteParams): AssessmentRouteState {
   const selectedDateWindowRaw = parseDateWindowParam(params.date_window);
   const selectedCompetencyId = parseCompetencyIdParam(params.competency_id);
+  const selectedParticipantUserId = parseParticipantUserIdParam(params.participant_user_id);
   const dateFromOverride = parseIsoDateParam(params.date_from);
   const dateToOverride = parseIsoDateParam(params.date_to);
   const hasInvalidDateRange = (() => {
@@ -128,6 +147,8 @@ export function parseAssessmentRouteState(params: AssessmentRouteParams): Assess
     selectedDateWindow,
     selectedCompetencyId,
     selectedCompetencyTitle: selectedCompetencyId ? normalizeRouteParamValue(params.competency_title) || null : null,
+    selectedParticipantUserId,
+    selectedParticipantName: selectedParticipantUserId ? normalizeRouteParamValue(params.participant_name) || null : null,
     dateFromOverride: hasInvalidDateRange ? null : dateFromOverride,
     dateToOverride: hasInvalidDateRange ? null : dateToOverride,
   };
@@ -207,5 +228,17 @@ export function buildClearDrillDownHref(existingParams: AssessmentRouteParams = 
     }
   }
 
+  return `/assessments?${params.toString()}`;
+}
+
+export function buildLearnerProgressHref(input: LearnerProgressDrillDownInput): string {
+  const params = new URLSearchParams();
+  params.set('status', 'all');
+  params.set('focus', 'all');
+  params.set('date_window', 'last_8_weeks');
+  params.set('participant_user_id', input.participantUserId);
+  if (String(input.participantName || '').trim()) {
+    params.set('participant_name', String(input.participantName).trim());
+  }
   return `/assessments?${params.toString()}`;
 }
