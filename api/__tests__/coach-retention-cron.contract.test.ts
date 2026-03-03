@@ -19,6 +19,9 @@ describe('coach retention cron contract', () => {
     expect(source).toContain("from('notification_preferences')");
     expect(source).toContain('/functions/v1/send-push-notification');
     expect(source).toContain('SENDGRID_API_KEY');
+    expect(source).toContain('in_app_dispatched_at');
+    expect(source).toContain('push_dispatched_at');
+    expect(source).toContain('email_dispatched_at');
     expect(source).toContain('dispatched_at');
   });
 
