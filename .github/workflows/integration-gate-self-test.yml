@@ -51,6 +51,40 @@ jobs:
           | api-smoke-domain-gate-event-doc | API Smoke | PASS | Responded correctly | n/a |
           EOF
 
+          cat > .tmp/integration-gate-self-test/json-overall-fail.md <<'EOF'
+          # Integration Validation Summary
+
+          | Check | Category | Status | Details | Reference |
+          |---|---|---|---|---|
+          | api-smoke-domain-gate-race-comms | API Smoke | PASS | Responded correctly | n/a |
+          EOF
+
+          cat > .tmp/integration-gate-self-test/json-overall-fail.json <<'EOF'
+          {
+            "overall": "FAIL",
+            "results": [
+              { "id": "api-smoke-domain-gate-race-comms", "status": "PASS" }
+            ]
+          }
+          EOF
+
+          cat > .tmp/integration-gate-self-test/json-markdown-mismatch.md <<'EOF'
+          # Integration Validation Summary
+
+          | Check | Category | Status | Details | Reference |
+          |---|---|---|---|---|
+          | api-smoke-domain-gate-race-comms | API Smoke | PASS | Responded correctly | n/a |
+          EOF
+
+          cat > .tmp/integration-gate-self-test/json-markdown-mismatch.json <<'EOF'
+          {
+            "overall": "PASS",
+            "results": [
+              { "id": "api-smoke-domain-gate-race-comms", "status": "FAIL" }
+            ]
+          }
+          EOF
+
       - name: Assert gate exit codes for PASS/FAIL/unexpected SKIP
         run: |
           set -euo pipefail
@@ -76,3 +110,5 @@ jobs:
           run_case "PASS fixture" 0 ".tmp/integration-gate-self-test/pass.md"
           run_case "FAIL fixture" 1 ".tmp/integration-gate-self-test/fail.md"
           run_case "unexpected SKIP fixture" 1 ".tmp/integration-gate-self-test/unexpected-skip.md"
+          run_case "JSON overall FAIL fixture" 1 ".tmp/integration-gate-self-test/json-overall-fail.md"
+          run_case "JSON/markdown mismatch fixture" 1 ".tmp/integration-gate-self-test/json-markdown-mismatch.md"
