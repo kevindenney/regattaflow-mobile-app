@@ -468,6 +468,30 @@ async function run() {
     reference: assessmentRlsMigrationPath,
   });
 
+  const programsCoreMigrationPath = 'supabase/migrations/20260302110000_programs_core_model.sql';
+  const programsCoreMigration = await readFile(programsCoreMigrationPath);
+  const programsCoreRlsSemanticClauses = [
+    '"programs_select_org_members"',
+    '"program_sessions_select_org_members"',
+    '"program_participants_select_org_members"',
+    'public.is_active_org_member(organization_id)',
+    "ARRAY['owner', 'admin', 'manager', 'faculty', 'instructor', 'preceptor', 'coach']::text[]",
+    "ARRAY['owner', 'admin', 'manager', 'faculty', 'instructor', 'preceptor', 'coach', 'coordinator']::text[]",
+    'user_id = auth.uid()',
+  ];
+  const programsCoreRlsSemanticsOk = programsCoreRlsSemanticClauses.every((clause) =>
+    programsCoreMigration.includes(clause)
+  );
+  add({
+    id: 'programs-core-rls-policy-semantics',
+    category: 'Programs Core RLS',
+    status: programsCoreRlsSemanticsOk ? 'PASS' : 'FAIL',
+    details: programsCoreRlsSemanticsOk
+      ? 'Programs core migration preserves org-member read scope, manager/staff write scopes, and participant self-service exception clauses.'
+      : 'Programs core migration is missing one or more required role-scoping semantic clauses.',
+    reference: programsCoreMigrationPath,
+  });
+
   const retentionDispatchSource = await readFile('lib/coach/retentionDispatch.ts');
   const retentionCronSource = await readFile('api/cron/coach-retention-loop.ts');
   const weeklyRecapPayloadGuardOk =
