@@ -3,6 +3,7 @@
 import { execSync } from 'node:child_process';
 
 const repo = process.env.GH_REPO || 'kevindenney/regattaflow-mobile-app';
+const strictMode = process.argv.includes('--strict') || process.env.AUTH_PROBE_SECRETS_STRICT === '1';
 const requiredOptionalSecrets = [
   'INTEGRATION_AUTH_SAILING_BEARER',
   'INTEGRATION_AUTH_INSTITUTION_BEARER',
@@ -38,14 +39,17 @@ function run() {
     return;
   }
 
-  console.log(`[check-auth-probe-gh-secrets] WARN repo=${repo}`);
+  const level = strictMode ? 'FAIL' : 'WARN';
+  console.log(`[check-auth-probe-gh-secrets] ${level} repo=${repo}`);
   for (const secretName of missing) {
     console.log(`- missing: ${secretName}`);
   }
   console.log(
     '- Deployment smoke still passes without these, but authenticated domain probes remain disabled until configured.'
   );
+  if (strictMode) {
+    process.exitCode = 1;
+  }
 }
 
 run();
-
