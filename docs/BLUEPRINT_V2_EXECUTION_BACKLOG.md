@@ -82,7 +82,11 @@ Status: Pending
   - unread threads
   - program-scoped participant trend summaries
   - Shipped index coverage in `20260303133000_add_coach_home_query_indexes.sql` with contract lock in `scripts/__tests__/coach-home-index-migration.contract.test.ts`.
-- [ ] Add regression tests for drill-down links and program scoping.
+- [x] Add regression tests for drill-down links and program scoping.
+  - Locked in CI via:
+    - `app/__tests__/coach-home-assessments-drilldown-route.e2e.test.ts`
+    - `app/__tests__/programs-experience-assessment-scope.contract.test.ts`
+    - `app/__tests__/communications-route.contract.test.ts`
 
 Acceptance:
 - Coach Home and drill-down flows meet agreed P95 budget.
