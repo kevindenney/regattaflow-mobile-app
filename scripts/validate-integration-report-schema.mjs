@@ -23,6 +23,8 @@ const REQUIRED_LINES = [
   '## Notes',
 ];
 
+const REQUIRED_RESULT_CHECK_IDS = ['api-smoke-auth-probe-configuration'];
+
 function parseArgs(argv) {
   const args = {
     reportPath: DEFAULT_REPORT_PATH,
@@ -71,6 +73,31 @@ function countResultRows(lines) {
   return count;
 }
 
+function parseResultCheckIds(lines) {
+  let inResultsTable = false;
+  const ids = new Set();
+
+  for (const line of lines) {
+    if (line.includes('| Check | Category | Status | Details | Reference |')) {
+      inResultsTable = true;
+      continue;
+    }
+    if (!inResultsTable) continue;
+
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('|')) break;
+    if (trimmed === '|---|---|---|---|---|') continue;
+
+    const parts = trimmed.split('|').map((part) => part.trim());
+    if (parts.length < 7) continue;
+    const checkId = parts[1];
+    if (!checkId) continue;
+    ids.add(checkId);
+  }
+
+  return ids;
+}
+
 async function run() {
   const args = parseArgs(process.argv);
   const reportRaw = await fs.readFile(args.reportPath, 'utf8');
@@ -86,6 +113,12 @@ async function run() {
   const rowCount = countResultRows(lines);
   if (rowCount === 0) {
     missing.push('At least one results table row under "## Results"');
+  }
+  const resultCheckIds = parseResultCheckIds(lines);
+  for (const requiredId of REQUIRED_RESULT_CHECK_IDS) {
+    if (!resultCheckIds.has(requiredId)) {
+      missing.push(`Required results check id "${requiredId}"`);
+    }
   }
 
   const reportRel = path.relative(REPO_ROOT, args.reportPath) || args.reportPath;
