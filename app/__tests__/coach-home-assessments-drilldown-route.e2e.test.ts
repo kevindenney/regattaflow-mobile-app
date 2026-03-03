@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   buildAssessmentsDrillDownHref,
   buildLearnerProgressHref,
+  buildProgramAssessmentHref,
   parseAssessmentRouteState,
   buildAssessmentQueryFilters,
   buildClearDrillDownHref,
@@ -55,6 +56,7 @@ describe('coach-home drill-down route flow', () => {
 
     const filters = buildAssessmentQueryFilters(routeState, new Date('2026-03-02T00:00:00.000Z'));
     expect(filters).toEqual({
+      program_id: null,
       competency_id: 'comp-42',
       assessed_from: '2026-01-06T00:00:00.000Z',
       assessed_to: '2026-03-02T00:00:00.000Z',
@@ -119,6 +121,20 @@ describe('coach-home drill-down route flow', () => {
     expect(params.get('participant_name')).toBe('Alex Johnson');
   });
 
+  it('builds program progress href with program_id and optional program_title', () => {
+    const href = buildProgramAssessmentHref({
+      programId: 'prog-123',
+      programTitle: 'Cohort 7',
+    });
+    const params = queryParamsFromHref(href);
+
+    expect(params.get('status')).toBe('all');
+    expect(params.get('focus')).toBe('all');
+    expect(params.get('date_window')).toBe('last_8_weeks');
+    expect(params.get('program_id')).toBe('prog-123');
+    expect(params.get('program_title')).toBe('Cohort 7');
+  });
+
   it('falls back safely for malformed competency/date drill-down params', () => {
     const malformedState = parseAssessmentRouteState({
       status: 'totally-invalid',
@@ -145,6 +161,8 @@ describe('coach-home drill-down route flow', () => {
       focus: 'due_today',
       competency_id: 'comp-42',
       competency_title: 'Patient Assessment',
+      program_id: 'prog-123',
+      program_title: 'Cohort 7',
       participant_user_id: 'user-abc-123',
       participant_name: 'Alex Johnson',
       date_window: 'custom',
@@ -163,6 +181,8 @@ describe('coach-home drill-down route flow', () => {
     expect(params.get('sort')).toBe('recent');
     expect(params.get('competency_id')).toBeNull();
     expect(params.get('competency_title')).toBeNull();
+    expect(params.get('program_id')).toBeNull();
+    expect(params.get('program_title')).toBeNull();
     expect(params.get('participant_user_id')).toBeNull();
     expect(params.get('participant_name')).toBeNull();
     expect(params.get('date_window')).toBeNull();
@@ -202,11 +222,14 @@ describe('coach-home drill-down route flow', () => {
     expect(clientsSource).toContain('onPress={() => handleTrendPress(trend)}');
     expect(clientsSource).toContain('buildAssessmentsDrillDownHref');
     expect(clientsSource).toContain('buildLearnerProgressHref');
+    expect(clientsSource).toContain('buildProgramAssessmentHref');
 
     expect(assessmentsSource).toContain('testID="assessments-clear-drilldown-filters"');
     expect(assessmentsSource).toContain('router.replace(buildClearDrillDownHref(params) as any)');
     expect(assessmentsSource).toContain('testID="assessments-back-button"');
     expect(assessmentsSource).toContain('onPress={() => router.back()}');
+    expect(assessmentsSource).toContain('selectedProgramId');
+    expect(assessmentsSource).toContain('program_id');
     expect(assessmentsSource).toContain('selectedParticipantUserId');
     expect(assessmentsSource).toContain('participant_user_id');
   });

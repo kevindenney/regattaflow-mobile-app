@@ -12,6 +12,8 @@ export type AssessmentRouteParams = {
   date_window?: string | string[];
   date_from?: string | string[];
   date_to?: string | string[];
+  program_id?: string | string[];
+  program_title?: string | string[];
   participant_user_id?: string | string[];
   participant_name?: string | string[];
 };
@@ -22,6 +24,8 @@ export type AssessmentRouteState = {
   selectedDateWindow: AssessmentDateWindow;
   selectedCompetencyId: string | null;
   selectedCompetencyTitle: string | null;
+  selectedProgramId: string | null;
+  selectedProgramTitle: string | null;
   selectedParticipantUserId: string | null;
   selectedParticipantName: string | null;
   dateFromOverride: string | null;
@@ -29,6 +33,7 @@ export type AssessmentRouteState = {
 };
 
 export type AssessmentRecordFilters = {
+  program_id: string | null;
   competency_id: string | null;
   assessed_from: string | null;
   assessed_to: string | null;
@@ -45,12 +50,19 @@ export type LearnerProgressDrillDownInput = {
   participantName?: string | null;
 };
 
+export type ProgramAssessmentDrillDownInput = {
+  programId: string;
+  programTitle?: string | null;
+};
+
 const DRILL_DOWN_PARAM_KEYS = new Set([
   'competency_id',
   'competency_title',
   'date_window',
   'date_from',
   'date_to',
+  'program_id',
+  'program_title',
   'participant_user_id',
   'participant_name',
 ]);
@@ -125,9 +137,17 @@ export function parseParticipantUserIdParam(value: unknown): string | null {
   return raw;
 }
 
+export function parseProgramIdParam(value: unknown): string | null {
+  const raw = normalizeRouteParamValue(value);
+  if (!raw) return null;
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(raw)) return null;
+  return raw;
+}
+
 export function parseAssessmentRouteState(params: AssessmentRouteParams): AssessmentRouteState {
   const selectedDateWindowRaw = parseDateWindowParam(params.date_window);
   const selectedCompetencyId = parseCompetencyIdParam(params.competency_id);
+  const selectedProgramId = parseProgramIdParam(params.program_id);
   const selectedParticipantUserId = parseParticipantUserIdParam(params.participant_user_id);
   const dateFromOverride = parseIsoDateParam(params.date_from);
   const dateToOverride = parseIsoDateParam(params.date_to);
@@ -147,6 +167,8 @@ export function parseAssessmentRouteState(params: AssessmentRouteParams): Assess
     selectedDateWindow,
     selectedCompetencyId,
     selectedCompetencyTitle: selectedCompetencyId ? normalizeRouteParamValue(params.competency_title) || null : null,
+    selectedProgramId,
+    selectedProgramTitle: selectedProgramId ? normalizeRouteParamValue(params.program_title) || null : null,
     selectedParticipantUserId,
     selectedParticipantName: selectedParticipantUserId ? normalizeRouteParamValue(params.participant_name) || null : null,
     dateFromOverride: hasInvalidDateRange ? null : dateFromOverride,
@@ -185,11 +207,12 @@ export function getDateWindowFilters(
 }
 
 export function buildAssessmentQueryFilters(
-  state: Pick<AssessmentRouteState, 'selectedCompetencyId' | 'selectedDateWindow' | 'dateFromOverride' | 'dateToOverride'>,
+  state: Pick<AssessmentRouteState, 'selectedProgramId' | 'selectedCompetencyId' | 'selectedDateWindow' | 'dateFromOverride' | 'dateToOverride'>,
   now: Date = new Date()
 ): AssessmentRecordFilters {
   const windowFilters = getDateWindowFilters(state, now);
   return {
+    program_id: state.selectedProgramId,
     competency_id: state.selectedCompetencyId,
     assessed_from: windowFilters.assessed_from,
     assessed_to: windowFilters.assessed_to,
@@ -239,6 +262,18 @@ export function buildLearnerProgressHref(input: LearnerProgressDrillDownInput): 
   params.set('participant_user_id', input.participantUserId);
   if (String(input.participantName || '').trim()) {
     params.set('participant_name', String(input.participantName).trim());
+  }
+  return `/assessments?${params.toString()}`;
+}
+
+export function buildProgramAssessmentHref(input: ProgramAssessmentDrillDownInput): string {
+  const params = new URLSearchParams();
+  params.set('status', 'all');
+  params.set('focus', 'all');
+  params.set('date_window', 'last_8_weeks');
+  params.set('program_id', input.programId);
+  if (String(input.programTitle || '').trim()) {
+    params.set('program_title', String(input.programTitle).trim());
   }
   return `/assessments?${params.toString()}`;
 }

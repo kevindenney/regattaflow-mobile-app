@@ -84,6 +84,8 @@ export default function AssessmentsScreen() {
   const [selectedDateWindow, setSelectedDateWindow] = useState<AssessmentDateWindow>('all');
   const [selectedCompetencyId, setSelectedCompetencyId] = useState<string | null>(null);
   const [selectedCompetencyTitle, setSelectedCompetencyTitle] = useState<string | null>(null);
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [selectedProgramTitle, setSelectedProgramTitle] = useState<string | null>(null);
   const [selectedParticipantUserId, setSelectedParticipantUserId] = useState<string | null>(null);
   const [selectedParticipantName, setSelectedParticipantName] = useState<string | null>(null);
   const [dateFromOverride, setDateFromOverride] = useState<string | null>(null);
@@ -97,6 +99,8 @@ export default function AssessmentsScreen() {
     setSelectedDateWindow(routeState.selectedDateWindow);
     setSelectedCompetencyId(routeState.selectedCompetencyId);
     setSelectedCompetencyTitle(routeState.selectedCompetencyTitle);
+    setSelectedProgramId(routeState.selectedProgramId);
+    setSelectedProgramTitle(routeState.selectedProgramTitle);
     setSelectedParticipantUserId(routeState.selectedParticipantUserId);
     setSelectedParticipantName(routeState.selectedParticipantName);
     setDateFromOverride(routeState.dateFromOverride);
@@ -104,6 +108,8 @@ export default function AssessmentsScreen() {
   }, [
     params.competency_id,
     params.competency_title,
+    params.program_id,
+    params.program_title,
     params.participant_name,
     params.participant_user_id,
     params.date_from,
@@ -115,23 +121,33 @@ export default function AssessmentsScreen() {
 
   const assessmentQueryFilters = useMemo<AssessmentRecordFilters>(() => ({
     ...buildAssessmentQueryFilters({
+      selectedProgramId,
       selectedCompetencyId,
       selectedDateWindow,
       dateFromOverride,
       dateToOverride,
     }),
-  }), [dateFromOverride, dateToOverride, selectedCompetencyId, selectedDateWindow]);
+  }), [dateFromOverride, dateToOverride, selectedCompetencyId, selectedDateWindow, selectedProgramId]);
   const hasDrillDownFilters = useMemo(
     () =>
       Boolean(
         selectedCompetencyId ||
+        selectedProgramId ||
         selectedParticipantUserId ||
         selectedDateWindow !== 'all' ||
         selectedFocus !== 'all' ||
         dateFromOverride ||
         dateToOverride
       ),
-    [dateFromOverride, dateToOverride, selectedCompetencyId, selectedDateWindow, selectedFocus, selectedParticipantUserId]
+    [
+      dateFromOverride,
+      dateToOverride,
+      selectedCompetencyId,
+      selectedDateWindow,
+      selectedFocus,
+      selectedParticipantUserId,
+      selectedProgramId,
+    ]
   );
 
   const [showCreate, setShowCreate] = useState(false);
@@ -516,6 +532,8 @@ export default function AssessmentsScreen() {
                 setSelectedDateWindow('all');
                 setSelectedCompetencyId(null);
                 setSelectedCompetencyTitle(null);
+                setSelectedProgramId(null);
+                setSelectedProgramTitle(null);
                 setSelectedParticipantUserId(null);
                 setSelectedParticipantName(null);
                 setDateFromOverride(null);
@@ -575,6 +593,25 @@ export default function AssessmentsScreen() {
               }}
             >
               <ThemedText style={styles.filterChipText}>Clear competency</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {selectedProgramId ? (
+          <View style={styles.filterRow}>
+            <TouchableOpacity style={[styles.filterChip, styles.filterChipActive]}>
+              <ThemedText style={[styles.filterChipText, styles.filterChipTextActive]}>
+                Program: {selectedProgramTitle || programById.get(selectedProgramId)?.title || selectedProgramId}
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.filterChip}
+              onPress={() => {
+                setSelectedProgramId(null);
+                setSelectedProgramTitle(null);
+              }}
+            >
+              <ThemedText style={styles.filterChipText}>Clear program</ThemedText>
             </TouchableOpacity>
           </View>
         ) : null}
