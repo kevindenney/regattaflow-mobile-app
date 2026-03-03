@@ -78,5 +78,7 @@ npm run report:migration-object-collision-audit
   - [x] Required tests pass in the target branch context
 
 - No-Go when:
-  - [x] Worktree remains unsliced/mixed across unrelated areas (resolved)
-  - [x] New unexpected SKIP/FAIL appears in strict validation or gate checks (none present)
+  - [ ] Worktree remains unsliced/mixed across unrelated areas
+  - [ ] New unexpected SKIP/FAIL appears in strict validation or gate checks
+
+Current state: no active No-Go conditions observed.
