@@ -415,15 +415,35 @@ async function run() {
 
   const programsAliasOk =
     programsFile.includes("./programs-experience") &&
-    raceManagementFile.includes("./programs-experience");
+    raceManagementFile.includes('trackRaceManagementAliasUsage') &&
+    raceManagementFile.includes("isFeatureEnabled('RACE_MANAGEMENT_ALIAS_REDIRECT_ONLY')") &&
+    raceManagementFile.includes('<Redirect href="/(tabs)/programs" />') &&
+    raceManagementFile.includes('<ProgramsExperience />');
   add({
     id: 'programs-route-alias',
     category: 'Programs Alias',
     status: programsAliasOk ? 'PASS' : 'FAIL',
     details: programsAliasOk
-      ? 'Both /programs and /race-management resolve to programs-experience.'
-      : 'Programs/race-management alias export mismatch.',
+      ? 'Programs stays canonical while race-management alias is telemetry-backed and redirect-capable.'
+      : 'Programs/race-management alias lifecycle markers are incomplete.',
     reference: 'app/(tabs)/programs.tsx, app/(tabs)/race-management.tsx',
+  });
+
+  const aliasReleaseNotesPath = 'docs/release-notes-race-management-alias-removal.md';
+  const aliasReleaseNotes = await readFile(aliasReleaseNotesPath);
+  const aliasReleaseNotesOk =
+    aliasReleaseNotes.includes('Earliest redirect-only start date') &&
+    aliasReleaseNotes.includes('Earliest alias removal date') &&
+    aliasReleaseNotes.includes('RACE_MANAGEMENT_ALIAS_REDIRECT_ONLY') &&
+    aliasReleaseNotes.includes('Alias usage telemetry is active');
+  add({
+    id: 'programs-alias-removal-checklist',
+    category: 'Programs Alias',
+    status: aliasReleaseNotesOk ? 'PASS' : 'FAIL',
+    details: aliasReleaseNotesOk
+      ? 'Alias release-note checklist includes date gates, telemetry prerequisite, and rollback guidance.'
+      : 'Alias release-note checklist is missing one or more required deprecation markers.',
+    reference: aliasReleaseNotesPath,
   });
 
   const tabRegistrationOk =

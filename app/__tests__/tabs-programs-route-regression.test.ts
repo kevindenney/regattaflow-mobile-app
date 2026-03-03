@@ -13,7 +13,10 @@ describe('tabs programs route regression', () => {
     const raceManagementSource = readTabFile('race-management.tsx');
 
     expect(programsSource).toContain("./programs-experience");
-    expect(raceManagementSource).toContain("./programs-experience");
+    expect(raceManagementSource).toContain('trackRaceManagementAliasUsage');
+    expect(raceManagementSource).toContain("isFeatureEnabled('RACE_MANAGEMENT_ALIAS_REDIRECT_ONLY')");
+    expect(raceManagementSource).toContain('<Redirect href="/(tabs)/programs" />');
+    expect(raceManagementSource).toContain('<ProgramsExperience />');
   });
 
   it('registers both programs and race-management tab screens in layout', () => {

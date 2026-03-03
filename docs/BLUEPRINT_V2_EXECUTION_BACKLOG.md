@@ -101,9 +101,12 @@ Acceptance:
 
 Status: Pending
 
-- [ ] Add telemetry event for `/race-management` alias usage.
-- [ ] Add redirect-only feature flag for alias path.
-- [ ] Add removal checklist/date gate in release notes doc.
+- [x] Add telemetry event for `/race-management` alias usage.
+  - Shipped via `trackRaceManagementAliasUsage()` in `lib/navigation/raceManagementAlias.ts`.
+- [x] Add redirect-only feature flag for alias path.
+  - Shipped via `RACE_MANAGEMENT_ALIAS_REDIRECT_ONLY` in `lib/featureFlags.ts` and alias routing logic in `app/(tabs)/race-management.tsx`.
+- [x] Add removal checklist/date gate in release notes doc.
+  - Shipped via `docs/release-notes-race-management-alias-removal.md`.
 
 Acceptance:
 - Alias deprecation is measurable and reversible.

@@ -73,4 +73,13 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('CREATE TABLE IF NOT EXISTS public.program_sessions');
     expect(source).toContain('CREATE TABLE IF NOT EXISTS public.program_participants');
   });
+
+  it('emits alias lifecycle checks for redirect flag + release checklist', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'programs-route-alias'");
+    expect(source).toContain('trackRaceManagementAliasUsage');
+    expect(source).toContain("isFeatureEnabled('RACE_MANAGEMENT_ALIAS_REDIRECT_ONLY')");
+    expect(source).toContain("id: 'programs-alias-removal-checklist'");
+    expect(source).toContain("reference: aliasReleaseNotesPath");
+  });
 });

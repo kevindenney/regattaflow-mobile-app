@@ -169,6 +169,13 @@ export const FEATURE_FLAGS = {
    * When false: All platforms use full-screen push navigation
    */
   USE_MASTER_DETAIL_LAYOUT: true,
+
+  /**
+   * Keep /race-management alias route as redirect-only to /programs.
+   * When true: alias path records usage telemetry and immediately redirects.
+   * When false: alias path renders Programs Experience directly.
+   */
+  RACE_MANAGEMENT_ALIAS_REDIRECT_ONLY: false,
 } as const;
 
 // =============================================================================
