@@ -134,7 +134,7 @@ export default function RaceManagementScreen() {
   const isFocused = useIsFocused();
   const { activeOrganization, ready: orgReady } = useOrganization();
   const { activeDomain, isSailingDomain, isNursingDomain } = useWorkspaceDomain();
-  const { unreadCount: communicationsUnreadCount } = useOrganizationCommunicationsUnread();
+  const { unreadCount: communicationsUnreadCount, unreadCountByProgram } = useOrganizationCommunicationsUnread();
   const isInstitutionWorkspace = orgReady && !isSailingDomain;
   const allowRaceWorkflows = orgReady && isSailingDomain;
   const [activeTab, setActiveTab] = useState<'upcoming' | 'active' | 'completed'>('upcoming');
@@ -166,6 +166,14 @@ export default function RaceManagementScreen() {
   const completedItems = isInstitutionWorkspace
     ? institutionProgramItems.completed
     : COMPLETED_RACES;
+  const getProgramUnreadCount = useCallback(
+    (programId: string) => {
+      const key = String(programId || '').trim();
+      if (!key) return 0;
+      return unreadCountByProgram[key] || 0;
+    },
+    [unreadCountByProgram]
+  );
   const {
     draft: commsDraft,
     isGenerating: commsGenerating,
@@ -494,7 +502,7 @@ export default function RaceManagementScreen() {
               >
                 <Ionicons name="mail-outline" size={18} color="#FFFFFF" />
                 <ThemedText style={styles.cardButtonPrimaryText}>
-                  Notify group{communicationsUnreadCount > 0 ? ` (${formatBadgeCount(communicationsUnreadCount)})` : ''}
+                  Notify group{getProgramUnreadCount(race.id) > 0 ? ` (${formatBadgeCount(getProgramUnreadCount(race.id))})` : ''}
                 </ThemedText>
               </TouchableOpacity>
             ) : (
@@ -615,7 +623,7 @@ export default function RaceManagementScreen() {
             >
               <Ionicons name="chatbubble-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.controlSecondaryText}>
-                Send update{isInstitutionWorkspace && communicationsUnreadCount > 0 ? ` (${formatBadgeCount(communicationsUnreadCount)})` : ''}
+                Send update{isInstitutionWorkspace && getProgramUnreadCount(race.id) > 0 ? ` (${formatBadgeCount(getProgramUnreadCount(race.id))})` : ''}
               </ThemedText>
             </TouchableOpacity>
           </View>
@@ -702,7 +710,7 @@ export default function RaceManagementScreen() {
             >
               <Ionicons name="mail-outline" size={18} color="#2563EB" />
               <ThemedText style={styles.cardButtonText}>
-                Send recap{isInstitutionWorkspace && communicationsUnreadCount > 0 ? ` (${formatBadgeCount(communicationsUnreadCount)})` : ''}
+                Send recap{isInstitutionWorkspace && getProgramUnreadCount(race.id) > 0 ? ` (${formatBadgeCount(getProgramUnreadCount(race.id))})` : ''}
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity

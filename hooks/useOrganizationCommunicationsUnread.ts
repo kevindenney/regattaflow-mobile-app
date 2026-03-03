@@ -11,6 +11,7 @@ export function useOrganizationCommunicationsUnread() {
   const isFocused = useIsFocused();
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCountByProgram, setUnreadCountByProgram] = useState<Record<string, number>>({});
 
   const organizationId = activeOrganization?.id ?? null;
   const userId = user?.id ?? null;
@@ -18,12 +19,17 @@ export function useOrganizationCommunicationsUnread() {
   const refresh = useCallback(async () => {
     if (!organizationId || !userId) {
       setUnreadCount(0);
+      setUnreadCountByProgram({});
       return;
     }
     setLoading(true);
     try {
-      const nextCount = await programService.getUnreadThreadCount(organizationId, userId);
+      const [nextCount, nextCountByProgram] = await Promise.all([
+        programService.getUnreadThreadCount(organizationId, userId),
+        programService.getUnreadThreadCountsByProgram(organizationId, userId),
+      ]);
       setUnreadCount(nextCount);
+      setUnreadCountByProgram(nextCountByProgram);
     } finally {
       setLoading(false);
     }
@@ -67,6 +73,7 @@ export function useOrganizationCommunicationsUnread() {
 
   return {
     unreadCount,
+    unreadCountByProgram,
     loading,
     refresh,
   };
