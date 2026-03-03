@@ -457,12 +457,27 @@ class ProgramService {
     return (data || []) as ProgramSessionRecord[];
   }
 
-  async listProgramParticipants(programId: string): Promise<ProgramParticipantRecord[]> {
-    const { data, error } = await supabase
+  async listProgramParticipants(
+    programId: string,
+    options?: {
+      sessionId?: string | null;
+      limit?: number;
+    }
+  ): Promise<ProgramParticipantRecord[]> {
+    const limit = Math.max(1, Math.min(5000, options?.limit ?? 1000));
+    let query = supabase
       .from('program_participants')
       .select('*')
       .eq('program_id', programId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(limit);
+
+    const sessionId = String(options?.sessionId || '').trim();
+    if (sessionId) {
+      query = query.eq('session_id', sessionId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []) as ProgramParticipantRecord[];
   }
@@ -595,12 +610,27 @@ class ProgramService {
     return counts;
   }
 
-  async listAssessmentRecords(programId: string): Promise<AssessmentRecord[]> {
-    const { data, error } = await supabase
+  async listAssessmentRecords(
+    programId: string,
+    options?: {
+      sessionId?: string | null;
+      limit?: number;
+    }
+  ): Promise<AssessmentRecord[]> {
+    const limit = Math.max(1, Math.min(5000, options?.limit ?? 1000));
+    let query = supabase
       .from('assessment_records')
       .select('*')
       .eq('program_id', programId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    const sessionId = String(options?.sessionId || '').trim();
+    if (sessionId) {
+      query = query.eq('session_id', sessionId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []) as AssessmentRecord[];
   }

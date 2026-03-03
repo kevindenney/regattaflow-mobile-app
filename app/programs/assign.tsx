@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -118,18 +118,10 @@ export default function ProgramAssignmentsScreen() {
     router.back();
   };
 
-  const loadAll = async () => {
+  const loadPrograms = useCallback(async () => {
     if (!activeOrganization?.id) return;
-    const [nextPrograms, nextSessions, nextParticipants, nextAssessments] = await Promise.all([
-      programService.listPrograms(activeOrganization.id),
-      programService.listOrganizationProgramSessions(activeOrganization.id, 500),
-      programService.listOrganizationProgramParticipants(activeOrganization.id, 1000),
-      programService.listOrganizationAssessmentRecords(activeOrganization.id, 1000),
-    ]);
+    const nextPrograms = await programService.listPrograms(activeOrganization.id);
     setPrograms(nextPrograms);
-    setSessions(nextSessions);
-    setParticipants(nextParticipants);
-    setAssessments(nextAssessments);
 
     const routeProgramId = params.programId || null;
     const validFromRoute = routeProgramId && nextPrograms.some((row) => row.id === routeProgramId);
@@ -137,7 +129,18 @@ export default function ProgramAssignmentsScreen() {
       if (current && nextPrograms.some((row) => row.id === current)) return current;
       return validFromRoute ? routeProgramId : nextPrograms[0]?.id || null;
     });
-  };
+  }, [activeOrganization?.id, params.programId]);
+
+  const loadProgramScopedData = useCallback(async (programId: string) => {
+    const [nextSessions, nextParticipants, nextAssessments] = await Promise.all([
+      programService.listProgramSessions(programId),
+      programService.listProgramParticipants(programId, { limit: 1000 }),
+      programService.listAssessmentRecords(programId, { limit: 1000 }),
+    ]);
+    setSessions(nextSessions);
+    setParticipants(nextParticipants);
+    setAssessments(nextAssessments);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -148,7 +151,7 @@ export default function ProgramAssignmentsScreen() {
 
       try {
         setLoading(true);
-        await loadAll();
+        await loadPrograms();
       } catch (error) {
         console.error('[programs.assign] failed to load assignment data', error);
       } finally {
@@ -157,7 +160,31 @@ export default function ProgramAssignmentsScreen() {
     };
 
     void load();
-  }, [activeOrganization?.id, params.programId, ready]);
+  }, [activeOrganization?.id, loadPrograms, ready]);
+
+  useEffect(() => {
+    let active = true;
+    const loadScoped = async () => {
+      if (!ready || !selectedProgramId) {
+        setSessions([]);
+        setParticipants([]);
+        setAssessments([]);
+        return;
+      }
+
+      try {
+        await loadProgramScopedData(selectedProgramId);
+      } catch (error) {
+        if (!active) return;
+        console.error('[programs.assign] failed to load scoped data', error);
+      }
+    };
+
+    void loadScoped();
+    return () => {
+      active = false;
+    };
+  }, [loadProgramScopedData, ready, selectedProgramId]);
 
   useEffect(() => {
     if (!selectedProgramId) {
@@ -392,7 +419,7 @@ export default function ProgramAssignmentsScreen() {
         },
       });
 
-      const nextParticipants = await programService.listOrganizationProgramParticipants(activeOrganization.id, 1000);
+      const nextParticipants = await programService.listProgramParticipants(selectedProgramId, { limit: 1000 });
       setParticipants(nextParticipants);
       setDisplayName('');
       setEmail('');
@@ -409,10 +436,10 @@ export default function ProgramAssignmentsScreen() {
     participantId: string,
     updates: Partial<Pick<ProgramParticipantRecord, 'role' | 'status'>>
   ) => {
-    if (!activeOrganization?.id) return;
+    if (!activeOrganization?.id || !selectedProgramId) return;
     try {
       await programService.updateProgramParticipant(participantId, updates);
-      const nextParticipants = await programService.listOrganizationProgramParticipants(activeOrganization.id, 1000);
+      const nextParticipants = await programService.listProgramParticipants(selectedProgramId, { limit: 1000 });
       setParticipants(nextParticipants);
       setHasMutations(true);
     } catch (error: any) {
@@ -421,7 +448,7 @@ export default function ProgramAssignmentsScreen() {
   };
 
   const removeParticipant = async (participantId: string) => {
-    if (!activeOrganization?.id) return;
+    if (!activeOrganization?.id || !selectedProgramId) return;
     Alert.alert('Remove assignment', 'Remove this person from the selected program?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -430,7 +457,7 @@ export default function ProgramAssignmentsScreen() {
         onPress: async () => {
           try {
             await programService.removeProgramParticipant(participantId);
-            const nextParticipants = await programService.listOrganizationProgramParticipants(activeOrganization.id, 1000);
+            const nextParticipants = await programService.listProgramParticipants(selectedProgramId, { limit: 1000 });
             setParticipants(nextParticipants);
             setHasMutations(true);
           } catch (error: any) {
@@ -452,7 +479,16 @@ export default function ProgramAssignmentsScreen() {
             <ThemedText style={styles.title}>Program Assignments</ThemedText>
             <ThemedText style={styles.subtitle}>Assign faculty, staff, and learners to programs and sessions.</ThemedText>
           </View>
-          <TouchableOpacity style={styles.refreshButton} onPress={() => void loadAll()}>
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={() => {
+              if (selectedProgramId) {
+                void loadProgramScopedData(selectedProgramId);
+                return;
+              }
+              void loadPrograms();
+            }}
+          >
             <Ionicons name="refresh" size={18} color="#2563EB" />
           </TouchableOpacity>
         </View>
