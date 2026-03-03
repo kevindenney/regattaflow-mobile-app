@@ -20,6 +20,10 @@
   - reminders
   - weekly recap
   - scheduled cron generation/delivery logging + in-app dispatch + push/email fanout + retry-safe per-channel dispatch tracking
+- BetterAt plan integration update shipped:
+  - mandatory Signature Insight Moment added to plan contracts
+  - trigger: timeline step completion + AI analysis availability
+  - output: evidence-backed "getting better at" insight + persisted evolving principles
 - Coach/program navigation and drill-down improvements already merged in the same lane (communications/assessments/program scoping slices).
 - Integration-gate reliability hardening:
   - strict integration mode now uses deterministic production fallback base URL when `INTEGRATION_BASE_URL` is unset.
