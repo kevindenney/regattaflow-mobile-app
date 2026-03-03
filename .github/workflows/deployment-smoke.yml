@@ -42,6 +42,21 @@ jobs:
       - name: Lint 20260302 migration header conventions
         run: npm run lint:migrations:20260302
 
+      - name: Report optional authenticated smoke probe configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${INTEGRATION_AUTH_SAILING_BEARER:-}" ]; then
+            echo "[deployment-smoke] Sailing authenticated probe: enabled"
+          else
+            echo "[deployment-smoke] Sailing authenticated probe: disabled (missing INTEGRATION_AUTH_SAILING_BEARER secret)"
+          fi
+          if [ -n "${INTEGRATION_AUTH_INSTITUTION_BEARER:-}" ]; then
+            echo "[deployment-smoke] Institution authenticated probe: enabled"
+          else
+            echo "[deployment-smoke] Institution authenticated probe: disabled (missing INTEGRATION_AUTH_INSTITUTION_BEARER secret)"
+          fi
+
       - name: Run strict integration validation
         shell: bash
         run: |
