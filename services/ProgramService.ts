@@ -202,6 +202,10 @@ export type CreateCommunicationMessageInput = {
   metadata?: Record<string, unknown>;
 };
 
+export type CommunicationThreadFilters = {
+  program_id?: string | null;
+};
+
 export type ProgramTemplateRecord = {
   id: string;
   organization_id: string | null;
@@ -932,15 +936,23 @@ class ProgramService {
 
   async listOrganizationCommunicationThreads(
     organizationId: string,
-    limit: number = 50
+    limit: number = 50,
+    filters?: CommunicationThreadFilters
   ): Promise<CommunicationThreadRecord[]> {
-    const { data, error } = await supabase
+    let query = supabase
       .from('communication_threads')
       .select('*')
       .eq('organization_id', organizationId)
       .eq('is_archived', false)
       .order('updated_at', { ascending: false })
       .limit(limit);
+
+    const programId = String(filters?.program_id || '').trim();
+    if (programId) {
+      query = query.eq('program_id', programId);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []) as CommunicationThreadRecord[];
   }

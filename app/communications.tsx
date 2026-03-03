@@ -12,6 +12,12 @@ import {
   CommunicationThreadRecord,
   programService,
 } from '@/services/ProgramService';
+import {
+  buildClearProgramCommunicationsHref,
+  parseCommunicationsFocusParam,
+  parseProgramIdParam,
+  parseProgramTitleParam,
+} from '@/lib/communications/drillDown';
 
 type ThreadRow = {
   thread: CommunicationThreadRecord;
@@ -20,7 +26,7 @@ type ThreadRow = {
 
 export default function CommunicationsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ focus?: string }>();
+  const params = useLocalSearchParams<{ focus?: string; program_id?: string; program_title?: string }>();
   const { user } = useAuth();
   const { activeOrganization } = useOrganization();
   const [loading, setLoading] = useState(true);
@@ -30,8 +36,10 @@ export default function CommunicationsScreen() {
 
   const organizationId = activeOrganization?.id ?? null;
   const userId = user?.id ?? null;
-  const focus = String(Array.isArray(params.focus) ? params.focus[0] : params.focus || '').trim().toLowerCase();
+  const focus = parseCommunicationsFocusParam(params.focus);
   const unreadOnly = focus === 'unread';
+  const selectedProgramId = parseProgramIdParam(params.program_id);
+  const selectedProgramTitle = parseProgramTitleParam(params.program_title, Boolean(selectedProgramId));
 
   const loadData = useCallback(async () => {
     if (!organizationId || !userId) {
@@ -45,7 +53,9 @@ export default function CommunicationsScreen() {
     try {
       if (!refreshing) setLoading(true);
       const [threadRows, unreadThreadIds] = await Promise.all([
-        programService.listOrganizationCommunicationThreads(organizationId, 100),
+        programService.listOrganizationCommunicationThreads(organizationId, 100, {
+          program_id: selectedProgramId,
+        }),
         programService.listUnreadThreadIds(organizationId, userId, 1000),
       ]);
       setThreads(threadRows);
@@ -56,7 +66,7 @@ export default function CommunicationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [organizationId, refreshing, userId]);
+  }, [organizationId, refreshing, selectedProgramId, userId]);
 
   useEffect(() => {
     void loadData();
@@ -120,7 +130,11 @@ export default function CommunicationsScreen() {
           <View>
             <ThemedText style={styles.title}>Communications</ThemedText>
             <ThemedText style={styles.subtitle}>
-              {unreadOnly ? 'Unread threads' : 'Organization thread updates'}
+              {selectedProgramId
+                ? `Program threads${selectedProgramTitle ? ` • ${selectedProgramTitle}` : ''}`
+                : unreadOnly
+                  ? 'Unread threads'
+                  : 'Organization thread updates'}
             </ThemedText>
           </View>
           <TouchableOpacity style={styles.actionChip} onPress={handleMarkAllRead}>
@@ -128,6 +142,22 @@ export default function CommunicationsScreen() {
             <ThemedText style={styles.actionChipText}>Mark all read</ThemedText>
           </TouchableOpacity>
         </View>
+
+        {selectedProgramId ? (
+          <View style={styles.filterRow}>
+            <TouchableOpacity style={[styles.filterChip, styles.filterChipActive]}>
+              <ThemedText style={[styles.filterChipText, styles.filterChipTextActive]}>
+                Program: {selectedProgramTitle || selectedProgramId}
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.filterChip}
+              onPress={() => router.replace(buildClearProgramCommunicationsHref(params) as any)}
+            >
+              <ThemedText style={styles.filterChipText}>Clear program</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {rows.length === 0 ? (
           <View style={styles.emptyState}>
@@ -192,6 +222,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   actionChipText: { color: '#1D4ED8', fontSize: 12, fontWeight: '600' },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  filterChip: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  filterChipActive: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  filterChipText: { color: '#334155', fontSize: 12, fontWeight: '600' },
+  filterChipTextActive: { color: '#1D4ED8' },
   listColumn: { gap: 10 },
   threadRow: {
     flexDirection: 'row',

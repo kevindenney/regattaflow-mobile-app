@@ -12,6 +12,8 @@ describe('communications route contract', () => {
     expect(source).toContain("programService.listOrganizationCommunicationThreads");
     expect(source).toContain("programService.listUnreadThreadIds");
     expect(source).toContain("programService.markAllThreadsRead");
+    expect(source).toContain('selectedProgramId');
+    expect(source).toContain('buildClearProgramCommunicationsHref');
     expect(source).toContain('router.push((`/communications/${threadId}`) as any)');
   });
 
@@ -26,5 +28,12 @@ describe('communications route contract', () => {
     expect(source).toContain('programService.listThreadMessages');
     expect(source).toContain('programService.createCommunicationMessage');
     expect(source).toContain('programService.markThreadRead');
+  });
+
+  it('wires institution program cards to program-scoped communications drill-down', () => {
+    const source = readAppFile('app/(tabs)/programs-experience.tsx');
+    expect(source).toContain('buildProgramCommunicationsHref');
+    expect(source).toContain('programId: race.id');
+    expect(source).toContain('programTitle: race.name');
   });
 });
