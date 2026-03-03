@@ -1119,6 +1119,30 @@ class ProgramService {
     return unreadThreadIds.length;
   }
 
+  async getUnreadThreadCountsByProgram(
+    organizationId: string,
+    userId: string,
+    messageLimit: number = 800
+  ): Promise<Record<string, number>> {
+    const unreadThreadIds = await this.listUnreadThreadIds(organizationId, userId, messageLimit);
+    if (unreadThreadIds.length === 0) return {};
+
+    const { data, error } = await supabase
+      .from('communication_threads')
+      .select('id,program_id')
+      .eq('organization_id', organizationId)
+      .in('id', unreadThreadIds);
+    if (error) throw error;
+
+    const counts: Record<string, number> = {};
+    for (const row of data || []) {
+      const programId = String((row as { program_id?: string | null }).program_id || '').trim();
+      if (!programId) continue;
+      counts[programId] = (counts[programId] || 0) + 1;
+    }
+    return counts;
+  }
+
   async listProgramTemplates(
     organizationId: string | null,
     domain?: WorkspaceDomain,
