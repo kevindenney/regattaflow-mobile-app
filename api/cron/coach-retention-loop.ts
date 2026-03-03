@@ -29,6 +29,49 @@ function buildNotificationContent(row: RetentionDeliveryRecord): { title: string
   };
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function sendEmailViaSendGrid(input: {
+  apiKey: string;
+  fromEmail: string;
+  toEmail: string;
+  subject: string;
+  body: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: input.toEmail }] }],
+        from: { email: input.fromEmail, name: 'RegattaFlow' },
+        subject: input.subject,
+        content: [
+          { type: 'text/plain', value: input.body },
+          { type: 'text/html', value: `<p>${escapeHtml(input.body)}</p>` },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      return { ok: false, error: `sendgrid_${response.status}:${text.slice(0, 200)}` };
+    }
+    return { ok: true };
+  } catch (error: any) {
+    return { ok: false, error: error?.message || 'sendgrid_request_failed' };
+  }
+}
+
 const handler = async (req: VercelRequest, res: VercelResponse) => {
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.setHeader('Allow', 'GET, POST');
@@ -94,6 +137,8 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
     if (pendingError) throw pendingError;
 
     const rows = (pendingRows || []) as RetentionDeliveryRecord[];
+    let pushDispatched = 0;
+    let emailDispatched = 0;
     if (rows.length > 0) {
       const notifications = rows.map((row) => {
         const { title, body } = buildNotificationContent(row);
@@ -122,6 +167,92 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
         throw notificationError;
       }
 
+      const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+      const [{ data: prefsRows, error: prefsError }, { data: userRows, error: usersError }] = await Promise.all([
+        supabase
+          .from('notification_preferences')
+          .select('user_id,push_enabled,email_enabled')
+          .in('user_id', userIds),
+        supabase
+          .from('users')
+          .select('id,email')
+          .in('id', userIds),
+      ]);
+      if (prefsError) throw prefsError;
+      if (usersError) throw usersError;
+
+      const prefByUserId = new Map<string, { push_enabled?: boolean; email_enabled?: boolean }>();
+      for (const row of prefsRows || []) {
+        const typed = row as { user_id?: string | null; push_enabled?: boolean; email_enabled?: boolean };
+        if (!typed.user_id) continue;
+        prefByUserId.set(typed.user_id, typed);
+      }
+
+      const emailByUserId = new Map<string, string>();
+      for (const row of userRows || []) {
+        const typed = row as { id?: string | null; email?: string | null };
+        const id = String(typed.id || '').trim();
+        const email = String(typed.email || '').trim();
+        if (!id || !email) continue;
+        emailByUserId.set(id, email);
+      }
+
+      const pushRecipients = rows
+        .filter((row) => (prefByUserId.get(row.user_id)?.push_enabled ?? true))
+        .map((row) => {
+          const { title, body } = buildNotificationContent(row);
+          return {
+            userId: row.user_id,
+            title,
+            body,
+            data: {
+              source: 'coach_retention_loop',
+              delivery_type: row.delivery_type,
+            },
+            category: 'group_messages',
+          };
+        });
+
+      if (pushRecipients.length > 0) {
+        const pushResponse = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ recipients: pushRecipients }),
+        });
+        if (pushResponse.ok) {
+          pushDispatched = pushRecipients.length;
+        } else {
+          const pushErrorText = await pushResponse.text();
+          console.error('coach-retention-loop push fanout failed', pushResponse.status, pushErrorText);
+        }
+      }
+
+      const sendGridApiKey = process.env.SENDGRID_API_KEY || '';
+      const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@regattaflow.com';
+      if (sendGridApiKey) {
+        for (const row of rows) {
+          if (!(prefByUserId.get(row.user_id)?.email_enabled ?? false)) continue;
+          const toEmail = emailByUserId.get(row.user_id);
+          if (!toEmail) continue;
+          const { title, body } = buildNotificationContent(row);
+          const emailResult = await sendEmailViaSendGrid({
+            apiKey: sendGridApiKey,
+            fromEmail,
+            toEmail,
+            subject: title,
+            body,
+          });
+          if (emailResult.ok) {
+            emailDispatched += 1;
+          } else {
+            console.error('coach-retention-loop email fanout failed', emailResult.error);
+          }
+        }
+      }
+
       const ids = rows.map((row) => row.id);
       const { error: dispatchedUpdateError } = await supabase
         .from('coach_retention_deliveries')
@@ -140,6 +271,8 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
       ok: true,
       inserted: deliveries.length,
       dispatched: rows.length,
+      pushDispatched,
+      emailDispatched,
       reminders,
       weeklyRecaps: recaps,
     });
