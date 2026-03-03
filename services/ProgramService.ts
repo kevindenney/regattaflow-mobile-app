@@ -43,6 +43,10 @@ export type ProgramSessionRecord = {
   updated_at: string;
 };
 
+export type UpdateProgramSessionInput = Partial<
+  Pick<ProgramSessionRecord, 'title' | 'description' | 'session_type' | 'status' | 'starts_at' | 'ends_at' | 'location' | 'metadata'>
+>;
+
 export type ProgramParticipantRecord = {
   id: string;
   organization_id: string;
@@ -455,6 +459,29 @@ class ProgramService {
       .limit(limit);
     if (error) throw error;
     return (data || []) as ProgramSessionRecord[];
+  }
+
+  async updateProgramSession(
+    sessionId: string,
+    updates: UpdateProgramSessionInput
+  ): Promise<ProgramSessionRecord> {
+    const { data, error } = await supabase
+      .from('program_sessions')
+      .update({
+        title: updates.title,
+        description: updates.description,
+        session_type: updates.session_type,
+        status: updates.status,
+        starts_at: updates.starts_at,
+        ends_at: updates.ends_at,
+        location: updates.location,
+        metadata: updates.metadata,
+      })
+      .eq('id', sessionId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as ProgramSessionRecord;
   }
 
   async listProgramParticipants(

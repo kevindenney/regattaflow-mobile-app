@@ -348,7 +348,7 @@ export default function RaceManagementScreen() {
       onPress: () => {
         if (isInstitutionWorkspace) {
           const firstProgramId = institutionProgramItems.upcoming[0]?.id || institutionProgramItems.active[0]?.id;
-          router.push((firstProgramId ? `/programs/assign?programId=${firstProgramId}` : '/(tabs)/members') as any);
+          router.push((firstProgramId ? `/programs/session-builder?programId=${firstProgramId}` : '/(tabs)/members') as any);
           return;
         }
         setActiveTab('active');
