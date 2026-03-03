@@ -10,6 +10,7 @@ import { useCoachHomeData } from '@/hooks/useCoachHomeData';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { coachingService, CoachingClient, ClientStats } from '@/services/CoachingService';
 import { buildAssessmentsDrillDownHref, buildLearnerProgressHref, buildProgramAssessmentHref } from '@/lib/assessments/drillDown';
+import { buildProgramCommunicationsHref } from '@/lib/communications/drillDown';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function ClientsScreen() {
@@ -104,6 +105,18 @@ export default function ClientsScreen() {
     router.push(href as any);
   };
 
+  const unreadThreadDrillDownHref = (() => {
+    if (assignedProgramsPreview.length !== 1) {
+      return '/communications?focus=unread';
+    }
+    const assignedProgram = assignedProgramsPreview[0];
+    return buildProgramCommunicationsHref({
+      programId: assignedProgram.id,
+      programTitle: assignedProgram.title,
+      focus: 'unread',
+    });
+  })();
+
   if (personaLoading || loading) {
     return (
       <ThemedView style={styles.container}>
@@ -168,7 +181,7 @@ export default function ClientsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.statCard}
-              onPress={() => router.push('/communications?focus=unread' as any)}
+              onPress={() => router.push(unreadThreadDrillDownHref as any)}
               activeOpacity={0.85}
             >
               <ThemedText style={styles.statValue}>{coachHomeCounts.unreadThreads}</ThemedText>
