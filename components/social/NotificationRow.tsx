@@ -62,6 +62,9 @@ function getNotificationIcon(type: SocialNotification['type']) {
       return <Heart {...iconProps} color="#FFFFFF" />;
     case 'race_comment':
     case 'race_comment_reply':
+    case 'new_message':
+    case 'thread_mention':
+    case 'activity_comment':
       return <MessageCircle {...iconProps} color="#FFFFFF" />;
     case 'followed_user_race':
       return <Flag {...iconProps} color="#FFFFFF" />;
@@ -78,6 +81,9 @@ function getIconBgColor(type: SocialNotification['type']): string {
       return IOS_COLORS.systemPink;
     case 'race_comment':
     case 'race_comment_reply':
+    case 'new_message':
+    case 'thread_mention':
+    case 'activity_comment':
       return IOS_COLORS.systemGreen;
     case 'followed_user_race':
       return IOS_COLORS.systemOrange;
@@ -87,7 +93,11 @@ function getIconBgColor(type: SocialNotification['type']): string {
 }
 
 /** Get notification action text (without actor name) */
-function getActionText(notification: SocialNotification): string {
+function getActionText(notification: SocialNotification, hasActor: boolean): string {
+  if (!hasActor) {
+    return notification.body ? `${notification.body}` : '';
+  }
+
   switch (notification.type) {
     case 'new_follower':
       return 'started following you';
@@ -141,8 +151,9 @@ export function NotificationRow({
   const swipeableRef = useRef<Swipeable>(null);
   const isUnread = !notification.isRead;
   const isFollowerNotification = notification.type === 'new_follower' && notification.actorId;
-  const actorName = notification.actorName || 'Someone';
-  const actionText = getActionText(notification);
+  const hasActor = Boolean(notification.actorId && notification.actorName);
+  const leadText = hasActor ? (notification.actorName as string) : (notification.title || 'Update');
+  const actionText = getActionText(notification, hasActor);
   const timeText = formatTime(notification.createdAt);
 
   const renderRightActions = (
@@ -218,9 +229,9 @@ export function NotificationRow({
         <View style={[styles.content, !isLast && styles.contentBorder]}>
           <Text style={styles.textContainer} numberOfLines={2}>
             <Text style={[styles.actorName, isUnread && styles.actorNameUnread]}>
-              {actorName}
+              {leadText}
             </Text>
-            <Text style={styles.actionText}> {actionText}</Text>
+            {actionText ? <Text style={styles.actionText}> {actionText}</Text> : null}
             <Text style={styles.separator}> · </Text>
             <Text style={styles.time}>{timeText}</Text>
           </Text>

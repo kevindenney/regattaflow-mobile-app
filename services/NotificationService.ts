@@ -25,7 +25,10 @@ export type SocialNotificationType =
   | 'race_comment'
   | 'race_comment_reply'
   | 'race_result_posted'
-  | 'achievement_earned';
+  | 'achievement_earned'
+  | 'new_message'
+  | 'thread_mention'
+  | 'activity_comment';
 
 export interface SocialNotification {
   id: string;
