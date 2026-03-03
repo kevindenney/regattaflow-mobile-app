@@ -26,6 +26,16 @@
   - `docs/deployment-readiness.md`
   - `docs/migration-object-collision-audit.md`
 
+## Mandatory Build Plan Gate (Retention Loop)
+
+The build plan must include these three retention loops together as one required loop:
+
+- `streaks`
+- `reminders`
+- `weekly recap`
+
+Status: `Mandatory` and `Shipped`.
+
 ## Recommended Merge Order (Safe Slicing)
 
 1. CI + gate infrastructure
