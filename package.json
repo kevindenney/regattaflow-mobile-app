@@ -19,6 +19,7 @@
     "validate:integration:report:schema": "node scripts/validate-integration-report-schema.mjs --report docs/integration-validation-latest.md",
     "validate:integration:strict": "npm run validate:integration:strict:smoke && npm run validate:integration:report:schema && npm run gate:integration-validation && npm run report:deployment-readiness",
     "validate:integration:vercel-strict": "INTEGRATION_BASE_URL=https://regattaflow-app.vercel.app npm run validate:integration:strict",
+    "ops:check:auth-probe-secrets": "node scripts/check-auth-probe-gh-secrets.mjs",
     "gate:integration-validation": "node scripts/check-integration-validation-gate.mjs --report docs/integration-validation-latest.md",
     "smoke:gate:integration-validation": "node scripts/smoke-integration-validation-gate.mjs",
     "report:deployment-readiness": "node scripts/generate-deployment-readiness.mjs",
