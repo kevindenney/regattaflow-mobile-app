@@ -23,6 +23,7 @@ import { useRouter } from 'expo-router';
 
 import { useExcellenceMetrics } from '@/hooks/useExcellenceMetrics';
 import { useLearnableEvents, useLearningInsights } from '@/hooks/useAdaptiveLearning';
+import { useSignaturePrinciples } from '@/hooks/useSignaturePrinciples';
 import { useSeasonSelection } from '@/hooks/useSailorProfile';
 import { useCurrentSeason, useUserSeasons } from '@/hooks/useSeason';
 import { sparkline } from '@/lib/tufte';
@@ -88,6 +89,7 @@ export function ProgressContent({
 
   // Load learning insights
   const { insights } = useLearningInsights();
+  const { principles, isLoading: principlesLoading } = useSignaturePrinciples(5);
 
   // Handle pull-to-refresh
   const handleRefresh = async () => {
@@ -216,6 +218,31 @@ export function ProgressContent({
         />
       </View>
 
+      <View style={styles.sectionDivider} />
+
+      <View style={styles.section}>
+        <Text style={styles.principlesTitle}>My Principles</Text>
+        {principlesLoading ? (
+          <Text style={styles.principlesLoading}>Loading principles...</Text>
+        ) : principles.length > 0 ? (
+          <View style={styles.principlesList}>
+            {principles.map((principle) => (
+              <View key={principle.id} style={styles.principleCard}>
+                <Text style={styles.principleText}>{principle.principle_text}</Text>
+                <Text style={styles.principleMeta}>
+                  reinforced {principle.times_reinforced}x
+                  {principle.times_challenged > 0 ? ` · challenged ${principle.times_challenged}x` : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.principlesEmpty}>
+            Complete a timeline step with AI analysis to start building your principles.
+          </Text>
+        )}
+      </View>
+
       {/* Season History Section */}
       {userSeasons.length > 0 && (
         <>
@@ -319,6 +346,43 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#e5e7eb',
     marginVertical: 20,
+  },
+  principlesTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 10,
+  },
+  principlesLoading: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+  },
+  principlesList: {
+    gap: 8,
+  },
+  principleCard: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  principleText: {
+    fontSize: 13,
+    color: '#111827',
+    lineHeight: 19,
+    marginBottom: 4,
+  },
+  principleMeta: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  principlesEmpty: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 18,
   },
   section: {
     // No background, no padding - let child components handle layout

@@ -197,14 +197,14 @@ Implementation status (2026-03-03): Coach Home retention weekly recap now includ
 
 ### 4.5.4 UX Placement
 - [ ] Timeline step completion confirmation surface
-- [ ] Post-analysis summary card
-- [ ] Progress tab "My Principles" list with trend/reinforcement indicators
+- [x] Post-analysis summary card
+- [x] Progress tab "My Principles" list with trend/reinforcement indicators
 
 ### 4.5.5 Acceptance Criteria (Release Gate)
 - [ ] At least one signature insight is generated for a completed timeline step with analysis.
-- [ ] Accepted principles persist and are reused in future nudges/checklists.
+- [x] Accepted principles persist and are reused in future nudges/checklists.
 - [ ] Dismissed insights do not resurface unchanged.
-- [ ] Principle history is visible in Progress.
+- [x] Principle history is visible in Progress.
 - [ ] Works for sailing now, with schema/path ready for other interests (nursing, drawing, fitness).
 
 ---

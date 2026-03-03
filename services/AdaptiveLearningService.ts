@@ -42,6 +42,8 @@ import {
 import type { RacePhase, ChecklistCategory } from '@/types/excellenceFramework';
 
 export class AdaptiveLearningService {
+  private static readonly PRINCIPLE_NUDGE_PREFIX = 'principle_mem_';
+
   // ============================================
   // Event Extraction
   // ============================================
@@ -587,12 +589,15 @@ export class AdaptiveLearningService {
         )
         .slice(0, 2);
 
+      const principleReminders = await this.buildPrincipleReminders(options.sailorId);
+      const mergedReminders = [...principleReminders, ...reminders].slice(0, 3);
+
       // Limit total nudges
       const allNudges = [
         ...checklistAdditions,
         ...venueInsights,
         ...conditionsInsights,
-        ...reminders,
+        ...mergedReminders,
       ];
       const limitedNudges = allNudges.slice(0, options.limit || 8);
 
@@ -606,7 +611,7 @@ export class AdaptiveLearningService {
         conditionsInsights: conditionsInsights.filter((n) =>
           limitedNudges.includes(n)
         ),
-        reminders: reminders.filter((n) => limitedNudges.includes(n)),
+        reminders: mergedReminders.filter((n) => limitedNudges.includes(n)),
         totalCount: limitedNudges.length,
         highPriorityCount: limitedNudges.filter((n) => n.matchScore >= 0.7)
           .length,
@@ -632,6 +637,48 @@ export class AdaptiveLearningService {
         highPriorityCount: 0,
         generatedAt: new Date().toISOString(),
       };
+    }
+  }
+
+  private static async buildPrincipleReminders(sailorId: string): Promise<PersonalizedNudge[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_principle_memory')
+        .select('id,principle_text,last_seen_at,times_reinforced,times_challenged')
+        .eq('user_id', sailorId)
+        .eq('interest_id', 'sailing')
+        .order('last_seen_at', { ascending: false })
+        .limit(2);
+
+      if (error) {
+        logger.warn('Failed to read principle memory for nudge reuse', { error, sailorId });
+        return [];
+      }
+
+      return (data || []).map((row: any, index: number) => {
+        const principleText = String(row.principle_text || '').trim();
+        const reinforced = Number(row.times_reinforced || 0);
+        const challenged = Number(row.times_challenged || 0);
+        return {
+          id: `nudge_principle_${row.id}`,
+          learnableEventId: `${this.PRINCIPLE_NUDGE_PREFIX}${row.id}`,
+          title: 'My principle to reuse',
+          message: principleText,
+          actionText: principleText,
+          category: 'decision_outcome' as LearnableEventType,
+          matchScore: Math.max(0.55, Math.min(0.85, 0.65 + index * 0.05)),
+          matchReasons: [
+            `Reinforced ${reinforced}x`,
+            challenged > 0 ? `Challenged ${challenged}x` : 'No recent challenges',
+          ],
+          sourceRaceDate: row.last_seen_at || undefined,
+          outcome: 'positive' as LearnableEventOutcome,
+          isNew: false,
+        } as PersonalizedNudge;
+      });
+    } catch (error) {
+      logger.warn('Error while building principle reminders', { error, sailorId });
+      return [];
     }
   }
 
@@ -741,6 +788,20 @@ export class AdaptiveLearningService {
     raceEventId?: string
   ): Promise<NudgeDelivery | null> {
     try {
+      if (learnableEventId.startsWith(this.PRINCIPLE_NUDGE_PREFIX)) {
+        const now = new Date().toISOString();
+        return {
+          id: `virtual_delivery_${learnableEventId}_${Date.now()}`,
+          learnableEventId,
+          sailorId,
+          raceEventId: raceEventId || undefined,
+          deliveredAt: now,
+          deliveryChannel: channel,
+          createdAt: now,
+          updatedAt: now,
+        };
+      }
+
       // Record the delivery
       const { data, error } = await supabase
         .from('nudge_deliveries')

@@ -33,6 +33,15 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('services/RaceChecklistService.ts');
   });
 
+  it('emits signature insight principle reuse contract row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'signature-insight-principle-reuse-contract'");
+    expect(source).toContain("from('user_principle_memory')");
+    expect(source).toContain('buildPrincipleReminders');
+    expect(source).toContain('My Principles');
+    expect(source).toContain('hooks/useSignaturePrinciples.ts');
+  });
+
   it('emits assessment RLS semantic role-scope check row', () => {
     const source = readScript('scripts/run-integration-validation.mjs');
     expect(source).toContain("id: 'assessment-rls-policy-semantics'");

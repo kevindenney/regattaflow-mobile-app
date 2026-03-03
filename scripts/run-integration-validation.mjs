@@ -745,6 +745,27 @@ async function run() {
     reference: 'services/RaceChecklistService.ts',
   });
 
+  const adaptiveLearningSource = await readFile('services/AdaptiveLearningService.ts');
+  const progressContentSource = await readFile('components/progress/ProgressContent.tsx');
+  const signaturePrinciplesHookSource = await readFile('hooks/useSignaturePrinciples.ts');
+  const signatureInsightReuseContractOk =
+    adaptiveLearningSource.includes("from('user_principle_memory')") &&
+    adaptiveLearningSource.includes('buildPrincipleReminders') &&
+    adaptiveLearningSource.includes('PRINCIPLE_NUDGE_PREFIX') &&
+    adaptiveLearningSource.includes('virtual_delivery_') &&
+    progressContentSource.includes('My Principles') &&
+    progressContentSource.includes('useSignaturePrinciples') &&
+    signaturePrinciplesHookSource.includes('listPrincipleMemory');
+  add({
+    id: 'signature-insight-principle-reuse-contract',
+    category: 'Signature Insight',
+    status: signatureInsightReuseContractOk ? 'PASS' : 'FAIL',
+    details: signatureInsightReuseContractOk
+      ? 'Accepted principles are surfaced in Progress and reused in adaptive reminder generation.'
+      : 'Signature principle reuse markers are incomplete across AdaptiveLearningService/ProgressContent/hook.',
+    reference: 'services/AdaptiveLearningService.ts, components/progress/ProgressContent.tsx, hooks/useSignaturePrinciples.ts',
+  });
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const lineageTableFilterRaw = process.env.INTEGRATION_REQUIRED_TABLES || '';
