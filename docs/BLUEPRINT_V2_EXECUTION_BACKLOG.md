@@ -126,11 +126,11 @@ Acceptance:
 
 ## CI / Validation Gate Matrix
 
-- [ ] `npm run typecheck`
-- [ ] `npm run test:ci:gates`
-- [ ] `npm run validate:integration:strict`
-- [ ] `npm run validate:pre-ship:bundle`
-- [ ] `npm run report:migration-object-collision-audit`
+- [x] `npm run typecheck`
+- [x] `npm run test:ci:gates`
+- [x] `npm run validate:integration:strict`
+- [x] `npm run validate:pre-ship:bundle`
+- [x] `npm run report:migration-object-collision-audit`
 
 ## Suggested Next Autonomous Slice
 
