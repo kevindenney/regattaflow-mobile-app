@@ -398,6 +398,21 @@ async function run() {
   const programsFile = await readFile('app/(tabs)/programs.tsx');
   const raceManagementFile = await readFile('app/(tabs)/race-management.tsx');
   const tabsLayoutFile = await readFile('app/(tabs)/_layout.tsx');
+  const programsCoreMigration = await readFile('supabase/migrations/20260302110000_programs_core_model.sql');
+  const programCoreMigrationCoverageOk =
+    programsCoreMigration.includes('CREATE TABLE IF NOT EXISTS public.programs') &&
+    programsCoreMigration.includes('CREATE TABLE IF NOT EXISTS public.program_sessions') &&
+    programsCoreMigration.includes('CREATE TABLE IF NOT EXISTS public.program_participants');
+  add({
+    id: 'programs-core-migration-coverage',
+    category: 'Programs Core',
+    status: programCoreMigrationCoverageOk ? 'PASS' : 'FAIL',
+    details: programCoreMigrationCoverageOk
+      ? 'Programs core migration defines programs, program_sessions, and program_participants tables.'
+      : 'Programs core migration is missing one or more required table definitions.',
+    reference: 'supabase/migrations/20260302110000_programs_core_model.sql',
+  });
+
   const programsAliasOk =
     programsFile.includes("./programs-experience") &&
     raceManagementFile.includes("./programs-experience");
@@ -502,7 +517,7 @@ async function run() {
   });
 
   const programsCoreMigrationPath = 'supabase/migrations/20260302110000_programs_core_model.sql';
-  const programsCoreMigration = await readFile(programsCoreMigrationPath);
+  const programsCoreRlsSource = await readFile(programsCoreMigrationPath);
   const programsCoreRlsSemanticClauses = [
     '"programs_select_org_members"',
     '"program_sessions_select_org_members"',
@@ -513,7 +528,7 @@ async function run() {
     'user_id = auth.uid()',
   ];
   const programsCoreRlsSemanticsOk = programsCoreRlsSemanticClauses.every((clause) =>
-    programsCoreMigration.includes(clause)
+    programsCoreRlsSource.includes(clause)
   );
   add({
     id: 'programs-core-rls-policy-semantics',

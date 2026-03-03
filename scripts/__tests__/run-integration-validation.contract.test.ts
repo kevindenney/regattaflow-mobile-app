@@ -64,4 +64,13 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('isNursingPresentationDomain');
     expect(source).toContain('app/settings/notifications.tsx, app/(tabs)/clients.tsx, app/(tabs)/programs-experience.tsx');
   });
+
+  it('emits programs-core migration coverage check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'programs-core-migration-coverage'");
+    expect(source).toContain("category: 'Programs Core'");
+    expect(source).toContain('CREATE TABLE IF NOT EXISTS public.programs');
+    expect(source).toContain('CREATE TABLE IF NOT EXISTS public.program_sessions');
+    expect(source).toContain('CREATE TABLE IF NOT EXISTS public.program_participants');
+  });
 });

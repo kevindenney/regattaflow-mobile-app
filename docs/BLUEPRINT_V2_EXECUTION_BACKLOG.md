@@ -36,10 +36,11 @@ Acceptance:
 
 Status: Pending
 
-- [ ] Confirm migration coverage for:
+- [x] Confirm migration coverage for:
   - `programs`
   - `program_sessions`
   - `program_participants`
+  - Shipped via integration check row `programs-core-migration-coverage` referencing `supabase/migrations/20260302110000_programs_core_model.sql`.
 - [x] Add missing indexes for assignment and due-work queries.
   - Shipped via `supabase/migrations/20260303133000_add_coach_home_query_indexes.sql`.
 - [ ] Implement/verify service layer CRUD and assignment APIs.
