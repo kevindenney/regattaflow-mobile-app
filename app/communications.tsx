@@ -101,12 +101,12 @@ export default function CommunicationsScreen() {
   const handleMarkAllRead = useCallback(async () => {
     if (!organizationId || !userId) return;
     try {
-      await programService.markAllThreadsRead(organizationId, userId);
+      await programService.markAllThreadsRead(organizationId, userId, selectedProgramId);
       setUnreadIds([]);
     } catch (error) {
       console.error('[communications] Failed to mark all threads read', error);
     }
-  }, [organizationId, userId]);
+  }, [organizationId, selectedProgramId, userId]);
 
   if (loading) {
     return (
