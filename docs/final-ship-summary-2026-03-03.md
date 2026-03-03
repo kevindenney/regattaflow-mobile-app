@@ -40,5 +40,5 @@
 ## Validation Snapshot (2026-03-03)
 - `npm run typecheck`: PASS
 - `npm run test:ci:gates`: PASS
-- `npm run validate:integration:strict`: PASS (`26 pass, 0 fail, 0 skip`)
+- `npm run validate:integration:strict`: PASS (latest run; current snapshot: `26 pass, 0 fail, 0 skip`)
 - `npm run validate:pre-ship:bundle`: PASS (`steps=6/6`)
