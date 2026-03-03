@@ -48,7 +48,9 @@ Status: In progress
   - `program_participants`
   - `communication_threads`
   - `templates`
-- Note: `programs/program_sessions/program_participants` shipped in `services/__tests__/ProgramsCoreRls.sql-security.test.ts`; `communication_threads/templates` remain pending.
+- Note: shipped in:
+  - `services/__tests__/ProgramsCoreRls.sql-security.test.ts`
+  - `services/__tests__/CommunicationTemplatesRls.sql-security.test.ts`
 - [ ] Add integration semantic checks for each table’s critical role clauses.
 - [ ] Add CI script alias for full SQL security matrix suite.
 
