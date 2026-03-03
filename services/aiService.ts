@@ -304,6 +304,7 @@ export class AIStrategyService {
               safety_information: [],
               protest_procedures: [],
               extracted_at: new Date(),
+              confidence_score: 0,
             } as CourseExtraction),
       };
 
