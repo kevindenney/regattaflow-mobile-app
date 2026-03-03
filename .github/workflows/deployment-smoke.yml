@@ -156,6 +156,19 @@ jobs:
             } > docs/integration-validation-latest.md
           fi
 
+      - name: Ensure deployment readiness markdown exists
+        if: always()
+        run: |
+          if [ ! -f docs/deployment-readiness.md ]; then
+            mkdir -p docs
+            {
+              echo '# Deployment Readiness'
+              echo
+              echo 'Deployment readiness generation failed before producing docs/deployment-readiness.md.'
+              echo 'See integration/deploy validation raw logs for details.'
+            } > docs/deployment-readiness.md
+          fi
+
       - name: Upload integration validation artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -180,6 +193,14 @@ jobs:
         with:
           name: api-smoke-deploy
           path: docs/api-smoke-deploy.md
+          if-no-files-found: error
+
+      - name: Upload deployment readiness artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-readiness
+          path: docs/deployment-readiness.md
           if-no-files-found: error
 
       - name: Upload deploy API smoke raw logs
