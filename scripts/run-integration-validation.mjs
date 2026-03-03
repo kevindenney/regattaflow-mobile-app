@@ -502,6 +502,46 @@ async function run() {
     reference: secondaryPacksCatalogMigrationPath,
   });
 
+  const programServiceSource = await readFile('services/ProgramService.ts');
+  const programServiceCrudContractOk =
+    programServiceSource.includes('async listPrograms(') &&
+    programServiceSource.includes('async getProgram(') &&
+    programServiceSource.includes('async createProgram(') &&
+    programServiceSource.includes('async listProgramSessions(') &&
+    programServiceSource.includes('async createProgramSession(') &&
+    programServiceSource.includes('async updateProgramSession(') &&
+    programServiceSource.includes('async listProgramParticipants(') &&
+    programServiceSource.includes('async listAssignedProgramIdsForStaff(') &&
+    programServiceSource.includes('async createProgramParticipant(') &&
+    programServiceSource.includes('async updateProgramParticipant(') &&
+    programServiceSource.includes('async removeProgramParticipant(');
+  add({
+    id: 'program-service-crud-assignment-contract',
+    category: 'Programs Core',
+    status: programServiceCrudContractOk ? 'PASS' : 'FAIL',
+    details: programServiceCrudContractOk
+      ? 'ProgramService exposes required CRUD + assignment API surface for programs core model.'
+      : 'ProgramService CRUD/assignment markers are missing.',
+    reference: 'services/ProgramService.ts',
+  });
+
+  const programsExperienceInstitutionSource = await readFile('app/(tabs)/programs-experience.tsx');
+  const programsUiRealDataContractOk =
+    programsExperienceInstitutionSource.includes('const upcomingItems = isInstitutionWorkspace') &&
+    programsExperienceInstitutionSource.includes('? institutionProgramItems.upcoming') &&
+    programsExperienceInstitutionSource.includes('programService.listPrograms(activeOrganization.id') &&
+    programsExperienceInstitutionSource.includes('programService.listOrganizationProgramSessions(activeOrganization.id') &&
+    programsExperienceInstitutionSource.includes('programService.getProgramParticipantCounts(activeOrganization.id');
+  add({
+    id: 'programs-ui-real-data-contract',
+    category: 'Programs Core',
+    status: programsUiRealDataContractOk ? 'PASS' : 'FAIL',
+    details: programsUiRealDataContractOk
+      ? 'Institution program paths are wired to ProgramService-backed data sources (not static mocks).'
+      : 'Institution program UI data-source markers are incomplete.',
+    reference: 'app/(tabs)/programs-experience.tsx',
+  });
+
   const tabRegistrationOk =
     tabsLayoutFile.includes('name="programs"') &&
     tabsLayoutFile.includes('name="race-management"');

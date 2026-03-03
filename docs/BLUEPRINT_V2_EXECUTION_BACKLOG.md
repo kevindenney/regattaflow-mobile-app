@@ -43,8 +43,10 @@ Status: Pending
   - Shipped via integration check row `programs-core-migration-coverage` referencing `supabase/migrations/20260302110000_programs_core_model.sql`.
 - [x] Add missing indexes for assignment and due-work queries.
   - Shipped via `supabase/migrations/20260303133000_add_coach_home_query_indexes.sql`.
-- [ ] Implement/verify service layer CRUD and assignment APIs.
-- [ ] Remove remaining mock fallbacks from program UI paths.
+- [x] Implement/verify service layer CRUD and assignment APIs.
+  - Verified via `program-service-crud-assignment-contract` and `services/__tests__/ProgramService.contract.test.ts`.
+- [x] Remove remaining mock fallbacks from program UI paths.
+  - Verified institution program path wiring via `programs-ui-real-data-contract` in `app/(tabs)/programs-experience.tsx`.
 - [x] Add DB signature assertions in integration validation for program tables/columns.
 
 Acceptance:

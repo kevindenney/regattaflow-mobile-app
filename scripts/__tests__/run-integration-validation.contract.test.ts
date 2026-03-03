@@ -110,4 +110,14 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('Studio Sprint Template');
     expect(source).toContain('Lesson Block Template');
   });
+
+  it('emits ProgramService CRUD/assignment and institution data-source contract rows', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'program-service-crud-assignment-contract'");
+    expect(source).toContain("id: 'programs-ui-real-data-contract'");
+    expect(source).toContain('services/ProgramService.ts');
+    expect(source).toContain('app/(tabs)/programs-experience.tsx');
+    expect(source).toContain('async listAssignedProgramIdsForStaff(');
+    expect(source).toContain('programService.listPrograms(activeOrganization.id');
+  });
 });
