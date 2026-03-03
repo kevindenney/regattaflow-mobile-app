@@ -110,16 +110,29 @@ function parseCheckRowsFromJson(payload) {
     .filter((row) => row.checkId && row.status);
 }
 
+/**
+ * @param {unknown} payload
+ */
+function parseJsonOverallStatus(payload) {
+  if (!payload || typeof payload !== 'object') return '';
+  const overall = /** @type {{ overall?: unknown }} */ (payload).overall;
+  if (typeof overall !== 'string') return '';
+  return overall.trim().toUpperCase();
+}
+
 async function run() {
   const args = parseArgs(process.argv);
   /** @type {{checkId: string; status: string}[]} */
   let rows = [];
   let sourcePath = args.reportPath;
   let parsedFrom = 'markdown';
+  let jsonOverall = '';
 
   try {
     const reportJsonRaw = await fs.readFile(args.reportJsonPath, 'utf8');
-    rows = parseCheckRowsFromJson(JSON.parse(reportJsonRaw));
+    const parsedJson = JSON.parse(reportJsonRaw);
+    rows = parseCheckRowsFromJson(parsedJson);
+    jsonOverall = parseJsonOverallStatus(parsedJson);
     if (rows.length > 0) {
       sourcePath = args.reportJsonPath;
       parsedFrom = 'json';
@@ -155,8 +168,13 @@ async function run() {
 
   const reportRel = path.relative(REPO_ROOT, sourcePath) || sourcePath;
 
-  if (duplicateCheckIds.length > 0 || failRows.length > 0 || unexpectedSkipRows.length > 0) {
+  const jsonOverallFailed = parsedFrom === 'json' && jsonOverall && jsonOverall !== 'PASS';
+
+  if (duplicateCheckIds.length > 0 || failRows.length > 0 || unexpectedSkipRows.length > 0 || jsonOverallFailed) {
     console.error(`Integration validation gate: BLOCK (${reportRel}, parsed as ${parsedFrom})`);
+    if (jsonOverallFailed) {
+      console.error(`JSON overall status is ${jsonOverall} (expected PASS).`);
+    }
     if (duplicateCheckIds.length > 0) {
       console.error('Duplicate check IDs detected:');
       for (const checkId of duplicateCheckIds) {

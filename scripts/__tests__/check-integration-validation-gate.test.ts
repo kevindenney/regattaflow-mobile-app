@@ -24,6 +24,28 @@ function runGate(reportPath: string, expectedSkipIds = '') {
   });
 }
 
+function writeJsonReport(
+  jsonPath: string,
+  rows: Array<{ id: string; status: string }>,
+  overall: 'PASS' | 'FAIL' | 'SKIP' = 'PASS'
+) {
+  fs.writeFileSync(
+    jsonPath,
+    JSON.stringify(
+      {
+        overall,
+        results: rows.map((row) => ({
+          id: row.id,
+          status: row.status,
+        })),
+      },
+      null,
+      2
+    ),
+    'utf8'
+  );
+}
+
 describe('check-integration-validation-gate', () => {
   it('fails closed when checks table is missing or unparsable', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'integration-gate-malformed-'));
@@ -202,5 +224,50 @@ describe('check-integration-validation-gate', () => {
     const allowed = runGate(reportPath, 'db-assertions-availability,api-smoke');
     expect(allowed.status).toBe(0);
     expect(allowed.stdout).toContain('Integration validation gate: PASS');
+  });
+
+  it('blocks when JSON overall status is FAIL even if rows are PASS', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'integration-gate-json-overall-fail-'));
+    const reportPath = path.join(tempDir, 'integration-validation-latest.md');
+    const reportJsonPath = path.join(tempDir, 'integration-validation-latest.json');
+
+    fs.writeFileSync(
+      reportPath,
+      buildReport([{ checkId: 'api-smoke', status: 'PASS' }]),
+      'utf8'
+    );
+    writeJsonReport(
+      reportJsonPath,
+      [{ id: 'api-smoke', status: 'PASS' }],
+      'FAIL'
+    );
+
+    const result = runGate(reportPath);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('JSON overall status is FAIL');
+  });
+
+  it('uses JSON rows and allows allowlisted SKIP when overall is PASS', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'integration-gate-json-pass-'));
+    const reportPath = path.join(tempDir, 'integration-validation-latest.md');
+    const reportJsonPath = path.join(tempDir, 'integration-validation-latest.json');
+
+    fs.writeFileSync(
+      reportPath,
+      buildReport([{ checkId: 'api-smoke', status: 'FAIL' }]),
+      'utf8'
+    );
+    writeJsonReport(
+      reportJsonPath,
+      [
+        { id: 'db-assertions-availability', status: 'SKIP' },
+        { id: 'api-smoke', status: 'PASS' },
+      ],
+      'PASS'
+    );
+
+    const result = runGate(reportPath, 'db-assertions-availability');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('parsed as json');
   });
 });
