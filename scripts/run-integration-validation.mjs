@@ -535,7 +535,9 @@ async function run() {
     }
   }
 
-  const baseUrl = process.env.INTEGRATION_BASE_URL || process.env.EXPO_PUBLIC_API_URL || '';
+  const configuredBaseUrl = process.env.INTEGRATION_BASE_URL || process.env.EXPO_PUBLIC_API_URL || '';
+  const fallbackStrictBaseUrl = process.env.INTEGRATION_STRICT_BASE_URL || 'https://regattaflow-app.vercel.app';
+  const baseUrl = configuredBaseUrl || (strictApiSmoke ? fallbackStrictBaseUrl : '');
   if (!baseUrl) {
     add({
       id: 'api-smoke-availability',
