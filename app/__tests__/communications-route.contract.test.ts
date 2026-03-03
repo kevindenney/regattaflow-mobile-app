@@ -12,6 +12,7 @@ describe('communications route contract', () => {
     expect(source).toContain("programService.listOrganizationCommunicationThreads");
     expect(source).toContain("programService.listUnreadThreadIds");
     expect(source).toContain("programService.markAllThreadsRead");
+    expect(source).toContain('markAllThreadsRead(organizationId, userId, selectedProgramId)');
     expect(source).toContain('selectedProgramId');
     expect(source).toContain('buildClearProgramCommunicationsHref');
     expect(source).toContain('router.push((`/communications/${threadId}`) as any)');

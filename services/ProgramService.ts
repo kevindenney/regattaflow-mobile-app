@@ -1043,14 +1043,22 @@ class ProgramService {
 
   async markAllThreadsRead(
     organizationId: string,
-    userId: string
+    userId: string,
+    programId?: string | null
   ): Promise<void> {
-    const { data: threadRows, error: threadsError } = await supabase
+    let query = supabase
       .from('communication_threads')
       .select('id')
       .eq('organization_id', organizationId)
       .eq('is_archived', false)
       .limit(1000);
+
+    const scopedProgramId = String(programId || '').trim();
+    if (scopedProgramId) {
+      query = query.eq('program_id', scopedProgramId);
+    }
+
+    const { data: threadRows, error: threadsError } = await query;
     if (threadsError) throw threadsError;
 
     const threadIds = (threadRows || [])
