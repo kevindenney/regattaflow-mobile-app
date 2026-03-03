@@ -11,6 +11,7 @@ describe('communications route contract', () => {
     expect(source).toContain('export default function CommunicationsScreen()');
     expect(source).toContain("programService.listOrganizationCommunicationThreads");
     expect(source).toContain("programService.listUnreadThreadIds");
+    expect(source).toContain('listUnreadThreadIds(organizationId, userId, 1000, selectedProgramId)');
     expect(source).toContain("programService.markAllThreadsRead");
     expect(source).toContain('markAllThreadsRead(organizationId, userId, selectedProgramId)');
     expect(source).toContain('selectedProgramId');

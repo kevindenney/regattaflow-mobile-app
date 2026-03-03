@@ -1071,8 +1071,10 @@ class ProgramService {
   async listUnreadThreadIds(
     organizationId: string,
     userId: string,
-    messageLimit: number = 800
+    messageLimit: number = 800,
+    programId?: string | null
   ): Promise<string[]> {
+    const scopedProgramId = String(programId || '').trim();
     const { data: messageRows, error: messageError } = await supabase
       .from('communication_messages')
       .select('thread_id,created_at')
@@ -1094,12 +1096,34 @@ class ProgramService {
     const threadIds = Array.from(latestIncomingByThread.keys());
     if (threadIds.length === 0) return [];
 
+    let visibleThreadQuery = supabase
+      .from('communication_threads')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .eq('is_archived', false)
+      .in('id', threadIds);
+    if (scopedProgramId) {
+      visibleThreadQuery = visibleThreadQuery.eq('program_id', scopedProgramId);
+    }
+
+    const { data: visibleThreadRows, error: visibleThreadError } = await visibleThreadQuery;
+    if (visibleThreadError) throw visibleThreadError;
+
+    const visibleThreadIds = new Set(
+      (visibleThreadRows || [])
+        .map((row) => (row as { id?: string | null }).id)
+        .filter((id): id is string => Boolean(id))
+    );
+    if (visibleThreadIds.size === 0) return [];
+
+    const scopedThreadIds = threadIds.filter((threadId) => visibleThreadIds.has(threadId));
+
     const { data: readRows, error: readError } = await supabase
       .from('communication_thread_reads')
       .select('thread_id,last_read_at')
       .eq('organization_id', organizationId)
       .eq('user_id', userId)
-      .in('thread_id', threadIds);
+      .in('thread_id', scopedThreadIds);
     if (readError) throw readError;
 
     const readMap = new Map<string, string>();
@@ -1109,7 +1133,7 @@ class ProgramService {
       readMap.set(entry.thread_id, entry.last_read_at);
     }
 
-    return threadIds.filter((threadId) => {
+    return scopedThreadIds.filter((threadId) => {
       const lastIncomingAt = latestIncomingByThread.get(threadId);
       const lastReadAt = readMap.get(threadId);
       if (!lastIncomingAt) return false;
@@ -1121,25 +1145,32 @@ class ProgramService {
   async getUnreadThreadCount(
     organizationId: string,
     userId: string,
-    messageLimit: number = 800
+    messageLimit: number = 800,
+    programId?: string | null
   ): Promise<number> {
-    const unreadThreadIds = await this.listUnreadThreadIds(organizationId, userId, messageLimit);
+    const unreadThreadIds = await this.listUnreadThreadIds(organizationId, userId, messageLimit, programId);
     return unreadThreadIds.length;
   }
 
   async getUnreadThreadCountsByProgram(
     organizationId: string,
     userId: string,
-    messageLimit: number = 800
+    messageLimit: number = 800,
+    programId?: string | null
   ): Promise<Record<string, number>> {
-    const unreadThreadIds = await this.listUnreadThreadIds(organizationId, userId, messageLimit);
+    const unreadThreadIds = await this.listUnreadThreadIds(organizationId, userId, messageLimit, programId);
     if (unreadThreadIds.length === 0) return {};
 
-    const { data, error } = await supabase
+    let threadsQuery = supabase
       .from('communication_threads')
       .select('id,program_id')
       .eq('organization_id', organizationId)
       .in('id', unreadThreadIds);
+    const scopedProgramId = String(programId || '').trim();
+    if (scopedProgramId) {
+      threadsQuery = threadsQuery.eq('program_id', scopedProgramId);
+    }
+    const { data, error } = await threadsQuery;
     if (error) throw error;
 
     const counts: Record<string, number> = {};

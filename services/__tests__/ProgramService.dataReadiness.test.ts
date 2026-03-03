@@ -80,7 +80,13 @@ describe('ProgramService data readiness queries', () => {
       { thread_id: 'thread-1', created_at: '2026-03-02T11:00:00.000Z' },
       { thread_id: 'thread-1', created_at: '2026-03-01T11:00:00.000Z' },
       { thread_id: 'thread-2', created_at: '2026-03-02T10:00:00.000Z' },
+      { thread_id: 'thread-archived', created_at: '2026-03-02T10:45:00.000Z' },
       { thread_id: null, created_at: '2026-03-02T10:30:00.000Z' },
+    ]);
+    const threadChain = createAsyncQueryChain([
+      { id: 'thread-1' },
+      { id: 'thread-2' },
+      // thread-archived intentionally omitted to simulate archived/invisible thread
     ]);
     const readsChain = createAsyncQueryChain([
       { thread_id: 'thread-1', last_read_at: '2026-03-02T12:00:00.000Z' },
@@ -89,6 +95,7 @@ describe('ProgramService data readiness queries', () => {
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'communication_messages') return messageChain;
+      if (table === 'communication_threads') return threadChain;
       if (table === 'communication_thread_reads') return readsChain;
       throw new Error(`Unexpected table: ${table}`);
     });
@@ -96,6 +103,30 @@ describe('ProgramService data readiness queries', () => {
     const unreadThreadIds = await programService.listUnreadThreadIds('org-1', 'user-1');
 
     expect(unreadThreadIds).toEqual(['thread-2']);
+    expect(threadChain.eq).toHaveBeenCalledWith('is_archived', false);
+  });
+
+  it('supports optional program-scoped unread thread derivation', async () => {
+    const messageChain = createAsyncQueryChain([
+      { thread_id: 'thread-1', created_at: '2026-03-02T11:00:00.000Z' },
+      { thread_id: 'thread-2', created_at: '2026-03-02T10:00:00.000Z' },
+    ]);
+    const threadChain = createAsyncQueryChain([
+      { id: 'thread-2' },
+    ]);
+    const readsChain = createAsyncQueryChain([]);
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'communication_messages') return messageChain;
+      if (table === 'communication_threads') return threadChain;
+      if (table === 'communication_thread_reads') return readsChain;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const unreadThreadIds = await programService.listUnreadThreadIds('org-1', 'user-1', 800, 'prog-2');
+
+    expect(unreadThreadIds).toEqual(['thread-2']);
+    expect(threadChain.eq).toHaveBeenCalledWith('program_id', 'prog-2');
   });
 
   it('falls back to default competency title when optional competency rows are not visible', async () => {
