@@ -88,6 +88,7 @@ For every new migration:
 8. `20260302203000_harden_assessment_records_select_rls.sql`
 9. `20260302213000_harden_org_invite_rls.sql`
 10. `20260302220000_enforce_org_invite_role_issuance.sql`
+11. `20260302223000_invite_token_lookup_by_id_rpc.sql`
 
 ## Canonical Header Contract (20260302*)
 - Every `20260302*` migration header must declare:
@@ -151,6 +152,7 @@ For every new migration:
   - `20260302203000_harden_assessment_records_select_rls.sql`
   - `20260302213000_harden_org_invite_rls.sql`
   - `20260302220000_enforce_org_invite_role_issuance.sql`
+  - `20260302223000_invite_token_lookup_by_id_rpc.sql`
 - New migration `20260302200000_org_invite_completion_flow.sql` is additive and should be kept:
   - expands `organization_memberships.role` check to include domain roles
   - adds security-definer RPCs: `get_organization_invite_by_token`, `mark_organization_invite_opened`, `respond_to_organization_invite_v1`
