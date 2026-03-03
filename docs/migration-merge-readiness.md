@@ -11,7 +11,7 @@ Use this file as the integration lane checklist while parallel Codex terminals i
 | 3 | Role preset persistence via `domain_catalog` | Terminal 3 | In progress | `role_key` propagation + preset resolution |
 | 4 | Programs/assessments/invites review pass | Terminal 4 | In progress | Bugs/security/regression findings |
 | 5 | Coach shell next slice | Terminal 5 | In progress | Coach Home + assessments + unread threads + progress |
-| 6 | Retention loops (mandatory) | Terminal 6 | Planned | Streaks + reminders + weekly recap must ship as one loop |
+| 6 | Retention loops (mandatory) | Terminal 6 | Shipped | Streaks + reminders + weekly recap shipped as one loop |
 
 ## Mandatory Retention Loop (Required for Build Completion)
 The following three items are mandatory and must be implemented together as one retention loop:
