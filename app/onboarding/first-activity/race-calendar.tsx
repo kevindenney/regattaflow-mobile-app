@@ -5,7 +5,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -21,6 +21,8 @@ import {
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 import { OnboardingProgressDots } from '@/components/onboarding/OnboardingProgressDots';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import type { RaceSelection } from '@/types/onboarding';
 
@@ -65,12 +67,22 @@ interface Race {
 }
 
 export default function RaceCalendarScreen() {
+  const params = useLocalSearchParams<{ domain?: string }>();
   const router = useRouter();
+  const { activeDomain } = useWorkspaceDomain();
+  const paramDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const resolvedDomain = paramDomain || activeDomain;
+  const isSailingDomain = String(resolvedDomain || '').toLowerCase().trim() === 'sailing';
   const [races, setRaces] = useState<Race[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedRaces, setSelectedRaces] = useState<string[]>([]);
 
   useEffect(() => {
+    if (!isSailingDomain) {
+      router.replace(getDashboardRoute('sailor', resolvedDomain));
+      return;
+    }
+
     // Simulate loading races
     const loadRaces = async () => {
       setIsLoading(true);
@@ -86,7 +98,7 @@ export default function RaceCalendarScreen() {
     };
 
     loadRaces();
-  }, []);
+  }, [isSailingDomain, router, resolvedDomain]);
 
   const handleToggleRace = useCallback((raceId: string) => {
     setSelectedRaces((prev) =>
@@ -112,13 +124,19 @@ export default function RaceCalendarScreen() {
     await OnboardingStateService.completeStep('complete');
 
     // Navigate to add race or complete
-    router.push('/onboarding/first-activity/add-race');
+    router.push({
+      pathname: '/onboarding/first-activity/add-race',
+      params: resolvedDomain ? { domain: resolvedDomain } : undefined,
+    });
   };
 
   const handleSkip = async () => {
     await OnboardingStateService.setSelectedRaces([]);
     await OnboardingStateService.completeStep('complete');
-    router.push('/onboarding/first-activity/add-race');
+    router.push({
+      pathname: '/onboarding/first-activity/add-race',
+      params: resolvedDomain ? { domain: resolvedDomain } : undefined,
+    });
   };
 
   const handleBack = () => {

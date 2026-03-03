@@ -283,7 +283,7 @@ export default function FleetsScreen() {
                   <Pressable style={styles.eventsActionPrimary} onPress={() => router.push('/(tabs)/events')}>
                     <Text style={styles.eventsActionPrimaryText}>Open Events</Text>
                   </Pressable>
-                  <Pressable style={styles.eventsActionSecondary} onPress={() => router.push('/(tabs)/race-management')}>
+                  <Pressable style={styles.eventsActionSecondary} onPress={() => router.push('/(tabs)/programs')}>
                     <Text style={styles.eventsActionSecondaryText}>Race Ops</Text>
                   </Pressable>
                 </View>

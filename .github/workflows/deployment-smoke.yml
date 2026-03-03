@@ -1,0 +1,134 @@
+name: Deployment Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '17 * * * *'
+
+concurrency:
+  group: deployment-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  strict-production-smoke:
+    name: Strict Production Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      INTEGRATION_BASE_URL: https://regattaflow-app.vercel.app
+      EXPECTED_SKIP_IDS: db-assertions-availability
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run strict integration validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+
+          MAX_ATTEMPTS=2
+          BACKOFF_SECONDS=10
+          ATTEMPT=1
+
+          is_transient_network_failure() {
+            local report_file="docs/integration-validation-latest.md"
+            local out_log="artifacts/validate-integration-strict.stdout.log"
+            local err_log="artifacts/validate-integration-strict.stderr.log"
+            local pattern='(EAI_AGAIN|ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|fetch failed|network error|network timeout|Request failed for .*AbortError|Request failed for .*aborted)'
+
+            if [[ -f "${report_file}" ]] && grep -Eiq "${pattern}" "${report_file}"; then
+              return 0
+            fi
+            if [[ -f "${out_log}" ]] && grep -Eiq "${pattern}" "${out_log}"; then
+              return 0
+            fi
+            if [[ -f "${err_log}" ]] && grep -Eiq "${pattern}" "${err_log}"; then
+              return 0
+            fi
+            return 1
+          }
+
+          while [[ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ]]; do
+            echo "::group::validate:integration:strict attempt ${ATTEMPT}/${MAX_ATTEMPTS}"
+            set +e
+            npm run validate:integration:strict \
+              > >(tee artifacts/validate-integration-strict.stdout.log) \
+              2> >(tee artifacts/validate-integration-strict.stderr.log >&2)
+            EXIT_CODE=$?
+            set -e
+            echo "::endgroup::"
+
+            if [[ "${EXIT_CODE}" -eq 0 ]]; then
+              echo "[integration-strict] PASS on attempt ${ATTEMPT}/${MAX_ATTEMPTS}."
+              break
+            fi
+
+            if [[ "${ATTEMPT}" -ge "${MAX_ATTEMPTS}" ]]; then
+              echo "[integration-strict] FAIL after ${ATTEMPT}/${MAX_ATTEMPTS} attempts; no retries left."
+              exit "${EXIT_CODE}"
+            fi
+
+            if is_transient_network_failure; then
+              echo "[integration-strict] Transient network failure detected. Retrying in ${BACKOFF_SECONDS}s..."
+              sleep "${BACKOFF_SECONDS}"
+              ATTEMPT=$((ATTEMPT + 1))
+              continue
+            fi
+
+            echo "[integration-strict] Non-transient validation failure detected (logical FAIL/SKIP or schema/runtime mismatch). Not retrying."
+            exit "${EXIT_CODE}"
+          done
+
+      - name: Validate integration report schema
+        run: npm run validate:integration:report:schema
+
+      - name: Enforce no FAIL and no unexpected SKIP
+        run: npm run gate:integration-validation
+
+      - name: Ensure integration validation markdown exists
+        if: always()
+        run: |
+          if [ ! -f docs/integration-validation-latest.md ]; then
+            mkdir -p docs
+            {
+              echo '# Integration Validation'
+              echo
+              echo 'Strict integration validation failed before producing docs/integration-validation-latest.md.'
+              echo 'See the integration-validation-raw-logs artifact for validator stdout/stderr.'
+            } > docs/integration-validation-latest.md
+          fi
+
+      - name: Upload integration validation artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-validation-latest
+          path: docs/integration-validation-latest.md
+          if-no-files-found: error
+
+      - name: Upload strict validator raw logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-validation-raw-logs
+          path: |
+            artifacts/validate-integration-strict.stdout.log
+            artifacts/validate-integration-strict.stderr.log
+          if-no-files-found: warn

@@ -128,7 +128,7 @@ export function LandingNav({ transparent = false, sticky = true }: LandingNavPro
         return [
           { label: 'Events', route: '/(tabs)/events', icon: 'calendar-outline' },
           { label: 'Members', route: '/(tabs)/members', icon: 'people-outline' },
-          { label: 'Racing', route: '/(tabs)/race-management', icon: 'flag-outline' },
+          { label: 'Programs & Placements', route: '/(tabs)/programs', icon: 'flag-outline' },
         ];
       default:
         return [

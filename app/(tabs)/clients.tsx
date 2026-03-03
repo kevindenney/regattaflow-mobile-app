@@ -6,12 +6,23 @@ import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
+import { useCoachHomeData } from '@/hooks/useCoachHomeData';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { coachingService, CoachingClient, ClientStats } from '@/services/CoachingService';
+import { buildAssessmentsDrillDownHref } from '@/lib/assessments/drillDown';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function ClientsScreen() {
   const router = useRouter();
   const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
+  const { isSailingDomain } = useWorkspaceDomain();
+  const {
+    counts: coachHomeCounts,
+    assignedProgramsPreview,
+    competencyTrends,
+    refresh: refreshCoachHome,
+    markThreadsSeen,
+  } = useCoachHomeData();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clients, setClients] = useState<CoachingClient[]>([]);
@@ -54,6 +65,7 @@ export default function ClientsScreen() {
 
   const handleRefresh = () => {
     setRefreshing(true);
+    void refreshCoachHome();
     if (coachId) {
       loadData(coachId);
     } else {
@@ -68,6 +80,28 @@ export default function ClientsScreen() {
   const formatLastSession = (date?: string) => {
     if (!date) return 'No sessions yet';
     return `Last session: ${formatDistanceToNow(new Date(date), { addSuffix: true })}`;
+  };
+
+  const formatTrendDelta = (delta: number | null) => {
+    if (delta === null || !Number.isFinite(delta)) return 'No prior period';
+    if (delta > 0) return `+${delta.toFixed(2)} vs prior`;
+    if (delta < 0) return `${delta.toFixed(2)} vs prior`;
+    return 'No change vs prior';
+  };
+
+  const trendColorForDelta = (delta: number | null) => {
+    if (delta === null || !Number.isFinite(delta) || delta === 0) return '#64748B';
+    return delta > 0 ? '#15803D' : '#B91C1C';
+  };
+
+  const handleTrendPress = (trend: (typeof competencyTrends)[number]) => {
+    const firstPoint = trend.points?.[0];
+    const href = buildAssessmentsDrillDownHref({
+      competencyId: trend.competency_id,
+      competencyTitle: trend.competency_title,
+      periodStartIso: firstPoint?.periodStart || null,
+    });
+    router.push(href as any);
   };
 
   if (personaLoading || loading) {
@@ -108,8 +142,107 @@ export default function ClientsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
-        <View style={styles.header}>
-          <ThemedText style={styles.title}>My Clients</ThemedText>
+        <View style={styles.coachHomeSection}>
+          <View style={styles.coachHomeHeader}>
+            <ThemedText style={styles.sectionTitle}>Coach Home</ThemedText>
+            <TouchableOpacity onPress={() => void markThreadsSeen()}>
+              <ThemedText style={styles.markSeenText}>Mark Threads Seen</ThemedText>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <ThemedText style={styles.statValue}>{coachHomeCounts.assignedPrograms}</ThemedText>
+              <ThemedText style={styles.statLabel}>Assigned Programs</ThemedText>
+            </View>
+            <View style={styles.statCard}>
+              <ThemedText style={styles.statValue}>{coachHomeCounts.dueAssessments}</ThemedText>
+              <ThemedText style={styles.statLabel}>Due Assessments</ThemedText>
+            </View>
+            <View style={styles.statCard}>
+              <ThemedText style={styles.statValue}>{coachHomeCounts.unreadThreads}</ThemedText>
+              <ThemedText style={styles.statLabel}>Unread Threads</ThemedText>
+            </View>
+          </View>
+          <View style={styles.coachHomeLinksRow}>
+            <TouchableOpacity
+              style={styles.coachHomeLinkChip}
+              onPress={() => router.push('/assessments?status=all&focus=due_today' as any)}
+            >
+              <ThemedText style={styles.coachHomeLinkChipText}>
+                Due today: {coachHomeCounts.dueTodayAssessments}
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.coachHomeLinkChip, styles.coachHomeLinkChipWarn]}
+              onPress={() => router.push('/assessments?status=all&focus=overdue' as any)}
+            >
+              <ThemedText style={[styles.coachHomeLinkChipText, styles.coachHomeLinkChipWarnText]}>
+                Overdue: {coachHomeCounts.overdueAssessments}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+          {assignedProgramsPreview.length > 0 ? (
+            <View style={styles.programPreviewSection}>
+              <ThemedText style={styles.programPreviewTitle}>Assigned Programs</ThemedText>
+              {assignedProgramsPreview.map((program) => (
+                <TouchableOpacity
+                  key={program.id}
+                  style={styles.programPreviewRow}
+                  onPress={() => router.push((`/programs/assign?programId=${program.id}`) as any)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={styles.programPreviewName}>{program.title}</ThemedText>
+                    <ThemedText style={styles.programPreviewMeta}>
+                      {String(program.status || '').replace('_', ' ')}
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+          <View style={styles.programPreviewSection}>
+            <ThemedText style={styles.programPreviewTitle}>Competency Progress (8 weeks)</ThemedText>
+            {competencyTrends.length > 0 ? (
+              competencyTrends.map((trend) => (
+                <TouchableOpacity
+                  key={trend.competency_id}
+                  style={styles.competencyTrendRow}
+                  onPress={() => handleTrendPress(trend)}
+                  activeOpacity={0.8}
+                  testID={`coach-trend-row-${trend.competency_id}`}
+                >
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={styles.programPreviewName}>{trend.competency_title}</ThemedText>
+                    <ThemedText style={styles.programPreviewMeta}>
+                      {trend.total_assessments} assessment{trend.total_assessments === 1 ? '' : 's'}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.competencyTrendScoreBlock}>
+                    <ThemedText style={styles.competencyTrendScore}>{trend.latest_average_score.toFixed(2)}</ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.competencyTrendDelta,
+                        { color: trendColorForDelta(trend.delta_from_previous) },
+                      ]}
+                    >
+                      {formatTrendDelta(trend.delta_from_previous)}
+                    </ThemedText>
+                  </View>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.competencyTrendEmpty}>
+                <ThemedText style={styles.programPreviewMeta}>
+                  No scored competency assessments yet.
+                </ThemedText>
+              </View>
+            )}
+          </View>
+        </View>
+
+          <View style={styles.header}>
+          <ThemedText style={styles.title}>{isSailingDomain ? 'My Clients' : 'My Learners'}</ThemedText>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => router.push('/coach/client/new')}
@@ -169,7 +302,9 @@ export default function ClientsScreen() {
                     {client.sailor?.full_name || client.sailor?.email || 'Unknown Client'}
                   </ThemedText>
                   <ThemedText style={styles.clientDetail}>
-                    {client.primary_boat_class || 'No boat class'} • {client.skill_level || 'Unknown level'}
+                    {isSailingDomain
+                      ? `${client.primary_boat_class || 'No boat class'} • ${client.skill_level || 'Unknown level'}`
+                      : `${client.skill_level || 'Unknown level'} coach track`}
                   </ThemedText>
                   <ThemedText style={styles.clientDetail}>
                     {formatLastSession(client.last_session_date)}
@@ -186,10 +321,12 @@ export default function ClientsScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={64} color="#CBD5E1" />
             <ThemedText style={styles.emptyText}>
-              Start building your client base
+              {isSailingDomain ? 'Start building your client base' : 'Start building your learner roster'}
             </ThemedText>
             <TouchableOpacity style={styles.ctaButton}>
-              <ThemedText style={styles.ctaButtonText}>Find Sailors</ThemedText>
+              <ThemedText style={styles.ctaButtonText}>
+                {isSailingDomain ? 'Find Sailors' : 'Invite Learners'}
+              </ThemedText>
             </TouchableOpacity>
           </View>
         )}
@@ -214,6 +351,108 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 10,
+  },
+  coachHomeSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  coachHomeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  markSeenText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '600',
+  },
+  coachHomeLinksRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: -6,
+    marginBottom: 14,
+  },
+  coachHomeLinkChip: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  coachHomeLinkChipWarn: {
+    backgroundColor: '#FEE2E2',
+  },
+  coachHomeLinkChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  coachHomeLinkChipWarnText: {
+    color: '#B91C1C',
+  },
+  programPreviewSection: {
+    marginBottom: 20,
+  },
+  programPreviewTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 8,
+  },
+  programPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    boxShadow: '0px 1px',
+    elevation: 1,
+  },
+  competencyTrendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+    gap: 12,
+    boxShadow: '0px 1px',
+    elevation: 1,
+  },
+  competencyTrendEmpty: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    boxShadow: '0px 1px',
+    elevation: 1,
+  },
+  competencyTrendScoreBlock: {
+    alignItems: 'flex-end',
+  },
+  competencyTrendScore: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  competencyTrendDelta: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  programPreviewName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  programPreviewMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#64748B',
+    textTransform: 'capitalize',
   },
   title: {
     fontSize: 32,

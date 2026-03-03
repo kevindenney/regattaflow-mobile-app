@@ -1,5 +1,6 @@
 import { createLogger } from '@/lib/utils/logger';
 import { useAuth } from '@/providers/AuthProvider';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import {
   sailorRacePreparationService,
   type RaceBriefData,
@@ -121,6 +122,7 @@ export function useRacePreparation({
   debounceMs = 1000,
 }: UseRacePreparationOptions): UseRacePreparationReturn {
   const { user } = useAuth();
+  const { isSailingDomain } = useWorkspaceDomain();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -169,6 +171,18 @@ export function useRacePreparation({
       runId === loadRunIdRef.current &&
       activeRegattaIdRef.current === targetRegattaId &&
       activeUserIdRef.current === targetUserId;
+
+    if (!isSailingDomain) {
+      if (!canCommit()) return;
+      setRigNotesState('');
+      setSelectedRigPresetIdState(null);
+      setAcknowledgements(DEFAULT_ACKNOWLEDGEMENTS);
+      setRaceBriefData(null);
+      setIntentions(DEFAULT_INTENTIONS);
+      setIsLoading(false);
+      hasLoadedOnceRef.current = true;
+      return;
+    }
 
     if (!targetRegattaId) {
       if (!canCommit()) return;
@@ -307,7 +321,7 @@ export function useRacePreparation({
       setIsLoading(false);
       hasLoadedOnceRef.current = true;
     }
-  }, [regattaId, user?.id]);
+  }, [regattaId, user?.id, isSailingDomain]);
 
   /**
    * Save pending changes to Supabase or AsyncStorage
@@ -401,13 +415,13 @@ export function useRacePreparation({
         setIsSaving(false);
       }
     }
-  }, [regattaId, user?.id]);
+  }, [regattaId, user?.id, isSailingDomain]);
 
   /**
    * Schedule a save with debouncing
    */
   const scheduleSave = useCallback(() => {
-    if (!autoSave) {
+    if (!isSailingDomain || !autoSave) {
       return;
     }
 
@@ -418,13 +432,14 @@ export function useRacePreparation({
     saveTimeoutRef.current = setTimeout(() => {
       void saveChanges();
     }, debounceMs);
-  }, [autoSave, debounceMs, saveChanges]);
+  }, [autoSave, debounceMs, saveChanges, isSailingDomain]);
 
   /**
    * Update rig notes
    */
   const setRigNotes = useCallback(
     (notes: string) => {
+      if (!isSailingDomain) return;
       setRigNotesState(notes);
       pendingChangesRef.current = {
         ...pendingChangesRef.current,
@@ -432,7 +447,7 @@ export function useRacePreparation({
       };
       scheduleSave();
     },
-    [scheduleSave]
+    [scheduleSave, isSailingDomain]
   );
 
   /**
@@ -440,6 +455,7 @@ export function useRacePreparation({
    */
   const setSelectedRigPresetId = useCallback(
     (id: string | null) => {
+      if (!isSailingDomain) return;
       setSelectedRigPresetIdState(id);
       pendingChangesRef.current = {
         ...pendingChangesRef.current,
@@ -447,7 +463,7 @@ export function useRacePreparation({
       };
       scheduleSave();
     },
-    [scheduleSave]
+    [scheduleSave, isSailingDomain]
   );
 
   /**
@@ -455,6 +471,7 @@ export function useRacePreparation({
    */
   const setAcknowledgementsCallback = useCallback(
     (acks: RegulatoryAcknowledgements) => {
+      if (!isSailingDomain) return;
       setAcknowledgements(acks);
       pendingChangesRef.current = {
         ...pendingChangesRef.current,
@@ -462,7 +479,7 @@ export function useRacePreparation({
       };
       scheduleSave();
     },
-    [scheduleSave]
+    [scheduleSave, isSailingDomain]
   );
 
   /**
@@ -470,6 +487,7 @@ export function useRacePreparation({
    */
   const toggleAcknowledgement = useCallback(
     (key: keyof RegulatoryAcknowledgements) => {
+      if (!isSailingDomain) return;
       setAcknowledgements((prev) => {
         const updated = {
           ...prev,
@@ -486,7 +504,7 @@ export function useRacePreparation({
         return updated;
       });
     },
-    [scheduleSave]
+    [scheduleSave, isSailingDomain]
   );
 
   /**
@@ -494,6 +512,7 @@ export function useRacePreparation({
    */
   const updateRaceBrief = useCallback(
     (data: RaceBriefData) => {
+      if (!isSailingDomain) return;
       // Only update if data has actually changed (deep comparison)
       setRaceBriefData((prev) => {
         if (JSON.stringify(prev) === JSON.stringify(data)) {
@@ -507,7 +526,7 @@ export function useRacePreparation({
         return data;
       });
     },
-    [scheduleSave]
+    [scheduleSave, isSailingDomain]
   );
 
   /**
@@ -516,6 +535,7 @@ export function useRacePreparation({
    */
   const updateIntentions = useCallback(
     (update: RaceIntentionUpdate) => {
+      if (!isSailingDomain) return;
       setIntentions((prev) => {
         // Deep merge to preserve nested fields from concurrent updates
         const merged = deepMergeIntentions(prev, update);
@@ -536,7 +556,7 @@ export function useRacePreparation({
         return merged;
       });
     },
-    [scheduleSave]
+    [scheduleSave, isSailingDomain]
   );
 
   /**
@@ -584,6 +604,7 @@ export function useRacePreparation({
    */
   const updateStrategyNote = useCallback(
     (sectionId: string, note: string) => {
+      if (!isSailingDomain) return;
       setIntentions((prev) => {
         const existingNotes = prev.strategyNotes || {};
         const updatedNotes: StrategyNotes = {
@@ -603,18 +624,19 @@ export function useRacePreparation({
         return merged;
       });
     },
-    [scheduleSave]
+    [scheduleSave, isSailingDomain]
   );
 
   /**
    * Manually trigger a save
    */
   const save = useCallback(async () => {
+    if (!isSailingDomain) return;
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
     await saveChanges();
-  }, [saveChanges]);
+  }, [saveChanges, isSailingDomain]);
 
   /**
    * Refresh data from server
@@ -635,11 +657,11 @@ export function useRacePreparation({
         clearTimeout(saveTimeoutRef.current);
       }
       // Save any pending changes before unmounting
-      if (Object.keys(pendingChangesRef.current).length > 0) {
+      if (isSailingDomain && Object.keys(pendingChangesRef.current).length > 0) {
         void saveChanges();
       }
     };
-  }, [saveChanges]);
+  }, [saveChanges, isSailingDomain]);
 
   // Compute derived state for loading optimization
   const isInitialLoading = isLoading && !hasLoadedOnceRef.current;
