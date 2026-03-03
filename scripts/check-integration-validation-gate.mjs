@@ -82,6 +82,14 @@ function parseCheckRows(markdown) {
 }
 
 /**
+ * @param {string} markdown
+ */
+function parseMarkdownOverallStatus(markdown) {
+  const match = markdown.match(/^- Overall:\s*\*\*(PASS|FAIL|SKIP)\*\*$/m);
+  return match ? String(match[1]).trim().toUpperCase() : '';
+}
+
+/**
  * @param {{checkId: string; status: string}[]} rows
  */
 function findDuplicateCheckIds(rows) {
@@ -110,6 +118,26 @@ function parseCheckRowsFromJson(payload) {
     .filter((row) => row.checkId && row.status);
 }
 
+function rowsToStatusMap(rows) {
+  /** @type {Map<string, string>} */
+  const map = new Map();
+  for (const row of rows) {
+    if (!row.checkId || !row.status) continue;
+    map.set(row.checkId, row.status.toUpperCase());
+  }
+  return map;
+}
+
+function rowsEquivalent(aRows, bRows) {
+  const a = rowsToStatusMap(aRows);
+  const b = rowsToStatusMap(bRows);
+  if (a.size !== b.size) return false;
+  for (const [checkId, status] of a.entries()) {
+    if (b.get(checkId) !== status) return false;
+  }
+  return true;
+}
+
 /**
  * @param {unknown} payload
  */
@@ -127,6 +155,8 @@ async function run() {
   let sourcePath = args.reportPath;
   let parsedFrom = 'markdown';
   let jsonOverall = '';
+  let markdownOverall = '';
+  let markdownRows = [];
 
   try {
     const reportJsonRaw = await fs.readFile(args.reportJsonPath, 'utf8');
@@ -146,9 +176,19 @@ async function run() {
 
   if (rows.length === 0) {
     const reportRaw = await fs.readFile(args.reportPath, 'utf8');
-    rows = parseCheckRows(reportRaw);
+    markdownRows = parseCheckRows(reportRaw);
+    markdownOverall = parseMarkdownOverallStatus(reportRaw);
+    rows = markdownRows;
     sourcePath = args.reportPath;
     parsedFrom = 'markdown';
+  } else {
+    try {
+      const reportRaw = await fs.readFile(args.reportPath, 'utf8');
+      markdownRows = parseCheckRows(reportRaw);
+      markdownOverall = parseMarkdownOverallStatus(reportRaw);
+    } catch {
+      // markdown may be unavailable; json-first path remains authoritative
+    }
   }
 
   if (rows.length === 0) {
@@ -169,11 +209,25 @@ async function run() {
   const reportRel = path.relative(REPO_ROOT, sourcePath) || sourcePath;
 
   const jsonOverallFailed = parsedFrom === 'json' && jsonOverall && jsonOverall !== 'PASS';
+  const crossFormatMismatch =
+    parsedFrom === 'json' &&
+    markdownRows.length > 0 &&
+    (!rowsEquivalent(rows, markdownRows) ||
+      (jsonOverall && markdownOverall && jsonOverall !== markdownOverall));
 
-  if (duplicateCheckIds.length > 0 || failRows.length > 0 || unexpectedSkipRows.length > 0 || jsonOverallFailed) {
+  if (
+    duplicateCheckIds.length > 0 ||
+    failRows.length > 0 ||
+    unexpectedSkipRows.length > 0 ||
+    jsonOverallFailed ||
+    crossFormatMismatch
+  ) {
     console.error(`Integration validation gate: BLOCK (${reportRel}, parsed as ${parsedFrom})`);
     if (jsonOverallFailed) {
       console.error(`JSON overall status is ${jsonOverall} (expected PASS).`);
+    }
+    if (crossFormatMismatch) {
+      console.error('JSON/markdown integration report mismatch detected (rows and/or overall status differ).');
     }
     if (duplicateCheckIds.length > 0) {
       console.error('Duplicate check IDs detected:');
