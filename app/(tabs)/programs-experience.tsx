@@ -175,6 +175,15 @@ export default function RaceManagementScreen() {
       null
     );
   }, [institutionProgramItems.active, institutionProgramItems.completed, institutionProgramItems.upcoming, isInstitutionWorkspace]);
+  const quickActionCommunicationsTarget = useMemo(() => {
+    if (!isInstitutionWorkspace) return null;
+    return (
+      institutionProgramItems.active[0] ||
+      institutionProgramItems.upcoming[0] ||
+      institutionProgramItems.completed[0] ||
+      null
+    );
+  }, [institutionProgramItems.active, institutionProgramItems.completed, institutionProgramItems.upcoming, isInstitutionWorkspace]);
   const getProgramUnreadCount = useCallback(
     (programId: string) => {
       const key = String(programId || '').trim();
@@ -382,7 +391,16 @@ export default function RaceManagementScreen() {
       badge: isInstitutionWorkspace ? communicationsUnreadCount : undefined,
       onPress: () => {
         if (isInstitutionWorkspace) {
-          router.push('/communications');
+          router.push(
+            (
+              quickActionCommunicationsTarget
+                ? buildProgramCommunicationsHref({
+                    programId: quickActionCommunicationsTarget.id,
+                    programTitle: quickActionCommunicationsTarget.name,
+                  })
+                : '/communications'
+            ) as any
+          );
           return;
         }
         const race = UPCOMING_RACES[0];
