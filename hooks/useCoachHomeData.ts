@@ -6,6 +6,11 @@ import { supabase } from '@/services/supabase';
 import { createCoachHomeRealtimeController } from '@/hooks/coachHomeRealtimeController';
 import { resolveCoachUnreadThreadCount } from '@/lib/coach/unreadScope';
 import {
+  CoachHomeProfileSample,
+  profileCoachHomeStep,
+  summarizeCoachHomeProfile,
+} from '@/lib/coach/coachHomeProfiling';
+import {
   buildCoachReminders,
   buildCoachWeeklyRecap,
   CoachReminder,
@@ -111,20 +116,28 @@ export function useCoachHomeData() {
 
     setLoading(true);
     try {
-      const [assignedProgramIds, dueSummary, unreadThreadCountsByProgram, trends, recentAssessments] = await Promise.all([
-        programService.listAssignedProgramIdsForStaff(organizationId, userId),
-        programService.getEvaluatorDueAssessmentSummary(organizationId, userId),
-        programService.getUnreadThreadCountsByProgram(organizationId, userId),
-        programService.listCompetencyProgressTrendsForEvaluator(organizationId, userId, {
-          weeks: 8,
-          limitCompetencies: 4,
-        }),
-        programService.listEvaluatorAssessmentRecords(organizationId, userId, 800),
-      ]);
+      const profileSamples: CoachHomeProfileSample[] = [];
+      const [assignedProgramIds, dueSummary, unreadThreadCountsByProgram, trends, recentAssessments] =
+        await profileCoachHomeStep('core_queries', () =>
+          Promise.all([
+            programService.listAssignedProgramIdsForStaff(organizationId, userId),
+            programService.getEvaluatorDueAssessmentSummary(organizationId, userId),
+            programService.getUnreadThreadCountsByProgram(organizationId, userId),
+            programService.listCompetencyProgressTrendsForEvaluator(organizationId, userId, {
+              weeks: 8,
+              limitCompetencies: 4,
+            }),
+            programService.listEvaluatorAssessmentRecords(organizationId, userId, 800),
+          ]),
+        profileSamples);
 
       let assignedProgramPreviewRows: CoachAssignedProgramPreview[] = [];
       if (assignedProgramIds.length > 0) {
-        const programs = await programService.listProgramsByIds(organizationId, assignedProgramIds, 3);
+        const programs = await profileCoachHomeStep(
+          'assigned_program_preview',
+          () => programService.listProgramsByIds(organizationId, assignedProgramIds, 3),
+          profileSamples
+        );
         assignedProgramPreviewRows = programs.map((row) => ({
           id: row.id,
           title: row.title,
@@ -133,45 +146,70 @@ export function useCoachHomeData() {
         }));
       }
 
-      const unreadThreads = resolveCoachUnreadThreadCount(unreadThreadCountsByProgram, assignedProgramIds);
-      const assessmentActivityTimestamps = recentAssessments.map((row) => row.assessed_at || row.created_at);
-      const completedActions = recentAssessments.filter((row) => {
-        const status = String(row.status || '').toLowerCase();
-        const completedStatus = status === 'submitted' || status === 'reviewed' || status === 'finalized';
-        if (!completedStatus) return false;
-        const timestamp = row.assessed_at || row.created_at;
-        if (!timestamp) return false;
-        const parsed = new Date(timestamp);
-        if (Number.isNaN(parsed.getTime())) return false;
-        return Date.now() - parsed.getTime() <= 7 * 24 * 60 * 60 * 1000;
-      }).length;
-      const activeDays = countActiveDaysWithin(assessmentActivityTimestamps, 7);
-      const reminders = buildCoachReminders({
-        overdueAssessments: dueSummary.overdue,
-        dueTodayAssessments: dueSummary.dueToday,
+      const {
         unreadThreads,
-      });
-      const weeklyRecap = buildCoachWeeklyRecap({
-        completedActions,
-        pendingActions: dueSummary.totalDue + unreadThreads,
-        activeDays,
-        trendDelta: trends[0]?.delta_from_previous ?? null,
-      });
-
-      setCounts({
-        assignedPrograms: assignedProgramIds.length,
-        dueAssessments: dueSummary.totalDue,
-        unreadThreads,
-        dueTodayAssessments: dueSummary.dueToday,
-        overdueAssessments: dueSummary.overdue,
-      });
-      setAssignedProgramsPreview(assignedProgramPreviewRows);
-      setCompetencyTrends(trends);
-      setRetention({
-        streakDays: computeDailyStreak(assessmentActivityTimestamps),
+        assessmentActivityTimestamps,
         reminders,
         weeklyRecap,
+      } = await profileCoachHomeStep('derive_retention_metrics', async () => {
+        const unreadThreads = resolveCoachUnreadThreadCount(unreadThreadCountsByProgram, assignedProgramIds);
+        const assessmentActivityTimestamps = recentAssessments.map((row) => row.assessed_at || row.created_at);
+        const completedActions = recentAssessments.filter((row) => {
+          const status = String(row.status || '').toLowerCase();
+          const completedStatus = status === 'submitted' || status === 'reviewed' || status === 'finalized';
+          if (!completedStatus) return false;
+          const timestamp = row.assessed_at || row.created_at;
+          if (!timestamp) return false;
+          const parsed = new Date(timestamp);
+          if (Number.isNaN(parsed.getTime())) return false;
+          return Date.now() - parsed.getTime() <= 7 * 24 * 60 * 60 * 1000;
+        }).length;
+        const activeDays = countActiveDaysWithin(assessmentActivityTimestamps, 7);
+        const reminders = buildCoachReminders({
+          overdueAssessments: dueSummary.overdue,
+          dueTodayAssessments: dueSummary.dueToday,
+          unreadThreads,
+        });
+        const weeklyRecap = buildCoachWeeklyRecap({
+          completedActions,
+          pendingActions: dueSummary.totalDue + unreadThreads,
+          activeDays,
+          trendDelta: trends[0]?.delta_from_previous ?? null,
+        });
+        return {
+          unreadThreads,
+          assessmentActivityTimestamps,
+          reminders,
+          weeklyRecap,
+        };
       });
+
+      await profileCoachHomeStep('state_commit', async () => {
+        setCounts({
+          assignedPrograms: assignedProgramIds.length,
+          dueAssessments: dueSummary.totalDue,
+          unreadThreads,
+          dueTodayAssessments: dueSummary.dueToday,
+          overdueAssessments: dueSummary.overdue,
+        });
+        setAssignedProgramsPreview(assignedProgramPreviewRows);
+        setCompetencyTrends(trends);
+        setRetention({
+          streakDays: computeDailyStreak(assessmentActivityTimestamps),
+          reminders,
+          weeklyRecap,
+        });
+      }, profileSamples);
+
+      if (__DEV__) {
+        const summary = summarizeCoachHomeProfile(profileSamples);
+        if (summary.budgetExceeded) {
+          console.warn(
+            `[CoachHomeProfile] refresh exceeded p95 budget (${summary.totalMs}ms > ${summary.budgetMs}ms)`,
+            summary.steps
+          );
+        }
+      }
     } finally {
       setLoading(false);
     }

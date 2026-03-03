@@ -62,7 +62,8 @@ Acceptance:
 Status: Pending
 
 - [ ] Coach Home data endpoint performance profiling.
-- [ ] Add P95 timing instrumentation and report hooks.
+- [x] Add P95 timing instrumentation and report hooks.
+  - Shipped via `lib/coach/coachHomeProfiling.ts`, `hooks/useCoachHomeData.ts`, and `docs/coach-home-query-baseline.md`.
 - [ ] Optimize queries/indexes for:
   - due assessments
   - unread threads
