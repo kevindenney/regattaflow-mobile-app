@@ -5,10 +5,12 @@
 
 import { EXPERIENCE_LEVELS, type ExperienceLevel } from '@/types/onboarding';
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { guardOnboardingRouteForDomain } from '@/lib/utils/onboardingRouting';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -28,8 +30,17 @@ const ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 export default function ExperienceScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string }>();
+  const { activeDomain } = useWorkspaceDomain();
+  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string; domain?: string }>();
+  const paramDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const resolvedDomain = paramDomain || activeDomain;
+  const isSailingDomain = String(resolvedDomain || '').toLowerCase().trim() === 'sailing';
   const [selectedLevel, setSelectedLevel] = useState<ExperienceLevel | null>(null);
+
+  useEffect(() => {
+    if (isSailingDomain) return;
+    router.replace(guardOnboardingRouteForDomain('/onboarding/experience', resolvedDomain) as any);
+  }, [isSailingDomain, resolvedDomain, router]);
 
   const handleSelect = useCallback((level: ExperienceLevel) => {
     setSelectedLevel(level);
@@ -43,9 +54,13 @@ export default function ExperienceScreen() {
 
     router.push({
       pathname: '/onboarding/boat-class',
-      params: { name: params.name, avatarUrl: params.avatarUrl },
+      params: {
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        ...(resolvedDomain ? { domain: resolvedDomain } : {}),
+      },
     });
-  }, [selectedLevel, router, params]);
+  }, [selectedLevel, router, params, resolvedDomain]);
 
   const handleBack = useCallback(() => {
     router.back();

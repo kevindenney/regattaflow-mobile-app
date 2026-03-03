@@ -22,7 +22,7 @@ import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated'
 
 import { OnboardingProgressDots } from '@/components/onboarding/OnboardingProgressDots';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
-import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
+import { guardOnboardingRouteForDomain } from '@/lib/utils/onboardingRouting';
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import type { RaceSelection } from '@/types/onboarding';
 
@@ -79,7 +79,7 @@ export default function RaceCalendarScreen() {
 
   useEffect(() => {
     if (!isSailingDomain) {
-      router.replace(getDashboardRoute('sailor'));
+      router.replace(guardOnboardingRouteForDomain('/onboarding/first-activity/race-calendar', resolvedDomain) as any);
       return;
     }
 
@@ -98,7 +98,7 @@ export default function RaceCalendarScreen() {
     };
 
     loadRaces();
-  }, [isSailingDomain, router, resolvedDomain]);
+  }, [isSailingDomain, resolvedDomain, router]);
 
   const handleToggleRace = useCallback((raceId: string) => {
     setSelectedRaces((prev) =>

@@ -9,6 +9,8 @@ import {
   type Fleet,
 } from '@/services/FleetDiscoveryService';
 import type { FleetSelection } from '@/types/onboarding';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { guardOnboardingRouteForDomain } from '@/lib/utils/onboardingRouting';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -26,13 +28,22 @@ import {
 
 export default function PrimaryFleetScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string }>();
+  const { activeDomain } = useWorkspaceDomain();
+  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string; domain?: string }>();
+  const paramDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const resolvedDomain = paramDomain || activeDomain;
+  const isSailingDomain = String(resolvedDomain || '').toLowerCase().trim() === 'sailing';
   const [searchQuery, setSearchQuery] = useState('');
   const [fleets, setFleets] = useState<Fleet[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedFleet, setSelectedFleet] = useState<Fleet | null>(null);
   const [hasNoFleet, setHasNoFleet] = useState(false);
+
+  useEffect(() => {
+    if (isSailingDomain) return;
+    router.replace(guardOnboardingRouteForDomain('/onboarding/primary-fleet', resolvedDomain) as any);
+  }, [isSailingDomain, resolvedDomain, router]);
 
   // Load fleets based on selected boat class and club from preferences
   useEffect(() => {
@@ -119,9 +130,13 @@ export default function PrimaryFleetScreen() {
 
     router.push({
       pathname: '/onboarding/find-races',
-      params: { name: params.name, avatarUrl: params.avatarUrl },
+      params: {
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        ...(resolvedDomain ? { domain: resolvedDomain } : {}),
+      },
     });
-  }, [selectedFleet, hasNoFleet, router, params]);
+  }, [selectedFleet, hasNoFleet, router, params, resolvedDomain]);
 
   const handleBack = useCallback(() => {
     router.back();
