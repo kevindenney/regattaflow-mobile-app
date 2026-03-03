@@ -1,6 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { buildCoachRetentionDeliveries } from '../../lib/coach/retentionCron';
+import {
+  hasPendingChannel,
+  isCompleteWeeklyRecapPayload,
+  isFullyDispatched,
+  RetentionDispatchRow,
+} from '../../lib/coach/retentionDispatch';
 
 type RetentionDeliveryRecord = {
   id: string;
@@ -29,7 +35,7 @@ type DeliveryUpdate = {
 
 function buildNotificationContent(row: Pick<RetentionDeliveryRecord, 'delivery_type' | 'payload'>): { title: string; body: string } {
   if (row.delivery_type === 'reminders') {
-    const reminders = Array.isArray((row.payload as any).reminders)
+      const reminders = Array.isArray((row.payload as any).reminders)
       ? (row.payload as any).reminders
       : [];
     const label = reminders[0]?.label || 'You have pending coach actions';
@@ -204,7 +210,30 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
       });
     }
 
-    const inAppRows = rows.filter((row) => !row.in_app_dispatched_at);
+    const invalidWeeklyRecapRows = rows.filter((row) => {
+      if (row.delivery_type !== 'weekly_recap') return false;
+      return !isCompleteWeeklyRecapPayload(row.payload || {});
+    });
+    if (invalidWeeklyRecapRows.length > 0) {
+      for (const row of invalidWeeklyRecapRows) {
+        const next = updatesById.get(row.id);
+        if (!next) continue;
+        next.in_app_dispatched_at = nowIso;
+        next.push_dispatched_at = nowIso;
+        next.email_dispatched_at = nowIso;
+        next.dispatched_at = nowIso;
+        next.dispatch_error = 'invalid_weekly_recap_payload';
+        next.push_dispatch_error = null;
+        next.email_dispatch_error = null;
+      }
+    }
+
+    const invalidWeeklyRecapIds = new Set(invalidWeeklyRecapRows.map((row) => row.id));
+    const rowsToDispatch = rows.filter((row) => !invalidWeeklyRecapIds.has(row.id));
+
+    const inAppRows = rowsToDispatch.filter((row) =>
+      hasPendingChannel(row as RetentionDispatchRow, 'in_app')
+    );
     if (inAppRows.length > 0) {
       const notifications = inAppRows.map((row) => {
         const { title, body } = buildNotificationContent(row);
@@ -240,7 +269,9 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
       }
     }
 
-    const pushRows = rows.filter((row) => !row.push_dispatched_at);
+    const pushRows = rowsToDispatch.filter((row) =>
+      hasPendingChannel(row as RetentionDispatchRow, 'push')
+    );
     const pushRecipientRows = pushRows.filter((row) => (prefByUserId.get(row.user_id)?.push_enabled ?? true));
     const pushSkippedRows = pushRows.filter((row) => !(prefByUserId.get(row.user_id)?.push_enabled ?? true));
 
@@ -296,7 +327,9 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
 
     const sendGridApiKey = process.env.SENDGRID_API_KEY || '';
     const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@regattaflow.com';
-    const emailRows = rows.filter((row) => !row.email_dispatched_at);
+    const emailRows = rowsToDispatch.filter((row) =>
+      hasPendingChannel(row as RetentionDispatchRow, 'email')
+    );
     let emailDispatched = 0;
     for (const row of emailRows) {
       const next = updatesById.get(row.id);
@@ -339,7 +372,7 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
 
     let dispatched = 0;
     for (const row of updatesById.values()) {
-      const channelDone = Boolean(row.in_app_dispatched_at && row.push_dispatched_at && row.email_dispatched_at);
+      const channelDone = isFullyDispatched(row);
       if (channelDone) {
         row.dispatched_at = nowIso;
         dispatched += 1;
@@ -373,6 +406,7 @@ const handler = async (req: VercelRequest, res: VercelResponse) => {
       dispatched,
       pushDispatched,
       emailDispatched,
+      skippedInvalidWeeklyRecaps: invalidWeeklyRecapRows.length,
       reminders,
       weeklyRecaps: recaps,
     });

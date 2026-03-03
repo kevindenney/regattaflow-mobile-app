@@ -11,6 +11,7 @@ const steps = [
   { script: 'validate:ai-domain-gates', env: {} },
   { script: 'test:jest:key', env: {} },
   { script: 'report:migration-object-collision-audit', env: {} },
+  { script: 'lint:migrations:20260302', env: {} },
   {
     script: 'validate:integration:strict',
     env: { EXPECTED_SKIP_IDS: expectedSkipIds },

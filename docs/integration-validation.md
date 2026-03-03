@@ -82,6 +82,13 @@ Use this in final integration message:
   - keeps GET-only AI probes
   - treats `FUNCTION_INVOCATION_FAILED` as `SKIP`
 
+### Optional authenticated smoke probes
+- Set `INTEGRATION_AUTH_SAILING_BEARER` to enable sailing authenticated probe:
+  - `GET /api/club/workspace` expects `200`.
+- Set `INTEGRATION_AUTH_INSTITUTION_BEARER` to enable institution/nursing authenticated probe:
+  - `POST /api/ai/club/support` expects controlled `403` domain gate.
+- If these env vars are not set, authenticated probes are omitted (no `SKIP` rows added).
+
 ### Expected `SKIP` policy (gate behavior)
 `scripts/check-integration-validation-gate.mjs` blocks when either of these is true:
 1. Any check row has `Status=FAIL`.
@@ -125,6 +132,8 @@ With CI env:
 ```bash
 INTEGRATION_BASE_URL=https://regattaflow-app.vercel.app
 EXPECTED_SKIP_IDS=db-assertions-availability
+INTEGRATION_AUTH_SAILING_BEARER=<optional sailing bearer token>
+INTEGRATION_AUTH_INSTITUTION_BEARER=<optional institution/nursing bearer token>
 ```
 
 Local pre-ship (bundle script used by team flow):
@@ -137,4 +146,5 @@ Bundle executes:
 3. `npm run validate:ai-domain-gates`
 4. `npm run test:jest:key`
 5. `npm run report:migration-object-collision-audit`
-6. `npm run validate:integration:strict`
+6. `npm run lint:migrations:20260302`
+7. `npm run validate:integration:strict`

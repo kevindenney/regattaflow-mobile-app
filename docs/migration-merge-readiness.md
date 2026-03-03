@@ -143,6 +143,25 @@ For every new migration:
 - If multiple streams added migrations touching same table/policy, consolidate before push.
 - If typecheck passes but behavior diverges, prefer service-level tests + manual route smoke checks.
 
+## Autonomous Post-Merge Bundles
+All in-scope migration streams are shipped. Any additional hardening should be executed as independent bundles:
+
+1. Deploy/runtime diagnostics bundle
+   - Improve failure-body extraction in strict deploy smoke without changing pass/fail semantics.
+   - Keep report output deterministic (no volatile timestamps, no churn on unchanged content).
+
+2. RLS regression-prevention bundle
+   - Add targeted tests for `assessment_records` visibility matrices by role and organization type.
+   - Add migration-lint checks for policy naming collisions and canonical-owner drift.
+
+3. Domain-gating regression bundle
+   - Add incremental contract probes for route/middleware ordering on newly added AI endpoints.
+   - Ensure unauthenticated probes remain controlled `401`/`405` responses, never runtime `500`.
+
+4. Retention loop reliability bundle
+   - Expand cron dispatch tests for idempotent channel dispatch retries.
+   - Validate weekly recap payload completeness before channel fanout.
+
 ## 2026-03-02 Invite Flow Reconciliation
 - Reviewed migrations:
   - `20260302160000_create_organization_invites.sql`

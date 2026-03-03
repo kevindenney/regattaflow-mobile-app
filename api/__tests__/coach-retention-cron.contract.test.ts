@@ -15,6 +15,8 @@ describe('coach retention cron contract', () => {
     expect(source).toContain("from('assessment_records')");
     expect(source).toContain("from('coach_retention_deliveries')");
     expect(source).toContain("delivery_type === 'weekly_recap'");
+    expect(source).toContain('isCompleteWeeklyRecapPayload');
+    expect(source).toContain('invalid_weekly_recap_payload');
     expect(source).toContain("from('social_notifications')");
     expect(source).toContain("from('notification_preferences')");
     expect(source).toContain('/functions/v1/send-push-notification');
@@ -23,6 +25,7 @@ describe('coach retention cron contract', () => {
     expect(source).toContain('push_dispatched_at');
     expect(source).toContain('email_dispatched_at');
     expect(source).toContain('dispatched_at');
+    expect(source).toContain('skippedInvalidWeeklyRecaps');
   });
 
   it('registers coach retention cron schedule in vercel config', () => {

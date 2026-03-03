@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 
 const BASE_URL = (process.env.INTEGRATION_BASE_URL || 'https://regattaflow-app.vercel.app').replace(/\/$/, '');
 const OUTPUT_PATH = 'docs/api-smoke-deploy.md';
+const SAILING_AUTH_TOKEN = String(process.env.INTEGRATION_AUTH_SAILING_BEARER || '').trim();
+const INSTITUTION_AUTH_TOKEN = String(process.env.INTEGRATION_AUTH_INSTITUTION_BEARER || '').trim();
 
 /** @type {Array<{id: string; method: string; path: string; okStatuses: number[]; note: string; body?: string; headers?: Record<string,string>}>} */
 const checks = [
@@ -44,6 +46,32 @@ const checks = [
     headers: { 'content-type': 'application/json' },
   },
 ];
+
+if (SAILING_AUTH_TOKEN) {
+  checks.push({
+    id: 'auth-sailing-workspace-get',
+    method: 'GET',
+    path: '/api/club/workspace',
+    okStatuses: [200],
+    note: 'Sailing authenticated workspace probe should return 200 without runtime failure.',
+    headers: { authorization: `Bearer ${SAILING_AUTH_TOKEN}` },
+  });
+}
+
+if (INSTITUTION_AUTH_TOKEN) {
+  checks.push({
+    id: 'auth-institution-domain-gate-post',
+    method: 'POST',
+    path: '/api/ai/club/support',
+    okStatuses: [403],
+    note: 'Institution authenticated probe should be domain-gated on club support.',
+    body: JSON.stringify({ message: 'deployment smoke probe' }),
+    headers: {
+      authorization: `Bearer ${INSTITUTION_AUTH_TOKEN}`,
+      'content-type': 'application/json',
+    },
+  });
+}
 
 function sanitize(value) {
   return String(value ?? '')
@@ -118,6 +146,8 @@ async function run() {
   lines.push(`- Base URL: ${BASE_URL}`);
   lines.push(`- Overall: **${overall}**`);
   lines.push(`- Checks: ${results.length} total (${results.length - failCount} pass, ${failCount} fail)`);
+  lines.push(`- Sailing auth probe token: ${SAILING_AUTH_TOKEN ? 'set' : 'not set'}`);
+  lines.push(`- Institution auth probe token: ${INSTITUTION_AUTH_TOKEN ? 'set' : 'not set'}`);
   lines.push('');
   lines.push('| Check | Status | Method | Endpoint | HTTP | x-vercel-error | x-vercel-id | x-vercel-request-id | Body Snippet |');
   lines.push('|---|---|---|---|---|---|---|---|---|');

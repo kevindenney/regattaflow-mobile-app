@@ -524,6 +524,8 @@ async function run() {
   const configuredBaseUrl = process.env.INTEGRATION_BASE_URL || process.env.EXPO_PUBLIC_API_URL || '';
   const fallbackStrictBaseUrl = process.env.INTEGRATION_STRICT_BASE_URL || 'https://regattaflow-app.vercel.app';
   const baseUrl = configuredBaseUrl || (strictApiSmoke ? fallbackStrictBaseUrl : '');
+  const sailingAuthToken = String(process.env.INTEGRATION_AUTH_SAILING_BEARER || '').trim();
+  const institutionAuthToken = String(process.env.INTEGRATION_AUTH_INSTITUTION_BEARER || '').trim();
   if (!baseUrl) {
     add({
       id: 'api-smoke-availability',
@@ -664,6 +666,82 @@ async function run() {
         });
       }
     }
+
+    /** @type {Array<{id: string; path: string; method: string; okStatuses: number[]; note: string; token: string; body?: string; headers?: Record<string, string>; expectedBodyIncludes?: string[]}>} */
+    const authenticatedChecks = [];
+    if (sailingAuthToken) {
+      authenticatedChecks.push({
+        id: 'api-smoke-auth-sailing-workspace',
+        path: '/api/club/workspace',
+        method: 'GET',
+        okStatuses: [200],
+        note: 'Sailing authenticated probe should return workspace payload without auth/runtime failure.',
+        token: sailingAuthToken,
+      });
+    }
+    if (institutionAuthToken) {
+      authenticatedChecks.push({
+        id: 'api-smoke-auth-institution-domain-gate',
+        path: '/api/ai/club/support',
+        method: 'POST',
+        okStatuses: [403],
+        note: 'Institution authenticated probe should be domain-gated on sailing-only support endpoint.',
+        token: institutionAuthToken,
+        body: JSON.stringify({ message: 'integration smoke check' }),
+        headers: { 'content-type': 'application/json' },
+        expectedBodyIncludes: ['DOMAIN_GATED', 'sailing workspaces', 'Organization context required'],
+      });
+    }
+
+    for (const check of authenticatedChecks) {
+      const target = `${baseUrl.replace(/\/$/, '')}${check.path}`;
+      try {
+        const response = await fetchWithTimeout(target, {
+          method: check.method,
+          headers: {
+            ...check.headers,
+            authorization: `Bearer ${check.token}`,
+          },
+          body: check.body,
+        });
+        const vercelError = response.headers.get('x-vercel-error');
+        const vercelId = response.headers.get('x-vercel-id') || '-';
+        const vercelRequestId = response.headers.get('x-vercel-request-id') || response.headers.get('x-request-id') || '-';
+        const bodyText = await response.text();
+        const bodySnippet = bodyText.slice(0, 180).replace(/\s+/g, ' ').trim() || '-';
+        const correlation = `(x-vercel-id=${vercelId}, x-vercel-request-id=${vercelRequestId}, body=${bodySnippet})`;
+        if (response.status === 500 && vercelError === 'FUNCTION_INVOCATION_FAILED') {
+          add({
+            id: check.id,
+            category: 'API Smoke',
+            status: 'FAIL',
+            details: `${check.note} Runtime failure (x-vercel-error=FUNCTION_INVOCATION_FAILED) at ${target} ${correlation}.`,
+            reference: target,
+          });
+          continue;
+        }
+        const bodyExpectationMet =
+          !check.expectedBodyIncludes ||
+          check.expectedBodyIncludes.length === 0 ||
+          check.expectedBodyIncludes.some((needle) => bodyText.includes(needle));
+        const ok = check.okStatuses.includes(response.status) && bodyExpectationMet;
+        add({
+          id: check.id,
+          category: 'API Smoke',
+          status: ok ? 'PASS' : 'FAIL',
+          details: `${check.note} Received HTTP ${response.status} from ${target} ${correlation}.`,
+          reference: target,
+        });
+      } catch (error) {
+        add({
+          id: check.id,
+          category: 'API Smoke',
+          status: 'FAIL',
+          details: `Authenticated request failed for ${target}: ${formatError(error)}`,
+          reference: target,
+        });
+      }
+    }
   }
 
   const passCount = results.filter((item) => item.status === 'PASS').length;
@@ -685,6 +763,7 @@ async function run() {
   reportLines.push('- Programs route alias checks');
   reportLines.push('- Assessment RLS assumption checks (migration + table shape)');
   reportLines.push('- API smoke checks (when `INTEGRATION_BASE_URL` is available; strict mode adds unauthenticated POST probes for AI endpoints)');
+  reportLines.push('- Optional authenticated smoke probes (enabled when domain bearer env vars are provided)');
   reportLines.push('');
   reportLines.push('## Required Signature Matrix');
   reportLines.push('');
@@ -713,6 +792,8 @@ async function run() {
   reportLines.push('');
   reportLines.push(`- API base: ${baseUrl || '(not set)'}`);
   reportLines.push(`- Strict API smoke mode: ${strictApiSmoke ? 'enabled' : 'disabled'}`);
+  reportLines.push(`- Sailing auth probe token: ${sailingAuthToken ? 'set' : 'not set'}`);
+  reportLines.push(`- Institution auth probe token: ${institutionAuthToken ? 'set' : 'not set'}`);
   reportLines.push(`- Supabase URL: ${supabaseUrl ? 'set' : 'not set'}`);
   reportLines.push(`- Service role key: ${serviceRoleKey ? 'set' : 'not set'}`);
   reportLines.push(`- Started: ${startedAt.toISOString()}`);
@@ -738,6 +819,8 @@ async function run() {
     },
     environment: {
       api_base: baseUrl || null,
+      sailing_auth_probe_token_set: Boolean(sailingAuthToken),
+      institution_auth_probe_token_set: Boolean(institutionAuthToken),
       supabase_url_set: Boolean(supabaseUrl),
       service_role_key_set: Boolean(serviceRoleKey),
     },

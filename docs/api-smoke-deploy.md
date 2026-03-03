@@ -3,6 +3,8 @@
 - Base URL: https://regattaflow-app.vercel.app
 - Overall: **PASS**
 - Checks: 5 total (5 pass, 0 fail)
+- Sailing auth probe token: not set
+- Institution auth probe token: not set
 
 | Check | Status | Method | Endpoint | HTTP | x-vercel-error | x-vercel-id | x-vercel-request-id | Body Snippet |
 |---|---|---|---|---|---|---|---|---|
@@ -15,4 +17,4 @@
 ## Notes
 
 - Any `HTTP 500` with `x-vercel-error=FUNCTION_INVOCATION_FAILED` is a hard FAIL.
-
+- Authenticated probe rows are included only when bearer token env vars are provided.
