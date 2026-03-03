@@ -128,7 +128,21 @@ async function run() {
   lines.push('- If duplicates are intentional canonical overrides, document them in migration merge notes before deploy.');
   lines.push('');
 
-  await fs.writeFile(OUTPUT_PATH, `${lines.join('\n')}\n`, 'utf8');
+  const nextContent = `${lines.join('\n')}\n`;
+  let currentContent = null;
+  try {
+    currentContent = await fs.readFile(OUTPUT_PATH, 'utf8');
+  } catch (error) {
+    const code = /** @type {{ code?: string }} */ (error)?.code;
+    if (code !== 'ENOENT') throw error;
+  }
+
+  if (currentContent === nextContent) {
+    console.log(`Migration object collision audit unchanged at ${path.relative(REPO_ROOT, OUTPUT_PATH)}`);
+    return;
+  }
+
+  await fs.writeFile(OUTPUT_PATH, nextContent, 'utf8');
   console.log(`Migration object collision audit written to ${path.relative(REPO_ROOT, OUTPUT_PATH)}`);
 }
 
