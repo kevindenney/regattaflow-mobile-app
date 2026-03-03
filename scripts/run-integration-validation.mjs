@@ -466,6 +466,23 @@ async function run() {
     reference: `lib/featureFlags.ts, ${rollbackRunbookPath}`,
   });
 
+  const secondaryPacksDocPath = 'docs/secondary-packs-canonical.md';
+  const secondaryPacksDoc = await readFile(secondaryPacksDocPath);
+  const secondaryPacksContractOk =
+    secondaryPacksDoc.includes('1. `drawing`') &&
+    secondaryPacksDoc.includes('2. `golf`') &&
+    secondaryPacksDoc.includes('workspace domain `drawing`') &&
+    secondaryPacksDoc.includes('workspace domain `fitness`');
+  add({
+    id: 'secondary-packs-canonical-contract',
+    category: 'Secondary Packs',
+    status: secondaryPacksContractOk ? 'PASS' : 'FAIL',
+    details: secondaryPacksContractOk
+      ? 'Canonical secondary packs list is locked to drawing and golf with explicit domain mapping.'
+      : 'Secondary packs canonical contract markers are missing.',
+    reference: secondaryPacksDocPath,
+  });
+
   const tabRegistrationOk =
     tabsLayoutFile.includes('name="programs"') &&
     tabsLayoutFile.includes('name="race-management"');

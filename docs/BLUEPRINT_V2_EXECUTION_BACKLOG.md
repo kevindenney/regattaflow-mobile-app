@@ -132,9 +132,11 @@ Acceptance:
 
 Status: Pending
 
-- [ ] Lock canonical secondary packs list (`drawing`, `golf`) in docs/contracts.
+- [x] Lock canonical secondary packs list (`drawing`, `golf`) in docs/contracts.
+  - Shipped via `docs/secondary-packs-canonical.md` + `secondary-packs-canonical-contract`.
 - [ ] Create pack templates and vocabulary stubs in `domain_catalog`.
-- [ ] Add one route-level and one API-level contract test per secondary pack.
+- [x] Add one route-level and one API-level contract test per secondary pack.
+  - Shipped via `app/__tests__/secondary-packs-route-api.contract.test.ts`.
 
 Acceptance:
 - Secondary packs can be enabled on shared skeleton without auth/gating regressions.

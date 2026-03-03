@@ -93,4 +93,13 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('SECONDARY_PACKS_V1');
     expect(source).toContain('docs/feature-flag-rollback-runbook.md');
   });
+
+  it('emits secondary-packs canonical contract check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'secondary-packs-canonical-contract'");
+    expect(source).toContain("category: 'Secondary Packs'");
+    expect(source).toContain('docs/secondary-packs-canonical.md');
+    expect(source).toContain('1. `drawing`');
+    expect(source).toContain('2. `golf`');
+  });
 });

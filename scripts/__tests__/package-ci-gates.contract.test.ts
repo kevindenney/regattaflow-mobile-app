@@ -26,12 +26,14 @@ describe('package CI gates contract', () => {
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/check-coach-home-baseline-budget.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/coach-home-index-migration.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/feature-flag-rollbacks.contract.test.ts');
+    expect(scripts['test:ci:gates:unit']).toContain('scripts/__tests__/secondary-packs-canonical.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('api/__tests__/domain-resolution.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/coach-home-assessments-drilldown-route.e2e.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/programs-experience-assessment-scope.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/communications-route.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/tabs-programs-route-regression.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/race-management-alias-lifecycle.contract.test.ts');
+    expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/secondary-packs-route-api.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('hooks/__tests__/useWorkspaceDomain.test.ts');
     expect(scripts['report:coach-home-query-baseline']).toContain('scripts/report-coach-home-query-baseline.mjs');
     expect(scripts['gate:coach-home-baseline-budget']).toContain('scripts/check-coach-home-baseline-budget.mjs');
