@@ -17,6 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { buildAssignmentPendingSummary } from '@/lib/programs/assignmentDashboard';
+import { AssignmentSortMode, buildAssignmentList } from '@/lib/programs/assignmentList';
 import {
   buildProgramAssignmentsCsv,
   buildProgramAssignmentsCsvFilename,
@@ -40,7 +41,6 @@ const FALLBACK_ROLE_OPTIONS = [
 ] as const;
 
 const STATUS_OPTIONS: ParticipantStatus[] = ['invited', 'active', 'completed', 'inactive'];
-type SortMode = 'newest' | 'oldest' | 'name' | 'role' | 'status';
 
 export default function ProgramAssignmentsScreen() {
   const router = useRouter();
@@ -65,7 +65,7 @@ export default function ProgramAssignmentsScreen() {
   const [searchText, setSearchText] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<ParticipantStatus | 'all'>('all');
-  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [sortMode, setSortMode] = useState<AssignmentSortMode>('newest');
   const [visibleCount, setVisibleCount] = useState(40);
   const [hasMutations, setHasMutations] = useState(false);
   const [inviteRolePresets, setInviteRolePresets] = useState<InviteRolePreset[]>([]);
@@ -273,36 +273,15 @@ export default function ProgramAssignmentsScreen() {
 
   const filteredParticipants = participants;
 
-  const filteredAssignments = useMemo(() => {
-    const needle = searchText.trim().toLowerCase();
-    const base = filteredParticipants.filter((row) => {
-      if (filterRole !== 'all' && row.role !== filterRole) return false;
-      if (filterStatus !== 'all' && row.status !== filterStatus) return false;
-      if (!needle) return true;
-      const haystack = `${row.display_name || ''} ${row.email || ''} ${row.role || ''}`.toLowerCase();
-      return haystack.includes(needle);
+  const { filteredAssignments, pagedAssignments } = useMemo(() => {
+    return buildAssignmentList(filteredParticipants, {
+      role: filterRole,
+      status: filterStatus,
+      searchText,
+      sortMode,
+      visibleCount,
     });
-
-    const sorted = [...base];
-    sorted.sort((a, b) => {
-      if (sortMode === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      if (sortMode === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      if (sortMode === 'name') {
-        const aName = String(a.display_name || a.email || '').toLowerCase();
-        const bName = String(b.display_name || b.email || '').toLowerCase();
-        return aName.localeCompare(bName);
-      }
-      if (sortMode === 'role') return String(a.role || '').localeCompare(String(b.role || ''));
-      if (sortMode === 'status') return String(a.status || '').localeCompare(String(b.status || ''));
-      return 0;
-    });
-    return sorted;
-  }, [filteredParticipants, filterRole, filterStatus, searchText, sortMode]);
-
-  const pagedAssignments = useMemo(
-    () => filteredAssignments.slice(0, visibleCount),
-    [filteredAssignments, visibleCount]
-  );
+  }, [filteredParticipants, filterRole, filterStatus, searchText, sortMode, visibleCount]);
 
   const staffQueue = useMemo(
     () =>
@@ -652,7 +631,7 @@ export default function ProgramAssignmentsScreen() {
                 <View style={styles.inlineGroup}>
                   <ThemedText style={styles.inlineLabel}>Sort</ThemedText>
                   <View style={styles.chipRow}>
-                    {(['newest', 'oldest', 'name', 'role', 'status'] as SortMode[]).map((option) => {
+                    {(['newest', 'oldest', 'name', 'role', 'status'] as AssignmentSortMode[]).map((option) => {
                       const active = sortMode === option;
                       return (
                         <TouchableOpacity
