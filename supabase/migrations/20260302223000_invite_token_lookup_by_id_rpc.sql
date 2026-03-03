@@ -1,5 +1,11 @@
 -- =============================================================================
 -- Invite token lookup by invite id for invitee-safe completion
+--
+-- Canonical ownership:
+-- - Owns `get_organization_invite_token_by_id(...)` lookup RPC in the
+--   20260302 migration lane.
+-- Override intent:
+-- - None; additive helper RPC for invitee-safe token flow completion.
 -- =============================================================================
 
 BEGIN;

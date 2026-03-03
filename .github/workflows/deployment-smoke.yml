@@ -24,6 +24,8 @@ jobs:
     env:
       INTEGRATION_BASE_URL: https://regattaflow-app.vercel.app
       EXPECTED_SKIP_IDS: db-assertions-availability
+      INTEGRATION_AUTH_SAILING_BEARER: ${{ secrets.INTEGRATION_AUTH_SAILING_BEARER }}
+      INTEGRATION_AUTH_INSTITUTION_BEARER: ${{ secrets.INTEGRATION_AUTH_INSTITUTION_BEARER }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,6 +38,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint 20260302 migration header conventions
+        run: npm run lint:migrations:20260302
 
       - name: Run strict integration validation
         shell: bash
