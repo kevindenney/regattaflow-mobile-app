@@ -22,6 +22,11 @@
 - Integration-gate reliability hardening:
   - strict integration mode now uses deterministic production fallback base URL when `INTEGRATION_BASE_URL` is unset.
   - generated validation reports are excluded from default working-tree noise via `.gitignore`.
+- Post-summary hardening/consistency updates merged on `main`:
+  - normalized strict DB assertion skip behavior to canonical `db-assertions-availability` id.
+  - aligned pre-ship expected skip policy with strict fallback behavior.
+  - synchronized integration runbook with actual pre-ship bundle step order.
+  - reconciled migration/readiness docs (mandatory retention gate explicit, canonical migration ordering/list completeness, No-Go checklist semantics).
 
 ## Deferred
 - No additional blockers deferred from the migration/CI hardening lane as of 2026-03-03.
