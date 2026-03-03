@@ -6,7 +6,7 @@
 ## Current Signal Snapshot
 
 - Pre-ship bundle: PASS (`npm run validate:pre-ship:bundle`)
-- Integration validation strict: PASS (26 PASS, 0 FAIL, 0 SKIP)
+- Integration validation strict: PASS (latest run; current snapshot: 26 PASS, 0 FAIL, 0 SKIP)
 - Integration gate: PASS (JSON-first parsing path)
 - Integration report schema check: PASS
 - Migration object collision audit (`20260302*`, indexes/triggers/constraints): PASS (0 duplicates)
