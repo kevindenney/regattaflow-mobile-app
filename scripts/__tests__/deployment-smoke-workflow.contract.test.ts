@@ -24,6 +24,8 @@ describe('deployment-smoke workflow contract', () => {
     expect(source).toContain('npm run validate:integration:strict');
     expect(source).toContain('npm run validate:api-smoke:deploy');
     expect(source).toContain('npm run gate:integration-validation');
+    expect(source).toContain('Upload deployment readiness artifact');
+    expect(source).toContain('docs/deployment-readiness.md');
   });
 
   it('reports optional authenticated probe configuration', () => {
@@ -35,4 +37,3 @@ describe('deployment-smoke workflow contract', () => {
     expect(source).toContain('missing INTEGRATION_AUTH_INSTITUTION_BEARER secret');
   });
 });
-
