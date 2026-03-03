@@ -9,7 +9,7 @@ import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 import { useCoachHomeData } from '@/hooks/useCoachHomeData';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { coachingService, CoachingClient, ClientStats } from '@/services/CoachingService';
-import { buildAssessmentsDrillDownHref } from '@/lib/assessments/drillDown';
+import { buildAssessmentsDrillDownHref, buildLearnerProgressHref } from '@/lib/assessments/drillDown';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function ClientsScreen() {
@@ -324,6 +324,19 @@ export default function ClientsScreen() {
                   <ThemedText style={styles.clientDetail}>
                     {client.total_sessions} session{client.total_sessions !== 1 ? 's' : ''} completed
                   </ThemedText>
+                  <TouchableOpacity
+                    style={styles.progressLink}
+                    onPress={() =>
+                      router.push(
+                        buildLearnerProgressHref({
+                          participantUserId: client.sailor_id,
+                          participantName: client.sailor?.full_name || client.sailor?.email || null,
+                        }) as any
+                      )
+                    }
+                  >
+                    <ThemedText style={styles.progressLinkText}>Open learner progress</ThemedText>
+                  </TouchableOpacity>
                 </View>
                 <Ionicons name="chevron-forward" size={24} color="#CBD5E1" />
               </TouchableOpacity>
@@ -534,6 +547,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
     marginTop: 2,
+  },
+  progressLink: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  progressLinkText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
   },
   emptyState: {
     alignItems: 'center',

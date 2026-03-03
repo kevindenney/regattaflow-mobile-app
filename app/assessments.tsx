@@ -84,6 +84,8 @@ export default function AssessmentsScreen() {
   const [selectedDateWindow, setSelectedDateWindow] = useState<AssessmentDateWindow>('all');
   const [selectedCompetencyId, setSelectedCompetencyId] = useState<string | null>(null);
   const [selectedCompetencyTitle, setSelectedCompetencyTitle] = useState<string | null>(null);
+  const [selectedParticipantUserId, setSelectedParticipantUserId] = useState<string | null>(null);
+  const [selectedParticipantName, setSelectedParticipantName] = useState<string | null>(null);
   const [dateFromOverride, setDateFromOverride] = useState<string | null>(null);
   const [dateToOverride, setDateToOverride] = useState<string | null>(null);
   const [competencyTitleById, setCompetencyTitleById] = useState<Record<string, string>>({});
@@ -95,9 +97,21 @@ export default function AssessmentsScreen() {
     setSelectedDateWindow(routeState.selectedDateWindow);
     setSelectedCompetencyId(routeState.selectedCompetencyId);
     setSelectedCompetencyTitle(routeState.selectedCompetencyTitle);
+    setSelectedParticipantUserId(routeState.selectedParticipantUserId);
+    setSelectedParticipantName(routeState.selectedParticipantName);
     setDateFromOverride(routeState.dateFromOverride);
     setDateToOverride(routeState.dateToOverride);
-  }, [params.competency_id, params.competency_title, params.date_from, params.date_to, params.date_window, params.focus, params.status]);
+  }, [
+    params.competency_id,
+    params.competency_title,
+    params.participant_name,
+    params.participant_user_id,
+    params.date_from,
+    params.date_to,
+    params.date_window,
+    params.focus,
+    params.status,
+  ]);
 
   const assessmentQueryFilters = useMemo<AssessmentRecordFilters>(() => ({
     ...buildAssessmentQueryFilters({
@@ -111,12 +125,13 @@ export default function AssessmentsScreen() {
     () =>
       Boolean(
         selectedCompetencyId ||
+        selectedParticipantUserId ||
         selectedDateWindow !== 'all' ||
         selectedFocus !== 'all' ||
         dateFromOverride ||
         dateToOverride
       ),
-    [dateFromOverride, dateToOverride, selectedCompetencyId, selectedDateWindow, selectedFocus]
+    [dateFromOverride, dateToOverride, selectedCompetencyId, selectedDateWindow, selectedFocus, selectedParticipantUserId]
   );
 
   const [showCreate, setShowCreate] = useState(false);
@@ -204,9 +219,23 @@ export default function AssessmentsScreen() {
     void load();
   }, [activeDomain, activeOrganization?.id, assessmentQueryFilters, isInstitutionWorkspace, ready, selectedStatus]);
 
+  const participantById = useMemo(() => {
+    const map = new Map<string, ProgramParticipantRecord>();
+    for (const row of participants) map.set(row.id, row);
+    return map;
+  }, [participants]);
+
   const recentRecords = useMemo(() => {
+    const base = selectedParticipantUserId
+      ? records.filter((row) => {
+          if (!row.participant_id) return false;
+          const participant = participantById.get(row.participant_id);
+          return participant?.user_id === selectedParticipantUserId;
+        })
+      : records;
+
     if (selectedFocus === 'all') {
-      return records.slice(0, 30);
+      return base.slice(0, 30);
     }
 
     const today = new Date();
@@ -214,7 +243,7 @@ export default function AssessmentsScreen() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    return records
+    return base
       .filter((row) => {
         const due = getAssessmentDueDate(row);
         if (!due) return false;
@@ -224,7 +253,7 @@ export default function AssessmentsScreen() {
         return due < today;
       })
       .slice(0, 30);
-  }, [records, selectedFocus]);
+  }, [participantById, records, selectedFocus, selectedParticipantUserId]);
 
   const programById = useMemo(() => {
     const map = new Map<string, ProgramRecord>();
@@ -237,12 +266,6 @@ export default function AssessmentsScreen() {
     for (const row of sessions) map.set(row.id, row);
     return map;
   }, [sessions]);
-
-  const participantById = useMemo(() => {
-    const map = new Map<string, ProgramParticipantRecord>();
-    for (const row of participants) map.set(row.id, row);
-    return map;
-  }, [participants]);
 
   const templateById = useMemo(() => {
     const map = new Map<string, ProgramTemplateRecord>();
@@ -493,6 +516,8 @@ export default function AssessmentsScreen() {
                 setSelectedDateWindow('all');
                 setSelectedCompetencyId(null);
                 setSelectedCompetencyTitle(null);
+                setSelectedParticipantUserId(null);
+                setSelectedParticipantName(null);
                 setDateFromOverride(null);
                 setDateToOverride(null);
                 router.replace(buildClearDrillDownHref(params) as any);
@@ -550,6 +575,25 @@ export default function AssessmentsScreen() {
               }}
             >
               <ThemedText style={styles.filterChipText}>Clear competency</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {selectedParticipantUserId ? (
+          <View style={styles.filterRow}>
+            <TouchableOpacity style={[styles.filterChip, styles.filterChipActive]}>
+              <ThemedText style={[styles.filterChipText, styles.filterChipTextActive]}>
+                Learner: {selectedParticipantName || selectedParticipantUserId}
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.filterChip}
+              onPress={() => {
+                setSelectedParticipantUserId(null);
+                setSelectedParticipantName(null);
+              }}
+            >
+              <ThemedText style={styles.filterChipText}>Clear learner</ThemedText>
             </TouchableOpacity>
           </View>
         ) : null}
