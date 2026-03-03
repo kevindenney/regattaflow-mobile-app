@@ -7,16 +7,17 @@ Use this file as the integration lane checklist while parallel Codex terminals i
 - `npm run validate:pre-ship:bundle`: PASS (`steps=6/6`)
 - `npm run validate:integration:strict`: PASS (`26 pass, 0 fail, 0 skip`)
 - `npm run gate:integration-validation`: PASS
+- `npm run test:ci:gates`: PASS
 - `npm run typecheck`: PASS
 
 ## Current Parallel Streams
 | Stream | Scope | Owner/Terminal | Status | Notes |
 |---|---|---|---|---|
-| 1 | Route/API domain gating + mixed-domain cleanup | Terminal 1 | In progress | Focus on sailing-only surfaces and non-sailing redirects |
-| 2 | Invite token flow end-to-end | Terminal 2 | In progress | Token deep link, opened/accepted/declined, membership activation |
-| 3 | Role preset persistence via `domain_catalog` | Terminal 3 | In progress | `role_key` propagation + preset resolution |
-| 4 | Programs/assessments/invites review pass | Terminal 4 | In progress | Bugs/security/regression findings |
-| 5 | Coach shell next slice | Terminal 5 | In progress | Coach Home + assessments + unread threads + progress |
+| 1 | Route/API domain gating + mixed-domain cleanup | Terminal 1 | Shipped | Sailing-only surfaces + non-sailing redirects merged to `main` |
+| 2 | Invite token flow end-to-end | Terminal 2 | Shipped | Token lookup/open/respond flow + membership activation merged to `main` |
+| 3 | Role preset persistence via `domain_catalog` | Terminal 3 | Shipped | `role_key` propagation and preset resolution merged to `main` |
+| 4 | Programs/assessments/invites review pass | Terminal 4 | Shipped | Review/hardening findings resolved in merged slices |
+| 5 | Coach shell next slice | Terminal 5 | Shipped | Coach Home, assessments scope, unread drill-downs merged to `main` |
 | 6 | Retention loops (mandatory) | Terminal 6 | Shipped | Streaks + reminders + weekly recap shipped as one loop |
 
 ## Mandatory Retention Loop (Required for Build Completion)
