@@ -34,6 +34,15 @@ const checks = [
     okStatuses: [401, 405],
     note: 'Coach retention cron should return controlled auth/method failure without runtime crash.',
   },
+  {
+    id: 'cron-coach-retention-post',
+    method: 'POST',
+    path: '/api/cron/coach-retention-loop',
+    okStatuses: [401, 405],
+    note: 'Coach retention cron should reject unauthenticated POST without runtime crash.',
+    body: JSON.stringify({}),
+    headers: { 'content-type': 'application/json' },
+  },
 ];
 
 function sanitize(value) {
