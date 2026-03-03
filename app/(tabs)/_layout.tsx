@@ -351,6 +351,7 @@ function TabLayoutInner() {
   const earningsTab = findTab('earnings');
   const eventsTab = findTab('events');
   const membersTab = findTab('members');
+  const programsTab = findTab('programs');
   const raceManagementTab = findTab('race-management');
 
   // Determine tab bar and scene style based on platform
@@ -634,8 +635,28 @@ function TabLayoutInner() {
           }}
         />
         <Tabs.Screen
+          name="programs"
+          options={{
+            href: isTabVisible('programs') ? undefined : null,
+            title: programsTab?.title ?? 'Programs & Placements',
+            tabBarIcon: ({ color, size, focused }) => (
+              <Ionicons
+                name={getIconName(programsTab, focused, programsTab?.iconFocused ?? 'school', programsTab?.icon ?? 'school-outline') as any}
+                size={isClubUser ? 24 : size}
+                color={color}
+              />
+            ),
+            tabBarButton: !isTabVisible('programs')
+              ? () => null
+              : isClubUser
+                ? renderClubTabButton
+                : undefined,
+          }}
+        />
+        <Tabs.Screen
           name="race-management"
           options={{
+            href: isTabVisible('race-management') ? undefined : null,
             title: raceManagementTab?.title ?? 'Racing',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
