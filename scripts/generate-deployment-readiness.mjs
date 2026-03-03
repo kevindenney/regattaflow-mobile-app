@@ -96,6 +96,8 @@ function parseIntegration(content) {
     rows,
     fails: rows.filter((row) => row.status === 'FAIL'),
     skips: rows.filter((row) => row.status === 'SKIP'),
+    authProbeConfig:
+      rows.find((row) => row.check === 'api-smoke-auth-probe-configuration') ?? null,
   };
 }
 
@@ -473,6 +475,15 @@ async function run() {
       `[ ] Resolve or document waiver for ${integration.skips.length} skipped integration validation check(s), including API smoke failures.`
     );
   }
+  if (
+    integration?.authProbeConfig &&
+    integration.authProbeConfig.details.includes('sailing=disabled') &&
+    integration.authProbeConfig.details.includes('institution=disabled')
+  ) {
+    actionItems.push(
+      '[ ] Configure authenticated smoke probe secrets (`INTEGRATION_AUTH_SAILING_BEARER`, `INTEGRATION_AUTH_INSTITUTION_BEARER`) to enable domain-authenticated runtime coverage in CI.'
+    );
+  }
   if (migration.skipped.length) {
     actionItems.push(
       `[ ] Triage ${migration.skipped.length} skipped migration file(s) and decide keep/remove/execute before deployment.`
@@ -527,6 +538,7 @@ ${testResults ? `- Source: \`e2e/TEST_RESULTS.md\`\n- Latest run label: ${testRe
 ## Integration Validation Summary
 
 ${integration ? `- Source: \`docs/integration-validation-latest.md\`\n- Generated: ${integration.generated}\n- Overall: **${statusEmoji(integration.overall)}**\n- Checks: ${integration.totals.total} total (${integration.totals.pass} pass, ${integration.totals.fail} fail, ${integration.totals.skip} skip)` : '- Source not found: `docs/integration-validation-latest.md`'}
+${integration?.authProbeConfig ? `- Authenticated probe coverage: ${integration.authProbeConfig.details}` : '- Authenticated probe coverage: unknown (check row not present)'}
 
 ## Waivers
 
