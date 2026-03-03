@@ -41,6 +41,32 @@ export type UserPrincipleMemory = {
 };
 
 export class SignatureInsightService {
+  async findLatestSignatureInsightEvent(
+    userId: string,
+    interestId: string
+  ): Promise<SignatureInsightEvent | null> {
+    try {
+      const { data, error } = await supabase
+        .from('signature_insight_events')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('interest_id', interestId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return (data as SignatureInsightEvent | null) || null;
+    } catch (error) {
+      logger.error('[SignatureInsightService] Failed to find latest signature insight event', {
+        error,
+        userId,
+        interestId,
+      });
+      throw error;
+    }
+  }
+
   async logSignatureInsightEvent(input: {
     userId: string;
     interestId: string;

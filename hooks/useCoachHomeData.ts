@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { CompetencyProgressTrend, programService } from '@/services/ProgramService';
+import { signatureInsightService } from '@/services/SignatureInsightService';
 import { supabase } from '@/services/supabase';
 import { createCoachHomeRealtimeController } from '@/hooks/coachHomeRealtimeController';
 import { resolveCoachUnreadThreadCount } from '@/lib/coach/unreadScope';
@@ -42,7 +43,7 @@ type CoachRetentionLoop = {
 
 export function useCoachHomeData() {
   const { user } = useAuth();
-  const { activeOrganization } = useOrganization();
+  const { activeOrganization, activeInterestSlug, activeDomain } = useOrganization();
   const [counts, setCounts] = useState<CoachHomeCounts>({
     assignedPrograms: 0,
     dueAssessments: 0,
@@ -68,11 +69,13 @@ export function useCoachHomeData() {
     },
   });
   const [loading, setLoading] = useState(false);
+  const [resolvingSignatureInsight, setResolvingSignatureInsight] = useState(false);
   const refreshDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRunIdRef = useRef(0);
 
   const organizationId = activeOrganization?.id ?? null;
   const userId = user?.id ?? null;
+  const activeInterestId = activeInterestSlug || activeDomain || 'sailing';
 
   const markThreadsSeen = useCallback(async () => {
     if (!organizationId || !userId) return;
@@ -127,7 +130,7 @@ export function useCoachHomeData() {
     setLoading(true);
     try {
       const profileSamples: CoachHomeProfileSample[] = [];
-      const [assignedProgramIds, dueSummary, unreadThreadCountsByProgram, trends, recentAssessments] =
+      const [assignedProgramIds, dueSummary, unreadThreadCountsByProgram, trends, recentAssessments, latestSignatureInsightEvent] =
         await profileCoachHomeStep('core_queries', () =>
           Promise.all([
             programService.listAssignedProgramIdsForStaff(organizationId, userId),
@@ -138,6 +141,7 @@ export function useCoachHomeData() {
               limitCompetencies: 4,
             }),
             programService.listEvaluatorAssessmentRecords(organizationId, userId, 800),
+            signatureInsightService.findLatestSignatureInsightEvent(userId, activeInterestId),
           ]),
         profileSamples);
 
@@ -186,6 +190,21 @@ export function useCoachHomeData() {
           activeDays,
           trendDelta: trends[0]?.delta_from_previous ?? null,
         });
+        if (latestSignatureInsightEvent) {
+          const nextSkill = String(latestSignatureInsightEvent.metadata?.phase || latestSignatureInsightEvent.interest_id || 'execution');
+          const nextEvidence = String(latestSignatureInsightEvent.evidence_text || '').trim();
+          const eventPrinciple =
+            latestSignatureInsightEvent.outcome === 'edited'
+              ? String(latestSignatureInsightEvent.edited_principle_text || '').trim()
+              : String(latestSignatureInsightEvent.principle_text || '').trim();
+          weeklyRecap.signatureInsight = {
+            skill: nextSkill || weeklyRecap.signatureInsight.skill,
+            evidence: nextEvidence || weeklyRecap.signatureInsight.evidence,
+            principle: eventPrinciple || weeklyRecap.signatureInsight.principle,
+            eventId: latestSignatureInsightEvent.id,
+            outcome: latestSignatureInsightEvent.outcome,
+          };
+        }
         return {
           unreadThreads,
           assessmentActivityTimestamps,
@@ -223,7 +242,7 @@ export function useCoachHomeData() {
     } finally {
       setLoading(false);
     }
-  }, [organizationId, userId]);
+  }, [activeInterestId, organizationId, userId]);
 
   const clearRefreshTimer = useCallback(() => {
     if (!refreshDebounceTimerRef.current) return;
@@ -268,14 +287,49 @@ export function useCoachHomeData() {
 
   const hasWorkspace = useMemo(() => Boolean(organizationId && userId), [organizationId, userId]);
 
+  const resolveSignatureInsight = useCallback(
+    async (outcome: 'accepted' | 'edited' | 'dismissed', editedPrincipleText?: string | null) => {
+      const eventId = retention.weeklyRecap.signatureInsight.eventId;
+      if (!eventId) return;
+      setResolvingSignatureInsight(true);
+      try {
+        const event = await signatureInsightService.applySignatureInsightOutcome({
+          eventId,
+          outcome,
+          editedPrincipleText: editedPrincipleText ?? null,
+        });
+
+        setRetention((prev) => ({
+          ...prev,
+          weeklyRecap: {
+            ...prev.weeklyRecap,
+            signatureInsight: {
+              ...prev.weeklyRecap.signatureInsight,
+              outcome: event.outcome,
+              principle:
+                event.outcome === 'edited'
+                  ? String(event.edited_principle_text || '').trim() || prev.weeklyRecap.signatureInsight.principle
+                  : prev.weeklyRecap.signatureInsight.principle,
+            },
+          },
+        }));
+      } finally {
+        setResolvingSignatureInsight(false);
+      }
+    },
+    [retention.weeklyRecap.signatureInsight.eventId]
+  );
+
   return {
     counts,
     retention,
     assignedProgramsPreview,
     competencyTrends,
     loading,
+    resolvingSignatureInsight,
     hasWorkspace,
     refresh,
     markThreadsSeen,
+    resolveSignatureInsight,
   };
 }

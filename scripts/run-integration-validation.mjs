@@ -728,6 +728,23 @@ async function run() {
     reference: 'services/SignatureInsightService.ts',
   });
 
+  const raceChecklistServiceSource = await readFile('services/RaceChecklistService.ts');
+  const signatureInsightTriggerContractOk =
+    raceChecklistServiceSource.includes('maybeEmitSignatureInsightForChecklistCompletion') &&
+    raceChecklistServiceSource.includes('status === \'completed\'') &&
+    raceChecklistServiceSource.includes('resolveLatestAiAnalysisForRace') &&
+    raceChecklistServiceSource.includes("sourceKind: 'timeline_step_completion'") &&
+    raceChecklistServiceSource.includes('signatureInsightService.logSignatureInsightEvent');
+  add({
+    id: 'signature-insight-timeline-trigger-contract',
+    category: 'Signature Insight',
+    status: signatureInsightTriggerContractOk ? 'PASS' : 'FAIL',
+    details: signatureInsightTriggerContractOk
+      ? 'Timeline step completion path emits signature insight events only when AI analysis is available.'
+      : 'Signature insight timeline trigger markers are incomplete in RaceChecklistService.',
+    reference: 'services/RaceChecklistService.ts',
+  });
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const lineageTableFilterRaw = process.env.INTEGRATION_REQUIRED_TABLES || '';

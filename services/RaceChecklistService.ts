@@ -7,6 +7,7 @@
 
 import { supabase } from './supabase';
 import { logger } from '@/lib/utils/logger';
+import { signatureInsightService } from '@/services/SignatureInsightService';
 import type {
   RaceChecklistItem,
   RaceChecklistItemRow,
@@ -21,6 +22,164 @@ import type {
 } from '@/types/excellenceFramework';
 
 export class RaceChecklistService {
+  private static readonly SIGNATURE_INSIGHT_INTEREST_ID = 'sailing';
+
+  private static getIsoWeekWindow(now: Date = new Date()): { start: string; end: string } {
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const weekday = dayStart.getUTCDay();
+    const diffToMonday = (weekday + 6) % 7;
+    const start = new Date(dayStart);
+    start.setUTCDate(start.getUTCDate() - diffToMonday);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 7);
+    return {
+      start: start.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+    };
+  }
+
+  private static async resolveLatestAiAnalysisForRace(input: {
+    sailorId: string;
+    raceEventId: string;
+  }): Promise<{
+    aiAnalysisId: string | null;
+    confidenceScore: number | null;
+    summary: string | null;
+  }> {
+    const { data: raceEventRow, error: raceEventError } = await supabase
+      .from('race_events')
+      .select('id,regatta_id')
+      .eq('id', input.raceEventId)
+      .eq('user_id', input.sailorId)
+      .maybeSingle();
+    if (raceEventError) {
+      logger.warn('[RaceChecklistService] Failed to resolve race event for signature insight', {
+        error: raceEventError,
+        sailorId: input.sailorId,
+        raceEventId: input.raceEventId,
+      });
+      return { aiAnalysisId: null, confidenceScore: null, summary: null };
+    }
+
+    const regattaId = String((raceEventRow as any)?.regatta_id || '').trim();
+    if (!regattaId) {
+      return { aiAnalysisId: null, confidenceScore: null, summary: null };
+    }
+
+    const { data: sessionRows, error: sessionError } = await supabase
+      .from('race_timer_sessions')
+      .select('id,regatta_id,race_id,start_time')
+      .eq('sailor_id', input.sailorId)
+      .or(`regatta_id.eq.${regattaId},race_id.eq.${regattaId}`)
+      .order('start_time', { ascending: false })
+      .limit(12);
+    if (sessionError) {
+      logger.warn('[RaceChecklistService] Failed to resolve timer sessions for signature insight', {
+        error: sessionError,
+        sailorId: input.sailorId,
+        raceEventId: input.raceEventId,
+        regattaId,
+      });
+      return { aiAnalysisId: null, confidenceScore: null, summary: null };
+    }
+
+    const sessionIds = Array.from(
+      new Set((sessionRows || []).map((row: any) => String(row?.id || '').trim()).filter(Boolean))
+    );
+    if (sessionIds.length === 0) {
+      return { aiAnalysisId: null, confidenceScore: null, summary: null };
+    }
+
+    const { data: analysisRows, error: analysisError } = await supabase
+      .from('ai_coach_analysis')
+      .select('id,timer_session_id,confidence_score,overall_summary,created_at')
+      .in('timer_session_id', sessionIds)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (analysisError) {
+      logger.warn('[RaceChecklistService] Failed to resolve AI analysis for signature insight', {
+        error: analysisError,
+        sailorId: input.sailorId,
+        raceEventId: input.raceEventId,
+      });
+      return { aiAnalysisId: null, confidenceScore: null, summary: null };
+    }
+
+    const latest = (analysisRows || [])[0] as any;
+    if (!latest?.id) return { aiAnalysisId: null, confidenceScore: null, summary: null };
+
+    return {
+      aiAnalysisId: String(latest.id),
+      confidenceScore:
+        typeof latest.confidence_score === 'number' && Number.isFinite(latest.confidence_score)
+          ? Number(latest.confidence_score)
+          : null,
+      summary: typeof latest.overall_summary === 'string' ? latest.overall_summary.trim() : null,
+    };
+  }
+
+  private static async maybeEmitSignatureInsightForChecklistCompletion(
+    row: RaceChecklistItemRow
+  ): Promise<void> {
+    const sailorId = String(row.sailor_id || '').trim();
+    const raceEventId = String(row.race_event_id || '').trim();
+    if (!sailorId || !raceEventId) return;
+
+    const ai = await this.resolveLatestAiAnalysisForRace({ sailorId, raceEventId });
+    if (!ai.aiAnalysisId) {
+      return;
+    }
+
+    const confidenceScore = ai.confidenceScore ?? null;
+    if (confidenceScore !== null && confidenceScore < 0.4) {
+      return;
+    }
+
+    const phaseLabel = String(row.phase || 'review');
+    const itemTitle = String(row.title || 'recent step').trim() || 'recent step';
+    const evidence = ai.summary
+      ? ai.summary.slice(0, 220)
+      : `AI analysis is available for your completed ${phaseLabel} step "${itemTitle}".`;
+    const insightText = `You are getting better at ${phaseLabel} execution because ${evidence}`;
+    const principleText = `When completing ${phaseLabel} steps like "${itemTitle}", carry one concrete execution adjustment into the next race.`;
+
+    const window = this.getIsoWeekWindow(new Date());
+    try {
+      await signatureInsightService.logSignatureInsightEvent({
+        userId: sailorId,
+        organizationId: null,
+        interestId: this.SIGNATURE_INSIGHT_INTEREST_ID,
+        raceEventId,
+        checklistItemId: row.id,
+        aiAnalysisId: ai.aiAnalysisId,
+        sourceKind: 'timeline_step_completion',
+        sourceWindowStart: window.start,
+        sourceWindowEnd: window.end,
+        insightText,
+        principleText,
+        evidenceText: evidence,
+        confidenceScore,
+        metadata: {
+          phase: row.phase,
+          checklistItemTitle: row.title,
+          checklistItemCategory: row.category,
+        },
+      });
+    } catch (error: any) {
+      const message = String(error?.message || '');
+      const code = String(error?.code || '');
+      const isDuplicate = code === '23505' || message.toLowerCase().includes('duplicate key');
+      if (!isDuplicate) {
+        logger.warn('[RaceChecklistService] Failed to emit signature insight event', {
+          error,
+          checklistItemId: row.id,
+          raceEventId,
+          sailorId,
+        });
+      }
+    }
+  }
+
   // ============================================
   // Checklist Item CRUD
   // ============================================
@@ -192,6 +351,10 @@ export class RaceChecklistService {
       if (error) {
         logger.error('Failed to update checklist status', { error, itemId, status });
         throw error;
+      }
+
+      if (status === 'completed') {
+        await this.maybeEmitSignatureInsightForChecklistCompletion(data as RaceChecklistItemRow);
       }
 
       return this.mapRowToItem(data);

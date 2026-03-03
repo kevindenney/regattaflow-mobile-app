@@ -26,9 +26,11 @@ describe('run-integration-validation contract', () => {
     const source = readScript('scripts/run-integration-validation.mjs');
     expect(source).toContain("id: 'signature-insight-memory-migration-coverage'");
     expect(source).toContain("id: 'signature-insight-service-contract'");
+    expect(source).toContain("id: 'signature-insight-timeline-trigger-contract'");
     expect(source).toContain('20260303153000_signature_insight_memory.sql');
     expect(source).toContain('apply_signature_insight_outcome_v1');
     expect(source).toContain('services/SignatureInsightService.ts');
+    expect(source).toContain('services/RaceChecklistService.ts');
   });
 
   it('emits assessment RLS semantic role-scope check row', () => {

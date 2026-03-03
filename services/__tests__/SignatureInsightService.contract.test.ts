@@ -9,6 +9,7 @@ describe('SignatureInsightService contract', () => {
   it('exposes required persistence API methods', () => {
     const source = readFile('services/SignatureInsightService.ts');
     expect(source).toContain('class SignatureInsightService');
+    expect(source).toContain('async findLatestSignatureInsightEvent(');
     expect(source).toContain('async logSignatureInsightEvent(');
     expect(source).toContain(".from('signature_insight_events')");
     expect(source).toContain('async listPrincipleMemory(');

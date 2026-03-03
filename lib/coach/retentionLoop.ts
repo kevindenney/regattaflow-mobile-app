@@ -19,6 +19,8 @@ export type CoachSignatureInsight = {
   skill: string;
   evidence: string;
   principle: string;
+  eventId?: string | null;
+  outcome?: 'pending' | 'accepted' | 'edited' | 'dismissed' | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;

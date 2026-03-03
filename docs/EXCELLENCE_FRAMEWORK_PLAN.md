@@ -167,17 +167,17 @@ Transform RegattaFlow into a comprehensive excellence tracking platform where ev
 Implementation status (2026-03-03): Coach Home retention weekly recap now includes a surfaced signature insight + principle line. Full timeline-step trigger and persisted principle memory remain pending.
 
 ### 4.5.1 Product Contract
-- [ ] Trigger moment only when both are true:
-  - [ ] user completes a timeline step
-  - [ ] AI analysis for that step/race is available
-- [ ] Show one concise signature insight:
-  - [ ] "You're getting better at `<interest skill>` because `<evidence>`"
-- [ ] Include one "principle extracted" line:
-  - [ ] "Principle: `<repeatable rule>`"
-- [ ] Allow user actions:
-  - [ ] Keep principle
-  - [ ] Edit principle wording
-  - [ ] Dismiss insight
+- [x] Trigger moment only when both are true:
+  - [x] user completes a timeline step
+  - [x] AI analysis for that step/race is available
+- [x] Show one concise signature insight:
+  - [x] "You're getting better at `<interest skill>` because `<evidence>`"
+- [x] Include one "principle extracted" line:
+  - [x] "Principle: `<repeatable rule>`"
+- [x] Allow user actions:
+  - [x] Keep principle
+  - [x] Edit principle wording
+  - [x] Dismiss insight
 
 ### 4.5.2 Data Model
 - [x] Add persistent principle memory table (or extend existing learnable events model):

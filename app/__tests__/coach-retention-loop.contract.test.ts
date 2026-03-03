@@ -13,6 +13,10 @@ describe('coach retention loop contract', () => {
     expect(source).toContain('Weekly recap:');
     expect(source).toContain('Signature Insight');
     expect(source).toContain('retention.weeklyRecap.signatureInsight');
+    expect(source).toContain('resolveSignatureInsight');
+    expect(source).toContain('Keep');
+    expect(source).toContain('Edit');
+    expect(source).toContain('Dismiss');
     expect(source).toContain('retention.reminders');
     expect(source).toContain("No reminders pending.");
     expect(source).toContain('router.push(reminder.href as any)');
@@ -23,6 +27,8 @@ describe('coach retention loop contract', () => {
     expect(source).toContain('buildCoachReminders');
     expect(source).toContain('buildCoachWeeklyRecap');
     expect(source).toContain('signatureInsight');
+    expect(source).toContain('findLatestSignatureInsightEvent');
+    expect(source).toContain('applySignatureInsightOutcome');
     expect(source).toContain('computeDailyStreak');
     expect(source).toContain('countActiveDaysWithin');
     expect(source).toContain('setRetention(');

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, TextInput } from 'react-native';
 import { Image } from '@/components/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -24,10 +24,14 @@ export default function ClientsScreen() {
     competencyTrends,
     refresh: refreshCoachHome,
     markThreadsSeen,
+    resolveSignatureInsight,
+    resolvingSignatureInsight,
   } = useCoachHomeData();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [clients, setClients] = useState<CoachingClient[]>([]);
+  const [editingPrinciple, setEditingPrinciple] = useState(false);
+  const [draftPrinciple, setDraftPrinciple] = useState('');
   const [stats, setStats] = useState<ClientStats>({
     activeClients: 0,
     totalSessions: 0,
@@ -226,6 +230,35 @@ export default function ClientsScreen() {
               <ThemedText style={styles.signatureInsightPrinciple}>
                 Principle: {retention.weeklyRecap.signatureInsight.principle}
               </ThemedText>
+              {retention.weeklyRecap.signatureInsight.eventId &&
+              retention.weeklyRecap.signatureInsight.outcome === 'pending' ? (
+                <View style={styles.signatureInsightActions}>
+                  <TouchableOpacity
+                    style={styles.signatureInsightActionPrimary}
+                    disabled={resolvingSignatureInsight}
+                    onPress={() => void resolveSignatureInsight('accepted')}
+                  >
+                    <ThemedText style={styles.signatureInsightActionPrimaryText}>Keep</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.signatureInsightAction}
+                    disabled={resolvingSignatureInsight}
+                    onPress={() => {
+                      setDraftPrinciple(retention.weeklyRecap.signatureInsight.principle);
+                      setEditingPrinciple(true);
+                    }}
+                  >
+                    <ThemedText style={styles.signatureInsightActionText}>Edit</ThemedText>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.signatureInsightAction}
+                    disabled={resolvingSignatureInsight}
+                    onPress={() => void resolveSignatureInsight('dismissed')}
+                  >
+                    <ThemedText style={styles.signatureInsightActionText}>Dismiss</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </View>
             {retention.reminders.length > 0 ? (
               <View style={styles.retentionReminderRow}>
@@ -423,6 +456,44 @@ export default function ClientsScreen() {
           </View>
         )}
       </ScrollView>
+      <Modal
+        visible={editingPrinciple}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingPrinciple(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <ThemedText style={styles.modalTitle}>Edit Principle</ThemedText>
+            <TextInput
+              value={draftPrinciple}
+              onChangeText={setDraftPrinciple}
+              multiline
+              style={styles.modalInput}
+              placeholder="Rewrite the principle in your own words"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalAction}
+                onPress={() => setEditingPrinciple(false)}
+              >
+                <ThemedText style={styles.modalActionText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalAction, styles.modalActionPrimary]}
+                onPress={() => {
+                  const next = draftPrinciple.trim();
+                  if (!next) return;
+                  setEditingPrinciple(false);
+                  void resolveSignatureInsight('edited', next);
+                }}
+              >
+                <ThemedText style={styles.modalActionPrimaryText}>Save</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ThemedView>
   );
 }
@@ -539,6 +610,93 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: '#334155',
+  },
+  signatureInsightActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  signatureInsightActionPrimary: {
+    borderRadius: 999,
+    backgroundColor: '#0EA5E9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  signatureInsightActionPrimaryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  signatureInsightAction: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  signatureInsightActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2, 6, 23, 0.45)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+  },
+  modalTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 10,
+  },
+  modalInput: {
+    minHeight: 96,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#0F172A',
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  modalAction: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  modalActionPrimary: {
+    backgroundColor: '#0EA5E9',
+    borderColor: '#0EA5E9',
+  },
+  modalActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  modalActionPrimaryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   retentionReminderRow: {
     flexDirection: 'row',
