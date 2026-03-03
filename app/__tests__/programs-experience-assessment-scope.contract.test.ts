@@ -12,5 +12,7 @@ describe('programs experience assessment drill-down contract', () => {
     expect(source).toContain("label: isInstitutionWorkspace ? 'Record assessments' : 'Record finishes'");
     expect(source).toContain('programId: race.id');
     expect(source).toContain('programTitle: race.name');
+    expect(source).toContain('quickActionAssessmentTarget');
+    expect(source).toContain(": '/assessments'");
   });
 });
