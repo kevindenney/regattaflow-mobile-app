@@ -619,6 +619,15 @@ async function run() {
         okStatuses: [401, 405],
         note: 'Cron endpoint should return controlled auth/method response without runtime crash.',
       },
+      {
+        id: 'api-smoke-cron-coach-retention-post',
+        path: '/api/cron/coach-retention-loop',
+        method: 'POST',
+        okStatuses: [401, 405],
+        note: 'Cron endpoint should reject unauthenticated POST without runtime crash.',
+        body: JSON.stringify({}),
+        headers: { 'content-type': 'application/json' },
+      },
     ];
 
     const apiChecks = strictApiSmoke
