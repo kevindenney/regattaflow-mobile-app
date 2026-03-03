@@ -12,7 +12,9 @@ describe('programs experience communications unread scope contract', () => {
     expect(source).toContain('getProgramUnreadCount');
     expect(source).toContain('getProgramUnreadCount(race.id)');
     expect(source).toContain('quickActionCommunicationsTarget');
+    expect(source).toContain('quickActionCommunicationsBadgeCount');
     expect(source).toContain('buildProgramCommunicationsHref');
+    expect(source).toContain('badge: quickActionCommunicationsBadgeCount');
     expect(source).toContain(": '/communications'");
     expect(source).toContain('Notify group');
     expect(source).toContain('Send update');
