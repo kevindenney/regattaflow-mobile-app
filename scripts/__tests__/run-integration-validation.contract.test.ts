@@ -31,6 +31,8 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('apply_signature_insight_outcome_v1');
     expect(source).toContain('services/SignatureInsightService.ts');
     expect(source).toContain('services/RaceChecklistService.ts');
+    expect(source).toContain("eq('outcome', 'dismissed')");
+    expect(source).toContain("eq('principle_text', principleText)");
   });
 
   it('emits signature insight principle reuse contract row', () => {

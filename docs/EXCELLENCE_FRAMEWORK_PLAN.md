@@ -203,7 +203,7 @@ Implementation status (2026-03-03): Coach Home retention weekly recap now includ
 ### 4.5.5 Acceptance Criteria (Release Gate)
 - [ ] At least one signature insight is generated for a completed timeline step with analysis.
 - [x] Accepted principles persist and are reused in future nudges/checklists.
-- [ ] Dismissed insights do not resurface unchanged.
+- [x] Dismissed insights do not resurface unchanged.
 - [x] Principle history is visible in Progress.
 - [ ] Works for sailing now, with schema/path ready for other interests (nursing, drawing, fitness).
 

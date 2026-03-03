@@ -143,6 +143,26 @@ export class RaceChecklistService {
     const insightText = `You are getting better at ${phaseLabel} execution because ${evidence}`;
     const principleText = `When completing ${phaseLabel} steps like "${itemTitle}", carry one concrete execution adjustment into the next race.`;
 
+    const { data: dismissedMatchRows, error: dismissedMatchError } = await supabase
+      .from('signature_insight_events')
+      .select('id')
+      .eq('user_id', sailorId)
+      .eq('interest_id', this.SIGNATURE_INSIGHT_INTEREST_ID)
+      .eq('outcome', 'dismissed')
+      .eq('principle_text', principleText)
+      .limit(1);
+    if (dismissedMatchError) {
+      logger.warn('[RaceChecklistService] Failed dismissed-insight suppression lookup', {
+        error: dismissedMatchError,
+        sailorId,
+        raceEventId,
+        checklistItemId: row.id,
+      });
+    }
+    if ((dismissedMatchRows || []).length > 0) {
+      return;
+    }
+
     const window = this.getIsoWeekWindow(new Date());
     try {
       await signatureInsightService.logSignatureInsightEvent({

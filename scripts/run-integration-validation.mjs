@@ -733,6 +733,8 @@ async function run() {
     raceChecklistServiceSource.includes('maybeEmitSignatureInsightForChecklistCompletion') &&
     raceChecklistServiceSource.includes('status === \'completed\'') &&
     raceChecklistServiceSource.includes('resolveLatestAiAnalysisForRace') &&
+    raceChecklistServiceSource.includes("eq('outcome', 'dismissed')") &&
+    raceChecklistServiceSource.includes("eq('principle_text', principleText)") &&
     raceChecklistServiceSource.includes("sourceKind: 'timeline_step_completion'") &&
     raceChecklistServiceSource.includes('signatureInsightService.logSignatureInsightEvent');
   add({
@@ -740,7 +742,7 @@ async function run() {
     category: 'Signature Insight',
     status: signatureInsightTriggerContractOk ? 'PASS' : 'FAIL',
     details: signatureInsightTriggerContractOk
-      ? 'Timeline step completion path emits signature insight events only when AI analysis is available.'
+      ? 'Timeline step completion path emits signature insight events only when AI analysis is available and suppresses unchanged dismissed insights.'
       : 'Signature insight timeline trigger markers are incomplete in RaceChecklistService.',
     reference: 'services/RaceChecklistService.ts',
   });

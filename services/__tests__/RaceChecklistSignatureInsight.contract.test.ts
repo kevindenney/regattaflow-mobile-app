@@ -12,6 +12,8 @@ describe('RaceChecklistService signature insight trigger contract', () => {
     expect(source).toContain("if (status === 'completed')");
     expect(source).toContain('resolveLatestAiAnalysisForRace');
     expect(source).toContain('if (!ai.aiAnalysisId)');
+    expect(source).toContain("eq('outcome', 'dismissed')");
+    expect(source).toContain("eq('principle_text', principleText)");
     expect(source).toContain("sourceKind: 'timeline_step_completion'");
     expect(source).toContain('signatureInsightService.logSignatureInsightEvent');
   });
