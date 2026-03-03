@@ -29,7 +29,8 @@ Status: Pending
   - `programs`
   - `program_sessions`
   - `program_participants`
-- [ ] Add missing indexes for assignment and due-work queries.
+- [x] Add missing indexes for assignment and due-work queries.
+  - Shipped via `supabase/migrations/20260303133000_add_coach_home_query_indexes.sql`.
 - [ ] Implement/verify service layer CRUD and assignment APIs.
 - [ ] Remove remaining mock fallbacks from program UI paths.
 - [x] Add DB signature assertions in integration validation for program tables/columns.
@@ -70,10 +71,11 @@ Status: Pending
   - Shipped via `toCoachHomeBaselineInput(...)` in `lib/coach/coachHomeProfiling.ts`.
 - [x] Add baseline budget gate script for repeatable budget checks from latest report artifact.
   - Shipped via `scripts/check-coach-home-baseline-budget.mjs` and `gate:coach-home-baseline-budget`.
-- [ ] Optimize queries/indexes for:
+- [x] Optimize queries/indexes for:
   - due assessments
   - unread threads
   - program-scoped participant trend summaries
+  - Shipped index coverage in `20260303133000_add_coach_home_query_indexes.sql` with contract lock in `scripts/__tests__/coach-home-index-migration.contract.test.ts`.
 - [ ] Add regression tests for drill-down links and program scoping.
 
 Acceptance:
