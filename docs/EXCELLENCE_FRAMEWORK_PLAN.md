@@ -164,6 +164,8 @@ Transform RegattaFlow into a comprehensive excellence tracking platform where ev
 
 ## Milestone 4.5: BetterAt Signature Insight Moment (MANDATORY)
 
+Implementation status (2026-03-03): Coach Home retention weekly recap now includes a surfaced signature insight + principle line. Full timeline-step trigger and persisted principle memory remain pending.
+
 ### 4.5.1 Product Contract
 - [ ] Trigger moment only when both are true:
   - [ ] user completes a timeline step

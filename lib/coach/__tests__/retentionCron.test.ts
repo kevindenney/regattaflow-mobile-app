@@ -26,6 +26,9 @@ describe('buildCoachRetentionDeliveries', () => {
     expect(deliveries).toHaveLength(2);
     expect(deliveries.some((row) => row.delivery_type === 'reminders')).toBe(true);
     expect(deliveries.some((row) => row.delivery_type === 'weekly_recap')).toBe(true);
+    const recap = deliveries.find((row) => row.delivery_type === 'weekly_recap');
+    expect(recap?.payload).toHaveProperty('signatureInsight');
+    expect((recap?.payload as any).signatureInsight.skill).toBeTruthy();
   });
 
   it('skips reminders when no due items are found but still emits weekly recap', () => {

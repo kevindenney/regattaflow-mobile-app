@@ -16,18 +16,32 @@ type WeeklyRecapPayload = {
   pendingActions: number;
   activeDays: number;
   trendDelta: number | null;
+  signatureInsight: {
+    skill: string;
+    evidence: string;
+    principle: string;
+  };
 };
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 export function isCompleteWeeklyRecapPayload(payload: Record<string, unknown>): payload is WeeklyRecapPayload {
+  const signatureInsight = payload.signatureInsight as Record<string, unknown> | undefined;
   return (
     isFiniteNumber(payload.completedActions) &&
     isFiniteNumber(payload.pendingActions) &&
     isFiniteNumber(payload.activeDays) &&
-    (payload.trendDelta === null || isFiniteNumber(payload.trendDelta))
+    (payload.trendDelta === null || isFiniteNumber(payload.trendDelta)) &&
+    Boolean(signatureInsight) &&
+    isNonEmptyString(signatureInsight?.skill) &&
+    isNonEmptyString(signatureInsight?.evidence) &&
+    isNonEmptyString(signatureInsight?.principle)
   );
 }
 

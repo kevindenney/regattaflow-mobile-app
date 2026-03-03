@@ -60,6 +60,11 @@ export function useCoachHomeData() {
       pendingActions: 0,
       activeDays: 0,
       trendDelta: null,
+      signatureInsight: {
+        skill: 'steady coaching consistency',
+        evidence: 'No recent completed actions yet',
+        principle: 'Finish one action to establish the next consistency loop.',
+      },
     },
   });
   const [loading, setLoading] = useState(false);
@@ -109,6 +114,11 @@ export function useCoachHomeData() {
           pendingActions: 0,
           activeDays: 0,
           trendDelta: null,
+          signatureInsight: {
+            skill: 'steady coaching consistency',
+            evidence: 'No recent completed actions yet',
+            principle: 'Finish one action to establish the next consistency loop.',
+          },
         },
       });
       return;

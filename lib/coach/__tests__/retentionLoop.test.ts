@@ -1,4 +1,5 @@
 import {
+  buildCoachSignatureInsight,
   buildCoachReminders,
   buildCoachWeeklyRecap,
   computeDailyStreak,
@@ -58,11 +59,25 @@ describe('coach retention loop helpers', () => {
       trendDelta: Number.NaN,
     });
 
-    expect(recap).toEqual({
-      completedActions: 5,
-      pendingActions: 0,
-      activeDays: 4,
-      trendDelta: null,
+    expect(recap.completedActions).toBe(5);
+    expect(recap.pendingActions).toBe(0);
+    expect(recap.activeDays).toBe(4);
+    expect(recap.trendDelta).toBeNull();
+    expect(recap.signatureInsight.skill).toBeTruthy();
+    expect(recap.signatureInsight.evidence).toBeTruthy();
+    expect(recap.signatureInsight.principle).toBeTruthy();
+  });
+
+  it('builds a stable signature insight from weekly recap stats', () => {
+    const insight = buildCoachSignatureInsight({
+      completedActions: 6,
+      pendingActions: 2,
+      activeDays: 5,
+      trendDelta: 0.9,
     });
+
+    expect(insight.skill).toContain('consistent execution');
+    expect(insight.evidence).toContain('6');
+    expect(insight.principle).toContain('Close one high-value assessment block');
   });
 });

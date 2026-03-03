@@ -218,6 +218,15 @@ export default function ClientsScreen() {
                 ? `, trend ${retention.weeklyRecap.trendDelta > 0 ? '+' : ''}${retention.weeklyRecap.trendDelta.toFixed(2)}`
                 : ''}
             </ThemedText>
+            <View style={styles.signatureInsightCard}>
+              <ThemedText style={styles.signatureInsightTitle}>Signature Insight</ThemedText>
+              <ThemedText style={styles.signatureInsightBody}>
+                You are getting better at {retention.weeklyRecap.signatureInsight.skill} because {retention.weeklyRecap.signatureInsight.evidence}.
+              </ThemedText>
+              <ThemedText style={styles.signatureInsightPrinciple}>
+                Principle: {retention.weeklyRecap.signatureInsight.principle}
+              </ThemedText>
+            </View>
             {retention.reminders.length > 0 ? (
               <View style={styles.retentionReminderRow}>
                 {retention.reminders.map((reminder) => (
@@ -506,6 +515,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#475569',
     lineHeight: 18,
+  },
+  signatureInsightCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 10,
+  },
+  signatureInsightTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  signatureInsightBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  signatureInsightPrinciple: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#334155',
   },
   retentionReminderRow: {
     flexDirection: 'row',

@@ -12,6 +12,13 @@ export type CoachWeeklyRecap = {
   pendingActions: number;
   activeDays: number;
   trendDelta: number | null;
+  signatureInsight: CoachSignatureInsight;
+};
+
+export type CoachSignatureInsight = {
+  skill: string;
+  evidence: string;
+  principle: string;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -109,11 +116,64 @@ export function buildCoachWeeklyRecap(input: {
   pendingActions: number;
   activeDays: number;
   trendDelta: number | null;
+  signatureInsight?: CoachSignatureInsight;
 }): CoachWeeklyRecap {
+  const completedActions = Math.max(0, Math.floor(input.completedActions));
+  const pendingActions = Math.max(0, Math.floor(input.pendingActions));
+  const activeDays = Math.max(0, Math.floor(input.activeDays));
+  const trendDelta = Number.isFinite(input.trendDelta as number) ? Number(input.trendDelta) : null;
+
+  const signatureInsight =
+    input.signatureInsight ||
+    buildCoachSignatureInsight({
+      completedActions,
+      pendingActions,
+      activeDays,
+      trendDelta,
+    });
+
   return {
-    completedActions: Math.max(0, Math.floor(input.completedActions)),
-    pendingActions: Math.max(0, Math.floor(input.pendingActions)),
-    activeDays: Math.max(0, Math.floor(input.activeDays)),
-    trendDelta: Number.isFinite(input.trendDelta as number) ? Number(input.trendDelta) : null,
+    completedActions,
+    pendingActions,
+    activeDays,
+    trendDelta,
+    signatureInsight,
+  };
+}
+
+export function buildCoachSignatureInsight(input: {
+  completedActions: number;
+  pendingActions: number;
+  activeDays: number;
+  trendDelta: number | null;
+}): CoachSignatureInsight {
+  if (input.completedActions >= 5 && input.activeDays >= 4) {
+    return {
+      skill: 'consistent execution under workload',
+      evidence: `${input.completedActions} completed actions across ${input.activeDays} active days this week`,
+      principle: 'Close one high-value assessment block early each day to keep momentum.',
+    };
+  }
+
+  if (input.trendDelta !== null && input.trendDelta > 0) {
+    return {
+      skill: 'raising assessment quality',
+      evidence: `weekly trend improved by +${input.trendDelta.toFixed(2)} versus prior period`,
+      principle: 'Reuse what worked last week and apply it to the next participant review.',
+    };
+  }
+
+  if (input.pendingActions > input.completedActions) {
+    return {
+      skill: 'recovery prioritization',
+      evidence: `${input.pendingActions} pending actions versus ${input.completedActions} completed`,
+      principle: 'Clear overdue items first, then batch due-today work in one focused window.',
+    };
+  }
+
+  return {
+    skill: 'steady coaching consistency',
+    evidence: `${input.completedActions} completed actions with ${input.activeDays} active days this week`,
+    principle: 'Keep a repeatable cadence: review, assess, and close the loop before context switching.',
   };
 }

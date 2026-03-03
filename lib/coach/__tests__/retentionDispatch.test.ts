@@ -13,6 +13,11 @@ describe('retentionDispatch helpers', () => {
         pendingActions: 2,
         activeDays: 4,
         trendDelta: 1.25,
+        signatureInsight: {
+          skill: 'consistent execution under workload',
+          evidence: '5 completed actions across 4 active days this week',
+          principle: 'Close one high-value assessment block early each day to keep momentum.',
+        },
       })
     ).toBe(true);
 
@@ -22,6 +27,11 @@ describe('retentionDispatch helpers', () => {
         pendingActions: 0,
         activeDays: 0,
         trendDelta: null,
+        signatureInsight: {
+          skill: 'steady coaching consistency',
+          evidence: '0 completed actions with 0 active days this week',
+          principle: 'Keep a repeatable cadence.',
+        },
       })
     ).toBe(true);
   });
@@ -32,6 +42,11 @@ describe('retentionDispatch helpers', () => {
         completedActions: 5,
         pendingActions: 2,
         trendDelta: 1.25,
+        signatureInsight: {
+          skill: 'x',
+          evidence: 'y',
+          principle: 'z',
+        },
       })
     ).toBe(false);
 
@@ -41,6 +56,20 @@ describe('retentionDispatch helpers', () => {
         pendingActions: 2,
         activeDays: 4,
         trendDelta: 1.25,
+        signatureInsight: {
+          skill: 'x',
+          evidence: 'y',
+          principle: 'z',
+        },
+      } as any)
+    ).toBe(false);
+
+    expect(
+      isCompleteWeeklyRecapPayload({
+        completedActions: 1,
+        pendingActions: 1,
+        activeDays: 1,
+        trendDelta: 0,
       } as any)
     ).toBe(false);
   });

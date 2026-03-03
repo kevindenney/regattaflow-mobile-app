@@ -11,6 +11,8 @@ describe('coach retention loop contract', () => {
     expect(source).toContain('Retention Loop');
     expect(source).toContain('retention.streakDays');
     expect(source).toContain('Weekly recap:');
+    expect(source).toContain('Signature Insight');
+    expect(source).toContain('retention.weeklyRecap.signatureInsight');
     expect(source).toContain('retention.reminders');
     expect(source).toContain("No reminders pending.");
     expect(source).toContain('router.push(reminder.href as any)');
@@ -20,6 +22,7 @@ describe('coach retention loop contract', () => {
     const source = readAppFile('hooks/useCoachHomeData.ts');
     expect(source).toContain('buildCoachReminders');
     expect(source).toContain('buildCoachWeeklyRecap');
+    expect(source).toContain('signatureInsight');
     expect(source).toContain('computeDailyStreak');
     expect(source).toContain('countActiveDaysWithin');
     expect(source).toContain('setRetention(');
