@@ -16,6 +16,9 @@ describe('coach retention cron contract', () => {
     expect(source).toContain("from('coach_retention_deliveries')");
     expect(source).toContain("delivery_type === 'weekly_recap'");
     expect(source).toContain("from('social_notifications')");
+    expect(source).toContain("from('notification_preferences')");
+    expect(source).toContain('/functions/v1/send-push-notification');
+    expect(source).toContain('SENDGRID_API_KEY');
     expect(source).toContain('dispatched_at');
   });
 
