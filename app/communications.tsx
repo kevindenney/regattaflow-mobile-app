@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDistanceToNow } from 'date-fns';
@@ -18,6 +19,7 @@ type ThreadRow = {
 };
 
 export default function CommunicationsScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ focus?: string }>();
   const { user } = useAuth();
   const { activeOrganization } = useOrganization();
@@ -80,10 +82,11 @@ export default function CommunicationsScreen() {
     try {
       await programService.markThreadRead(organizationId, userId, threadId);
       setUnreadIds((prev) => prev.filter((id) => id !== threadId));
+      router.push((`/communications/${threadId}`) as any);
     } catch (error) {
       console.error('[communications] Failed to mark thread read', error);
     }
-  }, [organizationId, userId]);
+  }, [organizationId, router, userId]);
 
   const handleMarkAllRead = useCallback(async () => {
     if (!organizationId || !userId) return;
