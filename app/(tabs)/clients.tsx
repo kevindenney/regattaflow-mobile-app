@@ -9,7 +9,7 @@ import { useCoachWorkspace } from '@/hooks/useCoachWorkspace';
 import { useCoachHomeData } from '@/hooks/useCoachHomeData';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { coachingService, CoachingClient, ClientStats } from '@/services/CoachingService';
-import { buildAssessmentsDrillDownHref, buildLearnerProgressHref } from '@/lib/assessments/drillDown';
+import { buildAssessmentsDrillDownHref, buildLearnerProgressHref, buildProgramAssessmentHref } from '@/lib/assessments/drillDown';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function ClientsScreen() {
@@ -200,7 +200,14 @@ export default function ClientsScreen() {
                 <TouchableOpacity
                   key={program.id}
                   style={styles.programPreviewRow}
-                  onPress={() => router.push((`/programs/assign?programId=${program.id}`) as any)}
+                  onPress={() =>
+                    router.push(
+                      buildProgramAssessmentHref({
+                        programId: program.id,
+                        programTitle: program.title,
+                      }) as any
+                    )
+                  }
                 >
                   <View style={{ flex: 1 }}>
                     <ThemedText style={styles.programPreviewName}>{program.title}</ThemedText>

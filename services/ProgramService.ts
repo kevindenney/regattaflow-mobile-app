@@ -109,6 +109,7 @@ export type CreateAssessmentInput = {
 
 export type AssessmentRecordFilters = {
   status?: AssessmentStatus | readonly AssessmentStatus[] | null;
+  program_id?: string | null;
   competency_id?: string | null;
   assessed_from?: string | null;
   assessed_to?: string | null;
@@ -319,6 +320,11 @@ class ProgramService {
     const competencyId = String(filters?.competency_id || '').trim();
     if (competencyId) {
       query = query.eq('competency_id', competencyId) as TQuery;
+    }
+
+    const programId = String(filters?.program_id || '').trim();
+    if (programId) {
+      query = query.eq('program_id', programId) as TQuery;
     }
 
     const assessedFrom = String(filters?.assessed_from || '').trim();
