@@ -430,6 +430,8 @@ async function run() {
       details: 'Missing EXPO_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. DB assertions skipped.',
     });
   } else {
+    let dbAssertionsAvailable = true;
+    let dbAssertionsSkipReason = '';
     try {
       const organizationsLineage = await validateTableSignature(supabase, {
         table: 'organizations',
@@ -437,48 +439,32 @@ async function run() {
       });
       schemaLineageCompatible = organizationsLineage.ok;
       if (!organizationsLineage.ok) {
+        dbAssertionsAvailable = false;
         lineageMismatchReasons.push(...organizationsLineage.reasons);
+        dbAssertionsSkipReason = `Connected Supabase project does not match this repo schema lineage; DB assertions skipped. ${lineageMismatchReasons.join(' ')}`;
       }
-      add({
-        id: 'db-project-lineage',
-        category: 'DB Assertions',
-        status: schemaLineageCompatible ? 'PASS' : 'SKIP',
-        details: schemaLineageCompatible
-          ? 'Connected Supabase project exposes expected organizations workspace schema.'
-          : `Connected Supabase project does not match this repo schema lineage; DB checks skipped. ${lineageMismatchReasons.join(' ')}`,
-        reference: 'organizations',
-      });
     } catch (error) {
       schemaLineageCompatible = false;
+      dbAssertionsAvailable = false;
+      dbAssertionsSkipReason = `Connected Supabase project lineage check failed; DB assertions skipped. ${formatError(error)}`;
+    }
+
+    if (!dbAssertionsAvailable) {
+      add({
+        id: 'db-assertions-availability',
+        category: 'DB Assertions',
+        status: 'SKIP',
+        details: dbAssertionsSkipReason,
+        reference: 'organizations',
+      });
+    } else {
       add({
         id: 'db-project-lineage',
         category: 'DB Assertions',
-        status: 'SKIP',
-        details: `Connected Supabase project lineage check failed; DB checks skipped. ${formatError(error)}`,
+        status: 'PASS',
+        details: 'Connected Supabase project exposes expected organizations workspace schema.',
         reference: 'organizations',
       });
-    }
-
-    if (!schemaLineageCompatible) {
-      for (const tableSignature of activeTableSignatures) {
-        add({
-          id: `db-table-signature-${tableSignature.table}`,
-          category: 'DB Assertions',
-          status: 'SKIP',
-          details: 'Skipped due to project lineage mismatch.',
-          reference: tableSignature.table,
-        });
-      }
-      for (const rpcSignature of activeRpcSignatures) {
-        add({
-          id: `db-rpc-signature-${rpcSignature.name}`,
-          category: 'DB Assertions',
-          status: 'SKIP',
-          details: 'Skipped due to project lineage mismatch.',
-          reference: `rpc:${rpcSignature.name}`,
-        });
-      }
-    } else {
       for (const tableSignature of activeTableSignatures) {
         try {
           const outcome = await validateTableSignature(supabase, tableSignature);
