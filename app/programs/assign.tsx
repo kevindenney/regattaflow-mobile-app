@@ -16,6 +16,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { buildAssignmentPendingSummary } from '@/lib/programs/assignmentDashboard';
 import {
   AssessmentRecord,
   ParticipantStatus,
@@ -361,13 +362,7 @@ export default function ProgramAssignmentsScreen() {
   };
 
   const pendingByEvaluatorId = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const row of assessments) {
-      if (row.status === 'finalized') continue;
-      if (!row.evaluator_id) continue;
-      map[row.evaluator_id] = (map[row.evaluator_id] || 0) + 1;
-    }
-    return map;
+    return buildAssignmentPendingSummary(assessments).pendingByEvaluatorId;
   }, [assessments]);
 
   const programById = useMemo(() => {
