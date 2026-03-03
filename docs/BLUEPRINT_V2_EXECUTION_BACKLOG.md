@@ -10,7 +10,7 @@ Source: `docs/BLUEPRINT_V2_JHU_NURSING_SAILING.md`
 
 ## Epic A: Domain Resolution Contract Enforcement
 
-Status: In progress
+Status: Completed
 
 - [x] Add explicit resolver utility contract tests for precedence (`organization_type` over `active_interest_id` for auth/gating).
   - Shipped via `api/middleware/domain.ts` + `api/__tests__/domain-resolution.contract.test.ts`.
@@ -34,7 +34,7 @@ Acceptance:
 
 ## Epic B: Program Data Model Completion (Phase 2)
 
-Status: Pending
+Status: Completed
 
 - [x] Confirm migration coverage for:
   - `programs`
@@ -55,7 +55,7 @@ Acceptance:
 
 ## Epic C: RLS Matrix Expansion
 
-Status: In progress
+Status: Completed
 
 - [x] Add SQL security tests for:
   - `programs`
@@ -74,7 +74,7 @@ Acceptance:
 
 ## Epic D: Coach Shell Productionization (Phase 3)
 
-Status: Pending
+Status: Completed
 
 - [x] Coach Home data endpoint performance profiling.
   - Shipped via `scripts/report-coach-home-endpoint-profile.mjs` + `docs/coach-home-endpoint-profile.md`.
@@ -102,7 +102,7 @@ Acceptance:
 
 ## Epic E: Route Alias Lifecycle
 
-Status: Pending
+Status: Completed
 
 - [x] Add telemetry event for `/race-management` alias usage.
   - Shipped via `trackRaceManagementAliasUsage()` in `lib/navigation/raceManagementAlias.ts`.
@@ -116,7 +116,7 @@ Acceptance:
 
 ## Epic F: Feature Flags and Rollback
 
-Status: Pending
+Status: Completed
 
 - [x] Add flags:
   - `program_data_model_v1`
@@ -133,7 +133,7 @@ Acceptance:
 
 ## Epic G: Secondary Packs Validation (Phase 4 Prep)
 
-Status: Pending
+Status: Completed
 
 - [x] Lock canonical secondary packs list (`drawing`, `golf`) in docs/contracts.
   - Shipped via `docs/secondary-packs-canonical.md` + `secondary-packs-canonical-contract`.
@@ -155,6 +155,4 @@ Acceptance:
 
 ## Suggested Next Autonomous Slice
 
-1. Epic C: add SQL security tests for `programs`, `program_sessions`, `program_participants`.
-2. Epic B: add/verify DB signature assertions for those tables in integration validation.
-3. Epic D: add coach-home query profiling helper + baseline report.
+1. Start execution against a new blueprint revision or production incident backlog.
