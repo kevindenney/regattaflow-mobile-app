@@ -1,0 +1,25 @@
+import fs from 'fs';
+import path from 'path';
+
+function readFile(relativePath: string): string {
+  return fs.readFileSync(path.resolve(process.cwd(), relativePath), 'utf8');
+}
+
+describe('coach retention cron contract', () => {
+  it('defines a guarded coach retention cron endpoint', () => {
+    const source = readFile('api/cron/coach-retention-loop.ts');
+    expect(source).toContain("req.method !== 'GET' && req.method !== 'POST'");
+    expect(source).toContain("res.setHeader('Allow', 'GET, POST')");
+    expect(source).toContain('process.env.CRON_SECRET');
+    expect(source).toContain("return res.status(401).json({ error: 'Unauthorized' })");
+    expect(source).toContain("from('assessment_records')");
+    expect(source).toContain("from('coach_retention_deliveries')");
+    expect(source).toContain("delivery_type === 'weekly_recap'");
+  });
+
+  it('registers coach retention cron schedule in vercel config', () => {
+    const source = readFile('vercel.json');
+    expect(source).toContain('/api/cron/coach-retention-loop');
+    expect(source).toContain('"0 13 * * *"');
+  });
+});
