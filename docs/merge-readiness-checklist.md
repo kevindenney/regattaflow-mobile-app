@@ -1,12 +1,12 @@
 # Merge Readiness Checklist
 
-- Generated: 2026-03-02
+- Generated: 2026-03-03
 - Context: parallel multi-terminal integration for domain packs, invite hardening, coach shell, and CI validation
 
 ## Current Signal Snapshot
 
 - Pre-ship bundle: PASS (`npm run validate:pre-ship:bundle`)
-- Integration validation strict: PASS (15 PASS, 0 FAIL, 1 SKIP)
+- Integration validation strict: PASS (26 PASS, 0 FAIL, 0 SKIP)
 - Integration gate: PASS (JSON-first parsing path)
 - Integration report schema check: PASS
 - Migration object collision audit (`20260302*`, indexes/triggers/constraints): PASS (0 duplicates)
@@ -14,13 +14,13 @@
 
 ## Blocking Conditions Before Merge
 
-- [ ] Reduce/organize working tree into mergeable scope. Current state is heavily mixed (hundreds of modified/untracked files).
-- [ ] Decide whether `api-smoke-availability` SKIP is acceptable for this merge (requires `INTEGRATION_BASE_URL` for live smoke).
+- [x] Reduce/organize working tree into mergeable scope (active merge lane now isolated/clean).
+- [x] `api-smoke-availability` SKIP removed from strict path (strict smoke now has deterministic production fallback base URL).
 - [x] Mandatory retention loop shipped end-to-end:
   - `streaks`
   - `reminders`
   - `weekly recap`
-- [ ] Confirm intended inclusion/exclusion for generated docs artifacts:
+- [x] Confirm intended inclusion/exclusion for generated docs artifacts:
   - `docs/integration-validation-latest.md`
   - `docs/integration-validation-latest.json`
   - `docs/deployment-readiness.md`
@@ -72,11 +72,11 @@ npm run report:migration-object-collision-audit
 ## Go/No-Go
 
 - Go when:
-  - [ ] No unexpected FAIL in integration validation/gates
-  - [ ] SKIPs are explicitly accepted/documented
-  - [ ] Merge scope is isolated to intended files
-  - [ ] Required tests pass in the target branch context
+  - [x] No unexpected FAIL in integration validation/gates
+  - [x] SKIPs are explicitly accepted/documented (none present in strict run)
+  - [x] Merge scope is isolated to intended files
+  - [x] Required tests pass in the target branch context
 
 - No-Go when:
-  - [ ] Worktree remains unsliced/mixed across unrelated areas
-  - [ ] New unexpected SKIP/FAIL appears in strict validation or gate checks
+  - [x] Worktree remains unsliced/mixed across unrelated areas (resolved)
+  - [x] New unexpected SKIP/FAIL appears in strict validation or gate checks (none present)
