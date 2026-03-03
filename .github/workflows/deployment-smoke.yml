@@ -102,6 +102,27 @@ jobs:
       - name: Enforce no FAIL and no unexpected SKIP
         run: npm run gate:integration-validation
 
+      - name: Run strict deploy API smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run validate:api-smoke:deploy \
+            > >(tee artifacts/validate-api-smoke-deploy.stdout.log) \
+            2> >(tee artifacts/validate-api-smoke-deploy.stderr.log >&2)
+
+      - name: Ensure deploy API smoke markdown exists
+        if: always()
+        run: |
+          if [ ! -f docs/api-smoke-deploy.md ]; then
+            mkdir -p docs
+            {
+              echo '# Deployment API Smoke'
+              echo
+              echo 'Deploy API smoke failed before producing docs/api-smoke-deploy.md.'
+              echo 'See the deploy-api-smoke-raw-logs artifact for stdout/stderr.'
+            } > docs/api-smoke-deploy.md
+          fi
+
       - name: Ensure integration validation markdown exists
         if: always()
         run: |
@@ -131,4 +152,22 @@ jobs:
           path: |
             artifacts/validate-integration-strict.stdout.log
             artifacts/validate-integration-strict.stderr.log
+          if-no-files-found: warn
+
+      - name: Upload deploy API smoke artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-smoke-deploy
+          path: docs/api-smoke-deploy.md
+          if-no-files-found: error
+
+      - name: Upload deploy API smoke raw logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-api-smoke-raw-logs
+          path: |
+            artifacts/validate-api-smoke-deploy.stdout.log
+            artifacts/validate-api-smoke-deploy.stderr.log
           if-no-files-found: warn
