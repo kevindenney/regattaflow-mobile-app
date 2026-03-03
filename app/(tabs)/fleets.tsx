@@ -10,6 +10,7 @@ import { TuningLibrary } from '@/components/fleets/TuningLibrary';
 import { Leaderboard } from '@/components/fleets/Leaderboard';
 import { FleetDiscoveryService, Fleet as DiscoveredFleet } from '@/services/FleetDiscoveryService';
 import { useAuth } from '@/providers/AuthProvider';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 
 type TabType = 'feed' | 'members' | 'tuning' | 'events' | 'leaderboard';
 
@@ -29,6 +30,9 @@ interface Fleet {
 export default function FleetsScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { isSailingDomain } = useWorkspaceDomain();
+  const programsRoute = '/(tabs)/programs';
+  const programsLabel = isSailingDomain ? 'Race Ops' : 'Programs';
   const [selectedFleet, setSelectedFleet] = useState<Fleet | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('feed');
 
@@ -277,14 +281,16 @@ export default function FleetsScreen() {
                 <Ionicons name="calendar-outline" size={52} color="#3B82F6" />
                 <Text style={styles.comingSoonText}>Fleet Events</Text>
                 <Text style={styles.comingSoonSubtext}>
-                  Open event operations and race management for this fleet.
+                  {isSailingDomain
+                    ? 'Open event operations and programs for this fleet.'
+                    : 'Open event operations and program planning for this cohort.'}
                 </Text>
                 <View style={styles.eventsActions}>
                   <Pressable style={styles.eventsActionPrimary} onPress={() => router.push('/(tabs)/events')}>
                     <Text style={styles.eventsActionPrimaryText}>Open Events</Text>
                   </Pressable>
-                  <Pressable style={styles.eventsActionSecondary} onPress={() => router.push('/(tabs)/race-management')}>
-                    <Text style={styles.eventsActionSecondaryText}>Race Ops</Text>
+                  <Pressable style={styles.eventsActionSecondary} onPress={() => router.push(programsRoute as any)}>
+                    <Text style={styles.eventsActionSecondaryText}>{programsLabel}</Text>
                   </Pressable>
                 </View>
               </View>
