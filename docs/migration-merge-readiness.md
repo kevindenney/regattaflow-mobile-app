@@ -11,6 +11,26 @@ Use this file as the integration lane checklist while parallel Codex terminals i
 | 3 | Role preset persistence via `domain_catalog` | Terminal 3 | In progress | `role_key` propagation + preset resolution |
 | 4 | Programs/assessments/invites review pass | Terminal 4 | In progress | Bugs/security/regression findings |
 | 5 | Coach shell next slice | Terminal 5 | In progress | Coach Home + assessments + unread threads + progress |
+| 6 | Retention loops (mandatory) | Terminal 6 | Planned | Streaks + reminders + weekly recap must ship as one loop |
+
+## Mandatory Retention Loop (Required for Build Completion)
+The following three items are mandatory and must be implemented together as one retention loop:
+
+1. `streaks`
+   - Daily/weekly engagement streak surfaced on home surfaces.
+   - Increment/reset rules defined in service logic and covered by tests.
+2. `reminders`
+   - Time-based nudges for pending actions (assessments, communications, or session prep).
+   - Trigger path defined (cron/job or scheduled function) with delivery logging.
+3. `weekly recap`
+   - Weekly digest of activity/progress delivered in-app and/or notification channel.
+   - Includes at least: completed actions, pending actions, and trend delta.
+
+## Retention Loop Exit Criteria
+- All three loops are implemented (`streaks`, `reminders`, `weekly recap`).
+- Domain behavior is validated for both sailing and institution workspaces.
+- Contract coverage exists for routing/entry points, plus service-level logic tests.
+- Loop status must be reported in final ship summary as `Shipped` (not deferred).
 
 ## File Overlap Watchlist
 These are high-risk conflict hotspots. Resolve intentionally, not by last-writer-wins.

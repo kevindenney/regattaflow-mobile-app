@@ -19,6 +19,7 @@ export default function ClientsScreen() {
   const { isSailingDomain } = useWorkspaceDomain();
   const {
     counts: coachHomeCounts,
+    retention,
     assignedProgramsPreview,
     competencyTrends,
     refresh: refreshCoachHome,
@@ -205,6 +206,43 @@ export default function ClientsScreen() {
                 Overdue: {coachHomeCounts.overdueAssessments}
               </ThemedText>
             </TouchableOpacity>
+          </View>
+          <View style={styles.retentionSection}>
+            <View style={styles.retentionHeaderRow}>
+              <ThemedText style={styles.retentionTitle}>Retention Loop</ThemedText>
+              <ThemedText style={styles.retentionStreak}>{retention.streakDays} day streak</ThemedText>
+            </View>
+            <ThemedText style={styles.retentionSubtitle}>
+              Weekly recap: {retention.weeklyRecap.completedActions} completed, {retention.weeklyRecap.pendingActions} pending, {retention.weeklyRecap.activeDays} active day{retention.weeklyRecap.activeDays === 1 ? '' : 's'}
+              {retention.weeklyRecap.trendDelta !== null
+                ? `, trend ${retention.weeklyRecap.trendDelta > 0 ? '+' : ''}${retention.weeklyRecap.trendDelta.toFixed(2)}`
+                : ''}
+            </ThemedText>
+            {retention.reminders.length > 0 ? (
+              <View style={styles.retentionReminderRow}>
+                {retention.reminders.map((reminder) => (
+                  <TouchableOpacity
+                    key={reminder.id}
+                    style={[
+                      styles.retentionReminderChip,
+                      reminder.severity === 'warning' && styles.retentionReminderChipWarn,
+                    ]}
+                    onPress={() => router.push(reminder.href as any)}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.retentionReminderChipText,
+                        reminder.severity === 'warning' && styles.retentionReminderChipTextWarn,
+                      ]}
+                    >
+                      {reminder.label}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <ThemedText style={styles.retentionNoReminders}>No reminders pending.</ThemedText>
+            )}
           </View>
           {assignedProgramsPreview.length > 0 ? (
             <View style={styles.programPreviewSection}>
@@ -434,6 +472,69 @@ const styles = StyleSheet.create({
   },
   coachHomeLinkChipWarnText: {
     color: '#B91C1C',
+  },
+  retentionSection: {
+    marginTop: -2,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    gap: 8,
+  },
+  retentionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  retentionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  retentionStreak: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0C4A6E',
+    backgroundColor: '#E0F2FE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  retentionSubtitle: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 18,
+  },
+  retentionReminderRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  retentionReminderChip: {
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  retentionReminderChipWarn: {
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+  },
+  retentionReminderChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1D4ED8',
+  },
+  retentionReminderChipTextWarn: {
+    color: '#B91C1C',
+  },
+  retentionNoReminders: {
+    fontSize: 12,
+    color: '#64748B',
   },
   programPreviewSection: {
     marginBottom: 20,
