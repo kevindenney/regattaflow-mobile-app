@@ -156,6 +156,21 @@ jobs:
             } > docs/integration-validation-latest.md
           fi
 
+      - name: Ensure integration validation JSON exists
+        if: always()
+        run: |
+          if [ ! -f docs/integration-validation-latest.json ]; then
+            mkdir -p docs
+            {
+              echo '{'
+              echo '  "generated_at": null,'
+              echo '  "overall": "FAIL",'
+              echo '  "error": "Strict integration validation failed before producing docs/integration-validation-latest.json.",'
+              echo '  "reference": "integration-validation-raw-logs artifact"'
+              echo '}'
+            } > docs/integration-validation-latest.json
+          fi
+
       - name: Ensure deployment readiness markdown exists
         if: always()
         run: |
@@ -174,7 +189,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: integration-validation-latest
-          path: docs/integration-validation-latest.md
+          path: |
+            docs/integration-validation-latest.md
+            docs/integration-validation-latest.json
           if-no-files-found: error
 
       - name: Upload strict validator raw logs
