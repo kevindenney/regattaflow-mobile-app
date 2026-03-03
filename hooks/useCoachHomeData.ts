@@ -43,7 +43,17 @@ export function useCoachHomeData() {
   const markThreadsSeen = useCallback(async () => {
     if (!organizationId || !userId) return;
     try {
-      await programService.markAllThreadsRead(organizationId, userId);
+      const assignedProgramIds = await programService.listAssignedProgramIdsForStaff(organizationId, userId);
+      const scopedProgramIds = Array.from(
+        new Set(assignedProgramIds.map((id) => String(id || '').trim()).filter(Boolean))
+      );
+      if (scopedProgramIds.length === 0) {
+        await programService.markAllThreadsRead(organizationId, userId);
+      } else {
+        await Promise.all(
+          scopedProgramIds.map((programId) => programService.markAllThreadsRead(organizationId, userId, programId))
+        );
+      }
     } catch (error) {
       console.warn('[useCoachHomeData] Failed to mark threads seen', error);
     }
