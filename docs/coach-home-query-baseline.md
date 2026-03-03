@@ -20,4 +20,5 @@ Scope: `hooks/useCoachHomeData.ts` refresh path
 
 - Runtime profiling currently emits warnings only in `__DEV__` when total refresh time exceeds budget.
 - Steps are captured by `lib/coach/coachHomeProfiling.ts`.
+- JSON export helper `toCoachHomeBaselineInput(...)` can convert in-app profile summaries to the report script input shape.
 - This baseline is deterministic and intended as a starting guardrail, not a production latency SLA report.

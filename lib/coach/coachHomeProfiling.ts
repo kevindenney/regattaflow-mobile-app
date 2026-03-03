@@ -18,6 +18,16 @@ export type CoachHomeProfileSummary = {
   steps: CoachHomeProfileSample[];
 };
 
+export type CoachHomeBaselineInput = {
+  run_id: string;
+  generated_at: string;
+  budget_ms: number;
+  samples: Array<{
+    step: CoachHomeProfileStep;
+    duration_ms: number;
+  }>;
+};
+
 export async function profileCoachHomeStep<T>(
   step: CoachHomeProfileStep,
   fn: () => Promise<T>,
@@ -45,5 +55,21 @@ export function summarizeCoachHomeProfile(
     budgetMs,
     budgetExceeded: totalMs > budgetMs,
     steps,
+  };
+}
+
+export function toCoachHomeBaselineInput(
+  summary: CoachHomeProfileSummary,
+  runId: string,
+  generatedAt: string = new Date().toISOString()
+): CoachHomeBaselineInput {
+  return {
+    run_id: String(runId || '').trim() || 'coach-home-profile-run',
+    generated_at: generatedAt,
+    budget_ms: summary.budgetMs,
+    samples: summary.steps.map((row) => ({
+      step: row.step,
+      duration_ms: row.durationMs,
+    })),
   };
 }

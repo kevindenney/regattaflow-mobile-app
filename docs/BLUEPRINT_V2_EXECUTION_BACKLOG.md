@@ -66,6 +66,8 @@ Status: Pending
   - Shipped via `lib/coach/coachHomeProfiling.ts`, `hooks/useCoachHomeData.ts`, and `docs/coach-home-query-baseline.md`.
 - [x] Add deterministic baseline report generator for coach-home profile sample input.
   - Shipped via `scripts/report-coach-home-query-baseline.mjs` and contract test coverage.
+- [x] Add profile-summary export helper for real in-app sample capture to report input shape.
+  - Shipped via `toCoachHomeBaselineInput(...)` in `lib/coach/coachHomeProfiling.ts`.
 - [ ] Optimize queries/indexes for:
   - due assessments
   - unread threads

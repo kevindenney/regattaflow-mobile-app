@@ -2,6 +2,7 @@ import {
   COACH_HOME_P95_BUDGET_MS,
   profileCoachHomeStep,
   summarizeCoachHomeProfile,
+  toCoachHomeBaselineInput,
 } from '../coachHomeProfiling';
 
 describe('coachHomeProfiling helpers', () => {
@@ -28,5 +29,27 @@ describe('coachHomeProfiling helpers', () => {
     expect(summary.totalMs).toBe(650);
     expect(summary.budgetExceeded).toBe(true);
     expect(summary.budgetMs).toBe(600);
+  });
+
+  it('exports deterministic baseline input payload shape', () => {
+    const summary = summarizeCoachHomeProfile(
+      [
+        { step: 'core_queries', durationMs: 300 },
+        { step: 'assigned_program_preview', durationMs: 120 },
+      ],
+      600
+    );
+
+    const payload = toCoachHomeBaselineInput(summary, 'run-001', '2026-03-03T13:05:00.000Z');
+
+    expect(payload).toEqual({
+      run_id: 'run-001',
+      generated_at: '2026-03-03T13:05:00.000Z',
+      budget_ms: 600,
+      samples: [
+        { step: 'core_queries', duration_ms: 300 },
+        { step: 'assigned_program_preview', duration_ms: 120 },
+      ],
+    });
   });
 });
