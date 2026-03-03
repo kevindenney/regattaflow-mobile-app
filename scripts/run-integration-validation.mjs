@@ -695,6 +695,39 @@ async function run() {
     reference: 'lib/coach/retentionDispatch.ts, api/cron/coach-retention-loop.ts',
   });
 
+  const signatureInsightMigrationPath = 'supabase/migrations/20260303153000_signature_insight_memory.sql';
+  const signatureInsightMigrationSource = await readFile(signatureInsightMigrationPath);
+  const signatureInsightMigrationOk =
+    signatureInsightMigrationSource.includes('CREATE TABLE IF NOT EXISTS public.user_principle_memory') &&
+    signatureInsightMigrationSource.includes('CREATE TABLE IF NOT EXISTS public.signature_insight_events') &&
+    signatureInsightMigrationSource.includes('apply_signature_insight_outcome_v1') &&
+    signatureInsightMigrationSource.includes("outcome IN ('pending', 'accepted', 'edited', 'dismissed')");
+  add({
+    id: 'signature-insight-memory-migration-coverage',
+    category: 'Signature Insight',
+    status: signatureInsightMigrationOk ? 'PASS' : 'FAIL',
+    details: signatureInsightMigrationOk
+      ? 'Signature insight persistence migration defines principle memory, event log, and outcome-apply RPC.'
+      : 'Signature insight migration markers are missing (tables and/or apply outcome function).',
+    reference: signatureInsightMigrationPath,
+  });
+
+  const signatureInsightServiceSource = await readFile('services/SignatureInsightService.ts');
+  const signatureInsightServiceContractOk =
+    signatureInsightServiceSource.includes('class SignatureInsightService') &&
+    signatureInsightServiceSource.includes("from('signature_insight_events')") &&
+    signatureInsightServiceSource.includes("from('user_principle_memory')") &&
+    signatureInsightServiceSource.includes("rpc('apply_signature_insight_outcome_v1'");
+  add({
+    id: 'signature-insight-service-contract',
+    category: 'Signature Insight',
+    status: signatureInsightServiceContractOk ? 'PASS' : 'FAIL',
+    details: signatureInsightServiceContractOk
+      ? 'SignatureInsightService exposes event logging, principle-memory listing, and outcome-apply RPC wiring.'
+      : 'SignatureInsightService persistence markers are incomplete.',
+    reference: 'services/SignatureInsightService.ts',
+  });
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const lineageTableFilterRaw = process.env.INTEGRATION_REQUIRED_TABLES || '';

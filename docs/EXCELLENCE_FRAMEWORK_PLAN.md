@@ -180,14 +180,14 @@ Implementation status (2026-03-03): Coach Home retention weekly recap now includ
   - [ ] Dismiss insight
 
 ### 4.5.2 Data Model
-- [ ] Add persistent principle memory table (or extend existing learnable events model):
-  - [ ] `user_id`, `interest_id`, `principle_text`
-  - [ ] `evidence_refs` (timeline step ids / event ids)
-  - [ ] `confidence_score`
-  - [ ] `times_reinforced`, `times_challenged`
-  - [ ] `last_seen_at`
-- [ ] Add signature-insight event log:
-  - [ ] insight text, principle snapshot, accepted/edited/dismissed outcome
+- [x] Add persistent principle memory table (or extend existing learnable events model):
+  - [x] `user_id`, `interest_id`, `principle_text`
+  - [x] `evidence_refs` (timeline step ids / event ids)
+  - [x] `confidence_score`
+  - [x] `times_reinforced`, `times_challenged`
+  - [x] `last_seen_at`
+- [x] Add signature-insight event log:
+  - [x] insight text, principle snapshot, accepted/edited/dismissed outcome
 
 ### 4.5.3 AI Generation Rules
 - [ ] Insight must be evidence-backed (no generic praise).

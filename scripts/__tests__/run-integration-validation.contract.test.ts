@@ -22,6 +22,15 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('invalid_weekly_recap_payload');
   });
 
+  it('emits signature insight memory migration and service contract rows', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'signature-insight-memory-migration-coverage'");
+    expect(source).toContain("id: 'signature-insight-service-contract'");
+    expect(source).toContain('20260303153000_signature_insight_memory.sql');
+    expect(source).toContain('apply_signature_insight_outcome_v1');
+    expect(source).toContain('services/SignatureInsightService.ts');
+  });
+
   it('emits assessment RLS semantic role-scope check row', () => {
     const source = readScript('scripts/run-integration-validation.mjs');
     expect(source).toContain("id: 'assessment-rls-policy-semantics'");
