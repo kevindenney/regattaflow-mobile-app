@@ -63,7 +63,6 @@ async function fetchWithTimeout(url, options, timeoutMs = 15000) {
 }
 
 async function run() {
-  const startedAt = new Date();
   const results = [];
 
   for (const check of checks) {
@@ -83,6 +82,8 @@ async function run() {
       const failInvocation = response.status === 500 && vercelError === 'FUNCTION_INVOCATION_FAILED';
       const statusOk = check.okStatuses.includes(response.status);
       const pass = !failInvocation && statusOk;
+      const diagnosticVercelId = pass ? '-' : vercelId;
+      const diagnosticRequestId = pass ? '-' : requestId;
 
       results.push({
         ...check,
@@ -90,8 +91,8 @@ async function run() {
         status: pass ? 'PASS' : 'FAIL',
         httpStatus: response.status,
         vercelError: vercelError || '-',
-        vercelId,
-        requestId,
+        vercelId: diagnosticVercelId,
+        requestId: diagnosticRequestId,
         bodySnippet: bodySnippet || '-',
       });
     } catch (error) {
@@ -110,12 +111,10 @@ async function run() {
 
   const failCount = results.filter((row) => row.status === 'FAIL').length;
   const overall = failCount > 0 ? 'FAIL' : 'PASS';
-  const finishedAt = new Date();
 
   const lines = [];
   lines.push('# Deployment API Smoke');
   lines.push('');
-  lines.push(`- Generated: ${finishedAt.toISOString()}`);
   lines.push(`- Base URL: ${BASE_URL}`);
   lines.push(`- Overall: **${overall}**`);
   lines.push(`- Checks: ${results.length} total (${results.length - failCount} pass, ${failCount} fail)`);
@@ -131,12 +130,23 @@ async function run() {
   lines.push('## Notes');
   lines.push('');
   lines.push('- Any `HTTP 500` with `x-vercel-error=FUNCTION_INVOCATION_FAILED` is a hard FAIL.');
-  lines.push(`- Started: ${startedAt.toISOString()}`);
-  lines.push(`- Finished: ${finishedAt.toISOString()}`);
   lines.push('');
 
-  await fs.writeFile(OUTPUT_PATH, `${lines.join('\n')}\n`, 'utf8');
-  console.log(`Wrote ${OUTPUT_PATH} (${overall})`);
+  const nextContent = `${lines.join('\n')}\n`;
+  let currentContent = null;
+  try {
+    currentContent = await fs.readFile(OUTPUT_PATH, 'utf8');
+  } catch (error) {
+    const code = /** @type {{ code?: string }} */ (error)?.code;
+    if (code !== 'ENOENT') throw error;
+  }
+
+  if (currentContent === nextContent) {
+    console.log(`Unchanged ${OUTPUT_PATH} (${overall})`);
+  } else {
+    await fs.writeFile(OUTPUT_PATH, nextContent, 'utf8');
+    console.log(`Wrote ${OUTPUT_PATH} (${overall})`);
+  }
 
   if (overall === 'FAIL') {
     process.exitCode = 1;
