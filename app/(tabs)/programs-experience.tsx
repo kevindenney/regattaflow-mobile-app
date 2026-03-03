@@ -20,6 +20,7 @@ import { useOrganization } from '@/providers/OrganizationProvider';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { useOrganizationCommunicationsUnread } from '@/hooks/useOrganizationCommunicationsUnread';
 import { formatBadgeCount } from '@/lib/utils/formatBadgeCount';
+import { buildInstitutionProgramItems, type InstitutionProgramItems } from '@/lib/programs/dashboardSections';
 import {
   programService,
   OrganizationAssessmentSummary,
@@ -81,60 +82,6 @@ const COMPLETED_RACES = [
   },
 ];
 
-const UPCOMING_PROGRAMS = [
-  {
-    id: 'program-1',
-    name: 'Adult-Gerontology Clinical Rotation • Cohort A',
-    start: '2024-03-18T08:00:00Z',
-    track: 'Adult-Gerontology',
-    learners: 24,
-    status: 'Ready',
-  },
-  {
-    id: 'program-2',
-    name: 'Pediatric Clinical Rotation • Cohort B',
-    start: '2024-03-20T09:00:00Z',
-    track: 'Pediatrics',
-    learners: 18,
-    status: 'Pending',
-  },
-  {
-    id: 'program-3',
-    name: 'Simulation Lab: Acute Deterioration',
-    start: '2024-03-23T11:00:00Z',
-    track: 'Simulation',
-    learners: 16,
-    status: 'Setup Required',
-  },
-];
-
-const ACTIVE_PROGRAMS = [
-  {
-    id: 'program-live',
-    name: 'Adult-Gerontology Clinical Rotation • Cohort A',
-    elapsed: '02:14:16',
-    unit: 'Johns Hopkins Hospital • Med-Surg',
-    checkIn: 22,
-  },
-];
-
-const COMPLETED_PROGRAMS = [
-  {
-    id: 'program-done-1',
-    name: 'Community Health Clinical • Cohort C',
-    finished: '2024-03-08T16:00:00Z',
-    lead: 'Prof. Sarah Johnson',
-    learners: 20,
-  },
-  {
-    id: 'program-done-2',
-    name: 'Simulation Lab: Sepsis Response',
-    finished: '2024-03-01T16:00:00Z',
-    lead: 'Dr. Mike Chen',
-    learners: 14,
-  },
-];
-
 const STATUS_COLORS: Record<string, string> = {
   Ready: '#10B981',
   Pending: '#F59E0B',
@@ -193,11 +140,7 @@ export default function RaceManagementScreen() {
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
   const [selectedRaceName, setSelectedRaceName] = useState<string | null>(null);
   const [sailwaveModalVisible, setSailwaveModalVisible] = useState(false);
-  const [institutionProgramItems, setInstitutionProgramItems] = useState<{
-    upcoming: typeof UPCOMING_PROGRAMS;
-    active: typeof ACTIVE_PROGRAMS;
-    completed: typeof COMPLETED_PROGRAMS;
-  }>({
+  const [institutionProgramItems, setInstitutionProgramItems] = useState<InstitutionProgramItems>({
     upcoming: [],
     active: [],
     completed: [],
@@ -279,12 +222,6 @@ export default function RaceManagementScreen() {
   const loadInstitutionPrograms = useCallback(async () => {
     if (!isInstitutionWorkspace || !activeOrganization?.id) return;
 
-    const toTitle = (value: string): string =>
-      value
-        .split('_')
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ');
-
     try {
       setProgramsLoading(true);
       setProgramsLoadError(null);
@@ -296,84 +233,20 @@ export default function RaceManagementScreen() {
         programService.getOrganizationAssessmentSummary(activeOrganization.id),
       ]);
 
-      const sessionByProgram = new Map<string, ProgramSessionRecord>();
-      for (const session of sessions) {
-        if (!sessionByProgram.has(session.program_id)) {
-          sessionByProgram.set(session.program_id, session);
-        }
-      }
-
-      const upcoming: typeof UPCOMING_PROGRAMS = [];
-      const active: typeof ACTIVE_PROGRAMS = [];
-      const completed: typeof COMPLETED_PROGRAMS = [];
-
-      const sorted = [...programs].sort((a: ProgramRecord, b: ProgramRecord) => {
-        const aTime = a.start_at ? new Date(a.start_at).getTime() : 0;
-        const bTime = b.start_at ? new Date(b.start_at).getTime() : 0;
-        return aTime - bTime;
+      const sections = buildInstitutionProgramItems({
+        programs,
+        sessions,
+        participantCounts,
       });
-
-      for (const program of sorted) {
-        const session = sessionByProgram.get(program.id);
-        const learners = participantCounts[program.id] || 0;
-        const start = program.start_at || new Date().toISOString();
-        const baseName = program.title;
-        const track =
-          typeof program.metadata?.unit === 'string'
-            ? String(program.metadata.unit)
-            : toTitle(program.type || 'Program');
-        const lead =
-          typeof program.metadata?.lead === 'string'
-            ? String(program.metadata.lead)
-            : 'Program Lead';
-
-        if (program.status === 'active') {
-          active.push({
-            id: program.id,
-            name: baseName,
-            elapsed: session?.starts_at ? formatDistanceToNow(new Date(session.starts_at)) : 'In progress',
-            unit: session?.location || track,
-            checkIn: learners,
-          });
-          continue;
-        }
-
-        if (program.status === 'completed' || program.status === 'archived' || program.status === 'cancelled') {
-          completed.push({
-            id: program.id,
-            name: baseName,
-            finished: program.end_at || start,
-            lead,
-            learners,
-          });
-          continue;
-        }
-
-        const status =
-          program.status === 'planned'
-            ? 'Ready'
-            : program.status === 'draft'
-              ? 'Setup Required'
-              : 'Pending';
-        upcoming.push({
-          id: program.id,
-          name: baseName,
-          start,
-          track,
-          learners,
-          status,
-        });
-      }
-
-      setInstitutionProgramItems({ upcoming, active, completed });
+      setInstitutionProgramItems(sections);
       setAssessmentSummary(nextAssessmentSummary);
       const targetProgramId = routeProgramId || createdProgramId;
       if (targetProgramId) {
-        if (active.some((row) => row.id === targetProgramId)) {
+        if (sections.active.some((row) => row.id === targetProgramId)) {
           setActiveTab('active');
-        } else if (completed.some((row) => row.id === targetProgramId)) {
+        } else if (sections.completed.some((row) => row.id === targetProgramId)) {
           setActiveTab('completed');
-        } else if (upcoming.some((row) => row.id === targetProgramId)) {
+        } else if (sections.upcoming.some((row) => row.id === targetProgramId)) {
           setActiveTab('upcoming');
         }
       }

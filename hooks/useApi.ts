@@ -64,7 +64,7 @@ export function useApi<T>(
   const isMountedRef = useRef(true);
   const fetchRunIdRef = useRef(0);
   const initialDataRef = useRef(initialData);
-  const fetchDataRef = useRef<() => Promise<void>>();
+  const fetchDataRef = useRef<(() => Promise<void>) | undefined>(undefined);
 
   useEffect(() => {
     apiRef.current = apiFunction;

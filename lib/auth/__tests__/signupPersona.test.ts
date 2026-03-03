@@ -1,7 +1,7 @@
 import {
   DEFAULT_PERSONA,
   normalizePersonaParam,
-} from '@/app/(auth)/signupPersona';
+} from '@/lib/auth/signupPersona';
 
 describe('normalizePersonaParam', () => {
   it('returns default persona when param is missing', () => {

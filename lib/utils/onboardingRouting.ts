@@ -73,5 +73,5 @@ export function getOnboardingStartRoute(
     return getOrganizationOnboardingRoute(domain);
   }
 
-  return getDashboardRoute(persona as any, domain) as string;
+  return getDashboardRoute(persona as any) as string;
 }

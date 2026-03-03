@@ -79,7 +79,7 @@ export default function RaceCalendarScreen() {
 
   useEffect(() => {
     if (!isSailingDomain) {
-      router.replace(getDashboardRoute('sailor', resolvedDomain));
+      router.replace(getDashboardRoute('sailor'));
       return;
     }
 

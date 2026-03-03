@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,12 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { buildAssignmentPendingSummary } from '@/lib/programs/assignmentDashboard';
+import { AssignmentSortMode, buildAssignmentList } from '@/lib/programs/assignmentList';
+import {
+  buildProgramAssignmentsCsv,
+  buildProgramAssignmentsCsvFilename,
+} from '@/lib/programs/assignmentExport';
 import {
   AssessmentRecord,
   ParticipantStatus,
@@ -35,8 +41,6 @@ const FALLBACK_ROLE_OPTIONS = [
 ] as const;
 
 const STATUS_OPTIONS: ParticipantStatus[] = ['invited', 'active', 'completed', 'inactive'];
-const STAFF_QUEUE_ROLES = new Set(['faculty', 'instructor', 'preceptor', 'tutor', 'coordinator']);
-type SortMode = 'newest' | 'oldest' | 'name' | 'role' | 'status';
 
 export default function ProgramAssignmentsScreen() {
   const router = useRouter();
@@ -54,14 +58,14 @@ export default function ProgramAssignmentsScreen() {
 
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [role, setRole] = useState<string>('faculty');
+  const [role, setRole] = useState<string>('');
   const [status, setStatus] = useState<ParticipantStatus>('active');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [searchText, setSearchText] = useState('');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<ParticipantStatus | 'all'>('all');
-  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [sortMode, setSortMode] = useState<AssignmentSortMode>('newest');
   const [visibleCount, setVisibleCount] = useState(40);
   const [hasMutations, setHasMutations] = useState(false);
   const [inviteRolePresets, setInviteRolePresets] = useState<InviteRolePreset[]>([]);
@@ -119,18 +123,10 @@ export default function ProgramAssignmentsScreen() {
     router.back();
   };
 
-  const loadAll = async () => {
+  const loadPrograms = useCallback(async () => {
     if (!activeOrganization?.id) return;
-    const [nextPrograms, nextSessions, nextParticipants, nextAssessments] = await Promise.all([
-      programService.listPrograms(activeOrganization.id),
-      programService.listOrganizationProgramSessions(activeOrganization.id, 500),
-      programService.listOrganizationProgramParticipants(activeOrganization.id, 1000),
-      programService.listOrganizationAssessmentRecords(activeOrganization.id, 1000),
-    ]);
+    const nextPrograms = await programService.listPrograms(activeOrganization.id);
     setPrograms(nextPrograms);
-    setSessions(nextSessions);
-    setParticipants(nextParticipants);
-    setAssessments(nextAssessments);
 
     const routeProgramId = params.programId || null;
     const validFromRoute = routeProgramId && nextPrograms.some((row) => row.id === routeProgramId);
@@ -138,7 +134,19 @@ export default function ProgramAssignmentsScreen() {
       if (current && nextPrograms.some((row) => row.id === current)) return current;
       return validFromRoute ? routeProgramId : nextPrograms[0]?.id || null;
     });
-  };
+  }, [activeOrganization?.id, params.programId]);
+
+  const loadProgramScopedData = useCallback(async (programId: string, sessionId?: string | null) => {
+    const scopeSessionId = String(sessionId || '').trim() || undefined;
+    const [nextSessions, nextParticipants, nextAssessments] = await Promise.all([
+      programService.listProgramSessions(programId),
+      programService.listProgramParticipants(programId, { sessionId: scopeSessionId, limit: 1000 }),
+      programService.listAssessmentRecords(programId, { sessionId: scopeSessionId, limit: 1000 }),
+    ]);
+    setSessions(nextSessions);
+    setParticipants(nextParticipants);
+    setAssessments(nextAssessments);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -149,7 +157,7 @@ export default function ProgramAssignmentsScreen() {
 
       try {
         setLoading(true);
-        await loadAll();
+        await loadPrograms();
       } catch (error) {
         console.error('[programs.assign] failed to load assignment data', error);
       } finally {
@@ -158,7 +166,31 @@ export default function ProgramAssignmentsScreen() {
     };
 
     void load();
-  }, [activeOrganization?.id, params.programId, ready]);
+  }, [activeOrganization?.id, loadPrograms, ready]);
+
+  useEffect(() => {
+    let active = true;
+    const loadScoped = async () => {
+      if (!ready || !selectedProgramId) {
+        setSessions([]);
+        setParticipants([]);
+        setAssessments([]);
+        return;
+      }
+
+      try {
+        await loadProgramScopedData(selectedProgramId, selectedSessionId);
+      } catch (error) {
+        if (!active) return;
+        console.error('[programs.assign] failed to load scoped data', error);
+      }
+    };
+
+    void loadScoped();
+    return () => {
+      active = false;
+    };
+  }, [loadProgramScopedData, ready, selectedProgramId, selectedSessionId]);
 
   useEffect(() => {
     if (!selectedProgramId) {
@@ -215,10 +247,7 @@ export default function ProgramAssignmentsScreen() {
   }, [inviteRolePresets]);
 
   const roleFilterOptions = useMemo(() => {
-    const activeParticipantRoles = participants
-      .filter((row) => !selectedProgramId || row.program_id === selectedProgramId)
-      .map((row) => row.role)
-      .filter(Boolean) as string[];
+    const activeParticipantRoles = participants.map((row) => row.role).filter(Boolean) as string[];
     const options = ['all', ...resolvedRoleOptions, ...activeParticipantRoles];
     const deduped: string[] = [];
     const seen = new Set<string>();
@@ -229,62 +258,39 @@ export default function ProgramAssignmentsScreen() {
       deduped.push(option);
     }
     return deduped;
-  }, [participants, resolvedRoleOptions, selectedProgramId]);
+  }, [participants, resolvedRoleOptions]);
 
   useEffect(() => {
     setRole((current) => {
       if (resolvedRoleOptions.includes(current)) return current;
-      return resolvedRoleOptions[0] || current;
+      const preferred = organizationInviteRolePresetService.resolveDefaultRoleLabel(inviteRolePresets);
+      if (resolvedRoleOptions.includes(preferred)) return preferred;
+      return resolvedRoleOptions[0] || preferred || current;
     });
-  }, [resolvedRoleOptions]);
+  }, [inviteRolePresets, resolvedRoleOptions]);
 
-  const sessionOptions = useMemo(
-    () => sessions.filter((row) => !selectedProgramId || row.program_id === selectedProgramId),
-    [sessions, selectedProgramId]
-  );
+  const sessionOptions = sessions;
 
-  const filteredParticipants = useMemo(
-    () => participants.filter((row) => !selectedProgramId || row.program_id === selectedProgramId),
-    [participants, selectedProgramId]
-  );
+  const filteredParticipants = participants;
 
-  const filteredAssignments = useMemo(() => {
-    const needle = searchText.trim().toLowerCase();
-    const base = filteredParticipants.filter((row) => {
-      if (filterRole !== 'all' && row.role !== filterRole) return false;
-      if (filterStatus !== 'all' && row.status !== filterStatus) return false;
-      if (!needle) return true;
-      const haystack = `${row.display_name || ''} ${row.email || ''} ${row.role || ''}`.toLowerCase();
-      return haystack.includes(needle);
+  const { filteredAssignments, pagedAssignments } = useMemo(() => {
+    return buildAssignmentList(filteredParticipants, {
+      role: filterRole,
+      status: filterStatus,
+      searchText,
+      sortMode,
+      visibleCount,
     });
-
-    const sorted = [...base];
-    sorted.sort((a, b) => {
-      if (sortMode === 'newest') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      if (sortMode === 'oldest') return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      if (sortMode === 'name') {
-        const aName = String(a.display_name || a.email || '').toLowerCase();
-        const bName = String(b.display_name || b.email || '').toLowerCase();
-        return aName.localeCompare(bName);
-      }
-      if (sortMode === 'role') return String(a.role || '').localeCompare(String(b.role || ''));
-      if (sortMode === 'status') return String(a.status || '').localeCompare(String(b.status || ''));
-      return 0;
-    });
-    return sorted;
-  }, [filteredParticipants, filterRole, filterStatus, searchText, sortMode]);
-
-  const pagedAssignments = useMemo(
-    () => filteredAssignments.slice(0, visibleCount),
-    [filteredAssignments, visibleCount]
-  );
+  }, [filteredParticipants, filterRole, filterStatus, searchText, sortMode, visibleCount]);
 
   const staffQueue = useMemo(
     () =>
       filteredParticipants.filter(
-        (row) => STAFF_QUEUE_ROLES.has(String(row.role || '').toLowerCase()) && row.status !== 'inactive'
+        (row) =>
+          organizationInviteRolePresetService.isStaffRole(row.role, inviteRolePresets) &&
+          row.status !== 'inactive'
       ),
-    [filteredParticipants]
+    [filteredParticipants, inviteRolePresets]
   );
 
   useEffect(() => {
@@ -296,38 +302,14 @@ export default function ProgramAssignmentsScreen() {
       Alert.alert('Nothing to export', 'No assignments match the current filters.');
       return;
     }
-    const escapeCsv = (value: unknown) => {
-      const text = String(value ?? '');
-      if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-        return `"${text.replace(/"/g, '""')}"`;
-      }
-      return text;
-    };
-    const rows = [
-      ['name', 'email', 'role', 'status', 'program', 'session', 'created_at'],
-      ...filteredAssignments.map((row) => {
-        const program = programById.get(row.program_id);
-        const session = row.session_id ? sessionById.get(row.session_id) : null;
-        return [
-          row.display_name || '',
-          row.email || '',
-          row.role || '',
-          row.status || '',
-          program?.title || '',
-          session?.title || '',
-          row.created_at || '',
-        ];
-      }),
-    ];
-    const csv = rows.map((line) => line.map(escapeCsv).join(',')).join('\n');
+    const csv = buildProgramAssignmentsCsv(filteredAssignments, programById, sessionById);
 
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const dateTag = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.setAttribute('download', `program-assignments-${dateTag}.csv`);
+      link.setAttribute('download', buildProgramAssignmentsCsvFilename());
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -339,13 +321,7 @@ export default function ProgramAssignmentsScreen() {
   };
 
   const pendingByEvaluatorId = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const row of assessments) {
-      if (row.status === 'finalized') continue;
-      if (!row.evaluator_id) continue;
-      map[row.evaluator_id] = (map[row.evaluator_id] || 0) + 1;
-    }
-    return map;
+    return buildAssignmentPendingSummary(assessments).pendingByEvaluatorId;
   }, [assessments]);
 
   const programById = useMemo(() => {
@@ -389,7 +365,10 @@ export default function ProgramAssignmentsScreen() {
         },
       });
 
-      const nextParticipants = await programService.listOrganizationProgramParticipants(activeOrganization.id, 1000);
+      const nextParticipants = await programService.listProgramParticipants(selectedProgramId, {
+        sessionId: selectedSessionId,
+        limit: 1000,
+      });
       setParticipants(nextParticipants);
       setDisplayName('');
       setEmail('');
@@ -406,10 +385,13 @@ export default function ProgramAssignmentsScreen() {
     participantId: string,
     updates: Partial<Pick<ProgramParticipantRecord, 'role' | 'status'>>
   ) => {
-    if (!activeOrganization?.id) return;
+    if (!activeOrganization?.id || !selectedProgramId) return;
     try {
       await programService.updateProgramParticipant(participantId, updates);
-      const nextParticipants = await programService.listOrganizationProgramParticipants(activeOrganization.id, 1000);
+      const nextParticipants = await programService.listProgramParticipants(selectedProgramId, {
+        sessionId: selectedSessionId,
+        limit: 1000,
+      });
       setParticipants(nextParticipants);
       setHasMutations(true);
     } catch (error: any) {
@@ -418,7 +400,7 @@ export default function ProgramAssignmentsScreen() {
   };
 
   const removeParticipant = async (participantId: string) => {
-    if (!activeOrganization?.id) return;
+    if (!activeOrganization?.id || !selectedProgramId) return;
     Alert.alert('Remove assignment', 'Remove this person from the selected program?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -427,7 +409,10 @@ export default function ProgramAssignmentsScreen() {
         onPress: async () => {
           try {
             await programService.removeProgramParticipant(participantId);
-            const nextParticipants = await programService.listOrganizationProgramParticipants(activeOrganization.id, 1000);
+            const nextParticipants = await programService.listProgramParticipants(selectedProgramId, {
+              sessionId: selectedSessionId,
+              limit: 1000,
+            });
             setParticipants(nextParticipants);
             setHasMutations(true);
           } catch (error: any) {
@@ -449,7 +434,16 @@ export default function ProgramAssignmentsScreen() {
             <ThemedText style={styles.title}>Program Assignments</ThemedText>
             <ThemedText style={styles.subtitle}>Assign faculty, staff, and learners to programs and sessions.</ThemedText>
           </View>
-          <TouchableOpacity style={styles.refreshButton} onPress={() => void loadAll()}>
+          <TouchableOpacity
+            style={styles.refreshButton}
+              onPress={() => {
+                if (selectedProgramId) {
+                  void loadProgramScopedData(selectedProgramId, selectedSessionId);
+                  return;
+                }
+                void loadPrograms();
+            }}
+          >
             <Ionicons name="refresh" size={18} color="#2563EB" />
           </TouchableOpacity>
         </View>
@@ -637,7 +631,7 @@ export default function ProgramAssignmentsScreen() {
                 <View style={styles.inlineGroup}>
                   <ThemedText style={styles.inlineLabel}>Sort</ThemedText>
                   <View style={styles.chipRow}>
-                    {(['newest', 'oldest', 'name', 'role', 'status'] as SortMode[]).map((option) => {
+                    {(['newest', 'oldest', 'name', 'role', 'status'] as AssignmentSortMode[]).map((option) => {
                       const active = sortMode === option;
                       return (
                         <TouchableOpacity
