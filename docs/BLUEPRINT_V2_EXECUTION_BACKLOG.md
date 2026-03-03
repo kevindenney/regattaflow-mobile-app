@@ -42,12 +42,13 @@ Acceptance:
 
 Status: In progress
 
-- [ ] Add SQL security tests for:
+- [x] Add SQL security tests for:
   - `programs`
   - `program_sessions`
   - `program_participants`
   - `communication_threads`
   - `templates`
+- Note: `programs/program_sessions/program_participants` shipped in `services/__tests__/ProgramsCoreRls.sql-security.test.ts`; `communication_threads/templates` remain pending.
 - [ ] Add integration semantic checks for each table’s critical role clauses.
 - [ ] Add CI script alias for full SQL security matrix suite.
 
