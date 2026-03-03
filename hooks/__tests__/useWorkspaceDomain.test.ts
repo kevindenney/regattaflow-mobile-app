@@ -1,4 +1,6 @@
 import { mapInterestSlugToDomain } from '@/lib/domain/mapInterestSlugToDomain';
+import fs from 'fs';
+import path from 'path';
 
 describe('useWorkspaceDomain helpers', () => {
   it('maps sailing-like interest slugs to sailing domain', () => {
@@ -23,5 +25,13 @@ describe('useWorkspaceDomain helpers', () => {
     expect(mapInterestSlugToDomain(null)).toBe('generic');
     expect(mapInterestSlugToDomain(undefined)).toBe('generic');
     expect(mapInterestSlugToDomain('robotics')).toBe('generic');
+  });
+
+  it('exposes presentation domain helpers for UI copy overrides', () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), 'hooks/useWorkspaceDomain.ts'), 'utf8');
+    expect(source).toContain('presentationDomain');
+    expect(source).toContain('isSailingPresentationDomain');
+    expect(source).toContain('isNursingPresentationDomain');
+    expect(source).toContain('fromInterest !== \'generic\' ? fromInterest : domain');
   });
 });

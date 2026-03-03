@@ -378,6 +378,23 @@ async function run() {
     reference: 'api/middleware/domain.ts',
   });
 
+  const notificationsSource = await readFile('app/settings/notifications.tsx');
+  const clientsSource = await readFile('app/(tabs)/clients.tsx');
+  const programsExperienceSource = await readFile('app/(tabs)/programs-experience.tsx');
+  const presentationCopyContractOk =
+    notificationsSource.includes('isSailingPresentationDomain') &&
+    clientsSource.includes('isSailingPresentationDomain') &&
+    programsExperienceSource.includes('isNursingPresentationDomain');
+  add({
+    id: 'ui-copy-presentation-domain-contract',
+    category: 'Domain Gating',
+    status: presentationCopyContractOk ? 'PASS' : 'FAIL',
+    details: presentationCopyContractOk
+      ? 'UI copy paths use presentation-domain helpers (interest-aware) without changing auth domain gates.'
+      : 'UI copy presentation-domain markers are missing.',
+    reference: 'app/settings/notifications.tsx, app/(tabs)/clients.tsx, app/(tabs)/programs-experience.tsx',
+  });
+
   const programsFile = await readFile('app/(tabs)/programs.tsx');
   const raceManagementFile = await readFile('app/(tabs)/race-management.tsx');
   const tabsLayoutFile = await readFile('app/(tabs)/_layout.tsx');

@@ -19,7 +19,12 @@ Status: In progress
     - `api/ai/races/[id]/comms/draft.ts`
     - `api/ai/events/[id]/documents/draft.ts`
     - `api/ai/club/support.ts`
-- [ ] Audit and patch UI-only copy paths to use `active_interest_id` where safe.
+- [x] Audit and patch UI-only copy paths to use `active_interest_id` where safe.
+  - Shipped presentation-domain copy overrides in:
+    - `app/settings/notifications.tsx`
+    - `app/(tabs)/clients.tsx`
+    - `app/(tabs)/programs-experience.tsx`
+  - Backed by integration contract row: `ui-copy-presentation-domain-contract`.
 - [x] Add integration check row for resolver precedence assumptions.
   - Shipped via `domain-resolver-precedence-contract` in `scripts/run-integration-validation.mjs`.
 

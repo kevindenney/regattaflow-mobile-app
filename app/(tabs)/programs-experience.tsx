@@ -133,7 +133,7 @@ export default function RaceManagementScreen() {
   const [programUpdateBannerText, setProgramUpdateBannerText] = useState('Program updated');
   const isFocused = useIsFocused();
   const { activeOrganization, ready: orgReady } = useOrganization();
-  const { activeDomain, isSailingDomain, isNursingDomain } = useWorkspaceDomain();
+  const { activeDomain, isSailingDomain, isNursingPresentationDomain } = useWorkspaceDomain();
   const { unreadCount: communicationsUnreadCount, unreadCountByProgram } = useOrganizationCommunicationsUnread();
   const isInstitutionWorkspace = orgReady && !isSailingDomain;
   const allowRaceWorkflows = orgReady && isSailingDomain;
@@ -897,12 +897,12 @@ export default function RaceManagementScreen() {
         <View style={styles.operationsCard}>
               <ThemedText style={styles.sectionTitle}>
             {isInstitutionWorkspace
-              ? (isNursingDomain ? 'Clinical operations toolkit' : 'Program operations toolkit')
+              ? (isNursingPresentationDomain ? 'Clinical operations toolkit' : 'Program operations toolkit')
               : 'Operations toolkit'}
           </ThemedText>
           <ThemedText style={styles.sectionHelper}>
             {isInstitutionWorkspace
-              ? (isNursingDomain
+              ? (isNursingPresentationDomain
                 ? 'Keep clinical documentation, patient safety protocols, and competency workflows current.'
                 : 'Keep program templates, session notes, and assessment workflows current.')
               : 'Keep race documentation and safety plans current before teams leave the dock.'}
@@ -919,7 +919,7 @@ export default function RaceManagementScreen() {
               <Ionicons name="medkit-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>
                 {isInstitutionWorkspace
-                  ? (isNursingDomain ? 'Patient safety checklist' : 'Session checklist')
+                  ? (isNursingPresentationDomain ? 'Patient safety checklist' : 'Session checklist')
                   : 'Safety checklist'}
               </ThemedText>
             </TouchableOpacity>
@@ -934,7 +934,7 @@ export default function RaceManagementScreen() {
               <Ionicons name="cloudy-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>
                 {isInstitutionWorkspace
-                  ? (isNursingDomain ? 'Clinical partner notes' : 'Program notes')
+                  ? (isNursingPresentationDomain ? 'Clinical partner notes' : 'Program notes')
                   : 'Weather briefing'}
               </ThemedText>
             </TouchableOpacity>
@@ -949,7 +949,7 @@ export default function RaceManagementScreen() {
               <Ionicons name="map-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>
                 {isInstitutionWorkspace
-                  ? (isNursingDomain ? 'Rotation templates' : 'Session templates')
+                  ? (isNursingPresentationDomain ? 'Rotation templates' : 'Session templates')
                   : 'Course maps'}
               </ThemedText>
             </TouchableOpacity>
@@ -964,7 +964,7 @@ export default function RaceManagementScreen() {
               <Ionicons name="clipboard-outline" size={20} color="#2563EB" />
               <ThemedText style={styles.operationLabel}>
                 {isInstitutionWorkspace
-                  ? (isNursingDomain ? 'Competency rubrics' : 'Assessment rubrics')
+                  ? (isNursingPresentationDomain ? 'Competency rubrics' : 'Assessment rubrics')
                   : 'Result templates'}
               </ThemedText>
             </TouchableOpacity>

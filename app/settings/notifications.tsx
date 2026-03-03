@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
-import { useInterest } from '@/hooks/useInterest';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { supabase } from '@/services/supabase';
 import {
@@ -182,10 +181,8 @@ function dateToTimeString(date: Date): string {
 
 export default function NotificationsScreen(): React.ReactElement {
   const { user, userType } = useAuth();
-  const { currentInterest } = useInterest();
-  const { isSailingDomain } = useWorkspaceDomain();
-  const interestSlug = currentInterest?.slug ?? 'sail-racing';
-  const isSailingCopy = isSailingDomain && interestSlug === 'sail-racing';
+  const { isSailingPresentationDomain } = useWorkspaceDomain();
+  const isSailingCopy = isSailingPresentationDomain;
   const isClubPersona = userType === 'club';
 
   // Source A: user_preferences JSONB

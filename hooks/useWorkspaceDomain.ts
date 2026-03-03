@@ -26,13 +26,23 @@ export function useWorkspaceDomain() {
     return mapInterestSlugToDomain(resolvedInterestSlug);
   }, [activeOrganization?.id, orgDomain, resolvedInterestSlug]);
 
+  const presentationDomain = useMemo<WorkspaceDomain>(() => {
+    const fromInterest = mapInterestSlugToDomain(resolvedInterestSlug);
+    return fromInterest !== 'generic' ? fromInterest : domain;
+  }, [domain, resolvedInterestSlug]);
+
   return {
     activeInterestId: resolvedInterestId,
     activeInterestSlug: resolvedInterestSlug,
     activeDomain: domain,
+    presentationDomain,
     isSailingDomain: domain === 'sailing',
     isNursingDomain: domain === 'nursing',
     isDrawingDomain: domain === 'drawing',
     isFitnessDomain: domain === 'fitness',
+    isSailingPresentationDomain: presentationDomain === 'sailing',
+    isNursingPresentationDomain: presentationDomain === 'nursing',
+    isDrawingPresentationDomain: presentationDomain === 'drawing',
+    isFitnessPresentationDomain: presentationDomain === 'fitness',
   };
 }

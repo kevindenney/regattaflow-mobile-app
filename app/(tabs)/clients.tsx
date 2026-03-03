@@ -16,7 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 export default function ClientsScreen() {
   const router = useRouter();
   const { coachId, loading: personaLoading, refresh: refreshPersonaContext } = useCoachWorkspace();
-  const { isSailingDomain } = useWorkspaceDomain();
+  const { isSailingPresentationDomain } = useWorkspaceDomain();
   const {
     counts: coachHomeCounts,
     retention,
@@ -312,7 +312,7 @@ export default function ClientsScreen() {
         </View>
 
           <View style={styles.header}>
-          <ThemedText style={styles.title}>{isSailingDomain ? 'My Clients' : 'My Learners'}</ThemedText>
+          <ThemedText style={styles.title}>{isSailingPresentationDomain ? 'My Clients' : 'My Learners'}</ThemedText>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => router.push('/coach/client/new')}
@@ -372,7 +372,7 @@ export default function ClientsScreen() {
                     {client.sailor?.full_name || client.sailor?.email || 'Unknown Client'}
                   </ThemedText>
                   <ThemedText style={styles.clientDetail}>
-                    {isSailingDomain
+                    {isSailingPresentationDomain
                       ? `${client.primary_boat_class || 'No boat class'} • ${client.skill_level || 'Unknown level'}`
                       : `${client.skill_level || 'Unknown level'} coach track`}
                   </ThemedText>
@@ -404,11 +404,11 @@ export default function ClientsScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={64} color="#CBD5E1" />
             <ThemedText style={styles.emptyText}>
-              {isSailingDomain ? 'Start building your client base' : 'Start building your learner roster'}
+              {isSailingPresentationDomain ? 'Start building your client base' : 'Start building your learner roster'}
             </ThemedText>
             <TouchableOpacity style={styles.ctaButton}>
               <ThemedText style={styles.ctaButtonText}>
-                {isSailingDomain ? 'Find Sailors' : 'Invite Learners'}
+                {isSailingPresentationDomain ? 'Find Sailors' : 'Invite Learners'}
               </ThemedText>
             </TouchableOpacity>
           </View>

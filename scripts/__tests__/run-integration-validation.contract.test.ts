@@ -56,4 +56,12 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain("if (orgType === 'club') return 'sailing'");
     expect(source).toContain("if (orgType === 'institution') return 'nursing'");
   });
+
+  it('emits presentation-domain UI copy contract check row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'ui-copy-presentation-domain-contract'");
+    expect(source).toContain('isSailingPresentationDomain');
+    expect(source).toContain('isNursingPresentationDomain');
+    expect(source).toContain('app/settings/notifications.tsx, app/(tabs)/clients.tsx, app/(tabs)/programs-experience.tsx');
+  });
 });
