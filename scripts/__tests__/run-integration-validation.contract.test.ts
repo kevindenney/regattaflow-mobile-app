@@ -40,6 +40,9 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain("id: 'signature-insight-principle-reuse-contract'");
     expect(source).toContain("from('user_principle_memory')");
     expect(source).toContain('buildPrincipleReminders');
+    expect(source).toContain("options.interestId || 'sailing'");
+    expect(source).toContain('hooks/useAdaptiveLearning.ts');
+    expect(source).toContain('hooks/useExcellenceChecklist.ts');
     expect(source).toContain('My Principles');
     expect(source).toContain('hooks/useSignaturePrinciples.ts');
   });

@@ -22,8 +22,6 @@ import type {
 } from '@/types/excellenceFramework';
 
 export class RaceChecklistService {
-  private static readonly SIGNATURE_INSIGHT_INTEREST_ID = 'sailing';
-
   private static getIsoWeekWindow(now: Date = new Date()): { start: string; end: string } {
     const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     const weekday = dayStart.getUTCDay();
@@ -119,7 +117,8 @@ export class RaceChecklistService {
   }
 
   private static async maybeEmitSignatureInsightForChecklistCompletion(
-    row: RaceChecklistItemRow
+    row: RaceChecklistItemRow,
+    interestId: string
   ): Promise<void> {
     const sailorId = String(row.sailor_id || '').trim();
     const raceEventId = String(row.race_event_id || '').trim();
@@ -147,7 +146,7 @@ export class RaceChecklistService {
       .from('signature_insight_events')
       .select('id')
       .eq('user_id', sailorId)
-      .eq('interest_id', this.SIGNATURE_INSIGHT_INTEREST_ID)
+      .eq('interest_id', interestId)
       .eq('outcome', 'dismissed')
       .eq('principle_text', principleText)
       .limit(1);
@@ -168,7 +167,7 @@ export class RaceChecklistService {
       await signatureInsightService.logSignatureInsightEvent({
         userId: sailorId,
         organizationId: null,
-        interestId: this.SIGNATURE_INSIGHT_INTEREST_ID,
+        interestId,
         raceEventId,
         checklistItemId: row.id,
         aiAnalysisId: ai.aiAnalysisId,
@@ -353,7 +352,10 @@ export class RaceChecklistService {
    */
   static async updateChecklistStatus(
     itemId: string,
-    status: ChecklistItemStatus
+    status: ChecklistItemStatus,
+    options?: {
+      interestId?: string;
+    }
   ): Promise<RaceChecklistItem> {
     try {
       const updates: Partial<RaceChecklistItemRow> = {
@@ -374,7 +376,8 @@ export class RaceChecklistService {
       }
 
       if (status === 'completed') {
-        await this.maybeEmitSignatureInsightForChecklistCompletion(data as RaceChecklistItemRow);
+        const interestId = String(options?.interestId || 'sailing').trim() || 'sailing';
+        await this.maybeEmitSignatureInsightForChecklistCompletion(data as RaceChecklistItemRow, interestId);
       }
 
       return this.mapRowToItem(data);

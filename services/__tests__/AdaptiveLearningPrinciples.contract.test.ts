@@ -11,6 +11,8 @@ describe('AdaptiveLearningService principle reuse contract', () => {
     expect(source).toContain('PRINCIPLE_NUDGE_PREFIX');
     expect(source).toContain('buildPrincipleReminders');
     expect(source).toContain("from('user_principle_memory')");
+    expect(source).toContain(".eq('interest_id', interestId)");
+    expect(source).toContain('options.interestId || \'sailing\'');
     expect(source).toContain('mergedReminders');
     expect(source).toContain('virtual_delivery_');
     expect(source).toContain('learnableEventId.startsWith(this.PRINCIPLE_NUDGE_PREFIX)');

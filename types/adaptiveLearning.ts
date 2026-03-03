@@ -469,6 +469,7 @@ export interface GetLearnableEventsOptions {
 export interface GenerateNudgesOptions {
   sailorId: string;
   raceEventId: string;
+  interestId?: string;
   venueId?: string;
   forecast?: {
     windSpeed: number;

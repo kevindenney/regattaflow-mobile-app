@@ -589,7 +589,10 @@ export class AdaptiveLearningService {
         )
         .slice(0, 2);
 
-      const principleReminders = await this.buildPrincipleReminders(options.sailorId);
+      const principleReminders = await this.buildPrincipleReminders(
+        options.sailorId,
+        options.interestId || 'sailing'
+      );
       const mergedReminders = [...principleReminders, ...reminders].slice(0, 3);
 
       // Limit total nudges
@@ -640,13 +643,16 @@ export class AdaptiveLearningService {
     }
   }
 
-  private static async buildPrincipleReminders(sailorId: string): Promise<PersonalizedNudge[]> {
+  private static async buildPrincipleReminders(
+    sailorId: string,
+    interestId: string
+  ): Promise<PersonalizedNudge[]> {
     try {
       const { data, error } = await supabase
         .from('user_principle_memory')
         .select('id,principle_text,last_seen_at,times_reinforced,times_challenged')
         .eq('user_id', sailorId)
-        .eq('interest_id', 'sailing')
+        .eq('interest_id', interestId)
         .order('last_seen_at', { ascending: false })
         .limit(2);
 

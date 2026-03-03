@@ -205,7 +205,7 @@ Implementation status (2026-03-03): Coach Home retention weekly recap now includ
 - [x] Accepted principles persist and are reused in future nudges/checklists.
 - [x] Dismissed insights do not resurface unchanged.
 - [x] Principle history is visible in Progress.
-- [ ] Works for sailing now, with schema/path ready for other interests (nursing, drawing, fitness).
+- [x] Works for sailing now, with schema/path ready for other interests (nursing, drawing, fitness).
 
 ---
 

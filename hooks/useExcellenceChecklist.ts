@@ -10,6 +10,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
+import { useOrganization } from '@/providers/OrganizationProvider';
 import { RaceChecklistService } from '@/services/RaceChecklistService';
 import type {
   RaceChecklistItem,
@@ -37,8 +38,10 @@ const EXCELLENCE_CHECKLIST_KEYS = {
  */
 export function useExcellenceChecklist(raceEventId: string, phase?: RacePhase) {
   const { user } = useAuth();
+  const { activeInterestSlug, activeDomain } = useOrganization();
   const queryClient = useQueryClient();
   const sailorId = user?.id;
+  const interestId = activeInterestSlug || activeDomain || 'sailing';
 
   // Fetch checklist items
   const {
@@ -78,7 +81,7 @@ export function useExcellenceChecklist(raceEventId: string, phase?: RacePhase) {
       itemId: string;
       status: ChecklistItemStatus;
     }) => {
-      return RaceChecklistService.updateChecklistStatus(itemId, status);
+      return RaceChecklistService.updateChecklistStatus(itemId, status, { interestId });
     },
     onMutate: async ({ itemId, status }) => {
       // Optimistic update

@@ -7,6 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
+import { useOrganization } from '@/providers/OrganizationProvider';
 import { AdaptiveLearningService } from '@/services/AdaptiveLearningService';
 import type {
   LearnableEvent,
@@ -182,8 +183,10 @@ export function usePersonalizedNudges(
   }
 ) {
   const { user } = useAuth();
+  const { activeInterestSlug, activeDomain } = useOrganization();
   const queryClient = useQueryClient();
   const sailorId = user?.id;
+  const interestId = activeInterestSlug || activeDomain || 'sailing';
 
   // Fetch nudges
   const {
@@ -192,12 +195,13 @@ export function usePersonalizedNudges(
     error,
     refetch,
   } = useQuery({
-    queryKey: ADAPTIVE_LEARNING_KEYS.nudges(raceEventId),
+    queryKey: [...ADAPTIVE_LEARNING_KEYS.nudges(raceEventId), interestId],
     queryFn: async () => {
       if (!sailorId) return null;
       return AdaptiveLearningService.generatePersonalizedNudges({
         sailorId,
         raceEventId,
+        interestId,
         ...options,
       });
     },

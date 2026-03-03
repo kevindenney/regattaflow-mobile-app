@@ -10,6 +10,7 @@ describe('RaceChecklistService signature insight trigger contract', () => {
     const source = readFile('services/RaceChecklistService.ts');
     expect(source).toContain('maybeEmitSignatureInsightForChecklistCompletion');
     expect(source).toContain("if (status === 'completed')");
+    expect(source).toContain("const interestId = String(options?.interestId || 'sailing').trim() || 'sailing'");
     expect(source).toContain('resolveLatestAiAnalysisForRace');
     expect(source).toContain('if (!ai.aiAnalysisId)');
     expect(source).toContain("eq('outcome', 'dismissed')");

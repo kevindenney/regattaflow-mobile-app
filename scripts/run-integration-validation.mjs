@@ -750,10 +750,17 @@ async function run() {
   const adaptiveLearningSource = await readFile('services/AdaptiveLearningService.ts');
   const progressContentSource = await readFile('components/progress/ProgressContent.tsx');
   const signaturePrinciplesHookSource = await readFile('hooks/useSignaturePrinciples.ts');
+  const adaptiveLearningHookSource = await readFile('hooks/useAdaptiveLearning.ts');
+  const excellenceChecklistHookSource = await readFile('hooks/useExcellenceChecklist.ts');
   const signatureInsightReuseContractOk =
     adaptiveLearningSource.includes("from('user_principle_memory')") &&
     adaptiveLearningSource.includes('buildPrincipleReminders') &&
     adaptiveLearningSource.includes('PRINCIPLE_NUDGE_PREFIX') &&
+    adaptiveLearningSource.includes(".eq('interest_id', interestId)") &&
+    adaptiveLearningSource.includes("options.interestId || 'sailing'") &&
+    adaptiveLearningHookSource.includes('const interestId = activeInterestSlug || activeDomain || \'sailing\'') &&
+    adaptiveLearningHookSource.includes('interestId,') &&
+    excellenceChecklistHookSource.includes('RaceChecklistService.updateChecklistStatus(itemId, status, { interestId })') &&
     adaptiveLearningSource.includes('virtual_delivery_') &&
     progressContentSource.includes('My Principles') &&
     progressContentSource.includes('useSignaturePrinciples') &&
