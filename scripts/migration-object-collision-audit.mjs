@@ -92,11 +92,9 @@ async function run() {
     constraint: allSymbols.filter((item) => item.type === 'constraint').length,
   };
 
-  const generatedAt = new Date().toISOString();
   const lines = [];
   lines.push('# Migration Object Collision Audit (20260302*)');
   lines.push('');
-  lines.push(`- Generated: ${generatedAt}`);
   lines.push(`- Scope: \`supabase/migrations/${TARGET_PATTERN.source}\``);
   lines.push(`- Migration files scanned: ${migrationFiles.length}`);
   lines.push(`- Symbols scanned: ${allSymbols.length} (indexes=${countsByType.index}, triggers=${countsByType.trigger}, constraints=${countsByType.constraint})`);
@@ -139,4 +137,3 @@ run().catch((error) => {
   console.error(`Migration object collision audit failed: ${message}`);
   process.exitCode = 1;
 });
-
