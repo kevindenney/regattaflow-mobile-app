@@ -166,6 +166,15 @@ export default function RaceManagementScreen() {
   const completedItems = isInstitutionWorkspace
     ? institutionProgramItems.completed
     : COMPLETED_RACES;
+  const quickActionAssessmentTarget = useMemo(() => {
+    if (!isInstitutionWorkspace) return null;
+    return (
+      institutionProgramItems.active[0] ||
+      institutionProgramItems.upcoming[0] ||
+      institutionProgramItems.completed[0] ||
+      null
+    );
+  }, [institutionProgramItems.active, institutionProgramItems.completed, institutionProgramItems.upcoming, isInstitutionWorkspace]);
   const getProgramUnreadCount = useCallback(
     (programId: string) => {
       const key = String(programId || '').trim();
@@ -387,8 +396,22 @@ export default function RaceManagementScreen() {
       icon: 'timer-outline',
       label: isInstitutionWorkspace ? 'Record assessments' : 'Record finishes',
       subtitle: isInstitutionWorkspace ? 'Capture competencies and feedback' : 'Capture times & penalties',
-      onPress: () =>
-        router.push((isInstitutionWorkspace ? '/assessments' : '/club/results/entry') as any),
+      onPress: () => {
+        if (isInstitutionWorkspace) {
+          router.push(
+            (
+              quickActionAssessmentTarget
+                ? buildProgramAssessmentHref({
+                    programId: quickActionAssessmentTarget.id,
+                    programTitle: quickActionAssessmentTarget.name,
+                  })
+                : '/assessments'
+            ) as any
+          );
+          return;
+        }
+        router.push('/club/results/entry' as any);
+      },
     },
   ] as const;
 
