@@ -88,6 +88,7 @@ Use this in final integration message:
 - Set `INTEGRATION_AUTH_INSTITUTION_BEARER` to enable institution/nursing authenticated probe:
   - `POST /api/ai/club/support` expects controlled `403` domain gate.
 - If these env vars are not set, authenticated probes are omitted (no `SKIP` rows added).
+- Validator always emits `api-smoke-auth-probe-configuration` as `PASS` to make enabled/disabled state explicit in reports.
 
 ### Expected `SKIP` policy (gate behavior)
 `scripts/check-integration-validation-gate.mjs` blocks when either of these is true:

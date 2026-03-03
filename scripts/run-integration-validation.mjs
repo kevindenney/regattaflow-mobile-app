@@ -526,6 +526,15 @@ async function run() {
   const baseUrl = configuredBaseUrl || (strictApiSmoke ? fallbackStrictBaseUrl : '');
   const sailingAuthToken = String(process.env.INTEGRATION_AUTH_SAILING_BEARER || '').trim();
   const institutionAuthToken = String(process.env.INTEGRATION_AUTH_INSTITUTION_BEARER || '').trim();
+
+  add({
+    id: 'api-smoke-auth-probe-configuration',
+    category: 'API Smoke',
+    status: 'PASS',
+    details: `Authenticated probe configuration: sailing=${sailingAuthToken ? 'enabled' : 'disabled'}, institution=${institutionAuthToken ? 'enabled' : 'disabled'}.`,
+    reference: 'INTEGRATION_AUTH_SAILING_BEARER, INTEGRATION_AUTH_INSTITUTION_BEARER',
+  });
+
   if (!baseUrl) {
     add({
       id: 'api-smoke-availability',
