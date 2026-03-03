@@ -18,6 +18,10 @@ import { useOrganization } from '@/providers/OrganizationProvider';
 import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
 import { buildAssignmentPendingSummary } from '@/lib/programs/assignmentDashboard';
 import {
+  buildProgramAssignmentsCsv,
+  buildProgramAssignmentsCsvFilename,
+} from '@/lib/programs/assignmentExport';
+import {
   AssessmentRecord,
   ParticipantStatus,
   ProgramParticipantRecord,
@@ -319,38 +323,14 @@ export default function ProgramAssignmentsScreen() {
       Alert.alert('Nothing to export', 'No assignments match the current filters.');
       return;
     }
-    const escapeCsv = (value: unknown) => {
-      const text = String(value ?? '');
-      if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-        return `"${text.replace(/"/g, '""')}"`;
-      }
-      return text;
-    };
-    const rows = [
-      ['name', 'email', 'role', 'status', 'program', 'session', 'created_at'],
-      ...filteredAssignments.map((row) => {
-        const program = programById.get(row.program_id);
-        const session = row.session_id ? sessionById.get(row.session_id) : null;
-        return [
-          row.display_name || '',
-          row.email || '',
-          row.role || '',
-          row.status || '',
-          program?.title || '',
-          session?.title || '',
-          row.created_at || '',
-        ];
-      }),
-    ];
-    const csv = rows.map((line) => line.map(escapeCsv).join(',')).join('\n');
+    const csv = buildProgramAssignmentsCsv(filteredAssignments, programById, sessionById);
 
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const dateTag = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.setAttribute('download', `program-assignments-${dateTag}.csv`);
+      link.setAttribute('download', buildProgramAssignmentsCsvFilename());
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
