@@ -16,6 +16,10 @@
 
 - [ ] Reduce/organize working tree into mergeable scope. Current state is heavily mixed (hundreds of modified/untracked files).
 - [ ] Decide whether `api-smoke-availability` SKIP is acceptable for this merge (requires `INTEGRATION_BASE_URL` for live smoke).
+- [ ] Mandatory retention loop shipped end-to-end:
+  - `streaks`
+  - `reminders`
+  - `weekly recap`
 - [ ] Confirm intended inclusion/exclusion for generated docs artifacts:
   - `docs/integration-validation-latest.md`
   - `docs/integration-validation-latest.json`
@@ -76,4 +80,3 @@ npm run report:migration-object-collision-audit
 - No-Go when:
   - [ ] Worktree remains unsliced/mixed across unrelated areas
   - [ ] New unexpected SKIP/FAIL appears in strict validation or gate checks
-
