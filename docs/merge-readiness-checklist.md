@@ -16,7 +16,7 @@
 
 - [ ] Reduce/organize working tree into mergeable scope. Current state is heavily mixed (hundreds of modified/untracked files).
 - [ ] Decide whether `api-smoke-availability` SKIP is acceptable for this merge (requires `INTEGRATION_BASE_URL` for live smoke).
-- [ ] Mandatory retention loop shipped end-to-end:
+- [x] Mandatory retention loop shipped end-to-end:
   - `streaks`
   - `reminders`
   - `weekly recap`
