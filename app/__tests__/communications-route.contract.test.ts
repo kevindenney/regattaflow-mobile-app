@@ -12,10 +12,19 @@ describe('communications route contract', () => {
     expect(source).toContain("programService.listOrganizationCommunicationThreads");
     expect(source).toContain("programService.listUnreadThreadIds");
     expect(source).toContain("programService.markAllThreadsRead");
+    expect(source).toContain('router.push((`/communications/${threadId}`) as any)');
   });
 
   it('wires coach-home unread thread drill-down to communications unread focus', () => {
     const source = readAppFile('app/(tabs)/clients.tsx');
     expect(source).toContain("router.push('/communications?focus=unread' as any)");
+  });
+
+  it('exposes thread detail route with read + reply flow', () => {
+    const source = readAppFile('app/communications/[threadId].tsx');
+    expect(source).toContain('export default function CommunicationThreadDetailScreen()');
+    expect(source).toContain('programService.listThreadMessages');
+    expect(source).toContain('programService.createCommunicationMessage');
+    expect(source).toContain('programService.markThreadRead');
   });
 });
