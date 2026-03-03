@@ -89,6 +89,8 @@ Use this in final integration message:
   - `POST /api/ai/club/support` expects controlled `403` domain gate.
 - If these env vars are not set, authenticated probes are omitted (no `SKIP` rows added).
 - Validator always emits `api-smoke-auth-probe-configuration` as `PASS` to make enabled/disabled state explicit in reports.
+- Optional ops helper (local): `npm run ops:check:auth-probe-secrets`
+  - Checks GitHub Actions secret presence for the two auth-probe tokens.
 
 ### Expected `SKIP` policy (gate behavior)
 `scripts/check-integration-validation-gate.mjs` blocks when either of these is true:
