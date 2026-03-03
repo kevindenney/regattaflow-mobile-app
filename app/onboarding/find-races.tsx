@@ -6,6 +6,8 @@
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { supabase } from '@/services/supabase';
 import type { RaceSelection } from '@/types/onboarding';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { guardOnboardingRouteForDomain } from '@/lib/utils/onboardingRouting';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -32,12 +34,21 @@ interface UpcomingRace {
 
 export default function FindRacesScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string }>();
+  const { activeDomain } = useWorkspaceDomain();
+  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string; domain?: string }>();
+  const paramDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const resolvedDomain = paramDomain || activeDomain;
+  const isSailingDomain = String(resolvedDomain || '').toLowerCase().trim() === 'sailing';
   const [searchQuery, setSearchQuery] = useState('');
   const [races, setRaces] = useState<UpcomingRace[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedRaces, setSelectedRaces] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (isSailingDomain) return;
+    router.replace(guardOnboardingRouteForDomain('/onboarding/find-races', resolvedDomain) as any);
+  }, [isSailingDomain, resolvedDomain, router]);
 
   // Load upcoming races (public/catalog races)
   useEffect(() => {
@@ -200,9 +211,13 @@ export default function FindRacesScreen() {
 
     router.push({
       pathname: '/onboarding/complete',
-      params: { name: params.name, avatarUrl: params.avatarUrl },
+      params: {
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        ...(resolvedDomain ? { domain: resolvedDomain } : {}),
+      },
     });
-  }, [selectedRaces, races, router, params]);
+  }, [selectedRaces, races, router, params, resolvedDomain]);
 
   const handleSkip = useCallback(async () => {
     await OnboardingStateService.setSelectedRaces([]);
@@ -210,9 +225,13 @@ export default function FindRacesScreen() {
 
     router.push({
       pathname: '/onboarding/complete',
-      params: { name: params.name, avatarUrl: params.avatarUrl },
+      params: {
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        ...(resolvedDomain ? { domain: resolvedDomain } : {}),
+      },
     });
-  }, [router, params]);
+  }, [router, params, resolvedDomain]);
 
   const handleBack = useCallback(() => {
     router.back();

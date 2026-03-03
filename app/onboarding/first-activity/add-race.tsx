@@ -5,7 +5,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import {
@@ -29,6 +29,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { OnboardingProgressDots } from '@/components/onboarding/OnboardingProgressDots';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { guardOnboardingRouteForDomain } from '@/lib/utils/onboardingRouting';
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 
 function SuccessIllustration() {
@@ -72,6 +74,16 @@ function SuccessIllustration() {
 
 export default function AddRaceScreen() {
   const router = useRouter();
+  const { activeDomain } = useWorkspaceDomain();
+  const params = useLocalSearchParams<{ domain?: string }>();
+  const paramDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const resolvedDomain = paramDomain || activeDomain;
+  const isSailingDomain = String(resolvedDomain || '').toLowerCase().trim() === 'sailing';
+
+  useEffect(() => {
+    if (isSailingDomain) return;
+    router.replace(guardOnboardingRouteForDomain('/onboarding/first-activity/add-race', resolvedDomain) as any);
+  }, [isSailingDomain, resolvedDomain, router]);
 
   const handleAddRace = async () => {
     // Mark onboarding as seen for returning user detection

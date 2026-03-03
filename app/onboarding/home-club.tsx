@@ -6,6 +6,8 @@
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { ClubDiscoveryService, type YachtClub } from '@/services/ClubDiscoveryService';
 import type { ClubSelection } from '@/types/onboarding';
+import { useWorkspaceDomain } from '@/hooks/useWorkspaceDomain';
+import { guardOnboardingRouteForDomain } from '@/lib/utils/onboardingRouting';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -23,13 +25,22 @@ import {
 
 export default function HomeClubScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string }>();
+  const { activeDomain } = useWorkspaceDomain();
+  const params = useLocalSearchParams<{ name?: string; avatarUrl?: string; domain?: string }>();
+  const paramDomain = Array.isArray(params.domain) ? params.domain[0] : params.domain;
+  const resolvedDomain = paramDomain || activeDomain;
+  const isSailingDomain = String(resolvedDomain || '').toLowerCase().trim() === 'sailing';
   const [searchQuery, setSearchQuery] = useState('');
   const [clubs, setClubs] = useState<YachtClub[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedClub, setSelectedClub] = useState<YachtClub | null>(null);
   const [hasNoClub, setHasNoClub] = useState(false);
+
+  useEffect(() => {
+    if (isSailingDomain) return;
+    router.replace(guardOnboardingRouteForDomain('/onboarding/home-club', resolvedDomain) as any);
+  }, [isSailingDomain, resolvedDomain, router]);
 
   // Load initial popular/nearby clubs
   useEffect(() => {
@@ -98,9 +109,13 @@ export default function HomeClubScreen() {
 
     router.push({
       pathname: '/onboarding/primary-fleet',
-      params: { name: params.name, avatarUrl: params.avatarUrl },
+      params: {
+        name: params.name,
+        avatarUrl: params.avatarUrl,
+        ...(resolvedDomain ? { domain: resolvedDomain } : {}),
+      },
     });
-  }, [selectedClub, hasNoClub, router, params]);
+  }, [selectedClub, hasNoClub, router, params, resolvedDomain]);
 
   const handleBack = useCallback(() => {
     router.back();
