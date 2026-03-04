@@ -35,6 +35,7 @@ describe('package CI gates contract', () => {
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/tabs-programs-route-regression.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/race-management-alias-lifecycle.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/secondary-packs-route-api.contract.test.ts');
+    expect(scripts['test:ci:gates:unit']).toContain('app/__tests__/signature-insight-completion-surface.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('hooks/__tests__/useWorkspaceDomain.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('hooks/__tests__/signature-insight-interest-threading.contract.test.ts');
     expect(scripts['test:ci:gates:unit']).toContain('services/__tests__/ProgramService.contract.test.ts');

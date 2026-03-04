@@ -55,6 +55,14 @@ describe('run-integration-validation contract', () => {
     expect(source).toContain('test:ci:gates:unit');
   });
 
+  it('emits signature insight completion confirmation surface contract row', () => {
+    const source = readScript('scripts/run-integration-validation.mjs');
+    expect(source).toContain("id: 'signature-insight-completion-confirmation-surface'");
+    expect(source).toContain('maybeEmitChecklistCompletionSignatureInsight');
+    expect(source).toContain('Signature Insight Ready');
+    expect(source).toContain('signature-insight-completion-surface.contract.test.ts');
+  });
+
   it('emits assessment RLS semantic role-scope check row', () => {
     const source = readScript('scripts/run-integration-validation.mjs');
     expect(source).toContain("id: 'assessment-rls-policy-semantics'");

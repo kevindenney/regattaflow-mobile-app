@@ -54,6 +54,8 @@ import {
   LEARNING_CAPTURE_CONFIG,
 } from '@/lib/educationalChecklistConfig';
 import { useAuth } from '@/providers/AuthProvider';
+import { useOrganization } from '@/providers/OrganizationProvider';
+import { signatureInsightService } from '@/services/SignatureInsightService';
 import {
   useActiveFocusIntent,
   useFocusIntentFromRace,
@@ -101,7 +103,9 @@ export function AfterRaceContent({
 }: AfterRaceContentProps) {
   // Get current user if userId not provided
   const { user } = useAuth();
+  const { activeInterestSlug, activeDomain } = useOrganization();
   const userId = propsUserId || user?.id;
+  const activeInterestId = activeInterestSlug || activeDomain || 'sailing';
   const router = useRouter();
 
   // Extract race location coordinates (available via useEnrichedRaces → venueCoordinates)
@@ -221,6 +225,10 @@ export function AfterRaceContent({
   // Toast notification for AI analysis completion
   const [showAIToast, setShowAIToast] = useState(false);
   const aiToastOpacity = useRef(new Animated.Value(0)).current;
+  const [signatureInsightConfirmation, setSignatureInsightConfirmation] = useState<{
+    message: string;
+    principle: string;
+  } | null>(null);
 
   // Enable LayoutAnimation on Android
   if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -349,6 +357,70 @@ export function AfterRaceContent({
   const nextLearningItem = useMemo(() => {
     return LEARNING_CAPTURE_CONFIG.items.find(item => !isLearningItemCompleted(item.id));
   }, [isLearningItemCompleted]);
+
+  const maybeEmitChecklistCompletionSignatureInsight = useCallback(
+    async (input: { sectionId: string; itemId: string; itemLabel: string; wasCompleted: boolean }) => {
+      if (input.wasCompleted) return;
+      if (!hasAIAnalysis || !userId) return;
+
+      const evidence = `AI analysis is available for your completed ${input.sectionId} timeline step "${input.itemLabel}".`;
+      const principle = `After completing ${input.sectionId} steps, lock one repeatable adjustment before your next race.`;
+      const message = `You're getting better at ${input.sectionId} execution because ${evidence}`;
+
+      try {
+        await signatureInsightService.logSignatureInsightEvent({
+          userId,
+          interestId: activeInterestId,
+          raceEventId: race.id,
+          sourceKind: 'timeline_step_completion',
+          insightText: message,
+          principleText: principle,
+          evidenceText: evidence,
+          confidenceScore: 0.6,
+          metadata: {
+            sectionId: input.sectionId,
+            checklistItemId: input.itemId,
+            checklistItemLabel: input.itemLabel,
+            source: 'educational_checklist_sheet',
+          },
+        });
+        setSignatureInsightConfirmation({ message, principle });
+      } catch (error) {
+        // Ignore duplicate or transient event-write failures; checklist completion remains primary.
+      }
+    },
+    [activeInterestId, hasAIAnalysis, race.id, userId]
+  );
+
+  const handlePerformanceToggle = useCallback(
+    async (itemId: string) => {
+      const item = POST_RACE_REVIEW_CONFIG.items.find((row) => row.id === itemId);
+      const wasCompleted = isPerformanceItemCompleted(itemId);
+      await togglePerformanceItem(itemId);
+      await maybeEmitChecklistCompletionSignatureInsight({
+        sectionId: POST_RACE_REVIEW_CONFIG.id,
+        itemId,
+        itemLabel: item?.label || itemId,
+        wasCompleted,
+      });
+    },
+    [isPerformanceItemCompleted, maybeEmitChecklistCompletionSignatureInsight, togglePerformanceItem]
+  );
+
+  const handleLearningToggle = useCallback(
+    async (itemId: string) => {
+      const item = LEARNING_CAPTURE_CONFIG.items.find((row) => row.id === itemId);
+      const wasCompleted = isLearningItemCompleted(itemId);
+      await toggleLearningItem(itemId);
+      await maybeEmitChecklistCompletionSignatureInsight({
+        sectionId: LEARNING_CAPTURE_CONFIG.id,
+        itemId,
+        itemLabel: item?.label || itemId,
+        wasCompleted,
+      });
+    },
+    [isLearningItemCompleted, maybeEmitChecklistCompletionSignatureInsight, toggleLearningItem]
+  );
 
   // ==========================================================================
   // RENDER
@@ -763,9 +835,10 @@ export function AfterRaceContent({
         accentColor="#007AFF"
         items={POST_RACE_REVIEW_CONFIG.items}
         isItemCompleted={isPerformanceItemCompleted}
-        toggleItem={togglePerformanceItem}
+        toggleItem={handlePerformanceToggle}
         completedCount={performanceCompletedCount}
         totalCount={performanceTotalCount}
+        signatureInsightConfirmation={signatureInsightConfirmation}
       />
 
       {/* Learning Capture Checklist Sheet */}
@@ -777,9 +850,10 @@ export function AfterRaceContent({
         accentColor="#AF52DE"
         items={LEARNING_CAPTURE_CONFIG.items}
         isItemCompleted={isLearningItemCompleted}
-        toggleItem={toggleLearningItem}
+        toggleItem={handleLearningToggle}
         completedCount={learningCompletedCount}
         totalCount={learningTotalCount}
+        signatureInsightConfirmation={signatureInsightConfirmation}
       />
 
       {/* Coach Selection Sheet (for multiple coaches) */}

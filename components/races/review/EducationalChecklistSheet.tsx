@@ -69,6 +69,11 @@ export interface EducationalChecklistSheetProps {
   completedCount: number;
   /** Total count of items */
   totalCount: number;
+  /** Optional confirmation surface when a signature insight is emitted */
+  signatureInsightConfirmation?: {
+    message: string;
+    principle: string;
+  } | null;
 }
 
 interface ChecklistItemRowProps {
@@ -202,6 +207,7 @@ export function EducationalChecklistSheet({
   toggleItem,
   completedCount,
   totalCount,
+  signatureInsightConfirmation = null,
 }: EducationalChecklistSheetProps) {
   const isAllComplete = completedCount === totalCount && totalCount > 0;
 
@@ -234,6 +240,20 @@ export function EducationalChecklistSheet({
         {subtitle && (
           <View style={styles.subtitleContainer}>
             <Text style={styles.subtitle}>{subtitle}</Text>
+            {signatureInsightConfirmation ? (
+              <View style={styles.signatureInsightNotice}>
+                <Target size={13} color={COLORS.purple} />
+                <View style={styles.signatureInsightNoticeBody}>
+                  <Text style={styles.signatureInsightNoticeTitle}>Signature Insight Ready</Text>
+                  <Text style={styles.signatureInsightNoticeText}>
+                    {signatureInsightConfirmation.message}
+                  </Text>
+                  <Text style={styles.signatureInsightNoticePrinciple}>
+                    Principle: {signatureInsightConfirmation.principle}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -338,6 +358,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.secondaryLabel,
     lineHeight: 20,
+  },
+  signatureInsightNotice: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    backgroundColor: '#FAF5FF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  signatureInsightNoticeBody: {
+    flex: 1,
+    gap: 2,
+  },
+  signatureInsightNoticeTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B21A8',
+  },
+  signatureInsightNoticeText: {
+    fontSize: 12,
+    color: '#581C87',
+    lineHeight: 17,
+  },
+  signatureInsightNoticePrinciple: {
+    fontSize: 11,
+    color: '#6B21A8',
+    lineHeight: 16,
   },
   progressBarContainer: {
     paddingHorizontal: 16,

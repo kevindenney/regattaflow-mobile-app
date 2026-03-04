@@ -789,6 +789,26 @@ async function run() {
     reference: 'package.json#scripts.test:ci:gates:unit',
   });
 
+  const afterRaceContentSource = await readFile('components/cards/content/phases/AfterRaceContent.tsx');
+  const educationalChecklistSheetSource = await readFile('components/races/review/EducationalChecklistSheet.tsx');
+  const signatureInsightCompletionSurfaceOk =
+    afterRaceContentSource.includes('maybeEmitChecklistCompletionSignatureInsight') &&
+    afterRaceContentSource.includes('hasAIAnalysis') &&
+    afterRaceContentSource.includes('signatureInsightService.logSignatureInsightEvent') &&
+    afterRaceContentSource.includes("sourceKind: 'timeline_step_completion'") &&
+    educationalChecklistSheetSource.includes('signatureInsightConfirmation') &&
+    educationalChecklistSheetSource.includes('Signature Insight Ready') &&
+    packageJsonSource.includes('app/__tests__/signature-insight-completion-surface.contract.test.ts');
+  add({
+    id: 'signature-insight-completion-confirmation-surface',
+    category: 'Signature Insight',
+    status: signatureInsightCompletionSurfaceOk ? 'PASS' : 'FAIL',
+    details: signatureInsightCompletionSurfaceOk
+      ? 'Timeline-step completion surface emits signature insights when AI analysis is available and renders confirmation in educational checklist sheets.'
+      : 'Signature insight completion confirmation surface markers are incomplete.',
+    reference: 'components/cards/content/phases/AfterRaceContent.tsx, components/races/review/EducationalChecklistSheet.tsx, package.json',
+  });
+
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   const lineageTableFilterRaw = process.env.INTEGRATION_REQUIRED_TABLES || '';

@@ -196,7 +196,7 @@ Implementation status (2026-03-03): Coach Home retention weekly recap now includ
 - [ ] Low-confidence insights are withheld or shown as draft suggestions.
 
 ### 4.5.4 UX Placement
-- [ ] Timeline step completion confirmation surface
+- [x] Timeline step completion confirmation surface
 - [x] Post-analysis summary card
 - [x] Progress tab "My Principles" list with trend/reinforcement indicators
 
