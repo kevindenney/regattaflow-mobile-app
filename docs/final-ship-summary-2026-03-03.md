@@ -55,6 +55,24 @@
   - deployment smoke contract coverage expanded:
     - script contract test added (`scripts/__tests__/run-api-smoke-deploy.contract.test.ts`)
     - CI gates now include dedicated SQL security suite (`npm run test:security:sql`) as part of `npm run test:ci:gates`.
+- Signature Insight Moment productionization completed across the active-interest lanes:
+  - persistence + event outcomes:
+    - migration `20260303153000_signature_insight_memory.sql`
+    - tables: `user_principle_memory`, `signature_insight_events`
+    - RPC: `apply_signature_insight_outcome_v1(...)`
+  - runtime trigger hardening:
+    - timeline-step completion emits insight only when AI analysis is available
+    - unchanged dismissed principles are suppressed from resurfacing
+  - UI/experience:
+    - Coach Home Signature Insight card with `Keep` / `Edit` / `Dismiss` actions
+    - Progress `My Principles` history section with reinforcement/challenge indicators
+  - reuse loop:
+    - accepted principles are fed back into adaptive reminder generation
+  - cross-interest threading:
+    - interest/domain is threaded through checklist completion and adaptive nudge generation (not sailing-hardcoded)
+  - CI coverage:
+    - behavior-level trigger test added and wired into `test:ci:gates:unit`
+    - integration validation contract rows extended for signature-insight migration/service/trigger/reuse/gate wiring
 
 ## Deferred
 - No additional blockers deferred from the migration/CI hardening lane as of 2026-03-03.
@@ -71,3 +89,9 @@
 - `npm run test:ci:gates`: PASS
 - `npm run validate:integration:strict`: PASS (latest run; current snapshot: `29 pass, 0 fail, 0 skip`)
 - `npm run validate:pre-ship:bundle`: PASS (`steps=7/7`)
+
+## Validation Snapshot (2026-03-04)
+- `npm run test:ci:gates`: PASS
+- `npm run validate:integration:strict`: PASS
+- `npm run validate:pre-ship:bundle`: PASS (`steps=7/7`)
+- `npm run typecheck`: PASS

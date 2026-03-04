@@ -3,9 +3,9 @@
 ## Purpose
 Use this file as the integration lane checklist while parallel Codex terminals implement plan blocks.
 
-## Current Validation Snapshot (2026-03-03)
+## Current Validation Snapshot (2026-03-04)
 - `npm run validate:pre-ship:bundle`: PASS (`steps=7/7`)
-- `npm run validate:integration:strict`: PASS (latest run; current snapshot: `29 pass, 0 fail, 0 skip`)
+- `npm run validate:integration:strict`: PASS
 - `npm run gate:integration-validation`: PASS
 - `npm run test:ci:gates`: PASS
 - `npm run typecheck`: PASS
@@ -170,6 +170,14 @@ All in-scope migration streams are shipped. Any additional hardening should be e
    - Extend collision audit to enforce canonical 20260302* ownership/header conventions.
    - Add CI guard so convention and ownership drift cannot regress silently.
    - Status (2026-03-03): shipped (`scripts/lint-20260302-migration-conventions.mjs` + `scripts/migration-object-collision-audit.mjs` with CI gate wiring and tests).
+
+6. Signature Insight productionization bundle
+   - Add persistence/event outcomes + trigger gating + dismissal non-resurfacing suppression.
+   - Add Coach Home keep/edit/dismiss actions and Progress `My Principles` surface.
+   - Reuse accepted principles in adaptive reminder generation.
+   - Thread active interest/domain through signature-insight trigger + adaptive nudges.
+   - Add behavior-level CI gate coverage for trigger emission path.
+   - Status (2026-03-04): shipped.
 
 ## 2026-03-02 Invite Flow Reconciliation
 - Reviewed migrations:
