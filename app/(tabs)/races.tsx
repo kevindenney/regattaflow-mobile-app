@@ -29,6 +29,7 @@ import {
   PostRaceAnalysisSection,
   RaceModalsSection,
   RacesFloatingHeader,
+  type RecommendedStepTemplate,
   RealRacesCarousel,
   RegulatoryDigestCard,
   SocialTimelineView,
@@ -99,6 +100,7 @@ import { createLogger } from '@/lib/utils/logger';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
+import { useOrganization } from '@/providers/OrganizationProvider';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useVocabulary } from '@/hooks/useVocabulary';
 import { useFeatureTourContext } from '@/providers/FeatureTourProvider';
@@ -145,7 +147,9 @@ export default function RacesScreen() {
   const { isTourActive, currentStep, triggerPricingPrompt } = useFeatureTourContext();
   const eventConfig = useInterestEventConfig();
   const { currentInterest } = useInterest();
+  const { activeOrganization } = useOrganization();
   const { vocab } = useVocabulary();
+  const [recommendedOrgTemplates, setRecommendedOrgTemplates] = useState<RecommendedStepTemplate[]>([]);
 
   // Safe area insets for proper header spacing
   const insets = useSafeAreaInsets();
@@ -1912,6 +1916,67 @@ export default function RacesScreen() {
     },
   });
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRecommendedOrgTemplates = async () => {
+      if (currentInterest?.slug !== 'nursing' || !activeOrganization?.id || !signedIn) {
+        if (!cancelled) {
+          setRecommendedOrgTemplates([]);
+        }
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('betterat_org_step_templates')
+          .select('id,title,description,step_type,module_ids,suggested_competency_ids')
+          .eq('org_id', activeOrganization.id)
+          .eq('interest_slug', 'nursing')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(6);
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        const templates = (data || []).map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          stepType: row.step_type,
+          moduleIds: Array.isArray(row.module_ids) ? row.module_ids.filter((item: any) => typeof item === 'string') : [],
+          suggestedCompetencyIds: Array.isArray(row.suggested_competency_ids)
+            ? row.suggested_competency_ids.filter((item: any) => typeof item === 'string')
+            : [],
+        })) as RecommendedStepTemplate[];
+
+        setRecommendedOrgTemplates(templates);
+      } catch {
+        if (!cancelled) {
+          setRecommendedOrgTemplates([]);
+        }
+      }
+    };
+
+    loadRecommendedOrgTemplates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrganization?.id, currentInterest?.slug, signedIn]);
+
+  const handleSelectRecommendedTemplate = useCallback((template: RecommendedStepTemplate) => {
+    handleShowAddRaceSheet({
+      templateId: template.id,
+      templateTitle: template.title,
+      templateDescription: template.description || undefined,
+      templateStepType: template.stepType,
+      templateModuleIds: template.moduleIds,
+      templateSuggestedCompetencyIds: template.suggestedCompetencyIds,
+    });
+  }, [handleShowAddRaceSheet]);
+
   // NowBar weather: fetch live weather for the next upcoming race's venue,
   // falling back to browser/device geolocation when no venue coordinates exist.
   const nextRaceVenueCoords = useMemo(() => {
@@ -3356,6 +3421,8 @@ export default function RacesScreen() {
           onAddPractice={handleAddPractice}
           onNewSeason={() => setShowSeasonSettings(true)}
           onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}
+          recommendedTemplates={recommendedOrgTemplates}
+          onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
           onAddButtonLayout={setAddButtonLayout}
           totalRaces={headerTotalRaces}
           upcomingRaces={upcomingRacesCount}

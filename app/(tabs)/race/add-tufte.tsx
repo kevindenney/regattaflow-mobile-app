@@ -16,7 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
 import * as Clipboard from 'expo-clipboard';
 import type { DocumentPickerAsset } from 'expo-document-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ChevronDown,
   ChevronLeft,
@@ -28,7 +28,7 @@ import {
   Trophy,
   Users,
 } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -199,6 +199,14 @@ interface FormState {
 
 export default function AddRaceScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{
+    templateId?: string;
+    templateTitle?: string;
+    templateDescription?: string;
+    templateStepType?: string;
+    templateModuleIds?: string;
+    templateSuggestedCompetencyIds?: string;
+  }>();
   const { user, isGuest } = useAuth();
   const { currentInterest } = useInterest();
   const eventConfig = useInterestEventConfig();
@@ -316,10 +324,43 @@ export default function AddRaceScreen() {
   // Course position editor state
   const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
   const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
+  const hasAppliedRouteTemplateRef = useRef(false);
+
+  const routeTemplatePrefill = useMemo(() => {
+    const parseListParam = (value?: string): string[] => {
+      if (!value) return [];
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((entry) => typeof entry === 'string').map((entry) => entry.trim()).filter(Boolean);
+        }
+      } catch {
+        // ignore parse failure; fallback to empty
+      }
+      return [];
+    };
+
+    return {
+      id: typeof searchParams.templateId === 'string' ? searchParams.templateId : '',
+      title: typeof searchParams.templateTitle === 'string' ? searchParams.templateTitle : '',
+      description: typeof searchParams.templateDescription === 'string' ? searchParams.templateDescription : '',
+      stepType: typeof searchParams.templateStepType === 'string' ? searchParams.templateStepType : '',
+      moduleIds: parseListParam(searchParams.templateModuleIds),
+      suggestedCompetencyIds: parseListParam(searchParams.templateSuggestedCompetencyIds),
+    };
+  }, [
+    searchParams.templateDescription,
+    searchParams.templateId,
+    searchParams.templateModuleIds,
+    searchParams.templateStepType,
+    searchParams.templateSuggestedCompetencyIds,
+    searchParams.templateTitle,
+  ]);
 
   // Reset form when screen is focused
   useFocusEffect(
     useCallback(() => {
+      hasAppliedRouteTemplateRef.current = false;
       setForm(getInitialState());
       setIsSaving(false);
       setCalculatedDistance(null);
@@ -330,6 +371,40 @@ export default function AddRaceScreen() {
       logger.debug('[AddRaceScreen] Form reset on focus');
     }, [])
   );
+
+  useEffect(() => {
+    if (hasAppliedRouteTemplateRef.current) return;
+    if (!routeTemplatePrefill.title && !routeTemplatePrefill.stepType && routeTemplatePrefill.moduleIds.length === 0) return;
+
+    const updates: Partial<FormState> = {};
+    if (routeTemplatePrefill.title) {
+      updates.name = routeTemplatePrefill.title;
+    }
+    if (!isSailing && routeTemplatePrefill.stepType) {
+      const matchingSubtype = eventConfig.eventSubtypes.find((entry) => entry.id === routeTemplatePrefill.stepType);
+      if (matchingSubtype) {
+        updates.eventSubtype = matchingSubtype.id;
+      }
+    }
+    if (!isSailing && routeTemplatePrefill.description) {
+      updates.subtypeFields = {
+        learning_objectives: routeTemplatePrefill.description,
+      };
+    }
+    if (routeTemplatePrefill.description) {
+      updates.notes = routeTemplatePrefill.description;
+    }
+
+    hasAppliedRouteTemplateRef.current = true;
+    setForm((prev) => ({
+      ...prev,
+      ...updates,
+      subtypeFields: {
+        ...prev.subtypeFields,
+        ...(updates.subtypeFields || {}),
+      },
+    }));
+  }, [eventConfig.eventSubtypes, isSailing, routeTemplatePrefill]);
 
   // Apply a suggestion from the suggestion engine to the form
   const applySuggestion = useCallback((suggestion: RaceSuggestion) => {
@@ -662,6 +737,22 @@ export default function AddRaceScreen() {
         venue_name: form.location || null,
         interest_id: currentInterest?.id ?? null,
       };
+
+      if (routeTemplatePrefill.id) {
+        metadata.org_template_id = routeTemplatePrefill.id;
+      }
+      if (routeTemplatePrefill.title) {
+        metadata.org_template_title = routeTemplatePrefill.title;
+      }
+      if (routeTemplatePrefill.description) {
+        metadata.org_template_description = routeTemplatePrefill.description;
+      }
+      if (routeTemplatePrefill.moduleIds.length > 0) {
+        metadata.org_template_module_ids = routeTemplatePrefill.moduleIds;
+      }
+      if (routeTemplatePrefill.suggestedCompetencyIds.length > 0) {
+        metadata.org_template_suggested_competency_ids = routeTemplatePrefill.suggestedCompetencyIds;
+      }
 
       // Guest Restriction: Prevent saving for guests and prompt to sign up
       if (isGuest || !user?.id) {

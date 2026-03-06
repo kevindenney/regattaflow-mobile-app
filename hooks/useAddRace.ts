@@ -111,11 +111,11 @@ export interface UseAddRaceReturn {
   /** Whether signup prompt should be shown (guest trying to add 2nd race) */
   showSignupPrompt: boolean;
   /** Handler to show add race sheet */
-  handleShowAddRaceSheet: () => void;
+  handleShowAddRaceSheet: (prefill?: AddRacePrefillParams) => void;
   /** Handler to close add race sheet */
   handleCloseAddRaceSheet: () => void;
   /** Handler to navigate to full add race page */
-  handleAddRaceNavigation: () => void;
+  handleAddRaceNavigation: (prefill?: AddRacePrefillParams) => void;
   /** Handler for quick add race form */
   handleQuickAddRaceSubmit: (data: QuickAddRaceData) => Promise<void>;
   /** Handler for full add race dialog with race type support */
@@ -126,6 +126,15 @@ export interface UseAddRaceReturn {
   setFamilyButtonExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   /** Setter for showSignupPrompt */
   setShowSignupPrompt: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export interface AddRacePrefillParams {
+  templateId?: string;
+  templateTitle?: string;
+  templateDescription?: string;
+  templateStepType?: string;
+  templateModuleIds?: string[];
+  templateSuggestedCompetencyIds?: string[];
 }
 
 /**
@@ -147,8 +156,22 @@ export function useAddRace({
   // Handler to show add race sheet
   // Note: Using page navigation instead of modal due to iOS modal presentation issues
   // The /(tabs)/race/add-tufte page has clean Tufte-style UI with real AI extraction
-  const handleShowAddRaceSheet = useCallback(() => {
-    router.push('/(tabs)/race/add-tufte');
+  const handleShowAddRaceSheet = useCallback((prefill?: AddRacePrefillParams) => {
+    router.push({
+      pathname: '/(tabs)/race/add-tufte',
+      params: prefill
+        ? {
+          templateId: prefill.templateId,
+          templateTitle: prefill.templateTitle,
+          templateDescription: prefill.templateDescription,
+          templateStepType: prefill.templateStepType,
+          templateModuleIds: prefill.templateModuleIds ? JSON.stringify(prefill.templateModuleIds) : undefined,
+          templateSuggestedCompetencyIds: prefill.templateSuggestedCompetencyIds
+            ? JSON.stringify(prefill.templateSuggestedCompetencyIds)
+            : undefined,
+        }
+        : undefined,
+    } as any);
   }, [router]);
 
   // Handler to close add race sheet
@@ -157,8 +180,22 @@ export function useAddRace({
   }, []);
 
   // Handler to navigate to full add race page
-  const handleAddRaceNavigation = useCallback(() => {
-    router.push('/(tabs)/race/add-tufte');
+  const handleAddRaceNavigation = useCallback((prefill?: AddRacePrefillParams) => {
+    router.push({
+      pathname: '/(tabs)/race/add-tufte',
+      params: prefill
+        ? {
+          templateId: prefill.templateId,
+          templateTitle: prefill.templateTitle,
+          templateDescription: prefill.templateDescription,
+          templateStepType: prefill.templateStepType,
+          templateModuleIds: prefill.templateModuleIds ? JSON.stringify(prefill.templateModuleIds) : undefined,
+          templateSuggestedCompetencyIds: prefill.templateSuggestedCompetencyIds
+            ? JSON.stringify(prefill.templateSuggestedCompetencyIds)
+            : undefined,
+        }
+        : undefined,
+    } as any);
   }, [router]);
 
   // Handler for quick add race form (simple name + date/time)
