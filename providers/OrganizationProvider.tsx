@@ -72,6 +72,7 @@ type MembershipLoadErrorPayload = {
 type OrganizationContextValue = {
   loading: boolean;
   ready: boolean;
+  membershipLoadAttempt: number;
   membershipLoadError: string | null;
   membershipLoadDebug: MembershipLoadDebug | null;
   membershipLoadErrorPayload: MembershipLoadErrorPayload | null;
@@ -98,6 +99,7 @@ const STORAGE_KEY = 'rf_active_organization_id';
 const Ctx = createContext<OrganizationContextValue>({
   loading: false,
   ready: false,
+  membershipLoadAttempt: 0,
   membershipLoadError: null,
   membershipLoadDebug: null,
   membershipLoadErrorPayload: null,
@@ -272,6 +274,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const userIdRef = React.useRef<string | null>(user?.id ?? null);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [membershipLoadAttempt, setMembershipLoadAttempt] = useState(0);
   const [membershipLoadError, setMembershipLoadError] = useState<string | null>(null);
   const [membershipLoadDebug, setMembershipLoadDebug] = useState<MembershipLoadDebug | null>(null);
   const [membershipLoadErrorPayload, setMembershipLoadErrorPayload] = useState<MembershipLoadErrorPayload | null>(null);
@@ -287,6 +290,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     const currentSignedIn = signedInRef.current;
     const currentUserId = userIdRef.current;
     const startedAt = new Date().toISOString();
+    setMembershipLoadAttempt((prev) => prev + 1);
     setMembershipLoadDebug({
       startedAt,
       finishedAt: null,
@@ -308,6 +312,18 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       });
       const { data: sessionData } = await Promise.race([supabase.auth.getSession(), sessionTimeout]);
       hasSession = Boolean(sessionData?.session);
+      setMembershipLoadDebug({
+        startedAt,
+        finishedAt: null,
+        hasSession: true,
+        userId: currentUserId,
+        phase: 'start',
+        table: 'organization_memberships',
+        errorMessage: null,
+        errorCode: null,
+        errorDetails: null,
+        errorHint: null,
+      });
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error ?? '');
       const timedOut = rawMessage === 'SESSION_TIMEOUT';
@@ -555,6 +571,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     () => ({
       loading,
       ready,
+      membershipLoadAttempt,
       membershipLoadError,
       membershipLoadDebug,
       membershipLoadErrorPayload,
@@ -576,6 +593,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     [
       loading,
       ready,
+      membershipLoadAttempt,
       membershipLoadError,
       membershipLoadDebug,
       membershipLoadErrorPayload,

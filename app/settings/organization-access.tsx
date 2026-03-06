@@ -43,6 +43,7 @@ export default function OrganizationAccessSettingsScreen() {
   const {
     loading,
     ready,
+    membershipLoadAttempt,
     membershipLoadError,
     membershipLoadDebug,
     membershipLoadErrorPayload,
@@ -412,6 +413,7 @@ export default function OrganizationAccessSettingsScreen() {
               <>
                 <Text className="text-xs text-gray-600 mt-3">loading: {String(loading)}</Text>
                 <Text className="text-xs text-gray-600 mt-1">ready: {String(ready)}</Text>
+                <Text className="text-xs text-gray-600 mt-1">membershipLoadAttempt: {membershipLoadAttempt}</Text>
                 <Text className="text-xs text-gray-600 mt-1">
                   membershipLoadError: {membershipLoadError || 'null'}
                 </Text>
