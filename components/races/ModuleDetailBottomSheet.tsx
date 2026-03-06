@@ -15,7 +15,7 @@
  * what experienced practitioners in their network have shared.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   PatientOverviewTool,
   MedicationsTool,

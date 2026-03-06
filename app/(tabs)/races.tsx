@@ -417,7 +417,16 @@ export default function RacesScreen() {
   const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
   const interestSlug = eventConfig.interestSlug;
   const interestFilteredRaces = useMemo(() => {
-    if (isSailingInterest) return liveRaces;
+    if (isSailingInterest) {
+      if (!liveRaces) return EMPTY_RACES;
+      return liveRaces.filter((race:any) => {
+        const meta = (race?.metadata || {}) as Record<string,any>;
+        const taggedInterest = String(meta.interest_slug || '').toLowerCase().trim();
+        // Sailing timeline should not show explicitly tagged non-sailing steps.
+        if (!taggedInterest) return true;
+        return taggedInterest === 'sail-racing' || taggedInterest === 'sailing' || taggedInterest === 'race';
+      });
+    }
     // For non-sailing interests, show events whose metadata.interest_slug matches
     if (!liveRaces) return EMPTY_RACES;
     const filtered = liveRaces.filter((race: any) => {
