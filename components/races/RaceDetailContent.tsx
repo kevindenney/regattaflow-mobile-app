@@ -373,6 +373,7 @@ export function RaceDetailContent({ raceId }: RaceDetailContentProps) {
           isOpen={activeModuleId !== null}
           onClose={() => setActiveModuleId(null)}
           config={eventConfig}
+          stepMetadata={(raceData as any)?.metadata || null}
           onContentChange={handleModuleContentChange}
         />
       )}

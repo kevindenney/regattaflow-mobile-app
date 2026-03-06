@@ -108,7 +108,7 @@ const DISTANCE_COLORS = {
   routeBg: '#F5F3FF',
 } as const;
 
-const NURSING_CAPABILITY_TITLE_BY_ID = new Map(
+const NURSING_CAPABILITY_TITLE_BY_ID = new globalThis.Map(
   NURSING_CORE_V1_CAPABILITIES.map((capability) => [capability.id, capability.title])
 );
 
@@ -1824,6 +1824,7 @@ export function RaceSummaryCard({
           isOpen={activeModuleId !== null}
           onClose={handleCloseModuleSheet}
           config={eventConfig}
+          stepMetadata={(race as any)?.metadata || null}
           artifactContext={moduleArtifactContext}
           onContentChange={handleModuleContentChange}
         />

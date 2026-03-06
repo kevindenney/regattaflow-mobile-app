@@ -812,6 +812,31 @@ const NURSING_COMPETENCY_BY_ID = new Map(
   NURSING_CORE_V1_CAPABILITIES.map((item) => [item.id,item])
 );
 
+const parseCompetencyIdList = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter((entry) => entry.length > 0);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+          .filter((entry) => entry.length > 0);
+      }
+    } catch {}
+    return trimmed
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  return [];
+};
+
 function MapsToSection({
   selectedIds,
   onAdd,
@@ -2075,6 +2100,7 @@ export interface ModuleDetailBottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
   config: InterestEventConfig;
+  stepMetadata?: Record<string,unknown> | null;
   artifactContext?: {
     eventType: ModuleArtifactEventType;
     eventId: string;
@@ -2089,6 +2115,7 @@ export function ModuleDetailBottomSheet({
   isOpen,
   onClose,
   config,
+  stepMetadata,
   artifactContext,
   onContentChange,
 }: ModuleDetailBottomSheetProps) {
@@ -2117,6 +2144,7 @@ export function ModuleDetailBottomSheet({
   const mappedCompetencyIdsRef = useRef(mappedCompetencyIds);
   mappedCompetencyIdsRef.current = mappedCompetencyIds;
   const hasLocalEditsByModuleRef = useRef<Record<string, boolean>>({});
+  const templateMapsToPrefillAppliedRef = useRef<Record<string, boolean>>({});
   const flushPendingSaveRef = useRef<((options?: {ensureSaved?: boolean}) => Promise<{artifact_id: string} | null>) | null>(null);
 
   // Notify parent whenever module content changes (notes, attachments, or tool steps)
@@ -2497,6 +2525,47 @@ export function ModuleDetailBottomSheet({
     && artifactContext?.eventType
     && artifactContext?.eventId
   );
+
+  const templateSuggestedCompetencyIds = useMemo(() => {
+    if (config.interestSlug !== 'nursing') return [];
+    const rawValue = (stepMetadata || {}).org_template_suggested_competency_ids;
+    const parsedIds = parseCompetencyIdList(rawValue);
+    return parsedIds
+      .filter((id) => CLINICAL_REASONING_CANDIDATE_IDS.includes(id))
+      .slice(0, MAX_MAPPED_COMPETENCIES);
+  }, [config.interestSlug, stepMetadata]);
+
+  React.useEffect(() => {
+    if (!isOpen || moduleId !== CLINICAL_REASONING_MODULE_ID) return;
+    if (config.interestSlug !== 'nursing') return;
+    if (templateSuggestedCompetencyIds.length === 0) return;
+
+    const existingMapped = mappedCompetencyIdsRef.current[moduleId] || [];
+    if (existingMapped.length > 0) return;
+
+    const prefillKey = currentArtifactId && isUuid(currentArtifactId)
+      ? `artifact:${currentArtifactId}`
+      : `pending:${artifactContext?.eventType || 'none'}:${artifactContext?.eventId || 'none'}:${moduleId}`;
+    if (templateMapsToPrefillAppliedRef.current[prefillKey]) return;
+    templateMapsToPrefillAppliedRef.current[prefillKey] = true;
+
+    markModuleDirty(moduleId);
+    const updated = {
+      ...mappedCompetencyIdsRef.current,
+      [moduleId]: templateSuggestedCompetencyIds,
+    };
+    mappedCompetencyIdsRef.current = updated;
+    setMappedCompetencyIds(updated);
+  }, [
+    artifactContext?.eventId,
+    artifactContext?.eventType,
+    config.interestSlug,
+    currentArtifactId,
+    isOpen,
+    markModuleDirty,
+    moduleId,
+    templateSuggestedCompetencyIds,
+  ]);
 
   React.useEffect(() => {
     let isCancelled = false;
