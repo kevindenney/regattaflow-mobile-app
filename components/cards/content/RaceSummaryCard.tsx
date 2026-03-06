@@ -43,6 +43,7 @@ import { CrewAvatarStack } from '@/components/races/CrewAvatarStack';
 import { CollaborationPopover } from '@/components/races/CollaborationPopover';
 import { useRaceCollaborators } from '@/hooks/useRaceCollaborators';
 import { useRaceMessages } from '@/hooks/useRaceMessages';
+import { useRecentNonNursingSteps } from '@/hooks/useRecentNonNursingSteps';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import { useQueryClient } from '@tanstack/react-query';
@@ -1151,8 +1152,13 @@ export function RaceSummaryCard({
   }, [isNursingInterest, race]);
   const visibleTemplateSuggestedTitles = templateSuggestedCompetencyTitles.slice(0, 3);
   const hiddenTemplateSuggestedCount = Math.max(templateSuggestedCompetencyTitles.length - visibleTemplateSuggestedTitles.length, 0);
+  const { steps: recentNonNursingSteps } = useRecentNonNursingSteps({
+    userId: userId || null,
+    excludeInterestSlug: 'nursing',
+    enabled: isNursingInterest,
+  });
   const transferSparkLine = useMemo(() => {
-    if (!isNursingInterest || !timelineRaces || timelineRaces.length === 0) return null;
+    if (!isNursingInterest) return null;
     const parseMetaSkillIds = (value:unknown):MetaSkillId[] => {
       const ids = parseStringIdList(value);
       return ids.filter((id):id is MetaSkillId => {
@@ -1166,7 +1172,7 @@ export function RaceSummaryCard({
       });
     };
     const toInterestSlug = (item:any):string => {
-      return String(item?.interestSlug || item?.metadata?.interest_slug || '').toLowerCase();
+      return String(item?.interestSlug || item?.metadata?.interest_slug || '').toLowerCase().trim();
     };
     const interestLabel = (slug:string):string => {
       if (slug === 'sail-racing' || slug === 'sailing' || slug === 'race') return 'Sailing';
@@ -1176,34 +1182,40 @@ export function RaceSummaryCard({
       return 'work';
     };
 
-    const candidates = [...timelineRaces]
-      .filter((item) => item?.id && item.id !== race.id)
-      .filter((item) => toInterestSlug(item) !== 'nursing')
-      .sort((a, b) => {
-        const aTime = new Date(a.date || '').getTime();
-        const bTime = new Date(b.date || '').getTime();
-        return bTime - aTime;
-      })
-      .slice(0, 10);
+    const findSparkFromCandidates = (candidates:any[]):string | null => {
+      const sorted = [...candidates]
+        .filter((item) => item?.id && item.id !== race.id)
+        .filter((item) => toInterestSlug(item) !== 'nursing')
+        .sort((a, b) => {
+          const aTime = new Date(a.date || a.start_date || a.created_at || '').getTime();
+          const bTime = new Date(b.date || b.start_date || b.created_at || '').getTime();
+          return bTime - aTime;
+        })
+        .slice(0, 10);
 
-    for (const candidate of candidates) {
-      const candidateMetadata = (candidate?.metadata || {}) as Record<string,unknown>;
-      const candidateSkills = parseMetaSkillIds(candidateMetadata.meta_skills);
-      const inferredSkills = candidateSkills.length > 0 ? candidateSkills : inferMetaSkillsFromContext({
-        interestSlug: toInterestSlug(candidate),
-        stepType: String(candidateMetadata.event_subtype || ''),
-        moduleIds: parseStringIdList(candidateMetadata.module_ids),
-        hasDebrief: Boolean(candidateMetadata.debrief || candidateMetadata.notes || candidateMetadata.debrief_notes),
-        hasReasoning: Boolean(candidateMetadata.reasoning || candidateMetadata.clinical_reasoning),
-        hasWorkoutLog: Boolean(candidateMetadata.workout_log || candidateMetadata.time_log || candidateMetadata.hours_logged),
-      });
-      const matchedSkill = NURSING_TRANSFER_META_SKILLS.find((skillId) => inferredSkills.includes(skillId));
-      if (!matchedSkill) continue;
-      const label = interestLabel(toInterestSlug(candidate));
-      return `Transfer: Recent ${label} reinforced ${metaSkillLabel(matchedSkill)}.`;
-    }
-    return null;
-  }, [isNursingInterest, timelineRaces, race.id]);
+      for (const candidate of sorted) {
+        const candidateMetadata = (candidate?.metadata || {}) as Record<string,unknown>;
+        const candidateSkills = parseMetaSkillIds(candidateMetadata.meta_skills);
+        const inferredSkills = candidateSkills.length > 0 ? candidateSkills : inferMetaSkillsFromContext({
+          interestSlug: toInterestSlug(candidate),
+          stepType: String(candidateMetadata.event_subtype || candidate?.raceType || ''),
+          moduleIds: parseStringIdList(candidateMetadata.module_ids),
+          hasDebrief: Boolean(candidateMetadata.debrief || candidateMetadata.notes || candidateMetadata.debrief_notes),
+          hasReasoning: Boolean(candidateMetadata.reasoning || candidateMetadata.clinical_reasoning),
+          hasWorkoutLog: Boolean(candidateMetadata.workout_log || candidateMetadata.time_log || candidateMetadata.hours_logged),
+        });
+        const matchedSkill = NURSING_TRANSFER_META_SKILLS.find((skillId) => inferredSkills.includes(skillId));
+        if (!matchedSkill) continue;
+        const label = interestLabel(toInterestSlug(candidate));
+        return `Transfer: Recent ${label} reinforced ${metaSkillLabel(matchedSkill)}.`;
+      }
+      return null;
+    };
+
+    const inMemorySpark = findSparkFromCandidates(timelineRaces || []);
+    if (inMemorySpark) return inMemorySpark;
+    return findSparkFromCandidates(recentNonNursingSteps || []);
+  }, [isNursingInterest, recentNonNursingSteps, timelineRaces, race.id]);
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
     // Team/Crew Chat — fallback entry point when no avatar row is visible
