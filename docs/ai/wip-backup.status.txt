@@ -1,0 +1,131 @@
+ M app.config.js
+ M app.json
+ M app/(tabs)/_layout.tsx
+ M app/(tabs)/connect.tsx
+ M app/(tabs)/events.tsx
+ M app/(tabs)/learn.tsx
+ M app/(tabs)/members.tsx
+ M app/(tabs)/profile.tsx
+ M app/(tabs)/programs-experience.tsx
+ M app/(tabs)/race/add-tufte.tsx
+ M app/(tabs)/races.tsx
+ M app/(tabs)/reflect.tsx
+ M app/(tabs)/search.tsx
+ M app/__tests__/tabs-programs-route-regression.test.ts
+ M app/_layout.tsx
+ M app/coach/discover.tsx
+ M app/communications.tsx
+ M app/index.tsx
+ M app/members/requests.tsx
+ M app/profile.tsx
+ M app/programs/templates.tsx
+ M app/settings.tsx
+ M app/settings/organization-access.tsx
+ M app/social-notifications.tsx
+ M assets/images/android-icon-foreground.png
+ M assets/images/android-icon-monochrome.png
+ M assets/images/favicon.png
+ M assets/images/icon.png
+ M assets/images/logo-full.png
+ M assets/images/splash-icon.png
+ M components/InterestSwitcher.tsx
+ M components/account/AccountModalContent.tsx
+ M components/account/TufteProfileHeader.tsx
+ M components/cards/CardGrid.native.tsx
+ M components/cards/CardGrid.web.tsx
+ M components/cards/CardGridTimeline.tsx
+ M components/cards/TimelineGridView.tsx
+ M components/cards/types.ts
+ M components/community/CommunityCard.tsx
+ M components/crew/CrewHub.tsx
+ M components/crew/CrewMemberFinderModal.tsx
+ M components/crew/tabs/RosterTab.tsx
+ M components/crew/tabs/ShareTab.tsx
+ M components/follow/FollowerPostCard.tsx
+ M components/follow/SailorActivityCard.tsx
+ M components/landing/SimpleLandingNav.tsx
+ M components/learn/CoachesContent.tsx
+ M components/learn/coaches/SailorDiscoveryView.tsx
+ M components/navigation/NavigationDrawer.tsx
+ M components/navigation/NavigationHeader.tsx
+ M components/navigation/WebSidebarNav.tsx
+ M components/onboarding/ContextualHint.tsx
+ M components/onboarding/InterestSelection.tsx
+ M components/races/LocationMapPicker.native.tsx
+ M components/races/LocationMapPicker.web.tsx
+ M components/races/ModuleDetailBottomSheet.tsx
+ M components/races/RaceCardWithTuning.tsx
+ M components/races/RaceChatDrawer.tsx
+ M components/races/RaceCrewChat.tsx
+ M components/races/RaceDetailContent.tsx
+ M components/races/RacesFloatingHeader.tsx
+ M components/races/edit/EditRaceForm.tsx
+ M components/races/prep/CourseMapTile.tsx
+ M components/reflect/RecentActivitySection.tsx
+ M components/reflect/ReflectProfileHeader.tsx
+ M components/reflect/SocialStatsCard.tsx
+ M components/reflect/StatisticsSection.tsx
+ M components/search/SailorSearchContent.tsx
+ M components/search/SuggestedSailorsSection.tsx
+ M components/seasons/SeasonHeader.tsx
+ M components/social/NotificationBell.tsx
+ M components/social/NotificationRow.tsx
+ M components/ui/TabScreenToolbar.tsx
+ M components/venue/feed/FeedPostCard.tsx
+ M hooks/useCoachRecruitment.ts
+ M hooks/useEnrichedRaces.ts
+ M hooks/useRaceResults.ts
+ M hooks/useRecentRaceResults.ts
+ M hooks/useReflectData.ts
+ M ios/RegattaFlow.xcodeproj/project.pbxproj
+ M ios/RegattaFlow/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png
+ M ios/RegattaFlow/Images.xcassets/SplashScreenLegacy.imageset/image.png
+ M ios/RegattaFlow/Images.xcassets/SplashScreenLegacy.imageset/image@2x.png
+ M ios/RegattaFlow/Images.xcassets/SplashScreenLegacy.imageset/image@3x.png
+ M ios/RegattaFlow/Info.plist
+ M lib/auth/nativeOAuth.ts
+ M lib/communications/drillDown.ts
+ M lib/navigation-config.ts
+ M providers/AuthProvider.tsx
+ M providers/InterestProvider.tsx
+ M providers/WebDrawerProvider.tsx
+ M scripts/generate-icon.mjs
+ M scripts/generate-splash.mjs
+ M services/CrewFinderService.ts
+ M services/NotificationService.ts
+ M services/OrganizationInviteService.ts
+ M services/ProgramService.ts
+ M services/RaceChecklistService.ts
+ M services/ai/RaceTuningEngine.ts
+ M services/competencyService.ts
+ M services/weather/OpenMeteoService.ts
+ M supabase/.temp/gotrue-version
+ M supabase/.temp/storage-migration
+ M supabase/.temp/storage-version
+ M supabase/functions/_shared/cors.ts
+?? .tmp/
+?? app/clinical-social-map.tsx
+?? app/explore/
+?? app/organization/
+?? components/connect/OrganizationsContent.tsx
+?? components/races/locationContextSuggestions.ts
+?? configs/competencies/
+?? configs/competency-candidates.ts
+?? docs/NURSING_SOCIAL_MAP_TIMELINE_SPEC.md
+?? docs/ai/
+?? lib/discover/
+?? lib/utils/sanitizeImageUri.ts
+?? penpot-mcp/
+?? public/favicon.ico
+?? services/TimelineStepService.ts
+?? services/ai/ClinicalReasoningEvaluationService.ts
+?? supabase/functions/clinical-reasoning-evaluate/
+?? supabase/migrations/20260304121000_create_race_shared_checklist_items.sql
+?? supabase/migrations/20260304153000_add_remove_organization_member_rpc.sql
+?? supabase/migrations/20260304162000_fix_remove_member_verification_source.sql
+?? supabase/migrations/20260304173000_org_join_notifications.sql
+?? supabase/migrations/20260304190000_add_org_invite_received_notification_type.sql
+?? supabase/migrations/20260305092000_create_betterat_timeline_steps.sql
+?? supabase/migrations/20260306120000_create_betterat_module_artifacts.sql
+?? supabase/migrations/20260306121500_create_betterat_module_artifacts.sql
+?? supabase/migrations/20260306134500_competency_attempt_artifact_links_and_module_evaluations.sql

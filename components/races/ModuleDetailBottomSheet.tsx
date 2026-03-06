@@ -75,6 +75,14 @@ import {
   ActionsheetDragIndicatorWrapper,
   ActionsheetScrollView,
 } from '@/components/ui/actionsheet';
+import { useModuleArtifact } from '@/hooks/useModuleArtifact';
+import { getModuleArtifact } from '@/services/moduleArtifactService';
+import type { ModuleArtifactEventType } from '@/services/moduleArtifactService';
+import { NURSING_COMPETENCY_CANDIDATES_V1 } from '@/configs/competency-candidates';
+import { NURSING_CORE_V1_CAPABILITIES, type NursingCoreV1Capability } from '@/configs/competencies/nursing-core-v1';
+import { logUnvalidatedArtifactAttempts } from '@/services/competencyService';
+import { evaluateClinicalReasoning, type ClinicalReasoningEvaluationResult } from '@/services/ai/ClinicalReasoningEvaluationService';
+import { supabase } from '@/services/supabase';
 import type { InterestEventConfig } from '@/types/interestEventConfig';
 
 // =============================================================================
@@ -793,6 +801,117 @@ interface Attachment {
   uri?: string;
 }
 
+const CLINICAL_REASONING_MODULE_ID = 'clinical_reasoning';
+const MAX_MAPPED_COMPETENCIES = 5;
+const CLINICAL_REASONING_CANDIDATES = NURSING_COMPETENCY_CANDIDATES_V1
+  .find((item) => item.moduleId === CLINICAL_REASONING_MODULE_ID)
+  ?.candidates || [];
+const CLINICAL_REASONING_CANDIDATE_IDS = CLINICAL_REASONING_CANDIDATES.map((item) => item.id);
+const NURSING_COMPETENCY_BY_ID = new Map(
+  NURSING_CORE_V1_CAPABILITIES.map((item) => [item.id,item])
+);
+
+function MapsToSection({
+  selectedIds,
+  onAdd,
+  onRemove,
+}: {
+  selectedIds: string[];
+  onAdd: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const selectedItems = selectedIds
+    .map((id) => NURSING_COMPETENCY_BY_ID.get(id))
+    .filter((item): item is NursingCoreV1Capability => Boolean(item));
+  const availableItems = CLINICAL_REASONING_CANDIDATES
+    .filter((item) => !selectedIds.includes(item.id));
+  const canAddMore = selectedIds.length < MAX_MAPPED_COMPETENCIES;
+
+  return (
+    <View style={s.mapsToSection}>
+      <View style={s.sectionHeader}>
+        <LucideIcons.Link2 size={15} color={C.blue} />
+        <Text style={[s.sectionTitle, { color: C.blue }]}>Maps to</Text>
+      </View>
+      <Text style={s.mapsToHint}>Select up to {MAX_MAPPED_COMPETENCIES} competencies</Text>
+      {selectedItems.length > 0 ? (
+        <View style={s.mapsToSelectedList}>
+          {selectedItems.map((item) => (
+            <View key={item.id} style={s.mapsToSelectedItem}>
+              <Text style={s.mapsToSelectedTitle} numberOfLines={2}>{item.title}</Text>
+              <Pressable onPress={() => onRemove(item.id)} style={s.mapsToRemoveButton}>
+                <Text style={s.mapsToRemoveText}>Remove</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={s.mapsToEmpty}>No competencies selected yet.</Text>
+      )}
+      {canAddMore && availableItems.length > 0 ? (
+        <View style={s.mapsToAddList}>
+          {availableItems.map((item) => (
+            <Pressable
+              key={item.id}
+              style={s.mapsToAddItem}
+              onPress={() => onAdd(item.id)}
+            >
+              <Text style={s.mapsToAddPrefix}>Add</Text>
+              <Text style={s.mapsToAddTitle} numberOfLines={2}>{item.title}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ClinicalReasoningFeedbackPanel({
+  result,
+  isLoading,
+  errorText,
+}: {
+  result: ClinicalReasoningEvaluationResult | null;
+  isLoading: boolean;
+  errorText: string;
+}) {
+  if (isLoading) {
+    return (
+      <View style={s.feedbackPanel}>
+        <Text style={s.feedbackLoading}>Getting feedback…</Text>
+      </View>
+    );
+  }
+  if (errorText.length > 0) {
+    return (
+      <View style={s.feedbackPanel}>
+        <Text style={s.feedbackError}>{errorText}</Text>
+      </View>
+    );
+  }
+  if (!result) return null;
+
+  return (
+    <View style={s.feedbackPanel}>
+      <Text style={s.feedbackTitle}>Feedback</Text>
+      <View style={s.feedbackScoreList}>
+        {result.scores.map((score) => {
+          const title = NURSING_COMPETENCY_BY_ID.get(score.competencyId)?.title || score.competencyId;
+          return (
+            <View key={score.competencyId} style={s.feedbackScoreItem}>
+              <Text style={s.feedbackScoreHeader}>{title} · {score.level}</Text>
+              {score.improvements.slice(0, 2).map((tip, idx) => (
+                <Text key={`${score.competencyId}-${idx}`} style={s.feedbackBullet}>• {tip}</Text>
+              ))}
+            </View>
+          );
+        })}
+      </View>
+      <Text style={s.feedbackNextAction}>Next action: {result.nextAction}</Text>
+    </View>
+  );
+}
+
 // =============================================================================
 // RICH CONTENT TOOLBAR
 // =============================================================================
@@ -978,17 +1097,19 @@ function GibbsReflectionTool({
         const Icon = step.icon;
 
         return (
-          <Pressable
+          <View
             key={step.id}
             style={[
               toolStyles.stepCard,
               isExpanded && toolStyles.stepCardExpanded,
               hasContent && !isExpanded && toolStyles.stepCardComplete,
             ]}
-            onPress={() => setExpandedStep(isExpanded ? null : step.id)}
           >
             {/* Step header */}
-            <View style={toolStyles.stepHeader}>
+            <Pressable
+              style={toolStyles.stepHeader}
+              onPress={() => setExpandedStep(isExpanded ? null : step.id)}
+            >
               <View style={[toolStyles.stepNumber, { backgroundColor: hasContent ? step.color : C.gray5 }]}>
                 {hasContent ? (
                   <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
@@ -1009,7 +1130,7 @@ function GibbsReflectionTool({
                 )}
               </View>
               <Icon size={16} color={isExpanded ? step.color : C.gray3} />
-            </View>
+            </Pressable>
 
             {/* Expanded content */}
             {isExpanded && (
@@ -1038,7 +1159,7 @@ function GibbsReflectionTool({
                 )}
               </View>
             )}
-          </Pressable>
+          </View>
         );
       })}
     </View>
@@ -1118,16 +1239,18 @@ function ClinicalReasoningTool({
 
         return (
           <View key={step.id}>
-            <Pressable
+            <View
               style={[
                 toolStyles.stepCard,
                 isExpanded && toolStyles.stepCardExpanded,
                 hasContent && !isExpanded && toolStyles.stepCardComplete,
               ]}
-              onPress={() => setExpandedStep(isExpanded ? null : step.id)}
             >
               {/* Step header */}
-              <View style={toolStyles.stepHeader}>
+              <Pressable
+                style={toolStyles.stepHeader}
+                onPress={() => setExpandedStep(isExpanded ? null : step.id)}
+              >
                 <View style={[toolStyles.stepNumber, { backgroundColor: hasContent ? step.color : C.gray5 }]}>
                   {hasContent ? (
                     <LucideIcons.Check size={12} color="#FFFFFF" strokeWidth={3} />
@@ -1150,7 +1273,7 @@ function ClinicalReasoningTool({
                 ) : (
                   <LucideIcons.ChevronRight size={16} color={C.gray3} />
                 )}
-              </View>
+              </Pressable>
 
               {/* Expanded content */}
               {isExpanded && (
@@ -1166,6 +1289,9 @@ function ClinicalReasoningTool({
                     textAlignVertical="top"
                     scrollEnabled={false}
                   />
+                  {step.id === 'outcome' && (
+                    <Text style={toolStyles.commitHint}>Ready to commit this draft? Tap Get feedback.</Text>
+                  )}
                   {!isLast && (
                     <Pressable
                       style={[toolStyles.nextButton, { backgroundColor: step.color }]}
@@ -1179,7 +1305,7 @@ function ClinicalReasoningTool({
                   )}
                 </View>
               )}
-            </Pressable>
+            </View>
 
             {/* Arrow connector between steps */}
             {!isLast && (
@@ -1692,6 +1818,11 @@ const toolStyles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
   },
+  commitHint: {
+    fontSize: 12,
+    color: C.gray,
+    lineHeight: 16,
+  },
   connector: {
     alignItems: 'center',
     paddingVertical: 2,
@@ -1943,6 +2074,11 @@ export interface ModuleDetailBottomSheetProps {
   isOpen: boolean;
   onClose: () => void;
   config: InterestEventConfig;
+  artifactContext?: {
+    eventType: ModuleArtifactEventType;
+    eventId: string;
+    userId?: string | null;
+  } | null;
   /** Called whenever module content changes (notes or attachments) */
   onContentChange?: (moduleId: string, summary: ModuleContentSummary) => void;
 }
@@ -1952,15 +2088,20 @@ export function ModuleDetailBottomSheet({
   isOpen,
   onClose,
   config,
+  artifactContext,
   onContentChange,
 }: ModuleDetailBottomSheetProps) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({});
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+  const [feedbackResultByModule, setFeedbackResultByModule] = useState<Record<string, ClinicalReasoningEvaluationResult | null>>({});
 
   // Tool step values: moduleId → { stepId → text }
   const [toolValues, setToolValues] = useState<Record<string, Record<string, string>>>({});
+  const [mappedCompetencyIds, setMappedCompetencyIds] = useState<Record<string, string[]>>({});
 
   // Refs to avoid stale closure issues in attachment handlers
   const notesRef = useRef(notes);
@@ -1969,6 +2110,10 @@ export function ModuleDetailBottomSheet({
   attachmentsRef.current = attachments;
   const toolValuesRef = useRef(toolValues);
   toolValuesRef.current = toolValues;
+  const mappedCompetencyIdsRef = useRef(mappedCompetencyIds);
+  mappedCompetencyIdsRef.current = mappedCompetencyIds;
+  const hasLocalEditsByModuleRef = useRef<Record<string, boolean>>({});
+  const flushPendingSaveRef = useRef<((options?: {ensureSaved?: boolean}) => Promise<{artifact_id: string} | null>) | null>(null);
 
   // Notify parent whenever module content changes (notes, attachments, or tool steps)
   const notifyContentChange = useCallback((modId: string, currentNotes: Record<string, string>, currentAttachments: Record<string, Attachment[]>) => {
@@ -1999,18 +2144,44 @@ export function ModuleDetailBottomSheet({
     }
   }, [isOpen]);
 
-  const handleClose = useCallback(() => {
+  React.useEffect(() => {
+    if (!isOpen || !moduleId) return;
+    hasLocalEditsByModuleRef.current[moduleId] = false;
+  }, [isOpen, moduleId]);
+
+  const markModuleDirty = useCallback((modId: string) => {
+    hasLocalEditsByModuleRef.current[modId] = true;
+  }, []);
+
+  const nursingDraftModuleIds = useRef(new Set([
+    'gibbs_reflection',
+    'clinical_reasoning',
+    'self_assessment',
+    'learning_notes',
+  ]));
+
+  const isNursingDraftModule = Boolean(
+    moduleId
+    && config.interestSlug === 'nursing'
+    && nursingDraftModuleIds.current.has(moduleId)
+  );
+
+  const handleClose = useCallback(async () => {
+    if (isNursingDraftModule && flushPendingSaveRef.current) {
+      await flushPendingSaveRef.current();
+    }
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setShowLinkInput(false);
     setLinkUrl('');
     onClose();
-  }, [onClose]);
+  }, [isNursingDraftModule, onClose]);
 
   // ---- Attachment handlers ----
 
   const addAttachment = useCallback((moduleKey: string, att: Attachment) => {
+    markModuleDirty(moduleKey);
     setAttachments((prev) => {
       const updated = {
         ...prev,
@@ -2019,9 +2190,10 @@ export function ModuleDetailBottomSheet({
       setTimeout(() => notifyContentChange(moduleKey, notesRef.current, updated), 0);
       return updated;
     });
-  }, [notifyContentChange]);
+  }, [markModuleDirty, notifyContentChange]);
 
   const removeAttachment = useCallback((moduleKey: string, attachmentId: string) => {
+    markModuleDirty(moduleKey);
     setAttachments((prev) => {
       const updated = {
         ...prev,
@@ -2030,7 +2202,7 @@ export function ModuleDetailBottomSheet({
       setTimeout(() => notifyContentChange(moduleKey, notesRef.current, updated), 0);
       return updated;
     });
-  }, [notifyContentChange]);
+  }, [markModuleDirty, notifyContentChange]);
 
   const handleAddAttachment = useCallback(async (type: Attachment['type']) => {
     if (!moduleId) return;
@@ -2178,6 +2350,7 @@ export function ModuleDetailBottomSheet({
   // Handler for tool step changes (Gibbs / Clinical Reasoning)
   const handleToolStepChange = useCallback((stepId: string, text: string) => {
     if (!moduleId) return;
+    markModuleDirty(moduleId);
     setToolValues((prev) => {
       const updated = {
         ...prev,
@@ -2187,7 +2360,228 @@ export function ModuleDetailBottomSheet({
       setTimeout(() => notifyContentChange(moduleId, notesRef.current, attachmentsRef.current), 0);
       return updated;
     });
+  }, [markModuleDirty, moduleId, notifyContentChange]);
+
+  const hydrateModuleArtifact = useCallback((content: {
+    toolValues: Record<string,string>;
+    notes: string;
+    attachments: Array<{id: string; type: string; label: string; uri?: string}>;
+    mappedCompetencyIds?: string[];
+  }) => {
+    if (!moduleId) return;
+    if (hasLocalEditsByModuleRef.current[moduleId]) return false;
+
+    const safeToolValues = Object.entries(content.toolValues || {}).reduce<Record<string,string>>((acc, [stepId, value]) => {
+      if (typeof value === 'string') {
+        acc[stepId] = value;
+      }
+      return acc;
+    }, {});
+
+    const safeAttachments = (Array.isArray(content.attachments) ? content.attachments : [])
+      .filter((item) => item && typeof item.id === 'string' && typeof item.type === 'string' && typeof item.label === 'string')
+      .filter((item) => ['photo', 'video', 'document', 'link', 'idea'].includes(item.type))
+      .map((item) => ({
+        id: item.id,
+        type: item.type as Attachment['type'],
+        label: item.label,
+        ...(item.uri ? { uri: item.uri } : {}),
+      }));
+
+    const updatedToolValues = {
+      ...toolValuesRef.current,
+      [moduleId]: safeToolValues,
+    };
+    const updatedNotes = {
+      ...notesRef.current,
+      [moduleId]: typeof content.notes === 'string' ? content.notes : '',
+    };
+    const updatedAttachments = {
+      ...attachmentsRef.current,
+      [moduleId]: safeAttachments,
+    };
+    const updatedMappedCompetencyIds = {
+      ...mappedCompetencyIdsRef.current,
+      [moduleId]: Array.isArray(content.mappedCompetencyIds)
+        ? content.mappedCompetencyIds
+          .filter((id) => typeof id === 'string' && id.trim().length > 0)
+          .slice(0, MAX_MAPPED_COMPETENCIES)
+        : [],
+    };
+
+    toolValuesRef.current = updatedToolValues;
+    notesRef.current = updatedNotes;
+    attachmentsRef.current = updatedAttachments;
+    mappedCompetencyIdsRef.current = updatedMappedCompetencyIds;
+
+    setToolValues(updatedToolValues);
+    setNotes(updatedNotes);
+    setAttachments(updatedAttachments);
+    setMappedCompetencyIds(updatedMappedCompetencyIds);
+
+    setTimeout(() => notifyContentChange(moduleId, updatedNotes, updatedAttachments), 0);
+    return true;
   }, [moduleId, notifyContentChange]);
+
+  const handleAddMappedCompetency = useCallback((competencyId: string) => {
+    if (!moduleId) return;
+    markModuleDirty(moduleId);
+    setMappedCompetencyIds((prev) => {
+      const existing = prev[moduleId] || [];
+      if (existing.includes(competencyId) || existing.length >= MAX_MAPPED_COMPETENCIES) {
+        return prev;
+      }
+      const updated = {
+        ...prev,
+        [moduleId]: [...existing, competencyId],
+      };
+      mappedCompetencyIdsRef.current = updated;
+      return updated;
+    });
+  }, [markModuleDirty, moduleId]);
+
+  const handleRemoveMappedCompetency = useCallback((competencyId: string) => {
+    if (!moduleId) return;
+    markModuleDirty(moduleId);
+    setMappedCompetencyIds((prev) => {
+      const existing = prev[moduleId] || [];
+      const updated = {
+        ...prev,
+        [moduleId]: existing.filter((id) => id !== competencyId),
+      };
+      mappedCompetencyIdsRef.current = updated;
+      return updated;
+    });
+  }, [markModuleDirty, moduleId]);
+
+  const { saveStatus, flushPendingSave, currentArtifactId } = useModuleArtifact({
+    isEnabled: Boolean(
+      isNursingDraftModule
+      && artifactContext?.eventType
+      && artifactContext?.eventId
+    ),
+    isOpen,
+    moduleId,
+    eventType: artifactContext?.eventType || null,
+    eventId: artifactContext?.eventId || null,
+    userId: artifactContext?.userId || null,
+    content: {
+      toolValues: moduleId ? (toolValues[moduleId] || {}) : {},
+      notes: moduleId ? (notes[moduleId] || '') : '',
+      attachments: (moduleId ? (attachments[moduleId] || []) : []).map((item) => ({
+        id: item.id,
+        type: item.type,
+        label: item.label,
+        ...(item.uri ? { uri: item.uri } : {}),
+      })),
+      mappedCompetencyIds: moduleId ? (mappedCompetencyIds[moduleId] || []) : [],
+    },
+    onHydrate: hydrateModuleArtifact,
+  });
+
+  flushPendingSaveRef.current = flushPendingSave;
+
+  const saveStatusLabel = saveStatus === 'saving' || saveStatus === 'loading'
+    ? 'Saving…'
+    : saveStatus === 'saved'
+      ? 'Saved'
+      : '';
+
+  const isClinicalReasoningCommitEnabled = Boolean(
+    moduleId === CLINICAL_REASONING_MODULE_ID
+    && config.interestSlug === 'nursing'
+    && artifactContext?.eventType
+    && artifactContext?.eventId
+  );
+
+  const handleGetFeedback = useCallback(async () => {
+    if (!moduleId || !isClinicalReasoningCommitEnabled || !artifactContext) return;
+
+    setFeedbackError('');
+    setIsFeedbackLoading(true);
+
+    try {
+      const flushed = await (flushPendingSaveRef.current
+        ? flushPendingSaveRef.current({ ensureSaved: true })
+        : null);
+
+      let artifactId = flushed?.artifact_id || currentArtifactId || null;
+
+      if (!artifactId) {
+        let resolvedUserId = artifactContext.userId || null;
+        if (!resolvedUserId) {
+          const { data } = await supabase.auth.getUser();
+          resolvedUserId = data.user?.id || null;
+        }
+        if (resolvedUserId) {
+          const existing = await getModuleArtifact({
+            eventType: artifactContext.eventType,
+            eventId: artifactContext.eventId,
+            userId: resolvedUserId,
+            moduleId,
+          });
+          artifactId = existing?.artifact_id || null;
+        }
+      }
+
+      if (!artifactId) {
+        throw new Error('Could not find a saved artifact to evaluate.');
+      }
+
+      const mappedIds = mappedCompetencyIds[moduleId] || [];
+      const competencyIds = mappedIds.length > 0 ? mappedIds : CLINICAL_REASONING_CANDIDATE_IDS;
+
+      let resolvedUserId = artifactContext.userId || null;
+      if (!resolvedUserId) {
+        const { data } = await supabase.auth.getUser();
+        resolvedUserId = data.user?.id || null;
+      }
+      if (!resolvedUserId) {
+        throw new Error('User session required for feedback.');
+      }
+
+      await logUnvalidatedArtifactAttempts({
+        userId: resolvedUserId,
+        candidateCompetencyIds: competencyIds,
+        artifactId,
+        eventType: artifactContext.eventType,
+        eventId: artifactContext.eventId,
+      });
+
+      const evaluation = await evaluateClinicalReasoning({ artifactId, competencyIds });
+
+      const { error: evaluationInsertError } = await supabase
+        .from('betterat_module_evaluations')
+        .upsert({
+          artifact_id: artifactId,
+          evaluator: 'claude',
+          model: null,
+          prompt_version: 'v1',
+          rubric_version: 'v1',
+          result: evaluation,
+        }, { onConflict: 'artifact_id,prompt_version,rubric_version' });
+
+      if (evaluationInsertError) {
+        throw evaluationInsertError;
+      }
+
+      setFeedbackResultByModule((prev) => ({
+        ...prev,
+        [moduleId]: evaluation,
+      }));
+    } catch (error: any) {
+      setFeedbackError(typeof error?.message === 'string' ? error.message : 'Could not get feedback right now.');
+    } finally {
+      setIsFeedbackLoading(false);
+    }
+  }, [
+    artifactContext,
+    config.interestSlug,
+    currentArtifactId,
+    isClinicalReasoningCommitEnabled,
+    mappedCompetencyIds,
+    moduleId,
+  ]);
 
   if (!moduleId) return null;
 
@@ -2219,6 +2613,9 @@ export function ModuleDetailBottomSheet({
             <IconComponent size={18} color={accent} />
           </View>
           <Text style={s.headerTitle}>{moduleInfo.label}</Text>
+          {isNursingDraftModule && saveStatusLabel.length > 0 ? (
+            <Text style={s.saveStatus}>{saveStatusLabel}</Text>
+          ) : null}
           <Pressable
             style={s.closeButton}
             onPress={handleClose}
@@ -2245,6 +2642,31 @@ export function ModuleDetailBottomSheet({
               )}
 
               {/* Structured items — drillable or static */}
+              {config.interestSlug === 'nursing' && moduleId === CLINICAL_REASONING_MODULE_ID ? (
+                <MapsToSection
+                  selectedIds={mappedCompetencyIds[moduleId] || []}
+                  onAdd={handleAddMappedCompetency}
+                  onRemove={handleRemoveMappedCompetency}
+                />
+              ) : null}
+              {isClinicalReasoningCommitEnabled ? (
+                <View style={s.feedbackCommitSection}>
+                  <Pressable
+                    style={[s.feedbackCommitButton, isFeedbackLoading && s.feedbackCommitButtonDisabled]}
+                    onPress={handleGetFeedback}
+                    disabled={isFeedbackLoading}
+                  >
+                    <Text style={s.feedbackCommitButtonText}>
+                      {isFeedbackLoading ? 'Getting feedback…' : 'Get feedback'}
+                    </Text>
+                  </Pressable>
+                  <ClinicalReasoningFeedbackPanel
+                    result={feedbackResultByModule[moduleId] || null}
+                    isLoading={isFeedbackLoading}
+                    errorText={feedbackError}
+                  />
+                </View>
+              ) : null}
               {content.drillableItems ? (
                 <DrillableItemsSection
                   items={moduleId === 'unit_protocols' ? PROTOCOL_LESSON_ITEMS : LAB_LESSON_ITEMS}
@@ -2266,6 +2688,7 @@ export function ModuleDetailBottomSheet({
                   prompt={content.notesPrompt}
                   value={currentNotes}
                   onChange={(text) => {
+                    markModuleDirty(moduleId);
                     setNotes((prev) => {
                       const updated = { ...prev, [moduleId]: text };
                       setTimeout(() => notifyContentChange(moduleId, updated, attachmentsRef.current), 0);
@@ -2347,6 +2770,11 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: 8,
   },
+  saveStatus: {
+    fontSize: 12,
+    color: C.secondaryLabel,
+    marginRight: 8,
+  },
 
   // Body
   body: {
@@ -2358,6 +2786,137 @@ const s = StyleSheet.create({
   // Sections
   section: {
     gap: 8,
+  },
+  mapsToSection: {
+    gap: 8,
+    backgroundColor: C.gray6,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: C.gray5,
+  },
+  mapsToHint: {
+    fontSize: 12,
+    color: C.secondaryLabel,
+  },
+  mapsToSelectedList: {
+    gap: 6,
+  },
+  mapsToSelectedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: C.bg,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: C.gray5,
+  },
+  mapsToSelectedTitle: {
+    flex: 1,
+    fontSize: 13,
+    color: C.label,
+    fontWeight: '500',
+  },
+  mapsToRemoveButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+  },
+  mapsToRemoveText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+  },
+  mapsToAddList: {
+    gap: 6,
+  },
+  mapsToAddItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  mapsToAddPrefix: {
+    fontSize: 12,
+    color: '#1D4ED8',
+    fontWeight: '700',
+  },
+  mapsToAddTitle: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1E3A8A',
+    fontWeight: '500',
+  },
+  mapsToEmpty: {
+    fontSize: 13,
+    color: C.secondaryLabel,
+  },
+  feedbackCommitSection: {
+    gap: 8,
+  },
+  feedbackCommitButton: {
+    backgroundColor: C.blue,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  feedbackCommitButtonDisabled: {
+    opacity: 0.7,
+  },
+  feedbackCommitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  feedbackPanel: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    padding: 10,
+    gap: 6,
+  },
+  feedbackTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E3A8A',
+  },
+  feedbackScoreList: {
+    gap: 6,
+  },
+  feedbackScoreItem: {
+    gap: 3,
+  },
+  feedbackScoreHeader: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1E3A8A',
+  },
+  feedbackBullet: {
+    fontSize: 12,
+    color: '#1E40AF',
+  },
+  feedbackNextAction: {
+    fontSize: 12,
+    color: '#1E3A8A',
+    fontWeight: '500',
+  },
+  feedbackLoading: {
+    fontSize: 12,
+    color: '#1E3A8A',
+  },
+  feedbackError: {
+    fontSize: 12,
+    color: '#B91C1C',
   },
   sectionHeader: {
     flexDirection: 'row',

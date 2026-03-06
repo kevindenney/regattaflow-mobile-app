@@ -15,6 +15,8 @@
 
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
 import type {
   Competency,
   CompetencyProgress,
@@ -30,6 +32,8 @@ import type {
 } from '@/types/competency';
 
 const logger = createLogger('competencyService');
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const NURSING_CAPABILITY_BY_ID = new Map(NURSING_CORE_V1_CAPABILITIES.map((item) => [item.id,item]));
 
 // ---------------------------------------------------------------------------
 // 1. Get all competency definitions for an interest
@@ -639,4 +643,149 @@ export async function getPendingFacultyReviews(
     logger.error('Failed to fetch pending faculty reviews', err);
     throw err;
   }
+}
+
+export async function logUnvalidatedArtifactAttempts(input: {
+  userId: string;
+  candidateCompetencyIds: string[];
+  artifactId?: string | null;
+  eventType?: string | null;
+  eventId?: string | null;
+}): Promise<string[]> {
+  const candidateIds = input.candidateCompetencyIds.filter((id) => typeof id === 'string' && id.trim().length > 0);
+  if (candidateIds.length === 0) return [];
+
+  const resolvedCompetencyIds = await resolveNursingCompetencyIds(candidateIds);
+  if (resolvedCompetencyIds.length === 0) {
+    logger.warn('[logUnvalidatedArtifactAttempts] No competency ids resolved for insertion', { candidateIds });
+    return [];
+  }
+
+  const nextAttemptByCompetency = await getNextAttemptNumbers(input.userId, resolvedCompetencyIds);
+  const inserted: string[] = [];
+
+  for (const competencyId of resolvedCompetencyIds) {
+    const row: Record<string, any> = {
+      user_id: input.userId,
+      competency_id: competencyId,
+      attempt_number: nextAttemptByCompetency.get(competencyId) || 1,
+      self_notes: null,
+      clinical_context: 'clinical_reasoning_feedback',
+      status: 'unvalidated',
+      artifact_id: input.artifactId || null,
+      event_type: input.eventType || null,
+      event_id: input.eventId || null,
+    };
+
+    const created = await insertAttemptWithFallback(row);
+    if (created) {
+      inserted.push(competencyId);
+    }
+  }
+
+  return inserted;
+}
+
+async function getNextAttemptNumbers(userId: string, competencyIds: string[]): Promise<Map<string, number>> {
+  const fallback = new Map(competencyIds.map((id) => [id,1]));
+  const { data, error } = await supabase
+    .from('betterat_competency_attempts')
+    .select('competency_id,attempt_number')
+    .eq('user_id', userId)
+    .in('competency_id', competencyIds)
+    .order('attempt_number', { ascending: false });
+
+  if (error) {
+    logger.warn('[getNextAttemptNumbers] Falling back to first attempt numbers', { error });
+    return fallback;
+  }
+
+  const nextByComp = new Map<string, number>();
+  for (const competencyId of competencyIds) {
+    nextByComp.set(competencyId, 1);
+  }
+  for (const row of (data || []) as Array<{competency_id: string; attempt_number: number}>) {
+    if (!nextByComp.has(row.competency_id)) continue;
+    const current = nextByComp.get(row.competency_id) || 1;
+    const candidateNext = (row.attempt_number || 0) + 1;
+    if (candidateNext > current) {
+      nextByComp.set(row.competency_id, candidateNext);
+    }
+  }
+  return nextByComp;
+}
+
+async function resolveNursingCompetencyIds(candidateIds: string[]): Promise<string[]> {
+  const directUuidIds = candidateIds.filter((id) => UUID_PATTERN.test(id));
+  const slugIds = candidateIds.filter((id) => !UUID_PATTERN.test(id));
+  if (slugIds.length === 0) return [...new Set(directUuidIds)];
+
+  const targetTitles = slugIds
+    .map((id) => NURSING_CAPABILITY_BY_ID.get(id)?.title)
+    .filter((title): title is string => Boolean(title));
+  if (targetTitles.length === 0) return [...new Set(directUuidIds)];
+
+  const { data: interestRow } = await supabase
+    .from('interests')
+    .select('id')
+    .eq('slug', 'nursing')
+    .maybeSingle();
+  const nursingInterestId = (interestRow as {id?: string} | null)?.id;
+  if (!nursingInterestId) return [...new Set(directUuidIds)];
+
+  const { data, error } = await supabase
+    .from('betterat_competencies')
+    .select('id,title')
+    .eq('interest_id', nursingInterestId)
+    .in('title', targetTitles);
+
+  if (error) {
+    logger.warn('[resolveNursingCompetencyIds] Failed title->id mapping', { error });
+    return [...new Set(directUuidIds)];
+  }
+
+  const byTitle = new Map<string, string>();
+  for (const row of (data || []) as Array<{id: string; title: string}>) {
+    byTitle.set(row.title, row.id);
+  }
+
+  const mapped = slugIds
+    .map((id) => NURSING_CAPABILITY_BY_ID.get(id)?.title)
+    .map((title) => (title ? byTitle.get(title) : undefined))
+    .filter((id): id is string => Boolean(id));
+
+  return [...new Set([...directUuidIds, ...mapped])];
+}
+
+async function insertAttemptWithFallback(initialRow: Record<string, any>): Promise<boolean> {
+  let row = { ...initialRow };
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const { error } = await supabase
+      .from('betterat_competency_attempts')
+      .insert(row);
+
+    if (!error) return true;
+    if (!isMissingSupabaseColumn(error)) {
+      logger.warn('[insertAttemptWithFallback] Insert failed', { error, row });
+      return false;
+    }
+
+    const message = String(error.message || '');
+    const nextRow = { ...row };
+    let dropped = false;
+    for (const key of ['artifact_id', 'event_type', 'event_id', 'status']) {
+      if (message.includes(`betterat_competency_attempts.${key}`) && key in nextRow) {
+        delete nextRow[key];
+        dropped = true;
+      }
+    }
+    if (!dropped) {
+      logger.warn('[insertAttemptWithFallback] Missing column fallback failed to match', { error, row });
+      return false;
+    }
+    row = nextRow;
+  }
+
+  return false;
 }
