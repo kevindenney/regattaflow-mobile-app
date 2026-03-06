@@ -72,7 +72,7 @@ import { ActivityCatalog } from '@/components/events/ActivityCatalog';
 import { TemplatePreview } from '@/components/events/TemplatePreview';
 import type { ActivityTemplate } from '@/types/activities';
 import type { EventSubtypeConfig, EventFormField } from '@/types/interestEventConfig';
-import { inferMetaSkillsFromStep } from '@/lib/transfer/metaSkills';
+import { inferMetaSkillsFromContext } from '@/lib/transfer/metaSkills';
 
 const logger = createLogger('AddRaceScreen');
 
@@ -836,11 +836,13 @@ export default function AddRaceScreen() {
         }
       }
 
-      const inferredMetaSkills = inferMetaSkillsFromStep({
+      const inferredMetaSkills = inferMetaSkillsFromContext({
         interestSlug: currentInterest?.slug || (isSailing ? 'sail-racing' : 'nursing'),
-        eventSubtype: isSailing ? form.raceType : form.eventSubtype,
-        race_type: form.raceType,
-        metadata,
+        stepType: isSailing ? form.raceType : form.eventSubtype,
+        moduleIds: Array.isArray(metadata.org_template_module_ids) ? metadata.org_template_module_ids : [],
+        hasDebrief: Boolean(metadata.debrief_notes || metadata.notes),
+        hasReasoning: Boolean(metadata.clinical_reasoning),
+        hasWorkoutLog: Boolean(metadata.time_log || metadata.hours_logged),
       });
       if (inferredMetaSkills.length > 0) {
         metadata.meta_skills = inferredMetaSkills;

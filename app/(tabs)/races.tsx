@@ -51,7 +51,7 @@ import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { MOCK_RACES } from '@/constants/mockData';
-import { inferMetaSkillsFromStep } from '@/lib/transfer/metaSkills';
+import { inferMetaSkillsFromContext } from '@/lib/transfer/metaSkills';
 import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
 import { useActiveRaceSummary } from '@/hooks/useActiveRaceSummary';
 import { useAddRace } from '@/hooks/useAddRace';
@@ -1138,10 +1138,12 @@ export default function RacesScreen() {
         event_subtype: 'blank_activity',
         interest_slug: interestSlug,
       };
-      const inferredMetaSkills = inferMetaSkillsFromStep({
+      const inferredMetaSkills = inferMetaSkillsFromContext({
         interestSlug,
-        eventSubtype: 'blank_activity',
-        metadata,
+        stepType: 'blank_activity',
+        hasDebrief: false,
+        hasReasoning: false,
+        hasWorkoutLog: false,
       });
       if (inferredMetaSkills.length > 0) {
         metadata.meta_skills = inferredMetaSkills;

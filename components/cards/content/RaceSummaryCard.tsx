@@ -60,7 +60,7 @@ import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import { usePhaseCompletionCounts, formatPhaseCompletionLabel } from '@/hooks/usePhaseCompletionCounts';
 import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
-import { inferMetaSkillsFromStep, metaSkillToLabel, type MetaSkillId } from '@/lib/transfer/metaSkills';
+import { inferMetaSkillsFromContext, metaSkillLabel, type MetaSkillId } from '@/lib/transfer/metaSkills';
 import {
   CardContentProps,
   RACE_PHASES,
@@ -1173,7 +1173,7 @@ export function RaceSummaryCard({
       if (slug === 'drawing') return 'Drawing';
       if (slug === 'fitness') return 'Fitness';
       if (slug === 'nursing') return 'Nursing';
-      return 'another';
+      return 'work';
     };
 
     const candidates = [...timelineRaces]
@@ -1184,16 +1184,23 @@ export function RaceSummaryCard({
         const bTime = new Date(b.date || '').getTime();
         return bTime - aTime;
       })
-      .slice(0, 7);
+      .slice(0, 10);
 
     for (const candidate of candidates) {
       const candidateMetadata = (candidate?.metadata || {}) as Record<string,unknown>;
       const candidateSkills = parseMetaSkillIds(candidateMetadata.meta_skills);
-      const inferredSkills = candidateSkills.length > 0 ? candidateSkills : inferMetaSkillsFromStep(candidate);
+      const inferredSkills = candidateSkills.length > 0 ? candidateSkills : inferMetaSkillsFromContext({
+        interestSlug: toInterestSlug(candidate),
+        stepType: String(candidateMetadata.event_subtype || ''),
+        moduleIds: parseStringIdList(candidateMetadata.module_ids),
+        hasDebrief: Boolean(candidateMetadata.debrief || candidateMetadata.notes || candidateMetadata.debrief_notes),
+        hasReasoning: Boolean(candidateMetadata.reasoning || candidateMetadata.clinical_reasoning),
+        hasWorkoutLog: Boolean(candidateMetadata.workout_log || candidateMetadata.time_log || candidateMetadata.hours_logged),
+      });
       const matchedSkill = NURSING_TRANSFER_META_SKILLS.find((skillId) => inferredSkills.includes(skillId));
       if (!matchedSkill) continue;
       const label = interestLabel(toInterestSlug(candidate));
-      return `Transfer: Your recent ${label} work reinforced ${metaSkillToLabel(matchedSkill)}.`;
+      return `Transfer: Recent ${label} reinforced ${metaSkillLabel(matchedSkill)}.`;
     }
     return null;
   }, [isNursingInterest, timelineRaces, race.id]);

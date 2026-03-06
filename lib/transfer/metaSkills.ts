@@ -44,6 +44,15 @@ const CONSISTENCY_MODULE_HINTS = new globalThis.Set([
   'habit_tracking',
 ]);
 
+type InferMetaSkillsContext = {
+  interestSlug?: string | null;
+  stepType?: string | null;
+  moduleIds?: string[] | null;
+  hasDebrief?: boolean | null;
+  hasReasoning?: boolean | null;
+  hasWorkoutLog?: boolean | null;
+};
+
 const parseStringList = (value:unknown):string[] => {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
@@ -101,13 +110,25 @@ const hasModuleHint = (moduleIds:string[], hints:Set<string>):boolean => {
 
 export const inferMetaSkillsFromStep = (step:any):MetaSkillId[] => {
   const metadata = getMetadata(step);
-  const interestSlug = getInterestSlug(step);
-  const eventSubtype = getEventSubtype(step);
-  const moduleIds = Array.from(new globalThis.Set([
+  const inferredModuleIds = Array.from(new globalThis.Set([
     ...parseStringList((step as any)?.module_ids),
     ...parseStringList(metadata.module_ids),
     ...parseStringList(metadata.org_template_module_ids),
-  ])).map((id) => id.toLowerCase());
+  ]));
+  return inferMetaSkillsFromContext({
+    interestSlug: getInterestSlug(step),
+    stepType: getEventSubtype(step),
+    moduleIds: inferredModuleIds,
+    hasDebrief: Boolean(metadata.debrief || metadata.debrief_notes || metadata.notes),
+    hasReasoning: Boolean(metadata.reasoning || metadata.clinical_reasoning),
+    hasWorkoutLog: Boolean(metadata.workout_log || metadata.time_log || metadata.hours_logged),
+  });
+};
+
+export const inferMetaSkillsFromContext = (context:InferMetaSkillsContext):MetaSkillId[] => {
+  const interestSlug = String(context.interestSlug || '').toLowerCase().trim();
+  const eventSubtype = String(context.stepType || '').toLowerCase().trim();
+  const moduleIds = Array.from(new globalThis.Set((context.moduleIds || []).map((id) => String(id).toLowerCase().trim()).filter(Boolean)));
 
   const inferred:MetaSkillId[] = [];
   const add = (id:MetaSkillId) => {
@@ -115,7 +136,7 @@ export const inferMetaSkillsFromStep = (step:any):MetaSkillId[] => {
   };
 
   if (
-    hasModuleHint(moduleIds, DEBRIEF_MODULE_HINTS)
+    hasModuleHint(moduleIds, DEBRIEF_MODULE_HINTS) || Boolean(context.hasDebrief)
     || eventSubtype.includes('debrief')
     || eventSubtype.includes('reflection')
   ) {
@@ -123,7 +144,7 @@ export const inferMetaSkillsFromStep = (step:any):MetaSkillId[] => {
   }
 
   if (
-    hasModuleHint(moduleIds, DECISION_MODULE_HINTS)
+    hasModuleHint(moduleIds, DECISION_MODULE_HINTS) || Boolean(context.hasReasoning)
     || eventSubtype.includes('clinical_shift')
     || eventSubtype.includes('simulation')
     || eventSubtype.includes('race')
@@ -154,7 +175,7 @@ export const inferMetaSkillsFromStep = (step:any):MetaSkillId[] => {
   }
 
   if (
-    hasModuleHint(moduleIds, CONSISTENCY_MODULE_HINTS)
+    hasModuleHint(moduleIds, CONSISTENCY_MODULE_HINTS) || Boolean(context.hasWorkoutLog)
     || eventSubtype.includes('fitness')
     || eventSubtype.includes('practice')
     || eventSubtype.includes('study')
@@ -174,9 +195,13 @@ export const inferMetaSkillsFromStep = (step:any):MetaSkillId[] => {
     if (!inferred.includes('situational_awareness')) add('situational_awareness');
   }
 
-  return inferred.slice(0, 3);
+  return inferred.slice(0,3);
 };
 
 export const metaSkillToLabel = (id:MetaSkillId):string => {
   return META_SKILL_LABELS[id] || id;
+};
+
+export const metaSkillLabel = (id:MetaSkillId):string => {
+  return metaSkillToLabel(id);
 };
