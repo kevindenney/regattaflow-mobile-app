@@ -387,6 +387,8 @@ export interface CardContentProps {
     raceType?: 'fleet' | 'distance' | 'match' | 'team';
     seriesName?: string;
     name?: string;
+    interestSlug?: string;
+    metadata?: Record<string,unknown>;
   }>;
   /** Timeline navigation - current race index */
   currentRaceIndex?: number;

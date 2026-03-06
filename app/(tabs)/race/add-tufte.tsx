@@ -72,6 +72,7 @@ import { ActivityCatalog } from '@/components/events/ActivityCatalog';
 import { TemplatePreview } from '@/components/events/TemplatePreview';
 import type { ActivityTemplate } from '@/types/activities';
 import type { EventSubtypeConfig, EventFormField } from '@/types/interestEventConfig';
+import { inferMetaSkillsFromStep } from '@/lib/transfer/metaSkills';
 
 const logger = createLogger('AddRaceScreen');
 
@@ -833,6 +834,16 @@ export default function AddRaceScreen() {
         for (const [key, value] of Object.entries(form.subtypeFields)) {
           if (value) metadata[key] = value;
         }
+      }
+
+      const inferredMetaSkills = inferMetaSkillsFromStep({
+        interestSlug: currentInterest?.slug || (isSailing ? 'sail-racing' : 'nursing'),
+        eventSubtype: isSailing ? form.raceType : form.eventSubtype,
+        race_type: form.raceType,
+        metadata,
+      });
+      if (inferredMetaSkills.length > 0) {
+        metadata.meta_skills = inferredMetaSkills;
       }
 
       raceData.metadata = metadata;

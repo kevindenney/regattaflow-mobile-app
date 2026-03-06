@@ -62,6 +62,10 @@ export interface TimeAxisRace {
   seriesName?: string;
   /** Full race name */
   name?: string;
+  /** Interest slug (used for subtle cross-interest transfer cues) */
+  interestSlug?: string;
+  /** Source metadata pass-through */
+  metadata?: Record<string,unknown>;
 }
 
 export interface TimelineTimeAxisProps {

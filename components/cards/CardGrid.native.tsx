@@ -77,7 +77,7 @@ interface CardGridNativeProps extends CardGridProps {
     raceIndex?: number,
     totalRaces?: number,
     // Timeline navigation props (for compact axis inside card)
-    timelineRaces?: Array<{ id: string; date: string; raceType?: 'fleet' | 'distance' | 'match' | 'team'; seriesName?: string; name?: string }>,
+    timelineRaces?: Array<{ id: string; date: string; raceType?: 'fleet' | 'distance' | 'match' | 'team'; seriesName?: string; name?: string; interestSlug?: string; metadata?: Record<string,unknown> }>,
     currentRaceIndex?: number,
     onSelectRace?: (index: number) => void,
     nextRaceIndex?: number,
@@ -232,6 +232,8 @@ function CardGridComponent({
       raceType: (race.race_type as 'fleet' | 'distance' | 'match' | 'team') || 'fleet',
       seriesName: race.series_name || (race as any).metadata?.series_name,
       name: race.name,
+      interestSlug: String((race as any)?.metadata?.interest_slug || ''),
+      metadata: (race as any)?.metadata,
     }));
   }, [races]);
 

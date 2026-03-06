@@ -60,6 +60,7 @@ import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import { usePhaseCompletionCounts, formatPhaseCompletionLabel } from '@/hooks/usePhaseCompletionCounts';
 import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
+import { inferMetaSkillsFromStep, metaSkillToLabel, type MetaSkillId } from '@/lib/transfer/metaSkills';
 import {
   CardContentProps,
   RACE_PHASES,
@@ -111,6 +112,11 @@ const DISTANCE_COLORS = {
 const NURSING_CAPABILITY_TITLE_BY_ID = new globalThis.Map(
   NURSING_CORE_V1_CAPABILITIES.map((capability) => [capability.id, capability.title])
 );
+const NURSING_TRANSFER_META_SKILLS:MetaSkillId[] = [
+  'debrief_discipline',
+  'decision_under_uncertainty',
+  'situational_awareness',
+];
 
 // Phase labels are now driven by useInterestEventConfig() — see phaseTabs useMemo below
 
@@ -1145,6 +1151,52 @@ export function RaceSummaryCard({
   }, [isNursingInterest, race]);
   const visibleTemplateSuggestedTitles = templateSuggestedCompetencyTitles.slice(0, 3);
   const hiddenTemplateSuggestedCount = Math.max(templateSuggestedCompetencyTitles.length - visibleTemplateSuggestedTitles.length, 0);
+  const transferSparkLine = useMemo(() => {
+    if (!isNursingInterest || !timelineRaces || timelineRaces.length === 0) return null;
+    const parseMetaSkillIds = (value:unknown):MetaSkillId[] => {
+      const ids = parseStringIdList(value);
+      return ids.filter((id):id is MetaSkillId => {
+        return (
+          id === 'debrief_discipline'
+          || id === 'decision_under_uncertainty'
+          || id === 'situational_awareness'
+          || id === 'communication_under_load'
+          || id === 'consistency_recovery'
+        );
+      });
+    };
+    const toInterestSlug = (item:any):string => {
+      return String(item?.interestSlug || item?.metadata?.interest_slug || '').toLowerCase();
+    };
+    const interestLabel = (slug:string):string => {
+      if (slug === 'sail-racing' || slug === 'sailing' || slug === 'race') return 'Sailing';
+      if (slug === 'drawing') return 'Drawing';
+      if (slug === 'fitness') return 'Fitness';
+      if (slug === 'nursing') return 'Nursing';
+      return 'another';
+    };
+
+    const candidates = [...timelineRaces]
+      .filter((item) => item?.id && item.id !== race.id)
+      .filter((item) => toInterestSlug(item) !== 'nursing')
+      .sort((a, b) => {
+        const aTime = new Date(a.date || '').getTime();
+        const bTime = new Date(b.date || '').getTime();
+        return bTime - aTime;
+      })
+      .slice(0, 7);
+
+    for (const candidate of candidates) {
+      const candidateMetadata = (candidate?.metadata || {}) as Record<string,unknown>;
+      const candidateSkills = parseMetaSkillIds(candidateMetadata.meta_skills);
+      const inferredSkills = candidateSkills.length > 0 ? candidateSkills : inferMetaSkillsFromStep(candidate);
+      const matchedSkill = NURSING_TRANSFER_META_SKILLS.find((skillId) => inferredSkills.includes(skillId));
+      if (!matchedSkill) continue;
+      const label = interestLabel(toInterestSlug(candidate));
+      return `Transfer: Your recent ${label} work reinforced ${metaSkillToLabel(matchedSkill)}.`;
+    }
+    return null;
+  }, [isNursingInterest, timelineRaces, race.id]);
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
     // Team/Crew Chat — fallback entry point when no avatar row is visible
@@ -1623,6 +1675,9 @@ export function RaceSummaryCard({
               </View>
             ) : null}
           </View>
+        ) : null}
+        {transferSparkLine ? (
+          <Text style={styles.transferSparkText}>{transferSparkLine}</Text>
         ) : null}
         {interestSlug === 'nursing' && (advancedCompetencyCount > 0 || hasValidatedCompetency) ? (
           <View style={styles.nursingStatusRow}>
@@ -3334,6 +3389,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#475569',
+  },
+  transferSparkText: {
+    fontSize: 11,
+    color: IOS_COLORS.secondaryLabel,
+    marginTop: -2,
+    marginBottom: 8,
   },
   advancedBadge: {
     alignSelf: 'flex-start',

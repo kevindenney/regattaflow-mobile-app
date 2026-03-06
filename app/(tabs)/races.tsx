@@ -51,6 +51,7 @@ import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { MOCK_RACES } from '@/constants/mockData';
+import { inferMetaSkillsFromStep } from '@/lib/transfer/metaSkills';
 import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
 import { useActiveRaceSummary } from '@/hooks/useActiveRaceSummary';
 import { useAddRace } from '@/hooks/useAddRace';
@@ -882,10 +883,10 @@ export default function RacesScreen() {
       raceIndex?: number,
       totalRaces?: number,
       // Timeline navigation props
-      _timelineRaces?: any[],
-      _currentRaceIndex?: number,
-      _onSelectRace?: (index: number) => void,
-      _nextRaceIndex?: number,
+      timelineRaces?: any[],
+      currentRaceIndex?: number,
+      onSelectRace?: (index: number) => void,
+      nextRaceIndex?: number,
       // Handler for card press (navigation to this card when clicking partially visible cards)
       onCardPress?: () => void,
       // Refetch trigger for AfterRaceContent
@@ -911,6 +912,10 @@ export default function RacesScreen() {
           seasonWeek={currentSeasonWeek}
           raceNumber={raceIndex !== undefined ? raceIndex + 1 : undefined}
           totalRaces={totalRaces}
+          timelineRaces={timelineRaces}
+          currentRaceIndex={currentRaceIndex}
+          onSelectRace={onSelectRace}
+          nextRaceIndex={nextRaceIndex}
           onCardPress={onCardPress}
           refetchTrigger={refetchTrigger}
         />
@@ -1119,6 +1124,19 @@ export default function RacesScreen() {
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10);
       const timeStr = now.toTimeString().slice(0, 5);
+      const interestSlug = currentInterest?.slug ?? 'nursing';
+      const metadata:Record<string,any> = {
+        event_subtype: 'blank_activity',
+        interest_slug: interestSlug,
+      };
+      const inferredMetaSkills = inferMetaSkillsFromStep({
+        interestSlug,
+        eventSubtype: 'blank_activity',
+        metadata,
+      });
+      if (inferredMetaSkills.length > 0) {
+        metadata.meta_skills = inferredMetaSkills;
+      }
 
       const { data: newEvent, error } = await supabase
         .from('regattas')
@@ -1128,10 +1146,7 @@ export default function RacesScreen() {
           created_by: user.id,
           status: 'planned',
           race_type: 'fleet',
-          metadata: {
-            event_subtype: 'blank_activity',
-            interest_slug: currentInterest?.slug ?? 'nursing',
-          },
+          metadata,
         })
         .select()
         .single();
