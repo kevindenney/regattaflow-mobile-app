@@ -58,6 +58,7 @@ import { useRaceStartOrder } from '@/hooks/useRaceStartOrder';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import { usePhaseCompletionCounts, formatPhaseCompletionLabel } from '@/hooks/usePhaseCompletionCounts';
+import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
 import {
   CardContentProps,
@@ -106,6 +107,10 @@ const DISTANCE_COLORS = {
   badgeText: '#7C3AED',
   routeBg: '#F5F3FF',
 } as const;
+
+const NURSING_CAPABILITY_TITLE_BY_ID = new Map(
+  NURSING_CORE_V1_CAPABILITIES.map((capability) => [capability.id, capability.title])
+);
 
 // Phase labels are now driven by useInterestEventConfig() — see phaseTabs useMemo below
 
@@ -256,6 +261,31 @@ function simplifyLabel(label: string): string {
     'Backstay Tension': 'Backstay',
   };
   return shortenings[label] || label;
+}
+
+function parseStringIdList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter((entry) => entry.length > 0);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+          .filter((entry) => entry.length > 0);
+      }
+    } catch {}
+    return trimmed
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+  return [];
 }
 
 /**
@@ -1093,6 +1123,14 @@ export function RaceSummaryCard({
   const teamNoun = eventConfig.teamNoun ?? 'Team';
   const normalizedInterestSlug = String(interestSlug || '').trim().toLowerCase();
   const isNursingInterest = normalizedInterestSlug === 'nursing';
+  const templateSuggestedCompetencyTitles = useMemo(() => {
+    if (!isNursingInterest) return [];
+    const metadata = ((race as any)?.metadata || {}) as Record<string, unknown>;
+    const suggestedIds = parseStringIdList(metadata.org_template_suggested_competency_ids);
+    return suggestedIds.map((id) => NURSING_CAPABILITY_TITLE_BY_ID.get(id) || id);
+  }, [isNursingInterest, race]);
+  const visibleTemplateSuggestedTitles = templateSuggestedCompetencyTitles.slice(0, 3);
+  const hiddenTemplateSuggestedCount = Math.max(templateSuggestedCompetencyTitles.length - visibleTemplateSuggestedTitles.length, 0);
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
     // Team/Crew Chat — fallback entry point when no avatar row is visible
@@ -1557,6 +1595,21 @@ export function RaceSummaryCard({
           numberOfLines={2}
           ellipsizeMode="tail"
         >{displayRaceName || '[No Step Name]'}</Text>
+        {isNursingInterest && visibleTemplateSuggestedTitles.length > 0 ? (
+          <View style={styles.templateSuggestedRow}>
+            <Text style={styles.templateSuggestedLabel}>Suggested:</Text>
+            {visibleTemplateSuggestedTitles.map((title) => (
+              <View key={title} style={styles.templateSuggestedChip}>
+                <Text style={styles.templateSuggestedChipText} numberOfLines={1}>{title}</Text>
+              </View>
+            ))}
+            {hiddenTemplateSuggestedCount > 0 ? (
+              <View style={styles.templateSuggestedChip}>
+                <Text style={styles.templateSuggestedChipText}>+{hiddenTemplateSuggestedCount}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         {interestSlug === 'nursing' && advancedCompetencyCount > 0 ? (
           <View style={styles.advancedBadge}>
             <Text style={styles.advancedBadgeText}>Advanced {advancedCompetencyCount}</Text>
@@ -3230,6 +3283,33 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.label,
     lineHeight: 22,
     marginBottom: 10,
+  },
+  templateSuggestedRow: {
+    marginTop: -2,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  templateSuggestedLabel: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
+    fontWeight: '600',
+  },
+  templateSuggestedChip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    maxWidth: 170,
+  },
+  templateSuggestedChipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#475569',
   },
   advancedBadge: {
     alignSelf: 'flex-start',
