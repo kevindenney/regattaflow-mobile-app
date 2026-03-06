@@ -15,6 +15,7 @@ import {
 import { supabase } from '@/services/supabase';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { InterestProvider, useInterest } from '@/providers/InterestProvider';
+import { OrganizationProvider } from '@/providers/OrganizationProvider';
 import { InterestSelection } from '@/components/onboarding/InterestSelection';
 import { ContextualHintProvider } from '@/providers/ContextualHintProvider';
 import StripeProvider from '@/providers/StripeProvider';
@@ -523,15 +524,17 @@ export default function RootLayout() {
         <GluestackUIProvider mode="light">
           <StripeProvider>
             <AuthProvider>
-              <InterestProvider>
-              <ContextualHintProvider>
-              <ToastProvider>
-                <PushNotificationHandler>
-                  <StackWithSplash />
-                </PushNotificationHandler>
-              </ToastProvider>
-              </ContextualHintProvider>
+              <OrganizationProvider>
+                <InterestProvider>
+                <ContextualHintProvider>
+                <ToastProvider>
+                  <PushNotificationHandler>
+                    <StackWithSplash />
+                  </PushNotificationHandler>
+                </ToastProvider>
+                </ContextualHintProvider>
               </InterestProvider>
+              </OrganizationProvider>
             </AuthProvider>
           </StripeProvider>
         </GluestackUIProvider>

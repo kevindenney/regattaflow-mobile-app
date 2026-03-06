@@ -41,6 +41,7 @@ export default function OrganizationAccessSettingsScreen() {
     autoInvite?: string;
   }>();
   const {
+    organizationProviderActive,
     loading,
     ready,
     providerMountedAt,
@@ -89,6 +90,29 @@ export default function OrganizationAccessSettingsScreen() {
     }
     return Array.from(byIdentity.values());
   }, [memberships]);
+
+  React.useEffect(() => {
+    if (!showDevDebugPanel) return;
+    const snapshot = {
+      organizationProviderActive,
+      loading,
+      ready,
+      providerMountedAt,
+      membershipLoadAttempt,
+      membershipLoadError,
+      hasDebugPayload: Boolean(membershipLoadDebug),
+    };
+    console.log('[organization-access] context snapshot', JSON.stringify(snapshot));
+  }, [
+    showDevDebugPanel,
+    organizationProviderActive,
+    loading,
+    ready,
+    providerMountedAt,
+    membershipLoadAttempt,
+    membershipLoadError,
+    membershipLoadDebug,
+  ]);
 
   const handleChangeVisibility = async (next: 'public' | 'org_members') => {
     if (next === defaultContentVisibility || savingVisibility) return;
@@ -414,6 +438,7 @@ export default function OrganizationAccessSettingsScreen() {
               <>
                 <Text className="text-xs text-gray-600 mt-3">loading: {String(loading)}</Text>
                 <Text className="text-xs text-gray-600 mt-1">ready: {String(ready)}</Text>
+                <Text className="text-xs text-gray-600 mt-1">organizationProviderActive: {String(organizationProviderActive)}</Text>
                 <Text className="text-xs text-gray-600 mt-1">providerMountedAt: {providerMountedAt || 'null'}</Text>
                 <Text className="text-xs text-gray-600 mt-1">membershipLoadAttempt: {membershipLoadAttempt}</Text>
                 <Text className="text-xs text-gray-600 mt-1">

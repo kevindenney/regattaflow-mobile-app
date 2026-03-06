@@ -70,6 +70,7 @@ type MembershipLoadErrorPayload = {
 };
 
 type OrganizationContextValue = {
+  organizationProviderActive: boolean;
   loading: boolean;
   ready: boolean;
   providerMountedAt: string | null;
@@ -96,8 +97,10 @@ type OrganizationContextValue = {
 const ACTIVE_STATUSES = new Set(['active', 'verified']);
 const MANAGER_ROLES = new Set(['owner', 'admin', 'manager', 'faculty', 'instructor']);
 const STORAGE_KEY = 'rf_active_organization_id';
+let hasLoggedMissingOrganizationProvider = false;
 
 const Ctx = createContext<OrganizationContextValue>({
+  organizationProviderActive: false,
   loading: false,
   ready: false,
   providerMountedAt: null,
@@ -578,6 +581,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
   const value = useMemo<OrganizationContextValue>(
     () => ({
+      organizationProviderActive: true,
       loading,
       ready,
       providerMountedAt,
@@ -629,5 +633,12 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 }
 
 export function useOrganization() {
-  return useContext(Ctx);
+  const ctx = useContext(Ctx);
+  if ((__DEV__ || process.env.NODE_ENV !== 'production') && !ctx.organizationProviderActive && !hasLoggedMissingOrganizationProvider) {
+    hasLoggedMissingOrganizationProvider = true;
+    console.error('[OrganizationProvider] useOrganization is running outside <OrganizationProvider>', {
+      pathname: typeof window !== 'undefined' ? window.location?.pathname || null : null,
+    });
+  }
+  return ctx;
 }
