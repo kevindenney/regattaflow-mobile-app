@@ -459,6 +459,10 @@ export default function CoachDiscoveryScreen() {
     router.push(`/coach/${coachId}?action=message`);
   }, [router]);
 
+  const handleOpenArtifactQueue = useCallback(() => {
+    router.push('/coach/artifact-queue');
+  }, [router]);
+
   const handleWaitlistSubmit = useCallback(async () => {
     if (!user || (selectedSkills.length === 0 && !freeText)) return;
 
@@ -781,6 +785,9 @@ export default function CoachDiscoveryScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.errorContainer}>
+          <TouchableOpacity style={styles.queueEntryButton} onPress={handleOpenArtifactQueue} activeOpacity={0.8}>
+            <Text style={styles.queueEntryText}>Open Review Queue</Text>
+          </TouchableOpacity>
           <Ionicons name="cloud-offline-outline" size={48} color={c.textLight} />
           <Text style={styles.errorTitle}>Something went wrong</Text>
           <Text style={styles.errorMessage}>
@@ -810,6 +817,11 @@ export default function CoachDiscoveryScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+          <View style={styles.queueEntryContainer}>
+            <TouchableOpacity style={styles.queueEntryButton} onPress={handleOpenArtifactQueue} activeOpacity={0.8}>
+              <Text style={styles.queueEntryText}>Open Review Queue</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.emptyPlatformBanner}>
             <Text style={styles.emptyPlatformTitle}>
               We're growing our coach network
@@ -845,6 +857,11 @@ export default function CoachDiscoveryScreen() {
           <View style={styles.headerSpacer} />
         </View>
         <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+          <View style={styles.queueEntryContainer}>
+            <TouchableOpacity style={styles.queueEntryButton} onPress={handleOpenArtifactQueue} activeOpacity={0.8}>
+              <Text style={styles.queueEntryText}>Open Review Queue</Text>
+            </TouchableOpacity>
+          </View>
           {!hasSubmittedNeeds ? (
             // Step 1: Needs input
             renderNeedsInput(
@@ -903,6 +920,11 @@ export default function CoachDiscoveryScreen() {
         <View style={styles.headerSpacer} />
       </View>
       <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+        <View style={styles.queueEntryContainer}>
+          <TouchableOpacity style={styles.queueEntryButton} onPress={handleOpenArtifactQueue} activeOpacity={0.8}>
+            <Text style={styles.queueEntryText}>Open Review Queue</Text>
+          </TouchableOpacity>
+        </View>
         {/* Active coach cards */}
         {renderActiveCoaches()}
 
@@ -1190,6 +1212,24 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+  },
+  queueEntryContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  queueEntryButton: {
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    backgroundColor: c.bgSubtle,
+  },
+  queueEntryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: c.accent,
   },
 
   // ---------------------------------------------------------------------------
