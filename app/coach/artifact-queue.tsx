@@ -132,17 +132,25 @@ export default function ArtifactQueueScreen() {
             const requesterLabel = requesterNameById[item.requester_user_id] || item.requester_user_id;
             const moduleId = item.artifact?.module_id || 'unknown_module';
             const createdLabel = formatDistanceToNow(new Date(item.created_at), { addSuffix: true });
+            const isInReview = item.status === 'in_review';
+            const statusLabel = isInReview ? 'In review' : 'Requested';
+            const buttonLabel = isInReview ? 'Continue' : 'Review';
 
             return (
               <View key={item.id} style={styles.card}>
                 <Text style={styles.requester}>{requesterLabel}</Text>
                 <Text style={styles.meta}>Module: {moduleId}</Text>
                 <Text style={styles.meta}>Requested {createdLabel}</Text>
+                <View style={[styles.statusPill, isInReview ? styles.statusPillInReview : styles.statusPillRequested]}>
+                  <Text style={[styles.statusPillText, isInReview ? styles.statusPillTextInReview : styles.statusPillTextRequested]}>
+                    {statusLabel}
+                  </Text>
+                </View>
                 <TouchableOpacity
                   style={styles.reviewButton}
                   onPress={() => router.push(`/coach/artifact-review/${item.artifact_id}` as any)}
                 >
-                  <Text style={styles.reviewButtonText}>Review</Text>
+                  <Text style={styles.reviewButtonText}>{buttonLabel}</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -225,5 +233,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  statusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginTop: 6,
+  },
+  statusPillRequested: {
+    backgroundColor: '#EFF8FF',
+    borderWidth: 1,
+    borderColor: '#B2DDFF',
+  },
+  statusPillInReview: {
+    backgroundColor: '#F9F5FF',
+    borderWidth: 1,
+    borderColor: '#D9D6FE',
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusPillTextRequested: {
+    color: '#175CD3',
+  },
+  statusPillTextInReview: {
+    color: '#5925DC',
   },
 });

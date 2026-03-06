@@ -161,7 +161,7 @@ export default function CoachArtifactReviewScreen() {
         .select('id,artifact_id,requester_user_id,coach_user_id,status,note,created_at')
         .eq('artifact_id', artifactId)
         .eq('coach_user_id', user.id)
-        .in('status', ['requested', 'in_review'])
+        .in('status', ['requested', 'in_review', 'completed'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -282,14 +282,14 @@ export default function CoachArtifactReviewScreen() {
     setErrorText(null);
     try {
       await updateRequest({ status: 'completed' });
-      setNotAssigned(true);
+      router.push('/coach/artifact-queue');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to complete review.';
       setErrorText(message);
     } finally {
       setUpdatingStatus(false);
     }
-  }, [requestRow, updateRequest]);
+  }, [requestRow, router, updateRequest]);
 
   const handleSaveNote = useCallback(async () => {
     if (!requestRow) return;
@@ -344,6 +344,11 @@ export default function CoachArtifactReviewScreen() {
                 Requested {requestRow?.created_at ? formatDistanceToNow(new Date(requestRow.created_at), { addSuffix: true }) : 'recently'}
               </Text>
               <Text style={styles.metaText}>Status: {requestRow?.status || 'unknown'}</Text>
+              {requestRow?.status === 'completed' ? (
+                <View style={styles.completedBadge}>
+                  <Text style={styles.completedBadgeText}>Completed</Text>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.card}>
@@ -422,9 +427,9 @@ export default function CoachArtifactReviewScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.primaryButton, updatingStatus && styles.disabledButton]}
+                  style={[styles.actionButton, styles.primaryButton, (updatingStatus || requestRow?.status === 'completed') && styles.disabledButton]}
                   onPress={handleMarkCompleted}
-                  disabled={updatingStatus}
+                  disabled={updatingStatus || requestRow?.status === 'completed'}
                 >
                   <Text style={styles.primaryButtonText}>Mark completed</Text>
                 </TouchableOpacity>
@@ -630,5 +635,20 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     fontSize: 14,
     backgroundColor: '#FFFFFF',
+  },
+  completedBadge: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#A4BCFD',
+    backgroundColor: '#EEF4FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  completedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3538CD',
   },
 });
