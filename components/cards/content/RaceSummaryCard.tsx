@@ -704,6 +704,7 @@ export function RaceSummaryCard({
     setModuleContent((prev) => ({ ...prev, [modId]: summary }));
   }, []);
   const [advancedCompetencyCount, setAdvancedCompetencyCount] = useState(0);
+  const [hasValidatedCompetency, setHasValidatedCompetency] = useState(false);
   const moduleArtifactContext = useMemo(() => {
     const source = String((race as any)?._source || (race as any)?.source || (race as any)?.source_table || '').toLowerCase();
     const explicitType = String((race as any)?.event_type || (race as any)?.eventType || (race as any)?.metadata?.event_type || '').toLowerCase();
@@ -738,13 +739,16 @@ export function RaceSummaryCard({
         || !moduleArtifactContext?.eventId
         || !isUuid(moduleArtifactContext.eventId)
       ) {
-        if (!isCancelled) setAdvancedCompetencyCount(0);
+        if (!isCancelled) {
+          setAdvancedCompetencyCount(0);
+          setHasValidatedCompetency(false);
+        }
         return;
       }
 
       const primaryQuery = supabase
         .from('betterat_competency_attempts')
-        .select('competency_id,artifact_id')
+        .select('competency_id,artifact_id,status')
         .eq('user_id', userId)
         .eq('event_id', moduleArtifactContext.eventId)
         .eq('event_type', moduleArtifactContext.eventType);
@@ -753,7 +757,7 @@ export function RaceSummaryCard({
         if (isMissingSupabaseColumn(error, 'betterat_competency_attempts.event_type')) {
           const fallback = await supabase
             .from('betterat_competency_attempts')
-            .select('competency_id,artifact_id')
+            .select('competency_id,artifact_id,status')
             .eq('user_id', userId)
             .eq('event_id', moduleArtifactContext.eventId);
           data = fallback.data;
@@ -761,9 +765,18 @@ export function RaceSummaryCard({
         }
       }
       if (error) {
-        if (!isCancelled) setAdvancedCompetencyCount(0);
+        if (!isCancelled) {
+          setAdvancedCompetencyCount(0);
+          setHasValidatedCompetency(false);
+        }
         return;
       }
+
+      const hasValidated = (data || []).some((row: any) => (
+        typeof row.artifact_id === 'string'
+        && row.artifact_id.length > 0
+        && String(row.status || '') === 'validated'
+      ));
 
       const uniqueIds = new Set(
         (data || [])
@@ -774,6 +787,7 @@ export function RaceSummaryCard({
 
       if (!isCancelled) {
         setAdvancedCompetencyCount(uniqueIds.size);
+        setHasValidatedCompetency(hasValidated);
       }
     };
 
@@ -1610,9 +1624,18 @@ export function RaceSummaryCard({
             ) : null}
           </View>
         ) : null}
-        {interestSlug === 'nursing' && advancedCompetencyCount > 0 ? (
-          <View style={styles.advancedBadge}>
-            <Text style={styles.advancedBadgeText}>Advanced {advancedCompetencyCount}</Text>
+        {interestSlug === 'nursing' && (advancedCompetencyCount > 0 || hasValidatedCompetency) ? (
+          <View style={styles.nursingStatusRow}>
+            {advancedCompetencyCount > 0 ? (
+              <View style={styles.advancedBadge}>
+                <Text style={styles.advancedBadgeText}>Advanced {advancedCompetencyCount}</Text>
+              </View>
+            ) : null}
+            {hasValidatedCompetency ? (
+              <View style={styles.validatedBadge}>
+                <Text style={styles.validatedBadgeText}>Validated</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -3326,6 +3349,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#166534',
+  },
+  nursingStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  validatedBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  validatedBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1D4ED8',
   },
   simpleDetailRow: {
     flexDirection: 'row',
