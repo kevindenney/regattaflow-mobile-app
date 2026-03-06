@@ -72,7 +72,6 @@ import { ActivityCatalog } from '@/components/events/ActivityCatalog';
 import { TemplatePreview } from '@/components/events/TemplatePreview';
 import type { ActivityTemplate } from '@/types/activities';
 import type { EventSubtypeConfig, EventFormField } from '@/types/interestEventConfig';
-import { inferMetaSkillsFromContext } from '@/lib/transfer/metaSkills';
 
 const logger = createLogger('AddRaceScreen');
 
@@ -201,6 +200,7 @@ interface FormState {
 export default function AddRaceScreen() {
   const router = useRouter();
   const searchParams = useLocalSearchParams<{
+    editId?: string;
     templateId?: string;
     templateTitle?: string;
     templateDescription?: string;
@@ -211,6 +211,8 @@ export default function AddRaceScreen() {
   const { user, isGuest } = useAuth();
   const { currentInterest } = useInterest();
   const eventConfig = useInterestEventConfig();
+  const editRaceId = typeof searchParams.editId === 'string' ? searchParams.editId : '';
+  const isEditing = editRaceId.length > 0;
 
   // Activity catalog from followed orgs & coaches
   const {
@@ -225,12 +227,12 @@ export default function AddRaceScreen() {
   // Derive the interest-aware header title
   const headerTitle = useMemo(() => {
     const slug = currentInterest?.slug;
-    if (!slug || slug === 'sail-racing') return 'Add Race';
-    if (slug === 'nursing') return 'Add Shift';
-    if (slug === 'drawing') return 'Add Session';
-    if (slug === 'fitness') return 'Add Workout';
-    return 'Add Event';
-  }, [currentInterest?.slug]);
+    if (!slug || slug === 'sail-racing') return isEditing ? 'Edit Race' : 'Add Race';
+    if (slug === 'nursing') return isEditing ? 'Edit Shift' : 'Add Shift';
+    if (slug === 'drawing') return isEditing ? 'Edit Session' : 'Add Session';
+    if (slug === 'fitness') return isEditing ? 'Edit Workout' : 'Add Workout';
+    return isEditing ? 'Edit Event' : 'Add Event';
+  }, [currentInterest?.slug, isEditing]);
 
   // Form state
   const isSailing = !currentInterest?.slug || currentInterest.slug === 'sail-racing';
@@ -275,10 +277,68 @@ export default function AddRaceScreen() {
 
   const [form, setForm] = useState<FormState>(getInitialState());
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingEditData, setIsLoadingEditData] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showRouteMap, setShowRouteMap] = useState(false);
   const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
   const [showAllSuggestions, setShowAllSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing || !editRaceId) return;
+    let isCancelled = false;
+    const loadExisting = async () => {
+      setIsLoadingEditData(true);
+      try {
+        const { data, error } = await supabase
+          .from('regattas')
+          .select('*')
+          .eq('id', editRaceId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data || isCancelled) return;
+
+        const metadata = (data.metadata && typeof data.metadata === 'object') ? data.metadata as Record<string, any> : {};
+        const startSource = data.start_date || data.date || null;
+        const parsedStart = startSource ? new Date(startSource) : null;
+        const isValidStart = !!parsedStart && !Number.isNaN(parsedStart.getTime());
+        const nextDate = isValidStart ? format(parsedStart, 'yyyy-MM-dd') : getInitialState().date;
+        const nextTime = isValidStart ? format(parsedStart, 'HH:mm') : getInitialState().time;
+        const nextSubtype = String(metadata.event_subtype || '').trim();
+        const subtypeConfig = eventConfig.eventSubtypes.find((item) => item.id === nextSubtype);
+        const nextSubtypeFields: Record<string, string> = {};
+        if (subtypeConfig?.formFields) {
+          subtypeConfig.formFields.forEach((field) => {
+            const rawValue = metadata[field.id];
+            if (rawValue === null || rawValue === undefined) return;
+            nextSubtypeFields[field.id] = String(rawValue);
+          });
+        }
+
+        setForm((prev) => ({
+          ...prev,
+          name: data.name || '',
+          date: nextDate,
+          time: nextTime,
+          location: data.start_area_name || metadata.venue_name || '',
+          raceType: typeof data.race_type === 'string' ? data.race_type : prev.raceType,
+          vhfChannel: data.vhf_channel || '',
+          eventSubtype: nextSubtype || prev.eventSubtype,
+          subtypeFields: nextSubtypeFields,
+          notes: metadata.notes || '',
+        }));
+      } catch (error) {
+        logger.error('[AddRaceScreen] Failed to load existing race for edit:', error);
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingEditData(false);
+        }
+      }
+    };
+    void loadExisting();
+    return () => {
+      isCancelled = true;
+    };
+  }, [editRaceId, eventConfig.eventSubtypes, isEditing]);
   const [showSuggestionDiagnostics, setShowSuggestionDiagnostics] = useState(false);
 
   // Race suggestions from the full suggestion engine
@@ -699,7 +759,8 @@ export default function AddRaceScreen() {
 
   // Validation
   const isFormValid = useMemo(() => {
-    if (!form.name.trim() || !form.date || !form.time) return false;
+    if (!form.date || !form.time) return false;
+    if (isSailing && !form.name.trim()) return false;
     if (isSailing) {
       if (form.raceType === 'match' && !form.opponentName.trim()) return false;
       if (form.raceType === 'team' && (!form.yourTeamName.trim() || !form.opponentTeamName.trim())) return false;
@@ -721,7 +782,7 @@ export default function AddRaceScreen() {
 
   // Save handler
   const handleSave = useCallback(async () => {
-    if (!isFormValid || isSaving) return;
+    if (!isFormValid || isSaving || isLoadingEditData) return;
     // For non-guests, we still need a user ID
     if (!isGuest && !user?.id) return;
 
@@ -732,6 +793,9 @@ export default function AddRaceScreen() {
         ? form.time
         : `${form.time.slice(0, 2)}:${form.time.slice(2)}`;
       const startTime = `${form.date}T${normalizedTime}:00`;
+      const subtypeLabel = eventConfig.eventSubtypes.find((s) => s.id === form.eventSubtype)?.label || 'Activity';
+      const generatedName = `${subtypeLabel} ${form.date}`;
+      const eventName = isSailing ? form.name.trim() : (form.name.trim() || generatedName);
 
       // Build metadata
       const metadata: Record<string, any> = {
@@ -775,7 +839,7 @@ export default function AddRaceScreen() {
       // Authenticated User Saving Logic (Supabase)
       // Build race data
       const raceData: Record<string, any> = {
-        name: form.name.trim(),
+        name: eventName,
         start_date: startTime,
         created_by: user.id,
         status: 'planned',
@@ -834,18 +898,6 @@ export default function AddRaceScreen() {
         for (const [key, value] of Object.entries(form.subtypeFields)) {
           if (value) metadata[key] = value;
         }
-      }
-
-      const inferredMetaSkills = inferMetaSkillsFromContext({
-        interestSlug: currentInterest?.slug || (isSailing ? 'sail-racing' : 'nursing'),
-        stepType: isSailing ? form.raceType : form.eventSubtype,
-        moduleIds: Array.isArray(metadata.org_template_module_ids) ? metadata.org_template_module_ids : [],
-        hasDebrief: Boolean(metadata.debrief_notes || metadata.notes),
-        hasReasoning: Boolean(metadata.clinical_reasoning),
-        hasWorkoutLog: Boolean(metadata.time_log || metadata.hours_logged),
-      });
-      if (inferredMetaSkills.length > 0) {
-        metadata.meta_skills = inferredMetaSkills;
       }
 
       raceData.metadata = metadata;
@@ -921,16 +973,24 @@ export default function AddRaceScreen() {
 
       logger.debug('[AddRaceScreen] Saving race:', raceData);
 
-      const { data: newRace, error } = await supabase
-        .from('regattas')
-        .insert(raceData)
-        .select()
-        .single();
+      const saveResult = isEditing
+        ? await supabase
+          .from('regattas')
+          .update(raceData)
+          .eq('id', editRaceId)
+          .select()
+          .single()
+        : await supabase
+          .from('regattas')
+          .insert(raceData)
+          .select()
+          .single();
+      const { data: savedRace, error } = saveResult;
 
       if (error) throw error;
 
       // Save NOR document if extracted from URL
-      if (form.aiInputMethod === 'url' && form.aiInputText?.trim() && newRace?.id) {
+      if (form.aiInputMethod === 'url' && form.aiInputText?.trim() && savedRace?.id) {
         try {
           // Normalize URL - add https:// if no protocol specified
           let norUrl = form.aiInputText.trim();
@@ -944,7 +1004,7 @@ export default function AddRaceScreen() {
           await supabase
             .from('regattas')
             .update({ notice_of_race_url: norUrl })
-            .eq('id', newRace.id);
+            .eq('id', savedRace.id);
 
           // Also save to documents table for document management
           const { data: doc } = await supabase
@@ -958,7 +1018,7 @@ export default function AddRaceScreen() {
               mime_type: 'text/html', // Web URL, not necessarily PDF
               document_type: 'nor',
               processing_status: 'completed',
-              regatta_id: newRace.id,
+              regatta_id: savedRace.id,
               used_for_extraction: true,
               extraction_timestamp: new Date().toISOString(),
             })
@@ -967,7 +1027,7 @@ export default function AddRaceScreen() {
 
           if (doc) {
             await supabase.from('race_documents').insert({
-              regatta_id: newRace.id,
+              regatta_id: savedRace.id,
               document_id: doc.id,
               user_id: user.id,
               document_type: 'nor',
@@ -979,15 +1039,15 @@ export default function AddRaceScreen() {
         }
       }
 
-      logger.debug('[AddRaceScreen] Race created:', newRace?.id);
-      router.replace(`/(tabs)/races?selected=${newRace.id}`);
+      logger.debug('[AddRaceScreen] Race saved:', savedRace?.id);
+      router.replace(`/(tabs)/races?selected=${savedRace.id}`);
     } catch (err) {
       logger.error('[AddRaceScreen] Save failed:', err);
-      Alert.alert('Error', 'Failed to create race');
+      Alert.alert('Error', isEditing ? 'Failed to update step' : 'Failed to create race');
     } finally {
       setIsSaving(false);
     }
-  }, [form, isFormValid, user?.id, isGuest, isSaving, calculatedDistance, router]);
+  }, [form, isFormValid, user?.id, isGuest, isSaving, isLoadingEditData, calculatedDistance, router, isEditing, editRaceId]);
 
   const handleClose = useCallback(() => {
     if (router.canGoBack()) {
@@ -1034,10 +1094,10 @@ export default function AddRaceScreen() {
           <Text style={styles.headerTitle}>{headerTitle}</Text>
           <Pressable
             onPress={handleSave}
-            disabled={!isFormValid || isSaving}
+            disabled={!isFormValid || isSaving || isLoadingEditData}
             hitSlop={12}
           >
-            <Text style={[styles.saveButton, (!isFormValid || isSaving) && styles.saveButtonDisabled]}>
+            <Text style={[styles.saveButton, (!isFormValid || isSaving || isLoadingEditData) && styles.saveButtonDisabled]}>
               {isSaving ? 'Saving...' : 'Save'}
             </Text>
           </Pressable>

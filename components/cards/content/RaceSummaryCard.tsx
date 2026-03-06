@@ -43,7 +43,6 @@ import { CrewAvatarStack } from '@/components/races/CrewAvatarStack';
 import { CollaborationPopover } from '@/components/races/CollaborationPopover';
 import { useRaceCollaborators } from '@/hooks/useRaceCollaborators';
 import { useRaceMessages } from '@/hooks/useRaceMessages';
-import { useRecentNonNursingSteps } from '@/hooks/useRecentNonNursingSteps';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import { useQueryClient } from '@tanstack/react-query';
@@ -61,7 +60,6 @@ import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import { usePhaseCompletionCounts, formatPhaseCompletionLabel } from '@/hooks/usePhaseCompletionCounts';
 import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
-import { inferMetaSkillsFromContext, metaSkillLabel, type MetaSkillId } from '@/lib/transfer/metaSkills';
 import {
   CardContentProps,
   RACE_PHASES,
@@ -113,11 +111,6 @@ const DISTANCE_COLORS = {
 const NURSING_CAPABILITY_TITLE_BY_ID = new globalThis.Map(
   NURSING_CORE_V1_CAPABILITIES.map((capability) => [capability.id, capability.title])
 );
-const NURSING_TRANSFER_META_SKILLS:MetaSkillId[] = [
-  'debrief_discipline',
-  'decision_under_uncertainty',
-  'situational_awareness',
-];
 
 // Phase labels are now driven by useInterestEventConfig() — see phaseTabs useMemo below
 
@@ -1152,70 +1145,6 @@ export function RaceSummaryCard({
   }, [isNursingInterest, race]);
   const visibleTemplateSuggestedTitles = templateSuggestedCompetencyTitles.slice(0, 3);
   const hiddenTemplateSuggestedCount = Math.max(templateSuggestedCompetencyTitles.length - visibleTemplateSuggestedTitles.length, 0);
-  const { steps: recentNonNursingSteps } = useRecentNonNursingSteps({
-    userId: userId || null,
-    excludeInterestSlug: 'nursing',
-    enabled: isNursingInterest,
-  });
-  const transferSparkLine = useMemo(() => {
-    if (!isNursingInterest) return null;
-    const parseMetaSkillIds = (value:unknown):MetaSkillId[] => {
-      const ids = parseStringIdList(value);
-      return ids.filter((id):id is MetaSkillId => {
-        return (
-          id === 'debrief_discipline'
-          || id === 'decision_under_uncertainty'
-          || id === 'situational_awareness'
-          || id === 'communication_under_load'
-          || id === 'consistency_recovery'
-        );
-      });
-    };
-    const toInterestSlug = (item:any):string => {
-      return String(item?.interestSlug || item?.metadata?.interest_slug || '').toLowerCase().trim();
-    };
-    const interestLabel = (slug:string):string => {
-      if (slug === 'sail-racing' || slug === 'sailing' || slug === 'race') return 'Sailing';
-      if (slug === 'drawing') return 'Drawing';
-      if (slug === 'fitness') return 'Fitness';
-      if (slug === 'nursing') return 'Nursing';
-      return 'work';
-    };
-
-    const findSparkFromCandidates = (candidates:any[]):string | null => {
-      const sorted = [...candidates]
-        .filter((item) => item?.id && item.id !== race.id)
-        .filter((item) => toInterestSlug(item) !== 'nursing')
-        .sort((a, b) => {
-          const aTime = new Date(a.date || a.start_date || a.created_at || '').getTime();
-          const bTime = new Date(b.date || b.start_date || b.created_at || '').getTime();
-          return bTime - aTime;
-        })
-        .slice(0, 10);
-
-      for (const candidate of sorted) {
-        const candidateMetadata = (candidate?.metadata || {}) as Record<string,unknown>;
-        const candidateSkills = parseMetaSkillIds(candidateMetadata.meta_skills);
-        const inferredSkills = candidateSkills.length > 0 ? candidateSkills : inferMetaSkillsFromContext({
-          interestSlug: toInterestSlug(candidate),
-          stepType: String(candidateMetadata.event_subtype || candidate?.raceType || ''),
-          moduleIds: parseStringIdList(candidateMetadata.module_ids),
-          hasDebrief: Boolean(candidateMetadata.debrief || candidateMetadata.notes || candidateMetadata.debrief_notes),
-          hasReasoning: Boolean(candidateMetadata.reasoning || candidateMetadata.clinical_reasoning),
-          hasWorkoutLog: Boolean(candidateMetadata.workout_log || candidateMetadata.time_log || candidateMetadata.hours_logged),
-        });
-        const matchedSkill = NURSING_TRANSFER_META_SKILLS.find((skillId) => inferredSkills.includes(skillId));
-        if (!matchedSkill) continue;
-        const label = interestLabel(toInterestSlug(candidate));
-        return `Transfer: Recent ${label} reinforced ${metaSkillLabel(matchedSkill)}.`;
-      }
-      return null;
-    };
-
-    const inMemorySpark = findSparkFromCandidates(timelineRaces || []);
-    if (inMemorySpark) return inMemorySpark;
-    return findSparkFromCandidates(recentNonNursingSteps || []);
-  }, [isNursingInterest, recentNonNursingSteps, timelineRaces, race.id]);
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
     // Team/Crew Chat — fallback entry point when no avatar row is visible
@@ -1232,27 +1161,25 @@ export function RaceSummaryCard({
     }
     // Only show edit/delete for owners
     if (isOwner) {
-      if (isNursingInterest) {
-        if (onMoveStepEarlier) {
-          items.push({ label: 'Move Earlier', icon: 'arrow-back-outline', onPress: onMoveStepEarlier });
-        }
-        if (onMoveStepLater) {
-          items.push({ label: 'Move Later', icon: 'arrow-forward-outline', onPress: onMoveStepLater });
-        }
-        if (onMoveStepToPlannedNext) {
-          items.push({
-            label: 'Move to Planned (Next)',
-            icon: 'bookmark-outline',
-            onPress: onMoveStepToPlannedNext,
-          });
-        }
-        if (onMoveStepToCompletedMostRecent) {
-          items.push({
-            label: 'Mark Done (Most recent)',
-            icon: 'checkmark-done-outline',
-            onPress: onMoveStepToCompletedMostRecent,
-          });
-        }
+      if (onMoveStepEarlier) {
+        items.push({ label: 'Move Earlier', icon: 'arrow-back-outline', onPress: onMoveStepEarlier });
+      }
+      if (onMoveStepLater) {
+        items.push({ label: 'Move Later', icon: 'arrow-forward-outline', onPress: onMoveStepLater });
+      }
+      if (onMoveStepToPlannedNext) {
+        items.push({
+          label: 'Move to Planned',
+          icon: 'bookmark-outline',
+          onPress: onMoveStepToPlannedNext,
+        });
+      }
+      if (onMoveStepToCompletedMostRecent) {
+        items.push({
+          label: 'Mark Done',
+          icon: 'checkmark-done-outline',
+          onPress: onMoveStepToCompletedMostRecent,
+        });
       }
       if (onEdit) {
         items.push({ label: `Edit ${noun}`, icon: 'create-outline', onPress: onEdit });
@@ -1694,9 +1621,6 @@ export function RaceSummaryCard({
               </View>
             ) : null}
           </View>
-        ) : null}
-        {transferSparkLine ? (
-          <Text style={styles.transferSparkText}>{transferSparkLine}</Text>
         ) : null}
         {interestSlug === 'nursing' && (advancedCompetencyCount > 0 || hasValidatedCompetency) ? (
           <View style={styles.nursingStatusRow}>
@@ -3408,12 +3332,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#475569',
-  },
-  transferSparkText: {
-    fontSize: 11,
-    color: IOS_COLORS.secondaryLabel,
-    marginTop: -2,
-    marginBottom: 8,
   },
   advancedBadge: {
     alignSelf: 'flex-start',

@@ -9,16 +9,18 @@
  */
 
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { EditRaceForm } from '@/components/races/edit';
 import { createLogger } from '@/lib/utils/logger';
+import { useInterest } from '@/providers/InterestProvider';
 
 const logger = createLogger('EditRaceScreen');
 
 export default function EditRaceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { currentInterest } = useInterest();
 
   logger.debug('[EditRaceScreen] Rendered with ID:', {
     id,
@@ -60,6 +62,12 @@ export default function EditRaceScreen() {
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const actualId = Array.isArray(id) ? id[0] : id;
 
+  useEffect(() => {
+    if (!actualId) return;
+    if (currentInterest?.slug !== 'nursing') return;
+    router.replace(`/(tabs)/race/add-tufte?editId=${actualId}`);
+  }, [actualId, currentInterest?.slug, router]);
+
   // Skip validation during static rendering (when id is placeholder '[id]')
   if (!uuidPattern.test(actualId)) {
     if (actualId === '[id]') {
@@ -70,6 +78,10 @@ export default function EditRaceScreen() {
       id: actualId,
       length: actualId.length
     });
+    return null;
+  }
+
+  if (currentInterest?.slug === 'nursing') {
     return null;
   }
 

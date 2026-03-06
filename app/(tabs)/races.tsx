@@ -51,7 +51,6 @@ import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { ErrorMessage } from '@/components/ui/error';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { MOCK_RACES } from '@/constants/mockData';
-import { inferMetaSkillsFromContext } from '@/lib/transfer/metaSkills';
 import { useRaceBriefSync } from '@/hooks/ai/useRaceBriefSync';
 import { useActiveRaceSummary } from '@/hooks/useActiveRaceSummary';
 import { useAddRace } from '@/hooks/useAddRace';
@@ -98,6 +97,7 @@ import {
   type RegulatoryAcknowledgements
 } from '@/lib/races';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
@@ -164,7 +164,16 @@ export default function RacesScreen() {
   // Season state and hooks
   const [showSeasonSettings, setShowSeasonSettings] = useState(false);
   const [showSeasonPicker, setShowSeasonPicker] = useState(false);
-  const [isGridView, setIsGridView] = useState(false);
+  const [isGridView, setIsGridView] = useState(true);
+  const [timelineStatusOverrides, setTimelineStatusOverrides] = useState<Record<string, {
+    status: 'completed' | 'planned';
+    startDateIso: string;
+    startTimeLabel: string;
+  }>>({});
+
+  useEffect(() => {
+    setIsGridView(true);
+  }, []);
 
   // filterSeasonId: null = "All Races", undefined = use current season, string = specific season
   const [filterSeasonId, setFilterSeasonId] = useState<string | null | undefined>(undefined);
@@ -417,16 +426,7 @@ export default function RacesScreen() {
   const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
   const interestSlug = eventConfig.interestSlug;
   const interestFilteredRaces = useMemo(() => {
-    if (isSailingInterest) {
-      if (!liveRaces) return EMPTY_RACES;
-      return liveRaces.filter((race:any) => {
-        const meta = (race?.metadata || {}) as Record<string,any>;
-        const taggedInterest = String(meta.interest_slug || '').toLowerCase().trim();
-        // Sailing timeline should not show explicitly tagged non-sailing steps.
-        if (!taggedInterest) return true;
-        return taggedInterest === 'sail-racing' || taggedInterest === 'sailing' || taggedInterest === 'race';
-      });
-    }
+    if (isSailingInterest) return liveRaces;
     // For non-sailing interests, show events whose metadata.interest_slug matches
     if (!liveRaces) return EMPTY_RACES;
     const filtered = liveRaces.filter((race: any) => {
@@ -830,11 +830,16 @@ export default function RacesScreen() {
     }
 
     return racesToShow.map((race: any) => ({
+      ...(timelineStatusOverrides[race.id] ? {
+        status: timelineStatusOverrides[race.id].status,
+        start_date: timelineStatusOverrides[race.id].startDateIso,
+        start_time: timelineStatusOverrides[race.id].startDateIso,
+      } : null),
       id: race.id,
       name: race.name || race.race_name || `Unnamed ${eventConfig.eventNoun}`,
       venue: race.venue || race.venue_name,
-      date: race.start_date || race.date || new Date().toISOString(),
-      startTime: race.start_time || race.startTime,
+      date: timelineStatusOverrides[race.id]?.startDateIso || race.start_date || race.date || new Date().toISOString(),
+      startTime: timelineStatusOverrides[race.id]?.startTimeLabel || race.start_time || race.startTime,
       boatClass: race.boat_class || race.boatClass,
       vhf_channel: race.vhf_channel || race.critical_details?.vhf_channel,
       race_type: race.race_type, // Preserve race type (fleet, distance, match, team)
@@ -862,7 +867,7 @@ export default function RacesScreen() {
         protestDeadline: race.protest_deadline || race.critical_details?.protest_deadline,
       },
     }));
-  }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline]);
+  }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline, timelineStatusOverrides]);
 
   // Calculate current season week (ISO week number with 'W' prefix)
   const currentSeasonWeek = useMemo(() => {
@@ -872,6 +877,131 @@ export default function RacesScreen() {
     const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
     return `W${weekNumber}`;
   }, []);
+
+  const applyTimelineStepStatus = useCallback(async (
+    raceId: string,
+    status: 'completed' | 'planned',
+    opts?: {indexHint?: number}
+  ) => {
+    const race = baseCardGridRaces.find((entry) => entry.id === raceId) as any;
+    const nowMs = Date.now();
+    const idx = opts?.indexHint ?? 0;
+    const rawDate = race?.start_date || race?.date || race?.startTime;
+    const parsed = rawDate ? new Date(rawDate) : null;
+    const existingMs = parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : null;
+    const nextMs =
+      status === 'completed'
+        ? Math.min(existingMs ?? Number.MAX_SAFE_INTEGER, nowMs - (idx + 1) * 60 * 1000)
+        : Math.max(existingMs ?? 0, nowMs + (idx + 1) * 2 * 60 * 60 * 1000);
+    const nextStart = new Date(nextMs).toISOString();
+    const eventDate = nextStart.slice(0, 10);
+    const startTime = new Date(nextMs).toTimeString().slice(0, 5);
+    const sourceRaw = String(race?._source || race?.source || race?.source_table || '').toLowerCase();
+    const primaryTable: 'race_events' | 'regattas' = sourceRaw.includes('race_event') ? 'race_events' : 'regattas';
+    const fallbackTable: 'race_events' | 'regattas' = primaryTable === 'race_events' ? 'regattas' : 'race_events';
+
+    const tryUpdate = async (table: 'race_events' | 'regattas') => {
+      const initialPayload = table === 'race_events'
+        ? { event_date: eventDate, start_time: nextStart }
+        : { start_date: nextStart };
+      const initialResult = await supabase
+        .from(table)
+        .update(initialPayload as any)
+        .eq('id', raceId)
+        .select('id')
+        .maybeSingle();
+      if (!initialResult.error) {
+        return initialResult;
+      }
+
+      if (
+        table === 'race_events' &&
+        isMissingSupabaseColumn(initialResult.error, 'race_events.start_time')
+      ) {
+        const fallbackPayload = { event_date: eventDate };
+        return await supabase
+          .from(table)
+          .update(fallbackPayload as any)
+          .eq('id', raceId)
+          .select('id')
+          .maybeSingle();
+      }
+
+      return initialResult;
+    };
+
+    const primary = await tryUpdate(primaryTable);
+    if (!primary.data?.id) {
+      const fallback = await tryUpdate(fallbackTable);
+      if (!fallback.data?.id) {
+        throw primary.error || fallback.error || new Error('Failed to update step timeline status');
+      }
+    }
+    setTimelineStatusOverrides((prev) => ({
+      ...prev,
+      [raceId]: {
+        status,
+        startDateIso: nextStart,
+        startTimeLabel: startTime,
+      },
+    }));
+
+    setSelectedRaceData((prev: any) => {
+      if (!prev || prev.id !== raceId) return prev;
+      return {
+        ...prev,
+        status,
+        start_date: nextStart,
+        date: nextStart,
+        start_time: startTime,
+        startTime: startTime,
+        completed_at: status === 'completed' ? new Date().toISOString() : null,
+        metadata: {
+          ...(prev.metadata && typeof prev.metadata === 'object' ? prev.metadata : {}),
+          status,
+        },
+      };
+    });
+  }, [baseCardGridRaces]);
+
+  const handleMoveStepToPlannedNext = useCallback((raceId: string) => {
+    if (!raceId) return;
+    void (async () => {
+      try {
+        await applyTimelineStepStatus(raceId, 'planned');
+        await refetchRacesRef.current?.();
+      } catch (error: any) {
+        showAlert('Update failed', error?.message || 'Could not move this step to planned.');
+      }
+    })();
+  }, [applyTimelineStepStatus, user?.id]);
+
+  const handleMoveStepToCompletedMostRecent = useCallback((raceId: string) => {
+    if (!raceId) return;
+    void (async () => {
+      try {
+        await applyTimelineStepStatus(raceId, 'completed');
+        await refetchRacesRef.current?.();
+      } catch (error: any) {
+        showAlert('Update failed', error?.message || 'Could not mark this step done.');
+      }
+    })();
+  }, [applyTimelineStepStatus, user?.id]);
+
+  const handleTimelineGridBulkStatusUpdate = useCallback(async (
+    raceIds: string[],
+    status: 'completed' | 'planned'
+  ) => {
+    if (raceIds.length === 0) return;
+    try {
+      await Promise.all(
+        raceIds.map((raceId, idx) => applyTimelineStepStatus(raceId, status, { indexHint: idx }))
+      );
+      await refetchRacesRef.current?.();
+    } catch (error: any) {
+      showAlert('Bulk update failed', error?.message || 'Could not update selected steps.');
+    }
+  }, [applyTimelineStepStatus, user?.id]);
 
   // Render card content for CardGrid
   const renderCardGridContent = useCallback(
@@ -892,10 +1022,10 @@ export default function RacesScreen() {
       raceIndex?: number,
       totalRaces?: number,
       // Timeline navigation props
-      timelineRaces?: any[],
-      currentRaceIndex?: number,
-      onSelectRace?: (index: number) => void,
-      nextRaceIndex?: number,
+      _timelineRaces?: any[],
+      _currentRaceIndex?: number,
+      _onSelectRace?: (index: number) => void,
+      _nextRaceIndex?: number,
       // Handler for card press (navigation to this card when clicking partially visible cards)
       onCardPress?: () => void,
       // Refetch trigger for AfterRaceContent
@@ -921,16 +1051,14 @@ export default function RacesScreen() {
           seasonWeek={currentSeasonWeek}
           raceNumber={raceIndex !== undefined ? raceIndex + 1 : undefined}
           totalRaces={totalRaces}
-          timelineRaces={timelineRaces}
-          currentRaceIndex={currentRaceIndex}
-          onSelectRace={onSelectRace}
-          nextRaceIndex={nextRaceIndex}
           onCardPress={onCardPress}
           refetchTrigger={refetchTrigger}
+          onMoveStepToPlannedNext={canManage ? () => handleMoveStepToPlannedNext(race.id) : undefined}
+          onMoveStepToCompletedMostRecent={canManage ? () => handleMoveStepToCompletedMostRecent(race.id) : undefined}
         />
       );
     },
-    [cardGridDimensions, currentSeasonWeek]
+    [cardGridDimensions, currentSeasonWeek, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext]
   );
 
   // Handle race change from CardGrid
@@ -1101,11 +1229,15 @@ export default function RacesScreen() {
     if (!raceId) return;
 
     try {
+      if (currentInterest?.slug === 'nursing') {
+        routerRef.current.push(`/(tabs)/race/add-tufte?editId=${raceId}`);
+        return;
+      }
       routerRef.current.push(`/race/edit/${raceId}`);
     } catch (error) {
       logger.error('Error navigating to edit race:', error);
     }
-  }, [logger]);
+  }, [currentInterest?.slug, logger]);
 
   // Navigate to the comprehensive edit flow for the selected race
   const handleEditSelectedRace = useCallback(() => {
@@ -1133,21 +1265,6 @@ export default function RacesScreen() {
       const now = new Date();
       const dateStr = now.toISOString().slice(0, 10);
       const timeStr = now.toTimeString().slice(0, 5);
-      const interestSlug = currentInterest?.slug ?? 'nursing';
-      const metadata:Record<string,any> = {
-        event_subtype: 'blank_activity',
-        interest_slug: interestSlug,
-      };
-      const inferredMetaSkills = inferMetaSkillsFromContext({
-        interestSlug,
-        stepType: 'blank_activity',
-        hasDebrief: false,
-        hasReasoning: false,
-        hasWorkoutLog: false,
-      });
-      if (inferredMetaSkills.length > 0) {
-        metadata.meta_skills = inferredMetaSkills;
-      }
 
       const { data: newEvent, error } = await supabase
         .from('regattas')
@@ -1157,7 +1274,10 @@ export default function RacesScreen() {
           created_by: user.id,
           status: 'planned',
           race_type: 'fleet',
-          metadata,
+          metadata: {
+            event_subtype: 'blank_activity',
+            interest_slug: currentInterest?.slug ?? 'nursing',
+          },
         })
         .select()
         .single();
@@ -2992,9 +3112,7 @@ export default function RacesScreen() {
                 setHasManuallySelected(true);
                 setIsGridView(false); // zoom back in
               }}
-              userId={user?.id}
-              onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
-              onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
+              onBulkUpdateStatus={isViewingOtherTimeline ? undefined : handleTimelineGridBulkStatusUpdate}
               topInset={totalHeaderHeight}
               seasonHeaderHeight={SEASON_HEADER_HEIGHT}
             />
