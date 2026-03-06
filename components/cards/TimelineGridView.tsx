@@ -6,7 +6,7 @@
  * Tapping a mini card zooms back to that race in the CardGrid.
  */
 
-import React, { useMemo, useRef, useCallback, useState } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -39,12 +39,6 @@ interface TimelineGridViewProps {
   nextRaceIndex?: number | null;
   /** Called when user taps a mini card */
   onSelectRace: (index: number, race: CardRaceData) => void;
-  /** Current user ID for ownership checks */
-  userId?: string;
-  /** Callback when edit is requested for a race */
-  onEditRace?: (raceId: string) => void;
-  /** Callback when delete is requested for a race */
-  onDeleteRace?: (raceId: string, raceName: string) => void;
   /** Top inset to clear the toolbar */
   topInset?: number;
   /** Season header height */
@@ -54,7 +48,7 @@ interface TimelineGridViewProps {
 interface MonthGroup {
   key: string;
   label: string;
-  races: { race: CardRaceData; index: number }[];
+  races: Array<{ race: CardRaceData; index: number }>;
 }
 
 // =============================================================================
@@ -121,25 +115,15 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const MiniCard = React.memo(function MiniCard({
   race,
+  index,
   isSelected,
   isNext,
-  canManage,
-  onEdit,
-  onDelete,
-  isMenuOpen,
-  onOpenMenu,
-  onCloseMenu,
   onPress,
 }: {
   race: CardRaceData;
+  index: number;
   isSelected: boolean;
   isNext: boolean;
-  canManage: boolean;
-  onEdit?: () => void;
-  onDelete?: () => void;
-  isMenuOpen: boolean;
-  onOpenMenu: () => void;
-  onCloseMenu: () => void;
   onPress: () => void;
 }) {
   const scale = useSharedValue(1);
@@ -164,10 +148,6 @@ const MiniCard = React.memo(function MiniCard({
         animStyle,
       ]}
       onPress={() => {
-        if (isMenuOpen) {
-          onCloseMenu();
-          return;
-        }
         triggerHaptic('selection');
         onPress();
       }}
@@ -178,59 +158,10 @@ const MiniCard = React.memo(function MiniCard({
         scale.value = withSpring(1, { damping: 15, stiffness: 300 });
       }}
     >
-      <View style={miniStyles.topRow}>
-        {/* Status badge */}
-        <View style={[miniStyles.statusBadge, { backgroundColor: statusColor }]}>
-          <Text style={miniStyles.statusText}>{statusLabel}</Text>
-        </View>
-        {canManage && (onEdit || onDelete) ? (
-          <Pressable
-            style={miniStyles.menuButton}
-            onPress={(event) => {
-              (event as any)?.stopPropagation?.();
-              if (isMenuOpen) {
-                onCloseMenu();
-                return;
-              }
-              onOpenMenu();
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Manage ${race.name || 'race'}`}
-          >
-            <Ionicons name="ellipsis-horizontal" size={14} color={IOS_COLORS.secondaryLabel} />
-          </Pressable>
-        ) : null}
+      {/* Status badge */}
+      <View style={[miniStyles.statusBadge, { backgroundColor: statusColor }]}>
+        <Text style={miniStyles.statusText}>{statusLabel}</Text>
       </View>
-
-      {isMenuOpen ? (
-        <View style={miniStyles.menuPopover}>
-          {onEdit ? (
-            <Pressable
-              style={miniStyles.menuItem}
-              onPress={(event) => {
-                (event as any)?.stopPropagation?.();
-                onCloseMenu();
-                onEdit();
-              }}
-            >
-              <Text style={miniStyles.menuItemText}>Edit</Text>
-            </Pressable>
-          ) : null}
-          {onDelete ? (
-            <Pressable
-              style={miniStyles.menuItem}
-              onPress={(event) => {
-                (event as any)?.stopPropagation?.();
-                onCloseMenu();
-                onDelete();
-              }}
-            >
-              <Text style={[miniStyles.menuItemText, miniStyles.menuItemDestructive]}>Delete</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
 
       {/* Date circle */}
       <View style={miniStyles.dateCircle}>
@@ -274,15 +205,11 @@ export function TimelineGridView({
   selectedRaceId,
   nextRaceIndex,
   onSelectRace,
-  userId,
-  onEditRace,
-  onDeleteRace,
   topInset = 0,
   seasonHeaderHeight = 34,
 }: TimelineGridViewProps) {
   const { width: screenWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
-  const [openMenuRaceId, setOpenMenuRaceId] = useState<string | null>(null);
 
   // Responsive columns
   const columns = screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : 2;
@@ -295,7 +222,6 @@ export function TimelineGridView({
 
   const handleSelectRace = useCallback(
     (index: number, race: CardRaceData) => {
-      setOpenMenuRaceId(null);
       onSelectRace(index, race);
     },
     [onSelectRace],
@@ -314,7 +240,6 @@ export function TimelineGridView({
           { paddingHorizontal: horizontalPadding },
         ]}
         showsVerticalScrollIndicator={false}
-        onScrollBeginDrag={() => setOpenMenuRaceId(null)}
       >
         {/* Summary bar */}
         <View style={gridStyles.summaryBar}>
@@ -340,25 +265,13 @@ export function TimelineGridView({
             <View style={[gridStyles.grid, { gap }]}>
               {group.races.map(({ race, index }) => (
                 <View key={race.id} style={{ width: cardWidth }}>
-                  {(() => {
-                    const canManage = !!userId && race.created_by === userId && !race.isDemo;
-                    const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
-                    const handleDelete = canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined;
-                    return (
                   <MiniCard
                     race={race}
+                    index={index}
                     isSelected={race.id === selectedRaceId}
                     isNext={index === nextRaceIndex}
-                    canManage={canManage}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    isMenuOpen={openMenuRaceId === race.id}
-                    onOpenMenu={() => setOpenMenuRaceId(race.id)}
-                    onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
                     onPress={() => handleSelectRace(index, race)}
                   />
-                    );
-                  })()}
                 </View>
               ))}
             </View>
@@ -427,55 +340,6 @@ const miniStyles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.5,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  menuButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(15,23,42,0.04)',
-  },
-  menuPopover: {
-    position: 'absolute',
-    top: 36,
-    right: 8,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: IOS_COLORS.separator,
-    minWidth: 96,
-    zIndex: 20,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 6px 16px rgba(15,23,42,0.16)',
-      } as any,
-      default: {
-        shadowColor: '#0F172A',
-        shadowOpacity: 0.16,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 6,
-      },
-    }),
-  },
-  menuItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  menuItemText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: IOS_COLORS.label,
-  },
-  menuItemDestructive: {
-    color: IOS_COLORS.red,
   },
   dateCircle: {
     alignItems: 'center',

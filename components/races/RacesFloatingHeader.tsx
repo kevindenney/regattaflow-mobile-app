@@ -222,6 +222,23 @@ export function RacesFloatingHeader({
   }));
 
   const isLoading = loadingInsights || weatherLoading;
+  const isNursingInterest = config.interestSlug === 'nursing';
+  const hasSimulationSubtype = (config.eventSubtypes || []).some((subtype) => {
+    const token = `${subtype.id} ${subtype.label}`.toLowerCase();
+    return token.includes('simulation');
+  });
+  const hasSkillsLabSubtype = (config.eventSubtypes || []).some((subtype) => {
+    const token = `${subtype.id} ${subtype.label}`.toLowerCase();
+    return token.includes('skills') && token.includes('lab');
+  });
+  const practiceLabelLower = String(vocab('Practice') || '').toLowerCase();
+  const hasCohortPracticeItem = Boolean(
+    isNursingInterest &&
+    onAddPractice &&
+    (practiceLabelLower.includes('group learning cycle') || practiceLabelLower.includes('cohort'))
+  );
+  const showNursingSimulationItem = isNursingInterest && hasSimulationSubtype;
+  const showNursingSkillsLabItem = isNursingInterest && (hasSkillsLabSubtype || !hasCohortPracticeItem);
 
   // Build the race counter subtitle (hidden for progress segment)
   const hasIndexCounter = Boolean(currentRaceIndex && totalRaces && totalRaces > 0 && currentRaceIndex <= totalRaces);
@@ -335,141 +352,327 @@ export function RacesFloatingHeader({
 
             {/* Menu Options */}
             <View style={styles.menuOptions}>
-              {/* Add Race Option */}
-              <TouchableOpacity
-                style={styles.menuOption}
-                onPress={() => handleMenuOption(onAddRace)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemBlue}15` }]}>
-                  <MaterialCommunityIcons name="flag-checkered" size={24} color={IOS_COLORS.systemBlue} />
-                </View>
-                <View style={styles.menuOptionContent}>
-                  <Text style={styles.menuOptionTitle}>{config.addEventLabel}</Text>
-                  <Text style={styles.menuOptionSubtitle}>
-                    {config.eventSubtypes?.[0]?.description || `Add a new ${config.eventNoun.toLowerCase()}`}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-              </TouchableOpacity>
-
-              {recommendedTemplates.length > 0 && onSelectRecommendedTemplate ? (
+              {isNursingInterest ? (
                 <>
-                  <View style={styles.menuSeparator} />
-                  <View style={styles.menuSection}>
-                    <Text style={styles.menuSectionTitle}>Recommended from your program</Text>
-                    {recommendedTemplates.map((template) => (
+                  <TouchableOpacity
+                    style={styles.menuOption}
+                    onPress={() => handleMenuOption(onAddRace)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemBlue}15` }]}>
+                      <MaterialCommunityIcons name="flag-checkered" size={24} color={IOS_COLORS.systemBlue} />
+                    </View>
+                    <View style={styles.menuOptionContent}>
+                      <Text style={styles.menuOptionTitle}>Add Clinical Shift</Text>
+                      <Text style={styles.menuOptionSubtitle}>
+                        Standard clinical rotation shift
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                  </TouchableOpacity>
+
+                  {recommendedTemplates.length > 0 && onSelectRecommendedTemplate ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <View style={styles.menuSection}>
+                        <Text style={styles.menuSectionTitle}>Recommended from your program</Text>
+                        {recommendedTemplates.map((template) => (
+                          <TouchableOpacity
+                            key={template.id}
+                            style={styles.menuOption}
+                            onPress={() => handleMenuOption(() => onSelectRecommendedTemplate(template))}
+                            activeOpacity={0.7}
+                          >
+                            <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemIndigo}15` }]}>
+                              <MaterialCommunityIcons name="star-outline" size={24} color={IOS_COLORS.systemIndigo} />
+                            </View>
+                            <View style={styles.menuOptionContent}>
+                              <Text style={styles.menuOptionTitle}>{template.title}</Text>
+                              <Text style={styles.menuOptionSubtitle} numberOfLines={2}>
+                                {template.description || 'Program-recommended nursing step template'}
+                              </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </>
+                  ) : null}
+
+                  {hasCohortPracticeItem && onAddPractice ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <View style={styles.menuSection}>
+                        <Text style={styles.menuSectionTitle}>Program</Text>
+                        <TouchableOpacity
+                          style={styles.menuOption}
+                          onPress={() => handleMenuOption(onAddPractice)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemTeal}15` }]}>
+                            <MaterialCommunityIcons name="account-group-outline" size={24} color={IOS_COLORS.systemTeal} />
+                          </View>
+                          <View style={styles.menuOptionContent}>
+                            <Text style={styles.menuOptionTitle}>Add Cohort Learning Cycle</Text>
+                            <Text style={styles.menuOptionSubtitle}>
+                              Shared plan and review loop for your cohort
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : null}
+
+                  {showNursingSimulationItem ? (
+                    <>
+                      <View style={styles.menuSeparator} />
                       <TouchableOpacity
-                        key={template.id}
                         style={styles.menuOption}
-                        onPress={() => handleMenuOption(() => onSelectRecommendedTemplate(template))}
+                        onPress={() => handleMenuOption(onAddRace)}
                         activeOpacity={0.7}
                       >
-                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemIndigo}15` }]}>
-                          <MaterialCommunityIcons name="star-outline" size={24} color={IOS_COLORS.systemIndigo} />
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemPurple}15` }]}>
+                          <MaterialCommunityIcons name="hospital-box-outline" size={24} color={IOS_COLORS.systemPurple} />
                         </View>
                         <View style={styles.menuOptionContent}>
-                          <Text style={styles.menuOptionTitle}>{template.title}</Text>
-                          <Text style={styles.menuOptionSubtitle} numberOfLines={2}>
-                            {template.description || 'Program-recommended nursing step template'}
+                          <Text style={styles.menuOptionTitle}>Add Simulation</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            High-fidelity simulation shift or scenario
                           </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
                       </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              ) : null}
+                    </>
+                  ) : null}
 
-              {/* Add Step Option */}
-              {onAddStep && (
+                  {showNursingSkillsLabItem ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(hasSkillsLabSubtype ? onAddRace : (onAddPractice || onAddRace))}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemGreen}15` }]}>
+                          <MaterialCommunityIcons name="sail-boat" size={24} color={IOS_COLORS.systemGreen} />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>Add Skills Lab</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            Skills lab session or training
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+
+                  {onAddStep ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onAddStep)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemTeal}15` }]}>
+                          <MaterialCommunityIcons name="plus-circle-outline" size={24} color={IOS_COLORS.systemTeal} />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>Add Custom Learning Step</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            Study block, assignment, debrief, or practice
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+
+                  {onNewSeason ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onNewSeason)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemOrange}15` }]}>
+                          <MaterialCommunityIcons name="calendar-plus" size={24} color={IOS_COLORS.systemOrange} />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>Add Rotation (Placement Block)</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            Start a new clinical placement period
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+
+                  {onBrowseCatalog ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onBrowseCatalog)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemPurple}15` }]}>
+                          <MaterialCommunityIcons name="trophy-outline" size={24} color={IOS_COLORS.systemPurple} />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>Browse Clinical Catalog</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            {config.catalogSubtitle ?? 'Browse courses and clinical skills'}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
+                </>
+              ) : (
                 <>
-                  <View style={styles.menuSeparator} />
+                  {/* Add Race Option */}
                   <TouchableOpacity
                     style={styles.menuOption}
-                    onPress={() => handleMenuOption(onAddStep)}
+                    onPress={() => handleMenuOption(onAddRace)}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemTeal}15` }]}>
-                      <MaterialCommunityIcons name="plus-circle-outline" size={24} color={IOS_COLORS.systemTeal} />
+                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemBlue}15` }]}>
+                      <MaterialCommunityIcons name="flag-checkered" size={24} color={IOS_COLORS.systemBlue} />
                     </View>
                     <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>Add Step</Text>
+                      <Text style={styles.menuOptionTitle}>{config.addEventLabel}</Text>
                       <Text style={styles.menuOptionSubtitle}>
-                        Blank step — define what, why, who, and how
+                        {config.eventSubtypes?.[0]?.description || `Add a new ${config.eventNoun.toLowerCase()}`}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
                   </TouchableOpacity>
-                </>
-              )}
 
-              {/* Separator */}
-              <View style={styles.menuSeparator} />
+                  {recommendedTemplates.length > 0 && onSelectRecommendedTemplate ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <View style={styles.menuSection}>
+                        <Text style={styles.menuSectionTitle}>Recommended from your program</Text>
+                        {recommendedTemplates.map((template) => (
+                          <TouchableOpacity
+                            key={template.id}
+                            style={styles.menuOption}
+                            onPress={() => handleMenuOption(() => onSelectRecommendedTemplate(template))}
+                            activeOpacity={0.7}
+                          >
+                            <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemIndigo}15` }]}>
+                              <MaterialCommunityIcons name="star-outline" size={24} color={IOS_COLORS.systemIndigo} />
+                            </View>
+                            <View style={styles.menuOptionContent}>
+                              <Text style={styles.menuOptionTitle}>{template.title}</Text>
+                              <Text style={styles.menuOptionSubtitle} numberOfLines={2}>
+                                {template.description || 'Program-recommended nursing step template'}
+                              </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </>
+                  ) : null}
 
-              {/* Add Practice Option */}
-              {onAddPractice && (
-                <TouchableOpacity
-                  style={styles.menuOption}
-                  onPress={() => handleMenuOption(onAddPractice)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemGreen}15` }]}>
-                    <MaterialCommunityIcons name="sail-boat" size={24} color={IOS_COLORS.systemGreen} />
-                  </View>
-                  <View style={styles.menuOptionContent}>
-                    <Text style={styles.menuOptionTitle}>Add {vocab('Practice')}</Text>
-                    <Text style={styles.menuOptionSubtitle}>
-                      {vocab('Practice')} session or training
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                </TouchableOpacity>
-              )}
+                  {/* Add Step Option */}
+                  {onAddStep && (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onAddStep)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemTeal}15` }]}>
+                          <MaterialCommunityIcons name="plus-circle-outline" size={24} color={IOS_COLORS.systemTeal} />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>Add Step</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            Blank step — define what, why, who, and how
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  )}
 
-              {/* New Season Option */}
-              {onNewSeason && (
-                <>
+                  {/* Separator */}
                   <View style={styles.menuSeparator} />
-                  <TouchableOpacity
-                    style={styles.menuOption}
-                    onPress={() => handleMenuOption(onNewSeason)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemOrange}15` }]}>
-                      <MaterialCommunityIcons name="calendar-plus" size={24} color={IOS_COLORS.systemOrange} />
-                    </View>
-                    <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>New {vocab('Period')}</Text>
-                      <Text style={styles.menuOptionSubtitle}>
-                        Start a new {vocab('Period').toLowerCase()}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                  </TouchableOpacity>
-                </>
-              )}
 
-              {/* Browse Catalog Option */}
-              {onBrowseCatalog && (
-                <>
-                  <View style={styles.menuSeparator} />
-                  <TouchableOpacity
-                    style={styles.menuOption}
-                    onPress={() => handleMenuOption(onBrowseCatalog)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemPurple}15` }]}>
-                      <MaterialCommunityIcons name="trophy-outline" size={24} color={IOS_COLORS.systemPurple} />
-                    </View>
-                    <View style={styles.menuOptionContent}>
-                      <Text style={styles.menuOptionTitle}>Browse {config.eventNoun} Catalog</Text>
-                      <Text style={styles.menuOptionSubtitle}>
-                        {config.catalogSubtitle ?? `Find and follow ${config.eventNoun.toLowerCase()}s`}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
-                  </TouchableOpacity>
+                  {/* Add Practice Option */}
+                  {onAddPractice && (
+                    <TouchableOpacity
+                      style={styles.menuOption}
+                      onPress={() => handleMenuOption(onAddPractice)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemGreen}15` }]}>
+                        <MaterialCommunityIcons name="sail-boat" size={24} color={IOS_COLORS.systemGreen} />
+                      </View>
+                      <View style={styles.menuOptionContent}>
+                        <Text style={styles.menuOptionTitle}>Add {vocab('Practice')}</Text>
+                        <Text style={styles.menuOptionSubtitle}>
+                          {vocab('Practice')} session or training
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* New Season Option */}
+                  {onNewSeason && (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onNewSeason)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemOrange}15` }]}>
+                          <MaterialCommunityIcons name="calendar-plus" size={24} color={IOS_COLORS.systemOrange} />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>New {vocab('Period')}</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            Start a new {vocab('Period').toLowerCase()}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  )}
+
+                  {/* Browse Catalog Option */}
+                  {onBrowseCatalog && (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onBrowseCatalog)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: `${IOS_COLORS.systemPurple}15` }]}>
+                          <MaterialCommunityIcons name="trophy-outline" size={24} color={IOS_COLORS.systemPurple} />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>Browse {config.eventNoun} Catalog</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            {config.catalogSubtitle ?? `Find and follow ${config.eventNoun.toLowerCase()}s`}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  )}
                 </>
               )}
             </View>
