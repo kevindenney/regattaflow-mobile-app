@@ -45,6 +45,18 @@ type RawOrganizationMembershipRecord = Omit<OrganizationMembershipRecord, 'organ
 };
 
 type OrganizationVisibilityDefault = 'public' | 'org_members';
+type MembershipLoadDebug = {
+  startedAt: string;
+  finishedAt: string | null;
+  hasSession: boolean;
+  userId: string | null;
+  phase: 'start' | 'success' | 'error' | 'timeout';
+  table: 'organization_memberships';
+  errorMessage: string | null;
+  errorCode: string | null;
+  errorDetails: string | null;
+  errorHint: string | null;
+};
 type MembershipLoadErrorPayload = {
   userId: string | null;
   table: 'organization_memberships';
@@ -61,6 +73,7 @@ type OrganizationContextValue = {
   loading: boolean;
   ready: boolean;
   membershipLoadError: string | null;
+  membershipLoadDebug: MembershipLoadDebug | null;
   membershipLoadErrorPayload: MembershipLoadErrorPayload | null;
   memberships: OrganizationMembershipRecord[];
   activeOrganizationId: string | null;
@@ -86,6 +99,7 @@ const Ctx = createContext<OrganizationContextValue>({
   loading: false,
   ready: false,
   membershipLoadError: null,
+  membershipLoadDebug: null,
   membershipLoadErrorPayload: null,
   memberships: [],
   activeOrganizationId: null,
@@ -257,16 +271,42 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [membershipLoadError, setMembershipLoadError] = useState<string | null>(null);
+  const [membershipLoadDebug, setMembershipLoadDebug] = useState<MembershipLoadDebug | null>(null);
   const [membershipLoadErrorPayload, setMembershipLoadErrorPayload] = useState<MembershipLoadErrorPayload | null>(null);
   const [memberships, setMemberships] = useState<OrganizationMembershipRecord[]>([]);
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
 
   const refreshMemberships = useCallback(async () => {
+    const startedAt = new Date().toISOString();
     const { data: sessionData } = await supabase.auth.getSession();
     const hasSession = Boolean(sessionData?.session);
+    setMembershipLoadDebug({
+      startedAt,
+      finishedAt: null,
+      hasSession,
+      userId: user?.id || null,
+      phase: 'start',
+      table: 'organization_memberships',
+      errorMessage: null,
+      errorCode: null,
+      errorDetails: null,
+      errorHint: null,
+    });
     if (!signedIn || !user?.id || !hasSession) {
       setMembershipLoadError(null);
       setMembershipLoadErrorPayload(null);
+      setMembershipLoadDebug({
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        hasSession,
+        userId: user?.id || null,
+        phase: 'error',
+        table: 'organization_memberships',
+        errorMessage: 'No active session',
+        errorCode: null,
+        errorDetails: null,
+        errorHint: null,
+      });
       setMemberships([]);
       setActiveOrganizationIdState(null);
       setLoading(false);
@@ -330,6 +370,18 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       const nextId = preferredMembership?.organization_id ?? null;
       setActiveOrganizationIdState(nextId);
       await storeActiveOrganizationId(nextId);
+      setMembershipLoadDebug({
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        hasSession: true,
+        userId: user?.id || null,
+        phase: 'success',
+        table: 'organization_memberships',
+        errorMessage: null,
+        errorCode: null,
+        errorDetails: null,
+        errorHint: null,
+      });
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error ?? '');
       const timedOut = rawMessage === 'ORG_MEMBERSHIP_TIMEOUT';
@@ -351,6 +403,18 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         hasSession: latestHasSession,
       };
       console.error('[OrganizationProvider] Membership load failed', payload);
+      setMembershipLoadDebug({
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        hasSession: latestHasSession,
+        userId: user?.id || null,
+        phase: timedOut ? 'timeout' : 'error',
+        table: 'organization_memberships',
+        errorMessage: rawMessage || 'Unknown membership load error',
+        errorCode: payload.code,
+        errorDetails: payload.details,
+        errorHint: payload.hint,
+      });
       if (rawMessage === 'ORG_MEMBERSHIP_TIMEOUT') {
         setMembershipLoadError('Could not load organizations. Retry.');
       } else {
@@ -437,6 +501,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       loading,
       ready,
       membershipLoadError,
+      membershipLoadDebug,
       membershipLoadErrorPayload,
       memberships,
       activeOrganizationId,
@@ -457,6 +522,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       loading,
       ready,
       membershipLoadError,
+      membershipLoadDebug,
       membershipLoadErrorPayload,
       memberships,
       activeOrganizationId,

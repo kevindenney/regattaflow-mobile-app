@@ -44,6 +44,7 @@ export default function OrganizationAccessSettingsScreen() {
     loading,
     ready,
     membershipLoadError,
+    membershipLoadDebug,
     membershipLoadErrorPayload,
     memberships,
     activeOrganizationId,
@@ -66,6 +67,7 @@ export default function OrganizationAccessSettingsScreen() {
   const [tokenLookupInput, setTokenLookupInput] = React.useState('');
   const [inviteRoleOptions, setInviteRoleOptions] = React.useState<InviteRolePreset[]>([]);
   const [showDebugInfo, setShowDebugInfo] = React.useState(false);
+  const showDevDebugPanel = __DEV__ || process.env.NODE_ENV !== 'production';
   const autoInviteHandledRef = React.useRef(false);
   const invalidParamAlertShownRef = React.useRef<string | null>(null);
   const displayMemberships = React.useMemo(() => {
@@ -393,6 +395,42 @@ export default function OrganizationAccessSettingsScreen() {
           </Pressable>
         </View>
 
+        {showDevDebugPanel ? (
+          <View className="mx-4 mt-4 bg-white rounded-2xl p-4 border border-gray-200">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Dev Diagnostics</Text>
+              <Pressable
+                onPress={() => setShowDebugInfo((prev) => !prev)}
+                className="px-3 py-2 rounded-xl border border-gray-300 bg-gray-50"
+              >
+                <Text className="text-xs font-medium text-gray-700">
+                  {showDebugInfo ? 'Hide debug' : 'Show debug'}
+                </Text>
+              </Pressable>
+            </View>
+            {showDebugInfo ? (
+              <>
+                <Text className="text-xs text-gray-600 mt-3">loading: {String(loading)}</Text>
+                <Text className="text-xs text-gray-600 mt-1">ready: {String(ready)}</Text>
+                <Text className="text-xs text-gray-600 mt-1">
+                  membershipLoadError: {membershipLoadError || 'null'}
+                </Text>
+                <ScrollView className="mt-2 max-h-48 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                  <Text className="text-xs text-gray-700">
+                    {JSON.stringify(membershipLoadDebug, null, 2)}
+                  </Text>
+                </ScrollView>
+                <Pressable
+                  onPress={() => void refreshMemberships()}
+                  className="mt-3 self-start px-3 py-2 rounded-xl border border-gray-300 bg-gray-50"
+                >
+                  <Text className="text-xs font-medium text-gray-700">Retry</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
+        ) : null}
+
         {resolvedTokenInvite ? (
           <View className="mx-4 mt-4 bg-white rounded-2xl p-4 border border-gray-200">
             <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Invite Link</Text>
@@ -465,23 +503,11 @@ export default function OrganizationAccessSettingsScreen() {
             >
               <Text className="text-sm font-medium text-rose-700">Retry</Text>
             </Pressable>
-            {__DEV__ && membershipLoadErrorPayload ? (
-              <View className="mt-3">
-                <Pressable
-                  onPress={() => setShowDebugInfo((prev) => !prev)}
-                  className="self-start px-3 py-2 rounded-xl border border-gray-300 bg-gray-50"
-                >
-                  <Text className="text-xs font-medium text-gray-700">
-                    {showDebugInfo ? 'Hide debug' : 'Show debug'}
-                  </Text>
-                </Pressable>
-                {showDebugInfo ? (
-                  <View className="mt-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
-                    <Text className="text-xs text-gray-700">
-                      {JSON.stringify(membershipLoadErrorPayload, null, 2)}
-                    </Text>
-                  </View>
-                ) : null}
+            {showDevDebugPanel && showDebugInfo && membershipLoadErrorPayload ? (
+              <View className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <Text className="text-xs text-gray-700">
+                  {JSON.stringify(membershipLoadErrorPayload, null, 2)}
+                </Text>
               </View>
             ) : null}
           </View>
