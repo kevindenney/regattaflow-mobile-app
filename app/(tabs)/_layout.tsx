@@ -637,7 +637,6 @@ function TabLayoutInner() {
         <Tabs.Screen
           name="programs"
           options={{
-            href: isTabVisible('programs') ? undefined : null,
             title: programsTab?.title ?? 'Programs & Placements',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
@@ -656,7 +655,6 @@ function TabLayoutInner() {
         <Tabs.Screen
           name="race-management"
           options={{
-            href: isTabVisible('race-management') ? undefined : null,
             title: raceManagementTab?.title ?? 'Racing',
             tabBarIcon: ({ color, size, focused }) => (
               <Ionicons
