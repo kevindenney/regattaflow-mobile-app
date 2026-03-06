@@ -84,6 +84,7 @@ import { logUnvalidatedArtifactAttempts } from '@/services/competencyService';
 import { evaluateClinicalReasoning, type ClinicalReasoningEvaluationResult } from '@/services/ai/ClinicalReasoningEvaluationService';
 import { supabase } from '@/services/supabase';
 import type { InterestEventConfig } from '@/types/interestEventConfig';
+import { isUuid } from '@/utils/uuid';
 
 // =============================================================================
 // COLORS
@@ -2098,6 +2099,9 @@ export function ModuleDetailBottomSheet({
   const [isFeedbackLoading, setIsFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
   const [feedbackResultByModule, setFeedbackResultByModule] = useState<Record<string, ClinicalReasoningEvaluationResult | null>>({});
+  const [isRequestingCoachReview, setIsRequestingCoachReview] = useState(false);
+  const [coachReviewStatus, setCoachReviewStatus] = useState<'none' | 'requested' | 'in_review' | 'completed'>('none');
+  const [coachReviewNotice, setCoachReviewNotice] = useState('');
 
   // Tool step values: moduleId → { stepId → text }
   const [toolValues, setToolValues] = useState<Record<string, Record<string, string>>>({});
@@ -2494,6 +2498,77 @@ export function ModuleDetailBottomSheet({
     && artifactContext?.eventId
   );
 
+  React.useEffect(() => {
+    let isCancelled = false;
+
+    const loadExistingCoachReviewStatus = async () => {
+      if (!isClinicalReasoningCommitEnabled || !moduleId || !isOpen) {
+        if (!isCancelled) {
+          setCoachReviewStatus('none');
+          setCoachReviewNotice('');
+        }
+        return;
+      }
+
+      const artifactId = currentArtifactId;
+      if (!artifactId || !isUuid(artifactId)) {
+        if (!isCancelled) {
+          setCoachReviewStatus('none');
+          setCoachReviewNotice('');
+        }
+        return;
+      }
+
+      let requesterUserId = artifactContext?.userId || null;
+      if (!requesterUserId) {
+        const { data } = await supabase.auth.getUser();
+        requesterUserId = data.user?.id || null;
+      }
+
+      if (!requesterUserId) {
+        if (!isCancelled) {
+          setCoachReviewStatus('none');
+          setCoachReviewNotice('');
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('betterat_artifact_review_requests')
+        .select('status,created_at')
+        .eq('artifact_id', artifactId)
+        .eq('requester_user_id', requesterUserId)
+        .in('status', ['requested', 'in_review', 'completed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (isCancelled) return;
+
+      if (error || !data) {
+        setCoachReviewStatus('none');
+        setCoachReviewNotice('');
+        return;
+      }
+
+      const status = data.status as 'requested' | 'in_review' | 'completed';
+      setCoachReviewStatus(status);
+      if (status === 'requested' || status === 'in_review') {
+        setCoachReviewNotice('Review requested');
+      } else if (status === 'completed') {
+        setCoachReviewNotice('Already reviewed');
+      } else {
+        setCoachReviewNotice('');
+      }
+    };
+
+    loadExistingCoachReviewStatus();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [artifactContext?.userId, currentArtifactId, isClinicalReasoningCommitEnabled, isOpen, moduleId]);
+
   const handleGetFeedback = useCallback(async () => {
     if (!moduleId || !isClinicalReasoningCommitEnabled || !artifactContext) return;
 
@@ -2583,6 +2658,98 @@ export function ModuleDetailBottomSheet({
     moduleId,
   ]);
 
+  const handleRequestCoachReview = useCallback(async () => {
+    if (!moduleId || !isClinicalReasoningCommitEnabled || !artifactContext) return;
+
+    setIsRequestingCoachReview(true);
+    setCoachReviewNotice('');
+
+    try {
+      const flushed = await (flushPendingSaveRef.current
+        ? flushPendingSaveRef.current({ ensureSaved: true })
+        : null);
+
+      let artifactId = flushed?.artifact_id || currentArtifactId || null;
+
+      let requesterUserId = artifactContext.userId || null;
+      if (!requesterUserId) {
+        const { data } = await supabase.auth.getUser();
+        requesterUserId = data.user?.id || null;
+      }
+      if (!requesterUserId) {
+        throw new Error('User session required for review request.');
+      }
+
+      if (!artifactId && artifactContext.eventType && artifactContext.eventId) {
+        const existing = await getModuleArtifact({
+          eventType: artifactContext.eventType,
+          eventId: artifactContext.eventId,
+          userId: requesterUserId,
+          moduleId,
+        });
+        artifactId = existing?.artifact_id || null;
+      }
+
+      if (!artifactId || !isUuid(artifactId)) {
+        throw new Error('Save this draft before requesting coach review.');
+      }
+
+      const { data: existingRequest, error: existingError } = await supabase
+        .from('betterat_artifact_review_requests')
+        .select('id,status,created_at')
+        .eq('artifact_id', artifactId)
+        .eq('requester_user_id', requesterUserId)
+        .in('status', ['requested', 'in_review', 'completed'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingError) {
+        throw existingError;
+      }
+
+      if (existingRequest) {
+        const existingStatus = existingRequest.status as 'requested' | 'in_review' | 'completed';
+        setCoachReviewStatus(existingStatus);
+        if (existingStatus === 'completed') {
+          setCoachReviewNotice('Already reviewed');
+        } else {
+          setCoachReviewNotice('Review requested');
+        }
+        return;
+      }
+
+      const { error: insertError } = await supabase
+        .from('betterat_artifact_review_requests')
+        .insert({
+          artifact_id: artifactId,
+          requester_user_id: requesterUserId,
+          coach_user_id: requesterUserId,
+          status: 'requested',
+          note: null,
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      setCoachReviewStatus('requested');
+      setCoachReviewNotice('Review requested');
+    } catch (error: any) {
+      const message = typeof error?.message === 'string'
+        ? error.message
+        : 'Could not request coach review right now.';
+      setCoachReviewNotice(message);
+    } finally {
+      setIsRequestingCoachReview(false);
+    }
+  }, [
+    artifactContext,
+    currentArtifactId,
+    isClinicalReasoningCommitEnabled,
+    moduleId,
+  ]);
+
   if (!moduleId) return null;
 
   const moduleInfo = config.moduleInfo[moduleId];
@@ -2660,6 +2827,32 @@ export function ModuleDetailBottomSheet({
                       {isFeedbackLoading ? 'Getting feedback…' : 'Get feedback'}
                     </Text>
                   </Pressable>
+                  <Pressable
+                    style={[
+                      s.reviewRequestButton,
+                      (isRequestingCoachReview
+                        || !currentArtifactId
+                        || coachReviewStatus === 'requested'
+                        || coachReviewStatus === 'in_review'
+                        || coachReviewStatus === 'completed')
+                        && s.feedbackCommitButtonDisabled,
+                    ]}
+                    onPress={handleRequestCoachReview}
+                    disabled={
+                      isRequestingCoachReview
+                      || !currentArtifactId
+                      || coachReviewStatus === 'requested'
+                      || coachReviewStatus === 'in_review'
+                      || coachReviewStatus === 'completed'
+                    }
+                  >
+                    <Text style={s.reviewRequestButtonText}>
+                      {isRequestingCoachReview ? 'Requesting…' : 'Request coach review'}
+                    </Text>
+                  </Pressable>
+                  {coachReviewNotice.length > 0 ? (
+                    <Text style={s.reviewRequestNotice}>{coachReviewNotice}</Text>
+                  ) : null}
                   <ClinicalReasoningFeedbackPanel
                     result={feedbackResultByModule[moduleId] || null}
                     isLoading={isFeedbackLoading}
@@ -2876,6 +3069,23 @@ const s = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  reviewRequestButton: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  reviewRequestButtonText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  reviewRequestNotice: {
+    fontSize: 12,
+    color: '#475467',
   },
   feedbackPanel: {
     backgroundColor: '#EFF6FF',
