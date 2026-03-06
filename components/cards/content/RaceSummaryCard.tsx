@@ -22,7 +22,7 @@ import {
   Sun,
   Map,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState, Component, ErrorInfo } from 'react';
+import React, { useCallback, useMemo, useState, Component, ErrorInfo, useEffect } from 'react';
 import { ActionSheetIOS, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
@@ -33,6 +33,7 @@ import { triggerHaptic } from '@/lib/haptics';
 import { useRouter } from 'expo-router';
 
 import { CrewHub } from '@/components/crew';
+import type { CrewHubTab } from '@/components/crew';
 import { DetailBottomSheet } from '@/components/races/DetailBottomSheet';
 import { ModuleDetailBottomSheet } from '@/components/races/ModuleDetailBottomSheet';
 import type { ModuleContentSummary } from '@/components/races/ModuleDetailBottomSheet';
@@ -66,6 +67,9 @@ import {
 } from '../types';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useInterest } from '@/providers/InterestProvider';
+import { supabase } from '@/services/supabase';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { isUuid } from '@/utils/uuid';
 import {
   AfterRaceContent,
   ConfigDrivenPhaseContent,
@@ -217,6 +221,26 @@ function formatTime(time?: string): string {
   return `${h12}:${minutes} ${ampm}`;
 }
 
+function buildNormalizedRaceDateTime(date?: string, startTime?: string): Date | null {
+  if (!date) return null;
+  const base = new Date(date);
+  if (Number.isNaN(base.getTime())) return null;
+
+  // If date already includes a timestamp, trust it as the single source of truth.
+  if (typeof date === 'string' && date.includes('T')) {
+    return base;
+  }
+
+  // Date-only value: apply startTime (if present) in local time.
+  const normalized = new Date(base);
+  normalized.setHours(0, 0, 0, 0);
+  if (startTime) {
+    const [hh, mm] = startTime.split(':').map(Number);
+    normalized.setHours(Number.isFinite(hh) ? hh : 0, Number.isFinite(mm) ? mm : 0, 0, 0);
+  }
+  return normalized;
+}
+
 /**
  * Simplify rig setting label for compact display
  */
@@ -312,11 +336,12 @@ function formatCountdownFull(countdown: {
  * "Saturday, Jan 25 at 3:00 PM"
  */
 function formatFullDate(date: string, time?: string): string {
-  const d = new Date(date);
+  const d = buildNormalizedRaceDateTime(date, time);
+  if (!d) return 'Date TBD';
   const weekday = d.toLocaleDateString('en-US', { weekday: 'long' });
   const month = d.toLocaleDateString('en-US', { month: 'short' });
   const day = d.getDate();
-  const timeStr = formatTime(time);
+  const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   return `${weekday}, ${month} ${day} at ${timeStr}`;
 }
 
@@ -619,11 +644,16 @@ export function RaceSummaryCard({
   onCardPress,
   // Refetch trigger for AfterRaceContent
   refetchTrigger,
+  onMoveStepEarlier,
+  onMoveStepLater,
+  onMoveStepToPlannedNext,
+  onMoveStepToCompletedMostRecent,
 }: CardContentProps) {
   const router = useRouter();
   const { currentInterest } = useInterest();
   const eventConfig = useInterestEventConfig();
-  const isSailing = currentInterest?.slug === 'sail-racing';
+  const interestSlug = currentInterest?.slug || eventConfig.interestSlug || 'sail-racing';
+  const isSailing = interestSlug === 'sail-racing';
 
   // Temporal phase state
   const currentPhase = useMemo(
@@ -643,12 +673,93 @@ export function RaceSummaryCard({
   const handleModuleContentChange = useCallback((modId: string, summary: ModuleContentSummary) => {
     setModuleContent((prev) => ({ ...prev, [modId]: summary }));
   }, []);
+  const [advancedCompetencyCount, setAdvancedCompetencyCount] = useState(0);
+  const moduleArtifactContext = useMemo(() => {
+    const source = String((race as any)?._source || (race as any)?.source || (race as any)?.source_table || '').toLowerCase();
+    const explicitType = String((race as any)?.event_type || (race as any)?.eventType || (race as any)?.metadata?.event_type || '').toLowerCase();
+    const explicitId = String((race as any)?.event_id || (race as any)?.eventId || (race as any)?.metadata?.event_id || '').trim();
+    const fallbackId = String((race as any)?.id || '').trim();
+    const eventId = explicitId || fallbackId;
+
+    let eventType: 'regatta' | 'race_event' | null = null;
+    if (explicitType === 'regatta' || explicitType === 'race_event') {
+      eventType = explicitType;
+    } else if (source.includes('race_event')) {
+      eventType = 'race_event';
+    } else if (source.includes('regatta') || eventId.length > 0) {
+      eventType = 'regatta';
+    }
+
+    if (!eventType || !eventId) return null;
+    return {
+      eventType,
+      eventId,
+      userId: userId || null,
+    };
+  }, [race, userId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const loadAdvancedCount = async () => {
+      if (
+        interestSlug !== 'nursing'
+        || !userId
+        || !isUuid(userId)
+        || !moduleArtifactContext?.eventId
+        || !isUuid(moduleArtifactContext.eventId)
+      ) {
+        if (!isCancelled) setAdvancedCompetencyCount(0);
+        return;
+      }
+
+      const primaryQuery = supabase
+        .from('betterat_competency_attempts')
+        .select('competency_id,artifact_id')
+        .eq('user_id', userId)
+        .eq('event_id', moduleArtifactContext.eventId)
+        .eq('event_type', moduleArtifactContext.eventType);
+      let { data, error } = await primaryQuery;
+      if (error) {
+        if (isMissingSupabaseColumn(error, 'betterat_competency_attempts.event_type')) {
+          const fallback = await supabase
+            .from('betterat_competency_attempts')
+            .select('competency_id,artifact_id')
+            .eq('user_id', userId)
+            .eq('event_id', moduleArtifactContext.eventId);
+          data = fallback.data;
+          error = fallback.error;
+        }
+      }
+      if (error) {
+        if (!isCancelled) setAdvancedCompetencyCount(0);
+        return;
+      }
+
+      const uniqueIds = new Set(
+        (data || [])
+          .filter((row: any) => typeof row.artifact_id === 'string' && row.artifact_id.length > 0)
+          .map((row: any) => String(row.competency_id || ''))
+          .filter((id: string) => id.length > 0)
+      );
+
+      if (!isCancelled) {
+        setAdvancedCompetencyCount(uniqueIds.size);
+      }
+    };
+
+    loadAdvancedCount();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [interestSlug, moduleArtifactContext, userId]);
 
   // Detailed Review modal state
   const [showDetailedReview, setShowDetailedReview] = useState(false);
 
   // Crew Hub state (unified crew management)
   const [showCrewHub, setShowCrewHub] = useState(false);
+  const [crewHubInitialTab, setCrewHubInitialTab] = useState<CrewHubTab>('roster');
 
   // Chat drawer state
   const [showChat, setShowChat] = useState(false);
@@ -669,14 +780,19 @@ export function RaceSummaryCard({
         month: 'short',
         day: 'numeric',
       });
-      const parts = [`${race.name} — ${dateStr}`];
-      if (race.venue) parts.push(race.venue);
-      parts.push('Shared from RegattaFlow');
+      const activityLabel = eventConfig.eventNoun || (isSailing ? 'Race' : 'Activity');
+      const locationLabel = isSailing ? 'Venue' : 'Location';
+      const sourceLabel = isSailing ? 'Shared from RegattaFlow' : 'Shared from BetterAt Clinical';
+      const locationValue = race.venue || 'TBD';
+
+      const parts = [`${activityLabel}: ${race.name}`, `${activityLabel} date: ${dateStr}`];
+      parts.push(`${locationLabel}: ${locationValue}`);
+      parts.push(sourceLabel);
       await Share.share({ message: parts.join('\n'), title: race.name });
     } catch {
       // User cancelled — no-op
     }
-  }, [race.name, race.date, race.venue]);
+  }, [eventConfig.eventNoun, isSailing, race.name, race.date, race.venue]);
 
   const queryClient = useQueryClient();
 
@@ -841,11 +957,57 @@ export function RaceSummaryCard({
     [detectedRaceType]
   );
 
-  // Calculate countdown
+  // Calculate countdown.
+  // For non-sailing steps, prefer the timestamp in `race.date` (start_date)
+  // instead of legacy `startTime`, which can be stale in mixed schemas.
+  const effectiveCountdownStartTime = useMemo(() => {
+    if (!isSailing && typeof race.date === 'string' && race.date.includes('T')) {
+      return undefined;
+    }
+    return race.startTime;
+  }, [isSailing, race.date, race.startTime]);
+
   const countdown = useMemo(
-    () => calculateCountdown(race.date, race.startTime),
+    () => calculateCountdown(race.date, effectiveCountdownStartTime),
+    [race.date, effectiveCountdownStartTime]
+  );
+  const rawTimelineStatus = String((race as any)?.status || (race as any)?.metadata?.status || '').toLowerCase();
+  const isExplicitlyCompleted = rawTimelineStatus === 'completed' || rawTimelineStatus === 'done';
+  const isOverdue = !isExplicitlyCompleted && countdown.isPast;
+  const isTimelineDone = isExplicitlyCompleted;
+  const isNextStepCard =
+    typeof raceNumber === 'number' &&
+    typeof nextRaceIndex === 'number' &&
+    (raceNumber - 1) === nextRaceIndex;
+  const eventSubtype = String((race as any)?.metadata?.event_subtype || '').toLowerCase();
+  const isBlankActivitySubtype = eventSubtype === 'blank_activity';
+  const isGroupLearningCycleSubtype = eventSubtype === 'group_learning_cycle';
+  const normalizedStepDateTime = useMemo(
+    () => buildNormalizedRaceDateTime(race.date, race.startTime),
     [race.date, race.startTime]
   );
+  const displayRaceName = (() => {
+    const raw = String(race.name || 'Step').replace(/^Activity/i, 'Step');
+
+    if (isBlankActivitySubtype) {
+      const isGenerated = /^Step\s*[-—]\s*\d{4}-\d{2}-\d{2}$/i.test(raw);
+      if (!isGenerated) return raw;
+      if (!normalizedStepDateTime) return 'Step';
+      return `Step — ${normalizedStepDateTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    }
+
+    // Legacy records for non-nursing interests may still carry "Group Cycle".
+    // Normalize the generated title so domain language stays consistent.
+    if (!isSailing && isGroupLearningCycleSubtype) {
+      const isLegacyGenerated = /^Group\s*Cycle\s*[-—]\s*\d{4}-\d{2}-\d{2}$/i.test(raw);
+      if (isLegacyGenerated) {
+        if (!normalizedStepDateTime) return 'Team Step';
+        return `Team Step — ${normalizedStepDateTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+      }
+    }
+
+    return race.name;
+  })();
 
   // Get urgency colors
   const urgency = useMemo(
@@ -921,21 +1083,54 @@ export function RaceSummaryCard({
     enabled: !countdown.isPast,
   });
 
+  const openCrewHub = useCallback((tab: CrewHubTab = 'roster') => {
+    setCrewHubInitialTab(tab);
+    setShowCrewHub(true);
+  }, []);
+
   // Build menu items for card management - permission-aware
   const noun = eventConfig.eventNoun;
   const teamNoun = eventConfig.teamNoun ?? 'Team';
+  const normalizedInterestSlug = String(interestSlug || '').trim().toLowerCase();
+  const isNursingInterest = normalizedInterestSlug === 'nursing';
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
     // Team/Crew Chat — fallback entry point when no avatar row is visible
     if (FEATURE_FLAGS.ENABLE_RACE_CREW_CHAT) {
       items.push({ label: `${teamNoun} Chat`, icon: 'chatbubbles-outline', onPress: () => setShowChat(true) });
     }
+    // Explicit collaborator entry point for shared/group workflows.
+    items.push({ label: 'Add Collaborators', icon: 'people-outline', onPress: () => openCrewHub('roster') });
     // Share is always available
     items.push({ label: `Share ${noun}`, icon: 'share-outline', onPress: handleShare });
-    // Detail (scrollable view)
-    items.push({ label: `${noun} Detail`, icon: 'flag-outline', onPress: () => router.push(`/race/${race.id}` as any) });
+    // Detail (scrollable view) is not part of the nursing experience menu.
+    if (!isNursingInterest) {
+      items.push({ label: `${noun} Detail`, icon: 'flag-outline', onPress: () => router.push(`/race/${race.id}` as any) });
+    }
     // Only show edit/delete for owners
     if (isOwner) {
+      if (isNursingInterest) {
+        if (onMoveStepEarlier) {
+          items.push({ label: 'Move Earlier', icon: 'arrow-back-outline', onPress: onMoveStepEarlier });
+        }
+        if (onMoveStepLater) {
+          items.push({ label: 'Move Later', icon: 'arrow-forward-outline', onPress: onMoveStepLater });
+        }
+        if (onMoveStepToPlannedNext) {
+          items.push({
+            label: 'Move to Planned (Next)',
+            icon: 'bookmark-outline',
+            onPress: onMoveStepToPlannedNext,
+          });
+        }
+        if (onMoveStepToCompletedMostRecent) {
+          items.push({
+            label: 'Mark Done (Most recent)',
+            icon: 'checkmark-done-outline',
+            onPress: onMoveStepToCompletedMostRecent,
+          });
+        }
+      }
       if (onEdit) {
         items.push({ label: `Edit ${noun}`, icon: 'create-outline', onPress: onEdit });
       }
@@ -948,7 +1143,23 @@ export function RaceSummaryCard({
       items.push({ label: 'Dismiss sample', icon: 'close-outline', onPress: onDismiss });
     }
     return items;
-  }, [onEdit, onDelete, race, onDismiss, isOwner, handleShare, router, noun, teamNoun]);
+  }, [
+    onEdit,
+    onDelete,
+    race,
+    onDismiss,
+    isOwner,
+    handleShare,
+    router,
+    noun,
+    teamNoun,
+    openCrewHub,
+    isNursingInterest,
+    onMoveStepEarlier,
+    onMoveStepLater,
+    onMoveStepToPlannedNext,
+    onMoveStepToCompletedMostRecent,
+  ]);
 
   // Long-press handler to show context menu
   const handleLongPress = useCallback(() => {
@@ -988,6 +1199,32 @@ export function RaceSummaryCard({
       );
     }
   }, [canManage, menuItems]);
+
+  const handleOverdueBadgePress = useCallback(() => {
+    if (!isOverdue) return;
+    const actions: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> = [];
+    if (onMoveStepToCompletedMostRecent) {
+      actions.push({ text: 'Mark Done', onPress: onMoveStepToCompletedMostRecent });
+    }
+    if (onMoveStepToPlannedNext) {
+      actions.push({ text: 'Move to Planned', onPress: onMoveStepToPlannedNext });
+    }
+    if (onOpenPostRaceInterview) {
+      actions.push({ text: 'Reflect + AI', onPress: onOpenPostRaceInterview });
+    }
+    if (Platform.OS === 'web') {
+      const choiceMap = actions.map((action, idx) => `${idx + 1}. ${action.text}`).join('\n');
+      const input = window.prompt(`Overdue Step\nChoose an action:\n${choiceMap}\n\nEnter number (or cancel).`, '');
+      const idx = Number(input) - 1;
+      if (Number.isInteger(idx) && idx >= 0 && idx < actions.length) {
+        actions[idx].onPress?.();
+      }
+      return;
+    }
+
+    actions.push({ text: 'Cancel', style: 'cancel' });
+    showAlertWithButtons('Overdue Step', 'What would you like to do?', actions);
+  }, [isOverdue, onMoveStepToCompletedMostRecent, onMoveStepToPlannedNext, onOpenPostRaceInterview]);
 
   // Render race type badge component
   const RaceTypeBadgeIcon = raceTypeBadge.icon;
@@ -1196,16 +1433,32 @@ export function RaceSummaryCard({
 
     if (venueName) parts.push(venueName);
 
-    const dateStr = formatDate(race.date);
-    const timeStr = formatTime(race.startTime);
+    const normalized = buildNormalizedRaceDateTime(race.date, race.startTime);
+    const dateStr = normalized
+      ? normalized.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      : 'Date TBD';
+    const timeStr = normalized
+      ? normalized.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : formatTime(race.startTime);
     parts.push(`${dateStr} ${timeStr}`);
     return parts.join(' · ');
   }, [race.venue, race.date, race.startTime, (race as any).venue_info, (race as any).racing_area_name]);
+
+  const nonSailingTypeLabel = useMemo(() => {
+    if (isBlankActivitySubtype) return 'Step';
+    return (
+      eventConfig.eventSubtypes.find((s) => s.id === (race as any)?.metadata?.event_subtype)?.label
+      ?? eventConfig.eventNoun
+    );
+  }, [eventConfig.eventNoun, eventConfig.eventSubtypes, isBlankActivitySubtype, race]);
 
   // Get active phase for inline progress bar
   const activePhase = useMemo(() => {
     return getActivePhaseForProgress(phaseCounts, countdown.isPast);
   }, [phaseCounts, countdown.isPast]);
+
+  const showNextRibbon = isNextStepCard && !isTimelineDone && !isOverdue;
+  const hideTypeChipForNextNonSailing = showNextRibbon && !isSailing;
 
   return (
     <>
@@ -1220,9 +1473,16 @@ export function RaceSummaryCard({
             scrollEventThrottle={16}
           >
             {/* Simplified Header: Race type badge + Countdown */}
+            <View style={styles.simpleHeaderWrapper}>
+            {showNextRibbon && (
+              <View style={styles.nextBookmarkRibbon}>
+                <Ionicons name="bookmark" size={11} color="#047857" />
+                <Text style={styles.nextBookmarkRibbonText}>Next</Text>
+              </View>
+            )}
             <View style={styles.simpleHeaderRow}>
           {/* Status badge: past = green checkmark + result; future = race type */}
-          {countdown.isPast ? (
+          {isTimelineDone ? (
             <View style={styles.pastRaceBadge}>
               <Ionicons name="checkmark-circle" size={14} color={IOS_COLORS.green} />
               <Text style={styles.pastBadgeText}>
@@ -1231,20 +1491,27 @@ export function RaceSummaryCard({
                   : 'DONE'}
               </Text>
             </View>
-          ) : (
+          ) : isOverdue ? (
+            <Pressable style={styles.overdueBadge} onPress={handleOverdueBadgePress}>
+              <Ionicons name="warning" size={13} color="#B45309" />
+              {!isBlankActivitySubtype && <Text style={styles.overdueBadgeText}>Overdue</Text>}
+            </Pressable>
+          ) : !hideTypeChipForNextNonSailing ? (
             <View style={styles.raceTypeBadge}>
-              <Text style={styles.raceTypeBadgeText}>
+              <Text style={[styles.raceTypeBadgeText, !isSailing && styles.raceTypeBadgeTextSubtle]}>
                 {isSailing
                   ? (detectedRaceType?.toUpperCase() || 'FLEET')
-                  : (eventConfig.eventSubtypes.find(s => s.id === (race as any)?.metadata?.event_subtype)?.label
-                    ?? eventConfig.eventNoun)?.toUpperCase()}
+                  : nonSailingTypeLabel}
               </Text>
             </View>
+          ) : (
+            <View />
           )}
         <View style={styles.simpleHeaderRight}>
             {/* Countdown: past = gray relative time; today = bold TODAY; future = large number */}
+            {(isSailing || isTimelineDone) && (
             <View style={styles.countdownSimple}>
-              {countdown.isPast ? (
+              {isTimelineDone ? (
                 <Text style={styles.pastTimeLabel}>
                   {countdown.daysSince === 0
                     ? 'Today'
@@ -1269,11 +1536,13 @@ export function RaceSummaryCard({
                 </>
               )}
             </View>
+            )}
             {/* Three-dot menu (includes Share Race, Crew Chat) */}
             {menuItems.length > 0 && (
               <CardMenu items={menuItems} iconSize={20} iconColor={IOS_COLORS.gray} />
             )}
           </View>
+        </View>
         </View>
 
         {(race as any).isDemo && (
@@ -1287,7 +1556,12 @@ export function RaceSummaryCard({
           style={styles.raceNameLarge}
           numberOfLines={2}
           ellipsizeMode="tail"
-        >{race.name || '[No Race Name]'}</Text>
+        >{displayRaceName || '[No Step Name]'}</Text>
+        {interestSlug === 'nursing' && advancedCompetencyCount > 0 ? (
+          <View style={styles.advancedBadge}>
+            <Text style={styles.advancedBadgeText}>Advanced {advancedCompetencyCount}</Text>
+          </View>
+        ) : null}
 
         {/* Location */}
         <View style={styles.simpleDetailRow}>
@@ -1312,6 +1586,12 @@ export function RaceSummaryCard({
               showPendingBadge
             />
           </View>
+        )}
+        {Boolean((race as any)?.metadata?.group_editable) && collaborators.length === 0 && (
+          <Pressable style={styles.addCollaboratorsChip} onPress={() => openCrewHub('roster')}>
+            <Ionicons name="people-outline" size={14} color={IOS_COLORS.blue} />
+            <Text style={styles.addCollaboratorsChipText}>Add collaborators</Text>
+          </Pressable>
         )}
 
         {/* Pill-style Phase Tabs (Prep/Race/Review) */}
@@ -1491,6 +1771,7 @@ export function RaceSummaryCard({
           isOpen={activeModuleId !== null}
           onClose={handleCloseModuleSheet}
           config={eventConfig}
+          artifactContext={moduleArtifactContext}
           onContentChange={handleModuleContentChange}
         />
       )}
@@ -1516,9 +1797,12 @@ export function RaceSummaryCard({
         className={boatClassName}
         regattaId={race.id}
         raceName={race.name}
+        interestSlug={interestSlug}
+        eventNoun={eventConfig.eventNoun}
+        teamNoun={eventConfig.teamNoun}
         isOpen={showCrewHub}
         onClose={() => setShowCrewHub(false)}
-        initialTab="roster"
+        initialTab={crewHubInitialTab}
       />
 
       {/* Race Chat Drawer */}
@@ -1543,7 +1827,7 @@ export function RaceSummaryCard({
           }}
           onManageCrew={() => {
             setShowCollabPopover(false);
-            setShowCrewHub(true);
+            openCrewHub('roster');
           }}
         />
       )}
@@ -2833,7 +3117,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 14,
+  },
+  simpleHeaderWrapper: {
+    position: 'relative',
+  },
+  nextBookmarkRibbon: {
+    position: 'absolute',
+    top: -14,
+    left: 8,
+    zIndex: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  nextBookmarkRibbonText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#047857',
+    letterSpacing: 0.2,
   },
   raceTypeBadge: {
     backgroundColor: IOS_COLORS.gray5,
@@ -2846,6 +3159,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: IOS_COLORS.secondaryLabel,
     letterSpacing: 0.5,
+  },
+  raceTypeBadgeTextSubtle: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+    color: IOS_COLORS.tertiaryLabel,
   },
   simpleHeaderRight: {
     flexDirection: 'row',
@@ -2889,12 +3209,42 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.green,
     letterSpacing: 0.5,
   },
+  overdueBadge: {
+    backgroundColor: '#FEF3C7',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  overdueBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#B45309',
+    letterSpacing: 0.2,
+  },
   raceNameLarge: {
     fontSize: 17,
     fontWeight: '600',
     color: IOS_COLORS.label,
     lineHeight: 22,
     marginBottom: 10,
+  },
+  advancedBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 999,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+  },
+  advancedBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#166534',
   },
   simpleDetailRow: {
     flexDirection: 'row',
@@ -2911,6 +3261,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
     marginBottom: 8,
+  },
+  addCollaboratorsChip: {
+    marginTop: 6,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EAF2FF',
+    borderWidth: 1,
+    borderColor: '#D6E5FF',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  addCollaboratorsChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
   },
 
 });
