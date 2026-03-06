@@ -262,11 +262,14 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
 
   const refreshMemberships = useCallback(async () => {
-    if (!signedIn || !user?.id) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const hasSession = Boolean(sessionData?.session);
+    if (!signedIn || !user?.id || !hasSession) {
       setMembershipLoadError(null);
       setMembershipLoadErrorPayload(null);
       setMemberships([]);
       setActiveOrganizationIdState(null);
+      setLoading(false);
       setReady(true);
       return;
     }
@@ -330,8 +333,8 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error ?? '');
       const timedOut = rawMessage === 'ORG_MEMBERSHIP_TIMEOUT';
-      const { data: sessionData } = await supabase.auth.getSession();
-      const hasSession = Boolean(sessionData?.session);
+      const { data: latestSessionData } = await supabase.auth.getSession();
+      const latestHasSession = Boolean(latestSessionData?.session);
       const payload: MembershipLoadErrorPayload = {
         userId: user?.id || null,
         table: 'organization_memberships',
@@ -345,13 +348,14 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
             ? (error as any).statusCode
             : null,
         timedOut,
-        hasSession,
+        hasSession: latestHasSession,
       };
       console.error('[OrganizationProvider] Membership load failed', payload);
       if (rawMessage === 'ORG_MEMBERSHIP_TIMEOUT') {
         setMembershipLoadError('Could not load organizations. Retry.');
       } else {
-        setMembershipLoadError(`Could not load organizations. ${rawMessage || 'Retry.'}`);
+        const errorCode = typeof (error as any)?.code === 'string' ? (error as any).code : null;
+        setMembershipLoadError(`Could not load organizations. ${rawMessage || 'Retry.'}${errorCode ? ` (${errorCode})` : ''}`);
       }
       setMembershipLoadErrorPayload(payload);
       setMemberships([]);
