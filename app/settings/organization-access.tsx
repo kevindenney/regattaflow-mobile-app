@@ -43,6 +43,7 @@ export default function OrganizationAccessSettingsScreen() {
   const {
     loading,
     ready,
+    membershipLoadError,
     memberships,
     activeOrganizationId,
     activeMembership,
@@ -451,6 +452,17 @@ export default function OrganizationAccessSettingsScreen() {
           <View className="py-20 items-center">
             <ActivityIndicator size="large" color="#2563EB" />
             <Text className="text-gray-500 mt-3">Loading organization memberships...</Text>
+          </View>
+        ) : membershipLoadError ? (
+          <View className="mx-4 mt-4 bg-white rounded-2xl p-4 border border-rose-200">
+            <Text className="text-base font-semibold text-rose-700">Could not load organizations</Text>
+            <Text className="text-sm text-rose-700 mt-2">{membershipLoadError}</Text>
+            <Pressable
+              onPress={() => void refreshMemberships()}
+              className="mt-3 self-start px-3 py-2 rounded-xl border border-rose-200 bg-rose-50"
+            >
+              <Text className="text-sm font-medium text-rose-700">Retry</Text>
+            </Pressable>
           </View>
         ) : displayMemberships.length === 0 ? (
           <View className="mx-4 mt-4 bg-white rounded-2xl p-4 border border-gray-200">

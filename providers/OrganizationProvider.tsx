@@ -49,6 +49,7 @@ type OrganizationVisibilityDefault = 'public' | 'org_members';
 type OrganizationContextValue = {
   loading: boolean;
   ready: boolean;
+  membershipLoadError: string | null;
   memberships: OrganizationMembershipRecord[];
   activeOrganizationId: string | null;
   activeMembership: OrganizationMembershipRecord | null;
@@ -72,6 +73,7 @@ const STORAGE_KEY = 'rf_active_organization_id';
 const Ctx = createContext<OrganizationContextValue>({
   loading: false,
   ready: false,
+  membershipLoadError: null,
   memberships: [],
   activeOrganizationId: null,
   activeMembership: null,
@@ -241,11 +243,13 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const { user, signedIn } = useAuth();
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [membershipLoadError, setMembershipLoadError] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<OrganizationMembershipRecord[]>([]);
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
 
   const refreshMemberships = useCallback(async () => {
     if (!signedIn || !user?.id) {
+      setMembershipLoadError(null);
       setMemberships([]);
       setActiveOrganizationIdState(null);
       setReady(true);
@@ -253,8 +257,9 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     }
 
     setLoading(true);
+    setMembershipLoadError(null);
     try {
-      const { data, error } = await supabase
+      const membershipsQuery = supabase
         .from('organization_memberships')
         .select(
           'id, organization_id, role, status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)',
@@ -262,9 +267,16 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         .eq('user_id', user.id)
         .in('status', ['active', 'verified', 'pending', 'invited'])
         .order('created_at', { ascending: false });
+      const membershipsTimeout = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('ORG_MEMBERSHIP_TIMEOUT'));
+        }, 10000);
+      });
+      const { data, error } = await Promise.race([membershipsQuery, membershipsTimeout]);
 
       if (error) {
         if (isOrgSchemaMissingError(error)) {
+          setMembershipLoadError(null);
           setMemberships([]);
           setActiveOrganizationIdState(null);
           setReady(true);
@@ -298,6 +310,17 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       const nextId = preferredMembership?.organization_id ?? null;
       setActiveOrganizationIdState(nextId);
       await storeActiveOrganizationId(nextId);
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+      if (rawMessage === 'ORG_MEMBERSHIP_TIMEOUT') {
+        console.error('[OrganizationProvider] Membership load timed out after 10s');
+        setMembershipLoadError('Could not load organizations. Retry.');
+      } else {
+        console.error('[OrganizationProvider] Failed to load memberships:', error);
+        setMembershipLoadError(`Could not load organizations. ${rawMessage || 'Retry.'}`);
+      }
+      setMemberships([]);
+      setActiveOrganizationIdState(null);
     } finally {
       setLoading(false);
       setReady(true);
@@ -374,6 +397,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     () => ({
       loading,
       ready,
+      membershipLoadError,
       memberships,
       activeOrganizationId,
       activeMembership,
@@ -392,6 +416,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     [
       loading,
       ready,
+      membershipLoadError,
       memberships,
       activeOrganizationId,
       activeMembership,
