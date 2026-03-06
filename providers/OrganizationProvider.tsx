@@ -72,6 +72,7 @@ type MembershipLoadErrorPayload = {
 type OrganizationContextValue = {
   loading: boolean;
   ready: boolean;
+  providerMountedAt: string | null;
   membershipLoadAttempt: number;
   membershipLoadError: string | null;
   membershipLoadDebug: MembershipLoadDebug | null;
@@ -99,6 +100,7 @@ const STORAGE_KEY = 'rf_active_organization_id';
 const Ctx = createContext<OrganizationContextValue>({
   loading: false,
   ready: false,
+  providerMountedAt: null,
   membershipLoadAttempt: 0,
   membershipLoadError: null,
   membershipLoadDebug: null,
@@ -274,6 +276,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const userIdRef = React.useRef<string | null>(user?.id ?? null);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [providerMountedAt, setProviderMountedAt] = useState<string | null>(null);
   const [membershipLoadAttempt, setMembershipLoadAttempt] = useState(0);
   const [membershipLoadError, setMembershipLoadError] = useState<string | null>(null);
   const [membershipLoadDebug, setMembershipLoadDebug] = useState<MembershipLoadDebug | null>(null);
@@ -285,6 +288,12 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     signedInRef.current = signedIn;
     userIdRef.current = user?.id ?? null;
   }, [signedIn, user?.id]);
+
+  useEffect(() => {
+    const mountedAt = new Date().toISOString();
+    setProviderMountedAt(mountedAt);
+    console.log('[OrganizationProvider] mounted', mountedAt);
+  }, []);
 
   const refreshMemberships = useCallback(async () => {
     const currentSignedIn = signedInRef.current;
@@ -571,6 +580,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     () => ({
       loading,
       ready,
+      providerMountedAt,
       membershipLoadAttempt,
       membershipLoadError,
       membershipLoadDebug,
@@ -593,6 +603,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     [
       loading,
       ready,
+      providerMountedAt,
       membershipLoadAttempt,
       membershipLoadError,
       membershipLoadDebug,
