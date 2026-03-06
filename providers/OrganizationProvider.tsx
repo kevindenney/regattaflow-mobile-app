@@ -278,12 +278,10 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
   const refreshMemberships = useCallback(async () => {
     const startedAt = new Date().toISOString();
-    const { data: sessionData } = await supabase.auth.getSession();
-    const hasSession = Boolean(sessionData?.session);
     setMembershipLoadDebug({
       startedAt,
       finishedAt: null,
-      hasSession,
+      hasSession: false,
       userId: user?.id || null,
       phase: 'start',
       table: 'organization_memberships',
@@ -292,6 +290,54 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       errorDetails: null,
       errorHint: null,
     });
+    let hasSession = false;
+    try {
+      const sessionTimeout = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('SESSION_TIMEOUT'));
+        }, 10000);
+      });
+      const { data: sessionData } = await Promise.race([supabase.auth.getSession(), sessionTimeout]);
+      hasSession = Boolean(sessionData?.session);
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+      const timedOut = rawMessage === 'SESSION_TIMEOUT';
+      const payload: MembershipLoadErrorPayload = {
+        userId: user?.id || null,
+        table: 'organization_memberships',
+        message: rawMessage || 'Unknown session load error',
+        code: typeof (error as any)?.code === 'string' ? (error as any).code : null,
+        details: typeof (error as any)?.details === 'string' ? (error as any).details : null,
+        hint: typeof (error as any)?.hint === 'string' ? (error as any).hint : null,
+        status: typeof (error as any)?.status === 'number'
+          ? (error as any).status
+          : typeof (error as any)?.statusCode === 'number'
+            ? (error as any).statusCode
+            : null,
+        timedOut,
+        hasSession: false,
+      };
+      console.error('[OrganizationProvider] Session load failed', payload);
+      setMembershipLoadError('Could not load organizations. Retry.');
+      setMembershipLoadErrorPayload(payload);
+      setMembershipLoadDebug({
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        hasSession: false,
+        userId: user?.id || null,
+        phase: timedOut ? 'timeout' : 'error',
+        table: 'organization_memberships',
+        errorMessage: timedOut ? 'SESSION_TIMEOUT' : (rawMessage || 'Unknown session load error'),
+        errorCode: payload.code,
+        errorDetails: payload.details,
+        errorHint: payload.hint,
+      });
+      setMemberships([]);
+      setActiveOrganizationIdState(null);
+      setLoading(false);
+      setReady(true);
+      return;
+    }
     if (!signedIn || !user?.id || !hasSession) {
       setMembershipLoadError(null);
       setMembershipLoadErrorPayload(null);
