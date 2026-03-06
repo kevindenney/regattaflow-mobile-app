@@ -1,4 +1,5 @@
 import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -114,6 +115,7 @@ export default function CoachArtifactReviewScreen() {
   const [noteDraft, setNoteDraft] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [validationWarning, setValidationWarning] = useState<string | null>(null);
 
   const mappedCompetencyLabels = useMemo(() => {
     const mappedIds = Array.isArray(artifactRow?.content?.mappedCompetencyIds)
@@ -275,13 +277,79 @@ export default function CoachArtifactReviewScreen() {
     }
   }, [requestRow, updateRequest]);
 
+  const validateAttemptsForArtifact = useCallback(async () => {
+    if (!artifactId || !isUuid(artifactId)) return;
+
+    let updates: Record<string,unknown> = {
+      status: 'validated',
+      validated_at: new Date().toISOString(),
+    };
+    let filters: Array<{column: string; value: string}> = [
+      { column: 'artifact_id', value: artifactId },
+      { column: 'status', value: 'unvalidated' },
+      { column: 'clinical_context', value: 'clinical_reasoning_feedback' },
+    ];
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      let query = supabase
+        .from('betterat_competency_attempts')
+        .update(updates);
+
+      for (const filter of filters) {
+        query = query.eq(filter.column, filter.value);
+      }
+
+      const { error } = await query;
+      if (!error) return;
+      if (!isMissingSupabaseColumn(error)) {
+        throw error;
+      }
+
+      const message = String(error.message || '');
+      let changed = false;
+      for (const key of ['validated_at', 'status']) {
+        if (message.includes(`betterat_competency_attempts.${key}`) && key in updates) {
+          const nextUpdates = { ...updates };
+          delete nextUpdates[key];
+          updates = nextUpdates;
+          changed = true;
+        }
+      }
+      for (const key of ['artifact_id', 'status', 'clinical_context']) {
+        if (message.includes(`betterat_competency_attempts.${key}`)) {
+          const nextFilters = filters.filter((filter) => filter.column !== key);
+          if (nextFilters.length !== filters.length) {
+            filters = nextFilters;
+            changed = true;
+          }
+        }
+      }
+
+      if (!changed) {
+        throw error;
+      }
+    }
+
+    throw new Error('Could not validate competency attempts after schema fallback retries.');
+  }, [artifactId]);
+
   const handleMarkCompleted = useCallback(async () => {
     if (!requestRow) return;
 
     setUpdatingStatus(true);
     setErrorText(null);
+    setValidationWarning(null);
     try {
       await updateRequest({ status: 'completed' });
+      if ((artifactRow?.module_id || '') === 'clinical_reasoning') {
+        try {
+          await validateAttemptsForArtifact();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Attempt validation failed.';
+          setValidationWarning(`Review completed, but attempt validation failed: ${message}`);
+          return;
+        }
+      }
       router.push('/coach/artifact-queue');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to complete review.';
@@ -289,7 +357,7 @@ export default function CoachArtifactReviewScreen() {
     } finally {
       setUpdatingStatus(false);
     }
-  }, [requestRow, router, updateRequest]);
+  }, [artifactRow?.module_id, requestRow, router, updateRequest, validateAttemptsForArtifact]);
 
   const handleSaveNote = useCallback(async () => {
     if (!requestRow) return;
@@ -417,6 +485,9 @@ export default function CoachArtifactReviewScreen() {
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Coach Actions</Text>
+              {validationWarning ? (
+                <Text style={styles.warningText}>{validationWarning}</Text>
+              ) : null}
               <View style={styles.actionRow}>
                 <TouchableOpacity
                   style={[styles.actionButton, styles.secondaryButton, (updatingStatus || requestRow?.status !== 'requested') && styles.disabledButton]}
@@ -517,6 +588,11 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#B42318',
     fontSize: 13,
+  },
+  warningText: {
+    color: '#B54708',
+    fontSize: 13,
+    marginBottom: 10,
   },
   emptyCard: {
     backgroundColor: '#FFFFFF',
