@@ -1,0 +1,97 @@
+export type TimelineStepSourceType = 'manual' | 'template' | 'copied' | 'program_session';
+export type TimelineStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
+export type TimelineStepVisibility = 'private' | 'followers' | 'coaches' | 'organization';
+
+export type MapFeedScope = 'mine' | 'following' | 'coaches' | 'organization' | 'all';
+export type MapFeedTimeWindow = 'now' | 'today' | 'week' | 'upcoming';
+
+export type TimelineStepRecord = {
+  id: string;
+  user_id: string;
+  interest_id: string;
+  organization_id: string | null;
+  program_session_id: string | null;
+  source_type: TimelineStepSourceType;
+  source_id: string | null;
+  title: string;
+  description: string | null;
+  category: string;
+  status: TimelineStepStatus;
+  starts_at: string | null;
+  ends_at: string | null;
+  location_name: string | null;
+  location_lat: number | null;
+  location_lng: number | null;
+  location_place_id: string | null;
+  visibility: TimelineStepVisibility;
+  share_approximate_location: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateTimelineStepInput = {
+  user_id: string;
+  interest_id: string;
+  organization_id?: string | null;
+  program_session_id?: string | null;
+  source_type?: TimelineStepSourceType;
+  source_id?: string | null;
+  title: string;
+  description?: string | null;
+  category?: string;
+  status?: TimelineStepStatus;
+  starts_at?: string | null;
+  ends_at?: string | null;
+  location_name?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+  location_place_id?: string | null;
+  visibility?: TimelineStepVisibility;
+  share_approximate_location?: boolean;
+  metadata?: Record<string, unknown>;
+};
+
+export type UpdateTimelineStepInput = Partial<
+  Omit<CreateTimelineStepInput, 'user_id' | 'interest_id' | 'source_type' | 'source_id'>
+>;
+
+export type TimelineStepListFilters = {
+  userId: string;
+  interestId?: string | null;
+  organizationId?: string | null;
+  status?: TimelineStepStatus | null;
+  from?: string | null;
+  to?: string | null;
+  limit?: number;
+};
+
+export type MapFeedFilters = {
+  viewerUserId: string;
+  scope?: MapFeedScope;
+  timeWindow?: MapFeedTimeWindow;
+  interestId?: string | null;
+  organizationId?: string | null;
+  limit?: number;
+};
+
+export type TimelineStepMapPin = {
+  pinId: string;
+  stepId: string;
+  ownerId: string;
+  ownerDisplayName: string;
+  ownerType: 'user' | 'coach' | 'organization';
+  title: string;
+  category: string;
+  status: TimelineStepStatus;
+  startsAt: string | null;
+  endsAt: string | null;
+  location: {
+    name: string | null;
+    lat: number;
+    lng: number;
+    isApproximate: boolean;
+  };
+  sourceType: TimelineStepSourceType;
+  visibility: TimelineStepVisibility;
+};
