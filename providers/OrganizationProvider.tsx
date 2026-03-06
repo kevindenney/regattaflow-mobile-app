@@ -45,11 +45,23 @@ type RawOrganizationMembershipRecord = Omit<OrganizationMembershipRecord, 'organ
 };
 
 type OrganizationVisibilityDefault = 'public' | 'org_members';
+type MembershipLoadErrorPayload = {
+  userId: string | null;
+  table: 'organization_memberships';
+  message: string;
+  code: string | null;
+  details: string | null;
+  hint: string | null;
+  status: number | null;
+  timedOut: boolean;
+  hasSession: boolean;
+};
 
 type OrganizationContextValue = {
   loading: boolean;
   ready: boolean;
   membershipLoadError: string | null;
+  membershipLoadErrorPayload: MembershipLoadErrorPayload | null;
   memberships: OrganizationMembershipRecord[];
   activeOrganizationId: string | null;
   activeMembership: OrganizationMembershipRecord | null;
@@ -74,6 +86,7 @@ const Ctx = createContext<OrganizationContextValue>({
   loading: false,
   ready: false,
   membershipLoadError: null,
+  membershipLoadErrorPayload: null,
   memberships: [],
   activeOrganizationId: null,
   activeMembership: null,
@@ -244,12 +257,14 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [membershipLoadError, setMembershipLoadError] = useState<string | null>(null);
+  const [membershipLoadErrorPayload, setMembershipLoadErrorPayload] = useState<MembershipLoadErrorPayload | null>(null);
   const [memberships, setMemberships] = useState<OrganizationMembershipRecord[]>([]);
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
 
   const refreshMemberships = useCallback(async () => {
     if (!signedIn || !user?.id) {
       setMembershipLoadError(null);
+      setMembershipLoadErrorPayload(null);
       setMemberships([]);
       setActiveOrganizationIdState(null);
       setReady(true);
@@ -258,6 +273,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
     setLoading(true);
     setMembershipLoadError(null);
+    setMembershipLoadErrorPayload(null);
     try {
       const membershipsQuery = supabase
         .from('organization_memberships')
@@ -277,6 +293,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       if (error) {
         if (isOrgSchemaMissingError(error)) {
           setMembershipLoadError(null);
+          setMembershipLoadErrorPayload(null);
           setMemberships([]);
           setActiveOrganizationIdState(null);
           setReady(true);
@@ -312,13 +329,31 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       await storeActiveOrganizationId(nextId);
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+      const timedOut = rawMessage === 'ORG_MEMBERSHIP_TIMEOUT';
+      const { data: sessionData } = await supabase.auth.getSession();
+      const hasSession = Boolean(sessionData?.session);
+      const payload: MembershipLoadErrorPayload = {
+        userId: user?.id || null,
+        table: 'organization_memberships',
+        message: rawMessage || 'Unknown membership load error',
+        code: typeof (error as any)?.code === 'string' ? (error as any).code : null,
+        details: typeof (error as any)?.details === 'string' ? (error as any).details : null,
+        hint: typeof (error as any)?.hint === 'string' ? (error as any).hint : null,
+        status: typeof (error as any)?.status === 'number'
+          ? (error as any).status
+          : typeof (error as any)?.statusCode === 'number'
+            ? (error as any).statusCode
+            : null,
+        timedOut,
+        hasSession,
+      };
+      console.error('[OrganizationProvider] Membership load failed', payload);
       if (rawMessage === 'ORG_MEMBERSHIP_TIMEOUT') {
-        console.error('[OrganizationProvider] Membership load timed out after 10s');
         setMembershipLoadError('Could not load organizations. Retry.');
       } else {
-        console.error('[OrganizationProvider] Failed to load memberships:', error);
         setMembershipLoadError(`Could not load organizations. ${rawMessage || 'Retry.'}`);
       }
+      setMembershipLoadErrorPayload(payload);
       setMemberships([]);
       setActiveOrganizationIdState(null);
     } finally {
@@ -398,6 +433,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       loading,
       ready,
       membershipLoadError,
+      membershipLoadErrorPayload,
       memberships,
       activeOrganizationId,
       activeMembership,
@@ -417,6 +453,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       loading,
       ready,
       membershipLoadError,
+      membershipLoadErrorPayload,
       memberships,
       activeOrganizationId,
       activeMembership,
