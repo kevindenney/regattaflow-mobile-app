@@ -2966,6 +2966,9 @@ export default function RacesScreen() {
                 setHasManuallySelected(true);
                 setIsGridView(false); // zoom back in
               }}
+              userId={user?.id}
+              onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
+              onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
               topInset={totalHeaderHeight}
               seasonHeaderHeight={SEASON_HEADER_HEIGHT}
             />
