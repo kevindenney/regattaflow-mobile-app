@@ -268,6 +268,8 @@ function defaultInterestSlugForDomain(domain: WorkspaceDomain): string | null {
 
 export function OrganizationProvider({ children }: { children: React.ReactNode }) {
   const { user, signedIn } = useAuth();
+  const signedInRef = React.useRef(signedIn);
+  const userIdRef = React.useRef<string | null>(user?.id ?? null);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [membershipLoadError, setMembershipLoadError] = useState<string | null>(null);
@@ -276,13 +278,20 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [memberships, setMemberships] = useState<OrganizationMembershipRecord[]>([]);
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
 
+  useEffect(() => {
+    signedInRef.current = signedIn;
+    userIdRef.current = user?.id ?? null;
+  }, [signedIn, user?.id]);
+
   const refreshMemberships = useCallback(async () => {
+    const currentSignedIn = signedInRef.current;
+    const currentUserId = userIdRef.current;
     const startedAt = new Date().toISOString();
     setMembershipLoadDebug({
       startedAt,
       finishedAt: null,
       hasSession: false,
-      userId: user?.id || null,
+      userId: currentUserId,
       phase: 'start',
       table: 'organization_memberships',
       errorMessage: null,
@@ -303,7 +312,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       const rawMessage = error instanceof Error ? error.message : String(error ?? '');
       const timedOut = rawMessage === 'SESSION_TIMEOUT';
       const payload: MembershipLoadErrorPayload = {
-        userId: user?.id || null,
+        userId: currentUserId,
         table: 'organization_memberships',
         message: rawMessage || 'Unknown session load error',
         code: typeof (error as any)?.code === 'string' ? (error as any).code : null,
@@ -324,7 +333,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         startedAt,
         finishedAt: new Date().toISOString(),
         hasSession: false,
-        userId: user?.id || null,
+        userId: currentUserId,
         phase: timedOut ? 'timeout' : 'error',
         table: 'organization_memberships',
         errorMessage: timedOut ? 'SESSION_TIMEOUT' : (rawMessage || 'Unknown session load error'),
@@ -338,14 +347,14 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       setReady(true);
       return;
     }
-    if (!signedIn || !user?.id || !hasSession) {
+    if (!currentSignedIn || !currentUserId || !hasSession) {
       setMembershipLoadError(null);
       setMembershipLoadErrorPayload(null);
       setMembershipLoadDebug({
         startedAt,
         finishedAt: new Date().toISOString(),
         hasSession,
-        userId: user?.id || null,
+        userId: currentUserId,
         phase: 'error',
         table: 'organization_memberships',
         errorMessage: 'No active session',
@@ -369,7 +378,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         .select(
           'id, organization_id, role, status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)',
         )
-        .eq('user_id', user.id)
+        .eq('user_id', currentUserId)
         .in('status', ['active', 'verified', 'pending', 'invited'])
         .order('created_at', { ascending: false });
       const membershipsTimeout = new Promise<never>((_, reject) => {
@@ -420,7 +429,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         startedAt,
         finishedAt: new Date().toISOString(),
         hasSession: true,
-        userId: user?.id || null,
+        userId: currentUserId,
         phase: 'success',
         table: 'organization_memberships',
         errorMessage: null,
@@ -434,7 +443,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       const { data: latestSessionData } = await supabase.auth.getSession();
       const latestHasSession = Boolean(latestSessionData?.session);
       const payload: MembershipLoadErrorPayload = {
-        userId: user?.id || null,
+        userId: currentUserId,
         table: 'organization_memberships',
         message: rawMessage || 'Unknown membership load error',
         code: typeof (error as any)?.code === 'string' ? (error as any).code : null,
@@ -453,7 +462,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         startedAt,
         finishedAt: new Date().toISOString(),
         hasSession: latestHasSession,
-        userId: user?.id || null,
+        userId: currentUserId,
         phase: timedOut ? 'timeout' : 'error',
         table: 'organization_memberships',
         errorMessage: rawMessage || 'Unknown membership load error',
@@ -474,11 +483,11 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       setLoading(false);
       setReady(true);
     }
-  }, [signedIn, user?.id]);
+  }, []);
 
   useEffect(() => {
     void refreshMemberships();
-  }, [refreshMemberships]);
+  }, [refreshMemberships, signedIn, user?.id]);
 
   const setActiveOrganizationId = useCallback(async (organizationId: string | null) => {
     setActiveOrganizationIdState(organizationId);
