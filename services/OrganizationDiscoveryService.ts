@@ -1,5 +1,6 @@
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 export type OrganizationJoinMode = 'invite_only' | 'request_to_join' | 'open_join';
 
@@ -51,22 +52,31 @@ class OrganizationDiscoveryService {
     const limit = Math.max(1, Math.min(input.limit || DEFAULT_LIMIT, 50));
     const queryText = String(input.query || '').trim();
 
-    let request = supabase
-      .from('organizations')
-      .select('id,name,slug,join_mode')
-      .eq('is_active', true)
-      .order('name', {ascending: true})
-      .limit(limit);
+    const applyCommonFilters = <T,>(query: T): T => {
+      let request: any = query;
+      request = request.eq('is_active', true).order('name', {ascending: true}).limit(limit);
+      if (queryText.length > 0) {
+        const q = escapeLike(queryText);
+        request = request.or(`name.ilike.%${q}%,slug.ilike.%${q}%`);
+      }
+      return request as T;
+    };
 
-    if (queryText.length > 0) {
-      const q = escapeLike(queryText);
-      request = request.or(`name.ilike.%${q}%,slug.ilike.%${q}%`);
+    let { data, error } = await applyCommonFilters(
+      supabase.from('organizations').select('id,name,slug,join_mode')
+    );
+
+    if (error && isMissingSupabaseColumn(error, 'organizations.join_mode')) {
+      const fallbackResult = await applyCommonFilters(
+        supabase.from('organizations').select('id,name,slug')
+      );
+      data = (fallbackResult as any).data || [];
+      error = (fallbackResult as any).error || null;
     }
 
-    const { data, error } = await request;
     if (error) throw error;
 
-    return (data || [])
+    return ((data || []) as any[])
       .filter((row: any) => isUuid(row?.id))
       .map((row: any) => ({
         id: row.id,
