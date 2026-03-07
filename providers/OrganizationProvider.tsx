@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { Platform } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 export type OrganizationType =
   | 'club'
@@ -34,13 +35,15 @@ export type OrganizationMembershipRecord = {
   organization_id: string;
   role: string;
   status: string;
+  membership_status: string;
   is_verified: boolean;
   verification_source: string | null;
   joined_at: string | null;
   organization: OrganizationRecord | null;
 };
 
-type RawOrganizationMembershipRecord = Omit<OrganizationMembershipRecord, 'organization'> & {
+type RawOrganizationMembershipRecord = Omit<OrganizationMembershipRecord, 'organization' | 'membership_status'> & {
+  membership_status?: string;
   organization: OrganizationRecord | OrganizationRecord[] | null;
 };
 
@@ -170,8 +173,12 @@ const isOrgSchemaMissingError = (error: any): boolean => {
 
 function normalizeMembershipRow(row: RawOrganizationMembershipRecord): OrganizationMembershipRecord {
   const organization = Array.isArray(row.organization) ? (row.organization[0] ?? null) : (row.organization ?? null);
+  const membershipStatus = typeof (row as any).membership_status === 'string'
+    ? (row as any).membership_status
+    : row.status;
   return {
     ...row,
+    membership_status: membershipStatus,
     organization,
   };
 }
@@ -287,6 +294,11 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [memberships, setMemberships] = useState<OrganizationMembershipRecord[]>([]);
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
 
+  const membershipColumns =
+    'id, organization_id, role, status, membership_status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)';
+  const membershipColumnsLegacy =
+    'id, organization_id, role, status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)';
+
   useEffect(() => {
     signedInRef.current = signedIn;
     userIdRef.current = user?.id ?? null;
@@ -401,20 +413,31 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     setMembershipLoadError(null);
     setMembershipLoadErrorPayload(null);
     try {
-      const membershipsQuery = supabase
-        .from('organization_memberships')
-        .select(
-          'id, organization_id, role, status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)',
-        )
-        .eq('user_id', currentUserId)
-        .in('status', ['active', 'verified', 'pending', 'invited'])
-        .order('created_at', { ascending: false });
       const membershipsTimeout = new Promise<never>((_, reject) => {
         setTimeout(() => {
           reject(new Error('ORG_MEMBERSHIP_TIMEOUT'));
         }, 10000);
       });
-      const { data, error } = await Promise.race([membershipsQuery, membershipsTimeout]);
+      const buildMembershipQuery = (columns: string) => supabase
+        .from('organization_memberships')
+        .select(columns)
+        .eq('user_id', currentUserId)
+        .in('status', ['active', 'verified', 'pending', 'invited'])
+        .order('created_at', { ascending: false });
+
+      let { data, error } = await Promise.race([
+        buildMembershipQuery(membershipColumns),
+        membershipsTimeout,
+      ]);
+
+      if (error && isMissingSupabaseColumn(error, 'organization_memberships.membership_status')) {
+        const legacyResult = await Promise.race([
+          buildMembershipQuery(membershipColumnsLegacy),
+          membershipsTimeout,
+        ]);
+        data = (legacyResult as any).data || [];
+        error = (legacyResult as any).error || null;
+      }
 
       if (error) {
         if (isOrgSchemaMissingError(error)) {
@@ -428,7 +451,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
         throw error;
       }
 
-      const normalized = ((data || []) as RawOrganizationMembershipRecord[]).map(normalizeMembershipRow);
+      const normalized = ((data || []) as unknown as RawOrganizationMembershipRecord[]).map(normalizeMembershipRow);
       const rows = dedupeMemberships(normalized);
       setMemberships(rows);
 
