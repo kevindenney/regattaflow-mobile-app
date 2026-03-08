@@ -28,10 +28,10 @@ export function coachRoleLabel({ interestSlug, role }: CoachRoleLabelInput): str
 
   const sailingRoleLabels: Record<string, string> = {
     coach: 'Coach',
-    tactician: 'Tactician',
-    sailmaker: 'Sailmaker',
-    rigger: 'Rigger',
-    race_officer: 'Race Officer',
+    coordinator: 'Tactician',
+    staff: 'Race Officer',
+    tutor: 'Sailmaker',
+    volunteer: 'Rigger',
     admin: 'Club Admin',
     manager: 'Team Manager',
   };
