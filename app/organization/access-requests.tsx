@@ -71,58 +71,49 @@ export default function OrganizationAccessRequestsScreen() {
       setErrorText(null);
       setWarningText(null);
     try {
-      let rows: any[] = [];
-      const { data, error } = await supabase
+      const { data: membershipRows, error: membershipError } = await supabase
         .from('organization_memberships')
-        .select('id,user_id,role,membership_status,status,created_at,users(full_name,email)')
+        .select('id,user_id,role,membership_status,status,created_at')
         .eq('organization_id', resolvedActiveOrgId)
         .eq('membership_status', 'pending')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        const fallback = await supabase
-          .from('organization_memberships')
-          .select('id,user_id,role,membership_status,status,created_at')
-          .eq('organization_id', resolvedActiveOrgId)
-          .eq('membership_status', 'pending')
-          .order('created_at', { ascending: false });
-
-        if (fallback.error) {
-          throw fallback.error;
-        }
-
-        const fallbackRows = fallback.data || [];
-        const userIds = Array.from(
-          new Set(
-            fallbackRows
-              .map((row: any) => row.user_id)
-              .filter((id: unknown): id is string => typeof id === 'string' && isUuid(id))
-          )
-        );
-
-        let usersById = new Map<string, { full_name?: string | null; email?: string | null }>();
-        if (userIds.length > 0) {
-          const usersQuery = await supabase
-            .from('users')
-            .select('id,full_name,email')
-            .in('id', userIds);
-          if (usersQuery.error) {
-            throw usersQuery.error;
-          }
-          usersById = new Map(
-            (usersQuery.data || []).map((row: any) => [
-              String(row.id),
-              { full_name: row.full_name ?? null, email: row.email ?? null },
-            ])
-          );
-        }
-
-        rows = fallbackRows.map((row: any) => ({ ...row, users: usersById.get(String(row.user_id)) || null }));
-      } else {
-        rows = data || [];
+      if (membershipError) {
+        throw membershipError;
       }
 
-      const normalized: PendingRequestRow[] = rows.map((row: any) => {
+      const rows = membershipRows || [];
+      const userIds = Array.from(
+        new Set(
+          rows
+            .map((row: any) => row.user_id)
+            .filter((id: unknown): id is string => typeof id === 'string' && isUuid(id))
+        )
+      );
+
+      let usersById = new Map<string, { full_name?: string | null; email?: string | null }>();
+      if (userIds.length > 0) {
+        const usersQuery = await supabase
+          .from('users')
+          .select('id,full_name,email')
+          .in('id', userIds);
+        if (usersQuery.error) {
+          throw usersQuery.error;
+        }
+        usersById = new Map(
+          (usersQuery.data || []).map((row: any) => [
+            String(row.id),
+            { full_name: row.full_name ?? null, email: row.email ?? null },
+          ])
+        );
+      }
+
+      const rowsWithUsers = rows.map((row: any) => ({
+        ...row,
+        users: usersById.get(String(row.user_id)) || null,
+      }));
+
+      const normalized: PendingRequestRow[] = rowsWithUsers.map((row: any) => {
         const user = Array.isArray(row.users) ? row.users[0] : row.users;
         const email = typeof user?.email === 'string' ? user.email : null;
         const fullName = typeof user?.full_name === 'string' ? user.full_name.trim() : '';
