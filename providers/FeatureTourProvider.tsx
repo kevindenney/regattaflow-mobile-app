@@ -110,7 +110,7 @@ export function FeatureTourProvider({
   onComplete,
   onSkip,
 }: FeatureTourProviderProps) {
-  const { isGuest } = useAuth();
+  const { isGuest, signedIn, userProfile } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isTourComplete, setIsTourComplete] = useState(false);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
@@ -123,6 +123,7 @@ export function FeatureTourProvider({
   const [readySteps, setReadySteps] = useState<Set<TourStep>>(new Set());
   const readyStepsRef = useRef<Set<TourStep>>(new Set());
   const pricingPromptTriggeredRef = useRef(false);
+  const isServerReturningUser = signedIn && userProfile?.onboarding_completed === true;
 
   useEffect(() => {
     readyStepsRef.current = readySteps;
@@ -178,8 +179,29 @@ export function FeatureTourProvider({
     return () => clearTimeout(timer);
   }, [showResumeHint]);
 
+  // Returning signed-in users should not re-enter the welcome/tour flow
+  // due to missing local storage in fresh web/incognito sessions.
+  useEffect(() => {
+    if (isLoading || !isServerReturningUser) return;
+    if (currentStep === null && isTourComplete) return;
+
+    const suppressTourForReturningUser = async () => {
+      await FeatureTourService.completeTour();
+      setCurrentStep(null);
+      setCurrentStepIndex(0);
+      setIsTourComplete(true);
+      setStepReadinessIssue(null);
+      setShowResumeHint(false);
+    };
+
+    void suppressTourForReturningUser();
+  }, [currentStep, isLoading, isServerReturningUser, isTourComplete]);
+
   // Auto-start tour if conditions are met (guests see welcome card instead)
   useEffect(() => {
+    if (isServerReturningUser) {
+      return;
+    }
     const canAutoStart = hasSeenOnboarding && !isGuest;
     if (!autoStart || isLoading || isTourComplete || !canAutoStart) {
       return;
@@ -205,7 +227,7 @@ export function FeatureTourProvider({
 
       checkAndStart();
     }
-  }, [autoStart, isLoading, isTourComplete, hasSeenOnboarding, isGuest, currentStep]);
+  }, [autoStart, isLoading, isTourComplete, hasSeenOnboarding, isGuest, currentStep, isServerReturningUser]);
 
   // Computed properties
   const isTourActive = useMemo(() => {
@@ -216,9 +238,10 @@ export function FeatureTourProvider({
 
   const shouldShowTour = useMemo(() => {
     // Guests see welcome card instead of tour
+    if (isServerReturningUser) return false;
     const canShow = hasSeenOnboarding && !isGuest;
     return canShow && !isTourComplete && !isLoading;
-  }, [hasSeenOnboarding, isGuest, isTourComplete, isLoading]);
+  }, [hasSeenOnboarding, isGuest, isTourComplete, isLoading, isServerReturningUser]);
 
   const currentStepConfig = useMemo(() => {
     if (!currentStep) return null;
