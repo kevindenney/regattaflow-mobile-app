@@ -19,6 +19,15 @@ type UseOrganizationSearchResult = {
 
 const SEARCH_DEBOUNCE_MS = 350;
 
+function dedupeOrganizationsById(rows: DiscoverableOrganization[]): DiscoverableOrganization[] {
+  const deduped = new Map<string, DiscoverableOrganization>();
+  for (const row of rows) {
+    if (!row?.id || deduped.has(row.id)) continue;
+    deduped.set(row.id, row);
+  }
+  return Array.from(deduped.values());
+}
+
 export function useOrganizationSearch(input: UseOrganizationSearchInput): UseOrganizationSearchResult {
   const { query, enabled = true, limit } = input;
   const [results, setResults] = useState<DiscoverableOrganization[]>([]);
@@ -54,7 +63,7 @@ export function useOrganizationSearch(input: UseOrganizationSearchInput): UseOrg
         limit,
       });
       if (requestIdRef.current !== requestId) return;
-      setResults(rows);
+      setResults(dedupeOrganizationsById(rows));
     } catch (error: any) {
       if (requestIdRef.current !== requestId) return;
       setResults([]);

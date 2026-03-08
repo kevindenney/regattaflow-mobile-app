@@ -378,6 +378,36 @@ export default function LearnScreen() {
     () => new Map(sortedMemberships.map((membership) => [membership.organization_id, membership])),
     [sortedMemberships]
   );
+  const organizationResultsForDisplay = useMemo(() => {
+    const byKey = new Map<string, (typeof organizationResults)[number]>();
+    const getMembershipRank = (orgId: string): number => {
+      const membership = membershipsByOrgId.get(orgId);
+      const normalizedStatus = String(membership?.membership_status || membership?.status || '').toLowerCase();
+      if (normalizedStatus === 'active' || normalizedStatus === 'verified') return 3;
+      if (normalizedStatus === 'pending' || normalizedStatus === 'invited') return 2;
+      if (normalizedStatus === 'rejected') return 1;
+      return 0;
+    };
+
+    for (const org of organizationResults) {
+      const slugKey = String(org.slug || '').trim().toLowerCase();
+      const nameKey = String(org.name || '').trim().toLowerCase();
+      const dedupeKey = nameKey ? `name:${nameKey}` : slugKey ? `slug:${slugKey}` : `id:${org.id}`;
+      const existing = byKey.get(dedupeKey);
+      if (!existing) {
+        byKey.set(dedupeKey, org);
+        continue;
+      }
+
+      const currentRank = getMembershipRank(org.id);
+      const existingRank = getMembershipRank(existing.id);
+      if (currentRank > existingRank) {
+        byKey.set(dedupeKey, org);
+      }
+    }
+
+    return Array.from(byKey.values());
+  }, [organizationResults, membershipsByOrgId]);
   const activeMembershipCount = useMemo(
     () =>
       sortedMemberships.filter((membership) => {
@@ -604,6 +634,14 @@ export default function LearnScreen() {
     return `Requires @${firstDomain}`;
   };
 
+  const getMembershipSearchStatus = (status: string | null | undefined): 'active' | 'pending' | 'rejected' | 'none' => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'active' || normalized === 'verified') return 'active';
+    if (normalized === 'pending' || normalized === 'invited') return 'pending';
+    if (normalized === 'rejected') return 'rejected';
+    return 'none';
+  };
+
   const getMembershipStatusLabel = (status: string | null | undefined): string => {
     const normalized = String(status || '').toLowerCase();
     if (normalized === 'active' || normalized === 'verified') return 'Active';
@@ -798,32 +836,40 @@ export default function LearnScreen() {
                     </View>
                   ) : (
                     <View style={styles.orgList}>
-                      {organizationResults.map((org) => {
+                      {organizationResultsForDisplay.map((org) => {
                         const isInviteOnly = org.join_mode === 'invite_only';
                         const isRequestMode = org.join_mode === 'request_to_join';
                         const isOpenJoinMode = org.join_mode === 'open_join';
                         const isBusy = joinBusyOrgId === org.id;
                         const hasDomainRestriction = Array.isArray(org.allowed_email_domains) && org.allowed_email_domains.length > 0;
+                        const existingMembership = membershipsByOrgId.get(org.id);
+                        const membershipStatus = getMembershipSearchStatus(existingMembership?.membership_status || existingMembership?.status || null);
+                        const hasMembership = membershipStatus !== 'none';
                         const isOpenJoinRestricted = isOpenJoinMode
                           && hasDomainRestriction
                           && !isEmailAllowed({email: user?.email, allowedDomains: org.allowed_email_domains});
-                        const existingMembership = membershipsByOrgId.get(org.id);
-                        const existingStatus = String(existingMembership?.membership_status || existingMembership?.status || '').toLowerCase();
-                        const hasPendingMembership = existingStatus === 'pending' || existingStatus === 'invited';
-                        const hasActiveMembership = existingStatus === 'active' || existingStatus === 'verified';
                         return (
                           <View key={org.id} style={styles.orgRow}>
                             <View style={styles.orgRowBody}>
                               <Text style={styles.orgName}>{org.name}</Text>
                               <Text style={styles.orgJoinModeLabel}>{getJoinModeLabel(org.join_mode)}</Text>
+                              {__DEV__ ? (
+                                <Text style={styles.orgDevProofText}>
+                                  {`id=${org.id} slug=${org.slug || 'none'} membership=${membershipStatus}`}
+                                </Text>
+                              ) : null}
                             </View>
-                            {hasPendingMembership ? (
+                            {hasMembership && membershipStatus === 'active' ? (
+                              <View style={[styles.orgActionButton, styles.orgActionButtonDisabled]}>
+                                <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Member</Text>
+                              </View>
+                            ) : hasMembership && membershipStatus === 'pending' ? (
                               <View style={[styles.orgActionButton, styles.orgActionButtonDisabled]}>
                                 <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Request sent</Text>
                               </View>
-                            ) : hasActiveMembership ? (
+                            ) : hasMembership && membershipStatus === 'rejected' ? (
                               <View style={[styles.orgActionButton, styles.orgActionButtonDisabled]}>
-                                <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Member</Text>
+                                <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Removed</Text>
                               </View>
                             ) : isInviteOnly ? (
                               <View style={styles.inviteRequiredPill}>
@@ -850,7 +896,7 @@ export default function LearnScreen() {
                           </View>
                         );
                       })}
-                      {organizationResults.length === 0 ? (
+                      {organizationResultsForDisplay.length === 0 ? (
                         <Text style={styles.orgHint}>No organizations found.</Text>
                       ) : null}
                     </View>
@@ -1466,6 +1512,10 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
   },
   orgRestrictionText: {
+    fontSize: 10,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  orgDevProofText: {
     fontSize: 10,
     color: IOS_COLORS.tertiaryLabel,
   },
