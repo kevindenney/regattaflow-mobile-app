@@ -27,6 +27,7 @@ type SaveState = {
 };
 
 type StatusFilter = 'active' | 'pending' | 'rejected' | 'all';
+type SortOption = 'name_asc' | 'name_desc' | 'status' | 'role';
 
 const NURSING_ROLES = ['member', 'preceptor', 'clinical_instructor', 'instructor', 'evaluator', 'admin', 'manager'];
 const SAILING_ROLES = ['member', 'coach', 'coordinator', 'staff', 'admin', 'manager'];
@@ -41,6 +42,32 @@ function getStatusBucket(row: Pick<MemberRow, 'membership_status' | 'status'>): 
   if (normalizedStatus === 'pending' || normalizedStatus === 'invited') return 'pending';
   if (normalizedStatus === 'rejected') return 'rejected';
   return 'other';
+}
+
+function getRoleBucketKey(role: string | null | undefined, interestSlug: string | null | undefined): string {
+  const normalizedRole = normalizeStatus(role);
+  const normalizedInterest = normalizeStatus(interestSlug);
+  if (isOrgAdminRole(normalizedRole)) return 'org_admin';
+
+  if (normalizedInterest === 'nursing') {
+    if (normalizedRole === 'evaluator' || normalizedRole === 'assessor') return 'evaluator_assessor';
+  }
+
+  if (normalizedInterest === 'sail-racing' || normalizedInterest.includes('sail')) {
+    if (normalizedRole === 'coordinator' || normalizedRole === 'tactician') return 'tactician';
+    if (normalizedRole === 'staff' || normalizedRole === 'race_officer') return 'race_officer';
+  }
+
+  return normalizedRole || 'member';
+}
+
+function getRoleBucketDisplayLabel(roleBucket: string, interestSlug: string | null | undefined): string {
+  if (roleBucket === 'org_admin') return 'Org Admin';
+  if (roleBucket === 'evaluator_assessor') return 'Evaluator/Assessor';
+  if (roleBucket === 'tactician') return 'Tactician';
+  if (roleBucket === 'race_officer') return 'Race Officer';
+  if (roleBucket === 'team_manager') return 'Team Manager';
+  return coachRoleLabel({ interestSlug: interestSlug || '', role: roleBucket });
 }
 
 export default function OrganizationMembersScreen() {
@@ -61,6 +88,8 @@ export default function OrganizationMembersScreen() {
   const [saveStates, setSaveStates] = useState<Record<string, SaveState | undefined>>({});
   const [memberQuery, setMemberQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [sortOption, setSortOption] = useState<SortOption>('name_asc');
 
   const resolvedActiveOrgId = useMemo(
     () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
@@ -371,15 +400,90 @@ export default function OrganizationMembersScreen() {
 
   const filteredRows = useMemo(() => {
     const normalizedQuery = memberQuery.trim().toLowerCase();
-    return rows.filter((row) => {
+    const filtered = rows.filter((row) => {
       const bucket = getStatusBucket(row);
       const matchesStatus = statusFilter === 'all' || bucket === statusFilter;
       if (!matchesStatus) return false;
+      const roleBucket = getRoleBucketKey(row.role, activeInterestSlug);
+      const matchesRole = roleFilter === 'all' || roleBucket === roleFilter;
+      if (!matchesRole) return false;
       if (!normalizedQuery) return true;
       const haystack = `${String(row.user_name || '').toLowerCase()} ${String(row.user_email || '').toLowerCase()}`;
       return haystack.includes(normalizedQuery);
     });
-  }, [memberQuery, rows, statusFilter]);
+    const statusRank = (value: string): number => {
+      if (value === 'active') return 0;
+      if (value === 'pending') return 1;
+      if (value === 'rejected') return 2;
+      return 3;
+    };
+    return filtered
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => {
+        if (sortOption === 'name_asc') {
+          const result = a.row.user_name.localeCompare(b.row.user_name, undefined, { sensitivity: 'base' });
+          return result !== 0 ? result : a.index - b.index;
+        }
+        if (sortOption === 'name_desc') {
+          const result = b.row.user_name.localeCompare(a.row.user_name, undefined, { sensitivity: 'base' });
+          return result !== 0 ? result : a.index - b.index;
+        }
+        if (sortOption === 'status') {
+          const result = statusRank(getStatusBucket(a.row)) - statusRank(getStatusBucket(b.row));
+          if (result !== 0) return result;
+          return a.row.user_name.localeCompare(b.row.user_name, undefined, { sensitivity: 'base' });
+        }
+        const bucketA = getRoleBucketKey(a.row.role, activeInterestSlug);
+        const bucketB = getRoleBucketKey(b.row.role, activeInterestSlug);
+        const rankA = bucketA === 'org_admin' ? 0 : 1;
+        const rankB = bucketB === 'org_admin' ? 0 : 1;
+        if (rankA !== rankB) return rankA - rankB;
+        const labelA = getRoleBucketDisplayLabel(bucketA, activeInterestSlug);
+        const labelB = getRoleBucketDisplayLabel(bucketB, activeInterestSlug);
+        const result = labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
+        if (result !== 0) return result;
+        return a.row.user_name.localeCompare(b.row.user_name, undefined, { sensitivity: 'base' });
+      })
+      .map((entry) => entry.row);
+  }, [activeInterestSlug, memberQuery, roleFilter, rows, sortOption, statusFilter]);
+
+  const roleFilterCounts = useMemo(() => {
+    return rows.reduce<Record<string, number>>((acc, row) => {
+      const bucket = getRoleBucketKey(row.role, activeInterestSlug);
+      acc[bucket] = (acc[bucket] || 0) + 1;
+      return acc;
+    }, {});
+  }, [activeInterestSlug, rows]);
+
+  const roleFilterOptions = useMemo(() => {
+    const interest = normalizeStatus(activeInterestSlug);
+    const allowedNursing = ['org_admin', 'preceptor', 'clinical_instructor', 'instructor', 'evaluator_assessor', 'member'];
+    const allowedSailing = ['org_admin', 'race_officer', 'tactician', 'team_manager', 'coach', 'coordinator', 'member'];
+    const allowedBase = interest === 'nursing'
+      ? allowedNursing
+      : (interest === 'sail-racing' || interest.includes('sail'))
+        ? allowedSailing
+        : ['org_admin', 'member'];
+
+    const options = ['all'];
+    for (const key of allowedBase) {
+      if ((roleFilterCounts[key] || 0) > 0) {
+        options.push(key);
+      }
+    }
+
+    const seen = new Set(options);
+    const otherKeys = Object.keys(roleFilterCounts).filter((key) => !seen.has(key) && (roleFilterCounts[key] || 0) > 0);
+    otherKeys.sort((a, b) =>
+      getRoleBucketDisplayLabel(a, activeInterestSlug).localeCompare(getRoleBucketDisplayLabel(b, activeInterestSlug), undefined, { sensitivity: 'base' })
+    );
+    for (const key of otherKeys) options.push(key);
+
+    if (!options.includes(roleFilter)) {
+      options.unshift(roleFilter);
+    }
+    return options;
+  }, [activeInterestSlug, roleFilter, roleFilterCounts]);
 
   const title = useMemo(
     () => `Members${activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}`,
@@ -453,6 +557,35 @@ export default function OrganizationMembersScreen() {
               autoCapitalize="none"
               autoCorrect={false}
             />
+            <View style={styles.sortRow}>
+              <Text style={styles.sortLabel}>Sort</Text>
+              <View style={styles.filtersRow}>
+                <TouchableOpacity
+                  style={[styles.filterPill, sortOption === 'name_asc' && styles.filterPillActive]}
+                  onPress={() => setSortOption('name_asc')}
+                >
+                  <Text style={[styles.filterPillText, sortOption === 'name_asc' && styles.filterPillTextActive]}>Name (A-Z)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterPill, sortOption === 'name_desc' && styles.filterPillActive]}
+                  onPress={() => setSortOption('name_desc')}
+                >
+                  <Text style={[styles.filterPillText, sortOption === 'name_desc' && styles.filterPillTextActive]}>Name (Z-A)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterPill, sortOption === 'status' && styles.filterPillActive]}
+                  onPress={() => setSortOption('status')}
+                >
+                  <Text style={[styles.filterPillText, sortOption === 'status' && styles.filterPillTextActive]}>Status</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterPill, sortOption === 'role' && styles.filterPillActive]}
+                  onPress={() => setSortOption('role')}
+                >
+                  <Text style={[styles.filterPillText, sortOption === 'role' && styles.filterPillTextActive]}>Role</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
             <View style={styles.filtersRow}>
               <TouchableOpacity
                 style={[styles.filterPill, statusFilter === 'active' && styles.filterPillActive]}
@@ -487,6 +620,24 @@ export default function OrganizationMembersScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            <View style={styles.filtersRow}>
+              {roleFilterOptions.map((option) => {
+                const isAll = option === 'all';
+                const count = isAll ? rows.length : (roleFilterCounts[option] || 0);
+                const label = isAll ? 'All' : getRoleBucketDisplayLabel(option, activeInterestSlug);
+                return (
+                  <TouchableOpacity
+                    key={`role-filter:${option}`}
+                    style={[styles.filterPill, roleFilter === option && styles.filterPillActive]}
+                    onPress={() => setRoleFilter(option)}
+                  >
+                    <Text style={[styles.filterPillText, roleFilter === option && styles.filterPillTextActive]}>
+                      {label} ({count})
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
 
@@ -506,10 +657,29 @@ export default function OrganizationMembersScreen() {
                         <Text style={styles.memberName}>{row.user_name}</Text>
                         {row.user_email ? <Text style={styles.memberEmail}>{row.user_email}</Text> : null}
                       </View>
-                      <View style={styles.roleBadge}>
-                        <Text style={styles.roleBadgeText}>
-                          {coachRoleLabel({ interestSlug: activeInterestSlug || '', role: row.role })}
-                        </Text>
+                      <View style={styles.memberHeaderBadges}>
+                        <View style={[
+                          styles.statusBadge,
+                          getStatusBucket(row) === 'active' && styles.statusBadgeActive,
+                          getStatusBucket(row) === 'pending' && styles.statusBadgePending,
+                          getStatusBucket(row) === 'rejected' && styles.statusBadgeRejected,
+                          getStatusBucket(row) === 'other' && styles.statusBadgeOther,
+                        ]}>
+                          <Text style={styles.statusBadgeText}>
+                            {getStatusBucket(row) === 'active'
+                              ? 'Active'
+                              : getStatusBucket(row) === 'pending'
+                                ? 'Pending'
+                                : getStatusBucket(row) === 'rejected'
+                                  ? 'Rejected'
+                                  : 'Unknown'}
+                          </Text>
+                        </View>
+                        <View style={styles.roleBadge}>
+                          <Text style={styles.roleBadgeText}>
+                            {getRoleBucketDisplayLabel(getRoleBucketKey(row.role, activeInterestSlug), activeInterestSlug)}
+                          </Text>
+                        </View>
                       </View>
                     </View>
 
@@ -648,6 +818,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#0F172A',
   },
+  sortRow: {
+    gap: 6,
+  },
+  sortLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
   filtersRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -696,6 +874,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  memberHeaderBadges: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   memberTextWrap: {
     flex: 1,
     gap: 2,
@@ -721,6 +903,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#1D4ED8',
+  },
+  statusBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statusBadgeActive: {
+    backgroundColor: '#ECFDF3',
+    borderColor: '#ABEFC6',
+  },
+  statusBadgePending: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  statusBadgeRejected: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  statusBadgeOther: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+  },
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#334155',
   },
   roleOptionsWrap: {
     flexDirection: 'row',
