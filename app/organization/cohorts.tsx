@@ -21,6 +21,11 @@ function normalize(value: unknown): string {
   return String(value || '').trim().toLowerCase();
 }
 
+function isActiveMembershipStatus(value: unknown): boolean {
+  const normalized = normalize(value);
+  return normalized === 'active' || normalized === 'verified';
+}
+
 export default function OrganizationCohortsScreen() {
   const {
     activeOrganization,
@@ -45,7 +50,7 @@ export default function OrganizationCohortsScreen() {
     const providerId = String(activeOrganizationId || '').trim();
     if (providerId) return providerId;
     const activeMembership = memberships.find((membership: any) =>
-      normalize(membership?.membership_status || membership?.status) === 'active'
+      isActiveMembershipStatus(membership?.membership_status || membership?.status)
     );
     if (!activeMembership) return null;
     return (
@@ -64,7 +69,9 @@ export default function OrganizationCohortsScreen() {
   }, [memberships, resolvedActiveOrgId]);
 
   const hasValidActiveOrgId = Boolean(resolvedActiveOrgId && isUuid(resolvedActiveOrgId));
-  const hasActiveMembership = normalize(activeOrgMembership?.membership_status || activeOrgMembership?.status) === 'active';
+  const hasActiveMembership = isActiveMembershipStatus(
+    activeOrgMembership?.membership_status || activeOrgMembership?.status
+  );
   const hasAdminRole = ADMIN_ROLES.has(normalize(activeOrgMembership?.role));
   const canEdit = hasValidActiveOrgId && hasActiveMembership && hasAdminRole;
   const canView = hasValidActiveOrgId && hasActiveMembership;

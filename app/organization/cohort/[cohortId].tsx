@@ -36,6 +36,11 @@ function normalize(value: unknown): string {
   return String(value || '').trim().toLowerCase();
 }
 
+function isActiveMembershipStatus(value: unknown): boolean {
+  const normalized = normalize(value);
+  return normalized === 'active' || normalized === 'verified';
+}
+
 export default function CohortDetailScreen() {
   const params = useLocalSearchParams<{ cohortId?: string }>();
   const cohortId = String(params.cohortId || '').trim();
@@ -56,25 +61,38 @@ export default function CohortDetailScreen() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [actionBusyUserId, setActionBusyUserId] = useState<string | null>(null);
 
-  const activeOrgMembership = useMemo(() => {
-    const activeId = String(activeOrganizationId || '').trim();
-    if (!activeId) return null;
+  const resolvedActiveOrgId = useMemo(() => {
+    const providerId = String(activeOrganizationId || '').trim();
+    if (providerId) return providerId;
+    const activeMembership = memberships.find((membership: any) =>
+      isActiveMembershipStatus(membership?.membership_status || membership?.status)
+    );
+    if (!activeMembership) return null;
     return (
-      memberships.find((membership: any) => {
-        const membershipOrgId = String(membership?.organization_id ?? membership?.organizationId ?? '').trim();
-        return membershipOrgId === activeId;
-      }) ?? null
+      String((activeMembership as any).organization_id ?? (activeMembership as any).organizationId ?? '').trim() || null
     );
   }, [activeOrganizationId, memberships]);
 
-  const hasValidOrg = Boolean(activeOrganizationId && isUuid(activeOrganizationId));
-  const hasActiveMembership = normalize(activeOrgMembership?.membership_status || activeOrgMembership?.status) === 'active';
+  const activeOrgMembership = useMemo(() => {
+    if (!resolvedActiveOrgId) return null;
+    return (
+      memberships.find((membership: any) => {
+        const membershipOrgId = String(membership?.organization_id ?? membership?.organizationId ?? '').trim();
+        return membershipOrgId === resolvedActiveOrgId;
+      }) ?? null
+    );
+  }, [memberships, resolvedActiveOrgId]);
+
+  const hasValidOrg = Boolean(resolvedActiveOrgId && isUuid(resolvedActiveOrgId));
+  const hasActiveMembership = isActiveMembershipStatus(
+    activeOrgMembership?.membership_status || activeOrgMembership?.status
+  );
   const hasAdminRole = ADMIN_ROLES.has(normalize(activeOrgMembership?.role));
   const canEdit = hasValidOrg && hasActiveMembership && hasAdminRole;
   const canView = hasValidOrg && hasActiveMembership;
 
   const loadData = useCallback(async () => {
-    if (!canView || !activeOrganizationId || !isUuid(cohortId)) {
+    if (!canView || !resolvedActiveOrgId || !isUuid(cohortId)) {
       setLoading(false);
       setCohort(null);
       setCohortMembers([]);
@@ -90,7 +108,7 @@ export default function CohortDetailScreen() {
         .from('betterat_org_cohorts')
         .select('id,org_id,name,description,interest_slug')
         .eq('id', cohortId)
-        .eq('org_id', activeOrganizationId)
+        .eq('org_id', resolvedActiveOrgId)
         .single();
 
       if (cohortError) throw cohortError;
@@ -107,8 +125,7 @@ export default function CohortDetailScreen() {
       const { data: orgMemberRows, error: orgMembersError } = await supabase
         .from('organization_memberships')
         .select('user_id,role,membership_status,status')
-        .eq('organization_id', activeOrganizationId)
-        .eq('membership_status', 'active')
+        .eq('organization_id', resolvedActiveOrgId)
         .order('created_at', { ascending: false });
 
       if (orgMembersError) throw orgMembersError;
@@ -151,7 +168,9 @@ export default function CohortDetailScreen() {
         };
       });
 
-      const nextOrgMembers: OrgActiveMember[] = (orgMemberRows || []).map((row: any) => {
+      const nextOrgMembers: OrgActiveMember[] = (orgMemberRows || [])
+        .filter((row: any) => isActiveMembershipStatus(row.membership_status || row.status))
+        .map((row: any) => {
         const user = usersById.get(String(row.user_id));
         const email = user?.email || null;
         const fullName = String(user?.full_name || '').trim();
@@ -173,7 +192,7 @@ export default function CohortDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganizationId, canView, cohortId]);
+  }, [canView, cohortId, resolvedActiveOrgId]);
 
   useEffect(() => {
     if (!orgReady || orgLoading || !canView) {
