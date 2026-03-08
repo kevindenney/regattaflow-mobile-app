@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,9 +44,15 @@ import {
 // TYPES
 // =============================================================================
 
-interface NotificationSection {
+interface GroupedNotificationSection {
   title: string;
   data: NotificationGroup[];
+  unreadCount: number;
+}
+
+interface RawNotificationSection {
+  title: string;
+  data: SocialNotification[];
   unreadCount: number;
 }
 
@@ -53,7 +60,7 @@ interface NotificationSection {
 // HELPERS
 // =============================================================================
 
-function groupNotificationsByTime(notifications: NotificationGroup[]): NotificationSection[] {
+function groupGroupedNotificationsByTime(notifications: NotificationGroup[]): GroupedNotificationSection[] {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
@@ -77,7 +84,7 @@ function groupNotificationsByTime(notifications: NotificationGroup[]): Notificat
     }
   });
 
-  const sections: NotificationSection[] = [];
+  const sections: GroupedNotificationSection[] = [];
 
   if (today.length > 0) {
     sections.push({
@@ -108,6 +115,38 @@ function groupNotificationsByTime(notifications: NotificationGroup[]): Notificat
     });
   }
 
+  return sections;
+}
+
+function groupRawNotificationsByTime(notifications: SocialNotification[]): RawNotificationSection[] {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+  const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const today: SocialNotification[] = [];
+  const yesterday: SocialNotification[] = [];
+  const thisWeek: SocialNotification[] = [];
+  const earlier: SocialNotification[] = [];
+
+  notifications.forEach((n) => {
+    const date = new Date(n.createdAt);
+    if (date >= todayStart) {
+      today.push(n);
+    } else if (date >= yesterdayStart) {
+      yesterday.push(n);
+    } else if (date >= weekStart) {
+      thisWeek.push(n);
+    } else {
+      earlier.push(n);
+    }
+  });
+
+  const sections: RawNotificationSection[] = [];
+  if (today.length > 0) sections.push({ title: 'Today', data: today, unreadCount: today.filter((n) => !n.isRead).length });
+  if (yesterday.length > 0) sections.push({ title: 'Yesterday', data: yesterday, unreadCount: yesterday.filter((n) => !n.isRead).length });
+  if (thisWeek.length > 0) sections.push({ title: 'This Week', data: thisWeek, unreadCount: thisWeek.filter((n) => !n.isRead).length });
+  if (earlier.length > 0) sections.push({ title: 'Earlier', data: earlier, unreadCount: earlier.filter((n) => !n.isRead).length });
   return sections;
 }
 
@@ -145,8 +184,10 @@ export default function SocialNotificationsScreen() {
   const queryClient = useQueryClient();
   const { threads } = useCrewThreads();
   const {
-    notifications,
-    unreadCount,
+    groupedNotifications,
+    rawNotifications,
+    unreadCountGrouped,
+    unreadCountRaw,
     isLoading,
     hasMore,
     loadMore,
@@ -157,6 +198,7 @@ export default function SocialNotificationsScreen() {
     markGroupAsRead,
     deleteNotification,
   } = useNotifications();
+  const [viewMode, setViewMode] = useState<'grouped' | 'all'>('grouped');
 
   // Sailor suggestions
   const {
@@ -174,19 +216,44 @@ export default function SocialNotificationsScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      const saved = window.localStorage.getItem('betterat.notifications.viewMode');
+      if (saved === 'grouped' || saved === 'all') {
+        setViewMode(saved);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      window.localStorage.setItem('betterat.notifications.viewMode', viewMode);
+    } catch {
+      // ignore storage failures
+    }
+  }, [viewMode]);
+
   // Group notifications by time
-  const sections = useMemo(
-    () => groupNotificationsByTime(notifications),
-    [notifications]
+  const groupedSections = useMemo(
+    () => groupGroupedNotificationsByTime(groupedNotifications),
+    [groupedNotifications]
+  );
+  const rawSections = useMemo(
+    () => groupRawNotificationsByTime(rawNotifications),
+    [rawNotifications]
   );
 
   // Get unique actor IDs from new_follower notifications
   const actorIds = useMemo(() => {
-    const ids = notifications
+    const ids = groupedNotifications
       .filter((n) => n.latest.type === 'new_follower' && n.latest.actorId)
       .map((n) => n.latest.actorId as string);
     return [...new Set(ids)];
-  }, [notifications]);
+  }, [groupedNotifications]);
 
   // Fetch which actors the current user is following
   const { data: followingData } = useQuery({
@@ -287,10 +354,11 @@ export default function SocialNotificationsScreen() {
   }, [router]);
 
   const totalUnreadMessages = threads.reduce((sum, t) => sum + t.unreadCount, 0);
+  const visibleUnreadCount = viewMode === 'grouped' ? unreadCountGrouped : unreadCountRaw;
 
   // Render notification row with rounded section container
-  const renderNotification = useCallback(
-    ({ item, index, section }: { item: NotificationGroup; index: number; section: NotificationSection }) => {
+  const renderGroupedNotification = useCallback(
+    ({ item, index, section }: { item: NotificationGroup; index: number; section: GroupedNotificationSection }) => {
       const latest = item.latest;
       const isFollowingBack = latest.actorId ? followingMap.get(latest.actorId) : false;
       const isFirst = index === 0;
@@ -343,9 +411,50 @@ export default function SocialNotificationsScreen() {
     [followingMap, markAsRead, markGroupAsRead, deleteNotification, handleToggleFollow, router]
   );
 
+  const renderRawNotification = useCallback(
+    ({ item, index, section }: { item: SocialNotification; index: number; section: RawNotificationSection }) => {
+      const isFollowingBack = item.actorId ? followingMap.get(item.actorId) : false;
+      const isFirst = index === 0;
+      const isLast = index === section.data.length - 1;
+
+      return (
+        <View
+          style={[
+            styles.notificationRowWrapper,
+            isFirst && styles.notificationRowFirst,
+            isLast && styles.notificationRowLast,
+          ]}
+        >
+          <NotificationRow
+            notification={item}
+            onPress={() => {
+              if (!item.isRead) markAsRead(item.id);
+              if (item.type === 'new_follower' && item.actorId) {
+                router.push(`/sailor/${item.actorId}`);
+              } else if (item.regattaId) {
+                router.push(`/race/${item.regattaId}`);
+              }
+            }}
+            onDelete={() => {
+              deleteNotification(item.id);
+            }}
+            isFollowingBack={isFollowingBack}
+            onToggleFollow={
+              item.type === 'new_follower' && item.actorId
+                ? () => handleToggleFollow(item.actorId!, isFollowingBack || false)
+                : undefined
+            }
+            isLast={isLast}
+          />
+        </View>
+      );
+    },
+    [followingMap, markAsRead, deleteNotification, handleToggleFollow, router]
+  );
+
   // Section header with unread count
   const renderSectionHeader = useCallback(
-    ({ section }: { section: NotificationSection }) => (
+    ({ section }: { section: GroupedNotificationSection | RawNotificationSection }) => (
       <View style={styles.sectionHeader}>
         <View style={styles.sectionHeaderContent}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -367,14 +476,56 @@ export default function SocialNotificationsScreen() {
         {/* Large Title */}
         <View style={styles.largeTitleRow}>
           <Text style={styles.largeTitle}>Activity</Text>
-          {unreadCount > 0 && (
+          {visibleUnreadCount > 0 && (
             <Pressable
-              onPress={markAllAsRead}
+              onPress={async () => {
+                if (viewMode === 'grouped') {
+                  await markAllAsRead();
+                  return;
+                }
+                const ids = rawNotifications.map((notification) => notification.id);
+                await markGroupAsRead(ids);
+              }}
               hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
             >
               <Text style={styles.markAllText}>Mark All Read</Text>
             </Pressable>
           )}
+        </View>
+
+        <View style={styles.viewModeRow}>
+          <Pressable
+            onPress={() => setViewMode('grouped')}
+            style={[
+              styles.viewModePill,
+              viewMode === 'grouped' && styles.viewModePillActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.viewModePillText,
+                viewMode === 'grouped' && styles.viewModePillTextActive,
+              ]}
+            >
+              Grouped
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setViewMode('all')}
+            style={[
+              styles.viewModePill,
+              viewMode === 'all' && styles.viewModePillActive,
+            ]}
+          >
+            <Text
+              style={[
+                styles.viewModePillText,
+                viewMode === 'all' && styles.viewModePillTextActive,
+              ]}
+            >
+              All
+            </Text>
+          </Pressable>
         </View>
 
         {/* Messages Section */}
@@ -469,7 +620,7 @@ export default function SocialNotificationsScreen() {
 
       </View>
     ),
-    [threads, totalUnreadMessages, unreadCount, markAllAsRead, handleSeeAllMessages, sections.length, unfollowedSuggestions, handleSailorPress, handleSuggestionFollow, handleSeeAllSuggestions]
+    [viewMode, visibleUnreadCount, rawNotifications, threads, totalUnreadMessages, markAllAsRead, markGroupAsRead, handleSeeAllMessages, unfollowedSuggestions, handleSailorPress, handleSuggestionFollow, handleSeeAllSuggestions]
   );
 
   // Empty state
@@ -522,10 +673,10 @@ export default function SocialNotificationsScreen() {
 
         {/* Main List */}
         <SectionList
-          sections={sections}
-          renderItem={renderNotification}
+          sections={viewMode === 'grouped' ? groupedSections : rawSections}
+          renderItem={viewMode === 'grouped' ? (renderGroupedNotification as any) : (renderRawNotification as any)}
           renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item) => item.latest.id}
+          keyExtractor={(item: any) => (viewMode === 'grouped' ? item.latest.id : item.id)}
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={ListEmpty}
           ListFooterComponent={ListFooter}
@@ -602,6 +753,33 @@ const styles = StyleSheet.create({
   markAllText: {
     fontSize: 15,
     color: IOS_COLORS.systemBlue,
+  },
+  viewModeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.xs,
+    marginTop: -IOS_SPACING.sm,
+    marginBottom: IOS_SPACING.lg,
+  },
+  viewModePill: {
+    paddingHorizontal: IOS_SPACING.md,
+    paddingVertical: IOS_SPACING.xs,
+    borderRadius: IOS_RADIUS.full,
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+  },
+  viewModePillActive: {
+    backgroundColor: IOS_COLORS.systemBlue,
+    borderColor: IOS_COLORS.systemBlue,
+  },
+  viewModePillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  viewModePillTextActive: {
+    color: IOS_COLORS.white,
   },
 
   // Messages Section

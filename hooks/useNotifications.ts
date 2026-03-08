@@ -136,9 +136,9 @@ export function useNotifications() {
   const rawNotifications: SocialNotification[] =
     data?.pages.flatMap((page) => page.notifications) || [];
   const groupedResult = groupNotifications(rawNotifications, { windowHours: 24 });
-  const notifications: NotificationGroup[] = groupedResult.groups;
-  const unreadCount = groupedResult.unreadCount;
-  const rawUnreadCount = rawNotifications.filter((notification) => !notification.isRead).length;
+  const groupedNotifications: NotificationGroup[] = groupedResult.groups;
+  const unreadCountGrouped = groupedResult.unreadCount;
+  const unreadCountRaw = rawNotifications.filter((notification) => !notification.isRead).length;
 
   // Mark as read mutation
   const markReadMutation = useMutation({
@@ -201,9 +201,9 @@ export function useNotifications() {
 
   const markAllAsRead = useCallback(async () => {
     if (!user?.id) throw new Error('Not authenticated');
-    const notificationIds = notifications.flatMap((group) => group.ids);
+    const notificationIds = groupedNotifications.flatMap((group) => group.ids);
     await markAllReadMutation.mutateAsync({ userId: user.id, notificationIds });
-  }, [markAllReadMutation, notifications, user?.id]);
+  }, [markAllReadMutation, groupedNotifications, user?.id]);
 
   const markGroupAsRead = useCallback(
     async (groupIds: string[]) => {
@@ -223,10 +223,12 @@ export function useNotifications() {
   );
 
   return {
-    notifications,
+    notifications: groupedNotifications,
+    groupedNotifications,
     rawNotifications,
-    unreadCount,
-    rawUnreadCount,
+    unreadCount: unreadCountGrouped,
+    unreadCountGrouped,
+    unreadCountRaw,
     isLoading,
     error,
     hasMore: hasNextPage || false,
