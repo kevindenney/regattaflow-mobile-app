@@ -853,11 +853,6 @@ export default function LearnScreen() {
                             <View style={styles.orgRowBody}>
                               <Text style={styles.orgName}>{org.name}</Text>
                               <Text style={styles.orgJoinModeLabel}>{getJoinModeLabel(org.join_mode)}</Text>
-                              {__DEV__ ? (
-                                <Text style={styles.orgDevProofText}>
-                                  {`id=${org.id} slug=${org.slug || 'none'} membership=${membershipStatus}`}
-                                </Text>
-                              ) : null}
                             </View>
                             {hasMembership && membershipStatus === 'active' ? (
                               <View style={[styles.orgActionButton, styles.orgActionButtonDisabled]}>
@@ -1512,10 +1507,6 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
   },
   orgRestrictionText: {
-    fontSize: 10,
-    color: IOS_COLORS.tertiaryLabel,
-  },
-  orgDevProofText: {
     fontSize: 10,
     color: IOS_COLORS.tertiaryLabel,
   },
