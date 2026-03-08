@@ -69,65 +69,52 @@ export function useOrgMembers(options: UseOrgMembersOptions): UseOrgMembersResul
       const queryLimit = limit + 1;
 
       try {
-        const { data, error: joinError } = await supabase
+        const { data: membershipsData, error: membershipsError } = await supabase
           .from('organization_memberships')
-          .select('user_id, role, membership_status, status, users(full_name, email)')
+          .select('user_id, role, membership_status, status')
           .eq('organization_id', organizationId)
           .order('created_at', { ascending: false })
           .limit(queryLimit);
 
-        let rows: any[] = [];
-
-        if (joinError) {
-          const { data: membershipsData, error: membershipsError } = await supabase
-            .from('organization_memberships')
-            .select('user_id, role, membership_status, status')
-            .eq('organization_id', organizationId)
-            .order('created_at', { ascending: false })
-            .limit(queryLimit);
-
-          if (membershipsError) {
-            throw membershipsError;
-          }
-
-          const membershipRows = membershipsData || [];
-          const userIds = Array.from(
-            new Set(
-              membershipRows
-                .map((row: any) => row.user_id)
-                .filter((id: unknown): id is string => typeof id === 'string' && isUuid(id))
-            )
-          );
-
-          let usersById = new Map<string, { full_name?: string | null; email?: string | null }>();
-          if (userIds.length > 0) {
-            const { data: usersData, error: usersError } = await supabase
-              .from('users')
-              .select('id, full_name, email')
-              .in('id', userIds);
-
-            if (usersError) {
-              throw usersError;
-            }
-
-            usersById = new Map(
-              (usersData || []).map((user: any) => [
-                String(user.id),
-                {
-                  full_name: user.full_name ?? null,
-                  email: user.email ?? null,
-                },
-              ])
-            );
-          }
-
-          rows = membershipRows.map((row: any) => {
-            const user = usersById.get(String(row.user_id)) || null;
-            return { ...row, users: user };
-          });
-        } else {
-          rows = data || [];
+        if (membershipsError) {
+          throw membershipsError;
         }
+
+        const membershipRows = membershipsData || [];
+        const userIds = Array.from(
+          new Set(
+            membershipRows
+              .map((row: any) => row.user_id)
+              .filter((id: unknown): id is string => typeof id === 'string' && isUuid(id))
+          )
+        );
+
+        let usersById = new Map<string, { full_name?: string | null; email?: string | null }>();
+        if (userIds.length > 0) {
+          const { data: usersData, error: usersError } = await supabase
+            .from('users')
+            .select('id, full_name, email')
+            .in('id', userIds);
+
+          if (usersError) {
+            throw usersError;
+          }
+
+          usersById = new Map(
+            (usersData || []).map((user: any) => [
+              String(user.id),
+              {
+                full_name: user.full_name ?? null,
+                email: user.email ?? null,
+              },
+            ])
+          );
+        }
+
+        const rows = membershipRows.map((row: any) => {
+          const user = usersById.get(String(row.user_id)) || null;
+          return { ...row, users: user };
+        });
 
         const nextHasMore = rows.length > limit;
         const normalized = rows.slice(0, limit).map((row: any): OrgMember => {
