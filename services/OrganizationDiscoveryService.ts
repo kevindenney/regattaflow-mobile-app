@@ -51,40 +51,60 @@ class OrganizationDiscoveryService {
   async searchOrganizations(input: SearchOrganizationsInput): Promise<DiscoverableOrganization[]> {
     const limit = Math.max(1, Math.min(input.limit || DEFAULT_LIMIT, 50));
     const queryText = String(input.query || '').trim();
+    if (!queryText) {
+      return [];
+    }
+    const q = escapeLike(queryText);
+    if (!q) {
+      return [];
+    }
 
     const applyCommonFilters = <T,>(query: T): T => {
       let request: any = query;
       request = request.eq('is_active', true).order('name', {ascending: true}).limit(limit);
-      if (queryText.length > 0) {
-        const q = escapeLike(queryText);
-        request = request.or(`name.ilike.%${q}%,slug.ilike.%${q}%`);
-      }
       return request as T;
     };
 
-    let { data, error } = await applyCommonFilters(
-      supabase.from('organizations').select('id,name,slug,join_mode')
+    const nameQuery = applyCommonFilters(
+      supabase.from('organizations').select('id,name,slug,join_mode').ilike('name', `%${q}%`)
     );
+    const slugQuery = applyCommonFilters(
+      supabase.from('organizations').select('id,name,slug,join_mode').ilike('slug', `%${q}%`)
+    );
+    let [nameResult, slugResult] = await Promise.all([nameQuery, slugQuery]);
+    let data = [...(nameResult.data || []), ...(slugResult.data || [])];
+    let error = nameResult.error || slugResult.error;
 
     if (error && isMissingSupabaseColumn(error, 'organizations.join_mode')) {
-      const fallbackResult = await applyCommonFilters(
-        supabase.from('organizations').select('id,name,slug')
+      const fallbackNameQuery = applyCommonFilters(
+        supabase.from('organizations').select('id,name,slug').ilike('name', `%${q}%`)
       );
-      data = (fallbackResult as any).data || [];
-      error = (fallbackResult as any).error || null;
+      const fallbackSlugQuery = applyCommonFilters(
+        supabase.from('organizations').select('id,name,slug').ilike('slug', `%${q}%`)
+      );
+      const [fallbackNameResult, fallbackSlugResult] = await Promise.all([fallbackNameQuery, fallbackSlugQuery]);
+      data = [...(fallbackNameResult.data || []), ...(fallbackSlugResult.data || [])];
+      error = fallbackNameResult.error || fallbackSlugResult.error;
     }
 
     if (error) throw error;
 
-    return ((data || []) as any[])
-      .filter((row: any) => isUuid(row?.id))
-      .map((row: any) => ({
+    const deduped = new Map<string, DiscoverableOrganization>();
+    for (const row of (data || []) as any[]) {
+      if (!isUuid(row?.id)) continue;
+      const mapped: DiscoverableOrganization = {
         id: row.id,
         name: String(row.name || ''),
         slug: row.slug || null,
         join_mode: normalizeJoinMode(row.join_mode),
-      }))
-      .filter((row) => row.name.length > 0);
+      };
+      if (!mapped.name) continue;
+      if (!deduped.has(mapped.id)) {
+        deduped.set(mapped.id, mapped);
+      }
+    }
+
+    return Array.from(deduped.values()).slice(0, limit);
   }
 
   async requestJoin(input: RequestJoinInput): Promise<RequestJoinResult> {

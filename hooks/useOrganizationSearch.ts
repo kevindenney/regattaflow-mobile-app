@@ -36,6 +36,13 @@ export function useOrganizationSearch(input: UseOrganizationSearchInput): UseOrg
       return;
     }
 
+    if (normalizedQuery.length === 0) {
+      setResults([]);
+      setLoading(false);
+      setErrorText(null);
+      return;
+    }
+
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setLoading(true);
