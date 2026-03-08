@@ -226,6 +226,9 @@ export default function OrganizationTemplatesScreen() {
               ? 'Publish optional sail racing step recommendations for learners.'
               : 'Publish optional nursing step recommendations for learners.'}
           </Text>
+          <TouchableOpacity onPress={() => router.push('/organization/access-requests')} style={styles.accessRequestsLink}>
+            <Text style={styles.accessRequestsLinkText}>Access requests</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -412,6 +415,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#64748B',
+  },
+  accessRequestsLink: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  accessRequestsLinkText: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '600',
   },
   scroll: {
     flex: 1,
