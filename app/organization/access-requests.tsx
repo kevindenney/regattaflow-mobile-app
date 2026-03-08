@@ -25,18 +25,32 @@ function formatRequestedAt(iso: string): string {
 }
 
 export default function OrganizationAccessRequestsScreen() {
-  const { activeOrganization, memberships } = useOrganization();
+  const { activeOrganization, activeOrganizationId, memberships, loading: orgLoading, ready: orgReady } = useOrganization();
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<PendingRequestRow[]>([]);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [warningText, setWarningText] = useState<string | null>(null);
-  const activeOrganizationId = activeOrganization?.id ?? null;
+  const resolvedActiveOrgId = useMemo(() => {
+    const providerId = String(activeOrganizationId || '').trim();
+    if (providerId) return providerId;
+    const activeMembership = memberships.find((membership: any) => {
+      const membershipStatus = String(
+        membership?.membership_status || membership?.status || '',
+      ).toLowerCase();
+      return membershipStatus === 'active';
+    });
+    if (!activeMembership) return null;
+    return String((activeMembership as any).organization_id ?? (activeMembership as any).organizationId ?? '').trim() || null;
+  }, [activeOrganizationId, memberships]);
 
-  const activeOrgMembership = useMemo(
-    () => memberships.find((membership) => membership.organization_id === activeOrganizationId) ?? null,
-    [memberships, activeOrganizationId],
-  );
+  const activeOrgMembership = useMemo(() => {
+    if (!resolvedActiveOrgId) return null;
+    return memberships.find((membership: any) => {
+      const membershipOrgId = String(membership?.organization_id ?? membership?.organizationId ?? '').trim();
+      return membershipOrgId === resolvedActiveOrgId;
+    }) ?? null;
+  }, [memberships, resolvedActiveOrgId]);
 
   const membershipStatus = String(
     activeOrgMembership?.membership_status || activeOrgMembership?.status || '',
@@ -44,10 +58,11 @@ export default function OrganizationAccessRequestsScreen() {
   const membershipRole = String(activeOrgMembership?.role || '').toLowerCase();
   const hasActiveMembership = membershipStatus === 'active';
   const hasAdminRole = membershipRole === 'admin' || membershipRole === 'manager' || membershipRole === 'owner';
-  const canViewAndAct = hasActiveMembership && hasAdminRole;
+  const hasValidActiveOrgId = !!resolvedActiveOrgId && isUuid(resolvedActiveOrgId);
+  const canViewAndAct = hasValidActiveOrgId && hasActiveMembership && hasAdminRole;
 
   const loadPendingRequests = useCallback(async () => {
-    if (!activeOrganization?.id || !isUuid(activeOrganization.id) || !canViewAndAct) {
+    if (!canViewAndAct || !resolvedActiveOrgId) {
       setRequests([]);
       return;
     }
@@ -60,7 +75,7 @@ export default function OrganizationAccessRequestsScreen() {
       const { data, error } = await supabase
         .from('organization_memberships')
         .select('id,user_id,role,membership_status,status,created_at,users(full_name,email)')
-        .eq('organization_id', activeOrganization.id)
+        .eq('organization_id', resolvedActiveOrgId)
         .eq('membership_status', 'pending')
         .order('created_at', { ascending: false });
 
@@ -68,7 +83,7 @@ export default function OrganizationAccessRequestsScreen() {
         const fallback = await supabase
           .from('organization_memberships')
           .select('id,user_id,role,membership_status,status,created_at')
-          .eq('organization_id', activeOrganization.id)
+          .eq('organization_id', resolvedActiveOrgId)
           .eq('membership_status', 'pending')
           .order('created_at', { ascending: false });
 
@@ -125,25 +140,28 @@ export default function OrganizationAccessRequestsScreen() {
 
       setRequests(normalized);
     } catch (error: any) {
+      if (__DEV__) {
+        console.error('[OrganizationAccessRequests] Pending request fetch failed', error?.message || error);
+      }
       setErrorText(error?.message || 'Could not load access requests.');
       setRequests([]);
     } finally {
       setLoading(false);
     }
-  }, [activeOrganization?.id, canViewAndAct]);
+  }, [canViewAndAct, resolvedActiveOrgId]);
 
   useEffect(() => {
-    if (!canViewAndAct) {
+    if (!orgReady || orgLoading || !canViewAndAct) {
       setRequests([]);
       setLoading(false);
       return;
     }
     void loadPendingRequests();
-  }, [canViewAndAct, loadPendingRequests]);
+  }, [canViewAndAct, loadPendingRequests, orgLoading, orgReady]);
 
   const handleUpdateRequest = useCallback(
     async (request: PendingRequestRow, nextMembershipStatus: 'active' | 'rejected') => {
-      if (!activeOrganization?.id || !canViewAndAct) return;
+      if (!resolvedActiveOrgId || !canViewAndAct) return;
       setActionBusyId(request.id);
       setErrorText(null);
       setWarningText(null);
@@ -152,14 +170,14 @@ export default function OrganizationAccessRequestsScreen() {
           .from('organization_memberships')
           .update({ membership_status: nextMembershipStatus })
           .eq('id', request.id)
-          .eq('organization_id', activeOrganization.id);
+          .eq('organization_id', resolvedActiveOrgId);
 
         if (error) throw error;
 
         try {
           await NotificationService.notifyOrgMembershipDecision({
             targetUserId: request.user_id,
-            organizationId: activeOrganization.id,
+            organizationId: resolvedActiveOrgId,
             organizationName: activeOrganization.name || 'this organization',
             decision: nextMembershipStatus === 'active' ? 'approved' : 'rejected',
           });
@@ -178,7 +196,7 @@ export default function OrganizationAccessRequestsScreen() {
         setActionBusyId(null);
       }
     },
-    [activeOrganization?.id, canViewAndAct, loadPendingRequests]
+    [activeOrganization?.name, canViewAndAct, loadPendingRequests, resolvedActiveOrgId]
   );
 
   const title = useMemo(
@@ -198,7 +216,11 @@ export default function OrganizationAccessRequestsScreen() {
         </View>
       </View>
 
-      {!activeOrganization?.id ? (
+      {!orgReady || orgLoading ? (
+        <View style={styles.centerState}>
+          <ActivityIndicator size="small" color="#2563EB" />
+        </View>
+      ) : !hasValidActiveOrgId ? (
         <View style={styles.centerState}>
           <Text style={styles.stateText}>Select an active organization first.</Text>
           <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/settings/organization-access')}>
