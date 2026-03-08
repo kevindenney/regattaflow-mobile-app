@@ -233,6 +233,9 @@ export default function OrganizationTemplatesScreen() {
             <TouchableOpacity onPress={() => router.push('/organization/members')} style={styles.accessRequestsLink}>
               <Text style={styles.accessRequestsLinkText}>Manage members</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/cohorts')} style={styles.accessRequestsLink}>
+              <Text style={styles.accessRequestsLinkText}>Cohorts</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>

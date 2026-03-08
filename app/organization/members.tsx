@@ -244,6 +244,14 @@ export default function OrganizationMembersScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>Manage active organization members and roles.</Text>
+          <View style={styles.headerLinksRow}>
+            <TouchableOpacity onPress={() => router.push('/organization/access-requests')}>
+              <Text style={styles.headerLinkText}>Access requests</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/cohorts')}>
+              <Text style={styles.headerLinkText}>Cohorts</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -371,6 +379,17 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#64748B',
+  },
+  headerLinksRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerLinkText: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '600',
   },
   scroll: {
     flex: 1,

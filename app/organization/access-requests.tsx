@@ -217,6 +217,14 @@ export default function OrganizationAccessRequestsScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>Approve or reject pending organization membership requests.</Text>
+          <View style={styles.headerLinksRow}>
+            <TouchableOpacity onPress={() => router.push('/organization/members')} style={styles.headerLink}>
+              <Text style={styles.headerLinkText}>Manage members</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/cohorts')} style={styles.headerLink}>
+              <Text style={styles.headerLinkText}>Cohorts</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -342,6 +350,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#64748B',
+  },
+  headerLinksRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerLink: {
+    alignSelf: 'flex-start',
+  },
+  headerLinkText: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '600',
   },
   scroll: {
     flex: 1,
