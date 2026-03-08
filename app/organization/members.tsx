@@ -73,6 +73,26 @@ export default function OrganizationMembersScreen() {
     return Array.from(new Set([...NURSING_ROLES, ...SAILING_ROLES]));
   }, [activeInterestSlug]);
 
+  const getDisplayRoleOptions = useCallback(
+    (currentRole: string): string[] => {
+      const normalizedCurrent = normalizeStatus(currentRole);
+      const candidateRoles = normalizedCurrent && !roleOptions.includes(normalizedCurrent)
+        ? [normalizedCurrent, ...roleOptions]
+        : roleOptions;
+
+      const deduped: string[] = [];
+      const seenLabels = new Set<string>();
+      for (const candidateRole of candidateRoles) {
+        const label = coachRoleLabel({ interestSlug: activeInterestSlug || '', role: candidateRole });
+        if (seenLabels.has(label)) continue;
+        seenLabels.add(label);
+        deduped.push(candidateRole);
+      }
+      return deduped;
+    },
+    [activeInterestSlug, roleOptions]
+  );
+
   const loadMembers = useCallback(async () => {
     if (!canManage || !resolvedActiveOrgId) {
       setRows([]);
@@ -365,7 +385,7 @@ export default function OrganizationMembersScreen() {
                     </View>
 
                     <View style={styles.roleOptionsWrap}>
-                      {roleOptions.map((optionRole) => {
+                      {getDisplayRoleOptions(row.role).map((optionRole) => {
                         const selected = normalizeStatus(optionRole) === normalizeStatus(row.role);
                         return (
                           <TouchableOpacity

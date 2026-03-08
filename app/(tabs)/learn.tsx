@@ -305,6 +305,15 @@ export default function LearnScreen() {
     () => new Map(sortedMemberships.map((membership) => [membership.organization_id, membership])),
     [sortedMemberships]
   );
+  const activeMembershipCount = useMemo(
+    () =>
+      sortedMemberships.filter((membership) => {
+        const normalizedStatus = String(membership.membership_status || membership.status || '').toLowerCase();
+        return normalizedStatus === 'active' || normalizedStatus === 'verified';
+      }).length,
+    [sortedMemberships]
+  );
+  const canLeaveActiveMembership = activeMembershipCount > 1;
   const resolvedActiveOrgId = useMemo(
     () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
     [activeOrganizationId, memberships]
@@ -387,8 +396,13 @@ export default function LearnScreen() {
 
   const leaveOrganization = async (membershipId: string, organizationId: string) => {
     if (!user?.id || !isUuid(organizationId) || leaveBusyMembershipId) return;
+    if (!canLeaveActiveMembership) {
+      setJoinNotice('You need at least one organization.');
+      return;
+    }
     setLeaveBusyMembershipId(membershipId);
     setJoinNotice(null);
+    const wasCurrentOrg = activeOrganizationId === organizationId;
 
     let payload: Record<string, any> = {
       membership_status: 'rejected',
@@ -424,6 +438,41 @@ export default function LearnScreen() {
           setJoinNotice('Access removed.');
           await refreshMemberships();
           await refreshOrganizationSearch();
+          if (wasCurrentOrg) {
+            let nextActiveOrgId: string | null = null;
+            let rows: any[] | null = null;
+
+            const query = await supabase
+              .from('organization_memberships')
+              .select('organization_id,membership_status,status')
+              .eq('user_id', user.id)
+              .in('membership_status', ['active', 'verified']);
+
+            if (query.error && isMissingSupabaseColumn(query.error, 'organization_memberships.membership_status')) {
+              const fallback = await supabase
+                .from('organization_memberships')
+                .select('organization_id,status')
+                .eq('user_id', user.id)
+                .in('status', ['active', 'verified']);
+              rows = fallback.data || null;
+            } else {
+              rows = query.data || null;
+            }
+
+            const nextRow = (rows || []).find((row) => String(row.organization_id || '') !== organizationId) || (rows || [])[0];
+            const candidateOrgId = String(nextRow?.organization_id || '');
+            if (isUuid(candidateOrgId)) {
+              nextActiveOrgId = candidateOrgId;
+            }
+
+            if (nextActiveOrgId) {
+              await setActiveOrganizationId(nextActiveOrgId);
+            } else {
+              await setActiveOrganizationId(null);
+              router.replace('/events');
+              setJoinNotice('You are no longer in any organizations.');
+            }
+          }
           break;
         }
 
@@ -448,6 +497,10 @@ export default function LearnScreen() {
   };
 
   const handleLeaveOrganization = (membershipId: string, organizationName: string, organizationId: string) => {
+    if (!canLeaveActiveMembership) {
+      setJoinNotice('You need at least one organization.');
+      return;
+    }
     Alert.alert(
       'Leave organization?',
       `You will lose access to ${organizationName}. You can request access again later.`,
@@ -595,12 +648,15 @@ export default function LearnScreen() {
                                         membership.organization_id
                                       )
                                     }
-                                    disabled={leaveBusyMembershipId === membership.id}
+                                    disabled={leaveBusyMembershipId === membership.id || !canLeaveActiveMembership}
                                   >
                                     <Text style={styles.leaveActionText}>
                                       {leaveBusyMembershipId === membership.id ? 'Leaving...' : 'Leave'}
                                     </Text>
                                   </TouchableOpacity>
+                                ) : null}
+                                {isMemberActive(normalizedStatus) && !isOrgAdminRole(membership.role) && !canLeaveActiveMembership ? (
+                                  <Text style={styles.leaveHelperText}>You need at least one org.</Text>
                                 ) : null}
                               </View>
                             )}
@@ -1125,6 +1181,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: IOS_COLORS.systemRed,
+  },
+  leaveHelperText: {
+    fontSize: 10,
+    color: IOS_COLORS.tertiaryLabel,
   },
   inviteRequiredPill: {
     borderRadius: 999,
