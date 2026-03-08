@@ -66,6 +66,33 @@ interface InterestContextValue {
 
 const ASYNC_STORAGE_KEY = 'betterat_preferred_interest'
 const INTERESTS_QUERY_KEY = ['interests', 'all']
+const EXISTING_PROFILE_AGE_THRESHOLD_MS = 5 * 60 * 1000
+
+function isValidDateValue(value: unknown): boolean {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value))
+}
+
+function hasExistingProfileSignal(profile: any): boolean {
+  if (!profile || typeof profile !== 'object') return false
+
+  if (profile.onboarding_completed === true) return true
+
+  const createdAt = profile.created_at
+  const hasStableProfileData = !!(profile.full_name || profile.avatar_url || profile.bio || profile.club_id)
+
+  if (isValidDateValue(createdAt) && hasStableProfileData) {
+    const ageMs = Date.now() - Date.parse(createdAt)
+    return ageMs >= EXISTING_PROFILE_AGE_THRESHOLD_MS
+  }
+
+  return false
+}
+
+function normalizeSlug(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toLowerCase()
+  return normalized.length > 0 ? normalized : null
+}
 
 // ---------------------------------------------------------------------------
 // Context
@@ -84,7 +111,7 @@ const InterestContext = createContext<InterestContextValue>({
 // ---------------------------------------------------------------------------
 
 export function InterestProvider({ children }: PropsWithChildren) {
-  const { user, signedIn, isGuest } = useAuth()
+  const { user, userProfile, fetchUserProfile, signedIn, isGuest } = useAuth()
   const queryClient = useQueryClient()
 
   // The slug that we have resolved as the "active" interest.
@@ -140,22 +167,30 @@ export function InterestProvider({ children }: PropsWithChildren) {
 
     const resolve = async () => {
       setResolving(true)
+      let chosenRoute = 'show-interest-selection'
 
       try {
         // 1. Fast path — check AsyncStorage
         const cachedSlug = await AsyncStorage.getItem(ASYNC_STORAGE_KEY)
 
         if (cachedSlug && interests.some((i) => i.slug === cachedSlug)) {
-          if (!cancelled) setActiveSlug(cachedSlug)
+          if (!cancelled) {
+            setActiveSlug(cachedSlug)
+            chosenRoute = 'cached-interest'
+          }
         }
 
         // 2. If signed in, check DB for authoritative preference
         if (signedIn && user?.id) {
-          const { data: prefs } = await supabase
+          const { data: prefs, error: prefsError } = await supabase
             .from('user_preferences')
             .select('preferred_interest_id')
             .eq('user_id', user.id)
-            .single()
+            .maybeSingle()
+
+          if (prefsError && prefsError.code !== 'PGRST116') {
+            throw prefsError
+          }
 
           if (!cancelled && prefs?.preferred_interest_id) {
             const matched = interests.find(
@@ -163,13 +198,85 @@ export function InterestProvider({ children }: PropsWithChildren) {
             )
             if (matched) {
               setActiveSlug(matched.slug)
+              chosenRoute = 'db-preferred-interest'
               // Sync AsyncStorage with DB truth
               await AsyncStorage.setItem(ASYNC_STORAGE_KEY, matched.slug)
             }
           }
         }
 
-        // 3. If still nothing resolved, leave activeSlug as null.
+        // 3. Existing-user fallback for fresh browsers/incognito:
+        // if profile indicates this is not a new user, pick a deterministic
+        // default and persist it so we don't re-enter onboarding.
+        if (signedIn && user?.id) {
+          const currentProfile = userProfile ?? (await fetchUserProfile(user.id))
+          const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
+
+          const profileSlugCandidates = [
+            normalizeSlug((currentProfile as any)?.active_interest_slug),
+            normalizeSlug((currentProfile as any)?.interest_slug),
+            normalizeSlug((currentProfile as any)?.primary_interest_slug),
+            normalizeSlug((currentProfile as any)?.preferred_interest_slug),
+          ].filter((value): value is string => !!value)
+
+          const metadataSlugCandidates = [
+            normalizeSlug(metadata.active_interest_slug),
+            normalizeSlug(metadata.interest_slug),
+          ].filter((value): value is string => !!value)
+
+          const explicitSlug =
+            [...profileSlugCandidates, ...metadataSlugCandidates]
+              .map((slug) => interests.find((interest) => interest.slug === slug))
+              .find((interest): interest is Interest => !!interest) ?? null
+
+          if (!cancelled && explicitSlug) {
+            setActiveSlug(explicitSlug.slug)
+            chosenRoute = 'server-profile-interest'
+            await AsyncStorage.setItem(ASYNC_STORAGE_KEY, explicitSlug.slug)
+            await supabase.from('user_preferences').upsert(
+              {
+                user_id: user.id,
+                preferred_interest_id: explicitSlug.id,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'user_id' },
+            )
+          } else if (!cancelled && hasExistingProfileSignal(currentProfile)) {
+            const defaultInterest =
+              interests.find((interest) => interest.slug === 'sail-racing') ??
+              interests[0] ??
+              null
+
+            if (defaultInterest) {
+              setActiveSlug(defaultInterest.slug)
+              chosenRoute = 'existing-user-default-interest'
+              await AsyncStorage.setItem(ASYNC_STORAGE_KEY, defaultInterest.slug)
+              await supabase.from('user_preferences').upsert(
+                {
+                  user_id: user.id,
+                  preferred_interest_id: defaultInterest.id,
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'user_id' },
+              )
+            }
+          }
+
+          if (__DEV__) {
+            const normalizedProfile = currentProfile as any
+            const onboardingComplete = normalizedProfile?.onboarding_completed === true
+            const profileExists = !!normalizedProfile?.id
+            console.log('[InterestRouting]', {
+              userId: user.id,
+              profileExists,
+              interestsCount: interests.length,
+              onboardingComplete,
+              chosenRoute,
+            })
+          }
+        }
+
+        // 4. If still nothing resolved, leave activeSlug as null.
         //    The InterestSelectionGate in _layout.tsx will show the onboarding
         //    modal so the user can pick their interest.
       } catch {
@@ -193,7 +300,7 @@ export function InterestProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     // Reset so the main effect can re-run
     resolvedOnceRef.current = false
-  }, [signedIn, user?.id])
+  }, [signedIn, user?.id, userProfile?.id, userProfile?.onboarding_completed, userProfile?.created_at])
 
   // ---------- Derived current interest ----------
 
