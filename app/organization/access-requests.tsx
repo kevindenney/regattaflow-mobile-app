@@ -166,9 +166,22 @@ export default function OrganizationAccessRequestsScreen() {
       setErrorText(null);
       setWarningText(null);
       try {
+        const updatePayload =
+          nextMembershipStatus === 'active'
+            ? {
+                membership_status: 'active',
+                status: 'active',
+                is_verified: true,
+                joined_at: new Date().toISOString(),
+              }
+            : {
+                membership_status: 'rejected',
+                status: 'rejected',
+                is_verified: false,
+              };
         const { error } = await supabase
           .from('organization_memberships')
-          .update({ membership_status: nextMembershipStatus })
+          .update(updatePayload)
           .eq('id', request.id)
           .eq('organization_id', resolvedActiveOrgId);
 
