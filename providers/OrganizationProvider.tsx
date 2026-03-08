@@ -99,7 +99,8 @@ type OrganizationContextValue = {
 
 const ACTIVE_STATUSES = new Set(['active', 'verified']);
 const MANAGER_ROLES = new Set(['owner', 'admin', 'manager', 'faculty', 'instructor']);
-const STORAGE_KEY = 'rf_active_organization_id';
+const STORAGE_KEY = 'betterat.active_org_id';
+const LEGACY_STORAGE_KEY = 'rf_active_organization_id';
 let hasLoggedMissingOrganizationProvider = false;
 
 const Ctx = createContext<OrganizationContextValue>({
@@ -130,9 +131,9 @@ const Ctx = createContext<OrganizationContextValue>({
 const getStoredActiveOrganizationId = async (): Promise<string | null> => {
   try {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      return window.localStorage.getItem(STORAGE_KEY);
+      return window.localStorage.getItem(STORAGE_KEY) || window.localStorage.getItem(LEGACY_STORAGE_KEY);
     }
-    return await AsyncStorage.getItem(STORAGE_KEY);
+    return (await AsyncStorage.getItem(STORAGE_KEY)) || (await AsyncStorage.getItem(LEGACY_STORAGE_KEY));
   } catch {
     return null;
   }
@@ -143,15 +144,19 @@ const storeActiveOrganizationId = async (organizationId: string | null): Promise
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       if (organizationId) {
         window.localStorage.setItem(STORAGE_KEY, organizationId);
+        window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       } else {
         window.localStorage.removeItem(STORAGE_KEY);
+        window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       }
       return;
     }
     if (organizationId) {
       await AsyncStorage.setItem(STORAGE_KEY, organizationId);
+      await AsyncStorage.removeItem(LEGACY_STORAGE_KEY);
     } else {
       await AsyncStorage.removeItem(STORAGE_KEY);
+      await AsyncStorage.removeItem(LEGACY_STORAGE_KEY);
     }
   } catch {
     // no-op
@@ -210,6 +215,14 @@ function dedupeMemberships(rows: OrganizationMembershipRecord[]): OrganizationMe
   }
 
   return deduped;
+}
+
+function getMembershipStatusValue(row: OrganizationMembershipRecord): string {
+  return String(row.membership_status || row.status || '').toLowerCase();
+}
+
+function isActiveMembership(row: OrganizationMembershipRecord): boolean {
+  return ACTIVE_STATUSES.has(getMembershipStatusValue(row));
 }
 
 function resolveWorkspaceDomain(org: OrganizationRecord | null): WorkspaceDomain {
@@ -456,21 +469,24 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       setMemberships(rows);
 
       const storedId = await getStoredActiveOrganizationId();
-      const activeRows = rows.filter((row) => ACTIVE_STATUSES.has((row.status as any) ?? null));
-      const activeInstitutionRows = activeRows.filter(
-        (row) => row.organization?.organization_type === 'institution'
-      );
-      const activeInstitutionManagerRows = activeInstitutionRows.filter((row) =>
-        MANAGER_ROLES.has((row.role as any) ?? null)
+      const activeRows = rows.filter(isActiveMembership);
+      const activeManagerRows = activeRows.filter((row) =>
+        MANAGER_ROLES.has(String(row.role || '').toLowerCase())
       );
 
+      // Preserve existing in-memory choice first, then persisted choice, but only if still ACTIVE.
+      const inMemoryActive = activeOrganizationId
+        ? activeRows.find((row) => row.organization_id === activeOrganizationId)
+        : null;
+      const storedActive = storedId
+        ? activeRows.find((row) => row.organization_id === storedId)
+        : null;
+
       const preferredMembership =
-        (storedId ? activeRows.find((row) => row.organization_id === storedId) : null) ||
-        activeInstitutionManagerRows[0] ||
-        activeInstitutionRows[0] ||
-        activeRows.find((row) => MANAGER_ROLES.has((row.role as any) ?? null)) ||
+        inMemoryActive ||
+        storedActive ||
+        activeManagerRows[0] ||
         activeRows[0] ||
-        rows[0] ||
         null;
 
       const nextId = preferredMembership?.organization_id ?? null;
@@ -534,16 +550,27 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       setLoading(false);
       setReady(true);
     }
-  }, []);
+  }, [activeOrganizationId]);
 
   useEffect(() => {
     void refreshMemberships();
   }, [refreshMemberships, signedIn, user?.id]);
 
   const setActiveOrganizationId = useCallback(async (organizationId: string | null) => {
+    if (!organizationId) {
+      setActiveOrganizationIdState(null);
+      await storeActiveOrganizationId(null);
+      return;
+    }
+
+    const target = memberships.find((row) => row.organization_id === organizationId) ?? null;
+    if (!target || !isActiveMembership(target)) {
+      return;
+    }
+
     setActiveOrganizationIdState(organizationId);
     await storeActiveOrganizationId(organizationId);
-  }, []);
+  }, [memberships]);
 
   const activeMembership = useMemo(() => {
     if (!activeOrganizationId) return null;
@@ -573,8 +600,8 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
   const canManageActiveOrganization = useMemo(() => {
     if (!activeMembership) return false;
-    return ACTIVE_STATUSES.has((activeMembership.status as any) ?? null)
-      && MANAGER_ROLES.has((activeMembership.role as any) ?? null);
+    return isActiveMembership(activeMembership)
+      && MANAGER_ROLES.has(String(activeMembership.role || '').toLowerCase());
   }, [activeMembership]);
 
   const defaultContentVisibility: OrganizationVisibilityDefault = useMemo(() => {
