@@ -151,7 +151,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
        args[0].includes('fontfaceobserver') ||
        args[0].includes('"shadow*" style props are deprecated') ||
        args[0].includes('"textShadow*" style props are deprecated') ||
-       args[0].includes('A text node cannot be a child of a <View>'))
+       args[0].includes('A text node cannot be a child of a <View>') ||
+       args[0].includes('Invalid DOM property `transform-origin`'))
     ) {
       return;
     }
@@ -163,7 +164,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
          args[0].message?.includes('fontfaceobserver') ||
          args[0].message?.includes('shadow*') ||
          args[0].message?.includes('textShadow*') ||
-         args[0].message?.includes('text node cannot be a child'))) {
+         args[0].message?.includes('text node cannot be a child') ||
+         args[0].message?.includes('transform-origin'))) {
       return;
     }
     originalError.apply(console, args);
