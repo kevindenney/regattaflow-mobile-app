@@ -177,8 +177,12 @@ class OrganizationDiscoveryService {
 
     let orgRow: any = null;
     {
-      const baseQuery = supabase.from('organizations').eq('id', input.orgId);
+      let baseQuery: any = supabase.from('organizations').eq('id', input.orgId).eq('is_active', true);
       let orgResult = await baseQuery.select('id,join_mode,allowed_email_domains').maybeSingle();
+      if (orgResult.error && isMissingSupabaseColumn(orgResult.error, 'organizations.is_active')) {
+        baseQuery = supabase.from('organizations').eq('id', input.orgId);
+        orgResult = await baseQuery.select('id,join_mode,allowed_email_domains').maybeSingle();
+      }
       if (
         orgResult.error
         && (
