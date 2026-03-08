@@ -651,7 +651,7 @@ class CrewFinderServiceClass {
       const { data: collaboratorRaces, error: collabError } = await supabase
         .from('race_collaborators')
         .select(`
-          race_id,
+          regatta_id,
           user_id,
           regattas!inner(
             id,
@@ -662,7 +662,7 @@ class CrewFinderServiceClass {
 
       if (!collabError && collaboratorRaces && collaboratorRaces.length > 0) {
         // Get race IDs where the user has collaborated
-        const raceIds = getValidUuidList(collaboratorRaces.map((c: any) => c.race_id));
+        const raceIds = getValidUuidList(collaboratorRaces.map((c: any) => c.regatta_id));
         if (raceIds.length === 0) {
           logger.debug('[CrewFinderService] Skipping collaborator lookup: no valid race UUIDs');
         } else {
@@ -676,7 +676,7 @@ class CrewFinderServiceClass {
                 name
               )
             `)
-            .in('race_id', raceIds)
+            .in('regatta_id', raceIds)
             .neq('user_id', userId);
 
           if (!othersError && otherCollaborators) {
@@ -830,7 +830,7 @@ class CrewFinderServiceClass {
       const { data: collaboratorRaces, error: collabError } = await supabase
         .from('race_collaborators')
         .select(`
-          race_id,
+          regatta_id,
           user_id,
           regattas!inner(
             id,
@@ -840,7 +840,7 @@ class CrewFinderServiceClass {
         .eq('user_id', userId);
 
       if (!collabError && collaboratorRaces && collaboratorRaces.length > 0) {
-        const raceIds = getValidUuidList(collaboratorRaces.map((c: any) => c.race_id));
+        const raceIds = getValidUuidList(collaboratorRaces.map((c: any) => c.regatta_id));
         if (raceIds.length === 0) {
           logger.debug('[CrewFinderService] Skipping collaborator lookup for race suggestions: no valid race UUIDs');
         } else {
@@ -853,7 +853,7 @@ class CrewFinderServiceClass {
                 name
               )
             `)
-            .in('race_id', raceIds)
+            .in('regatta_id', raceIds)
             .neq('user_id', userId);
 
           if (!othersError && otherCollaborators) {
@@ -1481,10 +1481,10 @@ class CrewFinderServiceClass {
     // Get current user's race collaborators (people they've raced with)
     const { data: userCollabs } = await supabase
       .from('race_collaborators')
-      .select('user_id, race_id')
+      .select('user_id, regatta_id')
       .eq('user_id', userId);
 
-    const userRaceIds = new Set(getValidUuidList((userCollabs || []).map((c: any) => c.race_id)));
+    const userRaceIds = new Set(getValidUuidList((userCollabs || []).map((c: any) => c.regatta_id)));
 
     // Get users already following to exclude/mark
     const followingIds = await this.getFollowingIds(userId);
@@ -1608,8 +1608,8 @@ class CrewFinderServiceClass {
     if (userRaceIds.size > 0) {
       const { data: sameRaceUsers } = await supabase
         .from('race_collaborators')
-        .select('user_id, race_id')
-        .in('race_id', Array.from(userRaceIds))
+        .select('user_id, regatta_id')
+        .in('regatta_id', Array.from(userRaceIds))
         .neq('user_id', userId)
         .limit(100);
 
