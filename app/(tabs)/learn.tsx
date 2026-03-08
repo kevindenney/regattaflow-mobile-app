@@ -79,21 +79,6 @@ type UserCohort = {
   interest_slug: string | null;
 };
 
-function normalizeText(value: unknown): string {
-  return String(value || '').trim().toLowerCase();
-}
-
-function templateMatchesCohort(template: OrgStepTemplate, cohort: UserCohort): boolean {
-  const cohortName = normalizeText(cohort.name);
-  if (!cohortName) return false;
-  const haystack = `${template.title || ''} ${template.description || ''}`.toLowerCase();
-  return (
-    haystack.includes(`[${cohortName}]`)
-    || haystack.includes(`cohort:${cohortName}`)
-    || haystack.includes(cohortName)
-  );
-}
-
 export default function LearnScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -113,6 +98,9 @@ export default function LearnScreen() {
   const [orgTemplatesError, setOrgTemplatesError] = useState<string | null>(null);
   const [pendingAccessCount, setPendingAccessCount] = useState(0);
   const [userCohorts, setUserCohorts] = useState<UserCohort[]>([]);
+  const [cohortTemplates, setCohortTemplates] = useState<OrgStepTemplate[]>([]);
+  const [cohortTemplatesLoading, setCohortTemplatesLoading] = useState(false);
+  const [cohortTemplatesError, setCohortTemplatesError] = useState<string | null>(null);
   const [userCohortsLoading, setUserCohortsLoading] = useState(false);
   const [userCohortsError, setUserCohortsError] = useState<string | null>(null);
 
@@ -292,6 +280,91 @@ export default function LearnScreen() {
       cancelled = true;
     };
   }, [activeOrganizationId, activeSegment, signedIn, user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCohortTemplates = async () => {
+      if (
+        activeSegment !== 'courses'
+        || !activeOrganizationId
+        || !isUuid(activeOrganizationId)
+        || !interestSlug
+        || !userCohorts.length
+      ) {
+        if (!cancelled) {
+          setCohortTemplates([]);
+          setCohortTemplatesError(null);
+          setCohortTemplatesLoading(false);
+        }
+        return;
+      }
+
+      const cohortIds = userCohorts.map((cohort) => cohort.id).filter((id) => isUuid(id));
+      if (cohortIds.length === 0) {
+        if (!cancelled) {
+          setCohortTemplates([]);
+          setCohortTemplatesError(null);
+          setCohortTemplatesLoading(false);
+        }
+        return;
+      }
+
+      setCohortTemplatesLoading(true);
+      setCohortTemplatesError(null);
+      try {
+        const { data: linkRows, error: linkError } = await supabase
+          .from('betterat_org_step_template_cohorts')
+          .select('org_template_id')
+          .in('cohort_id', cohortIds);
+        if (linkError) throw linkError;
+
+        const templateIds = Array.from(
+          new Set(
+            (linkRows || [])
+              .map((row: any) => String(row.org_template_id || ''))
+              .filter((id) => isUuid(id))
+          )
+        );
+
+        if (templateIds.length === 0) {
+          if (!cancelled) {
+            setCohortTemplates([]);
+          }
+          return;
+        }
+
+        const { data: templatesRows, error: templatesError } = await supabase
+          .from('betterat_org_step_templates')
+          .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
+          .in('id', templateIds)
+          .eq('org_id', activeOrganizationId)
+          .eq('interest_slug', interestSlug)
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (templatesError) throw templatesError;
+        if (!cancelled) {
+          setCohortTemplates((templatesRows || []) as OrgStepTemplate[]);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setCohortTemplates([]);
+          setCohortTemplatesError(error?.message || 'Could not load cohort recommendations.');
+        }
+      } finally {
+        if (!cancelled) {
+          setCohortTemplatesLoading(false);
+        }
+      }
+    };
+
+    void loadCohortTemplates();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrganizationId, activeSegment, interestSlug, userCohorts]);
 
   const sortedMemberships = [...memberships].sort((a, b) => {
     const aStatus = String(a.membership_status || a.status || '').toLowerCase();
@@ -565,17 +638,14 @@ export default function LearnScreen() {
 
   const isMemberActive = (status: string) => status === 'active' || status === 'verified';
   const statusLabel = (status: string) => (isMemberActive(status) ? 'Active' : status === 'pending' ? 'Pending' : 'Inactive');
-  const prioritizedOrgTemplates = useMemo(() => {
-    if (!orgTemplates.length || !userCohorts.length) return orgTemplates;
-    const withRank = orgTemplates.map((template) => {
-      const linked = userCohorts.some((cohort) => templateMatchesCohort(template, cohort));
-      return { template, linked };
-    });
-
-    return withRank
-      .sort((a, b) => Number(b.linked) - Number(a.linked))
-      .map((entry) => entry.template);
-  }, [orgTemplates, userCohorts]);
+  const cohortTemplateIds = useMemo(
+    () => new Set(cohortTemplates.map((template) => template.id)),
+    [cohortTemplates]
+  );
+  const programTemplates = useMemo(
+    () => orgTemplates.filter((template) => !cohortTemplateIds.has(template.id)),
+    [cohortTemplateIds, orgTemplates]
+  );
 
   return (
     <View style={styles.container}>
@@ -767,10 +837,6 @@ export default function LearnScreen() {
                   )}
                 </View>
 
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionLabel}>{templateSectionLabel.toUpperCase()}</Text>
-                  <Text style={styles.sectionCount}>{prioritizedOrgTemplates.length}</Text>
-                </View>
                 {userCohortsLoading ? (
                   <View style={styles.orgSearchLoading}>
                     <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
@@ -792,19 +858,54 @@ export default function LearnScreen() {
                 ) : userCohortsError ? (
                   <Text style={styles.orgError}>{userCohortsError}</Text>
                 ) : null}
+                {cohortTemplates.length > 0 ? (
+                  <>
+                    <View style={styles.sectionHeader}>
+                      <Text style={styles.sectionLabel}>RECOMMENDED FOR YOUR COHORT</Text>
+                      <Text style={styles.sectionCount}>{cohortTemplates.length}</Text>
+                    </View>
+                    <View style={styles.coursesList}>
+                      {cohortTemplates.map((template) => (
+                        <View key={template.id} style={styles.templateRow}>
+                          <View style={styles.templateIconContainer}>
+                            <Ionicons name="people-outline" size={14} color={IOS_COLORS.systemBlue} />
+                          </View>
+                          <View style={styles.templateBody}>
+                            <Text style={styles.templateTitle}>{template.title}</Text>
+                            {template.description ? (
+                              <Text style={styles.templateDescription} numberOfLines={2}>
+                                {template.description}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+                {cohortTemplatesError ? <Text style={styles.orgError}>{cohortTemplatesError}</Text> : null}
+
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionLabel}>{templateSectionLabel.toUpperCase()}</Text>
+                  <Text style={styles.sectionCount}>{programTemplates.length}</Text>
+                </View>
                 <View style={styles.coursesList}>
                   {!activeOrganizationId ? (
                     <Text style={styles.orgHint}>Set an active organization to see recommendations.</Text>
+                  ) : cohortTemplatesLoading ? (
+                    <View style={styles.orgSearchLoading}>
+                      <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
+                    </View>
                   ) : orgTemplatesLoading ? (
                     <View style={styles.orgSearchLoading}>
                       <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
                     </View>
                   ) : orgTemplatesError ? (
                     <Text style={styles.orgError}>{orgTemplatesError}</Text>
-                  ) : prioritizedOrgTemplates.length === 0 ? (
+                  ) : programTemplates.length === 0 ? (
                     <Text style={styles.orgHint}>No published recommendations for this interest yet.</Text>
                   ) : (
-                    prioritizedOrgTemplates.map((template) => (
+                    programTemplates.map((template) => (
                       <View key={template.id} style={styles.templateRow}>
                         <View style={styles.templateIconContainer}>
                           <Ionicons name="sparkles-outline" size={14} color={IOS_COLORS.systemBlue} />

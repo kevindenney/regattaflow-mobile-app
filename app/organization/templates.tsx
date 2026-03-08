@@ -35,6 +35,11 @@ type OrgStepTemplateRow = {
   created_at: string;
 };
 
+type OrgCohortRow = {
+  id: string;
+  name: string;
+};
+
 type Option = {
   value: string;
   label: string;
@@ -89,6 +94,9 @@ export default function OrganizationTemplatesScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<OrgStepTemplateRow[]>([]);
+  const [cohorts, setCohorts] = useState<OrgCohortRow[]>([]);
+  const [templateCohortIds, setTemplateCohortIds] = useState<Record<string, string[]>>({});
+  const [assigningKey, setAssigningKey] = useState<string | null>(null);
   const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
   const [interestLoadFailed, setInterestLoadFailed] = useState(false);
 
@@ -175,6 +183,81 @@ export default function OrganizationTemplatesScreen() {
     void loadTemplates();
   }, [loadTemplates]);
 
+  useEffect(() => {
+    if (!activeOrganization?.id || !canManageActiveOrganization) {
+      setCohorts([]);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('betterat_org_cohorts')
+        .select('id,name')
+        .eq('org_id', activeOrganization.id)
+        .order('created_at', { ascending: false });
+
+      if (cancelled) return;
+      if (error) {
+        setCohorts([]);
+        return;
+      }
+
+      setCohorts((data || []).map((row: any) => ({
+        id: String(row.id),
+        name: String(row.name || 'Cohort'),
+      })));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrganization?.id, canManageActiveOrganization]);
+
+  useEffect(() => {
+    if (!templates.length || !canManageActiveOrganization) {
+      setTemplateCohortIds({});
+      return;
+    }
+
+    const templateIds = templates.map((template) => template.id).filter((id) => isUuid(id));
+    if (templateIds.length === 0) {
+      setTemplateCohortIds({});
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('betterat_org_step_template_cohorts')
+        .select('org_template_id,cohort_id')
+        .in('org_template_id', templateIds);
+
+      if (cancelled) return;
+      if (error) {
+        setTemplateCohortIds({});
+        return;
+      }
+
+      const nextMap: Record<string, string[]> = {};
+      for (const row of data || []) {
+        const templateId = String((row as any).org_template_id || '');
+        const cohortId = String((row as any).cohort_id || '');
+        if (!isUuid(templateId) || !isUuid(cohortId)) continue;
+        if (!nextMap[templateId]) {
+          nextMap[templateId] = [];
+        }
+        nextMap[templateId].push(cohortId);
+      }
+
+      setTemplateCohortIds(nextMap);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageActiveOrganization, templates]);
+
   const canSubmit = useMemo(() => {
     return Boolean(
       canManageActiveOrganization
@@ -244,6 +327,42 @@ export default function OrganizationTemplatesScreen() {
       Alert.alert('Unable to update template', error?.message || 'Please try again.');
     }
   }, [canManageActiveOrganization]);
+
+  const handleToggleTemplateCohort = useCallback(async (templateId: string, cohortId: string) => {
+    if (!canManageActiveOrganization || !isUuid(templateId) || !isUuid(cohortId)) return;
+    const key = `${templateId}:${cohortId}`;
+    if (assigningKey === key) return;
+
+    const currentIds = new Set(templateCohortIds[templateId] || []);
+    const isLinked = currentIds.has(cohortId);
+    setAssigningKey(key);
+    try {
+      if (isLinked) {
+        const { error } = await supabase
+          .from('betterat_org_step_template_cohorts')
+          .delete()
+          .eq('org_template_id', templateId)
+          .eq('cohort_id', cohortId);
+        if (error) throw error;
+        currentIds.delete(cohortId);
+      } else {
+        const { error } = await supabase
+          .from('betterat_org_step_template_cohorts')
+          .insert({ org_template_id: templateId, cohort_id: cohortId });
+        if (error) throw error;
+        currentIds.add(cohortId);
+      }
+
+      setTemplateCohortIds((prev) => ({
+        ...prev,
+        [templateId]: Array.from(currentIds),
+      }));
+    } catch (error: any) {
+      Alert.alert('Unable to update cohort assignment', error?.message || 'Please try again.');
+    } finally {
+      setAssigningKey(null);
+    }
+  }, [assigningKey, canManageActiveOrganization, templateCohortIds]);
 
   return (
     <View style={styles.container}>
@@ -403,6 +522,34 @@ export default function OrganizationTemplatesScreen() {
                       {template.is_published ? 'Published' : 'Hidden'}
                     </Text>
                   </TouchableOpacity>
+                  {cohorts.length > 0 ? (
+                    <View style={styles.templateAssignSection}>
+                      <Text style={styles.templateAssignLabel}>Assign to cohorts</Text>
+                      <View style={styles.templateAssignChips}>
+                        {cohorts.map((cohort) => {
+                          const selected = (templateCohortIds[template.id] || []).includes(cohort.id);
+                          const key = `${template.id}:${cohort.id}`;
+                          const busy = assigningKey === key;
+                          return (
+                            <TouchableOpacity
+                              key={cohort.id}
+                              style={[
+                                styles.assignChip,
+                                selected && styles.assignChipSelected,
+                                busy && styles.assignChipBusy,
+                              ]}
+                              onPress={() => void handleToggleTemplateCohort(template.id, cohort.id)}
+                              disabled={busy}
+                            >
+                              <Text style={[styles.assignChipText, selected && styles.assignChipTextSelected]}>
+                                {busy ? 'Saving...' : cohort.name}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
               ))
             )}
@@ -565,6 +712,42 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 10,
     gap: 8,
+  },
+  templateAssignSection: {
+    gap: 6,
+  },
+  templateAssignLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  templateAssignChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  assignChip: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#FFFFFF',
+  },
+  assignChipSelected: {
+    borderColor: '#93C5FD',
+    backgroundColor: '#EFF6FF',
+  },
+  assignChipBusy: {
+    opacity: 0.7,
+  },
+  assignChipText: {
+    fontSize: 11,
+    color: '#334155',
+  },
+  assignChipTextSelected: {
+    color: '#1D4ED8',
+    fontWeight: '600',
   },
   templateTextWrap: {
     gap: 4,
