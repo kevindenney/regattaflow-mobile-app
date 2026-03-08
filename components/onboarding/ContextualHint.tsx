@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Platform,
   type LayoutChangeEvent,
   type ViewStyle,
   useWindowDimensions,
@@ -80,6 +81,7 @@ export function ContextualHint({
   pulseTarget = false,
   onTargetReady,
 }: ContextualHintProps) {
+  const collapsableProp = Platform.OS === 'web' ? undefined : false;
   const [targetBounds, setTargetBounds] = React.useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [cardHeight, setCardHeight] = React.useState(0);
   const { width: viewportWidth } = useWindowDimensions();
@@ -177,7 +179,7 @@ export function ContextualHint({
       onLayout={handleWrapperLayout}
     >
       {/* Native View wrapper for measureInWindow (Animated.View can't do this) */}
-      <View ref={measureRef} collapsable={false}>
+      <View ref={measureRef} collapsable={collapsableProp}>
         {children}
       </View>
 

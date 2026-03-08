@@ -139,6 +139,7 @@ export function RacesFloatingHeader({
   onMeasuredHeight,
   hidden,
 }: RacesFloatingHeaderProps) {
+  const collapsableProp = Platform.OS === 'web' ? undefined : false;
   const [menuVisible, setMenuVisible] = useState(false);
   const config = useInterestEventConfig();
   const { vocab } = useVocabulary();
@@ -287,7 +288,7 @@ export function RacesFloatingHeader({
 
       {/* Add button (with ref for onboarding spotlight) */}
       <TourStep step="add_your_race" position="bottom" horizontalAlign="targetRight" distance={18}>
-        <View ref={addButtonRef} collapsable={false}>
+        <View ref={addButtonRef} collapsable={collapsableProp}>
           <AnimatedPressable
             style={[capsuleStyles.actionButton, addButtonAnimStyle]}
             onPress={handleAddPress}
