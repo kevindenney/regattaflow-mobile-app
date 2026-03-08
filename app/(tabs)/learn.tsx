@@ -31,10 +31,11 @@ import { useOrganizationSearch } from '@/hooks/useOrganizationSearch';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
+import { coachRoleLabel } from '@/lib/organizations/roleLabels';
 
 type LearnSegment = 'courses' | 'coaches' | 'people';
 
-const COACH_ROLES = new Set([
+const NURSING_COACH_ROLES = new Set([
   'coach',
   'preceptor',
   'instructor',
@@ -43,6 +44,13 @@ const COACH_ROLES = new Set([
   'assessor',
   'admin',
   'manager',
+]);
+const SAILING_EXTRA_COACH_ROLES = new Set([
+  'tactician',
+  'sailmaker',
+  'rigger',
+  'race_officer',
+  'team_captain',
 ]);
 
 type OrgStepTemplate = {
@@ -222,9 +230,16 @@ export default function LearnScreen() {
     });
   };
 
+  const coachRoleSet = useMemo(() => {
+    if (isSailingInterest) {
+      return new Set<string>([...NURSING_COACH_ROLES, ...SAILING_EXTRA_COACH_ROLES]);
+    }
+    return NURSING_COACH_ROLES;
+  }, [isSailingInterest]);
+
   const coaches = useMemo(
-    () => orgMembers.filter((member) => COACH_ROLES.has(member.role.toLowerCase())),
-    [orgMembers]
+    () => orgMembers.filter((member) => coachRoleSet.has(member.role.toLowerCase())),
+    [coachRoleSet, orgMembers]
   );
 
   const filteredPeople = useMemo(() => {
@@ -481,7 +496,9 @@ export default function LearnScreen() {
                         <Text style={styles.memberName}>{coach.name}</Text>
                         <View style={styles.memberMetaRow}>
                           <View style={[styles.roleBadge, styles.roleBadgeCoach]}>
-                            <Text style={[styles.badgeText, styles.roleBadgeCoachText]}>{coach.role}</Text>
+                            <Text style={[styles.badgeText, styles.roleBadgeCoachText]}>
+                              {coachRoleLabel({ interestSlug, role: coach.role })}
+                            </Text>
                           </View>
                           <View
                             style={[
