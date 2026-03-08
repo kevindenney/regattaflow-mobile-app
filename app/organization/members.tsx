@@ -8,7 +8,7 @@ import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type MemberRow = {
   id: string;
@@ -26,11 +26,21 @@ type SaveState = {
   message: string;
 };
 
+type StatusFilter = 'active' | 'pending' | 'rejected' | 'all';
+
 const NURSING_ROLES = ['member', 'preceptor', 'clinical_instructor', 'instructor', 'evaluator', 'admin', 'manager'];
 const SAILING_ROLES = ['member', 'coach', 'coordinator', 'staff', 'admin', 'manager'];
 
 function normalizeStatus(value: string | null | undefined): string {
   return String(value || '').trim().toLowerCase();
+}
+
+function getStatusBucket(row: Pick<MemberRow, 'membership_status' | 'status'>): Exclude<StatusFilter, 'all'> | 'other' {
+  const normalizedStatus = normalizeStatus(row.membership_status || row.status);
+  if (normalizedStatus === 'active' || normalizedStatus === 'verified') return 'active';
+  if (normalizedStatus === 'pending' || normalizedStatus === 'invited') return 'pending';
+  if (normalizedStatus === 'rejected') return 'rejected';
+  return 'other';
 }
 
 export default function OrganizationMembersScreen() {
@@ -49,6 +59,8 @@ export default function OrganizationMembersScreen() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [busyMembershipId, setBusyMembershipId] = useState<string | null>(null);
   const [saveStates, setSaveStates] = useState<Record<string, SaveState | undefined>>({});
+  const [memberQuery, setMemberQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
 
   const resolvedActiveOrgId = useMemo(
     () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
@@ -111,14 +123,9 @@ export default function OrganizationMembersScreen() {
 
       if (membershipError) throw membershipError;
 
-      const activeMembershipRows = (membershipRows || []).filter((row: any) => {
-        const rowStatus = normalizeStatus(row.membership_status || row.status);
-        return rowStatus === 'active';
-      });
-
       const userIds = Array.from(
         new Set(
-          activeMembershipRows
+          (membershipRows || [])
             .map((row: any) => row.user_id)
             .filter((id: unknown): id is string => typeof id === 'string' && isUuid(id))
         )
@@ -144,7 +151,7 @@ export default function OrganizationMembersScreen() {
         );
       }
 
-      const normalized: MemberRow[] = activeMembershipRows.map((row: any) => {
+      const normalized: MemberRow[] = (membershipRows || []).map((row: any) => {
         const user = usersById.get(String(row.user_id));
         const email = typeof user?.email === 'string' ? user.email : null;
         const fullName = typeof user?.full_name === 'string' ? user.full_name.trim() : '';
@@ -349,6 +356,31 @@ export default function OrganizationMembersScreen() {
     [canManage, loadMembers, resolvedActiveOrgId, user?.id]
   );
 
+  const statusCounts = useMemo(() => {
+    return rows.reduce(
+      (acc, row) => {
+        const bucket = getStatusBucket(row);
+        if (bucket === 'active') acc.active += 1;
+        else if (bucket === 'pending') acc.pending += 1;
+        else if (bucket === 'rejected') acc.rejected += 1;
+        return acc;
+      },
+      { active: 0, pending: 0, rejected: 0 }
+    );
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const normalizedQuery = memberQuery.trim().toLowerCase();
+    return rows.filter((row) => {
+      const bucket = getStatusBucket(row);
+      const matchesStatus = statusFilter === 'all' || bucket === statusFilter;
+      if (!matchesStatus) return false;
+      if (!normalizedQuery) return true;
+      const haystack = `${String(row.user_name || '').toLowerCase()} ${String(row.user_email || '').toLowerCase()}`;
+      return haystack.includes(normalizedQuery);
+    });
+  }, [memberQuery, rows, statusFilter]);
+
   const title = useMemo(
     () => `Members${activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}`,
     [activeOrganization?.name]
@@ -362,7 +394,7 @@ export default function OrganizationMembersScreen() {
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>Manage active organization members and roles.</Text>
+          <Text style={styles.subtitle}>Manage organization members and roles.</Text>
           {__DEV__ ? (
             <Text style={styles.devDiagnosticText}>
               activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
@@ -406,9 +438,53 @@ export default function OrganizationMembersScreen() {
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <View style={styles.listHeader}>
-              <Text style={styles.sectionTitle}>Active members</Text>
+              <Text style={styles.sectionTitle}>Members</Text>
               <TouchableOpacity onPress={() => void loadMembers()}>
                 <Ionicons name="refresh-outline" size={18} color="#2563EB" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.searchInput}
+              value={memberQuery}
+              onChangeText={setMemberQuery}
+              placeholder="Search members"
+              placeholderTextColor="#94A3B8"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.filtersRow}>
+              <TouchableOpacity
+                style={[styles.filterPill, statusFilter === 'active' && styles.filterPillActive]}
+                onPress={() => setStatusFilter('active')}
+              >
+                <Text style={[styles.filterPillText, statusFilter === 'active' && styles.filterPillTextActive]}>
+                  Active ({statusCounts.active})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterPill, statusFilter === 'pending' && styles.filterPillActive]}
+                onPress={() => setStatusFilter('pending')}
+              >
+                <Text style={[styles.filterPillText, statusFilter === 'pending' && styles.filterPillTextActive]}>
+                  Pending ({statusCounts.pending})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterPill, statusFilter === 'rejected' && styles.filterPillActive]}
+                onPress={() => setStatusFilter('rejected')}
+              >
+                <Text style={[styles.filterPillText, statusFilter === 'rejected' && styles.filterPillTextActive]}>
+                  Rejected ({statusCounts.rejected})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterPill, statusFilter === 'all' && styles.filterPillActive]}
+                onPress={() => setStatusFilter('all')}
+              >
+                <Text style={[styles.filterPillText, statusFilter === 'all' && styles.filterPillTextActive]}>
+                  All ({rows.length})
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -418,10 +494,10 @@ export default function OrganizationMembersScreen() {
               <View style={styles.centerStateCompact}>
                 <ActivityIndicator size="small" color="#2563EB" />
               </View>
-            ) : rows.length === 0 ? (
-              <Text style={styles.stateText}>No active members.</Text>
+            ) : filteredRows.length === 0 ? (
+              <Text style={styles.stateText}>No members match your filters.</Text>
             ) : (
-              rows.map((row) => {
+              filteredRows.map((row) => {
                 const saveState = saveStates[row.id];
                 return (
                   <View key={row.id} style={styles.memberRow}>
@@ -561,6 +637,41 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 10,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterPill: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  filterPillActive: {
+    borderColor: '#93C5FD',
+    backgroundColor: '#EFF6FF',
+  },
+  filterPillText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  filterPillTextActive: {
+    color: '#1D4ED8',
   },
   listHeader: {
     flexDirection: 'row',
