@@ -90,4 +90,4 @@ Manual:
 - M5 completed (cohort create now derives `interest_slug` from active org context instead of free-text input).
 - M6 completed (template cohort assignment list now filters to org-interest-compatible cohorts).
 - M7 completed (Learn already shows admin tool shortcuts for admins and enforces safe leave/orphan guards).
-- M8 pending
+- M8 completed (removed remaining org-admin dev diagnostic text from members/cohorts/cohort detail surfaces).

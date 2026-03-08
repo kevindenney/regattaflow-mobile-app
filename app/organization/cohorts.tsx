@@ -182,11 +182,6 @@ export default function OrganizationCohortsScreen() {
           <Text style={styles.title}>Cohorts{activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}</Text>
           <Text style={styles.subtitle}>Organize members into cohorts and teams.</Text>
           <OrgContextPill interestSlug={orgInterestSlug} />
-          {__DEV__ ? (
-            <Text style={styles.devDiagnosticText}>
-              activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
-            </Text>
-          ) : null}
         </View>
       </View>
 
@@ -309,11 +304,6 @@ const styles = StyleSheet.create({
   headerTextWrap: { flex: 1 },
   title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
   subtitle: { marginTop: 2, fontSize: 12, color: '#64748B' },
-  devDiagnosticText: {
-    marginTop: 4,
-    fontSize: 11,
-    color: '#94A3B8',
-  },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12 },
   card: {

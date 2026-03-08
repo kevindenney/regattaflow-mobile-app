@@ -278,11 +278,6 @@ export default function CohortDetailScreen() {
           <Text style={styles.title}>{cohort?.name || 'Cohort'}</Text>
           <Text style={styles.subtitle}>{cohort?.description || 'Manage cohort members.'}</Text>
           <OrgContextPill interestSlug={orgInterestSlug} />
-          {__DEV__ ? (
-            <Text style={styles.devDiagnosticText}>
-              activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
-            </Text>
-          ) : null}
         </View>
       </View>
 
@@ -412,11 +407,6 @@ const styles = StyleSheet.create({
   headerTextWrap: { flex: 1 },
   title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
   subtitle: { marginTop: 2, fontSize: 12, color: '#64748B' },
-  devDiagnosticText: {
-    marginTop: 4,
-    fontSize: 11,
-    color: '#94A3B8',
-  },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12 },
   card: {

@@ -535,11 +535,6 @@ export default function OrganizationMembersScreen() {
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>Manage organization members and roles.</Text>
           <OrgContextPill interestSlug={orgInterestSlug} />
-          {__DEV__ ? (
-            <Text style={styles.devDiagnosticText}>
-              activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
-            </Text>
-          ) : null}
           <View style={styles.headerLinksRow}>
             <TouchableOpacity onPress={() => router.push('/organization/access-requests')}>
               <Text style={styles.headerLinkText}>Access requests</Text>
@@ -812,11 +807,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#64748B',
-  },
-  devDiagnosticText: {
-    marginTop: 4,
-    fontSize: 11,
-    color: '#94A3B8',
   },
   headerLinksRow: {
     marginTop: 6,
