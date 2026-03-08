@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 export type OrganizationType =
   | 'club'
@@ -225,6 +226,52 @@ function isActiveMembership(row: OrganizationMembershipRecord): boolean {
   return ACTIVE_STATUSES.has(getMembershipStatusValue(row));
 }
 
+function rankActiveMembershipStatus(row: OrganizationMembershipRecord): number {
+  const normalized = getMembershipStatusValue(row);
+  if (normalized === 'active' || normalized === 'verified') return 0;
+  if (normalized === 'pending' || normalized === 'invited') return 1;
+  return 2;
+}
+
+function resolvePreferredActiveOrgId(
+  rows: OrganizationMembershipRecord[],
+  currentActiveOrgId: string | null
+): string | null {
+  const activeRows = rows.filter(isActiveMembership);
+  if (activeRows.length === 0) return null;
+
+  if (currentActiveOrgId) {
+    const current = activeRows.find((row) => row.organization_id === currentActiveOrgId);
+    if (current) return current.organization_id;
+  }
+
+  const activeManagerRows = activeRows.filter((row) =>
+    MANAGER_ROLES.has(String(row.role || '').toLowerCase())
+  );
+  return activeManagerRows[0]?.organization_id ?? activeRows[0]?.organization_id ?? null;
+}
+
+function normalizeRealtimeMembershipRow(
+  row: Record<string, any>,
+  existing: OrganizationMembershipRecord | undefined
+): OrganizationMembershipRecord {
+  return {
+    id: String(row.id || existing?.id || ''),
+    organization_id: String(row.organization_id || existing?.organization_id || ''),
+    role: String(row.role || existing?.role || 'member'),
+    status: String(row.status || existing?.status || ''),
+    membership_status: String(
+      row.membership_status || row.status || existing?.membership_status || existing?.status || ''
+    ),
+    is_verified: Boolean(
+      row.is_verified ?? existing?.is_verified ?? false
+    ),
+    verification_source: row.verification_source ?? existing?.verification_source ?? null,
+    joined_at: row.joined_at ?? existing?.joined_at ?? null,
+    organization: existing?.organization ?? null,
+  };
+}
+
 function resolveWorkspaceDomain(org: OrganizationRecord | null): WorkspaceDomain {
   if (!org) return 'generic';
 
@@ -306,6 +353,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [membershipLoadErrorPayload, setMembershipLoadErrorPayload] = useState<MembershipLoadErrorPayload | null>(null);
   const [memberships, setMemberships] = useState<OrganizationMembershipRecord[]>([]);
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
+  const activeOrganizationIdRef = React.useRef<string | null>(null);
 
   const membershipColumns =
     'id, organization_id, role, status, membership_status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)';
@@ -316,6 +364,10 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     signedInRef.current = signedIn;
     userIdRef.current = user?.id ?? null;
   }, [signedIn, user?.id]);
+
+  useEffect(() => {
+    activeOrganizationIdRef.current = activeOrganizationId;
+  }, [activeOrganizationId]);
 
   useEffect(() => {
     const mountedAt = new Date().toISOString();
@@ -555,6 +607,56 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     void refreshMemberships();
   }, [refreshMemberships, signedIn, user?.id]);
+
+  useEffect(() => {
+    if (!signedIn || !user?.id) return;
+
+    const channel = supabase
+      .channel(`org-memberships:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'organization_memberships',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload: RealtimePostgresChangesPayload<any>) => {
+          setMemberships((prev) => {
+            let next = prev;
+            if (payload.eventType === 'DELETE') {
+              const deletedId = String((payload.old as any)?.id || '');
+              next = prev.filter((row) => row.id !== deletedId);
+            } else {
+              const incoming = payload.new as Record<string, any>;
+              const incomingId = String(incoming?.id || '');
+              if (!incomingId) return prev;
+              const existing = prev.find((row) => row.id === incomingId);
+              const normalized = normalizeRealtimeMembershipRow(incoming, existing);
+              const withoutIncoming = prev.filter((row) => row.id !== incomingId);
+              next = dedupeMemberships([normalized, ...withoutIncoming]).sort((a, b) => {
+                const statusRank = rankActiveMembershipStatus(a) - rankActiveMembershipStatus(b);
+                if (statusRank !== 0) return statusRank;
+                return String(a.organization?.name || '').localeCompare(String(b.organization?.name || ''));
+              });
+            }
+
+            const nextActiveOrgId = resolvePreferredActiveOrgId(next, activeOrganizationIdRef.current);
+            if (nextActiveOrgId !== activeOrganizationIdRef.current) {
+              activeOrganizationIdRef.current = nextActiveOrgId;
+              setActiveOrganizationIdState(nextActiveOrgId);
+              void storeActiveOrganizationId(nextActiveOrgId);
+            }
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [signedIn, user?.id]);
 
   const setActiveOrganizationId = useCallback(async (organizationId: string | null) => {
     if (!organizationId) {

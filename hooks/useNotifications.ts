@@ -9,6 +9,36 @@ import { NotificationService, type SocialNotification } from '@/services/Notific
 
 const PAGE_SIZE = 20;
 
+function upsertRealtimeNotificationIntoPages(previousData: any, notification: SocialNotification) {
+  if (!previousData || !Array.isArray(previousData.pages)) {
+    return {
+      pageParams: [0],
+      pages: [{ notifications: [notification], hasMore: false }],
+    };
+  }
+
+  const pages = [...previousData.pages];
+  if (!pages[0]) {
+    pages[0] = { notifications: [notification], hasMore: false };
+    return { ...previousData, pages };
+  }
+
+  const firstPage = pages[0] || { notifications: [], hasMore: false };
+  const existingNotifications = Array.isArray(firstPage.notifications)
+    ? firstPage.notifications
+    : [];
+  if (existingNotifications.some((entry: SocialNotification) => entry.id === notification.id)) {
+    return previousData;
+  }
+
+  pages[0] = {
+    ...firstPage,
+    notifications: [notification, ...existingNotifications],
+  };
+
+  return { ...previousData, pages };
+}
+
 export function useNotifications() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -62,8 +92,18 @@ export function useNotifications() {
 
     const unsubscribe = NotificationService.subscribeToNotifications(
       user.id,
-      () => {
+      (notification) => {
         if (!canCommit()) return;
+        queryClient.setQueryData(
+          ['social-notifications', targetUserId],
+          (previousData: any) =>
+            upsertRealtimeNotificationIntoPages(previousData, notification)
+        );
+        queryClient.setQueryData(
+          ['unread-notification-count', targetUserId],
+          (previousUnread: number | undefined) =>
+            Math.max(0, Number(previousUnread || 0) + (notification.isRead ? 0 : 1))
+        );
         queryClient.invalidateQueries({
           queryKey: ['social-notifications', targetUserId],
         });
@@ -207,8 +247,13 @@ export function useUnreadNotificationCount() {
 
     const unsubscribe = NotificationService.subscribeToNotifications(
       user.id,
-      () => {
+      (notification) => {
         if (!canCommit()) return;
+        queryClient.setQueryData(
+          ['unread-notification-count', targetUserId],
+          (previousUnread: number | undefined) =>
+            Math.max(0, Number(previousUnread || 0) + (notification.isRead ? 0 : 1))
+        );
         queryClient.invalidateQueries({
           queryKey: ['unread-notification-count', targetUserId],
         });
