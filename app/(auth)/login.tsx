@@ -6,6 +6,7 @@ import type { ViewStyle } from 'react-native';
 import { useAuth } from '../../providers/AuthProvider';
 import { supabase } from '../../services/supabase';
 import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
+import { getLastTabRoute } from '@/lib/utils/userTypeRouting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 const cardShadowStyle: ViewStyle =
@@ -79,7 +80,7 @@ const getAuthErrorMessage = (error: any): string => {
 };
 
 export default function Login() {
-  const { signIn, signInWithGoogle, signInWithApple, loading, enterGuestMode } = useAuth();
+  const { signIn, signInWithGoogle, signInWithApple, loading, enterGuestMode, signedIn, ready, userProfile } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -92,6 +93,12 @@ export default function Login() {
       isAppleSignInAvailable().then(setAppleSignInAvailable);
     }
   }, []);
+
+  useEffect(() => {
+    if (!ready || !signedIn) return;
+    const destination = getLastTabRoute(userProfile?.user_type ?? null);
+    router.replace(destination as any);
+  }, [ready, signedIn, userProfile?.user_type]);
 
   const onEmailLogin = async () => {
     setErrorMessage(null); // Clear previous errors
