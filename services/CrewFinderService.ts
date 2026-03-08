@@ -9,8 +9,17 @@
 
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isUuid } from '@/utils/uuid';
 
 const logger = createLogger('CrewFinderService');
+
+function getValidUuidList(values: unknown[]): string[] {
+  return Array.from(new Set(
+    values
+      .map((value) => String(value || '').trim())
+      .filter((value) => isUuid(value))
+  ));
+}
 
 /**
  * User profile data for crew finder
@@ -653,65 +662,68 @@ class CrewFinderServiceClass {
 
       if (!collabError && collaboratorRaces && collaboratorRaces.length > 0) {
         // Get race IDs where the user has collaborated
-        const raceIds = collaboratorRaces.map((c: any) => c.race_id);
-
-        // Find other collaborators in those races
-        const { data: otherCollaborators, error: othersError } = await supabase
-          .from('race_collaborators')
-          .select(`
-            user_id,
-            regattas!inner(
-              id,
-              name
-            )
-          `)
-          .in('race_id', raceIds)
-          .neq('user_id', userId);
-
-        if (!othersError && otherCollaborators) {
-          // Get unique user IDs
-          const collabUserIds = [...new Set(otherCollaborators.map((c: any) => c.user_id))];
-
-          if (collabUserIds.length > 0) {
-            // Fetch profiles for these users
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select(`
+        const raceIds = getValidUuidList(collaboratorRaces.map((c: any) => c.race_id));
+        if (raceIds.length === 0) {
+          logger.debug('[CrewFinderService] Skipping collaborator lookup: no valid race UUIDs');
+        } else {
+          // Find other collaborators in those races
+          const { data: otherCollaborators, error: othersError } = await supabase
+            .from('race_collaborators')
+            .select(`
+              user_id,
+              regattas!inner(
                 id,
-                full_name,
-                email,
-                sailor_profiles(
-                  avatar_emoji,
-                  avatar_color,
-                  experience_level
-                )
-              `)
-              .in('id', collabUserIds);
+                name
+              )
+            `)
+            .in('race_id', raceIds)
+            .neq('user_id', userId);
 
-            if (profiles) {
-              for (const profile of profiles) {
-                if (profile.id === userId) continue;
-                const displayName = profile.full_name?.trim()
-                  || (profile.email ? profile.email.split('@')[0] : '');
-                if (!displayName) continue;
+          if (!othersError && otherCollaborators) {
+            // Get unique user IDs
+            const collabUserIds = [...new Set(otherCollaborators.map((c: any) => c.user_id))];
 
-                const existing = suggestionsMap.get(profile.id);
-                const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
-                const raceName = (collab?.regattas as any)?.name || 'past race';
+            if (collabUserIds.length > 0) {
+              // Fetch profiles for these users
+              const { data: profiles } = await supabase
+                .from('profiles')
+                .select(`
+                  id,
+                  full_name,
+                  email,
+                  sailor_profiles(
+                    avatar_emoji,
+                    avatar_color,
+                    experience_level
+                  )
+                `)
+                .in('id', collabUserIds);
 
-                if (existing) {
-                  existing.score += 1; // Boost for race collaboration
-                } else {
-                  suggestionsMap.set(profile.id, {
-                    userId: profile.id,
-                    fullName: displayName,
-                    avatarEmoji: (profile.sailor_profiles as any)?.avatar_emoji,
-                    avatarColor: (profile.sailor_profiles as any)?.avatar_color,
-                    sailingExperience: (profile.sailor_profiles as any)?.experience_level,
-                    email: profile.email,
-                    score: 2, // Base score for past collaborators
-                    source: `Sailed with: ${raceName}`,
-                  });
+              if (profiles) {
+                for (const profile of profiles) {
+                  if (profile.id === userId) continue;
+                  const displayName = profile.full_name?.trim()
+                    || (profile.email ? profile.email.split('@')[0] : '');
+                  if (!displayName) continue;
+
+                  const existing = suggestionsMap.get(profile.id);
+                  const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
+                  const raceName = (collab?.regattas as any)?.name || 'past race';
+
+                  if (existing) {
+                    existing.score += 1; // Boost for race collaboration
+                  } else {
+                    suggestionsMap.set(profile.id, {
+                      userId: profile.id,
+                      fullName: displayName,
+                      avatarEmoji: (profile.sailor_profiles as any)?.avatar_emoji,
+                      avatarColor: (profile.sailor_profiles as any)?.avatar_color,
+                      sailingExperience: (profile.sailor_profiles as any)?.experience_level,
+                      email: profile.email,
+                      score: 2, // Base score for past collaborators
+                      source: `Sailed with: ${raceName}`,
+                    });
+                  }
                 }
               }
             }
@@ -828,62 +840,65 @@ class CrewFinderServiceClass {
         .eq('user_id', userId);
 
       if (!collabError && collaboratorRaces && collaboratorRaces.length > 0) {
-        const raceIds = collaboratorRaces.map((c: any) => c.race_id);
-
-        const { data: otherCollaborators, error: othersError } = await supabase
-          .from('race_collaborators')
-          .select(`
-            user_id,
-            regattas!inner(
-              id,
-              name
-            )
-          `)
-          .in('race_id', raceIds)
-          .neq('user_id', userId);
-
-        if (!othersError && otherCollaborators) {
-          const collabUserIds = [...new Set(otherCollaborators.map((c: any) => c.user_id))];
-
-          if (collabUserIds.length > 0) {
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select(`
+        const raceIds = getValidUuidList(collaboratorRaces.map((c: any) => c.race_id));
+        if (raceIds.length === 0) {
+          logger.debug('[CrewFinderService] Skipping collaborator lookup for race suggestions: no valid race UUIDs');
+        } else {
+          const { data: otherCollaborators, error: othersError } = await supabase
+            .from('race_collaborators')
+            .select(`
+              user_id,
+              regattas!inner(
                 id,
-                full_name,
-                email,
-                sailor_profiles(
-                  avatar_emoji,
-                  avatar_color,
-                  experience_level
-                )
-              `)
-              .in('id', collabUserIds);
+                name
+              )
+            `)
+            .in('race_id', raceIds)
+            .neq('user_id', userId);
 
-            if (profiles) {
-              for (const profile of profiles) {
-                if (profile.id === userId) continue;
-                const displayName = profile.full_name?.trim()
-                  || (profile.email ? profile.email.split('@')[0] : '');
-                if (!displayName) continue;
+          if (!othersError && otherCollaborators) {
+            const collabUserIds = [...new Set(otherCollaborators.map((c: any) => c.user_id))];
 
-                const existing = suggestionsMap.get(profile.id);
-                const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
-                const raceName = (collab?.regattas as any)?.name || 'past race';
+            if (collabUserIds.length > 0) {
+              const { data: profiles } = await supabase
+                .from('profiles')
+                .select(`
+                  id,
+                  full_name,
+                  email,
+                  sailor_profiles(
+                    avatar_emoji,
+                    avatar_color,
+                    experience_level
+                  )
+                `)
+                .in('id', collabUserIds);
 
-                if (existing) {
-                  existing.score += 1;
-                } else {
-                  suggestionsMap.set(profile.id, {
-                    userId: profile.id,
-                    fullName: displayName,
-                    avatarEmoji: (profile.sailor_profiles as any)?.avatar_emoji,
-                    avatarColor: (profile.sailor_profiles as any)?.avatar_color,
-                    sailingExperience: (profile.sailor_profiles as any)?.experience_level,
-                    email: profile.email,
-                    score: 2,
-                    source: `Sailed with: ${raceName}`,
-                  });
+              if (profiles) {
+                for (const profile of profiles) {
+                  if (profile.id === userId) continue;
+                  const displayName = profile.full_name?.trim()
+                    || (profile.email ? profile.email.split('@')[0] : '');
+                  if (!displayName) continue;
+
+                  const existing = suggestionsMap.get(profile.id);
+                  const collab = otherCollaborators.find((c: any) => c.user_id === profile.id);
+                  const raceName = (collab?.regattas as any)?.name || 'past race';
+
+                  if (existing) {
+                    existing.score += 1;
+                  } else {
+                    suggestionsMap.set(profile.id, {
+                      userId: profile.id,
+                      fullName: displayName,
+                      avatarEmoji: (profile.sailor_profiles as any)?.avatar_emoji,
+                      avatarColor: (profile.sailor_profiles as any)?.avatar_color,
+                      sailingExperience: (profile.sailor_profiles as any)?.experience_level,
+                      email: profile.email,
+                      score: 2,
+                      source: `Sailed with: ${raceName}`,
+                    });
+                  }
                 }
               }
             }
@@ -1469,7 +1484,7 @@ class CrewFinderServiceClass {
       .select('user_id, race_id')
       .eq('user_id', userId);
 
-    const userRaceIds = new Set((userCollabs || []).map((c: any) => c.race_id).filter(Boolean));
+    const userRaceIds = new Set(getValidUuidList((userCollabs || []).map((c: any) => c.race_id)));
 
     // Get users already following to exclude/mark
     const followingIds = await this.getFollowingIds(userId);
