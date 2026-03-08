@@ -1,5 +1,7 @@
 import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
+import { SAILING_CORE_V1_SKILLS } from '@/configs/competencies/sailing-core-v1';
 import { NURSING_EVENT_CONFIG } from '@/configs/nursing';
+import { SAILING_EVENT_CONFIG } from '@/configs/sailing';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
@@ -30,16 +32,52 @@ type OrgStepTemplateRow = {
   created_at: string;
 };
 
-const STEP_TYPE_OPTIONS = NURSING_EVENT_CONFIG.eventSubtypes.map((entry) => ({
+type InterestOption = {
+  slug: string;
+  label: string;
+};
+
+type Option = {
+  value: string;
+  label: string;
+};
+type ModuleOption = {
+  id: string;
+  label: string;
+};
+
+const INTEREST_OPTIONS: InterestOption[] = [
+  { slug: 'nursing', label: 'Nursing' },
+  { slug: SAILING_EVENT_CONFIG.interestSlug, label: 'Sail Racing' },
+];
+
+const NURSING_STEP_TYPE_OPTIONS: Option[] = NURSING_EVENT_CONFIG.eventSubtypes.map((entry) => ({
   value: entry.id,
   label: entry.label,
 }));
 
-const NURSING_MODULE_OPTIONS = Object.values(NURSING_EVENT_CONFIG.moduleInfo)
+const SAILING_STEP_TYPE_OPTIONS: Option[] = [
+  { value: 'race_day', label: 'Race Day' },
+  { value: 'practice', label: 'Practice' },
+  { value: 'drill_session', label: 'Drill Session' },
+  { value: 'tuning', label: 'Tuning' },
+  { value: 'video_review', label: 'Video Review' },
+];
+
+const NURSING_MODULE_OPTIONS: ModuleOption[] = Object.values(NURSING_EVENT_CONFIG.moduleInfo)
   .map((item) => ({ id: item.id, label: item.label }))
   .sort((a, b) => a.label.localeCompare(b.label));
 
-const NURSING_COMPETENCY_OPTIONS = NURSING_CORE_V1_CAPABILITIES.map((item) => ({
+const SAILING_MODULE_OPTIONS: ModuleOption[] = Object.values(SAILING_EVENT_CONFIG.moduleInfo)
+  .map((item) => ({ id: item.id, label: item.label }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+const NURSING_COMPETENCY_OPTIONS: ModuleOption[] = NURSING_CORE_V1_CAPABILITIES.map((item) => ({
+  id: item.id,
+  label: item.title,
+}));
+
+const SAILING_COMPETENCY_OPTIONS: ModuleOption[] = SAILING_CORE_V1_SKILLS.map((item) => ({
   id: item.id,
   label: item.title,
 }));
@@ -58,12 +96,24 @@ export default function OrganizationTemplatesScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<OrgStepTemplateRow[]>([]);
+  const [selectedInterestSlug, setSelectedInterestSlug] = useState<string>(INTEREST_OPTIONS[0].slug);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [stepType, setStepType] = useState(STEP_TYPE_OPTIONS[0]?.value || 'clinical_shift');
+  const [stepType, setStepType] = useState(NURSING_STEP_TYPE_OPTIONS[0]?.value || 'clinical_shift');
   const [moduleIds, setModuleIds] = useState<string[]>([]);
   const [suggestedCompetencyIds, setSuggestedCompetencyIds] = useState<string[]>([]);
+
+  const isSailing = selectedInterestSlug === SAILING_EVENT_CONFIG.interestSlug;
+  const stepTypeOptions = isSailing ? SAILING_STEP_TYPE_OPTIONS : NURSING_STEP_TYPE_OPTIONS;
+  const moduleOptions = isSailing ? SAILING_MODULE_OPTIONS : NURSING_MODULE_OPTIONS;
+  const competencyOptions = isSailing ? SAILING_COMPETENCY_OPTIONS : NURSING_COMPETENCY_OPTIONS;
+
+  useEffect(() => {
+    setStepType(stepTypeOptions[0]?.value || '');
+    setModuleIds([]);
+    setSuggestedCompetencyIds([]);
+  }, [selectedInterestSlug]);
 
   const loadTemplates = useCallback(async () => {
     if (!activeOrganization?.id) {
@@ -78,7 +128,7 @@ export default function OrganizationTemplatesScreen() {
         .from('betterat_org_step_templates')
         .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
         .eq('org_id', activeOrganization.id)
-        .eq('interest_slug', 'nursing')
+        .eq('interest_slug', selectedInterestSlug)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -88,7 +138,7 @@ export default function OrganizationTemplatesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganization?.id]);
+  }, [activeOrganization?.id, selectedInterestSlug]);
 
   useEffect(() => {
     void loadTemplates();
@@ -114,7 +164,7 @@ export default function OrganizationTemplatesScreen() {
       setSaving(true);
       const payload = {
         org_id: activeOrganization.id,
-        interest_slug: 'nursing',
+        interest_slug: selectedInterestSlug,
         title: title.trim(),
         description: description.trim() || null,
         step_type: stepType,
@@ -136,7 +186,7 @@ export default function OrganizationTemplatesScreen() {
       setTemplates((prev) => [inserted, ...prev]);
       setTitle('');
       setDescription('');
-      setStepType(STEP_TYPE_OPTIONS[0]?.value || 'clinical_shift');
+      setStepType(stepTypeOptions[0]?.value || '');
       setModuleIds([]);
       setSuggestedCompetencyIds([]);
     } catch (error: any) {
@@ -144,7 +194,7 @@ export default function OrganizationTemplatesScreen() {
     } finally {
       setSaving(false);
     }
-  }, [activeOrganization?.id, canSubmit, description, moduleIds, stepType, suggestedCompetencyIds, title, user?.id]);
+  }, [activeOrganization?.id, canSubmit, description, moduleIds, selectedInterestSlug, stepType, stepTypeOptions, suggestedCompetencyIds, title, user?.id]);
 
   const handleTogglePublished = useCallback(async (template: OrgStepTemplateRow) => {
     if (!canManageActiveOrganization) return;
@@ -171,7 +221,11 @@ export default function OrganizationTemplatesScreen() {
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>Organization Templates</Text>
-          <Text style={styles.subtitle}>Publish optional nursing step recommendations for learners.</Text>
+          <Text style={styles.subtitle}>
+            {isSailing
+              ? 'Publish optional sail racing step recommendations for learners.'
+              : 'Publish optional nursing step recommendations for learners.'}
+          </Text>
         </View>
       </View>
 
@@ -187,6 +241,22 @@ export default function OrganizationTemplatesScreen() {
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>New template</Text>
+
+            <Text style={styles.label}>Interest</Text>
+            <View style={styles.chipRow}>
+              {INTEREST_OPTIONS.map((option) => {
+                const selected = option.slug === selectedInterestSlug;
+                return (
+                  <TouchableOpacity
+                    key={option.slug}
+                    style={[styles.chip, selected && styles.chipSelected]}
+                    onPress={() => setSelectedInterestSlug(option.slug)}
+                  >
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             <TextInput
               style={styles.input}
@@ -208,7 +278,7 @@ export default function OrganizationTemplatesScreen() {
 
             <Text style={styles.label}>Step Type</Text>
             <View style={styles.chipRow}>
-              {STEP_TYPE_OPTIONS.map((option) => {
+              {stepTypeOptions.map((option) => {
                 const selected = option.value === stepType;
                 return (
                   <TouchableOpacity
@@ -224,7 +294,7 @@ export default function OrganizationTemplatesScreen() {
 
             <Text style={styles.label}>Modules</Text>
             <View style={styles.chipRow}>
-              {NURSING_MODULE_OPTIONS.map((option) => {
+              {moduleOptions.map((option) => {
                 const selected = moduleIds.includes(option.id);
                 return (
                   <TouchableOpacity
@@ -240,7 +310,7 @@ export default function OrganizationTemplatesScreen() {
 
             <Text style={styles.label}>Suggested Competencies</Text>
             <View style={styles.chipRow}>
-              {NURSING_COMPETENCY_OPTIONS.map((option) => {
+              {competencyOptions.map((option) => {
                 const selected = suggestedCompetencyIds.includes(option.id);
                 return (
                   <TouchableOpacity
@@ -266,7 +336,7 @@ export default function OrganizationTemplatesScreen() {
 
           <View style={styles.card}>
             <View style={styles.listHeader}>
-              <Text style={styles.sectionTitle}>Published templates</Text>
+              <Text style={styles.sectionTitle}>{isSailing ? 'Published sail racing templates' : 'Published nursing templates'}</Text>
               <TouchableOpacity onPress={() => void loadTemplates()}>
                 <Ionicons name="refresh-outline" size={18} color="#2563EB" />
               </TouchableOpacity>
