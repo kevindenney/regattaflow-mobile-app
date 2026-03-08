@@ -3,7 +3,7 @@
  * Database-backed courses for all interests (sailing, nursing, drawing, fitness).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,23 +19,35 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS } from '@/components/cards/constants';
-import { CoachesContent } from '@/components/learn/CoachesContent';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { TabScreenToolbar } from '@/components/ui/TabScreenToolbar';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { useInterest } from '@/providers/InterestProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
+import { useOrgMembers } from '@/hooks/useOrgMembers';
 import { useCourses, type BetterAtCourse } from '@/hooks/useBetterAtCourses';
 import { useOrganizationSearch } from '@/hooks/useOrganizationSearch';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
 
-type LearnSegment = 'courses' | 'coaches';
+type LearnSegment = 'courses' | 'coaches' | 'people';
 
 const LEARN_SEGMENTS = [
   { value: 'courses' as const, label: 'Courses' },
   { value: 'coaches' as const, label: 'Coaches' },
+  { value: 'people' as const, label: 'People' },
 ];
+
+const COACH_ROLES = new Set([
+  'coach',
+  'preceptor',
+  'instructor',
+  'clinical_instructor',
+  'evaluator',
+  'assessor',
+  'admin',
+  'manager',
+]);
 
 export default function LearnScreen() {
   const { width } = useWindowDimensions();
@@ -47,6 +59,7 @@ export default function LearnScreen() {
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
   const [activeSegment, setActiveSegment] = useState<LearnSegment>('courses');
   const [orgQuery, setOrgQuery] = useState('');
+  const [peopleQuery, setPeopleQuery] = useState('');
   const [joinBusyOrgId, setJoinBusyOrgId] = useState<string | null>(null);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
 
@@ -63,6 +76,17 @@ export default function LearnScreen() {
     query: orgQuery,
     enabled: activeSegment === 'courses' && signedIn,
     limit: 16,
+  });
+  const {
+    members: orgMembers,
+    loading: orgMembersLoading,
+    error: orgMembersError,
+    hasMore: orgMembersHasMore,
+    retry: retryOrgMembers,
+  } = useOrgMembers({
+    organizationId: activeOrganizationId,
+    enabled: activeSegment === 'coaches' || activeSegment === 'people',
+    limit: 200,
   });
 
   useEffect(() => {
@@ -114,6 +138,27 @@ export default function LearnScreen() {
       params: { courseId: course.id },
     });
   };
+
+  const coaches = useMemo(
+    () => orgMembers.filter((member) => COACH_ROLES.has(member.role.toLowerCase())),
+    [orgMembers]
+  );
+
+  const filteredPeople = useMemo(() => {
+    const query = peopleQuery.trim().toLowerCase();
+    if (!query) return orgMembers;
+    return orgMembers.filter((member) => {
+      return (
+        member.name.toLowerCase().includes(query) ||
+        member.role.toLowerCase().includes(query) ||
+        member.status.toLowerCase().includes(query) ||
+        (member.email || '').toLowerCase().includes(query)
+      );
+    });
+  }, [orgMembers, peopleQuery]);
+
+  const isMemberActive = (status: string) => status === 'active' || status === 'verified';
+  const statusLabel = (status: string) => (isMemberActive(status) ? 'Active' : status === 'pending' ? 'Pending' : 'Inactive');
 
   return (
     <View style={styles.container}>
@@ -275,8 +320,117 @@ export default function LearnScreen() {
           </View>
         </ScrollView>
       ) : (
-        /* Coaches segment */
-        <CoachesContent toolbarOffset={toolbarHeight} onScroll={handleToolbarScroll} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: toolbarHeight }]}
+          onScroll={handleToolbarScroll}
+          scrollEventThrottle={16}
+        >
+          <View style={[styles.content, isDesktop && styles.contentDesktop]}>
+            {!activeOrganizationId ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="people-outline" size={32} color={IOS_COLORS.gray3} />
+                <Text style={styles.emptyText}>No active organization selected</Text>
+                <Text style={styles.emptySubtext}>Choose an organization to view members.</Text>
+                <TouchableOpacity
+                  style={styles.primaryActionButton}
+                  onPress={() => router.push('/settings/organization-access')}
+                >
+                  <Text style={styles.primaryActionText}>Open Organization Access</Text>
+                </TouchableOpacity>
+              </View>
+            ) : orgMembersLoading ? (
+              <View style={styles.betterAtLoading}>
+                <ActivityIndicator size="large" color={IOS_COLORS.systemBlue} />
+              </View>
+            ) : orgMembersError ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="alert-circle-outline" size={32} color={IOS_COLORS.systemRed} />
+                <Text style={styles.emptyText}>Could not load members</Text>
+                <Text style={styles.orgError}>{orgMembersError}</Text>
+                <TouchableOpacity style={styles.primaryActionButton} onPress={retryOrgMembers}>
+                  <Text style={styles.primaryActionText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : activeSegment === 'coaches' ? (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionLabel}>COACHES</Text>
+                  <Text style={styles.sectionCount}>{coaches.length}</Text>
+                </View>
+                <View style={styles.coursesList}>
+                  {coaches.map((coach) => (
+                    <View key={`${coach.userId}-${coach.role}`} style={styles.memberRow}>
+                      <View style={styles.memberRowBody}>
+                        <Text style={styles.memberName}>{coach.name}</Text>
+                        <View style={styles.memberMetaRow}>
+                          <View style={[styles.roleBadge, styles.roleBadgeCoach]}>
+                            <Text style={[styles.badgeText, styles.roleBadgeCoachText]}>{coach.role}</Text>
+                          </View>
+                          <View
+                            style={[
+                              styles.roleBadge,
+                              isMemberActive(coach.status) ? styles.statusBadgeActive : styles.statusBadgePending,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.badgeText,
+                                isMemberActive(coach.status) ? styles.statusBadgeActiveText : styles.statusBadgePendingText,
+                              ]}
+                            >
+                              {statusLabel(coach.status)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <TouchableOpacity style={styles.orgActionButton} onPress={() => router.push('/communications')}>
+                        <Text style={styles.orgActionText}>Message</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                  {coaches.length === 0 ? (
+                    <Text style={styles.orgHint}>No coach-role members in this organization yet.</Text>
+                  ) : null}
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionLabel}>PEOPLE</Text>
+                  <Text style={styles.sectionCount}>{filteredPeople.length}</Text>
+                </View>
+                <TextInput
+                  style={styles.orgSearchInput}
+                  value={peopleQuery}
+                  onChangeText={setPeopleQuery}
+                  placeholder="Search members"
+                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                  autoCapitalize="none"
+                />
+                {orgMembersHasMore ? <Text style={styles.orgHint}>Showing first 200 members.</Text> : null}
+                <View style={styles.coursesList}>
+                  {filteredPeople.map((member) => (
+                    <View key={`${member.userId}-${member.role}`} style={styles.memberRow}>
+                      <View style={styles.memberRowBody}>
+                        <Text style={styles.memberName}>{member.name}</Text>
+                        <View style={styles.memberMetaRow}>
+                          <Text style={styles.memberMetaText}>{member.role}</Text>
+                          <Text style={styles.memberMetaDot}>·</Text>
+                          <Text style={styles.memberMetaText}>{statusLabel(member.status)}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                  {filteredPeople.length === 0 ? (
+                    <Text style={styles.orgHint}>No matching members.</Text>
+                  ) : null}
+                </View>
+              </>
+            )}
+          </View>
+        </ScrollView>
       )}
 
       {/* Toolbar rendered last — absolutely positioned over content */}
@@ -293,7 +447,7 @@ export default function LearnScreen() {
         onMeasuredHeight={setToolbarHeight}
         hidden={toolbarHidden}
       >
-        {/* Apple HIG Segmented Control: Courses | Coaches */}
+        {/* Apple HIG Segmented Control: Courses | Coaches | People */}
         <View style={styles.segmentedControlContainer}>
           <IOSSegmentedControl
             segments={LEARN_SEGMENTS}
@@ -492,6 +646,84 @@ const styles = StyleSheet.create({
   orgSearchLoading: {
     paddingVertical: 6,
     alignItems: 'flex-start',
+  },
+  primaryActionButton: {
+    marginTop: 10,
+    minHeight: 36,
+    borderRadius: 8,
+    backgroundColor: IOS_COLORS.systemBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  primaryActionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    gap: 10,
+  },
+  memberRowBody: {
+    flex: 1,
+    gap: 4,
+  },
+  memberName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  memberMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  memberMetaText: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  memberMetaDot: {
+    fontSize: 12,
+    color: IOS_COLORS.tertiaryLabel,
+  },
+  roleBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  roleBadgeCoach: {
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+  },
+  roleBadgeCoachText: {
+    color: '#1D4ED8',
+  },
+  statusBadgeActive: {
+    borderColor: '#BBF7D0',
+    backgroundColor: '#F0FDF4',
+  },
+  statusBadgeActiveText: {
+    color: '#15803D',
+  },
+  statusBadgePending: {
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFC',
+  },
+  statusBadgePendingText: {
+    color: '#64748B',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
   betterAtCourseRow: {
     flexDirection: 'row',
