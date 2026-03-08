@@ -25,15 +25,29 @@ function formatRequestedAt(iso: string): string {
 }
 
 export default function OrganizationAccessRequestsScreen() {
-  const { activeOrganization, canManageActiveOrganization } = useOrganization();
+  const { activeOrganization, memberships } = useOrganization();
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<PendingRequestRow[]>([]);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [warningText, setWarningText] = useState<string | null>(null);
+  const activeOrganizationId = activeOrganization?.id ?? null;
+
+  const activeOrgMembership = useMemo(
+    () => memberships.find((membership) => membership.organization_id === activeOrganizationId) ?? null,
+    [memberships, activeOrganizationId],
+  );
+
+  const membershipStatus = String(
+    activeOrgMembership?.membership_status || activeOrgMembership?.status || '',
+  ).toLowerCase();
+  const membershipRole = String(activeOrgMembership?.role || '').toLowerCase();
+  const hasActiveMembership = membershipStatus === 'active';
+  const hasAdminRole = membershipRole === 'admin' || membershipRole === 'manager' || membershipRole === 'owner';
+  const canViewAndAct = hasActiveMembership && hasAdminRole;
 
   const loadPendingRequests = useCallback(async () => {
-    if (!activeOrganization?.id || !isUuid(activeOrganization.id)) {
+    if (!activeOrganization?.id || !isUuid(activeOrganization.id) || !canViewAndAct) {
       setRequests([]);
       return;
     }
@@ -116,15 +130,20 @@ export default function OrganizationAccessRequestsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganization?.id]);
+  }, [activeOrganization?.id, canViewAndAct]);
 
   useEffect(() => {
+    if (!canViewAndAct) {
+      setRequests([]);
+      setLoading(false);
+      return;
+    }
     void loadPendingRequests();
-  }, [loadPendingRequests]);
+  }, [canViewAndAct, loadPendingRequests]);
 
   const handleUpdateRequest = useCallback(
     async (request: PendingRequestRow, nextMembershipStatus: 'active' | 'rejected') => {
-      if (!activeOrganization?.id) return;
+      if (!activeOrganization?.id || !canViewAndAct) return;
       setActionBusyId(request.id);
       setErrorText(null);
       setWarningText(null);
@@ -159,7 +178,7 @@ export default function OrganizationAccessRequestsScreen() {
         setActionBusyId(null);
       }
     },
-    [activeOrganization?.id, loadPendingRequests]
+    [activeOrganization?.id, canViewAndAct, loadPendingRequests]
   );
 
   const title = useMemo(
@@ -186,7 +205,11 @@ export default function OrganizationAccessRequestsScreen() {
             <Text style={styles.primaryButtonText}>Open Organization Access</Text>
           </TouchableOpacity>
         </View>
-      ) : !canManageActiveOrganization ? (
+      ) : !hasActiveMembership ? (
+        <View style={styles.centerState}>
+          <Text style={styles.stateText}>Active membership required.</Text>
+        </View>
+      ) : !hasAdminRole ? (
         <View style={styles.centerState}>
           <Text style={styles.stateText}>Admin access required.</Text>
         </View>
@@ -224,16 +247,24 @@ export default function OrganizationAccessRequestsScreen() {
                     </View>
                     <View style={styles.actionRow}>
                       <TouchableOpacity
-                        style={[styles.actionButton, styles.actionButtonApprove, busy && styles.actionButtonDisabled]}
+                        style={[
+                          styles.actionButton,
+                          styles.actionButtonApprove,
+                          (busy || !hasAdminRole) && styles.actionButtonDisabled,
+                        ]}
                         onPress={() => void handleUpdateRequest(request, 'active')}
-                        disabled={busy}
+                        disabled={busy || !hasAdminRole}
                       >
                         <Text style={styles.actionButtonApproveText}>{busy ? 'Saving...' : 'Approve'}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[styles.actionButton, styles.actionButtonReject, busy && styles.actionButtonDisabled]}
+                        style={[
+                          styles.actionButton,
+                          styles.actionButtonReject,
+                          (busy || !hasAdminRole) && styles.actionButtonDisabled,
+                        ]}
                         onPress={() => void handleUpdateRequest(request, 'rejected')}
-                        disabled={busy}
+                        disabled={busy || !hasAdminRole}
                       >
                         <Text style={styles.actionButtonRejectText}>{busy ? 'Saving...' : 'Reject'}</Text>
                       </TouchableOpacity>
