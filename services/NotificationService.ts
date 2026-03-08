@@ -28,7 +28,9 @@ export type SocialNotificationType =
   | 'achievement_earned'
   | 'new_message'
   | 'thread_mention'
-  | 'activity_comment';
+  | 'activity_comment'
+  | 'org_membership_approved'
+  | 'org_membership_rejected';
 
 export interface SocialNotification {
   id: string;
@@ -614,6 +616,31 @@ class NotificationServiceClass {
     }
 
     return data.id;
+  }
+
+  /**
+   * Notify a user that their org membership request was approved/rejected.
+   * Uses a SECURITY DEFINER RPC so authenticated org admins/managers can trigger this safely.
+   */
+  async notifyOrgMembershipDecision(input: {
+    targetUserId: string;
+    organizationId: string;
+    organizationName: string;
+    decision: 'approved' | 'rejected';
+  }): Promise<string> {
+    const { data, error } = await supabase.rpc('notify_org_membership_decision', {
+      p_target_user_id: input.targetUserId,
+      p_organization_id: input.organizationId,
+      p_organization_name: input.organizationName,
+      p_decision: input.decision,
+    });
+
+    if (error) {
+      logger.warn('Failed to notify org membership decision', { input, error });
+      throw error;
+    }
+
+    return String(data);
   }
 }
 

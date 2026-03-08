@@ -1,4 +1,5 @@
 import { useOrganization } from '@/providers/OrganizationProvider';
+import { NotificationService } from '@/services/NotificationService';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,7 @@ export default function OrganizationAccessRequestsScreen() {
   const [requests, setRequests] = useState<PendingRequestRow[]>([]);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [warningText, setWarningText] = useState<string | null>(null);
 
   const loadPendingRequests = useCallback(async () => {
     if (!activeOrganization?.id || !isUuid(activeOrganization.id)) {
@@ -36,8 +38,9 @@ export default function OrganizationAccessRequestsScreen() {
       return;
     }
 
-    setLoading(true);
-    setErrorText(null);
+      setLoading(true);
+      setErrorText(null);
+      setWarningText(null);
     try {
       let rows: any[] = [];
       const { data, error } = await supabase
@@ -120,18 +123,35 @@ export default function OrganizationAccessRequestsScreen() {
   }, [loadPendingRequests]);
 
   const handleUpdateRequest = useCallback(
-    async (requestId: string, nextMembershipStatus: 'active' | 'rejected') => {
+    async (request: PendingRequestRow, nextMembershipStatus: 'active' | 'rejected') => {
       if (!activeOrganization?.id) return;
-      setActionBusyId(requestId);
+      setActionBusyId(request.id);
       setErrorText(null);
+      setWarningText(null);
       try {
         const { error } = await supabase
           .from('organization_memberships')
           .update({ membership_status: nextMembershipStatus })
-          .eq('id', requestId)
+          .eq('id', request.id)
           .eq('organization_id', activeOrganization.id);
 
         if (error) throw error;
+
+        try {
+          await NotificationService.notifyOrgMembershipDecision({
+            targetUserId: request.user_id,
+            organizationId: activeOrganization.id,
+            organizationName: activeOrganization.name || 'this organization',
+            decision: nextMembershipStatus === 'active' ? 'approved' : 'rejected',
+          });
+        } catch {
+          setWarningText(
+            nextMembershipStatus === 'active'
+              ? 'Approved, but could not notify.'
+              : 'Rejected, but could not notify.'
+          );
+        }
+
         await loadPendingRequests();
       } catch (error: any) {
         setErrorText(error?.message || 'Could not update membership request.');
@@ -181,6 +201,7 @@ export default function OrganizationAccessRequestsScreen() {
             </View>
 
             {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
+            {warningText ? <Text style={styles.warningText}>{warningText}</Text> : null}
 
             {loading ? (
               <View style={styles.centerStateCompact}>
@@ -204,14 +225,14 @@ export default function OrganizationAccessRequestsScreen() {
                     <View style={styles.actionRow}>
                       <TouchableOpacity
                         style={[styles.actionButton, styles.actionButtonApprove, busy && styles.actionButtonDisabled]}
-                        onPress={() => void handleUpdateRequest(request.id, 'active')}
+                        onPress={() => void handleUpdateRequest(request, 'active')}
                         disabled={busy}
                       >
                         <Text style={styles.actionButtonApproveText}>{busy ? 'Saving...' : 'Approve'}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.actionButton, styles.actionButtonReject, busy && styles.actionButtonDisabled]}
-                        onPress={() => void handleUpdateRequest(request.id, 'rejected')}
+                        onPress={() => void handleUpdateRequest(request, 'rejected')}
                         disabled={busy}
                       >
                         <Text style={styles.actionButtonRejectText}>{busy ? 'Saving...' : 'Reject'}</Text>
@@ -349,6 +370,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#DC2626',
   },
+  warningText: {
+    fontSize: 12,
+    color: '#B45309',
+  },
   centerState: {
     flex: 1,
     alignItems: 'center',
@@ -381,4 +406,3 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 });
-
