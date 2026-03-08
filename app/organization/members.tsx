@@ -218,8 +218,8 @@ export default function OrganizationMembersScreen() {
       setSaveStates((prev) => ({ ...prev, [row.id]: undefined }));
 
       let payload: Record<string, any> = {
-        membership_status: 'removed',
-        status: 'removed',
+        membership_status: 'rejected',
+        status: 'rejected',
         is_verified: false,
         verified_at: null,
         joined_at: null,
