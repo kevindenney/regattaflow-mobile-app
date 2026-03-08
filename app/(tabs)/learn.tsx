@@ -293,6 +293,34 @@ export default function LearnScreen() {
     };
   }, [activeOrganizationId, activeSegment, signedIn, user?.id]);
 
+  const sortedMemberships = [...memberships].sort((a, b) => {
+    const aStatus = String(a.membership_status || a.status || '').toLowerCase();
+    const bStatus = String(b.membership_status || b.status || '').toLowerCase();
+    const aRank = aStatus === 'active' || aStatus === 'verified' ? 0 : aStatus === 'pending' ? 1 : 2;
+    const bRank = bStatus === 'active' || bStatus === 'verified' ? 0 : bStatus === 'pending' ? 1 : 2;
+    if (aRank !== bRank) return aRank - bRank;
+    return String(a.organization?.name || '').localeCompare(String(b.organization?.name || ''));
+  });
+  const membershipsByOrgId = useMemo(
+    () => new Map(sortedMemberships.map((membership) => [membership.organization_id, membership])),
+    [sortedMemberships]
+  );
+  const resolvedActiveOrgId = useMemo(
+    () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
+    [activeOrganizationId, memberships]
+  );
+  const activeOrgMembership = useMemo(
+    () => getActiveMembership({ memberships: memberships as any, activeOrgId: resolvedActiveOrgId }),
+    [memberships, resolvedActiveOrgId]
+  );
+  const hasActiveOrgAdmin = useMemo(() => {
+    if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) return false;
+    return (
+      isActiveOrgMembership(activeOrgMembership?.membershipStatus || null)
+      && isOrgAdminRole(activeOrgMembership?.role || null)
+    );
+  }, [activeOrgMembership?.membershipStatus, activeOrgMembership?.role, resolvedActiveOrgId]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -340,34 +368,6 @@ export default function LearnScreen() {
       cancelled = true;
     };
   }, [activeSegment, hasActiveOrgAdmin, resolvedActiveOrgId]);
-
-  const sortedMemberships = [...memberships].sort((a, b) => {
-    const aStatus = String(a.membership_status || a.status || '').toLowerCase();
-    const bStatus = String(b.membership_status || b.status || '').toLowerCase();
-    const aRank = aStatus === 'active' || aStatus === 'verified' ? 0 : aStatus === 'pending' ? 1 : 2;
-    const bRank = bStatus === 'active' || bStatus === 'verified' ? 0 : bStatus === 'pending' ? 1 : 2;
-    if (aRank !== bRank) return aRank - bRank;
-    return String(a.organization?.name || '').localeCompare(String(b.organization?.name || ''));
-  });
-  const membershipsByOrgId = useMemo(
-    () => new Map(sortedMemberships.map((membership) => [membership.organization_id, membership])),
-    [sortedMemberships]
-  );
-  const resolvedActiveOrgId = useMemo(
-    () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
-    [activeOrganizationId, memberships]
-  );
-  const activeOrgMembership = useMemo(
-    () => getActiveMembership({ memberships: memberships as any, activeOrgId: resolvedActiveOrgId }),
-    [memberships, resolvedActiveOrgId]
-  );
-  const hasActiveOrgAdmin = useMemo(() => {
-    if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) return false;
-    return (
-      isActiveOrgMembership(activeOrgMembership?.membershipStatus || null)
-      && isOrgAdminRole(activeOrgMembership?.role || null)
-    );
-  }, [activeOrgMembership?.membershipStatus, activeOrgMembership?.role, resolvedActiveOrgId]);
 
   const handleJoinOrganization = async (orgId: string, mode: OrganizationJoinMode) => {
     if (joinBusyOrgId) return;
