@@ -1,4 +1,6 @@
 import { useOrganization } from '@/providers/OrganizationProvider';
+import { normalizeOrgInterestSlug } from '@/lib/organizations/orgInterest';
+import { OrgContextPill } from '@/components/organizations/OrgContextPill';
 import { NotificationService } from '@/services/NotificationService';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -31,6 +33,7 @@ export default function OrganizationAccessRequestsScreen() {
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [warningText, setWarningText] = useState<string | null>(null);
+  const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
   const resolvedActiveOrgId = useMemo(() => {
     const providerId = String(activeOrganizationId || '').trim();
     if (providerId) return providerId;
@@ -60,6 +63,34 @@ export default function OrganizationAccessRequestsScreen() {
   const hasAdminRole = membershipRole === 'admin' || membershipRole === 'manager' || membershipRole === 'owner';
   const hasValidActiveOrgId = !!resolvedActiveOrgId && isUuid(resolvedActiveOrgId);
   const canViewAndAct = hasValidActiveOrgId && hasActiveMembership && hasAdminRole;
+
+  useEffect(() => {
+    if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) {
+      setOrgInterestSlug(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('id,interest_slug,primary_interest_slug')
+        .eq('id', resolvedActiveOrgId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setOrgInterestSlug(null);
+        return;
+      }
+      setOrgInterestSlug(
+        normalizeOrgInterestSlug((data as any)?.interest_slug)
+        || normalizeOrgInterestSlug((data as any)?.primary_interest_slug)
+        || null
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedActiveOrgId]);
 
   const loadPendingRequests = useCallback(async () => {
     if (!canViewAndAct || !resolvedActiveOrgId) {
@@ -241,6 +272,7 @@ export default function OrganizationAccessRequestsScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>Approve or reject pending organization membership requests.</Text>
+          <OrgContextPill interestSlug={orgInterestSlug} />
           <View style={styles.headerLinksRow}>
             <TouchableOpacity onPress={() => router.push('/organization/members')} style={styles.headerLink}>
               <Text style={styles.headerLinkText}>Manage members</Text>

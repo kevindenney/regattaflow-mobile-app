@@ -2,9 +2,12 @@ import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-cor
 import { SAILING_CORE_V1_SKILLS } from '@/configs/competencies/sailing-core-v1';
 import { NURSING_EVENT_CONFIG } from '@/configs/nursing';
 import { SAILING_EVENT_CONFIG } from '@/configs/sailing';
+import { normalizeOrgInterestSlug, orgInterestLabel } from '@/lib/organizations/orgInterest';
+import { OrgContextPill } from '@/components/organizations/OrgContextPill';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
+import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -32,11 +35,6 @@ type OrgStepTemplateRow = {
   created_at: string;
 };
 
-type InterestOption = {
-  slug: string;
-  label: string;
-};
-
 type Option = {
   value: string;
   label: string;
@@ -45,11 +43,6 @@ type ModuleOption = {
   id: string;
   label: string;
 };
-
-const INTEREST_OPTIONS: InterestOption[] = [
-  { slug: 'nursing', label: 'Nursing' },
-  { slug: SAILING_EVENT_CONFIG.interestSlug, label: 'Sail Racing' },
-];
 
 const NURSING_STEP_TYPE_OPTIONS: Option[] = NURSING_EVENT_CONFIG.eventSubtypes.map((entry) => ({
   value: entry.id,
@@ -91,12 +84,13 @@ function toggleArrayValue(values: string[], value: string): string[] {
 export default function OrganizationTemplatesScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const { activeOrganization, canManageActiveOrganization } = useOrganization();
+  const { activeOrganization, activeOrganizationId, canManageActiveOrganization, memberships } = useOrganization();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<OrgStepTemplateRow[]>([]);
-  const [selectedInterestSlug, setSelectedInterestSlug] = useState<string>(INTEREST_OPTIONS[0].slug);
+  const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
+  const [interestLoadFailed, setInterestLoadFailed] = useState(false);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -104,7 +98,12 @@ export default function OrganizationTemplatesScreen() {
   const [moduleIds, setModuleIds] = useState<string[]>([]);
   const [suggestedCompetencyIds, setSuggestedCompetencyIds] = useState<string[]>([]);
 
-  const isSailing = selectedInterestSlug === SAILING_EVENT_CONFIG.interestSlug;
+  const resolvedActiveOrgId = String(activeOrganizationId || '').trim()
+    || String((memberships || []).find((membership: any) => {
+      const status = String(membership?.membership_status || membership?.status || '').trim().toLowerCase();
+      return status === 'active';
+    })?.organization_id || '').trim();
+  const isSailing = orgInterestSlug === SAILING_EVENT_CONFIG.interestSlug;
   const stepTypeOptions = isSailing ? SAILING_STEP_TYPE_OPTIONS : NURSING_STEP_TYPE_OPTIONS;
   const moduleOptions = isSailing ? SAILING_MODULE_OPTIONS : NURSING_MODULE_OPTIONS;
   const competencyOptions = isSailing ? SAILING_COMPETENCY_OPTIONS : NURSING_COMPETENCY_OPTIONS;
@@ -113,10 +112,42 @@ export default function OrganizationTemplatesScreen() {
     setStepType(stepTypeOptions[0]?.value || '');
     setModuleIds([]);
     setSuggestedCompetencyIds([]);
-  }, [selectedInterestSlug]);
+  }, [orgInterestSlug]);
+
+  useEffect(() => {
+    if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) {
+      setOrgInterestSlug(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('id,interest_slug,primary_interest_slug')
+        .eq('id', resolvedActiveOrgId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setInterestLoadFailed(true);
+        setOrgInterestSlug(null);
+        return;
+      }
+      setInterestLoadFailed(false);
+      setOrgInterestSlug(
+        normalizeOrgInterestSlug((data as any)?.interest_slug)
+        || normalizeOrgInterestSlug((data as any)?.primary_interest_slug)
+        || null
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedActiveOrgId]);
 
   const loadTemplates = useCallback(async () => {
-    if (!activeOrganization?.id) {
+    if (!activeOrganization?.id || !orgInterestSlug) {
       setTemplates([]);
       setLoading(false);
       return;
@@ -128,7 +159,7 @@ export default function OrganizationTemplatesScreen() {
         .from('betterat_org_step_templates')
         .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
         .eq('org_id', activeOrganization.id)
-        .eq('interest_slug', selectedInterestSlug)
+        .eq('interest_slug', orgInterestSlug)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -138,7 +169,7 @@ export default function OrganizationTemplatesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeOrganization?.id, selectedInterestSlug]);
+  }, [activeOrganization?.id, orgInterestSlug]);
 
   useEffect(() => {
     void loadTemplates();
@@ -149,10 +180,11 @@ export default function OrganizationTemplatesScreen() {
       canManageActiveOrganization
       && activeOrganization?.id
       && user?.id
+      && !!orgInterestSlug
       && title.trim().length > 0
       && stepType.trim().length > 0
     );
-  }, [activeOrganization?.id, canManageActiveOrganization, stepType, title, user?.id]);
+  }, [activeOrganization?.id, canManageActiveOrganization, orgInterestSlug, stepType, title, user?.id]);
 
   const handleCreateTemplate = useCallback(async () => {
     if (!canSubmit || !activeOrganization?.id || !user?.id) {
@@ -164,7 +196,7 @@ export default function OrganizationTemplatesScreen() {
       setSaving(true);
       const payload = {
         org_id: activeOrganization.id,
-        interest_slug: selectedInterestSlug,
+        interest_slug: orgInterestSlug,
         title: title.trim(),
         description: description.trim() || null,
         step_type: stepType,
@@ -194,7 +226,7 @@ export default function OrganizationTemplatesScreen() {
     } finally {
       setSaving(false);
     }
-  }, [activeOrganization?.id, canSubmit, description, moduleIds, selectedInterestSlug, stepType, stepTypeOptions, suggestedCompetencyIds, title, user?.id]);
+  }, [activeOrganization?.id, canSubmit, description, moduleIds, orgInterestSlug, stepType, stepTypeOptions, suggestedCompetencyIds, title, user?.id]);
 
   const handleTogglePublished = useCallback(async (template: OrgStepTemplateRow) => {
     if (!canManageActiveOrganization) return;
@@ -226,6 +258,7 @@ export default function OrganizationTemplatesScreen() {
               ? 'Publish optional sail racing step recommendations for learners.'
               : 'Publish optional nursing step recommendations for learners.'}
           </Text>
+          <OrgContextPill interestSlug={orgInterestSlug} />
           <View style={styles.headerLinksRow}>
             <TouchableOpacity onPress={() => router.push('/organization/access-requests')} style={styles.accessRequestsLink}>
               <Text style={styles.accessRequestsLinkText}>Access requests</Text>
@@ -252,22 +285,15 @@ export default function OrganizationTemplatesScreen() {
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>New template</Text>
-
-            <Text style={styles.label}>Interest</Text>
-            <View style={styles.chipRow}>
-              {INTEREST_OPTIONS.map((option) => {
-                const selected = option.slug === selectedInterestSlug;
-                return (
-                  <TouchableOpacity
-                    key={option.slug}
-                    style={[styles.chip, selected && styles.chipSelected]}
-                    onPress={() => setSelectedInterestSlug(option.slug)}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <Text style={styles.contextText}>Using organization context: {orgInterestLabel(orgInterestSlug)}</Text>
+            {!orgInterestSlug ? (
+              <Text style={styles.warningText}>
+                Organization interest not set. Set an organization interest to create templates.
+              </Text>
+            ) : null}
+            {interestLoadFailed ? (
+              <Text style={styles.warningText}>Could not load organization interest. Using General.</Text>
+            ) : null}
 
             <TextInput
               style={styles.input}
@@ -347,7 +373,7 @@ export default function OrganizationTemplatesScreen() {
 
           <View style={styles.card}>
             <View style={styles.listHeader}>
-              <Text style={styles.sectionTitle}>{isSailing ? 'Published sail racing templates' : 'Published nursing templates'}</Text>
+              <Text style={styles.sectionTitle}>Published {orgInterestLabel(orgInterestSlug).toLowerCase()} templates</Text>
               <TouchableOpacity onPress={() => void loadTemplates()}>
                 <Ionicons name="refresh-outline" size={18} color="#2563EB" />
               </TouchableOpacity>
@@ -462,6 +488,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#334155',
+  },
+  contextText: {
+    fontSize: 12,
+    color: '#475569',
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#92400E',
   },
   input: {
     borderWidth: 1,

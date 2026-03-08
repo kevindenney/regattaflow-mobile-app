@@ -1,5 +1,7 @@
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
 import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
+import { normalizeOrgInterestSlug } from '@/lib/organizations/orgInterest';
+import { OrgContextPill } from '@/components/organizations/OrgContextPill';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -41,7 +43,6 @@ export default function CohortDetailScreen() {
 
   const {
     activeOrganizationId,
-    activeInterestSlug,
     memberships,
     loading: orgLoading,
     ready: orgReady,
@@ -54,6 +55,7 @@ export default function CohortDetailScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [errorText, setErrorText] = useState<string | null>(null);
   const [actionBusyUserId, setActionBusyUserId] = useState<string | null>(null);
+  const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
 
   const resolvedActiveOrgId = useMemo(
     () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
@@ -71,6 +73,34 @@ export default function CohortDetailScreen() {
   const hasAdminRole = isOrgAdminRole(membershipRole);
   const canEdit = hasValidOrg && hasActiveMembership && hasAdminRole;
   const canView = hasValidOrg && hasActiveMembership;
+
+  useEffect(() => {
+    if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) {
+      setOrgInterestSlug(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('id,interest_slug,primary_interest_slug')
+        .eq('id', resolvedActiveOrgId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setOrgInterestSlug(null);
+        return;
+      }
+      setOrgInterestSlug(
+        normalizeOrgInterestSlug((data as any)?.interest_slug)
+        || normalizeOrgInterestSlug((data as any)?.primary_interest_slug)
+        || null
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedActiveOrgId]);
 
   const loadData = useCallback(async () => {
     if (!canView || !resolvedActiveOrgId || !isUuid(cohortId)) {
@@ -248,6 +278,7 @@ export default function CohortDetailScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{cohort?.name || 'Cohort'}</Text>
           <Text style={styles.subtitle}>{cohort?.description || 'Manage cohort members.'}</Text>
+          <OrgContextPill interestSlug={orgInterestSlug} />
           {__DEV__ ? (
             <Text style={styles.devDiagnosticText}>
               activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
@@ -291,9 +322,9 @@ export default function CohortDetailScreen() {
                   <View style={styles.rowTextWrap}>
                     <Text style={styles.rowTitle}>{member.user_name}</Text>
                     {member.user_email ? <Text style={styles.rowMeta}>{member.user_email}</Text> : null}
-                    <Text style={styles.rowMeta}>
-                      {coachRoleLabel({ interestSlug: activeInterestSlug || '', role: member.role || 'member' })}
-                    </Text>
+                        <Text style={styles.rowMeta}>
+                          {coachRoleLabel({ interestSlug: orgInterestSlug || '', role: member.role || 'member' })}
+                        </Text>
                   </View>
                   {canEdit ? (
                     <TouchableOpacity
@@ -336,7 +367,7 @@ export default function CohortDetailScreen() {
                         <Text style={styles.rowTitle}>{member.user_name}</Text>
                         {member.user_email ? <Text style={styles.rowMeta}>{member.user_email}</Text> : null}
                         <Text style={styles.rowMeta}>
-                          {coachRoleLabel({ interestSlug: activeInterestSlug || '', role: member.role })}
+                          {coachRoleLabel({ interestSlug: orgInterestSlug || '', role: member.role })}
                         </Text>
                       </View>
                       <TouchableOpacity

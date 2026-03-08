@@ -1,6 +1,8 @@
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
 import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
+import { normalizeOrgInterestSlug } from '@/lib/organizations/orgInterest';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { OrgContextPill } from '@/components/organizations/OrgContextPill';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
@@ -75,7 +77,6 @@ export default function OrganizationMembersScreen() {
   const {
     activeOrganization,
     activeOrganizationId,
-    activeInterestSlug,
     memberships,
     loading: orgLoading,
     ready: orgReady,
@@ -90,6 +91,7 @@ export default function OrganizationMembersScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [sortOption, setSortOption] = useState<SortOption>('name_asc');
+  const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
 
   const resolvedActiveOrgId = useMemo(
     () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
@@ -107,12 +109,42 @@ export default function OrganizationMembersScreen() {
   const hasValidActiveOrgId = !!resolvedActiveOrgId && isUuid(resolvedActiveOrgId);
   const canManage = hasValidActiveOrgId && hasActiveMembership && hasAdminRole;
 
+  useEffect(() => {
+    if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) {
+      setOrgInterestSlug(null);
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('id,interest_slug,primary_interest_slug')
+        .eq('id', resolvedActiveOrgId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setOrgInterestSlug(null);
+        return;
+      }
+      setOrgInterestSlug(
+        normalizeOrgInterestSlug((data as any)?.interest_slug)
+        || normalizeOrgInterestSlug((data as any)?.primary_interest_slug)
+        || null
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedActiveOrgId]);
+
   const roleOptions = useMemo(() => {
-    const interest = String(activeInterestSlug || '').toLowerCase();
+    const interest = String(orgInterestSlug || '').toLowerCase();
     if (interest === 'nursing') return NURSING_ROLES;
     if (interest === 'sail-racing' || interest.includes('sail')) return SAILING_ROLES;
     return Array.from(new Set([...NURSING_ROLES, ...SAILING_ROLES]));
-  }, [activeInterestSlug]);
+  }, [orgInterestSlug]);
 
   const getDisplayRoleOptions = useCallback(
     (currentRole: string): string[] => {
@@ -124,14 +156,14 @@ export default function OrganizationMembersScreen() {
       const deduped: string[] = [];
       const seenLabels = new Set<string>();
       for (const candidateRole of candidateRoles) {
-        const label = coachRoleLabel({ interestSlug: activeInterestSlug || '', role: candidateRole });
+        const label = coachRoleLabel({ interestSlug: orgInterestSlug || '', role: candidateRole });
         if (seenLabels.has(label)) continue;
         seenLabels.add(label);
         deduped.push(candidateRole);
       }
       return deduped;
     },
-    [activeInterestSlug, roleOptions]
+    [orgInterestSlug, roleOptions]
   );
 
   const loadMembers = useCallback(async () => {
@@ -404,7 +436,7 @@ export default function OrganizationMembersScreen() {
       const bucket = getStatusBucket(row);
       const matchesStatus = statusFilter === 'all' || bucket === statusFilter;
       if (!matchesStatus) return false;
-      const roleBucket = getRoleBucketKey(row.role, activeInterestSlug);
+      const roleBucket = getRoleBucketKey(row.role, orgInterestSlug);
       const matchesRole = roleFilter === 'all' || roleBucket === roleFilter;
       if (!matchesRole) return false;
       if (!normalizedQuery) return true;
@@ -433,30 +465,30 @@ export default function OrganizationMembersScreen() {
           if (result !== 0) return result;
           return a.row.user_name.localeCompare(b.row.user_name, undefined, { sensitivity: 'base' });
         }
-        const bucketA = getRoleBucketKey(a.row.role, activeInterestSlug);
-        const bucketB = getRoleBucketKey(b.row.role, activeInterestSlug);
+        const bucketA = getRoleBucketKey(a.row.role, orgInterestSlug);
+        const bucketB = getRoleBucketKey(b.row.role, orgInterestSlug);
         const rankA = bucketA === 'org_admin' ? 0 : 1;
         const rankB = bucketB === 'org_admin' ? 0 : 1;
         if (rankA !== rankB) return rankA - rankB;
-        const labelA = getRoleBucketDisplayLabel(bucketA, activeInterestSlug);
-        const labelB = getRoleBucketDisplayLabel(bucketB, activeInterestSlug);
+        const labelA = getRoleBucketDisplayLabel(bucketA, orgInterestSlug);
+        const labelB = getRoleBucketDisplayLabel(bucketB, orgInterestSlug);
         const result = labelA.localeCompare(labelB, undefined, { sensitivity: 'base' });
         if (result !== 0) return result;
         return a.row.user_name.localeCompare(b.row.user_name, undefined, { sensitivity: 'base' });
       })
       .map((entry) => entry.row);
-  }, [activeInterestSlug, memberQuery, roleFilter, rows, sortOption, statusFilter]);
+  }, [memberQuery, orgInterestSlug, roleFilter, rows, sortOption, statusFilter]);
 
   const roleFilterCounts = useMemo(() => {
     return rows.reduce<Record<string, number>>((acc, row) => {
-      const bucket = getRoleBucketKey(row.role, activeInterestSlug);
+      const bucket = getRoleBucketKey(row.role, orgInterestSlug);
       acc[bucket] = (acc[bucket] || 0) + 1;
       return acc;
     }, {});
-  }, [activeInterestSlug, rows]);
+  }, [orgInterestSlug, rows]);
 
   const roleFilterOptions = useMemo(() => {
-    const interest = normalizeStatus(activeInterestSlug);
+    const interest = normalizeStatus(orgInterestSlug);
     const allowedNursing = ['org_admin', 'preceptor', 'clinical_instructor', 'instructor', 'evaluator_assessor', 'member'];
     const allowedSailing = ['org_admin', 'race_officer', 'tactician', 'team_manager', 'coach', 'coordinator', 'member'];
     const allowedBase = interest === 'nursing'
@@ -475,7 +507,7 @@ export default function OrganizationMembersScreen() {
     const seen = new Set(options);
     const otherKeys = Object.keys(roleFilterCounts).filter((key) => !seen.has(key) && (roleFilterCounts[key] || 0) > 0);
     otherKeys.sort((a, b) =>
-      getRoleBucketDisplayLabel(a, activeInterestSlug).localeCompare(getRoleBucketDisplayLabel(b, activeInterestSlug), undefined, { sensitivity: 'base' })
+      getRoleBucketDisplayLabel(a, orgInterestSlug).localeCompare(getRoleBucketDisplayLabel(b, orgInterestSlug), undefined, { sensitivity: 'base' })
     );
     for (const key of otherKeys) options.push(key);
 
@@ -483,7 +515,7 @@ export default function OrganizationMembersScreen() {
       options.unshift(roleFilter);
     }
     return options;
-  }, [activeInterestSlug, roleFilter, roleFilterCounts]);
+  }, [orgInterestSlug, roleFilter, roleFilterCounts]);
 
   const title = useMemo(
     () => `Members${activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}`,
@@ -499,6 +531,7 @@ export default function OrganizationMembersScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>Manage organization members and roles.</Text>
+          <OrgContextPill interestSlug={orgInterestSlug} />
           {__DEV__ ? (
             <Text style={styles.devDiagnosticText}>
               activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
@@ -624,7 +657,7 @@ export default function OrganizationMembersScreen() {
               {roleFilterOptions.map((option) => {
                 const isAll = option === 'all';
                 const count = isAll ? rows.length : (roleFilterCounts[option] || 0);
-                const label = isAll ? 'All' : getRoleBucketDisplayLabel(option, activeInterestSlug);
+                const label = isAll ? 'All' : getRoleBucketDisplayLabel(option, orgInterestSlug);
                 return (
                   <TouchableOpacity
                     key={`role-filter:${option}`}
@@ -677,7 +710,7 @@ export default function OrganizationMembersScreen() {
                         </View>
                         <View style={styles.roleBadge}>
                           <Text style={styles.roleBadgeText}>
-                            {getRoleBucketDisplayLabel(getRoleBucketKey(row.role, activeInterestSlug), activeInterestSlug)}
+                            {getRoleBucketDisplayLabel(getRoleBucketKey(row.role, orgInterestSlug), orgInterestSlug)}
                           </Text>
                         </View>
                       </View>
@@ -694,7 +727,7 @@ export default function OrganizationMembersScreen() {
                             disabled={busyMembershipId === row.id || selected}
                           >
                             <Text style={[styles.roleOptionText, selected && styles.roleOptionTextSelected]}>
-                              {coachRoleLabel({ interestSlug: activeInterestSlug || '', role: optionRole })}
+                              {coachRoleLabel({ interestSlug: orgInterestSlug || '', role: optionRole })}
                             </Text>
                           </TouchableOpacity>
                         );
