@@ -175,6 +175,7 @@ class OrganizationDiscoveryService {
 
     const nextStatus = input.mode === 'open_join' ? 'active' : 'pending';
     const nextMembershipStatus = input.mode === 'open_join' ? 'active' : 'pending';
+    const verificationSource = input.mode === 'open_join' ? 'admin' : 'invite';
 
     const { error: insertError } = await supabase
       .from('organization_memberships')
@@ -185,7 +186,7 @@ class OrganizationDiscoveryService {
         status: nextStatus,
         membership_status: nextMembershipStatus,
         is_verified: nextStatus === 'active',
-        verification_source: input.mode === 'open_join' ? 'open_join' : 'request_to_join',
+        verification_source: verificationSource,
         joined_at: nextStatus === 'active' ? new Date().toISOString() : null,
       });
 
