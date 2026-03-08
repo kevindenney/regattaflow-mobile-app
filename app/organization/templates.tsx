@@ -2,8 +2,8 @@ import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-cor
 import { SAILING_CORE_V1_SKILLS } from '@/configs/competencies/sailing-core-v1';
 import { NURSING_EVENT_CONFIG } from '@/configs/nursing';
 import { SAILING_EVENT_CONFIG } from '@/configs/sailing';
-import { normalizeOrgInterestSlug, orgInterestLabel } from '@/lib/organizations/orgInterest';
-import { OrgContextPill } from '@/components/organizations/OrgContextPill';
+import { orgInterestLabel } from '@/lib/organizations/orgInterest';
+import { fetchOrganizationInterestSlug, OrgContextPill } from '@/components/organizations/OrgContextPill';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
@@ -130,23 +130,16 @@ export default function OrganizationTemplatesScreen() {
 
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('id,interest_slug,primary_interest_slug')
-        .eq('id', resolvedActiveOrgId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
+      try {
+        const interestSlug = await fetchOrganizationInterestSlug(resolvedActiveOrgId);
+        if (cancelled) return;
+        setInterestLoadFailed(false);
+        setOrgInterestSlug(interestSlug);
+      } catch {
+        if (cancelled) return;
         setInterestLoadFailed(true);
         setOrgInterestSlug(null);
-        return;
       }
-      setInterestLoadFailed(false);
-      setOrgInterestSlug(
-        normalizeOrgInterestSlug((data as any)?.interest_slug)
-        || normalizeOrgInterestSlug((data as any)?.primary_interest_slug)
-        || null
-      );
     })();
 
     return () => {

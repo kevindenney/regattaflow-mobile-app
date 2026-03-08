@@ -1,6 +1,5 @@
 import { useOrganization } from '@/providers/OrganizationProvider';
-import { normalizeOrgInterestSlug } from '@/lib/organizations/orgInterest';
-import { OrgContextPill } from '@/components/organizations/OrgContextPill';
+import { fetchOrganizationInterestSlug, OrgContextPill } from '@/components/organizations/OrgContextPill';
 import { NotificationService } from '@/services/NotificationService';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -71,21 +70,14 @@ export default function OrganizationAccessRequestsScreen() {
     }
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('id,interest_slug,primary_interest_slug')
-        .eq('id', resolvedActiveOrgId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
+      try {
+        const interestSlug = await fetchOrganizationInterestSlug(resolvedActiveOrgId);
+        if (cancelled) return;
+        setOrgInterestSlug(interestSlug);
+      } catch {
+        if (cancelled) return;
         setOrgInterestSlug(null);
-        return;
       }
-      setOrgInterestSlug(
-        normalizeOrgInterestSlug((data as any)?.interest_slug)
-        || normalizeOrgInterestSlug((data as any)?.primary_interest_slug)
-        || null
-      );
     })();
     return () => {
       cancelled = true;

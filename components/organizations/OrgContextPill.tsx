@@ -1,10 +1,46 @@
-import { orgInterestPillText } from '@/lib/organizations/orgInterest';
+import { orgInterestPillText, resolveOrgInterestSlugFromOrganization } from '@/lib/organizations/orgInterest';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { supabase } from '@/services/supabase';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 type OrgContextPillProps = {
   interestSlug: string | null;
 };
+
+let didWarnMissingInterestSlugColumn = false;
+
+export async function fetchOrganizationInterestSlug(activeOrgId: string): Promise<string | null> {
+  const first = await supabase
+    .from('organizations')
+    .select('id,name,interest_slug,metadata')
+    .eq('id', activeOrgId)
+    .maybeSingle();
+
+  if (!first.error) {
+    return resolveOrgInterestSlugFromOrganization(first.data);
+  }
+
+  if (!isMissingSupabaseColumn(first.error, 'organizations.interest_slug')) {
+    throw first.error;
+  }
+
+  if (__DEV__ && !didWarnMissingInterestSlugColumn) {
+    didWarnMissingInterestSlugColumn = true;
+    console.warn('[OrgContextPill] organizations.interest_slug missing, falling back to organizations.metadata');
+  }
+
+  const fallback = await supabase
+    .from('organizations')
+    .select('id,name,metadata')
+    .eq('id', activeOrgId)
+    .maybeSingle();
+
+  if (fallback.error) {
+    throw fallback.error;
+  }
+  return resolveOrgInterestSlugFromOrganization(fallback.data);
+}
 
 export function OrgContextPill({ interestSlug }: OrgContextPillProps) {
   const isUnset = !interestSlug;

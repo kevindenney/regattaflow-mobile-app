@@ -1,8 +1,7 @@
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
 import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
-import { normalizeOrgInterestSlug } from '@/lib/organizations/orgInterest';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
-import { OrgContextPill } from '@/components/organizations/OrgContextPill';
+import { fetchOrganizationInterestSlug, OrgContextPill } from '@/components/organizations/OrgContextPill';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
@@ -117,21 +116,14 @@ export default function OrganizationMembersScreen() {
 
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('id,interest_slug,primary_interest_slug')
-        .eq('id', resolvedActiveOrgId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
+      try {
+        const interestSlug = await fetchOrganizationInterestSlug(resolvedActiveOrgId);
+        if (cancelled) return;
+        setOrgInterestSlug(interestSlug);
+      } catch {
+        if (cancelled) return;
         setOrgInterestSlug(null);
-        return;
       }
-      setOrgInterestSlug(
-        normalizeOrgInterestSlug((data as any)?.interest_slug)
-        || normalizeOrgInterestSlug((data as any)?.primary_interest_slug)
-        || null
-      );
     })();
 
     return () => {
