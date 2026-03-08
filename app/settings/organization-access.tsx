@@ -551,7 +551,7 @@ export default function OrganizationAccessSettingsScreen() {
           <>
             <View className="mx-4 mt-4 bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <Text className="px-4 pt-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Active Workspace
+                Workspace Context
               </Text>
               {displayMemberships.map((membership) => {
                 const isActive = activeOrganizationId === membership.organization_id;
@@ -569,11 +569,14 @@ export default function OrganizationAccessSettingsScreen() {
                     <View className="flex-1 pr-3">
                       <Text className="text-gray-900 font-medium">{org?.name || 'Unnamed Organization'}</Text>
                       <Text className="text-xs text-gray-500 mt-1">
-                        {formatOrgType(org?.organization_type)} • Role: {membership.role} • Status: {membership.status}
+                        {formatOrgType(org?.organization_type)} • Role: {membership.role} • Membership: {membership.membership_status || membership.status}
                       </Text>
                     </View>
                     {isActive ? (
-                      <CheckCircle2 size={20} color="#2563EB" />
+                      <View className="flex-row items-center">
+                        <Text className="text-xs font-semibold text-blue-700 mr-2">Current</Text>
+                        <CheckCircle2 size={20} color="#2563EB" />
+                      </View>
                     ) : (
                       <Circle size={20} color="#9CA3AF" />
                     )}

@@ -316,7 +316,7 @@ export default function LearnScreen() {
                                 disabled={isActiveOrg}
                               >
                                 <Text style={[styles.orgActionText, isActiveOrg && styles.orgActionTextActive]}>
-                                  {isActiveOrg ? 'Active' : 'Set active'}
+                                  {isActiveOrg ? 'Current' : 'Use this org'}
                                 </Text>
                               </TouchableOpacity>
                             )}
