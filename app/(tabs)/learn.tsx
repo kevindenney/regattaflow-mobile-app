@@ -45,6 +45,11 @@ const NURSING_COACH_ROLES = new Set([
   'manager',
 ]);
 const SAILING_EXTRA_COACH_ROLES = new Set([
+  'coordinator',
+  'staff',
+  'tutor',
+  'volunteer',
+  // Backward compatibility in case legacy rows still exist.
   'tactician',
   'sailmaker',
   'rigger',
