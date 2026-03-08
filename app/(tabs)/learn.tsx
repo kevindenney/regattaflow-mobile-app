@@ -29,14 +29,10 @@ import { useOrgMembers } from '@/hooks/useOrgMembers';
 import { useCourses, type BetterAtCourse } from '@/hooks/useBetterAtCourses';
 import { useOrganizationSearch } from '@/hooks/useOrganizationSearch';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
+import { supabase } from '@/services/supabase';
+import { isUuid } from '@/utils/uuid';
 
 type LearnSegment = 'courses' | 'coaches' | 'people';
-
-const LEARN_SEGMENTS = [
-  { value: 'courses' as const, label: 'Courses' },
-  { value: 'coaches' as const, label: 'Coaches' },
-  { value: 'people' as const, label: 'People' },
-];
 
 const COACH_ROLES = new Set([
   'coach',
@@ -48,6 +44,19 @@ const COACH_ROLES = new Set([
   'admin',
   'manager',
 ]);
+
+type OrgStepTemplate = {
+  id: string;
+  org_id: string;
+  interest_slug: string;
+  title: string;
+  description: string | null;
+  step_type: string | null;
+  module_ids: string[] | null;
+  suggested_competency_ids: string[] | null;
+  is_published: boolean;
+  created_at: string;
+};
 
 export default function LearnScreen() {
   const { width } = useWindowDimensions();
@@ -62,11 +71,33 @@ export default function LearnScreen() {
   const [peopleQuery, setPeopleQuery] = useState('');
   const [joinBusyOrgId, setJoinBusyOrgId] = useState<string | null>(null);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
+  const [orgTemplates, setOrgTemplates] = useState<OrgStepTemplate[]>([]);
+  const [orgTemplatesLoading, setOrgTemplatesLoading] = useState(false);
+  const [orgTemplatesError, setOrgTemplatesError] = useState<string | null>(null);
 
   const isDesktop = mounted && width > 768;
 
   const { currentInterest } = useInterest();
+  const interestSlug = String(currentInterest?.slug || '').trim().toLowerCase();
+  const isNursingInterest = interestSlug === 'nursing';
+  const isSailingInterest = interestSlug === 'sail-racing' || interestSlug.includes('sail');
   const { data: betterAtCourses, isLoading: betterAtLoading } = useCourses();
+  const filteredCourses = useMemo(() => betterAtCourses ?? [], [betterAtCourses]);
+  const courseTabLabel = isSailingInterest ? 'Training' : 'Courses';
+  const courseSectionLabel = isSailingInterest ? 'Training' : 'Courses';
+  const templateSectionLabel = isNursingInterest
+    ? 'Recommended from your program'
+    : isSailingInterest
+      ? 'Recommended drills & playbooks'
+      : 'Recommended for your organization';
+  const learnSegments = useMemo(
+    () => [
+      { value: 'courses' as const, label: courseTabLabel },
+      { value: 'coaches' as const, label: 'Coaches' },
+      { value: 'people' as const, label: 'People' },
+    ],
+    [courseTabLabel]
+  );
   const {
     results: organizationResults,
     loading: organizationSearchLoading,
@@ -92,6 +123,58 @@ export default function LearnScreen() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOrgTemplates = async () => {
+      if (!activeOrganizationId || !isUuid(activeOrganizationId) || !interestSlug) {
+        if (!cancelled) {
+          setOrgTemplates([]);
+          setOrgTemplatesError(null);
+          setOrgTemplatesLoading(false);
+        }
+        return;
+      }
+
+      setOrgTemplatesLoading(true);
+      setOrgTemplatesError(null);
+      try {
+        const { data, error } = await supabase
+          .from('betterat_org_step_templates')
+          .select('id,org_id,interest_slug,title,description,step_type,module_ids,suggested_competency_ids,is_published,created_at')
+          .eq('org_id', activeOrganizationId)
+          .eq('interest_slug', interestSlug)
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (error) {
+          throw error;
+        }
+        if (!cancelled) {
+          setOrgTemplates((data || []) as OrgStepTemplate[]);
+        }
+      } catch (templateError: any) {
+        if (!cancelled) {
+          setOrgTemplates([]);
+          setOrgTemplatesError(templateError?.message || 'Could not load recommendations.');
+        }
+      } finally {
+        if (!cancelled) {
+          setOrgTemplatesLoading(false);
+        }
+      }
+    };
+
+    if (activeSegment === 'courses') {
+      void loadOrgTemplates();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrganizationId, activeSegment, interestSlug]);
 
   const sortedMemberships = [...memberships].sort((a, b) => {
     const aStatus = String(a.membership_status || a.status || '').toLowerCase();
@@ -170,12 +253,12 @@ export default function LearnScreen() {
               <View style={styles.betterAtLoading}>
                 <ActivityIndicator size="large" color={currentInterest?.accent_color || IOS_COLORS.systemBlue} />
               </View>
-            ) : !betterAtCourses || betterAtCourses.length === 0 ? (
+            ) : !filteredCourses || filteredCourses.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="book-outline" size={32} color={IOS_COLORS.gray3} />
-                <Text style={styles.emptyText}>No courses available yet</Text>
+                <Text style={styles.emptyText}>No {courseSectionLabel.toLowerCase()} available yet</Text>
                 <Text style={styles.emptySubtext}>
-                  Courses for {currentInterest?.name || 'this interest'} are coming soon
+                  {courseSectionLabel} for {currentInterest?.name || 'this interest'} are coming soon
                 </Text>
               </View>
             ) : (
@@ -273,13 +356,45 @@ export default function LearnScreen() {
                 </View>
 
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionLabel}>
-                    {(currentInterest?.name || 'COURSES').toUpperCase()}
-                  </Text>
-                  <Text style={styles.sectionCount}>{betterAtCourses.length}</Text>
+                  <Text style={styles.sectionLabel}>{templateSectionLabel.toUpperCase()}</Text>
+                  <Text style={styles.sectionCount}>{orgTemplates.length}</Text>
                 </View>
                 <View style={styles.coursesList}>
-                  {betterAtCourses.map((course) => (
+                  {!activeOrganizationId ? (
+                    <Text style={styles.orgHint}>Set an active organization to see recommendations.</Text>
+                  ) : orgTemplatesLoading ? (
+                    <View style={styles.orgSearchLoading}>
+                      <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
+                    </View>
+                  ) : orgTemplatesError ? (
+                    <Text style={styles.orgError}>{orgTemplatesError}</Text>
+                  ) : orgTemplates.length === 0 ? (
+                    <Text style={styles.orgHint}>No published recommendations for this interest yet.</Text>
+                  ) : (
+                    orgTemplates.map((template) => (
+                      <View key={template.id} style={styles.templateRow}>
+                        <View style={styles.templateIconContainer}>
+                          <Ionicons name="sparkles-outline" size={14} color={IOS_COLORS.systemBlue} />
+                        </View>
+                        <View style={styles.templateBody}>
+                          <Text style={styles.templateTitle}>{template.title}</Text>
+                          {template.description ? (
+                            <Text style={styles.templateDescription} numberOfLines={2}>
+                              {template.description}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </View>
+
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionLabel}>{courseSectionLabel.toUpperCase()}</Text>
+                  <Text style={styles.sectionCount}>{filteredCourses.length}</Text>
+                </View>
+                <View style={styles.coursesList}>
+                  {filteredCourses.map((course) => (
                     <TouchableOpacity
                       key={course.id}
                       style={styles.betterAtCourseRow}
@@ -447,10 +562,10 @@ export default function LearnScreen() {
         onMeasuredHeight={setToolbarHeight}
         hidden={toolbarHidden}
       >
-        {/* Apple HIG Segmented Control: Courses | Coaches | People */}
+        {/* Apple HIG Segmented Control: interest-specific Courses label | Coaches | People */}
         <View style={styles.segmentedControlContainer}>
           <IOSSegmentedControl
-            segments={LEARN_SEGMENTS}
+            segments={learnSegments}
             selectedValue={activeSegment}
             onValueChange={setActiveSegment}
           />
@@ -646,6 +761,38 @@ const styles = StyleSheet.create({
   orgSearchLoading: {
     paddingVertical: 6,
     alignItems: 'flex-start',
+  },
+  templateRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  templateIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  templateBody: {
+    flex: 1,
+    gap: 2,
+  },
+  templateTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  templateDescription: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 16,
   },
   primaryActionButton: {
     marginTop: 10,
