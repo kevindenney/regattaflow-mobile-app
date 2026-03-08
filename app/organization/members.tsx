@@ -8,7 +8,7 @@ import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type MemberRow = {
   id: string;
@@ -301,44 +301,48 @@ export default function OrganizationMembersScreen() {
       if (!canManage || !resolvedActiveOrgId) return;
       if (user?.id && row.user_id === user.id) return;
 
+      const runReset = () => {
+        void (async () => {
+          setBusyMembershipId(row.id);
+          setSaveStates((prev) => ({ ...prev, [row.id]: undefined }));
+          try {
+            const { error } = await supabase.rpc('admin_reset_org_member_to_pending', {
+              p_org_id: resolvedActiveOrgId,
+              p_user_id: row.user_id,
+            });
+            if (error) throw error;
+
+            setSaveStates((prev) => ({
+              ...prev,
+              [row.id]: { type: 'saved', message: 'Reset to pending' },
+            }));
+            await loadMembers();
+          } catch (error: any) {
+            setSaveStates((prev) => ({
+              ...prev,
+              [row.id]: {
+                type: 'error',
+                message: error?.message || 'Could not reset to pending.',
+              },
+            }));
+          } finally {
+            setBusyMembershipId(null);
+          }
+        })();
+      };
+
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        const confirmed = window.confirm('Reset this member to pending? They will appear as a join request again.');
+        if (confirmed) runReset();
+        return;
+      }
+
       Alert.alert(
         'Reset to pending?',
         'Reset this member to pending? They will appear as a join request again.',
         [
           { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Reset',
-            style: 'destructive',
-            onPress: () => {
-              void (async () => {
-                setBusyMembershipId(row.id);
-                setSaveStates((prev) => ({ ...prev, [row.id]: undefined }));
-                try {
-                  const { error } = await supabase.rpc('admin_reset_org_member_to_pending', {
-                    p_org_id: resolvedActiveOrgId,
-                    p_user_id: row.user_id,
-                  });
-                  if (error) throw error;
-
-                  setSaveStates((prev) => ({
-                    ...prev,
-                    [row.id]: { type: 'saved', message: 'Reset to pending' },
-                  }));
-                  await loadMembers();
-                } catch (error: any) {
-                  setSaveStates((prev) => ({
-                    ...prev,
-                    [row.id]: {
-                      type: 'error',
-                      message: error?.message || 'Could not reset to pending.',
-                    },
-                  }));
-                } finally {
-                  setBusyMembershipId(null);
-                }
-              })();
-            },
-          },
+          { text: 'Reset', style: 'destructive', onPress: runReset },
         ]
       );
     },
