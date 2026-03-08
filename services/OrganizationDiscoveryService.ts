@@ -183,14 +183,22 @@ class OrganizationDiscoveryService {
         ];
 
         while (true) {
-          const { error: updateError } = await supabase
+          const { data: updatedRows, error: updateError } = await supabase
             .from('organization_memberships')
             .update(reRequestPayload)
+            .select('id')
             .eq('id', existing.id)
             .eq('organization_id', input.orgId)
             .eq('user_id', userId);
 
           if (!updateError) {
+            if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
+              return {
+                status: 'blocked',
+                membershipStatus: existingMembershipStatus,
+                message: 'Request could not be submitted. Please try again.',
+              };
+            }
             return {
               status: 'pending',
               membershipStatus: 'pending',
