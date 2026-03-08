@@ -150,6 +150,30 @@ export default function OrganizationAccessRequestsScreen() {
     void loadPendingRequests();
   }, [canViewAndAct, loadPendingRequests, orgLoading, orgReady]);
 
+  useEffect(() => {
+    if (!canViewAndAct || !resolvedActiveOrgId) return;
+
+    const channel = supabase
+      .channel(`access-requests:${resolvedActiveOrgId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'organization_memberships',
+          filter: `organization_id=eq.${resolvedActiveOrgId}`,
+        },
+        () => {
+          void loadPendingRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [canViewAndAct, loadPendingRequests, resolvedActiveOrgId]);
+
   const handleUpdateRequest = useCallback(
     async (request: PendingRequestRow, nextMembershipStatus: 'active' | 'rejected') => {
       if (!resolvedActiveOrgId || !canViewAndAct) return;
