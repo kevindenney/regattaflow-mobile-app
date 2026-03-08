@@ -9,6 +9,7 @@ export type DiscoverableOrganization = {
   name: string;
   slug: string | null;
   join_mode: OrganizationJoinMode;
+  allowed_email_domains: string[];
 };
 
 type SearchOrganizationsInput = {
@@ -34,6 +35,30 @@ function normalizeJoinMode(value: unknown): OrganizationJoinMode {
     return value;
   }
   return 'invite_only';
+}
+
+function normalizeAllowedEmailDomains(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const normalized = value
+    .map((entry) => String(entry || '').trim().toLowerCase().replace(/^@/, ''))
+    .filter((entry) => entry.length > 0);
+  return Array.from(new Set(normalized));
+}
+
+export function isEmailAllowed(input: {email: string | null | undefined; allowedDomains: string[]}): boolean {
+  const allowedDomains = normalizeAllowedEmailDomains(input.allowedDomains);
+  if (allowedDomains.length === 0) {
+    return true;
+  }
+  const email = String(input.email || '').trim().toLowerCase();
+  const atIndex = email.lastIndexOf('@');
+  if (atIndex <= 0 || atIndex >= email.length - 1) {
+    return false;
+  }
+  const domain = email.slice(atIndex + 1);
+  return allowedDomains.includes(domain);
 }
 
 function normalizeMembershipStatus(value: unknown): 'active' | 'pending' | 'rejected' | null {
@@ -66,14 +91,35 @@ class OrganizationDiscoveryService {
     };
 
     const nameQuery = applyCommonFilters(
-      supabase.from('organizations').select('id,name,slug,join_mode').ilike('name', `%${q}%`)
+      supabase.from('organizations').select('id,name,slug,join_mode,allowed_email_domains').ilike('name', `%${q}%`)
     );
     const slugQuery = applyCommonFilters(
-      supabase.from('organizations').select('id,name,slug,join_mode').ilike('slug', `%${q}%`)
+      supabase.from('organizations').select('id,name,slug,join_mode,allowed_email_domains').ilike('slug', `%${q}%`)
     );
     let [nameResult, slugResult] = await Promise.all([nameQuery, slugQuery]);
     let data = [...(nameResult.data || []), ...(slugResult.data || [])];
     let error = nameResult.error || slugResult.error;
+
+    if (
+      error
+      && (
+        isMissingSupabaseColumn(error, 'organizations.join_mode')
+        || isMissingSupabaseColumn(error, 'organizations.allowed_email_domains')
+      )
+    ) {
+      const fallbackNameWithJoinModeQuery = applyCommonFilters(
+        supabase.from('organizations').select('id,name,slug,join_mode').ilike('name', `%${q}%`)
+      );
+      const fallbackSlugWithJoinModeQuery = applyCommonFilters(
+        supabase.from('organizations').select('id,name,slug,join_mode').ilike('slug', `%${q}%`)
+      );
+      const [fallbackNameWithJoinModeResult, fallbackSlugWithJoinModeResult] = await Promise.all([
+        fallbackNameWithJoinModeQuery,
+        fallbackSlugWithJoinModeQuery,
+      ]);
+      data = [...(fallbackNameWithJoinModeResult.data || []), ...(fallbackSlugWithJoinModeResult.data || [])];
+      error = fallbackNameWithJoinModeResult.error || fallbackSlugWithJoinModeResult.error;
+    }
 
     if (error && isMissingSupabaseColumn(error, 'organizations.join_mode')) {
       const fallbackNameQuery = applyCommonFilters(
@@ -97,6 +143,7 @@ class OrganizationDiscoveryService {
         name: String(row.name || ''),
         slug: row.slug || null,
         join_mode: normalizeJoinMode(row.join_mode),
+        allowed_email_domains: normalizeAllowedEmailDomains(row.allowed_email_domains),
       };
       if (!mapped.name) continue;
       if (!deduped.has(mapped.id)) {
@@ -116,7 +163,52 @@ class OrganizationDiscoveryService {
       };
     }
 
-    if (input.mode === 'invite_only') {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) throw authError;
+    const userId = authData?.user?.id || null;
+    const userEmail = authData?.user?.email || null;
+    if (!userId || !isUuid(userId)) {
+      return {
+        status: 'blocked',
+        membershipStatus: null,
+        message: 'Sign in required.',
+      };
+    }
+
+    let orgRow: any = null;
+    {
+      const baseQuery = supabase.from('organizations').eq('id', input.orgId);
+      let orgResult = await baseQuery.select('id,join_mode,allowed_email_domains').maybeSingle();
+      if (
+        orgResult.error
+        && (
+          isMissingSupabaseColumn(orgResult.error, 'organizations.join_mode')
+          || isMissingSupabaseColumn(orgResult.error, 'organizations.allowed_email_domains')
+        )
+      ) {
+        orgResult = await baseQuery.select('id,join_mode').maybeSingle();
+      }
+      if (orgResult.error && isMissingSupabaseColumn(orgResult.error, 'organizations.join_mode')) {
+        orgResult = await baseQuery.select('id').maybeSingle();
+      }
+      if (orgResult.error) {
+        throw orgResult.error;
+      }
+      orgRow = orgResult.data;
+    }
+
+    if (!orgRow?.id) {
+      return {
+        status: 'blocked',
+        membershipStatus: null,
+        message: 'Organization not found.',
+      };
+    }
+
+    const resolvedMode = normalizeJoinMode(orgRow.join_mode ?? input.mode);
+    const allowedDomains = normalizeAllowedEmailDomains(orgRow.allowed_email_domains);
+
+    if (resolvedMode === 'invite_only') {
       return {
         status: 'blocked',
         membershipStatus: null,
@@ -124,15 +216,12 @@ class OrganizationDiscoveryService {
       };
     }
 
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError) throw authError;
-    const userId = authData?.user?.id || null;
-    if (!userId || !isUuid(userId)) {
-      return {
-        status: 'blocked',
-        membershipStatus: null,
-        message: 'Sign in required.',
-      };
+    if (
+      resolvedMode === 'open_join'
+      && allowedDomains.length > 0
+      && !isEmailAllowed({email: userEmail, allowedDomains})
+    ) {
+      throw new Error('This organization is restricted to approved email domains.');
     }
 
     const { data: existingRows, error: existingError } = await supabase
@@ -221,9 +310,9 @@ class OrganizationDiscoveryService {
       }
     }
 
-    const nextStatus = input.mode === 'open_join' ? 'active' : 'pending';
-    const nextMembershipStatus = input.mode === 'open_join' ? 'active' : 'pending';
-    const verificationSource = input.mode === 'open_join' ? 'admin' : 'invite';
+    const nextStatus = resolvedMode === 'open_join' ? 'active' : 'pending';
+    const nextMembershipStatus = resolvedMode === 'open_join' ? 'active' : 'pending';
+    const verificationSource = resolvedMode === 'open_join' ? 'admin' : 'invite';
 
     const { error: insertError } = await supabase
       .from('organization_memberships')

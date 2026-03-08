@@ -28,7 +28,7 @@ import { useOrganization } from '@/providers/OrganizationProvider';
 import { useOrgMembers } from '@/hooks/useOrgMembers';
 import { useCourses, type BetterAtCourse } from '@/hooks/useBetterAtCourses';
 import { useOrganizationSearch } from '@/hooks/useOrganizationSearch';
-import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
+import { isEmailAllowed, organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
 import { supabase } from '@/services/supabase';
 import { getActiveMembership, isActiveMembership as isActiveOrgMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
@@ -596,6 +596,14 @@ export default function LearnScreen() {
     return 'Invite only';
   };
 
+  const getRestrictedSubtitle = (allowedDomains: string[]): string => {
+    const firstDomain = String((allowedDomains || [])[0] || '').trim().toLowerCase().replace(/^@/, '');
+    if (!firstDomain) {
+      return 'Restricted by organization policy';
+    }
+    return `Requires @${firstDomain}`;
+  };
+
   const getMembershipStatusLabel = (status: string | null | undefined): string => {
     const normalized = String(status || '').toLowerCase();
     if (normalized === 'active' || normalized === 'verified') return 'Active';
@@ -793,7 +801,12 @@ export default function LearnScreen() {
                       {organizationResults.map((org) => {
                         const isInviteOnly = org.join_mode === 'invite_only';
                         const isRequestMode = org.join_mode === 'request_to_join';
+                        const isOpenJoinMode = org.join_mode === 'open_join';
                         const isBusy = joinBusyOrgId === org.id;
+                        const hasDomainRestriction = Array.isArray(org.allowed_email_domains) && org.allowed_email_domains.length > 0;
+                        const isOpenJoinRestricted = isOpenJoinMode
+                          && hasDomainRestriction
+                          && !isEmailAllowed({email: user?.email, allowedDomains: org.allowed_email_domains});
                         const existingMembership = membershipsByOrgId.get(org.id);
                         const existingStatus = String(existingMembership?.membership_status || existingMembership?.status || '').toLowerCase();
                         const hasPendingMembership = existingStatus === 'pending' || existingStatus === 'invited';
@@ -815,6 +828,13 @@ export default function LearnScreen() {
                             ) : isInviteOnly ? (
                               <View style={styles.inviteRequiredPill}>
                                 <Text style={styles.inviteRequiredText}>Invite required</Text>
+                              </View>
+                            ) : isOpenJoinRestricted ? (
+                              <View style={styles.orgActionsColumn}>
+                                <View style={[styles.orgActionButton, styles.orgActionButtonDisabled]}>
+                                  <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Restricted</Text>
+                                </View>
+                                <Text style={styles.orgRestrictionText}>{getRestrictedSubtitle(org.allowed_email_domains)}</Text>
                               </View>
                             ) : (
                               <TouchableOpacity
@@ -1444,6 +1464,10 @@ const styles = StyleSheet.create({
   },
   orgActionTextDisabled: {
     color: IOS_COLORS.secondaryLabel,
+  },
+  orgRestrictionText: {
+    fontSize: 10,
+    color: IOS_COLORS.tertiaryLabel,
   },
   memberRow: {
     flexDirection: 'row',
