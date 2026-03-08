@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
+import { isUuid } from '@/utils/uuid';
 
-const ACTIVE_ORG_STORAGE_KEY = 'rf_active_organization_id';
+const ACTIVE_ORG_STORAGE_KEY = 'betterat.active_org_id';
+const LEGACY_ACTIVE_ORG_STORAGE_KEY = 'rf_active_organization_id';
 const DOMAIN_CACHE_TTL_MS = 60_000;
 
 type WorkspaceDomain = 'sailing' | 'nursing' | 'drawing' | 'fitness' | 'generic';
@@ -50,9 +52,15 @@ const resolveDomainFromOrganization = (organization: any): WorkspaceDomain => {
 const getStoredActiveOrganizationId = async (): Promise<string | null> => {
   try {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      return window.localStorage.getItem(ACTIVE_ORG_STORAGE_KEY);
+      return (
+        window.localStorage.getItem(ACTIVE_ORG_STORAGE_KEY) ||
+        window.localStorage.getItem(LEGACY_ACTIVE_ORG_STORAGE_KEY)
+      );
     }
-    return await AsyncStorage.getItem(ACTIVE_ORG_STORAGE_KEY);
+    return (
+      (await AsyncStorage.getItem(ACTIVE_ORG_STORAGE_KEY)) ||
+      (await AsyncStorage.getItem(LEGACY_ACTIVE_ORG_STORAGE_KEY))
+    );
   } catch {
     return null;
   }
@@ -75,7 +83,8 @@ const resolveDomainFromUserMetadata = async (): Promise<WorkspaceDomain> => {
 };
 
 async function resolveActiveWorkspaceDomain(): Promise<WorkspaceDomain> {
-  const orgId = await getStoredActiveOrganizationId();
+  const storedOrgId = await getStoredActiveOrganizationId();
+  const orgId = isUuid(String(storedOrgId || '').trim()) ? String(storedOrgId).trim() : null;
   const now = Date.now();
   if (domainCache && domainCache.orgId === orgId && domainCache.expiresAt > now) {
     return domainCache.domain;
