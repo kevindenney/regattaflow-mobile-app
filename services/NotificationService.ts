@@ -495,16 +495,22 @@ class NotificationServiceClass {
                 .from('profiles')
                 .select('full_name')
                 .eq('id', n.actor_id)
-                .single();
+                .maybeSingle();
+
+              const { data: userProfile } = await supabase
+                .from('users')
+                .select('full_name,email')
+                .eq('id', n.actor_id)
+                .maybeSingle();
 
               const { data: sailorProfile } = await supabase
                 .from('sailor_profiles')
                 .select('avatar_emoji, avatar_color')
                 .eq('user_id', n.actor_id)
-                .single();
+                .maybeSingle();
 
               actorInfo = {
-                name: profile?.full_name || 'Sailor',
+                name: profile?.full_name || userProfile?.full_name || userProfile?.email || 'User',
                 avatarEmoji: sailorProfile?.avatar_emoji,
                 avatarColor: sailorProfile?.avatar_color,
               };
