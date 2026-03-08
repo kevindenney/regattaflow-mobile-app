@@ -112,9 +112,16 @@ export default function CohortDetailScreen() {
         .select('id,org_id,name,description,interest_slug')
         .eq('id', cohortId)
         .eq('org_id', resolvedActiveOrgId)
-        .single();
+        .maybeSingle();
 
       if (cohortError) throw cohortError;
+      if (!cohortData) {
+        setErrorText('Cohort not found.');
+        setCohort(null);
+        setCohortMembers([]);
+        setOrgMembers([]);
+        return;
+      }
       setCohort(cohortData as CohortRow);
 
       const { data: cohortMemberRows, error: cohortMembersError } = await supabase

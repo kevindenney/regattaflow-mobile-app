@@ -136,4 +136,9 @@ Rollback / Safety Notes:
   - Confirmed migration idempotence via NOTICE output (`nursing rows=0 sailing rows=0` in current env).
   - `npm run typecheck` passed after migration.
 - M2: pending
+- M2:
+  - `supabase db push` confirmed remote database up to date for this code-only milestone.
+  - Standardized access-request approve/reject writes with fallback-safe payloads.
+  - Replaced cohort detail `.single()` with `.maybeSingle()` and graceful not-found handling.
+  - `npm run typecheck` passed.
 - M3: pending

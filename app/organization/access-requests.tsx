@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 type PendingRequestRow = {
   id: string;
@@ -94,12 +95,24 @@ export default function OrganizationAccessRequestsScreen() {
       setErrorText(null);
       setWarningText(null);
     try {
-      const { data: membershipRows, error: membershipError } = await supabase
+      let membershipQuery = await supabase
         .from('organization_memberships')
         .select('id,user_id,role,membership_status,status,created_at')
         .eq('organization_id', resolvedActiveOrgId)
         .eq('membership_status', 'pending')
         .order('created_at', { ascending: false });
+
+      if (membershipQuery.error && isMissingSupabaseColumn(membershipQuery.error, 'organization_memberships.membership_status')) {
+        membershipQuery = await supabase
+          .from('organization_memberships')
+          .select('id,user_id,role,status,created_at')
+          .eq('organization_id', resolvedActiveOrgId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+      }
+
+      const membershipRows = membershipQuery.data;
+      const membershipError = membershipQuery.error;
 
       if (membershipError) {
         throw membershipError;
@@ -204,26 +217,53 @@ export default function OrganizationAccessRequestsScreen() {
       setErrorText(null);
       setWarningText(null);
       try {
-        const updatePayload =
+        let updatePayload: Record<string, any> =
           nextMembershipStatus === 'active'
             ? {
                 membership_status: 'active',
                 status: 'active',
                 is_verified: true,
+                verification_source: 'admin',
+                verified_at: new Date().toISOString(),
                 joined_at: new Date().toISOString(),
               }
             : {
                 membership_status: 'rejected',
                 status: 'rejected',
                 is_verified: false,
+                verification_source: 'admin',
+                verified_at: null,
+                joined_at: null,
               };
-        const { error } = await supabase
-          .from('organization_memberships')
-          .update(updatePayload)
-          .eq('id', request.id)
-          .eq('organization_id', resolvedActiveOrgId);
 
-        if (error) throw error;
+        const missingColumnFallbacks: Array<[string, string]> = [
+          ['membership_status', 'organization_memberships.membership_status'],
+          ['status', 'organization_memberships.status'],
+          ['is_verified', 'organization_memberships.is_verified'],
+          ['verification_source', 'organization_memberships.verification_source'],
+          ['verified_at', 'organization_memberships.verified_at'],
+          ['joined_at', 'organization_memberships.joined_at'],
+        ];
+
+        while (true) {
+          const { error } = await supabase
+            .from('organization_memberships')
+            .update(updatePayload)
+            .eq('id', request.id)
+            .eq('organization_id', resolvedActiveOrgId);
+
+          if (!error) break;
+
+          const missing = missingColumnFallbacks.find(([key, qualified]) =>
+            updatePayload[key] !== undefined && isMissingSupabaseColumn(error, qualified)
+          );
+          if (!missing) throw error;
+
+          const [missingKey] = missing;
+          const nextPayload = { ...updatePayload };
+          delete nextPayload[missingKey];
+          updatePayload = nextPayload;
+        }
 
         try {
           await NotificationService.notifyOrgMembershipDecision({
