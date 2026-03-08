@@ -1,5 +1,7 @@
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
 import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -32,6 +34,7 @@ function normalizeStatus(value: string | null | undefined): string {
 }
 
 export default function OrganizationMembersScreen() {
+  const { user } = useAuth();
   const {
     activeOrganization,
     activeOrganizationId,
@@ -206,6 +209,73 @@ export default function OrganizationMembersScreen() {
     [canManage, resolvedActiveOrgId]
   );
 
+  const handleRemoveAccess = useCallback(
+    async (row: MemberRow) => {
+      if (!canManage || !resolvedActiveOrgId) return;
+      if (user?.id && row.user_id === user.id) return;
+
+      setBusyMembershipId(row.id);
+      setSaveStates((prev) => ({ ...prev, [row.id]: undefined }));
+
+      let payload: Record<string, any> = {
+        membership_status: 'removed',
+        status: 'removed',
+        is_verified: false,
+        verified_at: null,
+        joined_at: null,
+      };
+
+      const missingColumnMap: Array<[string, string]> = [
+        ['membership_status', 'organization_memberships.membership_status'],
+        ['status', 'organization_memberships.status'],
+        ['is_verified', 'organization_memberships.is_verified'],
+        ['verified_at', 'organization_memberships.verified_at'],
+        ['joined_at', 'organization_memberships.joined_at'],
+      ];
+
+      try {
+        while (true) {
+          const { error } = await supabase
+            .from('organization_memberships')
+            .update(payload)
+            .eq('id', row.id)
+            .eq('organization_id', resolvedActiveOrgId)
+            .eq('user_id', row.user_id);
+
+          if (!error) break;
+
+          const missing = missingColumnMap.find(([key, qualified]) => payload[key] !== undefined && isMissingSupabaseColumn(error, qualified));
+          if (missing) {
+            const [missingKey] = missing;
+            const nextPayload = { ...payload };
+            delete nextPayload[missingKey];
+            payload = nextPayload;
+            continue;
+          }
+
+          throw error;
+        }
+
+        setRows((prev) => prev.filter((member) => member.id !== row.id));
+        setSaveStates((prev) => ({
+          ...prev,
+          [row.id]: { type: 'saved', message: 'Access removed' },
+        }));
+      } catch (error: any) {
+        setSaveStates((prev) => ({
+          ...prev,
+          [row.id]: {
+            type: 'error',
+            message: error?.message || 'Could not remove access.',
+          },
+        }));
+      } finally {
+        setBusyMembershipId(null);
+      }
+    },
+    [canManage, resolvedActiveOrgId, user?.id]
+  );
+
   const title = useMemo(
     () => `Members${activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}`,
     [activeOrganization?.name]
@@ -311,6 +381,20 @@ export default function OrganizationMembersScreen() {
                         );
                       })}
                     </View>
+
+                    {user?.id && row.user_id !== user.id ? (
+                      <View style={styles.memberActionsRow}>
+                        <TouchableOpacity
+                          style={[styles.removeButton, busyMembershipId === row.id && styles.disabledButton]}
+                          onPress={() => void handleRemoveAccess(row)}
+                          disabled={busyMembershipId === row.id}
+                        >
+                          <Text style={styles.removeButtonText}>
+                            {busyMembershipId === row.id ? 'Saving...' : 'Remove access'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
 
                     {saveState ? (
                       <Text style={saveState.type === 'error' ? styles.errorText : styles.savedText}>
@@ -468,6 +552,23 @@ const styles = StyleSheet.create({
   },
   roleOptionTextSelected: {
     color: '#1D4ED8',
+    fontWeight: '600',
+  },
+  memberActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  removeButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  removeButtonText: {
+    fontSize: 12,
+    color: '#B42318',
     fontWeight: '600',
   },
   centerState: {

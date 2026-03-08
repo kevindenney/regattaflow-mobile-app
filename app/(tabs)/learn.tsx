@@ -29,6 +29,7 @@ import { useCourses, type BetterAtCourse } from '@/hooks/useBetterAtCourses';
 import { useOrganizationSearch } from '@/hooks/useOrganizationSearch';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
 import { supabase } from '@/services/supabase';
+import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { isUuid } from '@/utils/uuid';
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
 
@@ -95,7 +96,7 @@ export default function LearnScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { signedIn, user } = useAuth();
-  const { memberships, activeOrganizationId, setActiveOrganizationId, refreshMemberships } = useOrganization();
+  const { memberships, activeOrganizationId, setActiveOrganizationId, refreshMemberships, canManageActiveOrganization } = useOrganization();
   const [mounted, setMounted] = useState(false);
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
@@ -107,6 +108,7 @@ export default function LearnScreen() {
   const [orgTemplates, setOrgTemplates] = useState<OrgStepTemplate[]>([]);
   const [orgTemplatesLoading, setOrgTemplatesLoading] = useState(false);
   const [orgTemplatesError, setOrgTemplatesError] = useState<string | null>(null);
+  const [pendingAccessCount, setPendingAccessCount] = useState(0);
   const [userCohorts, setUserCohorts] = useState<UserCohort[]>([]);
   const [userCohortsLoading, setUserCohortsLoading] = useState(false);
   const [userCohortsError, setUserCohortsError] = useState<string | null>(null);
@@ -288,6 +290,54 @@ export default function LearnScreen() {
     };
   }, [activeOrganizationId, activeSegment, signedIn, user?.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPendingAccessCount = async () => {
+      if (
+        activeSegment !== 'courses'
+        || !canManageActiveOrganization
+        || !activeOrganizationId
+        || !isUuid(activeOrganizationId)
+      ) {
+        if (!cancelled) {
+          setPendingAccessCount(0);
+        }
+        return;
+      }
+
+      try {
+        let { count, error } = await supabase
+          .from('organization_memberships')
+          .select('id', { count: 'exact', head: true })
+          .eq('organization_id', activeOrganizationId)
+          .eq('membership_status', 'pending');
+        if (error && isMissingSupabaseColumn(error, 'organization_memberships.membership_status')) {
+          const fallback = await supabase
+            .from('organization_memberships')
+            .select('id', { count: 'exact', head: true })
+            .eq('organization_id', activeOrganizationId)
+            .eq('status', 'pending');
+          count = fallback.count;
+          error = fallback.error;
+        }
+        if (error) throw error;
+        if (!cancelled) {
+          setPendingAccessCount(count || 0);
+        }
+      } catch {
+        if (!cancelled) {
+          setPendingAccessCount(0);
+        }
+      }
+    };
+
+    void loadPendingAccessCount();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrganizationId, activeSegment, canManageActiveOrganization]);
+
   const sortedMemberships = [...memberships].sort((a, b) => {
     const aStatus = String(a.membership_status || a.status || '').toLowerCase();
     const bStatus = String(b.membership_status || b.status || '').toLowerCase();
@@ -442,6 +492,37 @@ export default function LearnScreen() {
                     </View>
                   )}
                 </View>
+
+                {canManageActiveOrganization && activeOrganizationId && isUuid(activeOrganizationId) ? (
+                  <View style={styles.orgSection}>
+                    <Text style={styles.orgSectionTitle}>Admin tools</Text>
+                    <View style={styles.adminToolsList}>
+                      <TouchableOpacity style={styles.adminToolRow} onPress={() => router.push('/organization/access-requests')}>
+                        <Text style={styles.adminToolLabel}>Access requests</Text>
+                        <View style={styles.adminToolRight}>
+                          {pendingAccessCount > 0 ? (
+                            <View style={styles.pendingCountBadge}>
+                              <Text style={styles.pendingCountText}>{pendingAccessCount}</Text>
+                            </View>
+                          ) : null}
+                          <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.adminToolRow} onPress={() => router.push('/organization/members')}>
+                        <Text style={styles.adminToolLabel}>Members</Text>
+                        <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.adminToolRow} onPress={() => router.push('/organization/cohorts')}>
+                        <Text style={styles.adminToolLabel}>Cohorts</Text>
+                        <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.adminToolRow} onPress={() => router.push('/organization/templates')}>
+                        <Text style={styles.adminToolLabel}>Templates</Text>
+                        <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
 
                 <View style={styles.orgSection}>
                   <Text style={styles.orgSectionTitle}>Find an organization</Text>
@@ -952,6 +1033,44 @@ const styles = StyleSheet.create({
   orgSearchLoading: {
     paddingVertical: 6,
     alignItems: 'flex-start',
+  },
+  adminToolsList: {
+    gap: 8,
+  },
+  adminToolRow: {
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  adminToolLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  adminToolRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pendingCountBadge: {
+    minWidth: 18,
+    borderRadius: 999,
+    backgroundColor: IOS_COLORS.systemRed,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  pendingCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   cohortBadgeRow: {
     marginBottom: 8,
