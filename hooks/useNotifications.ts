@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { NotificationService, type SocialNotification } from '@/services/NotificationService';
+import { groupNotifications, type NotificationGroup } from '@/lib/notifications/dedupe';
 
 const PAGE_SIZE = 20;
 
@@ -37,6 +38,13 @@ function upsertRealtimeNotificationIntoPages(previousData: any, notification: So
   };
 
   return { ...previousData, pages };
+}
+
+function getGroupedUnreadCountFromPages(previousData: any): number {
+  const rows: SocialNotification[] = previousData?.pages?.flatMap((page: any) =>
+    Array.isArray(page?.notifications) ? page.notifications : []
+  ) || [];
+  return groupNotifications(rows, { windowHours: 24 }).unreadCount;
 }
 
 export function useNotifications() {
@@ -101,8 +109,11 @@ export function useNotifications() {
         );
         queryClient.setQueryData(
           ['unread-notification-count', targetUserId],
-          (previousUnread: number | undefined) =>
-            Math.max(0, Number(previousUnread || 0) + (notification.isRead ? 0 : 1))
+          () => {
+            const cache = queryClient.getQueryData(['social-notifications', targetUserId]);
+            if (!cache) return notification.isRead ? 0 : 1;
+            return getGroupedUnreadCountFromPages(cache);
+          }
         );
         queryClient.invalidateQueries({
           queryKey: ['social-notifications', targetUserId],
@@ -121,9 +132,13 @@ export function useNotifications() {
     };
   }, [user?.id, queryClient]);
 
-  // Flatten pages
-  const notifications: SocialNotification[] =
+  // Flatten pages + dedupe into grouped notifications
+  const rawNotifications: SocialNotification[] =
     data?.pages.flatMap((page) => page.notifications) || [];
+  const groupedResult = groupNotifications(rawNotifications, { windowHours: 24 });
+  const notifications: NotificationGroup[] = groupedResult.groups;
+  const unreadCount = groupedResult.unreadCount;
+  const rawUnreadCount = rawNotifications.filter((notification) => !notification.isRead).length;
 
   // Mark as read mutation
   const markReadMutation = useMutation({
@@ -142,7 +157,10 @@ export function useNotifications() {
 
   // Mark all as read mutation
   const markAllReadMutation = useMutation({
-    mutationFn: ({ userId }: { userId: string }) => {
+    mutationFn: ({ userId, notificationIds }: { userId: string; notificationIds?: string[] }) => {
+      if (notificationIds && notificationIds.length > 0) {
+        return NotificationService.markManyAsRead(userId, notificationIds);
+      }
       return NotificationService.markAllAsRead(userId);
     },
     onSuccess: (_, variables) => {
@@ -183,8 +201,18 @@ export function useNotifications() {
 
   const markAllAsRead = useCallback(async () => {
     if (!user?.id) throw new Error('Not authenticated');
-    await markAllReadMutation.mutateAsync({ userId: user.id });
-  }, [markAllReadMutation, user?.id]);
+    const notificationIds = notifications.flatMap((group) => group.ids);
+    await markAllReadMutation.mutateAsync({ userId: user.id, notificationIds });
+  }, [markAllReadMutation, notifications, user?.id]);
+
+  const markGroupAsRead = useCallback(
+    async (groupIds: string[]) => {
+      if (!user?.id) throw new Error('Not authenticated');
+      if (groupIds.length === 0) return;
+      await markAllReadMutation.mutateAsync({ userId: user.id, notificationIds: groupIds });
+    },
+    [markAllReadMutation, user?.id]
+  );
 
   const deleteNotification = useCallback(
     async (notificationId: string) => {
@@ -196,6 +224,9 @@ export function useNotifications() {
 
   return {
     notifications,
+    rawNotifications,
+    unreadCount,
+    rawUnreadCount,
     isLoading,
     error,
     hasMore: hasNextPage || false,
@@ -204,6 +235,7 @@ export function useNotifications() {
     refresh: refetch,
     markAsRead,
     markAllAsRead,
+    markGroupAsRead,
     deleteNotification,
   };
 }
@@ -231,7 +263,11 @@ export function useUnreadNotificationCount() {
     queryKey: ['unread-notification-count', user?.id],
     queryFn: async () => {
       if (!user?.id) return 0;
-      return NotificationService.getUnreadCount(user.id);
+      const { notifications } = await NotificationService.getNotifications(user.id, {
+        limit: 200,
+        offset: 0,
+      });
+      return groupNotifications(notifications, { windowHours: 24 }).unreadCount;
     },
     enabled: !!user?.id,
     staleTime: 30 * 1000,
@@ -251,8 +287,12 @@ export function useUnreadNotificationCount() {
         if (!canCommit()) return;
         queryClient.setQueryData(
           ['unread-notification-count', targetUserId],
-          (previousUnread: number | undefined) =>
-            Math.max(0, Number(previousUnread || 0) + (notification.isRead ? 0 : 1))
+          () => {
+            const previousData = queryClient.getQueryData(['social-notifications', targetUserId]);
+            if (!previousData) return notification.isRead ? 0 : 1;
+            const nextData = upsertRealtimeNotificationIntoPages(previousData, notification);
+            return getGroupedUnreadCountFromPages(nextData);
+          }
         );
         queryClient.invalidateQueries({
           queryKey: ['unread-notification-count', targetUserId],

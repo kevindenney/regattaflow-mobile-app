@@ -30,7 +30,7 @@ import { useSailorSuggestions } from '@/hooks/useSailorSuggestions';
 import { useAuth } from '@/providers/AuthProvider';
 import { CrewFinderService } from '@/services/CrewFinderService';
 import { supabase } from '@/services/supabase';
-import { type SocialNotification } from '@/services/NotificationService';
+import { type NotificationGroup } from '@/lib/notifications/dedupe';
 import { getInitials } from '@/components/account/accountStyles';
 import { triggerHaptic } from '@/lib/haptics';
 import {
@@ -45,7 +45,7 @@ import {
 
 interface NotificationSection {
   title: string;
-  data: SocialNotification[];
+  data: NotificationGroup[];
   unreadCount: number;
 }
 
@@ -53,19 +53,19 @@ interface NotificationSection {
 // HELPERS
 // =============================================================================
 
-function groupNotificationsByTime(notifications: SocialNotification[]): NotificationSection[] {
+function groupNotificationsByTime(notifications: NotificationGroup[]): NotificationSection[] {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
   const weekStart = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const today: SocialNotification[] = [];
-  const yesterday: SocialNotification[] = [];
-  const thisWeek: SocialNotification[] = [];
-  const earlier: SocialNotification[] = [];
+  const today: NotificationGroup[] = [];
+  const yesterday: NotificationGroup[] = [];
+  const thisWeek: NotificationGroup[] = [];
+  const earlier: NotificationGroup[] = [];
 
   notifications.forEach((n) => {
-    const date = new Date(n.createdAt);
+    const date = new Date(n.latestAt);
     if (date >= todayStart) {
       today.push(n);
     } else if (date >= yesterdayStart) {
@@ -83,28 +83,28 @@ function groupNotificationsByTime(notifications: SocialNotification[]): Notifica
     sections.push({
       title: 'Today',
       data: today,
-      unreadCount: today.filter((n) => !n.isRead).length,
+      unreadCount: today.filter((n) => n.hasUnread).length,
     });
   }
   if (yesterday.length > 0) {
     sections.push({
       title: 'Yesterday',
       data: yesterday,
-      unreadCount: yesterday.filter((n) => !n.isRead).length,
+      unreadCount: yesterday.filter((n) => n.hasUnread).length,
     });
   }
   if (thisWeek.length > 0) {
     sections.push({
       title: 'This Week',
       data: thisWeek,
-      unreadCount: thisWeek.filter((n) => !n.isRead).length,
+      unreadCount: thisWeek.filter((n) => n.hasUnread).length,
     });
   }
   if (earlier.length > 0) {
     sections.push({
       title: 'Earlier',
       data: earlier,
-      unreadCount: earlier.filter((n) => !n.isRead).length,
+      unreadCount: earlier.filter((n) => n.hasUnread).length,
     });
   }
 
@@ -146,6 +146,7 @@ export default function SocialNotificationsScreen() {
   const { threads } = useCrewThreads();
   const {
     notifications,
+    unreadCount,
     isLoading,
     hasMore,
     loadMore,
@@ -153,6 +154,7 @@ export default function SocialNotificationsScreen() {
     refresh,
     markAsRead,
     markAllAsRead,
+    markGroupAsRead,
     deleteNotification,
   } = useNotifications();
 
@@ -181,8 +183,8 @@ export default function SocialNotificationsScreen() {
   // Get unique actor IDs from new_follower notifications
   const actorIds = useMemo(() => {
     const ids = notifications
-      .filter((n) => n.type === 'new_follower' && n.actorId)
-      .map((n) => n.actorId as string);
+      .filter((n) => n.latest.type === 'new_follower' && n.latest.actorId)
+      .map((n) => n.latest.actorId as string);
     return [...new Set(ids)];
   }, [notifications]);
 
@@ -284,13 +286,13 @@ export default function SocialNotificationsScreen() {
     router.push('/messages');
   }, [router]);
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
   const totalUnreadMessages = threads.reduce((sum, t) => sum + t.unreadCount, 0);
 
   // Render notification row with rounded section container
   const renderNotification = useCallback(
-    ({ item, index, section }: { item: SocialNotification; index: number; section: NotificationSection }) => {
-      const isFollowingBack = item.actorId ? followingMap.get(item.actorId) : false;
+    ({ item, index, section }: { item: NotificationGroup; index: number; section: NotificationSection }) => {
+      const latest = item.latest;
+      const isFollowingBack = latest.actorId ? followingMap.get(latest.actorId) : false;
       const isFirst = index === 0;
       const isLast = index === section.data.length - 1;
 
@@ -302,24 +304,35 @@ export default function SocialNotificationsScreen() {
             isLast && styles.notificationRowLast,
           ]}
         >
+          {item.count > 1 && (
+            <View style={styles.groupCountChip}>
+              <Text style={styles.groupCountText}>+{item.count - 1}</Text>
+            </View>
+          )}
           <NotificationRow
-            notification={item}
+            notification={latest}
             onPress={() => {
-              if (!item.isRead) markAsRead(item.id);
+              if (item.hasUnread) {
+                if (item.ids.length > 1) {
+                  markGroupAsRead(item.ids);
+                } else {
+                  markAsRead(latest.id);
+                }
+              }
               // Navigate based on type
-              if (item.type === 'new_follower' && item.actorId) {
-                router.push(`/sailor/${item.actorId}`);
-              } else if (item.regattaId) {
-                router.push(`/race/${item.regattaId}`);
+              if (latest.type === 'new_follower' && latest.actorId) {
+                router.push(`/sailor/${latest.actorId}`);
+              } else if (latest.regattaId) {
+                router.push(`/race/${latest.regattaId}`);
               }
             }}
             onDelete={() => {
-              deleteNotification(item.id);
+              deleteNotification(latest.id);
             }}
             isFollowingBack={isFollowingBack}
             onToggleFollow={
-              item.type === 'new_follower' && item.actorId
-                ? () => handleToggleFollow(item.actorId!, isFollowingBack || false)
+              latest.type === 'new_follower' && latest.actorId
+                ? () => handleToggleFollow(latest.actorId!, isFollowingBack || false)
                 : undefined
             }
             isLast={isLast}
@@ -327,7 +340,7 @@ export default function SocialNotificationsScreen() {
         </View>
       );
     },
-    [followingMap, markAsRead, deleteNotification, handleToggleFollow, router]
+    [followingMap, markAsRead, markGroupAsRead, deleteNotification, handleToggleFollow, router]
   );
 
   // Section header with unread count
@@ -512,7 +525,7 @@ export default function SocialNotificationsScreen() {
           sections={sections}
           renderItem={renderNotification}
           renderSectionHeader={renderSectionHeader}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.latest.id}
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={ListEmpty}
           ListFooterComponent={ListFooter}
@@ -723,6 +736,21 @@ const styles = StyleSheet.create({
   notificationRowLast: {
     borderBottomLeftRadius: IOS_RADIUS.md,
     borderBottomRightRadius: IOS_RADIUS.md,
+  },
+  groupCountChip: {
+    position: 'absolute',
+    right: IOS_SPACING.md,
+    top: IOS_SPACING.sm,
+    backgroundColor: IOS_COLORS.systemGray5,
+    borderRadius: IOS_RADIUS.full,
+    paddingHorizontal: IOS_SPACING.xs,
+    paddingVertical: 2,
+    zIndex: 2,
+  },
+  groupCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.secondaryLabel,
   },
 
   // Section headers

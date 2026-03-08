@@ -290,6 +290,24 @@ class NotificationServiceClass {
     logger.info('Marked all notifications as read', { userId });
   }
 
+  async markManyAsRead(userId: string, notificationIds: string[]): Promise<void> {
+    if (notificationIds.length === 0) return;
+    const { error } = await supabase
+      .from('social_notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .in('id', notificationIds);
+
+    if (error) {
+      logger.error('Failed to mark notifications as read', {
+        userId,
+        count: notificationIds.length,
+        error,
+      });
+      throw error;
+    }
+  }
+
   /**
    * Delete a notification
    */
