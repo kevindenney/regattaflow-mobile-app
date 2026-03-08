@@ -39,7 +39,6 @@ export default function OrganizationCohortsScreen() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [interestSlugInput, setInterestSlugInput] = useState('');
   const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
 
   const resolvedActiveOrgId = useMemo(
@@ -142,12 +141,6 @@ export default function OrganizationCohortsScreen() {
     void loadCohorts();
   }, [canView, loadCohorts, orgLoading, orgReady]);
 
-  useEffect(() => {
-    if (!interestSlugInput && orgInterestSlug) {
-      setInterestSlugInput(orgInterestSlug);
-    }
-  }, [interestSlugInput, orgInterestSlug]);
-
   const handleCreateCohort = useCallback(async () => {
     if (!canEdit || !resolvedActiveOrgId) return;
     const trimmedName = name.trim();
@@ -163,7 +156,7 @@ export default function OrganizationCohortsScreen() {
         org_id: resolvedActiveOrgId,
         name: trimmedName,
         description: description.trim() || null,
-        interest_slug: interestSlugInput.trim() || null,
+        interest_slug: orgInterestSlug || null,
       };
 
       const { error } = await supabase.from('betterat_org_cohorts').insert(payload);
@@ -177,7 +170,7 @@ export default function OrganizationCohortsScreen() {
     } finally {
       setSaving(false);
     }
-  }, [canEdit, description, interestSlugInput, loadCohorts, name, resolvedActiveOrgId]);
+  }, [canEdit, description, loadCohorts, name, orgInterestSlug, resolvedActiveOrgId]);
 
   return (
     <View style={styles.container}>
@@ -232,13 +225,6 @@ export default function OrganizationCohortsScreen() {
                 onChangeText={setDescription}
                 multiline
                 numberOfLines={3}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Interest slug (optional)"
-                placeholderTextColor="#94A3B8"
-                value={interestSlugInput}
-                onChangeText={setInterestSlugInput}
               />
               <TouchableOpacity
                 style={[styles.primaryButton, saving && styles.disabledButton]}
