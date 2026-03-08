@@ -1,3 +1,4 @@
+import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -15,15 +16,8 @@ type CohortRow = {
   created_at: string;
 };
 
-const ADMIN_ROLES = new Set(['owner', 'admin', 'manager']);
-
 function normalize(value: unknown): string {
   return String(value || '').trim().toLowerCase();
-}
-
-function isActiveMembershipStatus(value: unknown): boolean {
-  const normalized = normalize(value);
-  return normalized === 'active' || normalized === 'verified';
 }
 
 export default function OrganizationCohortsScreen() {
@@ -46,33 +40,20 @@ export default function OrganizationCohortsScreen() {
   const [description, setDescription] = useState('');
   const [interestSlugInput, setInterestSlugInput] = useState('');
 
-  const resolvedActiveOrgId = useMemo(() => {
-    const providerId = String(activeOrganizationId || '').trim();
-    if (providerId) return providerId;
-    const activeMembership = memberships.find((membership: any) =>
-      isActiveMembershipStatus(membership?.membership_status || membership?.status)
-    );
-    if (!activeMembership) return null;
-    return (
-      String((activeMembership as any).organization_id ?? (activeMembership as any).organizationId ?? '').trim() || null
-    );
-  }, [activeOrganizationId, memberships]);
-
-  const activeOrgMembership = useMemo(() => {
-    if (!resolvedActiveOrgId) return null;
-    return (
-      memberships.find((membership: any) => {
-        const membershipOrgId = String(membership?.organization_id ?? membership?.organizationId ?? '').trim();
-        return membershipOrgId === resolvedActiveOrgId;
-      }) ?? null
-    );
-  }, [memberships, resolvedActiveOrgId]);
+  const resolvedActiveOrgId = useMemo(
+    () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
+    [activeOrganizationId, memberships]
+  );
+  const activeOrgMembership = useMemo(
+    () => getActiveMembership({ memberships: memberships as any, activeOrgId: resolvedActiveOrgId }),
+    [memberships, resolvedActiveOrgId]
+  );
 
   const hasValidActiveOrgId = Boolean(resolvedActiveOrgId && isUuid(resolvedActiveOrgId));
-  const hasActiveMembership = isActiveMembershipStatus(
-    activeOrgMembership?.membership_status || activeOrgMembership?.status
-  );
-  const hasAdminRole = ADMIN_ROLES.has(normalize(activeOrgMembership?.role));
+  const membershipStatus = activeOrgMembership?.membershipStatus || null;
+  const membershipRole = activeOrgMembership?.role || null;
+  const hasActiveMembership = isActiveMembership(membershipStatus);
+  const hasAdminRole = isOrgAdminRole(membershipRole);
   const canEdit = hasValidActiveOrgId && hasActiveMembership && hasAdminRole;
   const canView = hasValidActiveOrgId && hasActiveMembership;
 
@@ -184,6 +165,11 @@ export default function OrganizationCohortsScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>Cohorts{activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}</Text>
           <Text style={styles.subtitle}>Organize members into cohorts and teams.</Text>
+          {__DEV__ ? (
+            <Text style={styles.devDiagnosticText}>
+              activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -240,7 +226,11 @@ export default function OrganizationCohortsScreen() {
             </View>
           ) : (
             <View style={styles.card}>
-              <Text style={styles.stateText}>Admin access required to create or edit cohorts.</Text>
+              <Text style={styles.stateText}>
+                {normalize(membershipRole) === 'member'
+                  ? 'Your role in this org is Member. Ask an admin to promote you.'
+                  : 'Admin access required to create or edit cohorts.'}
+              </Text>
             </View>
           )}
 
@@ -309,6 +299,11 @@ const styles = StyleSheet.create({
   headerTextWrap: { flex: 1 },
   title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
   subtitle: { marginTop: 2, fontSize: 12, color: '#64748B' },
+  devDiagnosticText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#94A3B8',
+  },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12 },
   card: {

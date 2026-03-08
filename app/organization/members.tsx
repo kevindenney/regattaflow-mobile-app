@@ -1,4 +1,5 @@
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
+import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -23,7 +24,6 @@ type SaveState = {
   message: string;
 };
 
-const ADMIN_ROLES = new Set(['owner', 'admin', 'manager']);
 const NURSING_ROLES = ['member', 'preceptor', 'clinical_instructor', 'instructor', 'evaluator', 'admin', 'manager'];
 const SAILING_ROLES = ['member', 'coach', 'coordinator', 'staff', 'admin', 'manager'];
 
@@ -47,43 +47,19 @@ export default function OrganizationMembersScreen() {
   const [busyMembershipId, setBusyMembershipId] = useState<string | null>(null);
   const [saveStates, setSaveStates] = useState<Record<string, SaveState | undefined>>({});
 
-  const resolvedActiveOrgId = useMemo(() => {
-    const providerId = String(activeOrganizationId || '').trim();
-    if (providerId) return providerId;
-    const activeMembership = memberships.find((membership: any) => {
-      const membershipStatus = normalizeStatus(
-        membership?.membership_status || membership?.status || ''
-      );
-      return membershipStatus === 'active';
-    });
-    if (!activeMembership) return null;
-    return (
-      String(
-        (activeMembership as any).organization_id ??
-        (activeMembership as any).organizationId ??
-        ''
-      ).trim() || null
-    );
-  }, [activeOrganizationId, memberships]);
-
-  const activeOrgMembership = useMemo(() => {
-    if (!resolvedActiveOrgId) return null;
-    return (
-      memberships.find((membership: any) => {
-        const membershipOrgId = String(
-          membership?.organization_id ?? membership?.organizationId ?? ''
-        ).trim();
-        return membershipOrgId === resolvedActiveOrgId;
-      }) ?? null
-    );
-  }, [memberships, resolvedActiveOrgId]);
-
-  const membershipStatus = normalizeStatus(
-    activeOrgMembership?.membership_status || activeOrgMembership?.status || ''
+  const resolvedActiveOrgId = useMemo(
+    () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
+    [activeOrganizationId, memberships]
   );
-  const membershipRole = normalizeStatus(activeOrgMembership?.role || '');
-  const hasActiveMembership = membershipStatus === 'active';
-  const hasAdminRole = ADMIN_ROLES.has(membershipRole);
+  const activeOrgMembership = useMemo(
+    () => getActiveMembership({ memberships: memberships as any, activeOrgId: resolvedActiveOrgId }),
+    [memberships, resolvedActiveOrgId]
+  );
+
+  const membershipStatus = activeOrgMembership?.membershipStatus || null;
+  const membershipRole = activeOrgMembership?.role || null;
+  const hasActiveMembership = isActiveMembership(membershipStatus);
+  const hasAdminRole = isOrgAdminRole(membershipRole);
   const hasValidActiveOrgId = !!resolvedActiveOrgId && isUuid(resolvedActiveOrgId);
   const canManage = hasValidActiveOrgId && hasActiveMembership && hasAdminRole;
 
@@ -244,6 +220,11 @@ export default function OrganizationMembersScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>Manage active organization members and roles.</Text>
+          {__DEV__ ? (
+            <Text style={styles.devDiagnosticText}>
+              activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
+            </Text>
+          ) : null}
           <View style={styles.headerLinksRow}>
             <TouchableOpacity onPress={() => router.push('/organization/access-requests')}>
               <Text style={styles.headerLinkText}>Access requests</Text>
@@ -272,7 +253,11 @@ export default function OrganizationMembersScreen() {
         </View>
       ) : !hasAdminRole ? (
         <View style={styles.centerState}>
-          <Text style={styles.stateText}>Admin access required.</Text>
+          <Text style={styles.stateText}>
+            {normalizeStatus(membershipRole) === 'member'
+              ? 'Your role in this org is Member. Ask an admin to promote you.'
+              : 'Admin access required.'}
+          </Text>
         </View>
       ) : (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -379,6 +364,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: '#64748B',
+  },
+  devDiagnosticText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#94A3B8',
   },
   headerLinksRow: {
     marginTop: 6,

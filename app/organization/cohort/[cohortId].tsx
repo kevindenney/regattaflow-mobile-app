@@ -1,4 +1,5 @@
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
+import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
 import { isUuid } from '@/utils/uuid';
@@ -30,15 +31,8 @@ type OrgActiveMember = {
   user_email: string | null;
 };
 
-const ADMIN_ROLES = new Set(['owner', 'admin', 'manager']);
-
 function normalize(value: unknown): string {
   return String(value || '').trim().toLowerCase();
-}
-
-function isActiveMembershipStatus(value: unknown): boolean {
-  const normalized = normalize(value);
-  return normalized === 'active' || normalized === 'verified';
 }
 
 export default function CohortDetailScreen() {
@@ -61,33 +55,20 @@ export default function CohortDetailScreen() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [actionBusyUserId, setActionBusyUserId] = useState<string | null>(null);
 
-  const resolvedActiveOrgId = useMemo(() => {
-    const providerId = String(activeOrganizationId || '').trim();
-    if (providerId) return providerId;
-    const activeMembership = memberships.find((membership: any) =>
-      isActiveMembershipStatus(membership?.membership_status || membership?.status)
-    );
-    if (!activeMembership) return null;
-    return (
-      String((activeMembership as any).organization_id ?? (activeMembership as any).organizationId ?? '').trim() || null
-    );
-  }, [activeOrganizationId, memberships]);
-
-  const activeOrgMembership = useMemo(() => {
-    if (!resolvedActiveOrgId) return null;
-    return (
-      memberships.find((membership: any) => {
-        const membershipOrgId = String(membership?.organization_id ?? membership?.organizationId ?? '').trim();
-        return membershipOrgId === resolvedActiveOrgId;
-      }) ?? null
-    );
-  }, [memberships, resolvedActiveOrgId]);
+  const resolvedActiveOrgId = useMemo(
+    () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
+    [activeOrganizationId, memberships]
+  );
+  const activeOrgMembership = useMemo(
+    () => getActiveMembership({ memberships: memberships as any, activeOrgId: resolvedActiveOrgId }),
+    [memberships, resolvedActiveOrgId]
+  );
 
   const hasValidOrg = Boolean(resolvedActiveOrgId && isUuid(resolvedActiveOrgId));
-  const hasActiveMembership = isActiveMembershipStatus(
-    activeOrgMembership?.membership_status || activeOrgMembership?.status
-  );
-  const hasAdminRole = ADMIN_ROLES.has(normalize(activeOrgMembership?.role));
+  const membershipStatus = activeOrgMembership?.membershipStatus || null;
+  const membershipRole = activeOrgMembership?.role || null;
+  const hasActiveMembership = isActiveMembership(membershipStatus);
+  const hasAdminRole = isOrgAdminRole(membershipRole);
   const canEdit = hasValidOrg && hasActiveMembership && hasAdminRole;
   const canView = hasValidOrg && hasActiveMembership;
 
@@ -169,7 +150,7 @@ export default function CohortDetailScreen() {
       });
 
       const nextOrgMembers: OrgActiveMember[] = (orgMemberRows || [])
-        .filter((row: any) => isActiveMembershipStatus(row.membership_status || row.status))
+        .filter((row: any) => isActiveMembership(String(row.membership_status || row.status || '').trim() || null))
         .map((row: any) => {
         const user = usersById.get(String(row.user_id));
         const email = user?.email || null;
@@ -267,6 +248,11 @@ export default function CohortDetailScreen() {
         <View style={styles.headerTextWrap}>
           <Text style={styles.title}>{cohort?.name || 'Cohort'}</Text>
           <Text style={styles.subtitle}>{cohort?.description || 'Manage cohort members.'}</Text>
+          {__DEV__ ? (
+            <Text style={styles.devDiagnosticText}>
+              activeOrgId={resolvedActiveOrgId || 'none'} role={membershipRole || 'none'} status={membershipStatus || 'none'} active={String(hasActiveMembership)} admin={String(hasAdminRole)}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -326,7 +312,11 @@ export default function CohortDetailScreen() {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Add members</Text>
             {!canEdit ? (
-              <Text style={styles.stateText}>Admin access required to edit cohort members.</Text>
+              <Text style={styles.stateText}>
+                {normalize(membershipRole) === 'member'
+                  ? 'Your role in this org is Member. Ask an admin to promote you.'
+                  : 'Admin access required to edit cohort members.'}
+              </Text>
             ) : (
               <>
                 <TextInput
@@ -392,6 +382,11 @@ const styles = StyleSheet.create({
   headerTextWrap: { flex: 1 },
   title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
   subtitle: { marginTop: 2, fontSize: 12, color: '#64748B' },
+  devDiagnosticText: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#94A3B8',
+  },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12 },
   card: {
