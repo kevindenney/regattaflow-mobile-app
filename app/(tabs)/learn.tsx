@@ -6,7 +6,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -192,6 +191,10 @@ export default function LearnScreen() {
     if (aRank !== bRank) return aRank - bRank;
     return String(a.organization?.name || '').localeCompare(String(b.organization?.name || ''));
   });
+  const membershipsByOrgId = useMemo(
+    () => new Map(sortedMemberships.map((membership) => [membership.organization_id, membership])),
+    [sortedMemberships]
+  );
 
   const handleJoinOrganization = async (orgId: string, mode: OrganizationJoinMode) => {
     if (joinBusyOrgId) return;
@@ -203,7 +206,7 @@ export default function LearnScreen() {
       await refreshMemberships();
       await refreshOrganizationSearch();
     } catch (error: any) {
-      Alert.alert('Could not join organization', String(error?.message || 'Please try again.'));
+      setJoinNotice(String(error?.message || 'Could not send request. Please try again.'));
     } finally {
       setJoinBusyOrgId(null);
     }
@@ -286,6 +289,8 @@ export default function LearnScreen() {
                     <View style={styles.orgList}>
                       {sortedMemberships.map((membership) => {
                         const statusText = getMembershipStatusLabel(membership.membership_status || membership.status);
+                        const normalizedStatus = String(membership.membership_status || membership.status || '').toLowerCase();
+                        const isPending = normalizedStatus === 'pending' || normalizedStatus === 'invited';
                         const isActiveOrg = activeOrganizationId === membership.organization_id;
                         return (
                           <View key={membership.id} style={styles.orgRow}>
@@ -296,16 +301,25 @@ export default function LearnScreen() {
                                 <Text style={styles.orgMetaDot}>·</Text>
                                 <Text style={styles.orgMetaText}>{membership.role}</Text>
                               </View>
+                              {isPending ? (
+                                <Text style={styles.orgPendingHelper}>Awaiting approval</Text>
+                              ) : null}
                             </View>
-                            <TouchableOpacity
-                              style={[styles.orgActionButton, isActiveOrg && styles.orgActionButtonActive]}
-                              onPress={() => setActiveOrganizationId(membership.organization_id)}
-                              disabled={isActiveOrg}
-                            >
-                              <Text style={[styles.orgActionText, isActiveOrg && styles.orgActionTextActive]}>
-                                {isActiveOrg ? 'Active' : 'Set active'}
-                              </Text>
-                            </TouchableOpacity>
+                            {isPending ? (
+                              <View style={[styles.inviteRequiredPill, styles.pendingPill]}>
+                                <Text style={[styles.inviteRequiredText, styles.pendingPillText]}>Pending</Text>
+                              </View>
+                            ) : (
+                              <TouchableOpacity
+                                style={[styles.orgActionButton, isActiveOrg && styles.orgActionButtonActive]}
+                                onPress={() => setActiveOrganizationId(membership.organization_id)}
+                                disabled={isActiveOrg}
+                              >
+                                <Text style={[styles.orgActionText, isActiveOrg && styles.orgActionTextActive]}>
+                                  {isActiveOrg ? 'Active' : 'Set active'}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
                         );
                       })}
@@ -339,13 +353,25 @@ export default function LearnScreen() {
                         const isInviteOnly = org.join_mode === 'invite_only';
                         const isRequestMode = org.join_mode === 'request_to_join';
                         const isBusy = joinBusyOrgId === org.id;
+                        const existingMembership = membershipsByOrgId.get(org.id);
+                        const existingStatus = String(existingMembership?.membership_status || existingMembership?.status || '').toLowerCase();
+                        const hasPendingMembership = existingStatus === 'pending' || existingStatus === 'invited';
+                        const hasActiveMembership = existingStatus === 'active' || existingStatus === 'verified';
                         return (
                           <View key={org.id} style={styles.orgRow}>
                             <View style={styles.orgRowBody}>
                               <Text style={styles.orgName}>{org.name}</Text>
                               <Text style={styles.orgJoinModeLabel}>{getJoinModeLabel(org.join_mode)}</Text>
                             </View>
-                            {isInviteOnly ? (
+                            {hasPendingMembership ? (
+                              <View style={[styles.orgActionButton, styles.orgActionButtonDisabled]}>
+                                <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Request sent</Text>
+                              </View>
+                            ) : hasActiveMembership ? (
+                              <View style={[styles.orgActionButton, styles.orgActionButtonDisabled]}>
+                                <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Member</Text>
+                              </View>
+                            ) : isInviteOnly ? (
                               <View style={styles.inviteRequiredPill}>
                                 <Text style={styles.inviteRequiredText}>Invite required</Text>
                               </View>
@@ -762,9 +788,20 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.secondaryLabel,
     fontWeight: '600',
   },
+  pendingPill: {
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+  },
+  pendingPillText: {
+    color: '#1D4ED8',
+  },
   orgHint: {
     fontSize: 12,
     color: IOS_COLORS.secondaryLabel,
+  },
+  orgPendingHelper: {
+    fontSize: 11,
+    color: IOS_COLORS.tertiaryLabel,
   },
   orgNotice: {
     fontSize: 12,
@@ -824,6 +861,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  orgActionButtonDisabled: {
+    borderColor: '#D1D5DB',
+    backgroundColor: '#F8FAFC',
+  },
+  orgActionTextDisabled: {
+    color: IOS_COLORS.secondaryLabel,
   },
   memberRow: {
     flexDirection: 'row',
