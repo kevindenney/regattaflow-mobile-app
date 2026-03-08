@@ -8,7 +8,7 @@ import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 type MemberRow = {
   id: string;
@@ -296,6 +296,55 @@ export default function OrganizationMembersScreen() {
     [canManage, resolvedActiveOrgId, user?.id]
   );
 
+  const handleResetToPending = useCallback(
+    (row: MemberRow) => {
+      if (!canManage || !resolvedActiveOrgId) return;
+      if (user?.id && row.user_id === user.id) return;
+
+      Alert.alert(
+        'Reset to pending?',
+        'Reset this member to pending? They will appear as a join request again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reset',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                setBusyMembershipId(row.id);
+                setSaveStates((prev) => ({ ...prev, [row.id]: undefined }));
+                try {
+                  const { error } = await supabase.rpc('admin_reset_org_member_to_pending', {
+                    p_org_id: resolvedActiveOrgId,
+                    p_user_id: row.user_id,
+                  });
+                  if (error) throw error;
+
+                  setSaveStates((prev) => ({
+                    ...prev,
+                    [row.id]: { type: 'saved', message: 'Reset to pending' },
+                  }));
+                  await loadMembers();
+                } catch (error: any) {
+                  setSaveStates((prev) => ({
+                    ...prev,
+                    [row.id]: {
+                      type: 'error',
+                      message: error?.message || 'Could not reset to pending.',
+                    },
+                  }));
+                } finally {
+                  setBusyMembershipId(null);
+                }
+              })();
+            },
+          },
+        ]
+      );
+    },
+    [canManage, loadMembers, resolvedActiveOrgId, user?.id]
+  );
+
   const title = useMemo(
     () => `Members${activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}`,
     [activeOrganization?.name]
@@ -405,7 +454,16 @@ export default function OrganizationMembersScreen() {
                     {user?.id && row.user_id !== user.id ? (
                       <View style={styles.memberActionsRow}>
                         <TouchableOpacity
-                          style={[styles.removeButton, busyMembershipId === row.id && styles.disabledButton]}
+                          style={[styles.resetButton, busyMembershipId === row.id && styles.actionButtonDisabled]}
+                          onPress={() => void handleResetToPending(row)}
+                          disabled={busyMembershipId === row.id}
+                        >
+                          <Text style={styles.resetButtonText}>
+                            {busyMembershipId === row.id ? 'Saving...' : 'Reset to pending'}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.removeButton, busyMembershipId === row.id && styles.actionButtonDisabled]}
                           onPress={() => void handleRemoveAccess(row)}
                           disabled={busyMembershipId === row.id}
                         >
@@ -577,6 +635,20 @@ const styles = StyleSheet.create({
   memberActionsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 8,
+  },
+  resetButton: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  resetButtonText: {
+    fontSize: 12,
+    color: '#1D4ED8',
+    fontWeight: '600',
   },
   removeButton: {
     borderRadius: 8,
@@ -590,6 +662,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#B42318',
     fontWeight: '600',
+  },
+  actionButtonDisabled: {
+    opacity: 0.6,
   },
   centerState: {
     flex: 1,
