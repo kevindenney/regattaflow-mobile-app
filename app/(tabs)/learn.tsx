@@ -70,10 +70,31 @@ type OrgStepTemplate = {
   created_at: string;
 };
 
+type UserCohort = {
+  id: string;
+  name: string;
+  interest_slug: string | null;
+};
+
+function normalizeText(value: unknown): string {
+  return String(value || '').trim().toLowerCase();
+}
+
+function templateMatchesCohort(template: OrgStepTemplate, cohort: UserCohort): boolean {
+  const cohortName = normalizeText(cohort.name);
+  if (!cohortName) return false;
+  const haystack = `${template.title || ''} ${template.description || ''}`.toLowerCase();
+  return (
+    haystack.includes(`[${cohortName}]`)
+    || haystack.includes(`cohort:${cohortName}`)
+    || haystack.includes(cohortName)
+  );
+}
+
 export default function LearnScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { signedIn } = useAuth();
+  const { signedIn, user } = useAuth();
   const { memberships, activeOrganizationId, setActiveOrganizationId, refreshMemberships } = useOrganization();
   const [mounted, setMounted] = useState(false);
   const [toolbarHeight, setToolbarHeight] = useState(0);
@@ -86,6 +107,9 @@ export default function LearnScreen() {
   const [orgTemplates, setOrgTemplates] = useState<OrgStepTemplate[]>([]);
   const [orgTemplatesLoading, setOrgTemplatesLoading] = useState(false);
   const [orgTemplatesError, setOrgTemplatesError] = useState<string | null>(null);
+  const [userCohorts, setUserCohorts] = useState<UserCohort[]>([]);
+  const [userCohortsLoading, setUserCohortsLoading] = useState(false);
+  const [userCohortsError, setUserCohortsError] = useState<string | null>(null);
 
   const isDesktop = mounted && width > 768;
 
@@ -188,6 +212,82 @@ export default function LearnScreen() {
     };
   }, [activeOrganizationId, activeSegment, interestSlug]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUserCohorts = async () => {
+      if (!signedIn || !user?.id || !isUuid(user.id) || !activeOrganizationId || !isUuid(activeOrganizationId)) {
+        if (!cancelled) {
+          setUserCohorts([]);
+          setUserCohortsError(null);
+          setUserCohortsLoading(false);
+        }
+        return;
+      }
+
+      setUserCohortsLoading(true);
+      setUserCohortsError(null);
+      try {
+        const { data: memberRows, error: memberError } = await supabase
+          .from('betterat_org_cohort_members')
+          .select('cohort_id')
+          .eq('user_id', user.id);
+
+        if (memberError) throw memberError;
+
+        const cohortIds = Array.from(
+          new Set(
+            (memberRows || [])
+              .map((row: any) => String(row.cohort_id || ''))
+              .filter((id) => isUuid(id))
+          )
+        );
+
+        if (cohortIds.length === 0) {
+          if (!cancelled) {
+            setUserCohorts([]);
+          }
+          return;
+        }
+
+        const { data: cohortRows, error: cohortError } = await supabase
+          .from('betterat_org_cohorts')
+          .select('id,name,interest_slug,org_id')
+          .eq('org_id', activeOrganizationId)
+          .in('id', cohortIds);
+
+        if (cohortError) throw cohortError;
+
+        const normalized = (cohortRows || []).map((row: any) => ({
+          id: String(row.id),
+          name: String(row.name || 'Cohort'),
+          interest_slug: typeof row.interest_slug === 'string' ? row.interest_slug : null,
+        }));
+
+        if (!cancelled) {
+          setUserCohorts(normalized);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setUserCohorts([]);
+          setUserCohortsError(error?.message || 'Could not load cohort context.');
+        }
+      } finally {
+        if (!cancelled) {
+          setUserCohortsLoading(false);
+        }
+      }
+    };
+
+    if (activeSegment === 'courses') {
+      void loadUserCohorts();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOrganizationId, activeSegment, signedIn, user?.id]);
+
   const sortedMemberships = [...memberships].sort((a, b) => {
     const aStatus = String(a.membership_status || a.status || '').toLowerCase();
     const bStatus = String(b.membership_status || b.status || '').toLowerCase();
@@ -265,6 +365,17 @@ export default function LearnScreen() {
 
   const isMemberActive = (status: string) => status === 'active' || status === 'verified';
   const statusLabel = (status: string) => (isMemberActive(status) ? 'Active' : status === 'pending' ? 'Pending' : 'Inactive');
+  const prioritizedOrgTemplates = useMemo(() => {
+    if (!orgTemplates.length || !userCohorts.length) return orgTemplates;
+    const withRank = orgTemplates.map((template) => {
+      const linked = userCohorts.some((cohort) => templateMatchesCohort(template, cohort));
+      return { template, linked };
+    });
+
+    return withRank
+      .sort((a, b) => Number(b.linked) - Number(a.linked))
+      .map((entry) => entry.template);
+  }, [orgTemplates, userCohorts]);
 
   return (
     <View style={styles.container}>
@@ -403,8 +514,29 @@ export default function LearnScreen() {
 
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionLabel}>{templateSectionLabel.toUpperCase()}</Text>
-                  <Text style={styles.sectionCount}>{orgTemplates.length}</Text>
+                  <Text style={styles.sectionCount}>{prioritizedOrgTemplates.length}</Text>
                 </View>
+                {userCohortsLoading ? (
+                  <View style={styles.orgSearchLoading}>
+                    <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
+                  </View>
+                ) : userCohorts.length > 0 ? (
+                  <View style={styles.cohortBadgeRow}>
+                    <Text style={styles.cohortBadgeLabel}>{userCohorts.length > 1 ? 'Your cohorts' : 'Your cohort'}</Text>
+                    {userCohorts.slice(0, 3).map((cohort) => (
+                      <View key={cohort.id} style={styles.cohortPill}>
+                        <Text style={styles.cohortPillText}>{cohort.name}</Text>
+                      </View>
+                    ))}
+                    {userCohorts.length > 3 ? (
+                      <View style={styles.cohortPill}>
+                        <Text style={styles.cohortPillText}>+{userCohorts.length - 3}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : userCohortsError ? (
+                  <Text style={styles.orgError}>{userCohortsError}</Text>
+                ) : null}
                 <View style={styles.coursesList}>
                   {!activeOrganizationId ? (
                     <Text style={styles.orgHint}>Set an active organization to see recommendations.</Text>
@@ -414,10 +546,10 @@ export default function LearnScreen() {
                     </View>
                   ) : orgTemplatesError ? (
                     <Text style={styles.orgError}>{orgTemplatesError}</Text>
-                  ) : orgTemplates.length === 0 ? (
+                  ) : prioritizedOrgTemplates.length === 0 ? (
                     <Text style={styles.orgHint}>No published recommendations for this interest yet.</Text>
                   ) : (
-                    orgTemplates.map((template) => (
+                    prioritizedOrgTemplates.map((template) => (
                       <View key={template.id} style={styles.templateRow}>
                         <View style={styles.templateIconContainer}>
                           <Ionicons name="sparkles-outline" size={14} color={IOS_COLORS.systemBlue} />
@@ -820,6 +952,32 @@ const styles = StyleSheet.create({
   orgSearchLoading: {
     paddingVertical: 6,
     alignItems: 'flex-start',
+  },
+  cohortBadgeRow: {
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  cohortBadgeLabel: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    fontWeight: '600',
+    marginRight: 2,
+  },
+  cohortPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  cohortPillText: {
+    fontSize: 11,
+    color: '#1D4ED8',
+    fontWeight: '600',
   },
   templateRow: {
     flexDirection: 'row',
