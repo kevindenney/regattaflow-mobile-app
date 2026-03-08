@@ -186,7 +186,7 @@ export default function OrganizationTemplatesScreen() {
     void (async () => {
       const { data, error } = await supabase
         .from('betterat_org_cohorts')
-        .select('id,name')
+        .select('id,name,interest_slug')
         .eq('org_id', activeOrganization.id)
         .order('created_at', { ascending: false });
 
@@ -196,7 +196,14 @@ export default function OrganizationTemplatesScreen() {
         return;
       }
 
-      setCohorts((data || []).map((row: any) => ({
+      const normalizedOrgInterest = String(orgInterestSlug || '').trim().toLowerCase();
+      const rows = (data || []).filter((row: any) => {
+        const cohortInterest = String(row.interest_slug || '').trim().toLowerCase();
+        if (!normalizedOrgInterest) return true;
+        return !cohortInterest || cohortInterest === normalizedOrgInterest;
+      });
+
+      setCohorts(rows.map((row: any) => ({
         id: String(row.id),
         name: String(row.name || 'Cohort'),
       })));
@@ -205,7 +212,7 @@ export default function OrganizationTemplatesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganization?.id, canManageActiveOrganization]);
+  }, [activeOrganization?.id, canManageActiveOrganization, orgInterestSlug]);
 
   useEffect(() => {
     if (!templates.length || !canManageActiveOrganization) {

@@ -88,6 +88,6 @@ Manual:
 - M3 completed (approval write hardening + realtime admin/requester updates).
 - M4 completed (members fetch fallback for legacy membership schema + filters/actions verified in code path).
 - M5 completed (cohort create now derives `interest_slug` from active org context instead of free-text input).
-- M6 pending
+- M6 completed (template cohort assignment list now filters to org-interest-compatible cohorts).
 - M7 pending
 - M8 pending
