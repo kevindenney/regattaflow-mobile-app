@@ -137,7 +137,7 @@ class OrganizationDiscoveryService {
 
     const { data: existingRows, error: existingError } = await supabase
       .from('organization_memberships')
-      .select('status,membership_status')
+      .select('id,status,membership_status')
       .eq('organization_id', input.orgId)
       .eq('user_id', userId)
       .order('created_at', {ascending: false})
@@ -165,11 +165,51 @@ class OrganizationDiscoveryService {
         };
       }
       if (existingMembershipStatus === 'rejected' || existingStatus === 'rejected') {
-        return {
-          status: 'existing',
-          membershipStatus: 'rejected',
-          message: 'Request already reviewed.',
+        let reRequestPayload: Record<string, any> = {
+          status: 'pending',
+          membership_status: 'pending',
+          is_verified: false,
+          verified_at: null,
+          joined_at: null,
+          verification_source: 'invite',
         };
+
+        const missingColumnFallbacks: Array<[string, string]> = [
+          ['membership_status', 'organization_memberships.membership_status'],
+          ['is_verified', 'organization_memberships.is_verified'],
+          ['verified_at', 'organization_memberships.verified_at'],
+          ['joined_at', 'organization_memberships.joined_at'],
+          ['verification_source', 'organization_memberships.verification_source'],
+        ];
+
+        while (true) {
+          const { error: updateError } = await supabase
+            .from('organization_memberships')
+            .update(reRequestPayload)
+            .eq('id', existing.id)
+            .eq('organization_id', input.orgId)
+            .eq('user_id', userId);
+
+          if (!updateError) {
+            return {
+              status: 'pending',
+              membershipStatus: 'pending',
+              message: 'Request sent.',
+            };
+          }
+
+          const missing = missingColumnFallbacks.find(([key, qualified]) =>
+            reRequestPayload[key] !== undefined && isMissingSupabaseColumn(updateError, qualified)
+          );
+          if (!missing) {
+            throw updateError;
+          }
+
+          const [missingKey] = missing;
+          const nextPayload = { ...reRequestPayload };
+          delete nextPayload[missingKey];
+          reRequestPayload = nextPayload;
+        }
       }
     }
 
