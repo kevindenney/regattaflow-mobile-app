@@ -82,6 +82,16 @@ Manual:
 1. Smoke test Learn + members + cohorts + templates + notifications.
 2. Confirm clean git status except local temp artifacts.
 
+## M9 — Demo Smoke Harness (Unbuilt -> Built)
+Acceptance:
+- Repeatable browser smoke script exists for JHSON-first multi-org demo.
+- Script checks Learn, Activity notifications, Members/Cohorts/Templates routes, and cleanup signals.
+- Output is machine-readable (`id|PASS/FAIL|detail`) for quick triage.
+
+Manual:
+1. Run `node scripts/smoke-multi-org-demo.mjs`.
+2. Confirm `/tmp/multi-org-smoke.png` is generated and review any FAIL rows.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -91,3 +101,4 @@ Manual:
 - M6 completed (template cohort assignment list now filters to org-interest-compatible cohorts).
 - M7 completed (Learn already shows admin tool shortcuts for admins and enforces safe leave/orphan guards).
 - M8 completed (removed remaining org-admin dev diagnostic text from members/cohorts/cohort detail surfaces).
+- M9 completed (added `scripts/smoke-multi-org-demo.mjs` and documented usage).
