@@ -86,7 +86,7 @@ Manual:
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
 - M3 completed (approval write hardening + realtime admin/requester updates).
-- M4 pending
+- M4 completed (members fetch fallback for legacy membership schema + filters/actions verified in code path).
 - M5 pending
 - M6 pending
 - M7 pending

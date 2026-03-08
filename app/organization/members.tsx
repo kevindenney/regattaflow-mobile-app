@@ -168,11 +168,22 @@ export default function OrganizationMembersScreen() {
     setErrorText(null);
 
     try {
-      const { data: membershipRows, error: membershipError } = await supabase
+      let membershipQuery = await supabase
         .from('organization_memberships')
         .select('id,user_id,role,membership_status,status,created_at')
         .eq('organization_id', resolvedActiveOrgId)
         .order('created_at', { ascending: false });
+
+      if (membershipQuery.error && isMissingSupabaseColumn(membershipQuery.error, 'organization_memberships.membership_status')) {
+        membershipQuery = await supabase
+          .from('organization_memberships')
+          .select('id,user_id,role,status,created_at')
+          .eq('organization_id', resolvedActiveOrgId)
+          .order('created_at', { ascending: false });
+      }
+
+      const membershipRows = membershipQuery.data;
+      const membershipError = membershipQuery.error;
 
       if (membershipError) throw membershipError;
 
