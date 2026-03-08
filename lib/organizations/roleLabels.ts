@@ -3,6 +3,11 @@ type CoachRoleLabelInput = {
   role: string;
 };
 
+export function isOrgAdminRole(role: string | null | undefined): boolean {
+  const normalized = String(role || '').trim().toLowerCase();
+  return normalized === 'owner' || normalized === 'admin' || normalized === 'manager';
+}
+
 function toTitleCase(value: string): string {
   return value
     .split('_')
@@ -15,6 +20,10 @@ export function coachRoleLabel({ interestSlug, role }: CoachRoleLabelInput): str
   const normalizedInterest = String(interestSlug || '').trim().toLowerCase();
   const normalizedRole = String(role || '').trim().toLowerCase();
 
+  if (isOrgAdminRole(normalizedRole)) {
+    return 'Org Admin';
+  }
+
   const nursingRoleLabels: Record<string, string> = {
     preceptor: 'Preceptor',
     clinical_instructor: 'Clinical Instructor',
@@ -22,8 +31,6 @@ export function coachRoleLabel({ interestSlug, role }: CoachRoleLabelInput): str
     evaluator: 'Evaluator',
     assessor: 'Assessor',
     coach: 'Coach',
-    admin: 'Admin',
-    manager: 'Program Admin',
   };
 
   const sailingRoleLabels: Record<string, string> = {
@@ -32,8 +39,6 @@ export function coachRoleLabel({ interestSlug, role }: CoachRoleLabelInput): str
     staff: 'Race Officer',
     tutor: 'Sailmaker',
     volunteer: 'Rigger',
-    admin: 'Club Admin',
-    manager: 'Team Manager',
   };
 
   if (normalizedInterest === 'nursing') {

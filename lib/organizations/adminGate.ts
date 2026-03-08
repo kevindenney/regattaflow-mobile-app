@@ -1,4 +1,5 @@
 import { isUuid } from '@/utils/uuid';
+import { isOrgAdminRole as isCanonicalOrgAdminRole } from '@/lib/organizations/roleLabels';
 
 type MembershipLike = {
   organization_id?: unknown;
@@ -29,8 +30,7 @@ function normalize(value: unknown): string {
 }
 
 export function isOrgAdminRole(role: string | null): boolean {
-  const normalized = normalize(role);
-  return normalized === 'owner' || normalized === 'admin' || normalized === 'manager';
+  return isCanonicalOrgAdminRole(role);
 }
 
 export function isActiveMembership(status: string | null): boolean {

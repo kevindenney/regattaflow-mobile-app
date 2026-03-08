@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,6 +30,7 @@ import { useCourses, type BetterAtCourse } from '@/hooks/useBetterAtCourses';
 import { useOrganizationSearch } from '@/hooks/useOrganizationSearch';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
 import { supabase } from '@/services/supabase';
+import { getActiveMembership, isActiveMembership as isActiveOrgMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { isUuid } from '@/utils/uuid';
 import { coachRoleLabel } from '@/lib/organizations/roleLabels';
@@ -96,7 +98,7 @@ export default function LearnScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { signedIn, user } = useAuth();
-  const { memberships, activeOrganizationId, setActiveOrganizationId, refreshMemberships, canManageActiveOrganization } = useOrganization();
+  const { memberships, activeOrganizationId, setActiveOrganizationId, refreshMemberships } = useOrganization();
   const [mounted, setMounted] = useState(false);
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
@@ -104,6 +106,7 @@ export default function LearnScreen() {
   const [orgQuery, setOrgQuery] = useState('');
   const [peopleQuery, setPeopleQuery] = useState('');
   const [joinBusyOrgId, setJoinBusyOrgId] = useState<string | null>(null);
+  const [leaveBusyMembershipId, setLeaveBusyMembershipId] = useState<string | null>(null);
   const [joinNotice, setJoinNotice] = useState<string | null>(null);
   const [orgTemplates, setOrgTemplates] = useState<OrgStepTemplate[]>([]);
   const [orgTemplatesLoading, setOrgTemplatesLoading] = useState(false);
@@ -296,9 +299,9 @@ export default function LearnScreen() {
     const loadPendingAccessCount = async () => {
       if (
         activeSegment !== 'courses'
-        || !canManageActiveOrganization
-        || !activeOrganizationId
-        || !isUuid(activeOrganizationId)
+        || !hasActiveOrgAdmin
+        || !resolvedActiveOrgId
+        || !isUuid(resolvedActiveOrgId)
       ) {
         if (!cancelled) {
           setPendingAccessCount(0);
@@ -310,13 +313,13 @@ export default function LearnScreen() {
         let { count, error } = await supabase
           .from('organization_memberships')
           .select('id', { count: 'exact', head: true })
-          .eq('organization_id', activeOrganizationId)
+          .eq('organization_id', resolvedActiveOrgId)
           .eq('membership_status', 'pending');
         if (error && isMissingSupabaseColumn(error, 'organization_memberships.membership_status')) {
           const fallback = await supabase
             .from('organization_memberships')
             .select('id', { count: 'exact', head: true })
-            .eq('organization_id', activeOrganizationId)
+            .eq('organization_id', resolvedActiveOrgId)
             .eq('status', 'pending');
           count = fallback.count;
           error = fallback.error;
@@ -336,7 +339,7 @@ export default function LearnScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganizationId, activeSegment, canManageActiveOrganization]);
+  }, [activeSegment, hasActiveOrgAdmin, resolvedActiveOrgId]);
 
   const sortedMemberships = [...memberships].sort((a, b) => {
     const aStatus = String(a.membership_status || a.status || '').toLowerCase();
@@ -350,6 +353,21 @@ export default function LearnScreen() {
     () => new Map(sortedMemberships.map((membership) => [membership.organization_id, membership])),
     [sortedMemberships]
   );
+  const resolvedActiveOrgId = useMemo(
+    () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
+    [activeOrganizationId, memberships]
+  );
+  const activeOrgMembership = useMemo(
+    () => getActiveMembership({ memberships: memberships as any, activeOrgId: resolvedActiveOrgId }),
+    [memberships, resolvedActiveOrgId]
+  );
+  const hasActiveOrgAdmin = useMemo(() => {
+    if (!resolvedActiveOrgId || !isUuid(resolvedActiveOrgId)) return false;
+    return (
+      isActiveOrgMembership(activeOrgMembership?.membershipStatus || null)
+      && isOrgAdminRole(activeOrgMembership?.role || null)
+    );
+  }, [activeOrgMembership?.membershipStatus, activeOrgMembership?.role, resolvedActiveOrgId]);
 
   const handleJoinOrganization = async (orgId: string, mode: OrganizationJoinMode) => {
     if (joinBusyOrgId) return;
@@ -365,6 +383,85 @@ export default function LearnScreen() {
     } finally {
       setJoinBusyOrgId(null);
     }
+  };
+
+  const leaveOrganization = async (membershipId: string, organizationId: string) => {
+    if (!user?.id || !isUuid(organizationId) || leaveBusyMembershipId) return;
+    setLeaveBusyMembershipId(membershipId);
+    setJoinNotice(null);
+
+    let payload: Record<string, any> = {
+      membership_status: 'rejected',
+      status: 'rejected',
+      is_verified: false,
+      verified_at: null,
+      joined_at: null,
+    };
+
+    const missingColumnMap: Array<[string, string]> = [
+      ['membership_status', 'organization_memberships.membership_status'],
+      ['status', 'organization_memberships.status'],
+      ['is_verified', 'organization_memberships.is_verified'],
+      ['verified_at', 'organization_memberships.verified_at'],
+      ['joined_at', 'organization_memberships.joined_at'],
+    ];
+
+    try {
+      while (true) {
+        const { data, error } = await supabase
+          .from('organization_memberships')
+          .update(payload)
+          .select('id')
+          .eq('id', membershipId)
+          .eq('organization_id', organizationId)
+          .eq('user_id', user.id);
+
+        if (!error) {
+          if (!Array.isArray(data) || data.length === 0) {
+            setJoinNotice('Could not leave this organization. Ask an Org Admin to remove your access.');
+            break;
+          }
+          setJoinNotice('Access removed.');
+          await refreshMemberships();
+          await refreshOrganizationSearch();
+          break;
+        }
+
+        const missing = missingColumnMap.find(([key, qualified]) =>
+          payload[key] !== undefined && isMissingSupabaseColumn(error, qualified)
+        );
+
+        if (!missing) {
+          throw error;
+        }
+
+        const [missingKey] = missing;
+        const nextPayload = { ...payload };
+        delete nextPayload[missingKey];
+        payload = nextPayload;
+      }
+    } catch (error: any) {
+      setJoinNotice(String(error?.message || 'Could not leave organization.'));
+    } finally {
+      setLeaveBusyMembershipId(null);
+    }
+  };
+
+  const handleLeaveOrganization = (membershipId: string, organizationName: string, organizationId: string) => {
+    Alert.alert(
+      'Leave organization?',
+      `You will lose access to ${organizationName}. You can request access again later.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: () => {
+            void leaveOrganization(membershipId, organizationId);
+          },
+        },
+      ]
+    );
   };
 
   const getJoinModeLabel = (mode: OrganizationJoinMode): string => {
@@ -465,7 +562,9 @@ export default function LearnScreen() {
                               <View style={styles.orgMetaRow}>
                                 <Text style={styles.orgMetaText}>{statusText}</Text>
                                 <Text style={styles.orgMetaDot}>·</Text>
-                                <Text style={styles.orgMetaText}>{membership.role}</Text>
+                                <Text style={styles.orgMetaText}>
+                                  {coachRoleLabel({ interestSlug, role: membership.role })}
+                                </Text>
                               </View>
                               {isPending ? (
                                 <Text style={styles.orgPendingHelper}>Awaiting approval</Text>
@@ -476,15 +575,34 @@ export default function LearnScreen() {
                                 <Text style={[styles.inviteRequiredText, styles.pendingPillText]}>Pending</Text>
                               </View>
                             ) : (
-                              <TouchableOpacity
-                                style={[styles.orgActionButton, isActiveOrg && styles.orgActionButtonActive]}
-                                onPress={() => setActiveOrganizationId(membership.organization_id)}
-                                disabled={isActiveOrg}
-                              >
-                                <Text style={[styles.orgActionText, isActiveOrg && styles.orgActionTextActive]}>
-                                  {isActiveOrg ? 'Current' : 'Use this org'}
-                                </Text>
-                              </TouchableOpacity>
+                              <View style={styles.orgActionsColumn}>
+                                <TouchableOpacity
+                                  style={[styles.orgActionButton, isActiveOrg && styles.orgActionButtonActive]}
+                                  onPress={() => setActiveOrganizationId(membership.organization_id)}
+                                  disabled={isActiveOrg}
+                                >
+                                  <Text style={[styles.orgActionText, isActiveOrg && styles.orgActionTextActive]}>
+                                    {isActiveOrg ? 'Current' : 'Use this org'}
+                                  </Text>
+                                </TouchableOpacity>
+                                {isMemberActive(normalizedStatus) && !isOrgAdminRole(membership.role) ? (
+                                  <TouchableOpacity
+                                    style={styles.leaveActionButton}
+                                    onPress={() =>
+                                      handleLeaveOrganization(
+                                        membership.id,
+                                        membership.organization?.name || 'this organization',
+                                        membership.organization_id
+                                      )
+                                    }
+                                    disabled={leaveBusyMembershipId === membership.id}
+                                  >
+                                    <Text style={styles.leaveActionText}>
+                                      {leaveBusyMembershipId === membership.id ? 'Leaving...' : 'Leave'}
+                                    </Text>
+                                  </TouchableOpacity>
+                                ) : null}
+                              </View>
                             )}
                           </View>
                         );
@@ -493,7 +611,7 @@ export default function LearnScreen() {
                   )}
                 </View>
 
-                {canManageActiveOrganization && activeOrganizationId && isUuid(activeOrganizationId) ? (
+                {hasActiveOrgAdmin && resolvedActiveOrgId && isUuid(resolvedActiveOrgId) ? (
                   <View style={styles.orgSection}>
                     <Text style={styles.orgSectionTitle}>Admin tools</Text>
                     <View style={styles.adminToolsList}>
@@ -792,7 +910,9 @@ export default function LearnScreen() {
                       <View style={styles.memberRowBody}>
                         <Text style={styles.memberName}>{member.name}</Text>
                         <View style={styles.memberMetaRow}>
-                          <Text style={styles.memberMetaText}>{member.role}</Text>
+                          <Text style={styles.memberMetaText}>
+                            {coachRoleLabel({ interestSlug, role: member.role })}
+                          </Text>
                           <Text style={styles.memberMetaDot}>·</Text>
                           <Text style={styles.memberMetaText}>{statusLabel(member.status)}</Text>
                         </View>
@@ -981,6 +1101,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
+  orgActionsColumn: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   orgActionButtonActive: {
     borderColor: '#16A34A',
     backgroundColor: '#ECFDF3',
@@ -992,6 +1116,15 @@ const styles = StyleSheet.create({
   },
   orgActionTextActive: {
     color: '#15803D',
+  },
+  leaveActionButton: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  leaveActionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.systemRed,
   },
   inviteRequiredPill: {
     borderRadius: 999,
