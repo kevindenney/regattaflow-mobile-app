@@ -25,7 +25,7 @@ type SaveState = {
 
 const ADMIN_ROLES = new Set(['owner', 'admin', 'manager']);
 const NURSING_ROLES = ['member', 'preceptor', 'clinical_instructor', 'instructor', 'evaluator', 'admin', 'manager'];
-const SAILING_ROLES = ['member', 'coach', 'tactician', 'race_officer', 'team_manager', 'admin', 'manager'];
+const SAILING_ROLES = ['member', 'coach', 'tactician', 'race_officer', 'admin', 'manager'];
 
 function normalizeStatus(value: string | null | undefined): string {
   return String(value || '').trim().toLowerCase();
