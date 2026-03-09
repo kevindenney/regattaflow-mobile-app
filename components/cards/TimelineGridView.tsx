@@ -6,7 +6,7 @@
  * Tapping a mini card zooms back to that race in the CardGrid.
  */
 
-import React, { useMemo, useRef, useCallback, useState } from 'react';
+import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -45,6 +45,12 @@ interface TimelineGridViewProps {
   onEditRace?: (raceId: string) => void;
   /** Callback when delete is requested for a race */
   onDeleteRace?: (raceId: string, raceName: string) => void;
+  /** Bulk status update callback for selected races */
+  onBulkUpdateStatus?: (raceIds: string[], status: 'completed' | 'planned') => Promise<void> | void;
+  /** Bulk delete callback for selected races */
+  onBulkDelete?: (raceIds: string[]) => Promise<void> | void;
+  /** Reorder callback (ordered race IDs) */
+  onReorderRaces?: (raceIds: string[]) => Promise<void> | void;
   /** Top inset to clear the toolbar */
   topInset?: number;
   /** Season header height */
@@ -277,12 +283,19 @@ export function TimelineGridView({
   userId,
   onEditRace,
   onDeleteRace,
+  onBulkUpdateStatus,
+  onBulkDelete,
+  onReorderRaces,
   topInset = 0,
   seasonHeaderHeight = 34,
 }: TimelineGridViewProps) {
   const { width: screenWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [openMenuRaceId, setOpenMenuRaceId] = useState<string | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedRaceIds, setSelectedRaceIds] = useState<Set<string>>(new Set());
+  const [orderedRaces, setOrderedRaces] = useState<CardRaceData[]>(races);
+  const [draggingRaceId, setDraggingRaceId] = useState<string | null>(null);
 
   // Responsive columns
   const columns = screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : 2;
@@ -290,15 +303,77 @@ export function TimelineGridView({
   const gap = 10;
   const cardWidth = (screenWidth - horizontalPadding * 2 - gap * (columns - 1)) / columns;
 
+  useEffect(() => {
+    setOrderedRaces(races);
+    setSelectedRaceIds(new Set());
+    setBulkMode(false);
+  }, [races]);
+
   // Group races by month
-  const monthGroups = useMemo(() => groupByMonth(races), [races]);
+  const monthGroups = useMemo(() => groupByMonth(orderedRaces), [orderedRaces]);
+  const nowSplitIndex = useMemo(() => {
+    if (nextRaceIndex != null && nextRaceIndex >= 0) return nextRaceIndex;
+    const firstPlanned = orderedRaces.findIndex((race) => {
+      const dateStr = (race as any).start_date || race.date;
+      return !isRacePast(dateStr, race.startTime);
+    });
+    return firstPlanned >= 0 ? firstPlanned : null;
+  }, [nextRaceIndex, orderedRaces]);
+
+  const selectedCount = selectedRaceIds.size;
+
+  const toggleSelect = useCallback((raceId: string) => {
+    setSelectedRaceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(raceId)) {
+        next.delete(raceId);
+      } else {
+        next.add(raceId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleBulkStatus = useCallback(async (status: 'completed' | 'planned') => {
+    if (!onBulkUpdateStatus || selectedRaceIds.size === 0) return;
+    await onBulkUpdateStatus(Array.from(selectedRaceIds), status);
+    setSelectedRaceIds(new Set());
+    setBulkMode(false);
+  }, [onBulkUpdateStatus, selectedRaceIds]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (!onBulkDelete || selectedRaceIds.size === 0) return;
+    const ids = Array.from(selectedRaceIds);
+    setOrderedRaces((prev) => prev.filter((race) => !selectedRaceIds.has(race.id)));
+    await onBulkDelete(ids);
+    setSelectedRaceIds(new Set());
+    setBulkMode(false);
+  }, [onBulkDelete, selectedRaceIds]);
+
+  const reorderRaceIds = useCallback((dragId: string, dropId: string) => {
+    if (dragId === dropId) return;
+    setOrderedRaces((prev) => {
+      const from = prev.findIndex((r) => r.id === dragId);
+      const to = prev.findIndex((r) => r.id === dropId);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      void onReorderRaces?.(next.map((r) => r.id));
+      return next;
+    });
+  }, [onReorderRaces]);
 
   const handleSelectRace = useCallback(
     (index: number, race: CardRaceData) => {
       setOpenMenuRaceId(null);
+      if (bulkMode) {
+        toggleSelect(race.id);
+        return;
+      }
       onSelectRace(index, race);
     },
-    [onSelectRace],
+    [onSelectRace, bulkMode, toggleSelect],
   );
 
   return (
@@ -319,8 +394,46 @@ export function TimelineGridView({
         {/* Summary bar */}
         <View style={gridStyles.summaryBar}>
           <Text style={gridStyles.summaryText}>
-            {races.length} {races.length === 1 ? 'race' : 'races'}
+            {orderedRaces.length} {orderedRaces.length === 1 ? 'race' : 'races'}
           </Text>
+          {onBulkUpdateStatus ? (
+            bulkMode ? (
+              <View style={gridStyles.bulkActions}>
+                <Text style={gridStyles.bulkCount}>{selectedCount} selected</Text>
+                <Pressable style={gridStyles.bulkButton} onPress={() => void handleBulkStatus('completed')}>
+                  <Text style={gridStyles.bulkButtonTextDone}>Done</Text>
+                </Pressable>
+                <Pressable style={gridStyles.bulkButton} onPress={() => void handleBulkStatus('planned')}>
+                  <Text style={gridStyles.bulkButtonTextPlanned}>Planned</Text>
+                </Pressable>
+                {onBulkDelete ? (
+                  <Pressable style={gridStyles.bulkButton} onPress={() => void handleBulkDelete()}>
+                    <Text style={gridStyles.bulkButtonTextDelete}>Delete</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  style={gridStyles.bulkButton}
+                  onPress={() => {
+                    setBulkMode(false);
+                    setSelectedRaceIds(new Set());
+                  }}
+                >
+                  <Text style={gridStyles.bulkButtonTextCancel}>Cancel</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                style={gridStyles.bulkModeToggle}
+                onPress={() => {
+                  setBulkMode(true);
+                  setSelectedRaceIds(new Set());
+                }}
+              >
+                <Ionicons name="checkmark-done-outline" size={14} color={IOS_COLORS.blue} />
+                <Text style={gridStyles.bulkModeToggleText}>Bulk Edit</Text>
+              </Pressable>
+            )
+          ) : null}
           {nextRaceIndex != null && nextRaceIndex >= 0 && (
             <View style={gridStyles.summaryNextBadge}>
               <View style={gridStyles.summaryNextDot} />
@@ -331,15 +444,77 @@ export function TimelineGridView({
           )}
         </View>
 
-        {monthGroups.map((group) => (
+        {monthGroups.map((group, groupIdx) => {
+          const groupHasCompleted = nowSplitIndex != null
+            ? group.races.some(({ index }) => index < nowSplitIndex)
+            : false;
+          const groupHasPlanned = nowSplitIndex != null
+            ? group.races.some(({ index }) => index >= nowSplitIndex)
+            : false;
+          const hasCompletedBeforeGroup = nowSplitIndex != null
+            ? monthGroups.slice(0, groupIdx).some((priorGroup) =>
+                priorGroup.races.some(({ index }) => index < nowSplitIndex)
+              )
+            : false;
+          const showNowBeforeGroup = Boolean(
+            nowSplitIndex != null && !groupHasCompleted && groupHasPlanned && hasCompletedBeforeGroup
+          );
+          const showNowWithinGroup = Boolean(
+            nowSplitIndex != null && groupHasCompleted && groupHasPlanned
+          );
+          const completedEntries = showNowWithinGroup
+            ? group.races.filter(({ index }) => index < (nowSplitIndex as number))
+            : group.races;
+          const plannedEntries = showNowWithinGroup
+            ? group.races.filter(({ index }) => index >= (nowSplitIndex as number))
+            : [];
+
+          return (
           <View key={group.key} style={gridStyles.monthSection}>
+            {showNowBeforeGroup ? (
+              <View style={gridStyles.nowDividerRow}>
+                <View style={gridStyles.nowDividerLine} />
+                <View style={gridStyles.nowPill}>
+                  <View style={gridStyles.nowDot} />
+                  <Text style={gridStyles.nowPillText}>Now</Text>
+                </View>
+                <View style={gridStyles.nowDividerLine} />
+              </View>
+            ) : null}
             {/* Month header */}
             <Text style={gridStyles.monthHeader}>{group.label}</Text>
 
             {/* Card grid */}
             <View style={[gridStyles.grid, { gap }]}>
-              {group.races.map(({ race, index }) => (
-                <View key={race.id} style={{ width: cardWidth }}>
+              {completedEntries.map(({ race, index }) => (
+                <View
+                  key={race.id}
+                  style={[
+                    { width: cardWidth },
+                    selectedRaceIds.has(race.id) && gridStyles.selectedCardWrapper,
+                    draggingRaceId === race.id && gridStyles.draggingCardWrapper,
+                  ]}
+                  {...((Platform.OS === 'web' && !bulkMode) ? {
+                    draggable: true,
+                    onDragStart: () => setDraggingRaceId(race.id),
+                    onDragOver: (e: any) => e.preventDefault(),
+                    onDrop: (e: any) => {
+                      e.preventDefault();
+                      if (draggingRaceId) reorderRaceIds(draggingRaceId, race.id);
+                      setDraggingRaceId(null);
+                    },
+                    onDragEnd: () => setDraggingRaceId(null),
+                  } : {}) as any}
+                >
+                  {bulkMode ? (
+                    <View style={gridStyles.selectionBadge}>
+                      <Ionicons
+                        name={selectedRaceIds.has(race.id) ? 'checkbox' : 'square-outline'}
+                        size={16}
+                        color={selectedRaceIds.has(race.id) ? IOS_COLORS.blue : IOS_COLORS.secondaryLabel}
+                      />
+                    </View>
+                  ) : null}
                   {(() => {
                     const canManage = !!userId && race.created_by === userId && !race.isDemo;
                     const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
@@ -362,8 +537,73 @@ export function TimelineGridView({
                 </View>
               ))}
             </View>
+            {showNowWithinGroup ? (
+              <>
+                <View style={gridStyles.nowDividerRow}>
+                  <View style={gridStyles.nowDividerLine} />
+                  <View style={gridStyles.nowPill}>
+                    <View style={gridStyles.nowDot} />
+                    <Text style={gridStyles.nowPillText}>Now</Text>
+                  </View>
+                  <View style={gridStyles.nowDividerLine} />
+                </View>
+                <View style={[gridStyles.grid, { gap }]}>
+                  {plannedEntries.map(({ race, index }) => (
+                    <View
+                      key={race.id}
+                      style={[
+                        { width: cardWidth },
+                        selectedRaceIds.has(race.id) && gridStyles.selectedCardWrapper,
+                        draggingRaceId === race.id && gridStyles.draggingCardWrapper,
+                      ]}
+                      {...((Platform.OS === 'web' && !bulkMode) ? {
+                        draggable: true,
+                        onDragStart: () => setDraggingRaceId(race.id),
+                        onDragOver: (e: any) => e.preventDefault(),
+                        onDrop: (e: any) => {
+                          e.preventDefault();
+                          if (draggingRaceId) reorderRaceIds(draggingRaceId, race.id);
+                          setDraggingRaceId(null);
+                        },
+                        onDragEnd: () => setDraggingRaceId(null),
+                      } : {}) as any}
+                    >
+                      {bulkMode ? (
+                        <View style={gridStyles.selectionBadge}>
+                          <Ionicons
+                            name={selectedRaceIds.has(race.id) ? 'checkbox' : 'square-outline'}
+                            size={16}
+                            color={selectedRaceIds.has(race.id) ? IOS_COLORS.blue : IOS_COLORS.secondaryLabel}
+                          />
+                        </View>
+                      ) : null}
+                      {(() => {
+                        const canManage = !!userId && race.created_by === userId && !race.isDemo;
+                        const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
+                        const handleDelete = canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined;
+                        return (
+                      <MiniCard
+                        race={race}
+                        isSelected={race.id === selectedRaceId}
+                        isNext={index === nextRaceIndex}
+                        canManage={canManage}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        isMenuOpen={openMenuRaceId === race.id}
+                        onOpenMenu={() => setOpenMenuRaceId(race.id)}
+                        onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
+                        onPress={() => handleSelectRace(index, race)}
+                      />
+                        );
+                      })()}
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : null}
           </View>
-        ))}
+          );
+        })}
 
         {/* Bottom spacer for tab bar */}
         <View style={{ height: 100 }} />
@@ -540,6 +780,64 @@ const gridStyles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 4,
   },
+  bulkModeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,122,255,0.25)',
+    backgroundColor: 'rgba(0,122,255,0.08)',
+    marginLeft: 'auto',
+    marginRight: 8,
+  },
+  bulkModeToggleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.blue,
+  },
+  bulkActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 'auto',
+    marginRight: 8,
+  },
+  bulkCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  bulkButton: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: IOS_COLORS.separator,
+    backgroundColor: IOS_COLORS.systemBackground,
+  },
+  bulkButtonTextDone: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.green,
+  },
+  bulkButtonTextPlanned: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.blue,
+  },
+  bulkButtonTextCancel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  bulkButtonTextDelete: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.red,
+  },
   summaryText: {
     fontSize: 13,
     fontWeight: '500',
@@ -568,6 +866,41 @@ const gridStyles = StyleSheet.create({
   monthSection: {
     marginBottom: 20,
   },
+  nowDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  nowDividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: IOS_COLORS.separator,
+  },
+  nowPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  nowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: IOS_COLORS.green,
+  },
+  nowPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.green,
+    letterSpacing: 0.2,
+  },
   monthHeader: {
     fontSize: 20,
     fontWeight: '700',
@@ -578,5 +911,23 @@ const gridStyles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  selectedCardWrapper: {
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: IOS_COLORS.blue,
+    padding: 2,
+  },
+  draggingCardWrapper: {
+    opacity: 0.55,
+  },
+  selectionBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 30,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 999,
+    padding: 2,
   },
 });

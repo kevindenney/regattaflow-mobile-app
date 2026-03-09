@@ -16,7 +16,7 @@ import React, {
   useEffect,
   useState,
 } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Text } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 import {
@@ -91,6 +91,7 @@ function CardGridComponent({
   topInset,
   refetchTrigger,
   nowBarWeather,
+  showBottomTimeline = true,
 }: CardGridWebProps & { nextRaceIndex?: number | null; topInset?: number }) {
   // Refs for scroll container
   const horizontalScrollRef = useRef<ScrollView>(null);
@@ -315,6 +316,11 @@ function CardGridComponent({
           goToRace(raceIndex);
         }
       };
+      const isNextRace = nextRaceIndex != null && raceIndex === nextRaceIndex;
+      const isLastCompletedRace =
+        nextRaceIndex != null &&
+        nextRaceIndex > 0 &&
+        raceIndex === nextRaceIndex - 1;
 
       return (
         <View
@@ -326,9 +332,25 @@ function CardGridComponent({
               borderRadius: CARD_BORDER_RADIUS,
               opacity: isActive ? 1 : 0.7,
               transform: [{ scale: isActive ? 1 : 0.95 }],
+              borderWidth: isNextRace || isLastCompletedRace ? 2 : 0,
+              borderColor: isNextRace ? IOS_COLORS.green : isLastCompletedRace ? '#94A3B8' : 'transparent',
             },
           ]}
         >
+          {(isNextRace || isLastCompletedRace) ? (
+            <View style={styles.timelineBadgeStack}>
+              {isNextRace ? (
+                <View style={[styles.timelineBadge, styles.timelineBadgeNext]}>
+                  <Text style={styles.timelineBadgeTextNext}>NEXT</Text>
+                </View>
+              ) : null}
+              {isLastCompletedRace ? (
+                <View style={[styles.timelineBadge, styles.timelineBadgeDone]}>
+                  <Text style={styles.timelineBadgeTextDone}>LAST DONE</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           <CardWidthContext.Provider value={{ cardWidth: dimensions.cardWidth }}>
             {renderCardContent(
             race,
@@ -451,12 +473,14 @@ function CardGridComponent({
       )}
 
       {/* Bottom pill timeline indicator */}
-      <CardGridTimeline
-        totalRaces={races.length}
-        activeIndex={currentRaceIndex}
-        nextRaceIndex={nextRaceIndex ?? null}
-        onSelectRace={goToRace}
-      />
+      {showBottomTimeline ? (
+        <CardGridTimeline
+          totalRaces={races.length}
+          activeIndex={currentRaceIndex}
+          nextRaceIndex={nextRaceIndex ?? null}
+          onSelectRace={goToRace}
+        />
+      ) : null}
     </View>
   );
 }
@@ -496,6 +520,42 @@ const styles = StyleSheet.create({
     // @ts-ignore - Web-only property
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
     transition: 'transform 0.2s ease, opacity 0.2s ease',
+  },
+  timelineBadgeStack: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    gap: 6,
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  timelineBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  timelineBadgeNext: {
+    backgroundColor: 'rgba(52, 199, 89, 0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+  },
+  timelineBadgeDone: {
+    backgroundColor: 'rgba(148, 163, 184, 0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(100, 116, 139, 0.35)',
+  },
+  timelineBadgeTextNext: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: IOS_COLORS.green,
+    letterSpacing: 0.4,
+  },
+  timelineBadgeTextDone: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.4,
   },
   navArrow: {
     position: 'absolute',

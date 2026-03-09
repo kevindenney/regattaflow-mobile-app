@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
@@ -82,6 +83,7 @@ type UserCohort = {
 export default function LearnScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const { signedIn, user } = useAuth();
   const { memberships, activeOrganizationId, setActiveOrganizationId, refreshMemberships } = useOrganization();
   const [mounted, setMounted] = useState(false);
@@ -103,6 +105,7 @@ export default function LearnScreen() {
   const [cohortTemplatesError, setCohortTemplatesError] = useState<string | null>(null);
   const [userCohortsLoading, setUserCohortsLoading] = useState(false);
   const [userCohortsError, setUserCohortsError] = useState<string | null>(null);
+  const [recommendationsRefreshKey, setRecommendationsRefreshKey] = useState(0);
 
   const isDesktop = mounted && width > 768;
 
@@ -154,6 +157,11 @@ export default function LearnScreen() {
   }, []);
 
   useEffect(() => {
+    if (!isFocused) return;
+    setRecommendationsRefreshKey((prev) => prev + 1);
+  }, [isFocused]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadOrgTemplates = async () => {
@@ -203,7 +211,7 @@ export default function LearnScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganizationId, activeSegment, interestSlug]);
+  }, [activeOrganizationId, activeSegment, interestSlug, recommendationsRefreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,7 +287,7 @@ export default function LearnScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganizationId, activeSegment, signedIn, user?.id]);
+  }, [activeOrganizationId, activeSegment, recommendationsRefreshKey, signedIn, user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -364,7 +372,7 @@ export default function LearnScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrganizationId, activeSegment, interestSlug, userCohorts]);
+  }, [activeOrganizationId, activeSegment, interestSlug, recommendationsRefreshKey, userCohorts]);
 
   const sortedMemberships = [...memberships].sort((a, b) => {
     const aStatus = String(a.membership_status || a.status || '').toLowerCase();

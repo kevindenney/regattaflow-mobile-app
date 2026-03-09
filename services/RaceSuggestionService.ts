@@ -120,6 +120,17 @@ export interface RaceTemplate {
 // =====================================================
 
 class RaceSuggestionService {
+  private debugErrorDetails(error: any) {
+    if (!error) return null;
+    return {
+      code: typeof error.code === 'string' ? error.code : undefined,
+      message: typeof error.message === 'string' ? error.message : String(error),
+      details: typeof error.details === 'string' ? error.details : undefined,
+      hint: typeof error.hint === 'string' ? error.hint : undefined,
+      status: typeof error.status === 'number' ? error.status : undefined,
+    };
+  }
+
   private createTaggedError(code: string, message: string, cause?: unknown): Error {
     const tagged = new Error(`[${code}] ${message}`);
     (tagged as any).code = code;
@@ -150,8 +161,24 @@ class RaceSuggestionService {
     } = options;
 
     const ownerColumns: ('created_by' | 'user_id')[] = ['created_by', 'user_id'];
+    logger.debug('[Debug400][fetchRegattasForUser] starting owner-column probe', {
+      userId,
+      ownerColumns,
+      orderBy,
+      ascending,
+      ltStartDate,
+      gteStartDate,
+      limit,
+    });
 
     for (const ownerColumn of ownerColumns) {
+      logger.debug('[Debug400][fetchRegattasForUser] querying regattas', {
+        userId,
+        ownerColumn,
+        ltStartDate,
+        gteStartDate,
+        limit,
+      });
       let query = supabase
         .from('regattas')
         .select(select)
@@ -171,16 +198,35 @@ class RaceSuggestionService {
       const { data, error } = await query;
       if (error) {
         if (this.isSchemaFallbackError(error, `regattas.${ownerColumn}`)) {
+          logger.warn('[Debug400][fetchRegattasForUser] schema fallback triggered', {
+            userId,
+            failedOwnerColumn: ownerColumn,
+            fallbackToNextOwnerColumn: true,
+            error: this.debugErrorDetails(error),
+          });
           continue;
         }
+        logger.error('[Debug400][fetchRegattasForUser] non-fallback query failure', {
+          userId,
+          ownerColumn,
+          error: this.debugErrorDetails(error),
+        });
         throw error;
       }
 
-      if (data && data.length > 0) {
-        return data;
-      }
+      logger.debug('[Debug400][fetchRegattasForUser] query succeeded', {
+        userId,
+        ownerColumn,
+        count: Array.isArray(data) ? data.length : 0,
+        fallbackToNextOwnerColumn: false,
+      });
+      // Important: only fall back when schema/column errors occur.
+      // Do not probe alternate owner columns on empty results, because that
+      // causes noisy 400s in mixed-schema environments.
+      return data || [];
     }
 
+    logger.debug('[Debug400][fetchRegattasForUser] no rows returned from owner-column probes', { userId });
     return [];
   }
 
@@ -228,9 +274,9 @@ class RaceSuggestionService {
         throw error;
       }
 
-      if (data && data.length > 0) {
-        return data;
-      }
+      // Only continue to fallback column on schema errors above.
+      // Successful empty result means this is the canonical owner column.
+      return data || [];
     }
 
     return [];
@@ -1420,30 +1466,52 @@ class RaceSuggestionService {
    */
   async getCatalogMatches(userId: string): Promise<RaceSuggestion[]> {
     try {
-      // Get user's boat classes (support both user_id and sailor_id schema variants)
+      // Get user's boat classes (support both sailor_id and user_id schema variants).
+      // Prefer sailor_id first: this matches the current schema/RLS in this app.
       let sailorBoats: any[] | null = null;
-      const boatsByUser = await supabase
+      logger.debug('[Debug400][getCatalogMatches] querying sailor_boats by sailor_id', { userId });
+      const boatsBySailor = await supabase
         .from('sailor_boats')
         .select('boat_classes(name)')
-        .eq('user_id', userId);
-      if (boatsByUser.error && !this.isNonCriticalSuggestionError(boatsByUser.error, 'sailor_boats.user_id')) {
-        throw boatsByUser.error;
+        .eq('sailor_id', userId);
+      if (boatsBySailor.error && !this.isNonCriticalSuggestionError(boatsBySailor.error, 'sailor_boats.sailor_id')) {
+        logger.error('[Debug400][getCatalogMatches] sailor_boats sailor_id query failed (non-fallback)', {
+          userId,
+          error: this.debugErrorDetails(boatsBySailor.error),
+        });
+        throw boatsBySailor.error;
       }
-      const shouldTrySailorId =
-        (isMissingSupabaseColumn(boatsByUser.error, 'sailor_boats.user_id')) ||
-        (!boatsByUser.error && (!boatsByUser.data || boatsByUser.data.length === 0));
+      const shouldTryUserId = isMissingSupabaseColumn(boatsBySailor.error, 'sailor_boats.sailor_id');
+      if (boatsBySailor.error) {
+        logger.warn('[Debug400][getCatalogMatches] sailor_boats sailor_id query produced handled error', {
+          userId,
+          shouldTryUserId,
+          error: this.debugErrorDetails(boatsBySailor.error),
+        });
+      }
 
-      if (shouldTrySailorId) {
-        const boatsBySailor = await supabase
+      if (shouldTryUserId) {
+        logger.debug('[Debug400][getCatalogMatches] querying sailor_boats by user_id fallback', { userId });
+        const boatsByUser = await supabase
           .from('sailor_boats')
           .select('boat_classes(name)')
-          .eq('sailor_id', userId);
-        if (boatsBySailor.error && !this.isNonCriticalSuggestionError(boatsBySailor.error, 'sailor_boats.sailor_id')) {
-          throw boatsBySailor.error;
+          .eq('user_id', userId);
+        if (boatsByUser.error && !this.isNonCriticalSuggestionError(boatsByUser.error, 'sailor_boats.user_id')) {
+          logger.error('[Debug400][getCatalogMatches] sailor_boats user_id query failed (non-fallback)', {
+            userId,
+            error: this.debugErrorDetails(boatsByUser.error),
+          });
+          throw boatsByUser.error;
         }
-        sailorBoats = boatsBySailor.data || boatsByUser.data;
+        if (boatsByUser.error) {
+          logger.warn('[Debug400][getCatalogMatches] sailor_boats user_id query produced handled error', {
+            userId,
+            error: this.debugErrorDetails(boatsByUser.error),
+          });
+        }
+        sailorBoats = boatsByUser.data || boatsBySailor.data;
       } else {
-        sailorBoats = boatsByUser.data;
+        sailorBoats = boatsBySailor.data;
       }
 
       const userClasses = (sailorBoats || [])
@@ -1461,32 +1529,54 @@ class RaceSuggestionService {
 
       const followedIds = new Set((followedRaces || []).map((r) => r.catalog_race_id));
 
-      // Get user's region from profile
+      // Get user's region from profile.
+      // Prefer user_id first for this environment; fallback to id on schema mismatch.
       let profile: { country?: string | null; region?: string | null } | null = null;
-      const profileById = await supabase
+      logger.debug('[Debug400][getCatalogMatches] querying profile by user_id', { userId });
+      const profileByUserId = await supabase
         .from('profiles')
         .select('country, region')
-        .eq('id', userId)
+        .eq('user_id', userId)
         .maybeSingle();
-      if (profileById.error && !this.isNonCriticalSuggestionError(profileById.error, 'profiles.id')) {
-        throw profileById.error;
+      if (profileByUserId.error && !this.isNonCriticalSuggestionError(profileByUserId.error, 'profiles.user_id')) {
+        logger.error('[Debug400][getCatalogMatches] profiles by user_id query failed (non-fallback)', {
+          userId,
+          error: this.debugErrorDetails(profileByUserId.error),
+        });
+        throw profileByUserId.error;
       }
-      const shouldTryProfileByUserId =
-        (isMissingSupabaseColumn(profileById.error, 'profiles.id')) ||
-        (!profileById.error && !profileById.data);
+      const shouldTryProfileById = isMissingSupabaseColumn(profileByUserId.error, 'profiles.user_id');
+      if (profileByUserId.error) {
+        logger.warn('[Debug400][getCatalogMatches] profiles by user_id query produced handled error', {
+          userId,
+          shouldTryProfileById,
+          error: this.debugErrorDetails(profileByUserId.error),
+        });
+      }
 
-      if (shouldTryProfileByUserId) {
-        const profileByUserId = await supabase
+      if (shouldTryProfileById) {
+        logger.debug('[Debug400][getCatalogMatches] querying profile by id fallback', { userId });
+        const profileById = await supabase
           .from('profiles')
           .select('country, region')
-          .eq('user_id', userId)
+          .eq('id', userId)
           .maybeSingle();
-        if (profileByUserId.error && !this.isNonCriticalSuggestionError(profileByUserId.error, 'profiles.user_id')) {
-          throw profileByUserId.error;
+        if (profileById.error && !this.isNonCriticalSuggestionError(profileById.error, 'profiles.id')) {
+          logger.error('[Debug400][getCatalogMatches] profiles by id query failed (non-fallback)', {
+            userId,
+            error: this.debugErrorDetails(profileById.error),
+          });
+          throw profileById.error;
         }
-        profile = profileByUserId.data;
-      } else {
+        if (profileById.error) {
+          logger.warn('[Debug400][getCatalogMatches] profiles by id query produced handled error', {
+            userId,
+            error: this.debugErrorDetails(profileById.error),
+          });
+        }
         profile = profileById.data;
+      } else {
+        profile = profileByUserId.data;
       }
 
       const userCountry = profile?.country;

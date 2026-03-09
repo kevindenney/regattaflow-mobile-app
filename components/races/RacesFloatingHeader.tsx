@@ -16,6 +16,7 @@ import {
   Platform,
   Modal,
   Pressable,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -94,6 +95,10 @@ export interface RacesFloatingHeaderProps {
   upcomingRaces?: number;
   /** Current race index (1-based, for "X of Y" display) */
   currentRaceIndex?: number;
+  /** Optional season/filter label displayed inline with the title row */
+  seasonLabel?: string;
+  /** Callback when season label is pressed */
+  onSeasonPress?: () => void;
   /** Callback when "X upcoming" is pressed to navigate to next race */
   onUpcomingPress?: () => void;
   /** Callback reporting the measured height of the toolbar (for content paddingTop) */
@@ -135,11 +140,15 @@ export function RacesFloatingHeader({
   totalRaces,
   upcomingRaces,
   currentRaceIndex,
+  seasonLabel,
+  onSeasonPress,
   onUpcomingPress,
   onMeasuredHeight,
   hidden,
 }: RacesFloatingHeaderProps) {
   const collapsableProp = Platform.OS === 'web' ? undefined : false;
+  const { width: windowWidth } = useWindowDimensions();
+  const hideAvatarOnNarrowWeb = Platform.OS === 'web' && windowWidth < 960;
   const [menuVisible, setMenuVisible] = useState(false);
   const config = useInterestEventConfig();
   const { vocab } = useVocabulary();
@@ -244,14 +253,46 @@ export function RacesFloatingHeader({
   // Build the race counter subtitle (hidden for progress segment)
   const hasIndexCounter = Boolean(currentRaceIndex && totalRaces && totalRaces > 0 && currentRaceIndex <= totalRaces);
   const hasUpcoming = upcomingRaces !== undefined && upcomingRaces > 0;
-  const subtitleParts: string[] = [];
-  if (hasIndexCounter) {
-    subtitleParts.push(`${currentRaceIndex} of ${totalRaces}`);
-  }
-  if (hasUpcoming) {
-    subtitleParts.push(`${upcomingRaces} upcoming`);
-  }
-  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' | ') : undefined;
+  const hasMeta = Boolean(seasonLabel || hasIndexCounter || hasUpcoming);
+  const subtitleContent = hasMeta ? (
+    <View style={styles.metaRow}>
+      {seasonLabel ? (
+        <Pressable
+          style={[styles.metaChip, styles.metaChipSeason]}
+          onPress={onSeasonPress}
+          disabled={!onSeasonPress}
+          accessibilityRole={onSeasonPress ? 'button' : undefined}
+          accessibilityLabel={onSeasonPress ? 'Select season' : undefined}
+        >
+          <Ionicons name="calendar-outline" size={12} color={IOS_COLORS.systemBlue} />
+          <Text style={styles.metaChipSeasonText} numberOfLines={1}>
+            {seasonLabel}
+          </Text>
+          {onSeasonPress ? (
+            <Ionicons name="chevron-down" size={12} color={IOS_COLORS.systemBlue} />
+          ) : null}
+        </Pressable>
+      ) : null}
+      {hasIndexCounter ? (
+        <View style={[styles.metaChip, styles.metaChipProgress]}>
+          <Ionicons name="layers-outline" size={12} color={IOS_COLORS.secondaryLabel} />
+          <Text style={styles.metaChipProgressText}>{currentRaceIndex} of {totalRaces}</Text>
+        </View>
+      ) : null}
+      {hasUpcoming ? (
+        <Pressable
+          style={[styles.metaChip, styles.metaChipUpcoming]}
+          onPress={onUpcomingPress}
+          disabled={!onUpcomingPress}
+          accessibilityRole={onUpcomingPress ? 'button' : undefined}
+          accessibilityLabel={onUpcomingPress ? 'Go to next upcoming' : undefined}
+        >
+          <Ionicons name="time-outline" size={12} color={IOS_COLORS.systemGreen} />
+          <Text style={styles.metaChipUpcomingText}>{upcomingRaces} upcoming</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  ) : undefined;
 
   // Custom right capsule with notification bell, grid toggle, and add button
   const rightCapsule = (
@@ -312,11 +353,11 @@ export function RacesFloatingHeader({
     <>
       <TabScreenToolbar
         title={config.eventNoun}
-        subtitle={subtitle}
-        onSubtitlePress={hasUpcoming ? onUpcomingPress : undefined}
+        subtitleContent={subtitleContent}
         topInset={topInset}
         isLoading={isLoading}
         rightContent={rightCapsule}
+        showProfileAvatar={!hideAvatarOnNarrowWeb}
         onMeasuredHeight={onMeasuredHeight}
         hidden={hidden}
       >
@@ -688,6 +729,55 @@ const styles = StyleSheet.create({
   offlineContainer: {
     paddingHorizontal: IOS_SPACING.lg,
     paddingBottom: IOS_SPACING.xs,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 4,
+    minWidth: 0,
+  },
+  metaChipSeason: {
+    backgroundColor: '#EBF3FF',
+    borderColor: '#C8DCF8',
+    maxWidth: 220,
+  },
+  metaChipProgress: {
+    backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
+    borderColor: IOS_COLORS.separator,
+  },
+  metaChipUpcoming: {
+    backgroundColor: '#EAF8EE',
+    borderColor: '#CBEBD5',
+  },
+  metaChipSeasonText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
+    color: IOS_COLORS.systemBlue,
+    flexShrink: 1,
+  },
+  metaChipProgressText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  metaChipUpcomingText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
+    color: IOS_COLORS.systemGreen,
   },
   // Menu styles
   menuOverlay: {

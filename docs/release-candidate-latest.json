@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-03-09T00:58:27.508Z",
-  "startedAt": "2026-03-09T00:57:23.000Z",
+  "generatedAt": "2026-03-09T01:05:12.736Z",
+  "startedAt": "2026-03-09T01:03:56.023Z",
   "overall": "PASS",
   "summary": {
     "total": 5,
@@ -14,8 +14,8 @@
       "category": "quality",
       "status": "PASS",
       "command": "npm run typecheck",
-      "durationMs": 5050,
-      "detail": "npm run typecheck (5050ms)",
+      "durationMs": 5048,
+      "detail": "npm run typecheck (5048ms)",
       "stdoutTail": [
         "> regattaflow-app@1.0.0 typecheck",
         "> npx tsc --noEmit"
@@ -29,8 +29,8 @@
       "category": "quality",
       "status": "PASS",
       "command": "node scripts/qa-matrix-coverage.mjs",
-      "durationMs": 21,
-      "detail": "node scripts/qa-matrix-coverage.mjs (21ms)",
+      "durationMs": 22,
+      "detail": "node scripts/qa-matrix-coverage.mjs (22ms)",
       "stdoutTail": [
         "qa_matrix_rows|INFO|total=21",
         "qa_matrix_automated_rows|INFO|automated=21",
@@ -45,8 +45,8 @@
       "category": "smoke",
       "status": "PASS",
       "command": "node scripts/smoke-multi-org-demo.mjs",
-      "durationMs": 14084,
-      "detail": "node scripts/smoke-multi-org-demo.mjs (14084ms)",
+      "durationMs": 15558,
+      "detail": "node scripts/smoke-multi-org-demo.mjs (15558ms)",
       "stdoutTail": [
         "members_route|PASS|Members route reachable",
         "cohorts_route|PASS|Cohorts route reachable",
@@ -66,8 +66,8 @@
       "category": "api",
       "status": "PASS",
       "command": "node scripts/run-api-smoke-deploy.mjs",
-      "durationMs": 2449,
-      "detail": "node scripts/run-api-smoke-deploy.mjs (2449ms)",
+      "durationMs": 2769,
+      "detail": "node scripts/run-api-smoke-deploy.mjs (2769ms)",
       "stdoutTail": [
         "Unchanged docs/api-smoke-deploy.md (PASS)"
       ],
@@ -80,11 +80,11 @@
       "category": "integration",
       "status": "PASS",
       "command": "node scripts/run-integration-validation.mjs",
-      "durationMs": 42902,
-      "detail": "node scripts/run-integration-validation.mjs (42902ms)",
+      "durationMs": 53314,
+      "detail": "node scripts/run-integration-validation.mjs (53314ms)",
       "stdoutTail": [
-        "[dotenv@17.2.3] injecting env (41) from .env.local -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops",
-        "[dotenv@17.2.3] injecting env (5) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild",
+        "[dotenv@17.2.3] injecting env (41) from .env.local -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com",
+        "[dotenv@17.2.3] injecting env (5) from .env -- tip: ⚙️  override existing env vars with { override: true }",
         "Integration validation PASSED. Reports saved to /Users/kdenney/Developer/RegattaFlow/regattaflow-app/docs/integration-validation-latest.md and /Users/kdenney/Developer/RegattaFlow/regattaflow-app/docs/integration-validation-latest.json"
       ],
       "stderrTail": [

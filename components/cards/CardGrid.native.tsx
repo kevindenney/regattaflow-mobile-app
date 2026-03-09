@@ -115,6 +115,7 @@ function CardGridComponent({
   onContentScroll,
   refetchTrigger,
   nowBarWeather,
+  showBottomTimeline = true,
 }: CardGridNativeProps) {
   // Bottom inset to clear the floating tab bar
   const insets = useSafeAreaInsets();
@@ -357,6 +358,10 @@ function CardGridComponent({
       // Determine if this is the next upcoming race (for subtle styling)
       // Use != to catch both null and undefined
       const isNextRace = nextRaceIndex != null && raceIndex === nextRaceIndex;
+      const isLastCompletedRace =
+        nextRaceIndex != null &&
+        nextRaceIndex > 0 &&
+        raceIndex === nextRaceIndex - 1;
 
       // Determine if race is in the past (for warm off-white background)
       const isPastRace = isRacePast(race.date, race.startTime);
@@ -374,6 +379,7 @@ function CardGridComponent({
         >
           <CardShell
             isNextRace={isNextRace}
+            isLastCompleted={isLastCompletedRace}
             isPast={isPastRace}
             position={position}
             dimensions={dimensions}
@@ -484,13 +490,15 @@ function CardGridComponent({
       </Animated.View>
 
       {/* Bottom pill timeline indicator */}
-      <CardGridTimeline
-        totalRaces={races.length}
-        activeIndex={jsRaceIndex}
-        nextRaceIndex={nextRaceIndex ?? null}
-        onSelectRace={goToRace}
-        bottomInset={timelineBottomInset}
-      />
+      {showBottomTimeline ? (
+        <CardGridTimeline
+          totalRaces={races.length}
+          activeIndex={jsRaceIndex}
+          nextRaceIndex={nextRaceIndex ?? null}
+          onSelectRace={goToRace}
+          bottomInset={timelineBottomInset}
+        />
+      ) : null}
     </GestureHandlerRootView>
   );
 }

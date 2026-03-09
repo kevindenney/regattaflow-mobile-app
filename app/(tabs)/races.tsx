@@ -36,6 +36,7 @@ import {
   TeamLogisticsSection,
 } from '@/components/races';
 import { RaceListSection } from '@/components/races/RaceListSection';
+import { StepLocationsMapModal, type StepLocationMarker } from '@/components/races/StepLocationsMapModal';
 import { SeasonArchive } from '@/components/seasons/SeasonArchive';
 import { IOSRacesScreen } from '@/components/races/ios';
 import { AIPatternDetection } from '@/components/races/debrief/AIPatternDetection';
@@ -44,7 +45,6 @@ import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
 import { calculatePerformanceMetrics } from '@/components/races/PerformanceMetrics';
 import { PlanModeContent } from '@/components/races/plan';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
-import { SeasonHeader } from '@/components/seasons/SeasonHeader';
 import { SeasonPickerModal } from '@/components/seasons/SeasonPickerModal';
 import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
@@ -148,7 +148,7 @@ export default function RacesScreen() {
   const { isTourActive, currentStep, triggerPricingPrompt } = useFeatureTourContext();
   const eventConfig = useInterestEventConfig();
   const { currentInterest } = useInterest();
-  const { activeOrganization } = useOrganization();
+  const { activeOrganization, memberships, activeInterestSlug } = useOrganization();
   const { vocab } = useVocabulary();
   const [recommendedOrgTemplates, setRecommendedOrgTemplates] = useState<RecommendedStepTemplate[]>([]);
 
@@ -284,14 +284,14 @@ export default function RacesScreen() {
 
   // Toolbar measured height for content padding
   const [toolbarHeight, setToolbarHeight] = useState(0);
-  // SeasonHeader compact height: paddingVertical: 8 * 2 + text ~18px = ~34px
-  const SEASON_HEADER_HEIGHT = 34;
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
-  // Total header height including SeasonHeader (always visible now)
-  const totalHeaderHeight = toolbarHeight + SEASON_HEADER_HEIGHT;
+  // Total floating header height
+  const totalHeaderHeight = toolbarHeight;
 
   // Selected race detail state
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
+  const [showStepLocationsMap, setShowStepLocationsMap] = useState(false);
+  const [stepLocationsFocusRaceId, setStepLocationsFocusRaceId] = useState<string | null>(null);
   const hasActiveRace = selectedRaceId !== null;
   const [selectedRaceData, setSelectedRaceData] = useState<any>(null);
   const [selectedRaceMarks, setSelectedRaceMarks] = useState<any[]>([]);
@@ -311,6 +311,12 @@ export default function RacesScreen() {
   const initialSelectedRaceParam = useRef<string | null>(
     typeof searchParams?.selected === 'string' ? searchParams.selected : null
   );
+  useEffect(() => {
+    if (typeof searchParams?.selected === 'string' && searchParams.selected.length > 0) {
+      initialSelectedRaceParam.current = searchParams.selected;
+      logger.debug('[races.tsx] route selected param updated', { selected: searchParams.selected });
+    }
+  }, [searchParams?.selected]);
 
   // Live race execution state
   const [gpsPosition, setGpsPosition] = useState<any>(null);
@@ -423,18 +429,268 @@ export default function RacesScreen() {
 
   // Filter races by interest: show sailing regattas for sailing interest,
   // and events matching the active interest's slug for all others.
-  const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
-  const interestSlug = eventConfig.interestSlug;
+  // Use the same source that drives the visible InterestSwitcher pill first.
+  // Organization-scoped activeInterestSlug can differ (per-org defaults) and
+  // should not override an explicit user interest switch for this screen.
+  const interestSlug = String(
+    currentInterest?.slug ||
+    activeInterestSlug ||
+    eventConfig.interestSlug ||
+    ''
+  ).toLowerCase().trim();
+  const isSailingInterest = interestSlug === 'sail-racing';
   const interestFilteredRaces = useMemo(() => {
-    if (isSailingInterest) return liveRaces;
-    // For non-sailing interests, show events whose metadata.interest_slug matches
     if (!liveRaces) return EMPTY_RACES;
     const filtered = liveRaces.filter((race: any) => {
-      const meta = race.metadata;
-      return meta && meta.interest_slug === interestSlug;
+      const meta = (race?.metadata && typeof race.metadata === 'object') ? race.metadata : {};
+      const rowInterest = String(meta?.interest_slug || '').toLowerCase().trim();
+      const rowSubtype = String(meta?.event_subtype || '').toLowerCase().trim();
+      const rowRaceType = String(race?.race_type || '').toLowerCase().trim();
+      const searchable = [
+        String(race?.name || ''),
+        String(race?.venue || ''),
+        String(race?.start_area_name || ''),
+        String(meta?.venue_name || ''),
+        String(meta?.notes || ''),
+        String(meta?.description || ''),
+        String(meta?.learning_objectives || ''),
+        String(rowSubtype),
+      ].join(' ').toLowerCase();
+
+      const hasNursingSignal =
+        /nursing|clinical|med-surg|med surg|hospital|simulation|skills lab|debrief|preceptor|assessment|patient/.test(searchable);
+      const hasExplicitNonSailingSubtype = rowSubtype.length > 0 && rowSubtype !== 'fleet' && rowSubtype !== 'distance' && rowSubtype !== 'match' && rowSubtype !== 'team';
+      const hasSailingRaceType = rowRaceType === 'fleet' || rowRaceType === 'distance' || rowRaceType === 'match' || rowRaceType === 'team';
+      if (isSailingInterest) {
+        // Sailing keeps legacy rows with no explicit interest tag, but excludes
+        // rows explicitly tagged for another interest (e.g., nursing).
+        if (rowInterest === 'sail-racing') return true;
+        if (rowInterest.length > 0 && rowInterest !== 'sail-racing') return false;
+        // Legacy untagged rows: keep only when they are explicitly sailing by race_type.
+        if (!hasSailingRaceType) return false;
+        // Hard guard for legacy nursing rows lacking interest_slug.
+        if (hasNursingSignal) return false;
+        // Additional guard: drop rows that still carry a clearly non-sailing subtype.
+        return !hasExplicitNonSailingSubtype;
+      }
+      if (interestSlug === 'nursing') {
+        if (rowInterest === 'nursing') return true;
+        // Legacy rows missing interest_slug but clearly nursing content should still show in nursing.
+        return rowInterest.length === 0 && hasNursingSignal;
+      }
+      return rowInterest === interestSlug;
     });
     return filtered.length > 0 ? filtered : EMPTY_RACES;
   }, [liveRaces, isSailingInterest, interestSlug]);
+
+  const evaluateInterestMembership = useCallback((race: any, targetInterestSlug: string) => {
+    const meta = (race?.metadata && typeof race.metadata === 'object') ? race.metadata : {};
+    const rowInterest = String(meta?.interest_slug || '').toLowerCase().trim();
+    const rowSubtype = String(meta?.event_subtype || '').toLowerCase().trim();
+    const rowRaceType = String(race?.race_type || '').toLowerCase().trim();
+    const searchable = [
+      String(race?.name || ''),
+      String(race?.venue || ''),
+      String(race?.start_area_name || ''),
+      String(meta?.venue_name || ''),
+      String(meta?.notes || ''),
+      String(meta?.description || ''),
+      String(meta?.learning_objectives || ''),
+      String(rowSubtype),
+    ].join(' ').toLowerCase();
+
+    const hasNursingSignal =
+      /nursing|clinical|med-surg|med surg|hospital|simulation|skills lab|debrief|preceptor|assessment|patient/.test(searchable);
+    const hasExplicitNonSailingSubtype =
+      rowSubtype.length > 0 &&
+      rowSubtype !== 'fleet' &&
+      rowSubtype !== 'distance' &&
+      rowSubtype !== 'match' &&
+      rowSubtype !== 'team';
+    const hasSailingRaceType =
+      rowRaceType === 'fleet' ||
+      rowRaceType === 'distance' ||
+      rowRaceType === 'match' ||
+      rowRaceType === 'team';
+    const target = String(targetInterestSlug || '').toLowerCase().trim();
+    const targetIsSailing = target === 'sail-racing';
+
+    let include = false;
+    let reason = 'excluded_default';
+
+    if (targetIsSailing) {
+      if (rowInterest === 'sail-racing') {
+        include = true;
+        reason = 'include_explicit_sailing';
+      } else if (rowInterest.length > 0 && rowInterest !== 'sail-racing') {
+        include = false;
+        reason = 'exclude_explicit_other_interest';
+      } else if (!hasSailingRaceType) {
+        include = false;
+        reason = 'exclude_untagged_missing_sailing_race_type';
+      } else if (hasNursingSignal) {
+        include = false;
+        reason = 'exclude_untagged_nursing_signal';
+      } else if (hasExplicitNonSailingSubtype) {
+        include = false;
+        reason = 'exclude_untagged_non_sailing_subtype';
+      } else {
+        include = true;
+        reason = 'include_legacy_sailing';
+      }
+    } else if (target === 'nursing') {
+      if (rowInterest === 'nursing') {
+        include = true;
+        reason = 'include_explicit_nursing';
+      } else if (rowInterest.length === 0 && hasNursingSignal) {
+        include = true;
+        reason = 'include_legacy_nursing_signal';
+      } else {
+        include = false;
+        reason = 'exclude_non_nursing';
+      }
+    } else {
+      include = rowInterest === target;
+      reason = include ? 'include_exact_interest_match' : 'exclude_non_matching_interest';
+    }
+
+    return {
+      include,
+      reason,
+      rowInterest,
+      rowSubtype,
+      rowRaceType,
+      hasNursingSignal,
+      hasExplicitNonSailingSubtype,
+      hasSailingRaceType,
+    };
+  }, []);
+
+  const interestFilterDiagnostics = useMemo(() => {
+    const rows = Array.isArray(liveRaces) ? liveRaces : [];
+    const counts = {
+      total: rows.length,
+      kept: 0,
+      droppedExplicitOtherInterest: 0,
+      droppedNonSailingSubtype: 0,
+      droppedNoSailingRaceType: 0,
+      droppedNonMatchingInterest: 0,
+    };
+
+    const sample: Array<Record<string, unknown>> = [];
+
+    rows.forEach((race: any) => {
+      const meta = (race?.metadata && typeof race.metadata === 'object') ? race.metadata : {};
+      const rowInterest = String(meta?.interest_slug || '').toLowerCase().trim();
+      const rowSubtype = String(meta?.event_subtype || '').toLowerCase().trim();
+      const rowRaceType = String(race?.race_type || '').toLowerCase().trim();
+      const hasExplicitNonSailingSubtype =
+        rowSubtype.length > 0 &&
+        rowSubtype !== 'fleet' &&
+        rowSubtype !== 'distance' &&
+        rowSubtype !== 'match' &&
+        rowSubtype !== 'team';
+      const hasSailingRaceType =
+        rowRaceType === 'fleet' ||
+        rowRaceType === 'distance' ||
+        rowRaceType === 'match' ||
+        rowRaceType === 'team';
+
+      let keep = false;
+      let reason = 'none';
+
+      if (isSailingInterest) {
+        if (rowInterest === 'sail-racing') {
+          keep = true;
+          reason = 'kept_explicit_sailing';
+        } else if (rowInterest.length > 0 && rowInterest !== 'sail-racing') {
+          keep = false;
+          reason = 'dropped_explicit_other_interest';
+          counts.droppedExplicitOtherInterest += 1;
+        } else if (!hasSailingRaceType) {
+          keep = false;
+          reason = 'dropped_missing_sailing_race_type';
+          counts.droppedNoSailingRaceType += 1;
+        } else if (hasExplicitNonSailingSubtype) {
+          keep = false;
+          reason = 'dropped_non_sailing_subtype';
+          counts.droppedNonSailingSubtype += 1;
+        } else {
+          keep = true;
+          reason = 'kept_legacy_sailing';
+        }
+      } else {
+        keep = rowInterest === interestSlug;
+        if (!keep) {
+          reason = 'dropped_non_matching_interest';
+          counts.droppedNonMatchingInterest += 1;
+        } else {
+          reason = 'kept_matching_interest';
+        }
+      }
+
+      if (keep) counts.kept += 1;
+
+      if (sample.length < 8) {
+        sample.push({
+          id: race?.id ?? null,
+          name: race?.name ?? null,
+          rowInterest,
+          rowSubtype,
+          rowRaceType,
+          keep,
+          reason,
+        });
+      }
+    });
+
+    return {
+      effectiveInterestSlug: interestSlug,
+      isSailingInterest,
+      counts,
+      sample,
+    };
+  }, [interestSlug, isSailingInterest, liveRaces]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    logger.debug('[InterestDebug][Races] interest source snapshot', {
+      activeInterestSlug,
+      currentInterestSlug: currentInterest?.slug ?? null,
+      eventConfigInterestSlug: eventConfig.interestSlug,
+      effectiveInterestSlug: interestSlug,
+      liveRacesCount: Array.isArray(liveRaces) ? liveRaces.length : 0,
+      filteredCount: Array.isArray(interestFilteredRaces) ? interestFilteredRaces.length : 0,
+      diagnostics: interestFilterDiagnostics,
+    });
+  }, [
+    activeInterestSlug,
+    currentInterest?.slug,
+    eventConfig.interestSlug,
+    interestSlug,
+    liveRaces,
+    interestFilteredRaces,
+    interestFilterDiagnostics,
+  ]);
+
+  useEffect(() => {
+    if (!(typeof searchParams?.selected === 'string' && searchParams.selected.length > 0)) return;
+    logger.debug('[StepDebug][RacesScreen] Route selected param received', {
+      selected: searchParams.selected,
+      loading: liveRacesLoading,
+      totalLive: Array.isArray(liveRaces) ? liveRaces.length : 0,
+      totalInterestFiltered: Array.isArray(interestFilteredRaces) ? interestFilteredRaces.length : 0,
+      currentInterest: currentInterest?.slug,
+      filterSeasonId,
+    });
+  }, [
+    searchParams?.selected,
+    liveRacesLoading,
+    liveRaces,
+    interestFilteredRaces,
+    currentInterest?.slug,
+    filterSeasonId,
+  ]);
 
   // Track if races have been loaded at least once to prevent flash of demo content
   const hasLoadedRacesOnce = useRef(false);
@@ -677,6 +933,163 @@ export default function RacesScreen() {
   const currentTimeline = allTimelines[currentTimelineIndex] || allTimelines[0];
   const isViewingOtherTimeline = currentTimelineIndex > 0 && currentTimeline?.user?.isCurrentUser === false;
 
+  const extractRaceLocation = useCallback((race: any): { lat: number; lng: number } | null => {
+    const venueCoords = race?.venueCoordinates;
+    if (venueCoords && typeof venueCoords.lat === 'number' && typeof venueCoords.lng === 'number') {
+      return { lat: venueCoords.lat, lng: venueCoords.lng };
+    }
+
+    const metadata = (race?.metadata && typeof race.metadata === 'object') ? race.metadata : {};
+    const startCoords = metadata?.start_coordinates;
+    if (startCoords && typeof startCoords.lat === 'number' && typeof startCoords.lng === 'number') {
+      return { lat: startCoords.lat, lng: startCoords.lng };
+    }
+
+    const rawVenue = String(race?.venue || metadata?.venue_name || '').trim();
+    const match = rawVenue.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (match) {
+      const lat = Number(match[1]);
+      const lng = Number(match[2]);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        return { lat, lng };
+      }
+    }
+    return null;
+  }, []);
+
+  const stepLocationMarkers = useMemo<StepLocationMarker[]>(() => {
+    const markers: StepLocationMarker[] = [];
+    const seenRaceIds = new Set<string>();
+    const orgNameById = new Map<string, string>();
+    const membershipOrgNames = new Set<string>();
+    (memberships || []).forEach((membership) => {
+      const id = String(membership?.organization_id || '').trim();
+      const name = String(membership?.organization?.name || '').trim();
+      if (id && name && !orgNameById.has(id)) {
+        orgNameById.set(id, name);
+      }
+      if (name) {
+        membershipOrgNames.add(name);
+      }
+    });
+
+    const inferOrganizationName = (interestSlug: string, explicitOrgName: string): string => {
+      if (explicitOrgName) return explicitOrgName;
+      const interest = interestSlug.toLowerCase();
+      const orgs = Array.from(membershipOrgNames);
+      if (interest.includes('nurs')) {
+        const match = orgs.find((name) => /johns hopkins|jhu|nursing/i.test(name));
+        if (match) return match;
+      }
+      if (interest.includes('sail') || interest.includes('race')) {
+        const match = orgs.find((name) => /rhkyc|royal hong kong yacht club|yacht club/i.test(name));
+        if (match) return match;
+      }
+      return '';
+    };
+    allTimelines.forEach((timeline, timelineIndex) => {
+      const persona = timeline?.user?.isCurrentUser ? 'You' : (timeline?.user?.name || `Followed ${timelineIndex}`);
+      (timeline?.races || []).forEach((race: any) => {
+        const coords = extractRaceLocation(race);
+        if (!coords) return;
+        const metadata = (race?.metadata && typeof race.metadata === 'object') ? race.metadata : {};
+        const raceId = String(race?.id || '');
+        if (raceId) {
+          seenRaceIds.add(raceId);
+        }
+        const whenSource = race?.start_date || race?.date || race?.startTime || null;
+        const whenDate = whenSource ? new Date(whenSource) : null;
+        const whenLabel = whenDate && !Number.isNaN(whenDate.getTime())
+          ? whenDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+          : 'Time TBD';
+        const interestSlugValue = String(
+          metadata?.interest_slug ||
+          metadata?.interest ||
+          race?.interest_slug ||
+          ''
+        ).trim();
+        const organizationNameValue = String(
+          metadata?.organization_name ||
+          race?.organization_name ||
+          (metadata?.organization_id ? orgNameById.get(String(metadata.organization_id)) : '') ||
+          ''
+        ).trim();
+        const resolvedOrganizationName = inferOrganizationName(interestSlugValue, organizationNameValue);
+        const isCoachValue = Boolean(
+          metadata?.is_coach === true ||
+          /coach/i.test(String(metadata?.created_by_role || '')) ||
+          /coach/i.test(String(metadata?.persona_type || '')) ||
+          /coach/i.test(persona)
+        );
+        markers.push({
+          id: `${timeline?.user?.id || 'user'}-${race?.id || markers.length}`,
+          raceId: String(race?.id || ''),
+          lat: coords.lat,
+          lng: coords.lng,
+          persona,
+          title: String(race?.name || race?.race_name || 'Step'),
+          whenLabel,
+          startAtMs: whenDate && !Number.isNaN(whenDate.getTime()) ? whenDate.getTime() : undefined,
+          subtitle: String(race?.venue || race?.metadata?.venue_name || ''),
+          isCurrentUser: Boolean(timeline?.user?.isCurrentUser),
+          interestSlug: interestSlugValue || undefined,
+          organizationName: resolvedOrganizationName || undefined,
+          isCoach: isCoachValue,
+          userId: String(timeline?.user?.id || ''),
+        });
+      });
+    });
+
+    // Include current user's additional races outside the active interest/org view
+    // so the map filters can surface multi-interest and multi-org locations.
+    (liveRaces || []).forEach((race: any, index: number) => {
+      const raceId = String(race?.id || '');
+      if (!raceId || seenRaceIds.has(raceId)) return;
+      const coords = extractRaceLocation(race);
+      if (!coords) return;
+      const metadata = (race?.metadata && typeof race.metadata === 'object') ? race.metadata : {};
+      const interestSlugValue = String(metadata?.interest_slug || metadata?.interest || race?.interest_slug || '').trim();
+      const organizationNameValue = String(
+        metadata?.organization_name ||
+        race?.organization_name ||
+        (metadata?.organization_id ? orgNameById.get(String(metadata.organization_id)) : '') ||
+        ''
+      ).trim();
+      const resolvedOrganizationName = inferOrganizationName(interestSlugValue, organizationNameValue);
+      const whenSource = race?.start_date || race?.date || race?.startTime || null;
+      const whenDate = whenSource ? new Date(whenSource) : null;
+      const whenLabel = whenDate && !Number.isNaN(whenDate.getTime())
+        ? whenDate.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+        : 'Time TBD';
+      markers.push({
+        id: `me-extra-${raceId || index}`,
+        raceId,
+        lat: coords.lat,
+        lng: coords.lng,
+        persona: 'You',
+        title: String(race?.name || race?.race_name || 'Step'),
+        whenLabel,
+        startAtMs: whenDate && !Number.isNaN(whenDate.getTime()) ? whenDate.getTime() : undefined,
+        subtitle: String(race?.venue || metadata?.venue_name || ''),
+        isCurrentUser: true,
+        interestSlug: interestSlugValue || undefined,
+        organizationName: resolvedOrganizationName || undefined,
+        isCoach: Boolean(
+          metadata?.is_coach === true ||
+          /coach/i.test(String(metadata?.created_by_role || '')) ||
+          /coach/i.test(String(metadata?.persona_type || ''))
+        ),
+        userId: String(user?.id || ''),
+      });
+    });
+    return markers;
+  }, [allTimelines, extractRaceLocation, liveRaces, memberships, user?.id]);
+
+  const handleOpenLocationMapForRace = useCallback((raceId: string) => {
+    setStepLocationsFocusRaceId(raceId);
+    setShowStepLocationsMap(true);
+  }, []);
+
   // Race list data (extracted to useRaceListData hook)
   const {
     pastRaceIds,
@@ -689,8 +1102,33 @@ export default function RacesScreen() {
   } = useRaceListData({
     liveRaces: interestFilteredRaces,
     enrichedRaces,
-    recentRaces: isSailingInterest ? recentRaces : EMPTY_RACES,
+    // Prevent cross-interest leakage from legacy dashboard fallback rows.
+    // Interest scoping must be enforced by interestFilteredRaces/enrichedRaces only.
+    recentRaces: EMPTY_RACES,
   });
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    const interestIds = Array.isArray(interestFilteredRaces) ? interestFilteredRaces.map((r: any) => r?.id).filter(Boolean) : [];
+    const enrichedIds = Array.isArray(enrichedRaces) ? enrichedRaces.map((r: any) => r?.id).filter(Boolean) : [];
+    const safeIds = Array.isArray(safeRecentRaces) ? safeRecentRaces.map((r: any) => r?.id).filter(Boolean) : [];
+    logger.debug('[InterestDebug][Races] pipeline snapshot', {
+      effectiveInterestSlug: interestSlug,
+      interestIdsCount: interestIds.length,
+      enrichedIdsCount: enrichedIds.length,
+      safeIdsCount: safeIds.length,
+      interestIdsSample: interestIds.slice(0, 10),
+      enrichedIdsSample: enrichedIds.slice(0, 10),
+      safeIdsSample: safeIds.slice(0, 10),
+      safeRecentRaceNamesSample: safeRecentRaces.slice(0, 6).map((race: any) => ({
+        id: race?.id ?? null,
+        name: race?.name ?? null,
+        interest: String((race?.metadata && race.metadata.interest_slug) || ''),
+        subtype: String((race?.metadata && race.metadata.event_subtype) || ''),
+        raceType: String(race?.race_type || ''),
+      })),
+    });
+  }, [enrichedRaces, interestFilteredRaces, interestSlug, safeRecentRaces]);
 
   // Track if we're showing the demo race (no real races)
   const isShowingDemoRace = safeRecentRaces.length === 0;
@@ -754,7 +1192,12 @@ export default function RacesScreen() {
     });
   }, [safeRecentRaces, activeFilterSeasonId, seasonRegattaIds]);
 
-  const seasonFilteredRacesCount = seasonFilteredRaces.length;
+  const seasonLabel = useMemo(() => {
+    if (!activeFilterSeasonId) {
+      return `All ${eventConfig.eventNoun}s`;
+    }
+    return displaySeason?.name || '';
+  }, [activeFilterSeasonId, displaySeason?.name, eventConfig.eventNoun]);
 
   const seasonUpcomingRacesCount = useMemo(() => {
     const now = new Date();
@@ -784,19 +1227,20 @@ export default function RacesScreen() {
   // When no races exist, show a demo race so users can explore the UI
   // When viewing another user's timeline, use their races instead
   const baseCardGridRaces: CardRaceData[] = useMemo(() => {
-    // When viewing another user's timeline, use their races
     const racesToShow = isViewingOtherTimeline && currentTimeline?.races
       ? currentTimeline.races
       : safeRecentRaces;
 
-    // If no races and sample race not dismissed (only for own timeline), show demo race
     if (racesToShow.length === 0 && !sampleRaceDismissed && !isViewingOtherTimeline) {
       const demoIso = getDemoRaceStartDateISO(7, 11, 0);
-      const demoEvent = getDemoEvent(eventConfig.interestSlug, eventConfig.eventNoun);
-      const isSailing = eventConfig.interestSlug === 'sail-racing';
+      const demoEvent = getDemoEvent(interestSlug, eventConfig.eventNoun);
+      const isSailing = interestSlug === 'sail-racing';
+      const demoName = isSailing
+        ? (demoEvent.name || 'Sample Race')
+        : `Sample ${vocab('Activity') || 'Activity'}`;
       return [{
         id: DEMO_RACE.id || 'demo-race',
-        name: demoEvent.name || `Sample ${eventConfig.eventNoun}`,
+        name: demoName,
         venue: demoEvent.venue || vocab('Institution'),
         date: DEMO_RACE.date || demoIso,
         startTime: DEMO_RACE.startTime || getDemoRaceStartTimeLabel(11, 0),
@@ -804,12 +1248,10 @@ export default function RacesScreen() {
         race_type: (eventConfig.defaultSubtype || 'fleet') as const,
         isDemo: true,
         vhf_channel: isSailing ? 'Ch 72' : undefined,
-        // Sample weather data (sailing-specific fields only when relevant)
         boat_id: isSailing ? 'demo-boat-j70' : undefined,
         class_id: isSailing ? 'demo-class-j70' : undefined,
         wind: isSailing ? { direction: 'NE', speedMin: 12, speedMax: 18 } : undefined,
         tide: isSailing ? { state: 'flooding' as const, height: 1.8, direction: 'NW' } : undefined,
-        // Sample regulatory documents (sailing only)
         regulatory: isSailing ? {
           documents: [
             { id: 'demo-nor', name: 'Notice of Race', type: 'nor', uploadedAt: new Date().toISOString() },
@@ -819,55 +1261,75 @@ export default function RacesScreen() {
           vhfChannel: 'Ch 72',
           protestDeadline: '30 min after finish',
         } : undefined,
-        // Sample fleet/group info (sailing only)
         fleet: isSailing ? {
           totalCompetitors: 24,
           fleetName: 'Main Fleet',
           isRegistered: false,
         } : undefined,
-        // No created_by so delete/edit menu won't appear
       }];
     }
 
-    return racesToShow.map((race: any) => ({
-      ...(timelineStatusOverrides[race.id] ? {
-        status: timelineStatusOverrides[race.id].status,
-        start_date: timelineStatusOverrides[race.id].startDateIso,
-        start_time: timelineStatusOverrides[race.id].startDateIso,
-      } : null),
-      id: race.id,
-      name: race.name || race.race_name || `Unnamed ${eventConfig.eventNoun}`,
-      venue: race.venue || race.venue_name,
-      date: timelineStatusOverrides[race.id]?.startDateIso || race.start_date || race.date || new Date().toISOString(),
-      startTime: timelineStatusOverrides[race.id]?.startTimeLabel || race.start_time || race.startTime,
-      boatClass: race.boat_class || race.boatClass,
-      vhf_channel: race.vhf_channel || race.critical_details?.vhf_channel,
-      race_type: race.race_type, // Preserve race type (fleet, distance, match, team)
-      time_limit_hours: race.time_limit_hours, // Distance race duration
-      wind: race.wind,
-      tide: race.tide,
-      waves: race.waves,
-      temperature: race.temperature || race.waterTemperature,
-      critical_details: race.critical_details,
-      venueCoordinates: race.venueCoordinates,
-      created_by: race.created_by,
-      metadata: race.metadata, // Preserve metadata for sample detection
-      boat_id: race.boat_id || (race as any).boatId,
-      class_id: race.class_id || (race as any).classId,
-      // Basic defaults for new cards (will be enriched for selected race later)
-      rigSettings: race.rigSettings || race.tuningRecommendation,
-      fleet: race.fleet || {
-        totalCompetitors: race.competitor_count || race.entry_count || 0,
-        fleetName: race.fleet_name,
-        isRegistered: race.is_registered,
-      },
-      regulatory: race.regulatory || {
-        documents: race.documents || [],
-        vhfChannel: race.vhf_channel || race.critical_details?.vhf_channel,
-        protestDeadline: race.protest_deadline || race.critical_details?.protest_deadline,
-      },
-    }));
-  }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline, timelineStatusOverrides]);
+    return racesToShow.map((race: any) => {
+      const metadata = (race?.metadata && typeof race.metadata === 'object') ? race.metadata : {};
+      const rawName = race.name || race.race_name || `Unnamed ${eventConfig.eventNoun}`;
+      const generatedBlankName = /^Activity\s*[-—]\s*\d{4}-\d{2}-\d{2}$/i.test(String(rawName));
+      const resolvedName =
+        metadata?.event_subtype === 'blank_activity' &&
+        generatedBlankName &&
+        typeof metadata?.title === 'string' &&
+        metadata.title.trim().length > 0
+          ? metadata.title.trim()
+          : rawName;
+
+      return {
+        ...(timelineStatusOverrides[race.id] ? {
+          status: timelineStatusOverrides[race.id].status,
+          start_date: timelineStatusOverrides[race.id].startDateIso,
+          start_time: timelineStatusOverrides[race.id].startDateIso,
+        } : {}),
+        id: race.id,
+        name: resolvedName,
+        venue: race.venue || race.venue_name,
+        date: timelineStatusOverrides[race.id]?.startDateIso || race.start_date || race.date || new Date().toISOString(),
+        startTime: timelineStatusOverrides[race.id]?.startTimeLabel || race.start_time || race.startTime,
+        boatClass: race.boat_class || race.boatClass,
+        vhf_channel: race.vhf_channel || race.critical_details?.vhf_channel,
+        race_type: race.race_type,
+        time_limit_hours: race.time_limit_hours,
+        wind: race.wind,
+        tide: race.tide,
+        waves: race.waves,
+        temperature: race.temperature || race.waterTemperature,
+        critical_details: race.critical_details,
+        venueCoordinates: race.venueCoordinates,
+        created_by: race.created_by,
+        metadata: race.metadata,
+        boat_id: race.boat_id || (race as any).boatId,
+        class_id: race.class_id || (race as any).classId,
+        rigSettings: race.rigSettings || race.tuningRecommendation,
+        fleet: race.fleet || {
+          totalCompetitors: race.competitor_count || race.entry_count || 0,
+          fleetName: race.fleet_name,
+          isRegistered: race.is_registered,
+        },
+        regulatory: race.regulatory || {
+          documents: race.documents || [],
+          vhfChannel: race.vhf_channel || race.critical_details?.vhf_channel,
+          protestDeadline: race.protest_deadline || race.critical_details?.protest_deadline,
+        },
+      };
+    });
+  }, [
+    safeRecentRaces,
+    sampleRaceDismissed,
+    isViewingOtherTimeline,
+    currentTimeline,
+    timelineStatusOverrides,
+    eventConfig.interestSlug,
+    eventConfig.eventNoun,
+    eventConfig.defaultSubtype,
+    vocab,
+  ]);
 
   // Calculate current season week (ISO week number with 'W' prefix)
   const currentSeasonWeek = useMemo(() => {
@@ -1003,6 +1465,45 @@ export default function RacesScreen() {
     }
   }, [applyTimelineStepStatus, user?.id]);
 
+  const handleTimelineGridReorder = useCallback(async (orderedRaceIds: string[]) => {
+    if (orderedRaceIds.length === 0) return;
+    const nowMs = Date.now();
+    const byId = new Map(baseCardGridRaces.map((race: any) => [race.id, race]));
+    const completedOrdered: string[] = [];
+    const plannedOrdered: string[] = [];
+
+    orderedRaceIds.forEach((raceId) => {
+      const race: any = byId.get(raceId);
+      if (!race) return;
+      const rawDate = race?.start_date || race?.date || race?.startTime;
+      const parsed = rawDate ? new Date(rawDate) : null;
+      const ms = parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : nowMs;
+      if (ms < nowMs) {
+        completedOrdered.push(raceId);
+      } else {
+        plannedOrdered.push(raceId);
+      }
+    });
+
+    try {
+      await Promise.all([
+        ...completedOrdered.map((raceId, idx) =>
+          applyTimelineStepStatus(
+            raceId,
+            'completed',
+            { indexHint: Math.max(0, completedOrdered.length - idx - 1) },
+          )
+        ),
+        ...plannedOrdered.map((raceId, idx) =>
+          applyTimelineStepStatus(raceId, 'planned', { indexHint: idx })
+        ),
+      ]);
+      await refetchRacesRef.current?.();
+    } catch (error: any) {
+      showAlert('Reorder failed', error?.message || 'Could not reorder steps.');
+    }
+  }, [applyTimelineStepStatus, baseCardGridRaces]);
+
   // Render card content for CardGrid
   const renderCardGridContent = useCallback(
     (
@@ -1053,12 +1554,13 @@ export default function RacesScreen() {
           totalRaces={totalRaces}
           onCardPress={onCardPress}
           refetchTrigger={refetchTrigger}
+          onOpenLocationMap={handleOpenLocationMapForRace}
           onMoveStepToPlannedNext={canManage ? () => handleMoveStepToPlannedNext(race.id) : undefined}
           onMoveStepToCompletedMostRecent={canManage ? () => handleMoveStepToCompletedMostRecent(race.id) : undefined}
         />
       );
     },
-    [cardGridDimensions, currentSeasonWeek, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext]
+    [cardGridDimensions, currentSeasonWeek, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleOpenLocationMapForRace]
   );
 
   // Handle race change from CardGrid
@@ -1284,11 +1786,9 @@ export default function RacesScreen() {
 
       if (error) throw error;
 
-      // Navigate to the new event's detail view
-      routerRef.current.push({
-        pathname: '/(tabs)/races',
-        params: { selected: newEvent.id },
-      });
+      // Open the newly created step in creation flow labeling so the screen
+      // reads as "Add ..." even though we persist to the pre-created record.
+      routerRef.current.push(`/(tabs)/race/add-tufte?editId=${newEvent.id}&mode=add`);
     } catch (err) {
       console.error('Failed to create blank step:', err);
       showAlert('Error', 'Failed to create step. Please try again.');
@@ -1361,89 +1861,196 @@ export default function RacesScreen() {
     );
   }, [refetchRaces, selectedRaceId, user?.id]);
 
+  const deleteRaceDirect = useCallback(async (
+    raceId: string,
+    opts?: { friendlyName?: string; silent?: boolean; skipRefetch?: boolean }
+  ) => {
+    if (!raceId || isDeletingRace) return false;
+
+    const friendlyName = opts?.friendlyName || 'this race';
+    const silent = opts?.silent === true;
+    const skipRefetch = opts?.skipRefetch === true;
+
+    setDeletingRaceId(raceId);
+    try {
+      if (__DEV__) {
+        const candidate =
+          safeRecentRaces.find((race: any) => race?.id === raceId) ||
+          (Array.isArray(enrichedRaces) ? enrichedRaces.find((race: any) => race?.id === raceId) : null) ||
+          (Array.isArray(liveRaces) ? liveRaces.find((race: any) => race?.id === raceId) : null) ||
+          null;
+        const sailEval = candidate ? evaluateInterestMembership(candidate, 'sail-racing') : null;
+        const nursingEval = candidate ? evaluateInterestMembership(candidate, 'nursing') : null;
+        logger.debug('[DeleteDebug] delete requested', {
+          raceId,
+          friendlyName,
+          effectiveInterestSlug: interestSlug,
+          currentInterestSlug: currentInterest?.slug ?? null,
+          activeInterestSlug,
+          candidate: candidate ? {
+            id: candidate.id,
+            name: candidate.name,
+            race_type: candidate.race_type,
+            metadata_interest_slug: candidate?.metadata?.interest_slug ?? null,
+            metadata_event_subtype: candidate?.metadata?.event_subtype ?? null,
+          } : null,
+          appearsInSailing: sailEval,
+          appearsInNursing: nursingEval,
+        });
+      }
+
+      // First, try to delete race_events linked to this regatta (if it's a regatta)
+      const { data: linkedRaceEvents, error: linkedEventsError } = await supabase
+        .from('race_events')
+        .select('id')
+        .eq('regatta_id', raceId);
+
+      if (linkedEventsError) {
+        logger.warn('Error fetching linked race_events:', linkedEventsError);
+      }
+
+      const linkedEventIds = (linkedRaceEvents || []).map((event: { id: string }) => event.id);
+
+      if (linkedEventIds.length > 0) {
+        const { error: deleteLinkedError } = await supabase
+          .from('race_events')
+          .delete()
+          .in('id', linkedEventIds);
+
+        if (deleteLinkedError) {
+          logger.warn('Error deleting linked race_events:', deleteLinkedError);
+        }
+      }
+
+      // Also try to delete the race_event directly by ID (for races created via Add Race flow)
+      // This handles the case where the raceId IS a race_event ID, not a regatta ID
+      const { error: deleteDirectEventError } = await supabase
+        .from('race_events')
+        .delete()
+        .eq('id', raceId);
+
+      // Log but don't throw - the race might be in regattas table instead
+      if (deleteDirectEventError) {
+        logger.debug('Direct race_event delete result:', deleteDirectEventError.message);
+      }
+
+      // Try to delete from regattas table
+      const { error: deleteRegattaError } = await supabase
+        .from('regattas')
+        .delete()
+        .eq('id', raceId);
+
+      // Log but don't throw - the race might be in race_events table instead
+      if (deleteRegattaError) {
+        logger.debug('Regatta delete result:', deleteRegattaError.message);
+      }
+
+      if (selectedRaceId === raceId) {
+        setSelectedRaceId(null);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        setHasManuallySelected(false);
+      }
+
+      if (!skipRefetch) {
+        await refetchRaces();
+      }
+
+      if (!silent) {
+        showAlert('Race deleted', `"${friendlyName}" has been removed.`);
+      }
+      return true;
+    } catch (error: any) {
+      logger.error('Error deleting race:', error);
+      if (!silent) {
+        const message = error?.message || 'Unable to delete race. Please try again.';
+        showAlert('Error', message);
+      }
+      return false;
+    } finally {
+      setDeletingRaceId(prev => (prev === raceId ? null : prev));
+    }
+  }, [
+    activeInterestSlug,
+    currentInterest?.slug,
+    enrichedRaces,
+    evaluateInterestMembership,
+    interestSlug,
+    isDeletingRace,
+    liveRaces,
+    logger,
+    refetchRaces,
+    safeRecentRaces,
+    selectedRaceId,
+  ]);
+
   const handleDeleteRace = useCallback((raceId: string, raceName?: string) => {
     if (!raceId || isDeletingRace) {
       return;
     }
 
+    if (__DEV__) {
+      logger.debug('[DeleteDebug] handleDeleteRace invoked', {
+        raceId,
+        raceName: raceName || null,
+        effectiveInterestSlug: interestSlug,
+        currentInterestSlug: currentInterest?.slug ?? null,
+        activeInterestSlug,
+      });
+    }
+
     const friendlyName = raceName || 'this race';
     const confirmationMessage = `Are you sure you want to delete "${friendlyName}"? This action cannot be undone.`;
-
-    const performDelete = async () => {
-      setDeletingRaceId(raceId);
-      try {
-        // First, try to delete race_events linked to this regatta (if it's a regatta)
-        const { data: linkedRaceEvents, error: linkedEventsError } = await supabase
-          .from('race_events')
-          .select('id')
-          .eq('regatta_id', raceId);
-
-        if (linkedEventsError) {
-          logger.warn('Error fetching linked race_events:', linkedEventsError);
-        }
-
-        const linkedEventIds = (linkedRaceEvents || []).map((event: { id: string }) => event.id);
-
-        if (linkedEventIds.length > 0) {
-          const { error: deleteLinkedError } = await supabase
-            .from('race_events')
-            .delete()
-            .in('id', linkedEventIds);
-
-          if (deleteLinkedError) {
-            logger.warn('Error deleting linked race_events:', deleteLinkedError);
-          }
-        }
-
-        // Also try to delete the race_event directly by ID (for races created via Add Race flow)
-        // This handles the case where the raceId IS a race_event ID, not a regatta ID
-        const { error: deleteDirectEventError } = await supabase
-          .from('race_events')
-          .delete()
-          .eq('id', raceId);
-
-        // Log but don't throw - the race might be in regattas table instead
-        if (deleteDirectEventError) {
-          logger.debug('Direct race_event delete result:', deleteDirectEventError.message);
-        }
-
-        // Try to delete from regattas table
-        const { error: deleteRegattaError } = await supabase
-          .from('regattas')
-          .delete()
-          .eq('id', raceId);
-
-        // Log but don't throw - the race might be in race_events table instead
-        if (deleteRegattaError) {
-          logger.debug('Regatta delete result:', deleteRegattaError.message);
-        }
-
-        if (selectedRaceId === raceId) {
-          setSelectedRaceId(null);
-          setSelectedRaceData(null);
-          setSelectedRaceMarks([]);
-          setHasManuallySelected(false);
-        }
-
-        await refetchRaces();
-
-        showAlert('Race deleted', `"${friendlyName}" has been removed.`);
-      } catch (error: any) {
-        logger.error('Error deleting race:', error);
-        const message = error?.message || 'Unable to delete race. Please try again.';
-        showAlert('Error', message);
-      } finally {
-        setDeletingRaceId(prev => (prev === raceId ? null : prev));
-      }
-    };
 
     showConfirm(
       'Delete race?',
       confirmationMessage,
-      () => { void performDelete(); },
+      () => { void deleteRaceDirect(raceId, { friendlyName }); },
       { destructive: true, confirmText: 'Delete' }
     );
-  }, [isDeletingRace, logger, refetchRaces, selectedRaceId]);
+  }, [
+    activeInterestSlug,
+    currentInterest?.slug,
+    deleteRaceDirect,
+    interestSlug,
+    isDeletingRace,
+    logger,
+  ]);
+
+  const handleTimelineGridBulkDelete = useCallback((raceIds: string[]) => {
+    if (raceIds.length === 0) return;
+    const total = raceIds.length;
+    const label = total === 1 ? 'step' : 'steps';
+
+    showConfirm(
+      'Delete selected steps?',
+      `Are you sure you want to delete ${total} ${label}? This action cannot be undone.`,
+      async () => {
+        const byId = new Map(baseCardGridRaces.map((race: any) => [race.id, race]));
+        let deletedCount = 0;
+
+        for (const raceId of raceIds) {
+          const race: any = byId.get(raceId);
+          const ok = await deleteRaceDirect(raceId, {
+            friendlyName: race?.name || 'this step',
+            silent: true,
+            skipRefetch: true,
+          });
+          if (ok) deletedCount += 1;
+        }
+
+        await refetchRaces();
+        if (deletedCount === total) {
+          showAlert('Deleted', `${deletedCount} ${label} removed.`);
+        } else if (deletedCount > 0) {
+          showAlert('Partially deleted', `${deletedCount} of ${total} ${label} were removed.`);
+        } else {
+          showAlert('Delete failed', `No ${label} were removed.`);
+        }
+      },
+      { destructive: true, confirmText: 'Delete' }
+    );
+  }, [baseCardGridRaces, deleteRaceDirect, refetchRaces]);
 
   // Delete the currently selected race with confirmation
   const handleDeleteSelectedRace = useCallback(() => {
@@ -1689,6 +2296,7 @@ export default function RacesScreen() {
   // Using useRef to track if auto-selection has happened to prevent re-running
   const autoSelectDatasetKeyRef = useRef<string | null>(null);
   const autoSelectLastAppliedIdRef = useRef<string | null>(null);
+  const routeSelectedRefetchAttemptedRef = useRef<string | null>(null);
   // Auto-select when data changes; omit selectedRaceId dependency to avoid loops when we set it here.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
@@ -1739,6 +2347,16 @@ export default function RacesScreen() {
       selectionStillValid,
       previousKey: autoSelectDatasetKeyRef.current,
     });
+    logger.debug('[StepDebug][RacesScreen] Auto-select decision', {
+      targetId,
+      routeTargetId,
+      selectedRaceId,
+      safeRecentRacesCount: safeRecentRaces.length,
+      safeRecentRaceIds: safeRecentRaces.map((race: any) => race?.id),
+      reason: routeTargetId
+        ? 'route-target-or-fallback'
+        : (safeNextRace?.id ? 'next-race-or-fallback' : 'first-race'),
+    });
     autoSelectLastAppliedIdRef.current = targetId;
     // Only mark as auto if we truly changed the selection here
     setHasManuallySelected(false);
@@ -1760,12 +2378,35 @@ export default function RacesScreen() {
 
     const matchingRace = safeRecentRaces.find((race: any) => race.id === targetId);
     if (!matchingRace) {
+      logger.debug('[StepDebug][RacesScreen] Route selected not found in current dataset', {
+        targetId,
+        loading,
+        safeRecentRacesCount: safeRecentRaces.length,
+        safeRecentRaceIds: safeRecentRaces.map((race: any) => race?.id),
+        sampleRaceNames: safeRecentRaces.slice(0, 5).map((race: any) => race?.name),
+      });
+      // If /races is opened with ?selected=<id> right after save, data hydration can lag
+      // one render cycle. Trigger a single refresh attempt for that target before giving up.
+      if (routeSelectedRefetchAttemptedRef.current !== targetId) {
+        routeSelectedRefetchAttemptedRef.current = targetId;
+        void refetchRacesRef.current?.();
+      }
       return;
     }
 
+    routeSelectedRefetchAttemptedRef.current = null;
+
     logger.debug('[races.tsx] Selecting race from route params:', targetId);
+    logger.debug('[StepDebug][RacesScreen] Applying route selection to UI', {
+      targetId,
+      matchedName: matchingRace?.name,
+      matchedSubtype: (matchingRace as any)?.metadata?.event_subtype,
+      matchedInterestSlug: (matchingRace as any)?.metadata?.interest_slug,
+      matchedTitle: (matchingRace as any)?.metadata?.title,
+    });
     setSelectedRaceId(targetId);
     setHasManuallySelected(true);
+    setIsGridView(false);
     initialSelectedRaceParam.current = null;
 
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -1774,6 +2415,21 @@ export default function RacesScreen() {
       window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
     }
   }, [loading, safeRecentRaces]);
+
+  useEffect(() => {
+    if (!selectedRaceId) return;
+    const selected = safeRecentRaces.find((race: any) => race?.id === selectedRaceId);
+    logger.debug('[StepDebug][RacesScreen] Selected race snapshot', {
+      selectedRaceId,
+      existsInSafeRecent: !!selected,
+      selectedName: selected?.name,
+      selectedSubtype: (selected as any)?.metadata?.event_subtype,
+      selectedInterestSlug: (selected as any)?.metadata?.interest_slug,
+      selectedTitle: (selected as any)?.metadata?.title,
+      selectedDescription: (selected as any)?.metadata?.description,
+      selectedNotes: (selected as any)?.metadata?.notes,
+    });
+  }, [selectedRaceId, safeRecentRaces]);
 
   useEffect(() => {
     if (hasRealRaces) {
@@ -3069,7 +3725,7 @@ export default function RacesScreen() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 52,
+              top: totalHeaderHeight + 52,
               left: 16,
               right: 16,
               zIndex: 60,
@@ -3088,7 +3744,7 @@ export default function RacesScreen() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 132,
+              top: totalHeaderHeight + 132,
               left: 16,
               right: 16,
               zIndex: 60,
@@ -3113,8 +3769,10 @@ export default function RacesScreen() {
                 setIsGridView(false); // zoom back in
               }}
               onBulkUpdateStatus={isViewingOtherTimeline ? undefined : handleTimelineGridBulkStatusUpdate}
+              onBulkDelete={isViewingOtherTimeline ? undefined : handleTimelineGridBulkDelete}
+              onReorderRaces={isViewingOtherTimeline ? undefined : handleTimelineGridReorder}
               topInset={totalHeaderHeight}
-              seasonHeaderHeight={SEASON_HEADER_HEIGHT}
+              seasonHeaderHeight={0}
             />
           ) : (
             <CardGrid
@@ -3132,6 +3790,7 @@ export default function RacesScreen() {
               safeAreaTop={insets.top}
               toolbarHidden={toolbarHidden}
               onContentScroll={handleToolbarScroll}
+              showBottomTimeline={false}
               onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
               onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
               deletingRaceId={deletingRaceId}
@@ -3574,40 +4233,13 @@ export default function RacesScreen() {
           totalRaces={headerTotalRaces}
           upcomingRaces={upcomingRacesCount}
           currentRaceIndex={headerCurrentRaceIndex}
+          seasonLabel={seasonLabel}
+          onSeasonPress={() => setShowSeasonPicker(true)}
           onUpcomingPress={handleUpcomingPress}
           onMeasuredHeight={setToolbarHeight}
           hidden={toolbarHidden}
         />
       </View>
-
-      {/* Season Header - separately positioned below the floating header */}
-      {!toolbarHidden && toolbarHeight > 0 && (
-        <Pressable
-          style={{
-            position: 'absolute',
-            top: toolbarHeight,
-            left: 0,
-            right: 0,
-            zIndex: 99,
-            backgroundColor: 'rgba(242, 242, 247, 0.92)',
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: IOS_COLORS.separator,
-          }}
-          onPress={() => setShowSeasonPicker(true)}
-          onLongPress={() => setShowFullArchive(true)}
-        >
-          <SeasonHeader
-            season={displaySeason}
-            totalRaces={seasonFilteredRacesCount}
-            onSeasonPress={() => setShowSeasonPicker(true)}
-            onArchivePress={() => setShowFullArchive(true)}
-            showAllRaces={!activeFilterSeasonId}
-            eventNounPlural={`${eventConfig.eventNoun}s`}
-            periodTerm={vocab('Period')}
-            compact
-          />
-        </Pressable>
-      )}
 
       <RaceModalsSection
         // Document Type Picker
@@ -3639,6 +4271,13 @@ export default function RacesScreen() {
         selectedRaceId={selectedRaceId}
         onBoatClassSelectorClose={() => setShowBoatClassSelector(false)}
         onBoatClassSelected={handleBoatClassSelected}
+      />
+
+      <StepLocationsMapModal
+        visible={showStepLocationsMap}
+        onClose={() => setShowStepLocationsMap(false)}
+        markers={stepLocationMarkers}
+        focusRaceId={stepLocationsFocusRaceId}
       />
 
 

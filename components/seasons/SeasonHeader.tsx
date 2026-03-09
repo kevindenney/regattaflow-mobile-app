@@ -69,11 +69,6 @@ export function SeasonHeader({
         <Text style={[styles.seasonName, styles.allRacesText, compact && styles.seasonNameCompact]}>
           {allLabel}
         </Text>
-        {totalRaces !== undefined && (
-          <Text style={[styles.fraction, compact && styles.fractionCompact]}>
-            {totalRaces} total
-          </Text>
-        )}
       </Pressable>
     );
   }

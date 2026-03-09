@@ -41,6 +41,7 @@ const PAST_CARD_OPACITY = 0.85;
 /** Subtle green left-border accent for the next upcoming race */
 const NEXT_RACE_BORDER_WIDTH = 3;
 const NEXT_RACE_BORDER_COLOR = IOS_COLORS.green; // #34C759
+const LAST_DONE_BORDER_COLOR = '#94A3B8';
 
 export function CardShell({
   position,
@@ -50,6 +51,7 @@ export function CardShell({
   style,
   testID,
   isNextRace = false,
+  isLastCompleted = false,
   isPast = false,
   isDeleting = false,
 }: CardShellProps) {
@@ -114,9 +116,11 @@ export function CardShell({
       height: dimensions.cardHeight,
       borderRadius: dimensions.borderRadius,
       backgroundColor: isPast ? PAST_CARD_BG : IOS_COLORS.systemBackground,
+      borderWidth: isNextRace || isLastCompleted ? 2 : 0,
+      borderColor: isNextRace ? NEXT_RACE_BORDER_COLOR : isLastCompleted ? LAST_DONE_BORDER_COLOR : 'transparent',
       ...(isPast ? { opacity: PAST_CARD_OPACITY } : {}),
     }),
-    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius, isPast]
+    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius, isPast, isNextRace, isLastCompleted]
   );
 
   return (
@@ -130,6 +134,20 @@ export function CardShell({
       ]}
       testID={testID}
     >
+      {(isNextRace || isLastCompleted) ? (
+        <View style={styles.timelineBadgeStack}>
+          {isNextRace ? (
+            <View style={[styles.timelineBadge, styles.timelineBadgeNext]}>
+              <Text style={styles.timelineBadgeTextNext}>NEXT</Text>
+            </View>
+          ) : null}
+          {isLastCompleted ? (
+            <View style={[styles.timelineBadge, styles.timelineBadgeDone]}>
+              <Text style={styles.timelineBadgeTextDone}>LAST DONE</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       {children}
       {isDeleting && (
         <View style={styles.deletingOverlay} pointerEvents="box-only">
@@ -176,6 +194,42 @@ const styles = StyleSheet.create({
   nextRaceBorder: {
     borderLeftWidth: NEXT_RACE_BORDER_WIDTH,
     borderLeftColor: NEXT_RACE_BORDER_COLOR,
+  },
+  timelineBadgeStack: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    gap: 6,
+    alignItems: 'center',
+    zIndex: 15,
+  },
+  timelineBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  timelineBadgeNext: {
+    backgroundColor: 'rgba(52, 199, 89, 0.14)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+  },
+  timelineBadgeDone: {
+    backgroundColor: 'rgba(148, 163, 184, 0.18)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(100, 116, 139, 0.35)',
+  },
+  timelineBadgeTextNext: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: IOS_COLORS.green,
+    letterSpacing: 0.4,
+  },
+  timelineBadgeTextDone: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.4,
   },
 });
 

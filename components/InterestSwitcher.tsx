@@ -7,7 +7,7 @@
 
 import { useInterest } from '@/providers/InterestProvider'
 import type { Interest } from '@/providers/InterestProvider'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Modal,
   Platform,
@@ -28,9 +28,37 @@ export function InterestSwitcher() {
   const handleSelect = async (interest: Interest) => {
     setOpen(false)
     if (interest.slug !== currentInterest?.slug) {
-      await switchInterest(interest.slug)
+      if (__DEV__) {
+        console.log('[InterestSwitcher] switch requested', {
+          from: currentInterest?.slug ?? null,
+          to: interest.slug,
+          toName: interest.name,
+        })
+      }
+      try {
+        await switchInterest(interest.slug)
+        if (__DEV__) {
+          console.log('[InterestSwitcher] switch completed', {
+            target: interest.slug,
+          })
+        }
+      } catch (error) {
+        console.error('[InterestSwitcher] switch failed', {
+          target: interest.slug,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
     }
   }
+
+  useEffect(() => {
+    if (!__DEV__) return
+    console.log('[InterestSwitcher] state snapshot', {
+      currentInterestSlug: currentInterest?.slug ?? null,
+      currentInterestName: currentInterest?.name ?? null,
+      availableInterestSlugs: userInterests.map((interest) => interest.slug),
+    })
+  }, [currentInterest?.name, currentInterest?.slug, userInterests])
 
   return (
     <>

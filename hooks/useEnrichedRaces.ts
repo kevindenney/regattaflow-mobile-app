@@ -819,8 +819,23 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
 
     // Only enrich if races actually changed
     if (racesKey !== previousRacesRef.current) {
+      if (__DEV__) {
+        logger.debug('[InterestDebug][useEnrichedRaces] input changed', {
+          previousKey: previousRacesRef.current,
+          nextKey: racesKey,
+          inputCount: races.length,
+          inputIds: races.map((race) => race.id).slice(0, 12),
+        });
+      }
       previousRacesRef.current = racesKey;
       enrichRaces();
+      return;
+    }
+    if (__DEV__) {
+      logger.debug('[InterestDebug][useEnrichedRaces] input unchanged, skip enrich', {
+        racesKey,
+        inputCount: races.length,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [races]);

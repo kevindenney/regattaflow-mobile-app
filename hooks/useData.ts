@@ -754,6 +754,13 @@ export function useDashboardData() {
     accessLevel: regatta.accessLevel,
     collaboratorId: regatta.collaboratorId,
     created_by: regatta.created_by, // Preserve for permission checks
+    race_type: regatta.race_type,
+    start_date: regatta.start_date,
+    warning_signal_time: regatta.warning_signal_time,
+    // Preserve full metadata so non-sailing custom-step titles/notes render immediately
+    // without requiring a hard refresh.
+    metadata: regatta.metadata,
+    _source: regatta._source,
   })), [liveRaces]);
 
   const loading = profile.loading || racesLoading || performanceHistory.loading || boats.loading || fleets.loading || recentSessions.loading;

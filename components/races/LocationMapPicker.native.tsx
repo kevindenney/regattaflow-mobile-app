@@ -68,6 +68,8 @@ export interface LocationMapPickerProps {
   raceType?: RaceType;
   initialLocation?: { lat: number; lng: number } | null;
   initialName?: string;
+  likelyLocations?: VenueLocation[];
+  referenceLocations?: VenueLocation[];
 }
 
 interface VenueLocation {
@@ -104,9 +106,26 @@ export function LocationMapPicker({
   raceType = 'fleet',
   initialLocation,
   initialName = '',
+  likelyLocations = [],
+  referenceLocations = [],
 }: LocationMapPickerProps) {
   const mapRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
+
+  const dedupeVenues = useCallback((venues: VenueLocation[]) => {
+    const seen = new Set<string>();
+    return venues.filter((venue) => {
+      const key = venue.name.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, []);
+
+  const likelyVenueOptions = useMemo(
+    () => dedupeVenues(likelyLocations).slice(0, 8),
+    [dedupeVenues, likelyLocations]
+  );
 
   // State
   const [selectedLocation, setSelectedLocation] = useState<VenueLocation | null>(
@@ -126,13 +145,17 @@ export function LocationMapPicker({
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
+      const autoPinnedLocation =
+        initialLocation
+          ? { name: initialName || `${initialLocation.lat.toFixed(4)}, ${initialLocation.lng.toFixed(4)}`, lat: initialLocation.lat, lng: initialLocation.lng }
+          : (likelyVenueOptions[0] || { name: 'Pinned center', lat: DEFAULT_CENTER.lat, lng: DEFAULT_CENTER.lng });
       setSelectedLocation(
-        initialLocation ? { name: initialName, lat: initialLocation.lat, lng: initialLocation.lng } : null
+        autoPinnedLocation
       );
-      setSearchText(initialName);
+      setSearchText(initialName || autoPinnedLocation.name);
       setShowSearchResults(false);
     }
-  }, [visible, initialLocation, initialName]);
+  }, [visible, initialLocation, initialName, likelyVenueOptions]);
 
   // =============================================================================
   // DATA LOADING
@@ -307,10 +330,10 @@ export function LocationMapPicker({
   // =============================================================================
 
   const initialRegion = useMemo(() => ({
-    latitude: initialLocation?.lat || DEFAULT_CENTER.lat,
-    longitude: initialLocation?.lng || DEFAULT_CENTER.lng,
+    latitude: selectedLocation?.lat || initialLocation?.lat || likelyVenueOptions[0]?.lat || DEFAULT_CENTER.lat,
+    longitude: selectedLocation?.lng || initialLocation?.lng || likelyVenueOptions[0]?.lng || DEFAULT_CENTER.lng,
     ...DEFAULT_DELTA,
-  }), [initialLocation]);
+  }), [initialLocation, likelyVenueOptions, selectedLocation?.lat, selectedLocation?.lng]);
 
   // Fallback when maps not available
   if (!mapsAvailable) {
@@ -343,6 +366,7 @@ export function LocationMapPicker({
             <View style={styles.fallbackVenueList}>
               {/* Deduplicate venues by name */}
               {[...recentVenues, ...FALLBACK_VENUES]
+                .concat(likelyVenueOptions)
                 .filter((venue, index, self) =>
                   index === self.findIndex(v => v.name.toLowerCase() === venue.name.toLowerCase())
                 )
@@ -456,6 +480,18 @@ export function LocationMapPicker({
             showsCompass
             mapType="standard"
           >
+            {referenceLocations.map((location, index) => (
+              <Marker
+                key={`reference-${location.name}-${index}`}
+                coordinate={{
+                  latitude: location.lat,
+                  longitude: location.lng,
+                }}
+                pinColor="#94A3B8"
+                title={location.name}
+                description="Existing race location"
+              />
+            ))}
             {selectedLocation && (
               <Marker
                 coordinate={{
@@ -481,6 +517,41 @@ export function LocationMapPicker({
         {/* Quick Select */}
         {!showSearchResults && (
           <View style={styles.quickSelectContainer}>
+            {likelyVenueOptions.length > 0 && (
+              <>
+                <Text style={styles.quickSelectTitle}>LIKELY LOCATIONS</Text>
+                <FlatList
+                  data={likelyVenueOptions}
+                  keyExtractor={(item, index) => `likely-${item.name}-${index}`}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.quickSelectList}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={[
+                        styles.quickSelectItem,
+                        selectedLocation?.name === item.name && styles.quickSelectItemSelected,
+                      ]}
+                      onPress={() => handleSelectVenue(item)}
+                    >
+                      <MapPin
+                        size={14}
+                        color={selectedLocation?.name === item.name ? IOS_COLORS.blue : IOS_COLORS.gray}
+                      />
+                      <Text
+                        style={[
+                          styles.quickSelectItemText,
+                          selectedLocation?.name === item.name && styles.quickSelectItemTextSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+              </>
+            )}
             <Text style={styles.quickSelectTitle}>QUICK SELECT</Text>
             <FlatList
               data={recentVenues}

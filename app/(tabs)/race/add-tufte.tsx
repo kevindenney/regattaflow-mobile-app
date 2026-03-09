@@ -40,6 +40,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -66,6 +67,7 @@ import type { RaceSuggestion } from '@/services/RaceSuggestionService';
 
 import type { RaceType } from '@/components/races/RaceTypeSelector';
 import { useInterest } from '@/providers/InterestProvider';
+import { useOrganization } from '@/providers/OrganizationProvider';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useActivityCatalog } from '@/hooks/useActivityCatalog';
 import { ActivityCatalog } from '@/components/events/ActivityCatalog';
@@ -109,6 +111,22 @@ const SUGGESTION_SOURCE_HINTS: Record<string, string> = {
   patterns: 'regattas -> race_patterns',
   templates: 'race_templates',
 };
+
+const RHKYC_LIKELY_LOCATIONS = [
+  { name: 'RHKYC Kellett Island', lat: 22.2799, lng: 114.1839 },
+  { name: 'Victoria Harbour Start Line', lat: 22.2936, lng: 114.1828 },
+  { name: 'Causeway Bay Typhoon Shelter', lat: 22.2838, lng: 114.1902 },
+  { name: 'Aberdeen Harbour', lat: 22.2475, lng: 114.1528 },
+  { name: 'Middle Island Sailing Centre', lat: 22.2370, lng: 114.1944 },
+];
+
+const JHU_SON_LIKELY_LOCATIONS = [
+  { name: 'Johns Hopkins Hospital', lat: 39.2975, lng: -76.5929 },
+  { name: 'Johns Hopkins Bayview Medical Center', lat: 39.2902, lng: -76.5469 },
+  { name: 'JHU School of Nursing', lat: 39.2971, lng: -76.5922 },
+  { name: 'Armstrong Medical Education Building', lat: 39.2978, lng: -76.5938 },
+  { name: 'Simulation Center, Johns Hopkins', lat: 39.2969, lng: -76.5914 },
+];
 
 // Helper function to map course type string to PositionedCourseType
 function mapCourseTypeToPositionedType(courseType: string): PositionedCourseType {
@@ -201,6 +219,7 @@ export default function AddRaceScreen() {
   const router = useRouter();
   const searchParams = useLocalSearchParams<{
     editId?: string;
+    mode?: string;
     templateId?: string;
     templateTitle?: string;
     templateDescription?: string;
@@ -210,9 +229,11 @@ export default function AddRaceScreen() {
   }>();
   const { user, isGuest } = useAuth();
   const { currentInterest } = useInterest();
+  const { activeOrganization } = useOrganization();
   const eventConfig = useInterestEventConfig();
   const editRaceId = typeof searchParams.editId === 'string' ? searchParams.editId : '';
   const isEditing = editRaceId.length > 0;
+  const isCreateFlow = typeof searchParams.mode === 'string' && searchParams.mode.toLowerCase() === 'add';
 
   // Activity catalog from followed orgs & coaches
   const {
@@ -223,16 +244,6 @@ export default function AddRaceScreen() {
 
   // Template preview state
   const [previewTemplate, setPreviewTemplate] = useState<ActivityTemplate | null>(null);
-
-  // Derive the interest-aware header title
-  const headerTitle = useMemo(() => {
-    const slug = currentInterest?.slug;
-    if (!slug || slug === 'sail-racing') return isEditing ? 'Edit Race' : 'Add Race';
-    if (slug === 'nursing') return isEditing ? 'Edit Shift' : 'Add Shift';
-    if (slug === 'drawing') return isEditing ? 'Edit Session' : 'Add Session';
-    if (slug === 'fitness') return isEditing ? 'Edit Workout' : 'Add Workout';
-    return isEditing ? 'Edit Event' : 'Add Event';
-  }, [currentInterest?.slug, isEditing]);
 
   // Form state
   const isSailing = !currentInterest?.slug || currentInterest.slug === 'sail-racing';
@@ -279,9 +290,21 @@ export default function AddRaceScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingEditData, setIsLoadingEditData] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [referenceRaceLocations, setReferenceRaceLocations] = useState<Array<{ name: string; lat: number; lng: number }>>([]);
   const [showRouteMap, setShowRouteMap] = useState(false);
   const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
   const [showAllSuggestions, setShowAllSuggestions] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(() => !isEditing);
+  const [showEventTypePicker, setShowEventTypePicker] = useState(() => !isEditing);
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrowLayout = Platform.OS === 'web' && windowWidth < 980;
+
+  useEffect(() => {
+    if (!isEditing) return;
+    // Ensure edit mode opens in a focused state even if editId arrives after first render.
+    setShowCatalog(false);
+    setShowEventTypePicker(false);
+  }, [isEditing]);
 
   useEffect(() => {
     if (!isEditing || !editRaceId) return;
@@ -313,6 +336,19 @@ export default function AddRaceScreen() {
             nextSubtypeFields[field.id] = String(rawValue);
           });
         }
+
+        logger.debug('[StepDebug][AddRaceScreen] Loaded edit row', {
+          editRaceId,
+          dbName: data.name,
+          dbStartDate: data.start_date,
+          dbEventSubtype: metadata.event_subtype,
+          dbInterestSlug: metadata.interest_slug,
+          dbTitle: metadata.title,
+          dbDescription: metadata.description,
+          dbNotes: metadata.notes,
+          computedFormEventSubtype: nextSubtype,
+          computedSubtypeFieldKeys: Object.keys(nextSubtypeFields),
+        });
 
         setForm((prev) => ({
           ...prev,
@@ -386,6 +422,133 @@ export default function AddRaceScreen() {
   const [showCoursePositionEditor, setShowCoursePositionEditor] = useState(false);
   const [positionedCourse, setPositionedCourse] = useState<PositionedCourse | null>(null);
   const hasAppliedRouteTemplateRef = useRef(false);
+
+  const selectedSubtype = useMemo(
+    () => (!isSailing ? eventConfig.eventSubtypes.find((entry) => entry.id === form.eventSubtype) : null),
+    [eventConfig.eventSubtypes, form.eventSubtype, isSailing]
+  );
+
+  const stepTypeLabel = useMemo(() => {
+    if (isSailing) return 'Race';
+    if (!selectedSubtype) return eventConfig.eventNoun || 'Event';
+    if (selectedSubtype.id === 'blank_activity') {
+      return currentInterest?.slug === 'nursing' ? 'Custom Learning Step' : 'Custom Step';
+    }
+    return selectedSubtype.label;
+  }, [currentInterest?.slug, eventConfig.eventNoun, isSailing, selectedSubtype]);
+
+  const likelyLocations = useMemo(() => {
+    const orgName = String(activeOrganization?.name || '').toLowerCase();
+    const orgSlug = String(activeOrganization?.slug || '').toLowerCase();
+    const interestSlug = String(currentInterest?.slug || eventConfig.interestSlug || '').toLowerCase();
+
+    if (
+      orgName.includes('royal hong kong yacht club') ||
+      orgName.includes('rhkyc') ||
+      orgSlug.includes('rhkyc')
+    ) {
+      return RHKYC_LIKELY_LOCATIONS;
+    }
+
+    if (
+      orgName.includes('johns hopkins') ||
+      orgName.includes('jhu school of nursing') ||
+      orgSlug.includes('jhson') ||
+      interestSlug.includes('nursing')
+    ) {
+      return JHU_SON_LIKELY_LOCATIONS;
+    }
+
+    if (interestSlug === 'sail-racing') {
+      return RHKYC_LIKELY_LOCATIONS.slice(0, 3);
+    }
+
+    return JHU_SON_LIKELY_LOCATIONS.slice(0, 3);
+  }, [activeOrganization?.name, activeOrganization?.slug, currentInterest?.slug, eventConfig.interestSlug]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!showLocationPicker || !user?.id) return;
+
+    const parseCoords = (row: any): { lat: number; lng: number } | null => {
+      const metadata = (row?.metadata && typeof row.metadata === 'object') ? row.metadata : {};
+      const startCoords = metadata?.start_coordinates;
+      if (startCoords && typeof startCoords.lat === 'number' && typeof startCoords.lng === 'number') {
+        return { lat: startCoords.lat, lng: startCoords.lng };
+      }
+      const rawVenue = String(row?.start_area_name || metadata?.venue_name || '').trim();
+      const match = rawVenue.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+      if (!match) return null;
+      const lat = Number(match[1]);
+      const lng = Number(match[2]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+      return { lat, lng };
+    };
+
+    const loadReferenceLocations = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('regattas')
+          .select('id,name,start_area_name,metadata,start_date')
+          .order('start_date', { ascending: false })
+          .limit(180);
+        if (error) throw error;
+
+        const interestSlug = String(currentInterest?.slug || eventConfig.interestSlug || '').toLowerCase();
+        const filtered = (data || []).filter((row: any) => {
+          const metadata = (row?.metadata && typeof row.metadata === 'object') ? row.metadata : {};
+          const rowInterest = String(metadata?.interest_slug || '').toLowerCase();
+          if (!interestSlug) return true;
+          return rowInterest ? rowInterest === interestSlug : interestSlug === 'sail-racing';
+        });
+
+        const deduped: Array<{ name: string; lat: number; lng: number }> = [];
+        const seen = new Set<string>();
+        filtered.forEach((row: any) => {
+          const coords = parseCoords(row);
+          if (!coords) return;
+          const name = String(row?.name || row?.start_area_name || 'Race Location');
+          const key = `${coords.lat.toFixed(4)}|${coords.lng.toFixed(4)}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          deduped.push({ name, lat: coords.lat, lng: coords.lng });
+        });
+        if (!cancelled) {
+          setReferenceRaceLocations(deduped.slice(0, 50));
+        }
+      } catch (_error) {
+        if (!cancelled) {
+          setReferenceRaceLocations([]);
+        }
+      }
+    };
+
+    void loadReferenceLocations();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentInterest?.slug, eventConfig.interestSlug, showLocationPicker, user?.id]);
+
+  const headerTitle = useMemo(() => {
+    if (isCreateFlow) {
+      return `Add ${stepTypeLabel}`;
+    }
+    return isEditing ? `Edit ${stepTypeLabel}` : `Add ${stepTypeLabel}`;
+  }, [isCreateFlow, isEditing, stepTypeLabel]);
+
+  const headerSubtitle = useMemo(() => {
+    if (isSailing) return form.raceType ? `${RACE_TYPE_CONFIG[form.raceType]?.label} format` : 'Plan key details first';
+    const interestName = currentInterest?.name || eventConfig.interestSlug;
+    const subtypeName = selectedSubtype?.label || stepTypeLabel;
+    return `${interestName} • ${subtypeName}`;
+  }, [
+    currentInterest?.name,
+    eventConfig.interestSlug,
+    form.raceType,
+    isSailing,
+    selectedSubtype?.label,
+    stepTypeLabel,
+  ]);
 
   const routeTemplatePrefill = useMemo(() => {
     const parseListParam = (value?: string): string[] => {
@@ -782,7 +945,19 @@ export default function AddRaceScreen() {
 
   // Save handler
   const handleSave = useCallback(async () => {
-    if (!isFormValid || isSaving || isLoadingEditData) return;
+    if (!isFormValid || isSaving || isLoadingEditData) {
+      logger.debug('[StepDebug][AddRaceScreen] Save blocked before execution', {
+        isFormValid,
+        isSaving,
+        isLoadingEditData,
+        isEditing,
+        editRaceId,
+        eventSubtype: form.eventSubtype,
+        formName: form.name,
+        subtypeTitle: form.subtypeFields.title || form.subtypeFields.activity_title || '',
+      });
+      return;
+    }
     // For non-guests, we still need a user ID
     if (!isGuest && !user?.id) return;
 
@@ -795,13 +970,25 @@ export default function AddRaceScreen() {
       const startTime = `${form.date}T${normalizedTime}:00`;
       const subtypeLabel = eventConfig.eventSubtypes.find((s) => s.id === form.eventSubtype)?.label || 'Activity';
       const generatedName = `${subtypeLabel} ${form.date}`;
-      const eventName = isSailing ? form.name.trim() : (form.name.trim() || generatedName);
+      const subtypeTitle = String(form.subtypeFields.title || form.subtypeFields.activity_title || '').trim();
+      const subtypeDescription = String(form.subtypeFields.description || form.subtypeFields.learning_objectives || '').trim();
+      const notesValue = String(form.notes || '').trim();
+      const eventName = isSailing
+        ? form.name.trim()
+        : (form.name.trim() || subtypeTitle || generatedName);
 
       // Build metadata
       const metadata: Record<string, any> = {
         venue_name: form.location || null,
         interest_id: currentInterest?.id ?? null,
+        notes: notesValue || subtypeDescription || null,
       };
+      if (activeOrganization?.id) {
+        metadata.organization_id = activeOrganization.id;
+      }
+      if (activeOrganization?.name) {
+        metadata.organization_name = activeOrganization.name;
+      }
 
       if (routeTemplatePrefill.id) {
         metadata.org_template_id = routeTemplatePrefill.id;
@@ -891,6 +1078,12 @@ export default function AddRaceScreen() {
         // Non-sailing: store event subtype and dynamic fields in metadata
         metadata.event_subtype = form.eventSubtype;
         metadata.interest_slug = currentInterest?.slug;
+        if (subtypeTitle) {
+          metadata.title = subtypeTitle;
+        }
+        if (subtypeDescription) {
+          metadata.description = subtypeDescription;
+        }
         // Sync main form date/time into metadata for subtype compatibility
         metadata.date = form.date;
         metadata.start_time = form.time;
@@ -901,6 +1094,24 @@ export default function AddRaceScreen() {
       }
 
       raceData.metadata = metadata;
+
+      logger.debug('[StepDebug][AddRaceScreen] Save payload prepared', {
+        isEditing,
+        editRaceId,
+        eventSubtype: form.eventSubtype,
+        eventName,
+        formName: form.name,
+        subtypeTitle,
+        subtypeDescription,
+        notesValue,
+        metadataPreview: {
+          event_subtype: metadata.event_subtype,
+          interest_slug: metadata.interest_slug,
+          title: metadata.title,
+          description: metadata.description,
+          notes: metadata.notes,
+        },
+      });
 
       // Add route waypoints
       if (form.routeWaypoints.length > 0) {
@@ -1040,6 +1251,21 @@ export default function AddRaceScreen() {
       }
 
       logger.debug('[AddRaceScreen] Race saved:', savedRace?.id);
+      logger.debug('[StepDebug][AddRaceScreen] Save result row', {
+        id: savedRace?.id,
+        name: savedRace?.name,
+        start_date: savedRace?.start_date,
+        metadataPreview: {
+          event_subtype: (savedRace as any)?.metadata?.event_subtype,
+          interest_slug: (savedRace as any)?.metadata?.interest_slug,
+          title: (savedRace as any)?.metadata?.title,
+          description: (savedRace as any)?.metadata?.description,
+          notes: (savedRace as any)?.metadata?.notes,
+        },
+      });
+      logger.debug('[StepDebug][AddRaceScreen] Navigating back to races with selected', {
+        selected: savedRace?.id,
+      });
       router.replace(`/(tabs)/races?selected=${savedRace.id}`);
     } catch (err) {
       logger.error('[AddRaceScreen] Save failed:', err);
@@ -1091,7 +1317,10 @@ export default function AddRaceScreen() {
           <Pressable onPress={handleClose} hitSlop={12}>
             <ChevronLeft size={28} color={COLORS.accent} />
           </Pressable>
-          <Text style={styles.headerTitle}>{headerTitle}</Text>
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, isNarrowLayout && styles.headerTitleNarrow]}>{headerTitle}</Text>
+            <Text style={styles.headerSubtitle} numberOfLines={1}>{headerSubtitle}</Text>
+          </View>
           <Pressable
             onPress={handleSave}
             disabled={!isFormValid || isSaving || isLoadingEditData}
@@ -1168,11 +1397,33 @@ export default function AddRaceScreen() {
           {/* Activity Catalog — templates from orgs & coaches */}
           {(catalogTemplates.length > 0 || catalogLoading) && (
             <View style={styles.section}>
-              <ActivityCatalog
-                templates={catalogTemplates}
-                onSelectTemplate={setPreviewTemplate}
-                isLoading={catalogLoading}
-              />
+              {isSailing ? (
+                <ActivityCatalog
+                  templates={catalogTemplates}
+                  onSelectTemplate={setPreviewTemplate}
+                  isLoading={catalogLoading}
+                />
+              ) : (
+                <>
+                  <View style={styles.sectionHeaderCompact}>
+                    <Text style={styles.sectionLabel}>FROM YOUR ORGANIZATIONS & COACHES</Text>
+                    <Pressable onPress={() => setShowCatalog((prev) => !prev)}>
+                      <Text style={styles.sectionActionText}>{showCatalog ? 'Hide' : 'Browse'}</Text>
+                    </Pressable>
+                  </View>
+                  {showCatalog ? (
+                    <ActivityCatalog
+                      templates={catalogTemplates}
+                      onSelectTemplate={setPreviewTemplate}
+                      isLoading={catalogLoading}
+                    />
+                  ) : (
+                    <Text style={styles.collapsedHelperText}>
+                      Templates are available, but hidden so you can edit this step first.
+                    </Text>
+                  )}
+                </>
+              )}
             </View>
           )}
 
@@ -1202,27 +1453,51 @@ export default function AddRaceScreen() {
             </View>
           ) : (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>EVENT TYPE</Text>
-              <View style={styles.raceTypeGrid}>
-                {eventConfig.eventSubtypes.map((subtype) => {
-                  const isSelected = form.eventSubtype === subtype.id;
-                  const accentColor = currentInterest?.accent_color ?? COLORS.accent;
-                  return (
-                    <Pressable
-                      key={subtype.id}
-                      style={[styles.raceTypeCard, isSelected && { borderColor: accentColor }]}
-                      onPress={() => setForm(prev => ({ ...prev, eventSubtype: subtype.id, subtypeFields: {} }))}
-                    >
-                      <Text style={[styles.raceTypeLabel, isSelected && { color: accentColor }]}>
-                        {subtype.label}
-                      </Text>
-                      <Text style={[styles.subtypeDescription, isSelected && { color: accentColor }]} numberOfLines={1}>
-                        {subtype.description}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.sectionHeaderCompact}>
+                <Text style={styles.sectionLabel}>EVENT TYPE</Text>
+                {isEditing && (
+                  <Pressable onPress={() => setShowEventTypePicker((prev) => !prev)}>
+                    <Text style={styles.sectionActionText}>{showEventTypePicker ? 'Done' : 'Change'}</Text>
+                  </Pressable>
+                )}
               </View>
+              {(!isEditing || showEventTypePicker) ? (
+                <View style={styles.subtypeList}>
+                  {eventConfig.eventSubtypes.map((subtype) => {
+                    const isSelected = form.eventSubtype === subtype.id;
+                    const accentColor = currentInterest?.accent_color ?? COLORS.accent;
+                    return (
+                      <Pressable
+                        key={subtype.id}
+                        style={[
+                          styles.subtypeRow,
+                          isSelected && { borderColor: accentColor, backgroundColor: `${accentColor}10` },
+                        ]}
+                        onPress={() => setForm(prev => ({ ...prev, eventSubtype: subtype.id, subtypeFields: {} }))}
+                      >
+                        <View style={styles.subtypeRowMain}>
+                          <Text style={[styles.subtypeRowTitle, isSelected && { color: accentColor }]}>
+                            {subtype.id === 'blank_activity' && currentInterest?.slug === 'nursing'
+                              ? 'Custom Learning Step'
+                              : subtype.label}
+                          </Text>
+                          {!isNarrowLayout && (
+                            <Text style={styles.subtypeRowId}>{subtype.id.replace(/_/g, ' ')}</Text>
+                          )}
+                        </View>
+                        <Text style={[styles.subtypeRowDescription, isSelected && { color: accentColor }]} numberOfLines={2}>
+                          {subtype.description}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.selectedSubtypeSummary}>
+                  <Text style={styles.selectedSubtypeTitle}>{stepTypeLabel}</Text>
+                  <Text style={styles.selectedSubtypeHint}>Tap Change to switch step type</Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -1316,14 +1591,14 @@ export default function AddRaceScreen() {
               aiExtracted={form.aiExtractedFields.has('name')}
             />
 
-            <View style={styles.row}>
+            <View style={[styles.row, isNarrowLayout && styles.rowStack]}>
               <FieldRow
                 label="Date"
                 value={form.date}
                 onChangeText={(v) => updateField('date', v)}
                 placeholder="YYYY-MM-DD"
                 required
-                halfWidth
+                halfWidth={!isNarrowLayout}
                 aiExtracted={form.aiExtractedFields.has('date')}
               />
               <FieldRow
@@ -1332,7 +1607,7 @@ export default function AddRaceScreen() {
                 onChangeText={(v) => updateField('time', v)}
                 placeholder="HH:MM"
                 required
-                halfWidth
+                halfWidth={!isNarrowLayout}
                 aiExtracted={form.aiExtractedFields.has('time')}
               />
             </View>
@@ -1393,13 +1668,13 @@ export default function AddRaceScreen() {
                 </Pressable>
               )}
 
-              <View style={styles.row}>
+              <View style={[styles.row, isNarrowLayout && styles.rowStack]}>
                 <FieldRow
                   label="Laps"
                   value={form.numberOfLaps}
                   onChangeText={(v) => updateField('numberOfLaps', v)}
                   placeholder="3"
-                  halfWidth
+                  halfWidth={!isNarrowLayout}
                   keyboardType="numeric"
                 />
                 <FieldRow
@@ -1407,7 +1682,7 @@ export default function AddRaceScreen() {
                   value={form.expectedFleetSize}
                   onChangeText={(v) => updateField('expectedFleetSize', v)}
                   placeholder="20"
-                  halfWidth
+                  halfWidth={!isNarrowLayout}
                   keyboardType="numeric"
                 />
               </View>
@@ -1417,13 +1692,13 @@ export default function AddRaceScreen() {
           {form.raceType === 'distance' && (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>DISTANCE RACING</Text>
-              <View style={styles.row}>
+              <View style={[styles.row, isNarrowLayout && styles.rowStack]}>
                 <FieldRow
                   label="Distance (nm)"
                   value={form.totalDistanceNm}
                   onChangeText={(v) => updateField('totalDistanceNm', v)}
                   placeholder={calculatedDistance ? calculatedDistance.toFixed(1) : '25'}
-                  halfWidth
+                  halfWidth={!isNarrowLayout}
                   keyboardType="numeric"
                   aiExtracted={form.aiExtractedFields.has('totalDistanceNm')}
                 />
@@ -1432,7 +1707,7 @@ export default function AddRaceScreen() {
                   value={form.timeLimitHours}
                   onChangeText={(v) => updateField('timeLimitHours', v)}
                   placeholder="8"
-                  halfWidth
+                  halfWidth={!isNarrowLayout}
                   keyboardType="numeric"
                 />
               </View>
@@ -1618,6 +1893,21 @@ export default function AddRaceScreen() {
             return (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>{subtypeConfig.label.toUpperCase()}</Text>
+                <Pressable style={styles.locationRow} onPress={() => setShowLocationPicker(true)}>
+                  <MapPin size={20} color={form.location ? COLORS.accent : COLORS.tertiary} />
+                  <View style={styles.locationContent}>
+                    <Text style={styles.locationLabel}>Location (Map)</Text>
+                    <Text style={[styles.locationValue, !form.location && styles.locationPlaceholder]}>
+                      {form.location || 'Select from map'}
+                    </Text>
+                    {form.latitude && form.longitude && (
+                      <Text style={styles.locationCoords}>
+                        {form.latitude.toFixed(4)}, {form.longitude.toFixed(4)}
+                      </Text>
+                    )}
+                  </View>
+                  <ChevronRight size={20} color={COLORS.tertiary} />
+                </Pressable>
                 {subtypeConfig.formFields
                   .filter((field: EventFormField) => !['date', 'start_time', 'end_time'].includes(field.id))
                   .map((field: EventFormField) => {
@@ -1743,6 +2033,8 @@ export default function AddRaceScreen() {
         raceType={form.raceType}
         initialLocation={form.latitude && form.longitude ? { lat: form.latitude, lng: form.longitude } : null}
         initialName={form.location}
+        likelyLocations={likelyLocations}
+        referenceLocations={referenceRaceLocations}
       />
 
       {/* Course Position Editor Modal */}
@@ -1923,17 +2215,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.separator,
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: COLORS.ink,
   },
+  headerTitleNarrow: {
+    fontSize: 16,
+  },
+  headerSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: COLORS.secondary,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
   saveButton: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.accent,
   },
@@ -1941,7 +2249,9 @@ const styles = StyleSheet.create({
     color: COLORS.tertiary,
   },
   content: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 20,
   },
   suggestionDiagnosticCard: {
     marginTop: 8,
@@ -1987,14 +2297,36 @@ const styles = StyleSheet.create({
 
   // Section
   section: {
-    marginBottom: 24,
+    marginBottom: 18,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.separator,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.secondary,
-    letterSpacing: 1,
-    marginBottom: 12,
+    letterSpacing: 0.2,
+    marginBottom: 8,
+  },
+  sectionHeaderCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sectionActionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.accent,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
+  collapsedHelperText: {
+    fontSize: 12,
+    color: COLORS.secondary,
+    lineHeight: 18,
+    paddingHorizontal: 2,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -2033,6 +2365,55 @@ const styles = StyleSheet.create({
     color: COLORS.tertiary,
     marginTop: 2,
   },
+  subtypeList: {
+    gap: 8,
+  },
+  subtypeRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.inputBorder,
+    paddingHorizontal: 2,
+    paddingVertical: 9,
+  },
+  subtypeRowMain: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  subtypeRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.ink,
+    flexShrink: 1,
+  },
+  subtypeRowId: {
+    fontSize: 10,
+    color: COLORS.tertiary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  subtypeRowDescription: {
+    marginTop: 3,
+    fontSize: 12,
+    color: COLORS.secondary,
+    lineHeight: 15,
+  },
+  selectedSubtypeSummary: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.inputBorder,
+    paddingHorizontal: 2,
+    paddingVertical: 8,
+  },
+  selectedSubtypeTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.ink,
+  },
+  selectedSubtypeHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: COLORS.secondary,
+  },
 
   // Dynamic form fields (non-sailing)
   fieldLabel: {
@@ -2047,12 +2428,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   selectChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: COLORS.inputBorder,
-    backgroundColor: COLORS.inputBg,
+    backgroundColor: 'transparent',
   },
   selectChipText: {
     fontSize: 13,
@@ -2174,8 +2555,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  rowStack: {
+    flexDirection: 'column',
+    gap: 0,
+  },
   fieldRow: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   fieldRowHalf: {
     flex: 1,
@@ -2186,8 +2571,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   fieldLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.secondary,
+    letterSpacing: 0.2,
   },
   required: {
     color: COLORS.error,
@@ -2200,16 +2586,18 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   fieldInput: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: COLORS.inputBorder,
-    padding: 12,
-    fontSize: 15,
+    paddingHorizontal: 0,
+    paddingVertical: 8,
+    fontSize: 16,
     color: COLORS.ink,
   },
   fieldInputMultiline: {
-    minHeight: 80,
+    minHeight: 72,
     textAlignVertical: 'top',
   },
 
@@ -2217,13 +2605,15 @@ const styles = StyleSheet.create({
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    borderWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: COLORS.inputBorder,
-    padding: 12,
-    marginBottom: 12,
-    gap: 12,
+    paddingHorizontal: 0,
+    paddingVertical: 10,
+    marginBottom: 10,
+    gap: 10,
   },
   locationContent: {
     flex: 1,
@@ -2234,7 +2624,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   locationValue: {
-    fontSize: 15,
+    fontSize: 16,
     color: COLORS.ink,
   },
   locationPlaceholder: {

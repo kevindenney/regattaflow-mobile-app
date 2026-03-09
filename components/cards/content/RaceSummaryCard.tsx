@@ -22,7 +22,7 @@ import {
   Sun,
   Map,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState, Component, ErrorInfo, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, Component, ErrorInfo, useEffect, useRef } from 'react';
 import { ActionSheetIOS, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
@@ -674,6 +674,7 @@ export function RaceSummaryCard({
   onCardPress,
   // Refetch trigger for AfterRaceContent
   refetchTrigger,
+  onOpenLocationMap,
   onMoveStepEarlier,
   onMoveStepLater,
   onMoveStepToPlannedNext,
@@ -1031,9 +1032,13 @@ export function RaceSummaryCard({
     [race.date, race.startTime]
   );
   const displayRaceName = (() => {
+    const metadataTitle = String((race as any)?.metadata?.title || '').trim();
     const raw = String(race.name || 'Step').replace(/^Activity/i, 'Step');
 
     if (isBlankActivitySubtype) {
+      if (metadataTitle.length > 0 && /^Step\s*[-—]\s*\d{4}-\d{2}-\d{2}$/i.test(raw)) {
+        return metadataTitle;
+      }
       const isGenerated = /^Step\s*[-—]\s*\d{4}-\d{2}-\d{2}$/i.test(raw);
       if (!isGenerated) return raw;
       if (!normalizedStepDateTime) return 'Step';
@@ -1052,6 +1057,30 @@ export function RaceSummaryCard({
 
     return race.name;
   })();
+
+  const titleDebugLoggedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isBlankActivitySubtype) return;
+    if (!race?.id) return;
+    if (titleDebugLoggedRef.current.has(race.id)) return;
+    titleDebugLoggedRef.current.add(race.id);
+
+    const metadataTitle = String((race as any)?.metadata?.title || '').trim();
+    const metadataDescription = String((race as any)?.metadata?.description || '').trim();
+    const metadataNotes = String((race as any)?.metadata?.notes || '').trim();
+    const rawName = String(race.name || '');
+    const usedGeneratedName = /^Step\s*[-—]\s*\d{4}-\d{2}-\d{2}$/i.test(rawName);
+
+    console.debug('[StepDebug][RaceSummaryCard] Title resolution snapshot', {
+      raceId: race.id,
+      rawName,
+      displayRaceName,
+      usedGeneratedName,
+      metadataTitle,
+      metadataDescription,
+      metadataNotes,
+    });
+  }, [displayRaceName, isBlankActivitySubtype, race]);
 
   // Get urgency colors
   const urgency = useMemo(
@@ -1638,10 +1667,14 @@ export function RaceSummaryCard({
         ) : null}
 
         {/* Location */}
-        <View style={styles.simpleDetailRow}>
+        <Pressable
+          style={styles.simpleDetailRow}
+          onPress={() => onOpenLocationMap?.(String(race.id))}
+          disabled={!onOpenLocationMap}
+        >
           <Ionicons name="location-outline" size={16} color={IOS_COLORS.secondaryLabel} />
           <Text style={styles.simpleDetailText}>{venue?.name || race.venue || 'Venue TBD'}</Text>
-        </View>
+        </Pressable>
 
         {/* Date/time */}
         <View style={styles.simpleDetailRow}>

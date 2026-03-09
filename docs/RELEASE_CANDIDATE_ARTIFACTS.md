@@ -1,6 +1,6 @@
 # Release Candidate Artifacts
 
-- Generated: 2026-03-09T00:58:27.508Z
+- Generated: 2026-03-09T01:05:12.736Z
 - Overall: **PASS**
 - Summary: 5 PASS, 0 FAIL, 0 SKIP (5 total)
 
@@ -8,11 +8,11 @@
 
 | ID | Category | Status | Command | Detail |
 |---|---|---|---|---|
-| typecheck | quality | PASS | `npm run typecheck` | npm run typecheck (5050ms) |
-| qa_matrix_coverage | quality | PASS | `node scripts/qa-matrix-coverage.mjs` | node scripts/qa-matrix-coverage.mjs (21ms) |
-| smoke_multi_org_demo | smoke | PASS | `node scripts/smoke-multi-org-demo.mjs` | node scripts/smoke-multi-org-demo.mjs (14084ms) |
-| api_smoke_deploy | api | PASS | `node scripts/run-api-smoke-deploy.mjs` | node scripts/run-api-smoke-deploy.mjs (2449ms) |
-| integration_validation | integration | PASS | `node scripts/run-integration-validation.mjs` | node scripts/run-integration-validation.mjs (42902ms) |
+| typecheck | quality | PASS | `npm run typecheck` | npm run typecheck (5048ms) |
+| qa_matrix_coverage | quality | PASS | `node scripts/qa-matrix-coverage.mjs` | node scripts/qa-matrix-coverage.mjs (22ms) |
+| smoke_multi_org_demo | smoke | PASS | `node scripts/smoke-multi-org-demo.mjs` | node scripts/smoke-multi-org-demo.mjs (15558ms) |
+| api_smoke_deploy | api | PASS | `node scripts/run-api-smoke-deploy.mjs` | node scripts/run-api-smoke-deploy.mjs (2769ms) |
+| integration_validation | integration | PASS | `node scripts/run-integration-validation.mjs` | node scripts/run-integration-validation.mjs (53314ms) |
 
 ## Artifact Index
 

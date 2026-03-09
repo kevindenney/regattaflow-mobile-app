@@ -12,6 +12,9 @@
 import { useMemo } from 'react';
 import { getDemoRaceStartDateISO, getDemoRaceStartTimeLabel } from '@/lib/demo/demoDate';
 import type { VocabularyMap } from '@/lib/vocabulary';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useRaceListData');
 
 // =============================================================================
 // TYPES
@@ -167,13 +170,38 @@ export function useRaceListData({
 
   // Safe recent races - prioritize enriched > live > fallback
   const safeRecentRaces = useMemo((): LiveRace[] => {
+    let source: 'enriched' | 'normalized_live' | 'recent_fallback' = 'recent_fallback';
     if (enrichedRaces && enrichedRaces.length > 0) {
+      source = 'enriched';
+      if (__DEV__) {
+        logger.debug('[InterestDebug][useRaceListData] selected source', {
+          source,
+          count: enrichedRaces.length,
+          ids: enrichedRaces.map((race) => race?.id).filter(Boolean).slice(0, 12),
+        });
+      }
       return enrichedRaces;
     }
     if (normalizedLiveRaces.length > 0) {
+      source = 'normalized_live';
+      if (__DEV__) {
+        logger.debug('[InterestDebug][useRaceListData] selected source', {
+          source,
+          count: normalizedLiveRaces.length,
+          ids: normalizedLiveRaces.map((race) => race?.id).filter(Boolean).slice(0, 12),
+        });
+      }
       return normalizedLiveRaces;
     }
-    return Array.isArray(recentRaces) ? (recentRaces as LiveRace[]) : [];
+    const fallbackRows = Array.isArray(recentRaces) ? (recentRaces as LiveRace[]) : [];
+    if (__DEV__) {
+      logger.debug('[InterestDebug][useRaceListData] selected source', {
+        source,
+        count: fallbackRows.length,
+        ids: fallbackRows.map((race) => race?.id).filter(Boolean).slice(0, 12),
+      });
+    }
+    return fallbackRows;
   }, [enrichedRaces, normalizedLiveRaces, recentRaces]);
 
   // Calculate next race from timeline

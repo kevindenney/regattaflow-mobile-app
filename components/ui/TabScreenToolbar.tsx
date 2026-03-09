@@ -16,6 +16,8 @@ import {
   StyleSheet,
   Platform,
   Image,
+  ScrollView,
+  useWindowDimensions,
   type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
@@ -59,6 +61,7 @@ export interface ToolbarAction {
 export interface TabScreenToolbarProps {
   title: string;
   subtitle?: string;
+  subtitleContent?: React.ReactNode;
   onSubtitlePress?: () => void;
   actions?: ToolbarAction[];
   /**
@@ -199,6 +202,7 @@ function ActionButton({ action }: { action: ToolbarAction }) {
 export function TabScreenToolbar({
   title,
   subtitle,
+  subtitleContent,
   onSubtitlePress,
   actions,
   rightContent,
@@ -212,6 +216,9 @@ export function TabScreenToolbar({
   hidden = false,
 }: TabScreenToolbarProps) {
   const { isDrawerOpen, openDrawer } = useWebDrawer();
+  const { width: windowWidth } = useWindowDimensions();
+  const isNarrowWebToolbar = Platform.OS === 'web' && windowWidth < 960;
+  const shouldShowInlineSubtitle = Boolean((subtitle || subtitleContent) && !isNarrowWebToolbar);
 
   // Show sidebar toggle on web ONLY when sidebar is closed (so user can re-open it)
   // When sidebar is open, the toggle inside the sidebar handles closing
@@ -300,7 +307,11 @@ export function TabScreenToolbar({
           )}
         </View>
 
-        {subtitle ? (
+        {subtitleContent && shouldShowInlineSubtitle ? (
+          <View style={styles.subtitleContainer}>
+            {subtitleContent}
+          </View>
+        ) : subtitle && shouldShowInlineSubtitle ? (
           <Pressable
             style={styles.subtitleContainer}
             onPress={onSubtitlePress ? () => onSubtitlePress() : undefined}
@@ -337,6 +348,31 @@ export function TabScreenToolbar({
           {showProfileAvatar && <ProfileAvatarButton />}
         </View>
       </View>
+
+      {/* Narrow web: move subtitle/meta chips to a dedicated second row */}
+      {!shouldShowInlineSubtitle && (subtitleContent || subtitle) ? (
+        <View style={styles.subtitleRow}>
+          {subtitleContent ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.subtitleRowScrollContent}
+            >
+              {subtitleContent}
+            </ScrollView>
+          ) : subtitle ? (
+            <Pressable
+              style={styles.subtitleRowTextWrap}
+              onPress={onSubtitlePress ? () => onSubtitlePress() : undefined}
+              disabled={!onSubtitlePress}
+            >
+              <Text style={[styles.subtitleText, onSubtitlePress && styles.subtitleLink]} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       {/* Children slot for tab-specific extras */}
       {children}
@@ -432,7 +468,20 @@ const styles = StyleSheet.create({
   // Subtitle (center area)
   subtitleContainer: {
     paddingHorizontal: 8,
+    marginRight: 8,
     flexShrink: 1,
+    minWidth: 0,
+  },
+  subtitleRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  subtitleRowScrollContent: {
+    paddingRight: 12,
+  },
+  subtitleRowTextWrap: {
+    minHeight: 22,
+    justifyContent: 'center',
   },
   subtitleText: {
     fontSize: 13,
@@ -482,7 +531,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: IOS_COLORS.secondarySystemGroupedBackground,
     borderRadius: 9999,
-    ...IOS_SHADOWS.sm,
+    ...Platform.select({
+      web: {},
+      default: IOS_SHADOWS.sm,
+    }),
     // Web-specific shadow fallback
     ...Platform.select({
       web: {

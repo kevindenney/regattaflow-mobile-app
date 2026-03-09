@@ -36,6 +36,8 @@ export interface LocationMapPickerProps {
   raceType?: RaceType;
   initialLocation?: { lat: number; lng: number } | null;
   initialName?: string;
+  likelyLocations?: VenueLocation[];
+  referenceLocations?: VenueLocation[];
 }
 
 interface VenueLocation {
@@ -66,15 +68,18 @@ const FALLBACK_VENUES: VenueLocation[] = [
 function LeafletMap({
   center,
   selectedLocation,
+  referenceLocations,
   onMapClick,
 }: {
   center: { lat: number; lng: number };
   selectedLocation: VenueLocation | null;
+  referenceLocations: VenueLocation[];
   onMapClick: (lat: number, lng: number) => void;
 }) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const referenceMarkerRefs = useRef<any[]>([]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !mapContainerRef.current) return;
@@ -180,6 +185,38 @@ function LeafletMap({
     }
   }, [selectedLocation?.lat, selectedLocation?.lng]);
 
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const L = (window as any).L;
+    if (!L) return;
+
+    referenceMarkerRefs.current.forEach((marker) => {
+      try {
+        mapRef.current.removeLayer(marker);
+      } catch (_e) {
+        // ignore
+      }
+    });
+    referenceMarkerRefs.current = [];
+
+    const icon = L.divIcon({
+      className: 'reference-location-pin',
+      html: '<div style="width:8px;height:8px;border-radius:999px;background:#94A3B8;border:1px solid #ffffff;box-shadow:0 1px 2px rgba(0,0,0,0.2)"></div>',
+      iconSize: [8, 8],
+    });
+
+    referenceLocations.forEach((location) => {
+      const marker = L.marker([location.lat, location.lng], { icon }).addTo(mapRef.current);
+      marker.bindPopup(
+        `<div style="font-size:12px;min-width:140px">
+          <div style="font-weight:600;color:#334155">${location.name}</div>
+          <div style="color:#64748B;margin-top:2px">Existing race location</div>
+        </div>`
+      );
+      referenceMarkerRefs.current.push(marker);
+    });
+  }, [referenceLocations]);
+
   return (
     <View
       ref={mapContainerRef as any}
@@ -199,7 +236,24 @@ export function LocationMapPicker({
   raceType = 'fleet',
   initialLocation,
   initialName = '',
+  likelyLocations = [],
+  referenceLocations = [],
 }: LocationMapPickerProps) {
+  const dedupeVenues = useCallback((venues: VenueLocation[]) => {
+    const seen = new Set<string>();
+    return venues.filter((venue) => {
+      const key = venue.name.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, []);
+
+  const likelyVenueOptions = useMemo(
+    () => dedupeVenues(likelyLocations).slice(0, 8),
+    [dedupeVenues, likelyLocations]
+  );
+
   // State
   const [selectedLocation, setSelectedLocation] = useState<VenueLocation | null>(
     initialLocation ? { name: initialName, lat: initialLocation.lat, lng: initialLocation.lng } : null
@@ -230,13 +284,17 @@ export function LocationMapPicker({
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
+      const autoPinnedLocation =
+        initialLocation
+          ? { name: initialName || `${initialLocation.lat.toFixed(4)}, ${initialLocation.lng.toFixed(4)}`, lat: initialLocation.lat, lng: initialLocation.lng }
+          : (likelyVenueOptions[0] || { name: 'Pinned center', lat: DEFAULT_CENTER.lat, lng: DEFAULT_CENTER.lng });
       setSelectedLocation(
-        initialLocation ? { name: initialName, lat: initialLocation.lat, lng: initialLocation.lng } : null
+        autoPinnedLocation
       );
-      setSearchText(initialName);
+      setSearchText(initialName || autoPinnedLocation.name);
       setShowSearchResults(false);
     }
-  }, [visible, initialLocation, initialName]);
+  }, [visible, initialLocation, initialName, likelyVenueOptions]);
 
   // =============================================================================
   // SEARCH
@@ -352,9 +410,9 @@ export function LocationMapPicker({
   // =============================================================================
 
   const center = useMemo(() => ({
-    lat: initialLocation?.lat || DEFAULT_CENTER.lat,
-    lng: initialLocation?.lng || DEFAULT_CENTER.lng,
-  }), [initialLocation]);
+    lat: selectedLocation?.lat || initialLocation?.lat || likelyVenueOptions[0]?.lat || DEFAULT_CENTER.lat,
+    lng: selectedLocation?.lng || initialLocation?.lng || likelyVenueOptions[0]?.lng || DEFAULT_CENTER.lng,
+  }), [initialLocation, likelyVenueOptions, selectedLocation?.lat, selectedLocation?.lng]);
 
   if (!visible) return null;
 
@@ -420,6 +478,7 @@ export function LocationMapPicker({
           <LeafletMap
             center={center}
             selectedLocation={selectedLocation}
+            referenceLocations={referenceLocations}
             onMapClick={handleMapClick}
           />
 
@@ -437,6 +496,37 @@ export function LocationMapPicker({
         {/* Quick Select */}
         {!showSearchResults && (
           <View style={styles.quickSelectContainer}>
+            {likelyVenueOptions.length > 0 && (
+              <>
+                <Text style={styles.quickSelectTitle}>LIKELY LOCATIONS</Text>
+                <View style={styles.quickSelectList}>
+                  {likelyVenueOptions.map((item, index) => (
+                    <Pressable
+                      key={`likely-${item.name}-${index}`}
+                      style={[
+                        styles.quickSelectItem,
+                        selectedLocation?.name === item.name && styles.quickSelectItemSelected,
+                      ]}
+                      onPress={() => handleSelectVenue(item)}
+                    >
+                      <MapPin
+                        size={14}
+                        color={selectedLocation?.name === item.name ? IOS_COLORS.blue : IOS_COLORS.gray}
+                      />
+                      <Text
+                        style={[
+                          styles.quickSelectItemText,
+                          selectedLocation?.name === item.name && styles.quickSelectItemTextSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {item.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
             <Text style={styles.quickSelectTitle}>QUICK SELECT</Text>
             <View style={styles.quickSelectList}>
               {recentVenues.map((item, index) => (

@@ -277,6 +277,8 @@ export interface CardShellProps {
   testID?: string;
   /** Whether this is the next upcoming race (subtle background tint) */
   isNextRace?: boolean;
+  /** Whether this is the most recently completed race before "now" */
+  isLastCompleted?: boolean;
   /** Whether this race is in the past (warm off-white background) */
   isPast?: boolean;
   /** Whether this race is currently being deleted (show loading overlay) */
@@ -340,6 +342,8 @@ export interface CardGridProps {
     /** Where the weather data comes from: venue name or "Current location" */
     locationLabel?: string;
   } | null;
+  /** Show bottom timeline pills/dots */
+  showBottomTimeline?: boolean;
 }
 
 /**
@@ -402,6 +406,8 @@ export interface CardContentProps {
   onCardPress?: () => void;
   /** Incrementing counter to trigger data refetch (e.g., after PostRaceInterview completes) */
   refetchTrigger?: number;
+  /** Open map focused on this step location (shows your + followed step locations) */
+  onOpenLocationMap?: (raceId: string) => void;
 }
 
 // =============================================================================
