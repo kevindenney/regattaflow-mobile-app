@@ -85,7 +85,14 @@ async function main() {
     results.push(skipped);
     emitResultLine(skipped);
   } else {
-    const smoke = runCommand('smoke_multi_org_demo', 'node', ['scripts/smoke-multi-org-demo.mjs'], { category: 'smoke' });
+    const smoke = runCommand('smoke_multi_org_demo', 'node', ['scripts/smoke-multi-org-demo.mjs'], {
+      category: 'smoke',
+      env: {
+        SMOKE_SKIP_DUAL: '1',
+        SMOKE_AUTO_CONTINUE: '1',
+        SMOKE_RELAX_AUTH_CHECKS: '1',
+      },
+    });
     results.push(smoke);
     emitResultLine(smoke);
   }

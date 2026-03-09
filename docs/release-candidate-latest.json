@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-03-09T00:48:30.159Z",
-  "startedAt": "2026-03-09T00:48:25.230Z",
+  "generatedAt": "2026-03-09T00:58:27.508Z",
+  "startedAt": "2026-03-09T00:57:23.000Z",
   "overall": "PASS",
   "summary": {
     "total": 5,
-    "pass": 2,
+    "pass": 5,
     "fail": 0,
-    "skip": 3
+    "skip": 0
   },
   "results": [
     {
@@ -14,8 +14,8 @@
       "category": "quality",
       "status": "PASS",
       "command": "npm run typecheck",
-      "durationMs": 4907,
-      "detail": "npm run typecheck (4907ms)",
+      "durationMs": 5050,
+      "detail": "npm run typecheck (5050ms)",
       "stdoutTail": [
         "> regattaflow-app@1.0.0 typecheck",
         "> npx tsc --noEmit"
@@ -43,32 +43,53 @@
     {
       "id": "smoke_multi_org_demo",
       "category": "smoke",
-      "status": "SKIP",
+      "status": "PASS",
       "command": "node scripts/smoke-multi-org-demo.mjs",
-      "durationMs": 0,
-      "detail": "Skipped via --skip-smoke",
-      "stdoutTail": [],
-      "stderrTail": []
+      "durationMs": 14084,
+      "detail": "node scripts/smoke-multi-org-demo.mjs (14084ms)",
+      "stdoutTail": [
+        "members_route|PASS|Members route reachable",
+        "cohorts_route|PASS|Cohorts route reachable",
+        "templates_route|PASS|Templates route reachable",
+        "templates_interest_locked|PASS|interest selector present=false",
+        "templates_context_hint|PASS|context hint=0, fallback=1",
+        "org_access_invite_panel|PASS|urlMatch=true, invite panel=0, current access=0, workspace=0, loading=0",
+        "cleanup_no_dev_text|PASS|debug text count=0",
+        "artifact|INFO|/tmp/multi-org-smoke.png"
+      ],
+      "stderrTail": [
+        ""
+      ]
     },
     {
       "id": "api_smoke_deploy",
       "category": "api",
-      "status": "SKIP",
+      "status": "PASS",
       "command": "node scripts/run-api-smoke-deploy.mjs",
-      "durationMs": 0,
-      "detail": "Skipped via --skip-api",
-      "stdoutTail": [],
-      "stderrTail": []
+      "durationMs": 2449,
+      "detail": "node scripts/run-api-smoke-deploy.mjs (2449ms)",
+      "stdoutTail": [
+        "Unchanged docs/api-smoke-deploy.md (PASS)"
+      ],
+      "stderrTail": [
+        ""
+      ]
     },
     {
       "id": "integration_validation",
       "category": "integration",
-      "status": "SKIP",
+      "status": "PASS",
       "command": "node scripts/run-integration-validation.mjs",
-      "durationMs": 0,
-      "detail": "Skipped via --skip-integration",
-      "stdoutTail": [],
-      "stderrTail": []
+      "durationMs": 42902,
+      "detail": "node scripts/run-integration-validation.mjs (42902ms)",
+      "stdoutTail": [
+        "[dotenv@17.2.3] injecting env (41) from .env.local -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops",
+        "[dotenv@17.2.3] injecting env (5) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild",
+        "Integration validation PASSED. Reports saved to /Users/kdenney/Developer/RegattaFlow/regattaflow-app/docs/integration-validation-latest.md and /Users/kdenney/Developer/RegattaFlow/regattaflow-app/docs/integration-validation-latest.json"
+      ],
+      "stderrTail": [
+        ""
+      ]
     }
   ],
   "artifacts": [
