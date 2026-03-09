@@ -44,7 +44,6 @@ import { OnWaterTrackingView } from '@/components/races/OnWaterTrackingView';
 import { calculatePerformanceMetrics } from '@/components/races/PerformanceMetrics';
 import { PlanModeContent } from '@/components/races/plan';
 import { TacticalCalculations } from '@/components/races/TacticalDataOverlay';
-import { SeasonHeader } from '@/components/seasons/SeasonHeader';
 import { SeasonPickerModal } from '@/components/seasons/SeasonPickerModal';
 import { SeasonSettingsModal } from '@/components/seasons/SeasonSettingsModal';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
@@ -284,11 +283,9 @@ export default function RacesScreen() {
 
   // Toolbar measured height for content padding
   const [toolbarHeight, setToolbarHeight] = useState(0);
-  // SeasonHeader compact height: paddingVertical: 8 * 2 + text ~18px = ~34px
-  const SEASON_HEADER_HEIGHT = 34;
   const { toolbarHidden, handleScroll: handleToolbarScroll } = useScrollToolbarHide();
-  // Total header height including SeasonHeader (always visible now)
-  const totalHeaderHeight = toolbarHeight + SEASON_HEADER_HEIGHT;
+  // Single-line toolbar mode: season context is in toolbar subtitle.
+  const totalHeaderHeight = toolbarHeight;
 
   // Selected race detail state
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
@@ -763,6 +760,13 @@ export default function RacesScreen() {
       return raceDate > now;
     }).length;
   }, [seasonFilteredRaces]);
+
+  const seasonToolbarLabel = useMemo(() => {
+    if (!activeFilterSeasonId) {
+      return `All ${eventConfig.eventNoun}s`;
+    }
+    return (displaySeason as any)?.short_name || displaySeason?.name || undefined;
+  }, [activeFilterSeasonId, displaySeason, eventConfig.eventNoun]);
 
   const selectedDemoRace = useMemo(
     () => selectedDemoRaceId ? MOCK_RACES.find(race => race.id === selectedDemoRaceId) ?? null : null,
@@ -1361,6 +1365,87 @@ export default function RacesScreen() {
     );
   }, [refetchRaces, selectedRaceId, user?.id]);
 
+  const deleteRaceById = useCallback(async (
+    raceId: string,
+    raceName?: string,
+    options?: { showSuccessAlert?: boolean; skipRefetch?: boolean }
+  ) => {
+    if (!raceId || isDeletingRace) return false;
+
+    const friendlyName = raceName || 'this race';
+    const showSuccessAlert = options?.showSuccessAlert ?? true;
+    const skipRefetch = options?.skipRefetch ?? false;
+
+    setDeletingRaceId(raceId);
+    try {
+      // First, try to delete race_events linked to this regatta (if it's a regatta)
+      const { data: linkedRaceEvents, error: linkedEventsError } = await supabase
+        .from('race_events')
+        .select('id')
+        .eq('regatta_id', raceId);
+
+      if (linkedEventsError) {
+        logger.warn('Error fetching linked race_events:', linkedEventsError);
+      }
+
+      const linkedEventIds = (linkedRaceEvents || []).map((event: { id: string }) => event.id);
+
+      if (linkedEventIds.length > 0) {
+        const { error: deleteLinkedError } = await supabase
+          .from('race_events')
+          .delete()
+          .in('id', linkedEventIds);
+
+        if (deleteLinkedError) {
+          logger.warn('Error deleting linked race_events:', deleteLinkedError);
+        }
+      }
+
+      // Also try to delete the race_event directly by ID (for races created via Add Race flow)
+      const { error: deleteDirectEventError } = await supabase
+        .from('race_events')
+        .delete()
+        .eq('id', raceId);
+
+      if (deleteDirectEventError) {
+        logger.debug('Direct race_event delete result:', deleteDirectEventError.message);
+      }
+
+      // Try to delete from regattas table
+      const { error: deleteRegattaError } = await supabase
+        .from('regattas')
+        .delete()
+        .eq('id', raceId);
+
+      if (deleteRegattaError) {
+        logger.debug('Regatta delete result:', deleteRegattaError.message);
+      }
+
+      if (selectedRaceId === raceId) {
+        setSelectedRaceId(null);
+        setSelectedRaceData(null);
+        setSelectedRaceMarks([]);
+        setHasManuallySelected(false);
+      }
+
+      if (!skipRefetch) {
+        await refetchRaces();
+      }
+
+      if (showSuccessAlert) {
+        showAlert('Race deleted', `"${friendlyName}" has been removed.`);
+      }
+      return true;
+    } catch (error: any) {
+      logger.error('Error deleting race:', error);
+      const message = error?.message || 'Unable to delete race. Please try again.';
+      showAlert('Error', message);
+      return false;
+    } finally {
+      setDeletingRaceId(prev => (prev === raceId ? null : prev));
+    }
+  }, [isDeletingRace, logger, refetchRaces, selectedRaceId]);
+
   const handleDeleteRace = useCallback((raceId: string, raceName?: string) => {
     if (!raceId || isDeletingRace) {
       return;
@@ -1369,81 +1454,39 @@ export default function RacesScreen() {
     const friendlyName = raceName || 'this race';
     const confirmationMessage = `Are you sure you want to delete "${friendlyName}"? This action cannot be undone.`;
 
-    const performDelete = async () => {
-      setDeletingRaceId(raceId);
-      try {
-        // First, try to delete race_events linked to this regatta (if it's a regatta)
-        const { data: linkedRaceEvents, error: linkedEventsError } = await supabase
-          .from('race_events')
-          .select('id')
-          .eq('regatta_id', raceId);
-
-        if (linkedEventsError) {
-          logger.warn('Error fetching linked race_events:', linkedEventsError);
-        }
-
-        const linkedEventIds = (linkedRaceEvents || []).map((event: { id: string }) => event.id);
-
-        if (linkedEventIds.length > 0) {
-          const { error: deleteLinkedError } = await supabase
-            .from('race_events')
-            .delete()
-            .in('id', linkedEventIds);
-
-          if (deleteLinkedError) {
-            logger.warn('Error deleting linked race_events:', deleteLinkedError);
-          }
-        }
-
-        // Also try to delete the race_event directly by ID (for races created via Add Race flow)
-        // This handles the case where the raceId IS a race_event ID, not a regatta ID
-        const { error: deleteDirectEventError } = await supabase
-          .from('race_events')
-          .delete()
-          .eq('id', raceId);
-
-        // Log but don't throw - the race might be in regattas table instead
-        if (deleteDirectEventError) {
-          logger.debug('Direct race_event delete result:', deleteDirectEventError.message);
-        }
-
-        // Try to delete from regattas table
-        const { error: deleteRegattaError } = await supabase
-          .from('regattas')
-          .delete()
-          .eq('id', raceId);
-
-        // Log but don't throw - the race might be in race_events table instead
-        if (deleteRegattaError) {
-          logger.debug('Regatta delete result:', deleteRegattaError.message);
-        }
-
-        if (selectedRaceId === raceId) {
-          setSelectedRaceId(null);
-          setSelectedRaceData(null);
-          setSelectedRaceMarks([]);
-          setHasManuallySelected(false);
-        }
-
-        await refetchRaces();
-
-        showAlert('Race deleted', `"${friendlyName}" has been removed.`);
-      } catch (error: any) {
-        logger.error('Error deleting race:', error);
-        const message = error?.message || 'Unable to delete race. Please try again.';
-        showAlert('Error', message);
-      } finally {
-        setDeletingRaceId(prev => (prev === raceId ? null : prev));
-      }
-    };
-
     showConfirm(
       'Delete race?',
       confirmationMessage,
-      () => { void performDelete(); },
+      () => { void deleteRaceById(raceId, friendlyName); },
       { destructive: true, confirmText: 'Delete' }
     );
-  }, [isDeletingRace, logger, refetchRaces, selectedRaceId]);
+  }, [deleteRaceById, isDeletingRace]);
+
+  const handleTimelineGridBulkDelete = useCallback((raceIds: string[]) => {
+    if (!raceIds.length) return;
+
+    const count = raceIds.length;
+    const noun = count === 1 ? 'step' : 'steps';
+    showConfirm(
+      'Delete selected?',
+      `Delete ${count} selected ${noun}? This cannot be undone.`,
+      () => {
+        void (async () => {
+          try {
+            for (const raceId of raceIds) {
+              const race = baseCardGridRaces.find((row) => row.id === raceId);
+              await deleteRaceById(raceId, race?.name, { showSuccessAlert: false, skipRefetch: true });
+            }
+            await refetchRacesRef.current?.();
+            showAlert('Deleted', `${count} ${noun} deleted.`);
+          } catch (error: any) {
+            showAlert('Bulk delete failed', error?.message || 'Could not delete selected steps.');
+          }
+        })();
+      },
+      { destructive: true, confirmText: 'Delete' }
+    );
+  }, [baseCardGridRaces, deleteRaceById]);
 
   // Delete the currently selected race with confirmation
   const handleDeleteSelectedRace = useCallback(() => {
@@ -3069,7 +3112,7 @@ export default function RacesScreen() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 52,
+              top: totalHeaderHeight + 52,
               left: 16,
               right: 16,
               zIndex: 60,
@@ -3088,7 +3131,7 @@ export default function RacesScreen() {
             pointerEvents="none"
             style={{
               position: 'absolute',
-              top: totalHeaderHeight + SEASON_HEADER_HEIGHT + 132,
+              top: totalHeaderHeight + 132,
               left: 16,
               right: 16,
               zIndex: 60,
@@ -3113,8 +3156,8 @@ export default function RacesScreen() {
                 setIsGridView(false); // zoom back in
               }}
               onBulkUpdateStatus={isViewingOtherTimeline ? undefined : handleTimelineGridBulkStatusUpdate}
+              onBulkDeleteRaces={isViewingOtherTimeline ? undefined : handleTimelineGridBulkDelete}
               topInset={totalHeaderHeight}
-              seasonHeaderHeight={SEASON_HEADER_HEIGHT}
             />
           ) : (
             <CardGrid
@@ -3572,42 +3615,15 @@ export default function RacesScreen() {
           onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
           onAddButtonLayout={setAddButtonLayout}
           totalRaces={headerTotalRaces}
-          upcomingRaces={upcomingRacesCount}
+          upcomingRaces={seasonUpcomingRacesCount}
           currentRaceIndex={headerCurrentRaceIndex}
           onUpcomingPress={handleUpcomingPress}
+          seasonLabel={seasonToolbarLabel}
+          onSeasonPress={() => setShowSeasonPicker(true)}
           onMeasuredHeight={setToolbarHeight}
           hidden={toolbarHidden}
         />
       </View>
-
-      {/* Season Header - separately positioned below the floating header */}
-      {!toolbarHidden && toolbarHeight > 0 && (
-        <Pressable
-          style={{
-            position: 'absolute',
-            top: toolbarHeight,
-            left: 0,
-            right: 0,
-            zIndex: 99,
-            backgroundColor: 'rgba(242, 242, 247, 0.92)',
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: IOS_COLORS.separator,
-          }}
-          onPress={() => setShowSeasonPicker(true)}
-          onLongPress={() => setShowFullArchive(true)}
-        >
-          <SeasonHeader
-            season={displaySeason}
-            totalRaces={seasonFilteredRacesCount}
-            onSeasonPress={() => setShowSeasonPicker(true)}
-            onArchivePress={() => setShowFullArchive(true)}
-            showAllRaces={!activeFilterSeasonId}
-            eventNounPlural={`${eventConfig.eventNoun}s`}
-            periodTerm={vocab('Period')}
-            compact
-          />
-        </Pressable>
-      )}
 
       <RaceModalsSection
         // Document Type Picker

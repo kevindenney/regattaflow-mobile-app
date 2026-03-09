@@ -7,6 +7,7 @@
 
 import { useInterest } from '@/providers/InterestProvider'
 import type { Interest } from '@/providers/InterestProvider'
+import { router } from 'expo-router'
 import React, { useState } from 'react'
 import {
   Modal,
@@ -101,6 +102,15 @@ export function InterestSwitcher() {
             >
               <Text style={styles.closeBtnText}>Done</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.manageBtn}
+              onPress={() => {
+                setOpen(false)
+                router.push('/catalog')
+              }}
+            >
+              <Text style={styles.manageBtnText}>Manage Catalog</Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
@@ -194,5 +204,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
+  },
+  manageBtn: {
+    marginTop: 10,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#EEF2FF',
+  },
+  manageBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4338CA',
   },
 })

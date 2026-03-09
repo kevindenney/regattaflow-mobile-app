@@ -47,8 +47,10 @@ interface TimelineGridViewProps {
   onDeleteRace?: (raceId: string, raceName: string) => void;
   /** Top inset to clear the toolbar */
   topInset?: number;
-  /** Season header height */
-  seasonHeaderHeight?: number;
+  /** Bulk update status for selected steps */
+  onBulkUpdateStatus?: (raceIds: string[], status: 'completed' | 'planned') => Promise<void> | void;
+  /** Bulk delete selected steps */
+  onBulkDeleteRaces?: (raceIds: string[]) => Promise<void> | void;
 }
 
 interface MonthGroup {
@@ -278,11 +280,14 @@ export function TimelineGridView({
   onEditRace,
   onDeleteRace,
   topInset = 0,
-  seasonHeaderHeight = 34,
+  onBulkUpdateStatus,
+  onBulkDeleteRaces,
 }: TimelineGridViewProps) {
   const { width: screenWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [openMenuRaceId, setOpenMenuRaceId] = useState<string | null>(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedRaceIds, setSelectedRaceIds] = useState<Set<string>>(new Set());
 
   // Responsive columns
   const columns = screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : 2;
@@ -296,15 +301,35 @@ export function TimelineGridView({
   const handleSelectRace = useCallback(
     (index: number, race: CardRaceData) => {
       setOpenMenuRaceId(null);
+      if (bulkMode) {
+        setSelectedRaceIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(race.id)) {
+            next.delete(race.id);
+          } else {
+            next.add(race.id);
+          }
+          return next;
+        });
+        return;
+      }
       onSelectRace(index, race);
     },
-    [onSelectRace],
+    [bulkMode, onSelectRace],
   );
+
+  const selectedIdsArray = useMemo(() => Array.from(selectedRaceIds), [selectedRaceIds]);
+  const canBulkEdit = Boolean(onBulkUpdateStatus || onBulkDeleteRaces);
+
+  const clearBulk = useCallback(() => {
+    setBulkMode(false);
+    setSelectedRaceIds(new Set());
+  }, []);
 
   return (
     <Animated.View
       entering={FadeIn.duration(250)}
-      style={[gridStyles.container, { paddingTop: topInset + seasonHeaderHeight + 8 }]}
+      style={[gridStyles.container, { paddingTop: topInset + 8 }]}
     >
       <ScrollView
         ref={scrollRef}
@@ -318,15 +343,60 @@ export function TimelineGridView({
       >
         {/* Summary bar */}
         <View style={gridStyles.summaryBar}>
-          <Text style={gridStyles.summaryText}>
-            {races.length} {races.length === 1 ? 'race' : 'races'}
-          </Text>
-          {nextRaceIndex != null && nextRaceIndex >= 0 && (
-            <View style={gridStyles.summaryNextBadge}>
-              <View style={gridStyles.summaryNextDot} />
-              <Text style={gridStyles.summaryNextText}>
-                Next: {races[nextRaceIndex]?.name || 'Upcoming'}
-              </Text>
+          <View style={gridStyles.summaryLeft}>
+            {canBulkEdit && (
+              <Pressable
+                style={[gridStyles.bulkChip, bulkMode && gridStyles.bulkChipActive]}
+                onPress={() => {
+                  if (bulkMode) {
+                    clearBulk();
+                  } else {
+                    setBulkMode(true);
+                    setSelectedRaceIds(new Set());
+                  }
+                }}
+              >
+                <Text style={[gridStyles.bulkChipText, bulkMode && gridStyles.bulkChipTextActive]}>
+                  {bulkMode ? 'Exit Bulk' : 'Bulk Edit'}
+                </Text>
+              </Pressable>
+            )}
+            {nextRaceIndex != null && nextRaceIndex >= 0 && (
+              <View style={gridStyles.summaryNextBadge}>
+                <View style={gridStyles.summaryNextDot} />
+                <Text style={gridStyles.summaryNextText}>
+                  Next: {races[nextRaceIndex]?.name || 'Upcoming'}
+                </Text>
+              </View>
+            )}
+          </View>
+          {bulkMode && selectedIdsArray.length > 0 && (
+            <View style={gridStyles.bulkActions}>
+              <Text style={gridStyles.bulkCount}>{selectedIdsArray.length}</Text>
+              {onBulkUpdateStatus ? (
+                <Pressable
+                  style={gridStyles.bulkActionChip}
+                  onPress={() => void onBulkUpdateStatus(selectedIdsArray, 'planned')}
+                >
+                  <Text style={gridStyles.bulkActionText}>Planned</Text>
+                </Pressable>
+              ) : null}
+              {onBulkUpdateStatus ? (
+                <Pressable
+                  style={gridStyles.bulkActionChip}
+                  onPress={() => void onBulkUpdateStatus(selectedIdsArray, 'completed')}
+                >
+                  <Text style={gridStyles.bulkActionText}>Done</Text>
+                </Pressable>
+              ) : null}
+              {onBulkDeleteRaces ? (
+                <Pressable
+                  style={[gridStyles.bulkActionChip, gridStyles.bulkDeleteChip]}
+                  onPress={() => void onBulkDeleteRaces(selectedIdsArray)}
+                >
+                  <Text style={[gridStyles.bulkActionText, gridStyles.bulkDeleteText]}>Delete</Text>
+                </Pressable>
+              ) : null}
             </View>
           )}
         </View>
@@ -347,7 +417,7 @@ export function TimelineGridView({
                     return (
                   <MiniCard
                     race={race}
-                    isSelected={race.id === selectedRaceId}
+                    isSelected={bulkMode ? selectedRaceIds.has(race.id) : race.id === selectedRaceId}
                     isNext={index === nextRaceIndex}
                     canManage={canManage}
                     onEdit={handleEdit}
@@ -539,11 +609,13 @@ const gridStyles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
     paddingHorizontal: 4,
+    gap: 8,
   },
-  summaryText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: IOS_COLORS.secondaryLabel,
+  summaryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
   },
   summaryNextBadge: {
     flexDirection: 'row',
@@ -564,6 +636,59 @@ const gridStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: IOS_COLORS.green,
+    maxWidth: 220,
+  },
+  bulkChip: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#C7D2FE',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  bulkChipActive: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#93C5FD',
+  },
+  bulkChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4338CA',
+  },
+  bulkChipTextActive: {
+    color: '#1D4ED8',
+  },
+  bulkActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bulkCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.secondaryLabel,
+    minWidth: 16,
+    textAlign: 'right',
+  },
+  bulkActionChip: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.separator,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  bulkActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+  },
+  bulkDeleteChip: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  bulkDeleteText: {
+    color: '#B91C1C',
   },
   monthSection: {
     marginBottom: 20,

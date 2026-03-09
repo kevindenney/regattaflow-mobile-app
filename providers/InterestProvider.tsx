@@ -50,12 +50,18 @@ export interface Interest {
 interface InterestContextValue {
   /** The currently-active interest, or null while loading */
   currentInterest: Interest | null
+  /** Full public interest catalog */
+  allInterests: Interest[]
   /** All interests available to this user (public + org interests they belong to) */
   userInterests: Interest[]
   /** True while the initial interest data is being resolved */
   loading: boolean
   /** Switch the active interest by slug. Persists to AsyncStorage and (if signed in) user_preferences. */
   switchInterest: (slug: string) => Promise<void>
+  /** Add an interest back into the user's quick list */
+  addInterest: (slug: string) => Promise<void>
+  /** Remove an interest from the user's quick list */
+  removeInterest: (slug: string) => Promise<void>
   /** Force re-fetch interests from Supabase */
   refreshInterests: () => Promise<void>
 }
@@ -65,6 +71,7 @@ interface InterestContextValue {
 // ---------------------------------------------------------------------------
 
 const ASYNC_STORAGE_KEY = 'betterat_preferred_interest'
+const HIDDEN_INTERESTS_KEY_PREFIX = 'betterat_hidden_interests'
 const INTERESTS_QUERY_KEY = ['interests', 'all']
 const EXISTING_PROFILE_AGE_THRESHOLD_MS = 5 * 60 * 1000
 
@@ -100,9 +107,12 @@ function normalizeSlug(value: unknown): string | null {
 
 const InterestContext = createContext<InterestContextValue>({
   currentInterest: null,
+  allInterests: [],
   userInterests: [],
   loading: true,
   switchInterest: async () => {},
+  addInterest: async () => {},
+  removeInterest: async () => {},
   refreshInterests: async () => {},
 })
 
@@ -111,13 +121,15 @@ const InterestContext = createContext<InterestContextValue>({
 // ---------------------------------------------------------------------------
 
 export function InterestProvider({ children }: PropsWithChildren) {
-  const { user, userProfile, fetchUserProfile, signedIn, isGuest } = useAuth()
+  const { user, userProfile, fetchUserProfile, signedIn } = useAuth()
   const queryClient = useQueryClient()
 
   // The slug that we have resolved as the "active" interest.
   // null means we haven't resolved yet.
   const [activeSlug, setActiveSlug] = useState<string | null>(null)
   const [resolving, setResolving] = useState(true)
+  const [hiddenSlugs, setHiddenSlugs] = useState<string[]>([])
+  const [hiddenResolved, setHiddenResolved] = useState(false)
 
   // Track whether we already ran the initial resolution so we don't re-run
   // every time `user` reference changes.
@@ -154,6 +166,58 @@ export function InterestProvider({ children }: PropsWithChildren) {
 
   // Stable reference: avoid creating a new [] on every render when data is undefined
   const interests = rawInterests ?? EMPTY_INTERESTS
+
+  const hiddenStorageKey = useMemo(
+    () => `${HIDDEN_INTERESTS_KEY_PREFIX}:${signedIn && user?.id ? user.id : 'guest'}`,
+    [signedIn, user?.id],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadHiddenInterests = async () => {
+      setHiddenResolved(false)
+      try {
+        const raw = await AsyncStorage.getItem(hiddenStorageKey)
+        const parsed = raw ? JSON.parse(raw) : []
+        const normalized = Array.isArray(parsed)
+          ? parsed
+              .map((value) => normalizeSlug(value))
+              .filter((value): value is string => !!value)
+          : []
+        if (!cancelled) {
+          setHiddenSlugs(Array.from(new Set(normalized)))
+        }
+      } catch {
+        if (!cancelled) {
+          setHiddenSlugs([])
+        }
+      } finally {
+        if (!cancelled) {
+          setHiddenResolved(true)
+        }
+      }
+    }
+
+    void loadHiddenInterests()
+    return () => {
+      cancelled = true
+    }
+  }, [hiddenStorageKey])
+
+  const persistHiddenSlugs = useCallback(
+    async (nextHidden: string[]) => {
+      await AsyncStorage.setItem(hiddenStorageKey, JSON.stringify(nextHidden))
+      setHiddenSlugs(nextHidden)
+    },
+    [hiddenStorageKey],
+  )
+
+  const userInterests = useMemo(() => {
+    if (hiddenSlugs.length === 0) return interests
+    const hidden = new Set(hiddenSlugs)
+    return interests.filter((interest) => !hidden.has(interest.slug))
+  }, [hiddenSlugs, interests])
 
   // ---------- Resolve which interest should be active on mount ----------
 
@@ -306,14 +370,25 @@ export function InterestProvider({ children }: PropsWithChildren) {
 
   const currentInterest = useMemo(() => {
     if (!activeSlug) return null
-    return interests.find((i) => i.slug === activeSlug) ?? null
-  }, [activeSlug, interests])
+    return userInterests.find((i) => i.slug === activeSlug) ?? null
+  }, [activeSlug, userInterests])
+
+  useEffect(() => {
+    if (!hiddenResolved) return
+    if (userInterests.length === 0) {
+      setActiveSlug(null)
+      return
+    }
+    if (!activeSlug || !userInterests.some((interest) => interest.slug === activeSlug)) {
+      setActiveSlug(userInterests[0].slug)
+    }
+  }, [activeSlug, hiddenResolved, userInterests])
 
   // ---------- switchInterest ----------
 
   const switchInterest = useCallback(
     async (slug: string) => {
-      const target = interests.find((i) => i.slug === slug)
+      const target = userInterests.find((i) => i.slug === slug)
       if (!target) {
         throw new Error(`Interest with slug "${slug}" not found`)
       }
@@ -343,7 +418,34 @@ export function InterestProvider({ children }: PropsWithChildren) {
         }
       }
     },
-    [interests, signedIn, user?.id],
+    [userInterests, signedIn, user?.id],
+  )
+
+  const addInterest = useCallback(
+    async (slug: string) => {
+      const normalized = normalizeSlug(slug)
+      if (!normalized) return
+      const target = interests.find((interest) => interest.slug === normalized)
+      if (!target) return
+      if (!hiddenSlugs.includes(normalized)) return
+      const nextHidden = hiddenSlugs.filter((entry) => entry !== normalized)
+      await persistHiddenSlugs(nextHidden)
+    },
+    [hiddenSlugs, interests, persistHiddenSlugs],
+  )
+
+  const removeInterest = useCallback(
+    async (slug: string) => {
+      const normalized = normalizeSlug(slug)
+      if (!normalized) return
+      if (!interests.some((interest) => interest.slug === normalized)) return
+      // Keep at least one interest available.
+      const visibleCount = interests.filter((interest) => !hiddenSlugs.includes(interest.slug)).length
+      if (visibleCount <= 1 && !hiddenSlugs.includes(normalized)) return
+      const nextHidden = Array.from(new Set([...hiddenSlugs, normalized]))
+      await persistHiddenSlugs(nextHidden)
+    },
+    [hiddenSlugs, interests, persistHiddenSlugs],
   )
 
   // ---------- refreshInterests ----------
@@ -354,19 +456,22 @@ export function InterestProvider({ children }: PropsWithChildren) {
 
   // ---------- Loading state ----------
 
-  const loading = interestsLoading || resolving
+  const loading = interestsLoading || resolving || !hiddenResolved
 
   // ---------- Context value (memoised) ----------
 
   const value = useMemo<InterestContextValue>(
     () => ({
       currentInterest,
-      userInterests: interests,
+      allInterests: interests,
+      userInterests,
       loading,
       switchInterest,
+      addInterest,
+      removeInterest,
       refreshInterests,
     }),
-    [currentInterest, interests, loading, switchInterest, refreshInterests],
+    [currentInterest, interests, userInterests, loading, switchInterest, addInterest, removeInterest, refreshInterests],
   )
 
   return (

@@ -96,6 +96,10 @@ export interface RacesFloatingHeaderProps {
   currentRaceIndex?: number;
   /** Callback when "X upcoming" is pressed to navigate to next race */
   onUpcomingPress?: () => void;
+  /** Season/context label shown in subtitle line (single-line header mode) */
+  seasonLabel?: string;
+  /** Opens season picker/settings */
+  onSeasonPress?: () => void;
   /** Callback reporting the measured height of the toolbar (for content paddingTop) */
   onMeasuredHeight?: (height: number) => void;
   /** When true the toolbar slides up off-screen */
@@ -136,6 +140,8 @@ export function RacesFloatingHeader({
   upcomingRaces,
   currentRaceIndex,
   onUpcomingPress,
+  seasonLabel,
+  onSeasonPress,
   onMeasuredHeight,
   hidden,
 }: RacesFloatingHeaderProps) {
@@ -241,10 +247,13 @@ export function RacesFloatingHeader({
   const showNursingSimulationItem = isNursingInterest && hasSimulationSubtype;
   const showNursingSkillsLabItem = isNursingInterest && (hasSkillsLabSubtype || !hasCohortPracticeItem);
 
-  // Build the race counter subtitle (hidden for progress segment)
+  // Build single-line subtitle: season/context + counters
   const hasIndexCounter = Boolean(currentRaceIndex && totalRaces && totalRaces > 0 && currentRaceIndex <= totalRaces);
   const hasUpcoming = upcomingRaces !== undefined && upcomingRaces > 0;
   const subtitleParts: string[] = [];
+  if (seasonLabel) {
+    subtitleParts.push(seasonLabel);
+  }
   if (hasIndexCounter) {
     subtitleParts.push(`${currentRaceIndex} of ${totalRaces}`);
   }
@@ -313,7 +322,7 @@ export function RacesFloatingHeader({
       <TabScreenToolbar
         title={config.eventNoun}
         subtitle={subtitle}
-        onSubtitlePress={hasUpcoming ? onUpcomingPress : undefined}
+        onSubtitlePress={onSeasonPress ?? (hasUpcoming ? onUpcomingPress : undefined)}
         topInset={topInset}
         isLoading={isLoading}
         rightContent={rightCapsule}
