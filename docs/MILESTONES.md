@@ -155,6 +155,22 @@ Manual:
 3. Verify decision notifications do not fork into duplicate type buckets for the same semantic event.
 4. Confirm legacy decision rows (if present) render as approved/rejected semantics, not an unknown type.
 
+## M14 — Members/Cohorts/Templates Load-Time Budget
+Acceptance:
+- Route-load budget harness exists for admin surfaces:
+  - `/organization/members`
+  - `/organization/cohorts`
+  - `/organization/templates`
+- Baseline metrics captured in docs with explicit scoring rule and thresholds.
+- Local demo p95 stays within agreed threshold (`<= 3500ms`) using the documented run method.
+
+Manual:
+1. Run:
+   `node scripts/measure-admin-route-loads.mjs`
+2. Confirm per-route `route_<id>_p95|PASS|...` lines.
+3. Confirm `route_budget_overall|PASS|...`.
+4. Validate latest values in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -169,3 +185,4 @@ Manual:
 - M11 completed (enhanced smoke harness with dual-session DB-backed pending->active verification and updated QA matrix).
 - M12 completed (hardened invite-only UX with requester token path and admin invite-management shortcut from Learn).
 - M13 completed (normalized legacy org membership decision notification types and added service contract checks).
+- M14 completed (added route-load budget harness and captured passing local p95 baseline in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`).
