@@ -9,9 +9,17 @@
 - RHKYC (`sail-racing`, `request_to_join`)
 
 ## Pre-check
-1. Open web app in two browser sessions (admin + requester).
-2. Ensure both users are signed in.
-3. Ensure requester is not yet active in target org for approval flow.
+1. Reset demo state (preferred):
+```bash
+DEMO_ADMIN_EMAIL="kevin@oceanflow.io" \
+DEMO_REQUESTER_EMAIL="jhu2@jhu.edu" \
+DEMO_RESET_DB_URL="postgres://..." \
+node scripts/reset-multi-org-demo.mjs
+```
+If DB URL/`psql` is unavailable, use the deterministic SQL packet in `docs/RESET_SQL.md`.
+2. Open web app in two browser sessions (admin + requester).
+3. Ensure both users are signed in.
+4. Ensure requester is not yet active in target org for approval flow.
 
 ## Walkthrough
 

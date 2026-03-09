@@ -92,6 +92,192 @@ Manual:
 1. Run `node scripts/smoke-multi-org-demo.mjs`.
 2. Confirm `/tmp/multi-org-smoke.png` is generated and review any FAIL rows.
 
+## M10 — Canonical Demo Reset Script
+Status: DONE (`5199f20`)
+
+Acceptance:
+- `scripts/reset-multi-org-demo.mjs` resets demo org/persona state deterministically.
+- Script is idempotent and prints machine-readable `PASS/FAIL` lines by step.
+- Works in auto mode with `psql` + DB URL, and has deterministic SQL fallback packet.
+- Ensures:
+  - JHSON `open_join`, `allowed_email_domains=['jhu.edu']`, `interest_slug='nursing'`
+  - RHKYC `request_to_join`, `interest_slug='sail-racing'`
+  - Admin active `admin` membership in both orgs
+  - Requester active in JHSON and pending in RHKYC
+  - One cohort + one template linked to cohort in each org
+  - Optional bounded cleanup of old membership-decision notifications for requester
+
+Manual:
+1. Run:
+   `DEMO_ADMIN_EMAIL=\"kevin@oceanflow.io\" DEMO_REQUESTER_EMAIL=\"jhu2@jhu.edu\" DEMO_RESET_DB_URL=\"postgres://...\" node scripts/reset-multi-org-demo.mjs`
+2. Confirm script outputs `reset_verify|PASS|ok` and `reset_complete|PASS|...`.
+3. If DB URL/`psql` is unavailable, execute fallback steps from `docs/RESET_SQL.md`.
+
+## M11 — Dual-Session Smoke Harness
+Status: PARTIAL (`5f5c3f1`, `7356872`)
+
+Acceptance:
+- `scripts/smoke-multi-org-demo.mjs` supports two-persona operator flow (requester + admin).
+- Harness verifies pending -> approved -> active transition using DB reads (not browser action simulation).
+- Harness emits machine-readable `PASS/FAIL` step lines for dual-session checks and route checks.
+- QA matrix documents dual-session invocation and expected IDs.
+
+Manual:
+1. Run:
+   `SMOKE_DB_URL=\"postgres://...\" SMOKE_ADMIN_EMAIL=\"kevin@oceanflow.io\" SMOKE_REQUESTER_EMAIL=\"jhu2@jhu.edu\" node scripts/smoke-multi-org-demo.mjs`
+2. Follow prompts:
+   - Open requester session, perform Request Access.
+   - Open admin session, approve request.
+3. Confirm:
+   - `dual_pending_state|PASS|...`
+   - `dual_active_state|PASS|...`
+   - `dual_decision_notification|PASS|...`
+4. Confirm existing route smoke checks still pass (unless `SMOKE_SKIP_BROWSER=1`).
+
+## M12 — Invite Flow Hardening
+Status: PARTIAL (`12e9522`)
+
+Acceptance:
+- Invite-only org rows in Learn provide a requester path (`Use invite token`) instead of passive label-only state.
+- Learn admin tools expose direct invite-management entry (`Organization access`) for admin/manager users.
+- QA matrix includes invite-only requester and admin invite-issuance checks.
+
+Manual:
+1. In `/learn`, find an `invite_only` organization.
+2. Confirm row shows `Invite required` and `Use invite token`.
+3. Click `Use invite token` and confirm navigation to `/org-invite`.
+4. In admin session, open `/learn` and confirm `Organization access` appears in Admin tools.
+5. Click `Organization access` and confirm invite composer/history render in `/settings/organization-access`.
+
+## M13 — Notification Contract Stabilization
+Status: DONE (`00449a5`)
+
+Acceptance:
+- Membership decision notifications normalize to canonical types (`org_membership_approved` / `org_membership_rejected`) even when legacy rows use `org_membership_decision`.
+- Grouped/all notification modes avoid duplicate semantic buckets caused by legacy vs canonical type mismatch.
+- Contract test coverage explicitly checks canonical membership decision notification handling in service layer.
+
+Manual:
+1. Trigger an org membership approval and rejection flow.
+2. Open `/social-notifications` and switch between `Grouped` and `All`.
+3. Verify decision notifications do not fork into duplicate type buckets for the same semantic event.
+4. Confirm legacy decision rows (if present) render as approved/rejected semantics, not an unknown type.
+
+## M14 — Members/Cohorts/Templates Load-Time Budget
+Status: DONE (`1c81712`)
+
+Acceptance:
+- Route-load budget harness exists for admin surfaces:
+  - `/organization/members`
+  - `/organization/cohorts`
+  - `/organization/templates`
+- Baseline metrics captured in docs with explicit scoring rule and thresholds.
+- Local demo p95 stays within agreed threshold (`<= 3500ms`) using the documented run method.
+
+Manual:
+1. Run:
+   `node scripts/measure-admin-route-loads.mjs`
+2. Confirm per-route `route_<id>_p95|PASS|...` lines.
+3. Confirm `route_budget_overall|PASS|...`.
+4. Validate latest values in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`.
+
+## M15 — Program Workspace + Org Context Alignment
+Status: DONE (`f2526d9`)
+
+Acceptance:
+- Programs experience surfaces explicit active-org context (`Context: <Domain>`) and no longer silently falls back when no active org is selected.
+- Active org mismatch states are user-visible and recoverable with a direct switch action to organization access.
+- Institution-only program paths (`/programs/create`, `/programs/assign`) block non-institution contexts and provide deterministic recovery routing.
+
+Manual:
+1. Open `/(tabs)/programs` with no active organization selected.
+2. Confirm `No active organization` message appears with `Open organization access`.
+3. Switch to JHSON (institution) and confirm context pill shows `Context: Nursing`.
+4. Navigate to `/programs/create` and `/programs/assign` from institution org; confirm pages load normally.
+5. Switch to a non-institution org and open `/programs/create` and `/programs/assign`; confirm guard message appears with organization-access action.
+
+## M16 — Coach Artifact Review QA Completion
+Status: DONE (`e7f46da`)
+
+Acceptance:
+- Coach artifact queue includes explicit signed-out guidance, request/in-review counts, and deterministic action labels.
+- Artifact detail flow enforces status rules:
+  - `Start review` only from `requested`
+  - `Mark completed` only from `in_review`
+  - User-visible next-step cue for requested items
+- Contract coverage pins workflow guardrails for queue and detail screens.
+- QA matrix includes queue/detail/error/empty/manual verification steps.
+
+Manual:
+1. Open `/coach/artifact-queue` while signed out.
+2. Confirm `Sign in to view assigned artifact reviews.` is shown.
+3. Sign in as assigned reviewer and confirm summary chips show `requested` and `in review` counts.
+4. Open `/coach/artifact-review/[artifactId]` for a `requested` item.
+5. Confirm cue `Next step: start review to unlock completion.` and that `Mark completed` is disabled.
+6. Tap `Start review`; confirm status becomes `in_review` and `Mark completed` becomes enabled.
+7. Complete review and confirm return to queue/completed state without silent failure.
+8. Open artifact not assigned to current user and confirm `Not assigned` state renders.
+
+## M17 — Realtime Resilience (Reconnect + Ordering)
+Status: DONE (`e83b7f6`)
+
+Acceptance:
+- Organization membership realtime updates ignore out-of-order payloads using commit timestamp guards.
+- Membership realtime subscription triggers deterministic resync on reconnect/error transitions.
+- Notification realtime stream backfills after reconnect and dedupes already-delivered notifications.
+- Feed merge logic keeps notifications ordered by `createdAt` and dedupes across all cached pages.
+- Contract tests cover membership reconnect logic and notification reconnect/order guardrails.
+
+Manual:
+1. Start requester/admin sessions and keep both open.
+2. Trigger membership state transitions (pending -> active) while toggling network connectivity.
+3. Confirm requester/admin settle on final membership state without manual hard refresh.
+4. Trigger multiple notification events quickly (including delayed/replayed events).
+5. Confirm Activity feed remains ordered newest-first and does not duplicate rows after reconnect.
+6. Confirm reconnect does not lose recent notifications (new rows appear after subscription restore).
+
+## M18 — Demo QA Matrix Automation Hooks
+Status: DONE (`b13ea46`)
+
+Acceptance:
+- QA matrix rows include explicit automation hook IDs and runnable command/test IDs.
+- Smoke harness exposes additional deterministic IDs used by matrix mapping (`activity_view_toggle_controls`, `templates_context_hint`, `org_access_invite_panel`).
+- Contract coverage pins matrix-critical UI cues across learn, members, cohorts, and templates surfaces.
+- Automation coverage report script (`scripts/qa-matrix-coverage.mjs`) enforces `>= 60%` scripted coverage threshold.
+
+Manual:
+1. Open `docs/QA_MATRIX.md` and confirm each matrix row includes `Automation Hook` and `Run`.
+2. Run `node scripts/qa-matrix-coverage.mjs`.
+3. Confirm `qa_matrix_automation_ratio|PASS|...` with threshold at or above `60%`.
+4. Run `node scripts/smoke-multi-org-demo.mjs` and confirm new IDs:
+   - `activity_view_toggle_controls`
+   - `templates_context_hint`
+   - `org_access_invite_panel`
+5. Run `npm test -- app/__tests__/qa-matrix-hooks.contract.test.ts` as a targeted contract check.
+
+## M19 — Release Candidate Gate + Evidence Pack
+Status: DONE (`d1c901a`, `7356872`)
+
+Acceptance:
+- Single command gate exists: `node scripts/release-candidate-gate.mjs`.
+- Gate bundles:
+  - `npm run typecheck`
+  - QA matrix automation coverage (`node scripts/qa-matrix-coverage.mjs`)
+  - multi-org smoke harness (`node scripts/smoke-multi-org-demo.mjs`)
+  - API smoke deploy check (`node scripts/run-api-smoke-deploy.mjs`)
+  - integration validation (`node scripts/run-integration-validation.mjs`)
+- Gate writes machine-readable report: `docs/release-candidate-latest.json`.
+- Gate writes artifact index/evidence summary: `docs/RELEASE_CANDIDATE_ARTIFACTS.md`.
+- Console output remains machine-readable (`rc_<id>|PASS/FAIL/SKIP|detail`).
+
+Manual:
+1. Run `node scripts/release-candidate-gate.mjs`.
+2. Confirm command emits `rc_report_json|INFO|docs/release-candidate-latest.json`.
+3. Confirm command emits `rc_artifact_index|INFO|docs/RELEASE_CANDIDATE_ARTIFACTS.md`.
+4. Open `docs/release-candidate-latest.json` and verify overall + per-step statuses are present.
+5. Open `docs/RELEASE_CANDIDATE_ARTIFACTS.md` and verify artifact checklist includes smoke/api/integration outputs.
+6. Optional scoped run (local-only, no remote probes): `node scripts/release-candidate-gate.mjs --skip-smoke --skip-api --skip-integration`.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -102,3 +288,13 @@ Manual:
 - M7 completed (Learn already shows admin tool shortcuts for admins and enforces safe leave/orphan guards).
 - M8 completed (removed remaining org-admin dev diagnostic text from members/cohorts/cohort detail surfaces).
 - M9 completed (added `scripts/smoke-multi-org-demo.mjs` and documented usage).
+- M10 completed (added canonical reset wrapper `scripts/reset-multi-org-demo.mjs` and deterministic SQL packet `docs/RESET_SQL.md`).
+- M11 completed (enhanced smoke harness with dual-session DB-backed pending->active verification and updated QA matrix).
+- M12 completed (hardened invite-only UX with requester token path and admin invite-management shortcut from Learn).
+- M13 completed (normalized legacy org membership decision notification types and added service contract checks).
+- M14 completed (added route-load budget harness and captured passing local p95 baseline in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`).
+- M15 completed (aligned Programs to active org context with explicit mismatch states, context pill, and institution-only guards for create/assign flows).
+- M16 completed (hardened artifact queue/detail status gating, added contract guards, and expanded QA matrix for coach artifact review states).
+- M17 completed (added reconnect backfill and ordering guards for membership + notifications realtime streams with contract coverage).
+- M18 completed (mapped QA matrix rows to automation hooks/commands, added coverage gate script, and extended smoke/contract hook IDs).
+- M19 completed (added single-command release candidate gate plus machine-readable report and artifact index outputs in docs).

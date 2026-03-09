@@ -135,8 +135,20 @@ export default function RaceManagementScreen() {
   const { activeOrganization, ready: orgReady } = useOrganization();
   const { activeDomain, isSailingDomain, isNursingPresentationDomain } = useWorkspaceDomain();
   const { unreadCount: communicationsUnreadCount, unreadCountByProgram } = useOrganizationCommunicationsUnread();
-  const isInstitutionWorkspace = orgReady && !isSailingDomain;
-  const allowRaceWorkflows = orgReady && isSailingDomain;
+  const hasActiveOrganization = Boolean(activeOrganization?.id);
+  const isInstitutionOrganization = activeOrganization?.organization_type === 'institution';
+  const isRaceWorkspace = orgReady && hasActiveOrganization && isSailingDomain && !isInstitutionOrganization;
+  const hasOrgDomainMismatch = orgReady && hasActiveOrganization && isInstitutionOrganization && isSailingDomain;
+  const isInstitutionWorkspace = orgReady && hasActiveOrganization && isInstitutionOrganization && !hasOrgDomainMismatch;
+  const allowRaceWorkflows = isRaceWorkspace;
+  const contextLabel = useMemo(() => {
+    if (!hasActiveOrganization) return 'No organization selected';
+    if (activeDomain === 'nursing') return 'Nursing';
+    if (activeDomain === 'sailing') return 'Sailing';
+    if (activeDomain === 'drawing') return 'Drawing';
+    if (activeDomain === 'fitness') return 'Fitness';
+    return 'General';
+  }, [activeDomain, hasActiveOrganization]);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'active' | 'completed'>('upcoming');
   const [commsModalVisible, setCommsModalVisible] = useState(false);
   const [selectedRaceId, setSelectedRaceId] = useState<string | null>(null);
@@ -452,6 +464,57 @@ export default function RaceManagementScreen() {
           <ThemedText style={styles.loadingStateBody}>
             Resolving your organization context before loading operations.
           </ThemedText>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!hasActiveOrganization) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingState}>
+          <Ionicons name="business-outline" size={26} color="#2563EB" />
+          <ThemedText style={styles.loadingStateTitle}>No active organization</ThemedText>
+          <ThemedText style={styles.loadingStateBody}>
+            Select an active organization to load the Programs workspace.
+          </ThemedText>
+          <TouchableOpacity style={styles.stateActionButton} onPress={() => router.push('/settings/organization-access' as any)}>
+            <ThemedText style={styles.stateActionButtonText}>Open organization access</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (hasOrgDomainMismatch) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingState}>
+          <Ionicons name="alert-circle-outline" size={26} color="#B91C1C" />
+          <ThemedText style={styles.loadingStateTitle}>Organization context mismatch</ThemedText>
+          <ThemedText style={styles.loadingStateBody}>
+            This institution workspace is currently resolving with sailing context. Switch organizations and retry.
+          </ThemedText>
+          <TouchableOpacity style={styles.stateActionButton} onPress={() => router.push('/settings/organization-access' as any)}>
+            <ThemedText style={styles.stateActionButtonText}>Switch organization</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    );
+  }
+
+  if (!isInstitutionWorkspace && !isRaceWorkspace) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.loadingState}>
+          <Ionicons name="compass-outline" size={26} color="#2563EB" />
+          <ThemedText style={styles.loadingStateTitle}>Programs unavailable for this organization</ThemedText>
+          <ThemedText style={styles.loadingStateBody}>
+            Switch to an institution workspace to manage programs and assignments.
+          </ThemedText>
+          <TouchableOpacity style={styles.stateActionButton} onPress={() => router.push('/settings/organization-access' as any)}>
+            <ThemedText style={styles.stateActionButtonText}>Switch organization</ThemedText>
+          </TouchableOpacity>
         </View>
       </ThemedView>
     );
@@ -793,6 +856,9 @@ export default function RaceManagementScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.contextPill}>
+          <ThemedText style={styles.contextPillText}>Context: {contextLabel}</ThemedText>
+        </View>
         <View style={styles.heroCard}>
           <View style={styles.heroCopy}>
             <ThemedText style={styles.heroTitle}>
@@ -1044,6 +1110,33 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  stateActionButton: {
+    marginTop: 6,
+    borderRadius: 999,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  stateActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  contextPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: -8,
+  },
+  contextPillText: {
+    color: '#1D4ED8',
+    fontSize: 12,
+    fontWeight: '600',
   },
   heroCard: {
     flexDirection: 'row',

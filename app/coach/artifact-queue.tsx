@@ -32,6 +32,7 @@ export default function ArtifactQueueScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [requesterNameById, setRequesterNameById] = useState<Record<string,string>>({});
   const [errorText, setErrorText] = useState<string | null>(null);
+  const signedOut = !user?.id;
 
   const loadQueue = useCallback(async () => {
     if (!user?.id) {
@@ -119,7 +120,11 @@ export default function ArtifactQueueScreen() {
         style={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {errorText ? (
+        {signedOut ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Sign in to view assigned artifact reviews.</Text>
+          </View>
+        ) : errorText ? (
           <View style={styles.errorState}>
             <Text style={styles.errorText}>{errorText}</Text>
           </View>
@@ -128,7 +133,16 @@ export default function ArtifactQueueScreen() {
             <Text style={styles.emptyText}>No reviews requested yet.</Text>
           </View>
         ) : (
-          items.map((item) => {
+          <>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryText}>
+                {items.filter((row) => row.status === 'requested').length} requested
+              </Text>
+              <Text style={styles.summaryText}>
+                {items.filter((row) => row.status === 'in_review').length} in review
+              </Text>
+            </View>
+            {items.map((item) => {
             const requesterLabel = requesterNameById[item.requester_user_id] || item.requester_user_id;
             const moduleId = item.artifact?.module_id || 'unknown_module';
             const createdLabel = formatDistanceToNow(new Date(item.created_at), { addSuffix: true });
@@ -154,7 +168,8 @@ export default function ArtifactQueueScreen() {
                 </TouchableOpacity>
               </View>
             );
-          })
+            })}
+          </>
         )}
       </ScrollView>
     </View>
@@ -201,6 +216,23 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 13,
     color: '#B42318',
+  },
+  summaryRow: {
+    marginTop: 8,
+    marginBottom: 10,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  summaryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#344054',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   card: {
     backgroundColor: '#FFFFFF',

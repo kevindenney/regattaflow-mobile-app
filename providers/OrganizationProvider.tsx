@@ -354,6 +354,8 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [memberships, setMemberships] = useState<OrganizationMembershipRecord[]>([]);
   const [activeOrganizationId, setActiveOrganizationIdState] = useState<string | null>(null);
   const activeOrganizationIdRef = React.useRef<string | null>(null);
+  const membershipRealtimeCommitRef = React.useRef<Map<string, number>>(new Map());
+  const membershipRealtimeSubscribedOnceRef = React.useRef(false);
 
   const membershipColumns =
     'id, organization_id, role, status, membership_status, is_verified, verification_source, joined_at, organization:organizations(id, name, slug, organization_type, verification_mode, allowed_email_domains, metadata, is_active)';
@@ -364,6 +366,11 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
     signedInRef.current = signedIn;
     userIdRef.current = user?.id ?? null;
   }, [signedIn, user?.id]);
+
+  useEffect(() => {
+    membershipRealtimeSubscribedOnceRef.current = false;
+    membershipRealtimeCommitRef.current.clear();
+  }, [user?.id]);
 
   useEffect(() => {
     activeOrganizationIdRef.current = activeOrganizationId;
@@ -518,6 +525,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
       const normalized = ((data || []) as unknown as RawOrganizationMembershipRecord[]).map(normalizeMembershipRow);
       const rows = dedupeMemberships(normalized);
+      membershipRealtimeCommitRef.current.clear();
       setMemberships(rows);
 
       const storedId = await getStoredActiveOrganizationId();
@@ -622,6 +630,15 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
           filter: `user_id=eq.${user.id}`,
         },
         (payload: RealtimePostgresChangesPayload<any>) => {
+          const payloadRowId = String((payload.new as any)?.id || (payload.old as any)?.id || '');
+          if (!payloadRowId) return;
+          const commitTime = new Date(payload.commit_timestamp || Date.now()).getTime();
+          const knownCommitTime = membershipRealtimeCommitRef.current.get(payloadRowId) ?? Number.NEGATIVE_INFINITY;
+          if (commitTime < knownCommitTime) {
+            return;
+          }
+          membershipRealtimeCommitRef.current.set(payloadRowId, commitTime);
+
           setMemberships((prev) => {
             let next = prev;
             if (payload.eventType === 'DELETE') {
@@ -651,12 +668,23 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (membershipRealtimeSubscribedOnceRef.current) {
+            void refreshMemberships();
+          } else {
+            membershipRealtimeSubscribedOnceRef.current = true;
+          }
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          void refreshMemberships();
+        }
+      });
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [signedIn, user?.id]);
+  }, [refreshMemberships, signedIn, user?.id]);
 
   const setActiveOrganizationId = useCallback(async (organizationId: string | null) => {
     if (!organizationId) {
