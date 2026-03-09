@@ -33,7 +33,6 @@ import {
   IOS_COLORS,
 } from './constants';
 import { CardWidthContext } from './CardWidthContext';
-import { CardGridTimeline } from './CardGridTimeline';
 import { TimeAxisRace } from '@/components/races/TimelineTimeAxis';
 
 // =============================================================================
@@ -450,13 +449,6 @@ function CardGridComponent({
         </TouchableOpacity>
       )}
 
-      {/* Bottom pill timeline indicator */}
-      <CardGridTimeline
-        totalRaces={races.length}
-        activeIndex={currentRaceIndex}
-        nextRaceIndex={nextRaceIndex ?? null}
-        onSelectRace={goToRace}
-      />
     </View>
   );
 }
