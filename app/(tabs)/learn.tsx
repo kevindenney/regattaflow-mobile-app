@@ -787,6 +787,10 @@ export default function LearnScreen() {
                   <View style={styles.orgSection}>
                     <Text style={styles.orgSectionTitle}>Admin tools</Text>
                     <View style={styles.adminToolsList}>
+                      <TouchableOpacity style={styles.adminToolRow} onPress={() => router.push('/settings/organization-access')}>
+                        <Text style={styles.adminToolLabel}>Organization access</Text>
+                        <Ionicons name="chevron-forward" size={16} color={IOS_COLORS.tertiaryLabel} />
+                      </TouchableOpacity>
                       <TouchableOpacity style={styles.adminToolRow} onPress={() => router.push('/organization/access-requests')}>
                         <Text style={styles.adminToolLabel}>Access requests</Text>
                         <View style={styles.adminToolRight}>
@@ -867,8 +871,16 @@ export default function LearnScreen() {
                                 <Text style={[styles.orgActionText, styles.orgActionTextDisabled]}>Removed</Text>
                               </View>
                             ) : isInviteOnly ? (
-                              <View style={styles.inviteRequiredPill}>
-                                <Text style={styles.inviteRequiredText}>Invite required</Text>
+                              <View style={styles.orgActionsColumn}>
+                                <View style={styles.inviteRequiredPill}>
+                                  <Text style={styles.inviteRequiredText}>Invite required</Text>
+                                </View>
+                                <TouchableOpacity
+                                  style={styles.orgActionButton}
+                                  onPress={() => router.push('/org-invite')}
+                                >
+                                  <Text style={styles.orgActionText}>Use invite token</Text>
+                                </TouchableOpacity>
                               </View>
                             ) : isOpenJoinRestricted ? (
                               <View style={styles.orgActionsColumn}>

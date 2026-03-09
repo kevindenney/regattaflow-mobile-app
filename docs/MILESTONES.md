@@ -130,6 +130,19 @@ Manual:
    - `dual_decision_notification|PASS|...`
 4. Confirm existing route smoke checks still pass (unless `SMOKE_SKIP_BROWSER=1`).
 
+## M12 — Invite Flow Hardening
+Acceptance:
+- Invite-only org rows in Learn provide a requester path (`Use invite token`) instead of passive label-only state.
+- Learn admin tools expose direct invite-management entry (`Organization access`) for admin/manager users.
+- QA matrix includes invite-only requester and admin invite-issuance checks.
+
+Manual:
+1. In `/learn`, find an `invite_only` organization.
+2. Confirm row shows `Invite required` and `Use invite token`.
+3. Click `Use invite token` and confirm navigation to `/org-invite`.
+4. In admin session, open `/learn` and confirm `Organization access` appears in Admin tools.
+5. Click `Organization access` and confirm invite composer/history render in `/settings/organization-access`.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -142,3 +155,4 @@ Manual:
 - M9 completed (added `scripts/smoke-multi-org-demo.mjs` and documented usage).
 - M10 completed (added canonical reset wrapper `scripts/reset-multi-org-demo.mjs` and deterministic SQL packet `docs/RESET_SQL.md`).
 - M11 completed (enhanced smoke harness with dual-session DB-backed pending->active verification and updated QA matrix).
+- M12 completed (hardened invite-only UX with requester token path and admin invite-management shortcut from Learn).

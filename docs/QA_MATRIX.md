@@ -20,6 +20,7 @@ Across:
 | Org discovery | Requester | JHSON | `/learn` | Search JHSON | Row visible and deduped |
 | Domain gating | Requester | JHSON | `/learn` | Attempt join as non-`@jhu.edu` | `Restricted` shown |
 | Request access | Requester | RHKYC | `/learn` | Click `Request access` | `Request sent` shown |
+| Invite-only discovery | Requester | Invite-only org | `/learn` | View invite-only row | `Invite required` + `Use invite token` action shown |
 | Pending queue update | Admin | RHKYC | `/organization/access-requests` | Watch queue after requester action | Pending row appears without refresh |
 | Approve request | Admin | RHKYC | `/organization/access-requests` | Approve requester | Pending row removed; success state visible |
 | Realtime membership | Requester | RHKYC | `/learn` | Keep page open during approval | Membership becomes active without refresh |
@@ -33,6 +34,7 @@ Across:
 | Cohort membership | Admin | Active org | `/organization/cohort/[cohortId]` | Add requester | Member count/row updates |
 | Template create/publish | Admin | Active org | `/organization/templates` | Create template | Template row appears/published |
 | Template-cohort assign | Admin | Active org | `/organization/templates` | Link cohort to template | Assignment persists after refresh |
+| Invite issuance path | Admin | Active org | `/learn` -> `/settings/organization-access` | Open Organization access admin tool | Invite composer + invite history available |
 | Context pill | Both | JHSON | org admin routes | Check top context | `Context: Nursing` |
 | Cohort-first recommendation | Requester | Active org | `/learn` | Open recommendations | `Recommended for your cohort` appears before program section |
 | Safe leave guard | Requester | Active org | `/learn` | Try leaving only active org | Guard blocks orphaned state |
