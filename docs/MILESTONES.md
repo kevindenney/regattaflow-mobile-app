@@ -220,6 +220,23 @@ Manual:
 5. Confirm Activity feed remains ordered newest-first and does not duplicate rows after reconnect.
 6. Confirm reconnect does not lose recent notifications (new rows appear after subscription restore).
 
+## M18 — Demo QA Matrix Automation Hooks
+Acceptance:
+- QA matrix rows include explicit automation hook IDs and runnable command/test IDs.
+- Smoke harness exposes additional deterministic IDs used by matrix mapping (`activity_view_toggle_controls`, `templates_context_hint`, `org_access_invite_panel`).
+- Contract coverage pins matrix-critical UI cues across learn, members, cohorts, and templates surfaces.
+- Automation coverage report script (`scripts/qa-matrix-coverage.mjs`) enforces `>= 60%` scripted coverage threshold.
+
+Manual:
+1. Open `docs/QA_MATRIX.md` and confirm each matrix row includes `Automation Hook` and `Run`.
+2. Run `node scripts/qa-matrix-coverage.mjs`.
+3. Confirm `qa_matrix_automation_ratio|PASS|...` with threshold at or above `60%`.
+4. Run `node scripts/smoke-multi-org-demo.mjs` and confirm new IDs:
+   - `activity_view_toggle_controls`
+   - `templates_context_hint`
+   - `org_access_invite_panel`
+5. Run `npm test -- app/__tests__/qa-matrix-hooks.contract.test.ts` as a targeted contract check.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -238,3 +255,4 @@ Manual:
 - M15 completed (aligned Programs to active org context with explicit mismatch states, context pill, and institution-only guards for create/assign flows).
 - M16 completed (hardened artifact queue/detail status gating, added contract guards, and expanded QA matrix for coach artifact review states).
 - M17 completed (added reconnect backfill and ordering guards for membership + notifications realtime streams with contract coverage).
+- M18 completed (mapped QA matrix rows to automation hooks/commands, added coverage gate script, and extended smoke/contract hook IDs).

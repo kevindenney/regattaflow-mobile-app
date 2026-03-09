@@ -206,6 +206,9 @@ async function runBrowserSmoke() {
     const approvedCount = await page.locator('text=Membership approved').count();
     const welcomeCount = await page.locator('text=organization access is now active').count();
     push('activity_approval_notification', approvedCount > 0 || welcomeCount > 0, `approved=${approvedCount}, welcome=${welcomeCount}`);
+    const groupedToggleCount = await page.locator('text=Grouped').count();
+    const allToggleCount = await page.locator('text=All').count();
+    push('activity_view_toggle_controls', groupedToggleCount > 0 && allToggleCount > 0, `grouped=${groupedToggleCount}, all=${allToggleCount}`);
 
     await page.goto(`${baseUrl}/organization/members`, { waitUntil: 'networkidle', timeout: 120000 });
     push('members_route', (await page.locator('text=Members').count()) > 0, 'Members route reachable');
@@ -217,6 +220,12 @@ async function runBrowserSmoke() {
     const hasInterestSelector = (await page.getByPlaceholder('Interest slug (optional)').count()) > 0;
     push('templates_route', (await page.locator('text=Templates').count()) > 0, 'Templates route reachable');
     push('templates_interest_locked', !hasInterestSelector, `interest selector present=${hasInterestSelector}`);
+    const templateContextHintCount = await page.locator('text=Using organization context:').count();
+    push('templates_context_hint', templateContextHintCount > 0, `context hint count=${templateContextHintCount}`);
+
+    await page.goto(`${baseUrl}/settings/organization-access`, { waitUntil: 'networkidle', timeout: 120000 });
+    const invitePanelCount = await page.locator('text=Invite People').count();
+    push('org_access_invite_panel', invitePanelCount > 0, `invite panel count=${invitePanelCount}`);
 
     await page.goto(`${baseUrl}/learn`, { waitUntil: 'networkidle', timeout: 120000 });
     const debugCount = await page.locator('text=activeOrgId=').count();
