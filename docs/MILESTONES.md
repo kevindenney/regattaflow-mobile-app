@@ -93,6 +93,8 @@ Manual:
 2. Confirm `/tmp/multi-org-smoke.png` is generated and review any FAIL rows.
 
 ## M10 — Canonical Demo Reset Script
+Status: DONE (`5199f20`)
+
 Acceptance:
 - `scripts/reset-multi-org-demo.mjs` resets demo org/persona state deterministically.
 - Script is idempotent and prints machine-readable `PASS/FAIL` lines by step.
@@ -112,6 +114,8 @@ Manual:
 3. If DB URL/`psql` is unavailable, execute fallback steps from `docs/RESET_SQL.md`.
 
 ## M11 — Dual-Session Smoke Harness
+Status: PARTIAL (`5f5c3f1`, `7356872`)
+
 Acceptance:
 - `scripts/smoke-multi-org-demo.mjs` supports two-persona operator flow (requester + admin).
 - Harness verifies pending -> approved -> active transition using DB reads (not browser action simulation).
@@ -131,6 +135,8 @@ Manual:
 4. Confirm existing route smoke checks still pass (unless `SMOKE_SKIP_BROWSER=1`).
 
 ## M12 — Invite Flow Hardening
+Status: PARTIAL (`12e9522`)
+
 Acceptance:
 - Invite-only org rows in Learn provide a requester path (`Use invite token`) instead of passive label-only state.
 - Learn admin tools expose direct invite-management entry (`Organization access`) for admin/manager users.
@@ -144,6 +150,8 @@ Manual:
 5. Click `Organization access` and confirm invite composer/history render in `/settings/organization-access`.
 
 ## M13 — Notification Contract Stabilization
+Status: DONE (`00449a5`)
+
 Acceptance:
 - Membership decision notifications normalize to canonical types (`org_membership_approved` / `org_membership_rejected`) even when legacy rows use `org_membership_decision`.
 - Grouped/all notification modes avoid duplicate semantic buckets caused by legacy vs canonical type mismatch.
@@ -156,6 +164,8 @@ Manual:
 4. Confirm legacy decision rows (if present) render as approved/rejected semantics, not an unknown type.
 
 ## M14 — Members/Cohorts/Templates Load-Time Budget
+Status: DONE (`1c81712`)
+
 Acceptance:
 - Route-load budget harness exists for admin surfaces:
   - `/organization/members`
@@ -172,6 +182,8 @@ Manual:
 4. Validate latest values in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`.
 
 ## M15 — Program Workspace + Org Context Alignment
+Status: DONE (`f2526d9`)
+
 Acceptance:
 - Programs experience surfaces explicit active-org context (`Context: <Domain>`) and no longer silently falls back when no active org is selected.
 - Active org mismatch states are user-visible and recoverable with a direct switch action to organization access.
@@ -185,6 +197,8 @@ Manual:
 5. Switch to a non-institution org and open `/programs/create` and `/programs/assign`; confirm guard message appears with organization-access action.
 
 ## M16 — Coach Artifact Review QA Completion
+Status: DONE (`e7f46da`)
+
 Acceptance:
 - Coach artifact queue includes explicit signed-out guidance, request/in-review counts, and deterministic action labels.
 - Artifact detail flow enforces status rules:
@@ -205,6 +219,8 @@ Manual:
 8. Open artifact not assigned to current user and confirm `Not assigned` state renders.
 
 ## M17 — Realtime Resilience (Reconnect + Ordering)
+Status: DONE (`e83b7f6`)
+
 Acceptance:
 - Organization membership realtime updates ignore out-of-order payloads using commit timestamp guards.
 - Membership realtime subscription triggers deterministic resync on reconnect/error transitions.
@@ -221,6 +237,8 @@ Manual:
 6. Confirm reconnect does not lose recent notifications (new rows appear after subscription restore).
 
 ## M18 — Demo QA Matrix Automation Hooks
+Status: DONE (`b13ea46`)
+
 Acceptance:
 - QA matrix rows include explicit automation hook IDs and runnable command/test IDs.
 - Smoke harness exposes additional deterministic IDs used by matrix mapping (`activity_view_toggle_controls`, `templates_context_hint`, `org_access_invite_panel`).
@@ -238,6 +256,8 @@ Manual:
 5. Run `npm test -- app/__tests__/qa-matrix-hooks.contract.test.ts` as a targeted contract check.
 
 ## M19 — Release Candidate Gate + Evidence Pack
+Status: DONE (`d1c901a`, `7356872`)
+
 Acceptance:
 - Single command gate exists: `node scripts/release-candidate-gate.mjs`.
 - Gate bundles:

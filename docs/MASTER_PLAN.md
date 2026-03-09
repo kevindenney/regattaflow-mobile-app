@@ -86,20 +86,21 @@ Success bar:
 | Templates + cohort assignment | DONE | `83bce4d`, `6786b23` | Org templates constrained by interest + cohort linking. |
 | Learn cohort-first recommendations | DONE | `39402ac`, `6786b23` | `Recommended for your cohort` rendered before program recommendations. |
 | Learn admin tools + safe leave | DONE | `bd67dec`, `03df37d`, `381acae`, `88feb39` | Admin shortcuts + orphan-guard for leave flow. |
-| Demo smoke harness | DONE | `f3bbb0e` | `scripts/smoke-multi-org-demo.mjs` validates key routes and signals. |
+| Demo smoke harness | DONE | `f3bbb0e`, `5f5c3f1`, `b13ea46`, `7356872` | Script validates key routes/signals with machine-readable IDs; dual-session checks are operator-assisted. |
 | Organization invites data/service stack | PARTIAL | `20260302160000`..`20260302223000`, app `org-invite.tsx` | Token + RPC/service paths exist; operational QA and admin UX hardening gaps remain. |
-| Multi-persona automated E2E | PARTIAL | `f3bbb0e` | Current smoke is single-session and route/assertion oriented; dual-user decision automation remains. |
-| Demo reset automation | PARTIAL | `a7f9719`, existing seed/cleanup scripts | Manual reset path exists; no single canonical reset script for JHSON/RHKYC demo personas. |
+| Multi-persona automated E2E | PARTIAL | `5f5c3f1`, `7356872` | DB-backed dual-session flow exists, but approval transition remains operator-assisted (not browser-automated end-to-end). |
+| Demo reset automation | DONE | `5199f20` | Canonical reset script exists: `scripts/reset-multi-org-demo.mjs` with deterministic SQL fallback packet. |
 | Programs core workspace | PARTIAL | `20260302110000`, `20260302113000`, multiple contracts | Strong schema/service/tests exist; full QA convergence with multi-org demo still incomplete. |
 | Coach retention + recap payload guards | PARTIAL | `3c52fb3`, `cb0fd48`, `ea8ed73` | Core loop exists; some roadmap docs still flag pending depth in persisted insight loop behavior. |
 | Artifact review workflow | PARTIAL | `20260306121500`, `20260306150000` | Queue/detail screens exist; broader role/process QA and runbook integration pending. |
-| End-to-end org invite-to-active flow in smoke harness | TODO | N/A | Add invitation issuance, acceptance, and role issuance checks to automated smoke. |
-| Deterministic demo data bootstrap/reset for JHSON-first | TODO | N/A | One-command reset/seed pipeline for repeatable demos still missing. |
-| Multi-org observability dashboard for demo incidents | TODO | N/A | Need machine-readable post-run summary across smoke + API + realtime checks. |
+| End-to-end org invite-to-active flow in smoke harness | PARTIAL | `5f5c3f1`, `b13ea46` | Request->approve transition is validated; full invite issuance->acceptance->active flow is not yet script-validated end-to-end. |
+| Deterministic demo data bootstrap/reset for JHSON-first | DONE | `5199f20` | One-command deterministic reset shipped for JHSON/RHKYC demo personas. |
+| Multi-org observability dashboard for demo incidents | DONE | `d1c901a`, `7356872` | RC gate emits machine-readable summary + artifact index in `docs/` across smoke/API/integration checks. |
 
-## 5) Next 10 Milestones (Dependency Ordered)
+## 5) Milestone Status (M10-M19)
 
 ### M10 — Canonical Demo Reset Script
+- Status: DONE (`5199f20`)
 - Goal: one command to reset requester/admin membership, cohort links, and template assignments for JHSON + RHKYC.
 - Acceptance:
   - `node scripts/reset-jhson-demo-state.mjs` returns success summary.
@@ -109,6 +110,7 @@ Success bar:
   - Re-run previous seed scripts (`seed-demo-users-simple`, `seed-rhkyc-demo`) and restore backup SQL snapshot.
 
 ### M11 — Dual-Session Smoke Harness (Requester + Admin)
+- Status: PARTIAL (`5f5c3f1`, `7356872`)
 - Goal: automate pending->approve->active verification in realtime using two browser contexts.
 - Acceptance:
   - Smoke output includes decision and requester realtime assertions.
@@ -117,6 +119,7 @@ Success bar:
   - Keep existing single-session smoke harness as fallback (`smoke-multi-org-demo.mjs`).
 
 ### M12 — Invite Flow Hardening (Org Admin to Invitee)
+- Status: PARTIAL (`12e9522`)
 - Goal: complete operational path for invite token issuance, open/accept, and role assignment.
 - Acceptance:
   - Admin can issue invite from organization-access flow.
@@ -126,6 +129,7 @@ Success bar:
   - Disable invite entry points in UI and keep request-to-join as default path.
 
 ### M13 — Notification Contract Stabilization
+- Status: DONE (`00449a5`)
 - Goal: standardize membership decision notification payloads and grouped/all rendering expectations.
 - Acceptance:
   - Contract test coverage for approval/rejection event shape.
@@ -134,6 +138,7 @@ Success bar:
   - Revert to prior notification type union and disable grouping transform for membership events.
 
 ### M14 — Members/Cohorts/Templates Load-Time Budget
+- Status: DONE (`1c81712`)
 - Goal: set and enforce response/render budgets for admin routes under demo data volume.
 - Acceptance:
   - Baseline metrics captured in docs.
@@ -142,6 +147,7 @@ Success bar:
   - Remove new aggressive query/index paths and retain current stable queries.
 
 ### M15 — Program Workspace + Org Context Alignment
+- Status: DONE (`f2526d9`)
 - Goal: ensure Programs experience respects active org + domain context in the same way Learn does.
 - Acceptance:
   - Active org mismatch is surfaced and recoverable.
@@ -150,6 +156,7 @@ Success bar:
   - Route fallback to existing canonical programs tab behavior without org-specific overlays.
 
 ### M16 — Coach Artifact Review QA Completion
+- Status: DONE (`e7f46da`)
 - Goal: finish artifact queue/detail acceptance matrix for coach persona with role/rules checks.
 - Acceptance:
   - Queue/list/detail/review states verified against competency attempts.
@@ -158,6 +165,7 @@ Success bar:
   - Hide artifact review actions behind feature flag while preserving read-only artifacts.
 
 ### M17 — Realtime Resilience (Reconnect + Ordering)
+- Status: DONE (`e83b7f6`)
 - Goal: harden membership/notification realtime handling for reconnect/order anomalies.
 - Acceptance:
   - Simulated disconnect/reconnect does not lose final state.
@@ -166,6 +174,7 @@ Success bar:
   - Temporarily add explicit refresh-on-focus fallback for critical admin/requester screens.
 
 ### M18 — Demo QA Matrix Automation Hooks
+- Status: DONE (`b13ea46`)
 - Goal: map QA matrix rows to scriptable checks where possible.
 - Acceptance:
   - QA matrix rows include command/test IDs.
@@ -174,10 +183,10 @@ Success bar:
   - Keep matrix manual with explicit evidence screenshot checklist.
 
 ### M19 — Release Candidate Gate + Evidence Pack
+- Status: DONE (`d1c901a`, `7356872`)
 - Goal: produce one command that emits release readiness report for JHSON-first demo.
 - Acceptance:
   - Bundles typecheck, smoke, API validation, key route checks.
   - Generates machine-readable report + artifact index in `docs/`.
 - Rollback:
   - Use existing `run-integration-validation.mjs` + manual checklist bundle.
-
