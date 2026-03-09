@@ -111,6 +111,25 @@ Manual:
 2. Confirm script outputs `reset_verify|PASS|ok` and `reset_complete|PASS|...`.
 3. If DB URL/`psql` is unavailable, execute fallback steps from `docs/RESET_SQL.md`.
 
+## M11 — Dual-Session Smoke Harness
+Acceptance:
+- `scripts/smoke-multi-org-demo.mjs` supports two-persona operator flow (requester + admin).
+- Harness verifies pending -> approved -> active transition using DB reads (not browser action simulation).
+- Harness emits machine-readable `PASS/FAIL` step lines for dual-session checks and route checks.
+- QA matrix documents dual-session invocation and expected IDs.
+
+Manual:
+1. Run:
+   `SMOKE_DB_URL=\"postgres://...\" SMOKE_ADMIN_EMAIL=\"kevin@oceanflow.io\" SMOKE_REQUESTER_EMAIL=\"jhu2@jhu.edu\" node scripts/smoke-multi-org-demo.mjs`
+2. Follow prompts:
+   - Open requester session, perform Request Access.
+   - Open admin session, approve request.
+3. Confirm:
+   - `dual_pending_state|PASS|...`
+   - `dual_active_state|PASS|...`
+   - `dual_decision_notification|PASS|...`
+4. Confirm existing route smoke checks still pass (unless `SMOKE_SKIP_BROWSER=1`).
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -122,3 +141,4 @@ Manual:
 - M8 completed (removed remaining org-admin dev diagnostic text from members/cohorts/cohort detail surfaces).
 - M9 completed (added `scripts/smoke-multi-org-demo.mjs` and documented usage).
 - M10 completed (added canonical reset wrapper `scripts/reset-multi-org-demo.mjs` and deterministic SQL packet `docs/RESET_SQL.md`).
+- M11 completed (enhanced smoke harness with dual-session DB-backed pending->active verification and updated QA matrix).

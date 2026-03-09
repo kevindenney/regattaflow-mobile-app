@@ -50,7 +50,25 @@ Run:
 node scripts/smoke-multi-org-demo.mjs
 ```
 
+Dual-session DB-backed mode (recommended):
+
+```bash
+SMOKE_DB_URL="postgres://..." \
+SMOKE_ADMIN_EMAIL="kevin@oceanflow.io" \
+SMOKE_REQUESTER_EMAIL="jhu2@jhu.edu" \
+node scripts/smoke-multi-org-demo.mjs
+```
+
+Operator-assist mode control:
+- `SMOKE_AUTO_CONTINUE=1` skips Enter prompts.
+- `SMOKE_SKIP_BROWSER=1` runs only dual-session DB checks.
+
 Expected PASS line IDs:
+- `dual_db_prereq|PASS|...`
+- `dual_context_resolve|PASS|...`
+- `dual_pending_state|PASS|...`
+- `dual_active_state|PASS|...`
+- `dual_decision_notification|PASS|...`
 - `learn_load|PASS|...`
 - `learn_admin_tools|PASS|...`
 - `learn_jhson_visible|PASS|...`
@@ -71,4 +89,3 @@ Expected artifact line:
 - Screenshot of Activity grouped/all toggle state.
 - Screenshot of cohort recommendation section ordering.
 - Smoke harness raw output + screenshot artifact path.
-
