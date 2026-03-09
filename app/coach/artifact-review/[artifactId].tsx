@@ -335,6 +335,10 @@ export default function CoachArtifactReviewScreen() {
 
   const handleMarkCompleted = useCallback(async () => {
     if (!requestRow) return;
+    if (requestRow.status !== 'in_review') {
+      setErrorText('Start review before marking this request as completed.');
+      return;
+    }
 
     setUpdatingStatus(true);
     setErrorText(null);
@@ -412,6 +416,9 @@ export default function CoachArtifactReviewScreen() {
                 Requested {requestRow?.created_at ? formatDistanceToNow(new Date(requestRow.created_at), { addSuffix: true }) : 'recently'}
               </Text>
               <Text style={styles.metaText}>Status: {requestRow?.status || 'unknown'}</Text>
+              {requestRow?.status === 'requested' ? (
+                <Text style={styles.metaText}>Next step: start review to unlock completion.</Text>
+              ) : null}
               {requestRow?.status === 'completed' ? (
                 <View style={styles.completedBadge}>
                   <Text style={styles.completedBadgeText}>Completed</Text>
@@ -498,9 +505,9 @@ export default function CoachArtifactReviewScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.primaryButton, (updatingStatus || requestRow?.status === 'completed') && styles.disabledButton]}
+                  style={[styles.actionButton, styles.primaryButton, (updatingStatus || requestRow?.status !== 'in_review') && styles.disabledButton]}
                   onPress={handleMarkCompleted}
-                  disabled={updatingStatus || requestRow?.status === 'completed'}
+                  disabled={updatingStatus || requestRow?.status !== 'in_review'}
                 >
                   <Text style={styles.primaryButtonText}>Mark completed</Text>
                 </TouchableOpacity>

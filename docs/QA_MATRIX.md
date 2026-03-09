@@ -45,6 +45,26 @@ Across:
 - Requester membership state flips to active after approval without reload.
 - Requester notification card appears for approval event without reload.
 
+## Coach Artifact Review Checks
+- Route: `/coach/artifact-queue`
+- Signed-out behavior:
+  - Expected: `Sign in to view assigned artifact reviews.`
+- Queue behavior:
+  - Expected summary chips for `requested` and `in review` counts.
+  - `Review` action opens `/coach/artifact-review/[artifactId]`.
+- Detail route: `/coach/artifact-review/[artifactId]`
+  - For `requested` status:
+    - Expected cue: `Next step: start review to unlock completion.`
+    - `Mark completed` must be disabled.
+  - After `Start review`:
+    - Status becomes `in_review`.
+    - `Mark completed` enabled.
+  - Completing review:
+    - Request status transitions to `completed`.
+    - For `clinical_reasoning` artifacts, competency-attempt validation runs; if fallback schema blocks this, warning text is shown instead of silent failure.
+  - Not-assigned artifact:
+    - Expected card: `Not assigned`.
+
 ## Smoke Harness
 Run:
 

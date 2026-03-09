@@ -184,6 +184,26 @@ Manual:
 4. Navigate to `/programs/create` and `/programs/assign` from institution org; confirm pages load normally.
 5. Switch to a non-institution org and open `/programs/create` and `/programs/assign`; confirm guard message appears with organization-access action.
 
+## M16 — Coach Artifact Review QA Completion
+Acceptance:
+- Coach artifact queue includes explicit signed-out guidance, request/in-review counts, and deterministic action labels.
+- Artifact detail flow enforces status rules:
+  - `Start review` only from `requested`
+  - `Mark completed` only from `in_review`
+  - User-visible next-step cue for requested items
+- Contract coverage pins workflow guardrails for queue and detail screens.
+- QA matrix includes queue/detail/error/empty/manual verification steps.
+
+Manual:
+1. Open `/coach/artifact-queue` while signed out.
+2. Confirm `Sign in to view assigned artifact reviews.` is shown.
+3. Sign in as assigned reviewer and confirm summary chips show `requested` and `in review` counts.
+4. Open `/coach/artifact-review/[artifactId]` for a `requested` item.
+5. Confirm cue `Next step: start review to unlock completion.` and that `Mark completed` is disabled.
+6. Tap `Start review`; confirm status becomes `in_review` and `Mark completed` becomes enabled.
+7. Complete review and confirm return to queue/completed state without silent failure.
+8. Open artifact not assigned to current user and confirm `Not assigned` state renders.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -200,3 +220,4 @@ Manual:
 - M13 completed (normalized legacy org membership decision notification types and added service contract checks).
 - M14 completed (added route-load budget harness and captured passing local p95 baseline in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`).
 - M15 completed (aligned Programs to active org context with explicit mismatch states, context pill, and institution-only guards for create/assign flows).
+- M16 completed (hardened artifact queue/detail status gating, added contract guards, and expanded QA matrix for coach artifact review states).
