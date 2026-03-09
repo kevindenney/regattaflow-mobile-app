@@ -171,6 +171,19 @@ Manual:
 3. Confirm `route_budget_overall|PASS|...`.
 4. Validate latest values in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`.
 
+## M15 — Program Workspace + Org Context Alignment
+Acceptance:
+- Programs experience surfaces explicit active-org context (`Context: <Domain>`) and no longer silently falls back when no active org is selected.
+- Active org mismatch states are user-visible and recoverable with a direct switch action to organization access.
+- Institution-only program paths (`/programs/create`, `/programs/assign`) block non-institution contexts and provide deterministic recovery routing.
+
+Manual:
+1. Open `/(tabs)/programs` with no active organization selected.
+2. Confirm `No active organization` message appears with `Open organization access`.
+3. Switch to JHSON (institution) and confirm context pill shows `Context: Nursing`.
+4. Navigate to `/programs/create` and `/programs/assign` from institution org; confirm pages load normally.
+5. Switch to a non-institution org and open `/programs/create` and `/programs/assign`; confirm guard message appears with organization-access action.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -186,3 +199,4 @@ Manual:
 - M12 completed (hardened invite-only UX with requester token path and admin invite-management shortcut from Learn).
 - M13 completed (normalized legacy org membership decision notification types and added service contract checks).
 - M14 completed (added route-load budget harness and captured passing local p95 baseline in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`).
+- M15 completed (aligned Programs to active org context with explicit mismatch states, context pill, and institution-only guards for create/assign flows).

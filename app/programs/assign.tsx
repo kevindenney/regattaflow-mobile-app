@@ -47,6 +47,7 @@ export default function ProgramAssignmentsScreen() {
   const params = useLocalSearchParams<{ programId?: string }>();
   const { activeOrganization, ready } = useOrganization();
   const { activeDomain } = useWorkspaceDomain();
+  const isInstitutionOrganization = activeOrganization?.organization_type === 'institution';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -422,6 +423,23 @@ export default function ProgramAssignmentsScreen() {
       },
     ]);
   };
+
+  if (ready && (!activeOrganization?.id || !isInstitutionOrganization)) {
+    return (
+      <ThemedView style={styles.container}>
+        <View style={styles.gateState}>
+          <Ionicons name="alert-circle-outline" size={24} color="#B91C1C" />
+          <ThemedText style={styles.gateStateTitle}>Assignments require an institution organization</ThemedText>
+          <ThemedText style={styles.gateStateBody}>
+            Switch to an institution workspace before managing program assignments.
+          </ThemedText>
+          <TouchableOpacity style={styles.gateStateAction} onPress={() => router.replace('/settings/organization-access' as any)}>
+            <ThemedText style={styles.gateStateActionText}>Open organization access</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
@@ -892,4 +910,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadMoreText: { color: '#1D4ED8', fontSize: 12, fontWeight: '700' },
+  gateState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 24,
+  },
+  gateStateTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  gateStateBody: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  gateStateAction: {
+    marginTop: 4,
+    borderRadius: 999,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  gateStateActionText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 });
