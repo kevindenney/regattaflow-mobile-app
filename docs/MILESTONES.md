@@ -204,6 +204,22 @@ Manual:
 7. Complete review and confirm return to queue/completed state without silent failure.
 8. Open artifact not assigned to current user and confirm `Not assigned` state renders.
 
+## M17 — Realtime Resilience (Reconnect + Ordering)
+Acceptance:
+- Organization membership realtime updates ignore out-of-order payloads using commit timestamp guards.
+- Membership realtime subscription triggers deterministic resync on reconnect/error transitions.
+- Notification realtime stream backfills after reconnect and dedupes already-delivered notifications.
+- Feed merge logic keeps notifications ordered by `createdAt` and dedupes across all cached pages.
+- Contract tests cover membership reconnect logic and notification reconnect/order guardrails.
+
+Manual:
+1. Start requester/admin sessions and keep both open.
+2. Trigger membership state transitions (pending -> active) while toggling network connectivity.
+3. Confirm requester/admin settle on final membership state without manual hard refresh.
+4. Trigger multiple notification events quickly (including delayed/replayed events).
+5. Confirm Activity feed remains ordered newest-first and does not duplicate rows after reconnect.
+6. Confirm reconnect does not lose recent notifications (new rows appear after subscription restore).
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -221,3 +237,4 @@ Manual:
 - M14 completed (added route-load budget harness and captured passing local p95 baseline in `docs/ADMIN_ROUTE_LOAD_BASELINE.md`).
 - M15 completed (aligned Programs to active org context with explicit mismatch states, context pill, and institution-only guards for create/assign flows).
 - M16 completed (hardened artifact queue/detail status gating, added contract guards, and expanded QA matrix for coach artifact review states).
+- M17 completed (added reconnect backfill and ordering guards for membership + notifications realtime streams with contract coverage).

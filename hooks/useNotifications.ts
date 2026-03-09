@@ -24,20 +24,31 @@ function upsertRealtimeNotificationIntoPages(previousData: any, notification: So
     return { ...previousData, pages };
   }
 
-  const firstPage = pages[0] || { notifications: [], hasMore: false };
+  // Remove any pre-existing copy of the notification from every page first.
+  const nextPages = pages.map((page) => {
+    const rows = Array.isArray(page?.notifications) ? page.notifications : [];
+    return {
+      ...page,
+      notifications: rows.filter((entry: SocialNotification) => entry.id !== notification.id),
+    };
+  });
+
+  const firstPage = nextPages[0] || { notifications: [], hasMore: false };
   const existingNotifications = Array.isArray(firstPage.notifications)
     ? firstPage.notifications
     : [];
-  if (existingNotifications.some((entry: SocialNotification) => entry.id === notification.id)) {
-    return previousData;
-  }
+  const merged = [notification, ...existingNotifications].sort((a, b) => {
+    const aTime = new Date(a.createdAt).getTime();
+    const bTime = new Date(b.createdAt).getTime();
+    return bTime - aTime;
+  });
 
-  pages[0] = {
+  nextPages[0] = {
     ...firstPage,
-    notifications: [notification, ...existingNotifications],
+    notifications: merged,
   };
 
-  return { ...previousData, pages };
+  return { ...previousData, pages: nextPages };
 }
 
 function getGroupedUnreadCountFromPages(previousData: any): number {

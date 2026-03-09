@@ -138,8 +138,68 @@ class NotificationServiceClass {
   private realtimeChannel: RealtimeChannel | null = null;
   private realtimeUserId: string | null = null;
   private realtimeChannelRunId = 0;
+  private recentlyDeliveredNotificationIds = new Set<string>();
+  private recentlyDeliveredOrder: string[] = [];
   private listeners: Set<(notification: SocialNotification) => void> =
     new Set();
+
+  private rememberDeliveredNotification(notificationId: string): void {
+    if (!notificationId) return;
+    if (this.recentlyDeliveredNotificationIds.has(notificationId)) return;
+    this.recentlyDeliveredNotificationIds.add(notificationId);
+    this.recentlyDeliveredOrder.push(notificationId);
+    if (this.recentlyDeliveredOrder.length > 500) {
+      const removed = this.recentlyDeliveredOrder.shift();
+      if (removed) this.recentlyDeliveredNotificationIds.delete(removed);
+    }
+  }
+
+  private resetDeliveredNotificationCache(): void {
+    this.recentlyDeliveredNotificationIds.clear();
+    this.recentlyDeliveredOrder = [];
+  }
+
+  private async backfillNotificationsAfterReconnect(
+    userId: string,
+    channelRunId: number
+  ): Promise<void> {
+    if (!userId) return;
+    if (this.realtimeChannelRunId !== channelRunId || this.realtimeUserId !== userId) return;
+    if (this.listeners.size === 0) return;
+
+    try {
+      const { notifications } = await this.getNotifications(userId, {
+        limit: 25,
+        offset: 0,
+      });
+      if (this.realtimeChannelRunId !== channelRunId || this.realtimeUserId !== userId) return;
+      if (!Array.isArray(notifications) || notifications.length === 0) return;
+
+      const missing = notifications.filter(
+        (notification) => !this.recentlyDeliveredNotificationIds.has(notification.id)
+      );
+      if (missing.length === 0) return;
+
+      const ordered = [...missing].sort((a, b) => {
+        const aTime = new Date(a.createdAt).getTime();
+        const bTime = new Date(b.createdAt).getTime();
+        return aTime - bTime;
+      });
+
+      for (const notification of ordered) {
+        this.rememberDeliveredNotification(notification.id);
+        this.listeners.forEach((listener) => {
+          try {
+            listener(notification);
+          } catch (error) {
+            logger.error('Error in notification listener during reconnect backfill', { error });
+          }
+        });
+      }
+    } catch (error) {
+      logger.warn('Notification reconnect backfill failed', { userId, error });
+    }
+  }
 
   // ===========================================================================
   // NOTIFICATIONS CRUD
@@ -539,6 +599,7 @@ class NotificationServiceClass {
       this.realtimeChannel = null;
       this.realtimeUserId = null;
       this.realtimeChannelRunId += 1;
+      this.resetDeliveredNotificationCache();
     }
 
     // Set up Supabase realtime channel if not already done
@@ -601,7 +662,12 @@ class NotificationServiceClass {
 
             const notification: SocialNotification = {
               id: n.id,
-              type: n.type,
+              type: normalizeNotificationType(
+                String(n.type || ''),
+                (n.data || null) as Record<string, any> | null,
+                n.title || null,
+                n.body || null
+              ),
               title: n.title,
               body: n.body,
               isRead: n.is_read,
@@ -623,6 +689,7 @@ class NotificationServiceClass {
             ) {
               return;
             }
+            this.rememberDeliveredNotification(notification.id);
             this.listeners.forEach((listener) => {
               try {
                 listener(notification);
@@ -632,7 +699,18 @@ class NotificationServiceClass {
             });
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (
+            this.realtimeChannelRunId !== channelRunId ||
+            this.realtimeUserId !== channelUserId
+          ) {
+            return;
+          }
+
+          if (status === 'SUBSCRIBED') {
+            void this.backfillNotificationsAfterReconnect(channelUserId, channelRunId);
+          }
+        });
     }
 
     // Return unsubscribe function
@@ -645,6 +723,7 @@ class NotificationServiceClass {
         this.realtimeChannel = null;
         this.realtimeUserId = null;
         this.realtimeChannelRunId += 1;
+        this.resetDeliveredNotificationCache();
       }
     };
   }
@@ -660,6 +739,7 @@ class NotificationServiceClass {
       this.realtimeUserId = null;
       this.realtimeChannelRunId += 1;
     }
+    this.resetDeliveredNotificationCache();
     logger.info('Unsubscribed from all notifications');
   }
 
