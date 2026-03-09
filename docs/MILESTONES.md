@@ -237,6 +237,27 @@ Manual:
    - `org_access_invite_panel`
 5. Run `npm test -- app/__tests__/qa-matrix-hooks.contract.test.ts` as a targeted contract check.
 
+## M19 — Release Candidate Gate + Evidence Pack
+Acceptance:
+- Single command gate exists: `node scripts/release-candidate-gate.mjs`.
+- Gate bundles:
+  - `npm run typecheck`
+  - QA matrix automation coverage (`node scripts/qa-matrix-coverage.mjs`)
+  - multi-org smoke harness (`node scripts/smoke-multi-org-demo.mjs`)
+  - API smoke deploy check (`node scripts/run-api-smoke-deploy.mjs`)
+  - integration validation (`node scripts/run-integration-validation.mjs`)
+- Gate writes machine-readable report: `docs/release-candidate-latest.json`.
+- Gate writes artifact index/evidence summary: `docs/RELEASE_CANDIDATE_ARTIFACTS.md`.
+- Console output remains machine-readable (`rc_<id>|PASS/FAIL/SKIP|detail`).
+
+Manual:
+1. Run `node scripts/release-candidate-gate.mjs`.
+2. Confirm command emits `rc_report_json|INFO|docs/release-candidate-latest.json`.
+3. Confirm command emits `rc_artifact_index|INFO|docs/RELEASE_CANDIDATE_ARTIFACTS.md`.
+4. Open `docs/release-candidate-latest.json` and verify overall + per-step statuses are present.
+5. Open `docs/RELEASE_CANDIDATE_ARTIFACTS.md` and verify artifact checklist includes smoke/api/integration outputs.
+6. Optional scoped run (local-only, no remote probes): `node scripts/release-candidate-gate.mjs --skip-smoke --skip-api --skip-integration`.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -256,3 +277,4 @@ Manual:
 - M16 completed (hardened artifact queue/detail status gating, added contract guards, and expanded QA matrix for coach artifact review states).
 - M17 completed (added reconnect backfill and ordering guards for membership + notifications realtime streams with contract coverage).
 - M18 completed (mapped QA matrix rows to automation hooks/commands, added coverage gate script, and extended smoke/contract hook IDs).
+- M19 completed (added single-command release candidate gate plus machine-readable report and artifact index outputs in docs).

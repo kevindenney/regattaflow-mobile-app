@@ -1,0 +1,104 @@
+{
+  "generatedAt": "2026-03-09T00:48:30.159Z",
+  "startedAt": "2026-03-09T00:48:25.230Z",
+  "overall": "PASS",
+  "summary": {
+    "total": 5,
+    "pass": 2,
+    "fail": 0,
+    "skip": 3
+  },
+  "results": [
+    {
+      "id": "typecheck",
+      "category": "quality",
+      "status": "PASS",
+      "command": "npm run typecheck",
+      "durationMs": 4907,
+      "detail": "npm run typecheck (4907ms)",
+      "stdoutTail": [
+        "> regattaflow-app@1.0.0 typecheck",
+        "> npx tsc --noEmit"
+      ],
+      "stderrTail": [
+        ""
+      ]
+    },
+    {
+      "id": "qa_matrix_coverage",
+      "category": "quality",
+      "status": "PASS",
+      "command": "node scripts/qa-matrix-coverage.mjs",
+      "durationMs": 21,
+      "detail": "node scripts/qa-matrix-coverage.mjs (21ms)",
+      "stdoutTail": [
+        "qa_matrix_rows|INFO|total=21",
+        "qa_matrix_automated_rows|INFO|automated=21",
+        "qa_matrix_automation_ratio|PASS|21/21 (100.0%) min=60%"
+      ],
+      "stderrTail": [
+        ""
+      ]
+    },
+    {
+      "id": "smoke_multi_org_demo",
+      "category": "smoke",
+      "status": "SKIP",
+      "command": "node scripts/smoke-multi-org-demo.mjs",
+      "durationMs": 0,
+      "detail": "Skipped via --skip-smoke",
+      "stdoutTail": [],
+      "stderrTail": []
+    },
+    {
+      "id": "api_smoke_deploy",
+      "category": "api",
+      "status": "SKIP",
+      "command": "node scripts/run-api-smoke-deploy.mjs",
+      "durationMs": 0,
+      "detail": "Skipped via --skip-api",
+      "stdoutTail": [],
+      "stderrTail": []
+    },
+    {
+      "id": "integration_validation",
+      "category": "integration",
+      "status": "SKIP",
+      "command": "node scripts/run-integration-validation.mjs",
+      "durationMs": 0,
+      "detail": "Skipped via --skip-integration",
+      "stdoutTail": [],
+      "stderrTail": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "docs/QA_MATRIX.md",
+      "note": "Matrix rows + automation hook IDs"
+    },
+    {
+      "path": "docs/MILESTONES.md",
+      "note": "Milestone acceptance/manual log"
+    },
+    {
+      "path": "docs/release-candidate-latest.json",
+      "note": "Machine-readable release gate output"
+    },
+    {
+      "path": "docs/RELEASE_CANDIDATE_ARTIFACTS.md",
+      "note": "Human-readable artifact index and command outcomes"
+    },
+    {
+      "path": "docs/api-smoke-deploy.md",
+      "note": "API smoke details (when API smoke runs)"
+    },
+    {
+      "path": "docs/integration-validation-latest.md",
+      "note": "Integration validation report (when integration validation runs)"
+    },
+    {
+      "path": "/tmp/multi-org-smoke.png",
+      "note": "Browser smoke screenshot artifact (when smoke runs with browser)"
+    }
+  ]
+}
