@@ -11,6 +11,16 @@ describe('social notifications retention rendering contract', () => {
     expect(source).toContain("'new_message'");
     expect(source).toContain("'thread_mention'");
     expect(source).toContain("'activity_comment'");
+    expect(source).toContain("'org_membership_approved'");
+    expect(source).toContain("'org_membership_rejected'");
+  });
+
+  it('normalizes legacy org_membership_decision rows to canonical approved/rejected types', () => {
+    const source = readFile('services/NotificationService.ts');
+    expect(source).toContain("normalizedRaw !== 'org_membership_decision'");
+    expect(source).toContain('normalizeMembershipDecisionType(');
+    expect(source).toContain("return 'org_membership_rejected'");
+    expect(source).toContain("return 'org_membership_approved'");
   });
 
   it('renders actor-less notifications using title/body instead of \"Someone\" fallback', () => {

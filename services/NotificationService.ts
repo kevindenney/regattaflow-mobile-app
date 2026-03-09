@@ -71,6 +71,65 @@ export interface NotificationStats {
   totalCount: number;
 }
 
+const CANONICAL_NOTIFICATION_TYPES: ReadonlySet<SocialNotificationType> = new Set([
+  'new_follower',
+  'followed_user_race',
+  'race_like',
+  'race_comment',
+  'race_comment_reply',
+  'race_result_posted',
+  'achievement_earned',
+  'new_message',
+  'thread_mention',
+  'activity_comment',
+  'org_membership_approved',
+  'org_membership_rejected',
+]);
+
+function normalizeMembershipDecisionType(
+  rawType: string,
+  data: Record<string, any> | null | undefined,
+  title: string | null | undefined,
+  body: string | null | undefined
+): SocialNotificationType | null {
+  const normalizedRaw = String(rawType || '').trim().toLowerCase();
+  if (normalizedRaw !== 'org_membership_decision') return null;
+
+  const decision = String(data?.decision || data?.membership_decision || '')
+    .trim()
+    .toLowerCase();
+  if (decision === 'rejected' || decision === 'declined') return 'org_membership_rejected';
+  if (decision === 'approved' || decision === 'accepted') return 'org_membership_approved';
+
+  const signal = `${String(title || '')} ${String(body || '')}`.toLowerCase();
+  if (
+    signal.includes('not approved') ||
+    signal.includes('rejected') ||
+    signal.includes('declined')
+  ) {
+    return 'org_membership_rejected';
+  }
+
+  return 'org_membership_approved';
+}
+
+function normalizeNotificationType(
+  rawType: string,
+  data: Record<string, any> | null | undefined,
+  title: string | null | undefined,
+  body: string | null | undefined
+): SocialNotificationType {
+  const decisionType = normalizeMembershipDecisionType(rawType, data, title, body);
+  if (decisionType) return decisionType;
+
+  const normalizedRaw = String(rawType || '').trim().toLowerCase();
+  if (CANONICAL_NOTIFICATION_TYPES.has(normalizedRaw as SocialNotificationType)) {
+    return normalizedRaw as SocialNotificationType;
+  }
+
+  return 'activity_comment';
+}
+
 // =============================================================================
 // SERVICE CLASS
 // =============================================================================
@@ -182,10 +241,16 @@ class NotificationServiceClass {
 
     const notifications: SocialNotification[] = data.map((n: any) => {
       const actor = n.actor_id ? actorMap.get(n.actor_id) : undefined;
+      const normalizedType = normalizeNotificationType(
+        String(n.type || ''),
+        (n.data || null) as Record<string, any> | null,
+        n.title || null,
+        n.body || null
+      );
 
       return {
         id: n.id,
-        type: n.type,
+        type: normalizedType,
         title: n.title,
         body: n.body,
         isRead: n.is_read,

@@ -143,6 +143,18 @@ Manual:
 4. In admin session, open `/learn` and confirm `Organization access` appears in Admin tools.
 5. Click `Organization access` and confirm invite composer/history render in `/settings/organization-access`.
 
+## M13 — Notification Contract Stabilization
+Acceptance:
+- Membership decision notifications normalize to canonical types (`org_membership_approved` / `org_membership_rejected`) even when legacy rows use `org_membership_decision`.
+- Grouped/all notification modes avoid duplicate semantic buckets caused by legacy vs canonical type mismatch.
+- Contract test coverage explicitly checks canonical membership decision notification handling in service layer.
+
+Manual:
+1. Trigger an org membership approval and rejection flow.
+2. Open `/social-notifications` and switch between `Grouped` and `All`.
+3. Verify decision notifications do not fork into duplicate type buckets for the same semantic event.
+4. Confirm legacy decision rows (if present) render as approved/rejected semantics, not an unknown type.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -156,3 +168,4 @@ Manual:
 - M10 completed (added canonical reset wrapper `scripts/reset-multi-org-demo.mjs` and deterministic SQL packet `docs/RESET_SQL.md`).
 - M11 completed (enhanced smoke harness with dual-session DB-backed pending->active verification and updated QA matrix).
 - M12 completed (hardened invite-only UX with requester token path and admin invite-management shortcut from Learn).
+- M13 completed (normalized legacy org membership decision notification types and added service contract checks).
