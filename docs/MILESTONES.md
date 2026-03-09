@@ -92,6 +92,25 @@ Manual:
 1. Run `node scripts/smoke-multi-org-demo.mjs`.
 2. Confirm `/tmp/multi-org-smoke.png` is generated and review any FAIL rows.
 
+## M10 — Canonical Demo Reset Script
+Acceptance:
+- `scripts/reset-multi-org-demo.mjs` resets demo org/persona state deterministically.
+- Script is idempotent and prints machine-readable `PASS/FAIL` lines by step.
+- Works in auto mode with `psql` + DB URL, and has deterministic SQL fallback packet.
+- Ensures:
+  - JHSON `open_join`, `allowed_email_domains=['jhu.edu']`, `interest_slug='nursing'`
+  - RHKYC `request_to_join`, `interest_slug='sail-racing'`
+  - Admin active `admin` membership in both orgs
+  - Requester active in JHSON and pending in RHKYC
+  - One cohort + one template linked to cohort in each org
+  - Optional bounded cleanup of old membership-decision notifications for requester
+
+Manual:
+1. Run:
+   `DEMO_ADMIN_EMAIL=\"kevin@oceanflow.io\" DEMO_REQUESTER_EMAIL=\"jhu2@jhu.edu\" DEMO_RESET_DB_URL=\"postgres://...\" node scripts/reset-multi-org-demo.mjs`
+2. Confirm script outputs `reset_verify|PASS|ok` and `reset_complete|PASS|...`.
+3. If DB URL/`psql` is unavailable, execute fallback steps from `docs/RESET_SQL.md`.
+
 ## Manual Verification Log
 - M1 completed (migration + typecheck).
 - M2 completed (domain-gated join modes).
@@ -102,3 +121,4 @@ Manual:
 - M7 completed (Learn already shows admin tool shortcuts for admins and enforces safe leave/orphan guards).
 - M8 completed (removed remaining org-admin dev diagnostic text from members/cohorts/cohort detail surfaces).
 - M9 completed (added `scripts/smoke-multi-org-demo.mjs` and documented usage).
+- M10 completed (added canonical reset wrapper `scripts/reset-multi-org-demo.mjs` and deterministic SQL packet `docs/RESET_SQL.md`).
