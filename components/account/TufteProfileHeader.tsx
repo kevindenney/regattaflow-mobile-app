@@ -25,6 +25,7 @@ import { accountStyles, getInitials, formatMemberSince } from './accountStyles';
 import { IOSListSection } from '@/components/ui/ios/IOSListSection';
 import { supabase } from '@/services/supabase';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 
 interface ProfileUpdates {
   full_name?: string;
@@ -58,6 +59,7 @@ export function TufteProfileHeader({
   const memberSinceText = formatMemberSince(memberSince);
   const [localAvatarUrl, setLocalAvatarUrl] = useState(avatarUrl);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const safeAvatarUrl = getSafeImageUri(localAvatarUrl);
 
   // Update local avatar when prop changes
   React.useEffect(() => {
@@ -222,8 +224,8 @@ export function TufteProfileHeader({
           disabled={!onSave || uploadingAvatar}
           activeOpacity={0.7}
         >
-          {localAvatarUrl ? (
-            <Image source={{ uri: localAvatarUrl }} style={accountStyles.profileAvatar} />
+          {safeAvatarUrl ? (
+            <Image source={{ uri: safeAvatarUrl }} style={accountStyles.profileAvatar} />
           ) : (
             <View style={accountStyles.profileAvatar}>
               <Text style={accountStyles.profileAvatarText}>{initials}</Text>

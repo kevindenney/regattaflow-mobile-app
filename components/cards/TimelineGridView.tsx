@@ -6,7 +6,7 @@
  * Tapping a mini card zooms back to that race in the CardGrid.
  */
 
-import React, { useMemo, useRef, useCallback, useState } from 'react';
+import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -51,6 +51,8 @@ interface TimelineGridViewProps {
   onBulkUpdateStatus?: (raceIds: string[], status: 'completed' | 'planned') => Promise<void> | void;
   /** Bulk delete selected steps */
   onBulkDeleteRaces?: (raceIds: string[]) => Promise<void> | void;
+  /** Persist reordered timeline race IDs */
+  onReorderRaces?: (orderedRaceIds: string[]) => Promise<void> | void;
 }
 
 interface MonthGroup {
@@ -58,6 +60,7 @@ interface MonthGroup {
   label: string;
   races: { race: CardRaceData; index: number }[];
 }
+type IndexedRace = { race: CardRaceData; index: number };
 
 // =============================================================================
 // HELPERS
@@ -68,10 +71,10 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-function groupByMonth(races: CardRaceData[]): MonthGroup[] {
+function groupByMonthIndexed(indexedRaces: IndexedRace[]): MonthGroup[] {
   const groups = new Map<string, MonthGroup>();
 
-  races.forEach((race, index) => {
+  indexedRaces.forEach(({ race, index }) => {
     const dateStr = (race as any).start_date || race.date;
     const d = new Date(dateStr);
     const year = d.getFullYear();
@@ -132,6 +135,12 @@ const MiniCard = React.memo(function MiniCard({
   onOpenMenu,
   onCloseMenu,
   onPress,
+  isReorderMode = false,
+  isDragging = false,
+  onDragStartCard,
+  onDragEnterCard,
+  onDropCard,
+  onLongPressCard,
 }: {
   race: CardRaceData;
   isSelected: boolean;
@@ -143,6 +152,12 @@ const MiniCard = React.memo(function MiniCard({
   onOpenMenu: () => void;
   onCloseMenu: () => void;
   onPress: () => void;
+  isReorderMode?: boolean;
+  isDragging?: boolean;
+  onDragStartCard?: () => void;
+  onDragEnterCard?: () => void;
+  onDropCard?: () => void;
+  onLongPressCard?: () => void;
 }) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
@@ -157,12 +172,32 @@ const MiniCard = React.memo(function MiniCard({
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
   const isBlankActivity = (race as any).metadata?.event_subtype === 'blank_activity';
 
+  const webDnDProps: any = Platform.OS === 'web' && isReorderMode
+    ? {
+        draggable: true,
+        onDragStart: () => onDragStartCard?.(),
+        onDragEnter: (event: any) => {
+          event?.preventDefault?.();
+          onDragEnterCard?.();
+        },
+        onDragOver: (event: any) => {
+          event?.preventDefault?.();
+        },
+        onDrop: (event: any) => {
+          event?.preventDefault?.();
+          onDropCard?.();
+        },
+      }
+    : {};
+
   return (
     <AnimatedPressable
       style={[
         miniStyles.card,
         isSelected && miniStyles.cardSelected,
         isNext && miniStyles.cardNext,
+        isReorderMode && miniStyles.cardReorderMode,
+        isDragging && miniStyles.cardDragging,
         animStyle,
       ]}
       onPress={() => {
@@ -173,19 +208,22 @@ const MiniCard = React.memo(function MiniCard({
         triggerHaptic('selection');
         onPress();
       }}
+      onLongPress={isReorderMode && Platform.OS !== 'web' ? onLongPressCard : undefined}
+      delayLongPress={140}
       onPressIn={() => {
         scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
       }}
       onPressOut={() => {
         scale.value = withSpring(1, { damping: 15, stiffness: 300 });
       }}
+      {...webDnDProps}
     >
       <View style={miniStyles.topRow}>
         {/* Status badge */}
         <View style={[miniStyles.statusBadge, { backgroundColor: statusColor }]}>
           <Text style={miniStyles.statusText}>{statusLabel}</Text>
         </View>
-        {canManage && (onEdit || onDelete) ? (
+        {canManage && !isReorderMode && (onEdit || onDelete) ? (
           <Pressable
             style={miniStyles.menuButton}
             onPress={(event) => {
@@ -282,12 +320,16 @@ export function TimelineGridView({
   topInset = 0,
   onBulkUpdateStatus,
   onBulkDeleteRaces,
+  onReorderRaces,
 }: TimelineGridViewProps) {
   const { width: screenWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
   const [openMenuRaceId, setOpenMenuRaceId] = useState<string | null>(null);
   const [bulkMode, setBulkMode] = useState(false);
+  const [reorderMode, setReorderMode] = useState(false);
   const [selectedRaceIds, setSelectedRaceIds] = useState<Set<string>>(new Set());
+  const [orderedIds, setOrderedIds] = useState<string[]>([]);
+  const [dragRaceId, setDragRaceId] = useState<string | null>(null);
 
   // Responsive columns
   const columns = screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : 2;
@@ -295,8 +337,56 @@ export function TimelineGridView({
   const gap = 10;
   const cardWidth = (screenWidth - horizontalPadding * 2 - gap * (columns - 1)) / columns;
 
-  // Group races by month
-  const monthGroups = useMemo(() => groupByMonth(races), [races]);
+  useEffect(() => {
+    const incomingIds = races.map((race) => race.id);
+    setOrderedIds((prev) => {
+      if (prev.length === 0) return incomingIds;
+      const next = prev.filter((id) => incomingIds.includes(id));
+      for (const id of incomingIds) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
+  }, [races]);
+
+  const orderedRaces = useMemo(() => {
+    if (orderedIds.length === 0) return races;
+    const raceById = new Map(races.map((race) => [race.id, race]));
+    const ordered = orderedIds
+      .map((id) => raceById.get(id))
+      .filter((race): race is CardRaceData => !!race);
+    for (const race of races) {
+      if (!ordered.some((row) => row.id === race.id)) {
+        ordered.push(race);
+      }
+    }
+    return ordered;
+  }, [orderedIds, races]);
+
+  const indexedRaces = useMemo<IndexedRace[]>(
+    () => orderedRaces.map((race, index) => ({ race, index })),
+    [orderedRaces],
+  );
+  const doneIndexedRaces = useMemo<IndexedRace[]>(() => {
+    if (nextRaceIndex != null) {
+      return indexedRaces.filter(({ index }) => index < nextRaceIndex);
+    }
+    return indexedRaces.filter(({ race }) => {
+      const dateStr = (race as any).start_date || race.date;
+      return isRacePast(dateStr, race.startTime);
+    });
+  }, [indexedRaces, nextRaceIndex]);
+  const plannedIndexedRaces = useMemo<IndexedRace[]>(() => {
+    if (nextRaceIndex != null) {
+      return indexedRaces.filter(({ index }) => index >= nextRaceIndex);
+    }
+    return indexedRaces.filter(({ race }) => {
+      const dateStr = (race as any).start_date || race.date;
+      return !isRacePast(dateStr, race.startTime);
+    });
+  }, [indexedRaces, nextRaceIndex]);
+  const plannedGroups = useMemo(() => groupByMonthIndexed(plannedIndexedRaces), [plannedIndexedRaces]);
+  const doneGroups = useMemo(() => groupByMonthIndexed(doneIndexedRaces), [doneIndexedRaces]);
 
   const handleSelectRace = useCallback(
     (index: number, race: CardRaceData) => {
@@ -320,11 +410,51 @@ export function TimelineGridView({
 
   const selectedIdsArray = useMemo(() => Array.from(selectedRaceIds), [selectedRaceIds]);
   const canBulkEdit = Boolean(onBulkUpdateStatus || onBulkDeleteRaces);
+  const canReorder = Boolean(onReorderRaces);
+
+  useEffect(() => {
+    if (!canReorder && reorderMode) {
+      setReorderMode(false);
+      setDragRaceId(null);
+    }
+  }, [canReorder, reorderMode]);
 
   const clearBulk = useCallback(() => {
     setBulkMode(false);
     setSelectedRaceIds(new Set());
   }, []);
+
+  const applyReorder = useCallback((fromId: string, toId: string) => {
+    if (!fromId || !toId || fromId === toId) return;
+    setOrderedIds((prev) => {
+      const current = prev.length ? [...prev] : races.map((race) => race.id);
+      const fromIdx = current.indexOf(fromId);
+      const toIdx = current.indexOf(toId);
+      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return current;
+      const next = [...current];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      void onReorderRaces?.(next);
+      return next;
+    });
+  }, [onReorderRaces, races]);
+
+  const handleCardPress = useCallback((index: number, race: CardRaceData) => {
+    if (reorderMode && Platform.OS !== 'web') {
+      if (!dragRaceId) {
+        setDragRaceId(race.id);
+        return;
+      }
+      if (dragRaceId === race.id) {
+        setDragRaceId(null);
+        return;
+      }
+      applyReorder(dragRaceId, race.id);
+      setDragRaceId(null);
+      return;
+    }
+    handleSelectRace(index, race);
+  }, [applyReorder, dragRaceId, handleSelectRace, reorderMode]);
 
   return (
     <Animated.View
@@ -361,11 +491,25 @@ export function TimelineGridView({
                 </Text>
               </Pressable>
             )}
+            {canReorder ? (
+              <Pressable
+                style={[gridStyles.bulkChip, reorderMode && gridStyles.bulkChipActive]}
+                onPress={() => {
+                  setReorderMode((prev) => !prev);
+                  setBulkMode(false);
+                  setSelectedRaceIds(new Set());
+                }}
+              >
+                <Text style={[gridStyles.bulkChipText, reorderMode && gridStyles.bulkChipTextActive]}>
+                  {reorderMode ? 'Reordering…' : 'Reorder'}
+                </Text>
+              </Pressable>
+            ) : null}
             {nextRaceIndex != null && nextRaceIndex >= 0 && (
               <View style={gridStyles.summaryNextBadge}>
                 <View style={gridStyles.summaryNextDot} />
                 <Text style={gridStyles.summaryNextText}>
-                  Next: {races[nextRaceIndex]?.name || 'Upcoming'}
+                  Next: {orderedRaces[nextRaceIndex]?.name || 'Upcoming'}
                 </Text>
               </View>
             )}
@@ -401,7 +545,13 @@ export function TimelineGridView({
           )}
         </View>
 
-        {monthGroups.map((group) => (
+        {reorderMode && Platform.OS !== 'web' ? (
+          <View style={gridStyles.reorderHelpBar}>
+            <Text style={gridStyles.reorderHelpText}>Long-press a step, then tap another step to move it.</Text>
+          </View>
+        ) : null}
+
+        {plannedGroups.map((group) => (
           <View key={group.key} style={gridStyles.monthSection}>
             {/* Month header */}
             <Text style={gridStyles.monthHeader}>{group.label}</Text>
@@ -425,8 +575,85 @@ export function TimelineGridView({
                     isMenuOpen={openMenuRaceId === race.id}
                     onOpenMenu={() => setOpenMenuRaceId(race.id)}
                     onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
-                    onPress={() => handleSelectRace(index, race)}
+                    onPress={() => handleCardPress(index, race)}
+                    isReorderMode={reorderMode}
+                    isDragging={dragRaceId === race.id}
+                    onLongPressCard={() => {
+                      if (!reorderMode || Platform.OS === 'web') return;
+                      setDragRaceId(race.id);
+                    }}
+                    onDragStartCard={() => setDragRaceId(race.id)}
+                    onDragEnterCard={() => {
+                      if (dragRaceId && dragRaceId !== race.id) {
+                        applyReorder(dragRaceId, race.id);
+                      }
+                    }}
+                    onDropCard={() => {
+                      if (dragRaceId && dragRaceId !== race.id) {
+                        applyReorder(dragRaceId, race.id);
+                      }
+                      setDragRaceId(null);
+                    }}
                   />
+                    );
+                  })()}
+                </View>
+              ))}
+            </View>
+          </View>
+        ))}
+
+        {plannedGroups.length > 0 && doneGroups.length > 0 ? (
+          <View style={gridStyles.nowDividerWrap}>
+            <View style={gridStyles.nowDividerLine} />
+            <View style={gridStyles.nowDividerBadge}>
+              <Text style={gridStyles.nowDividerBadgeText}>NOW</Text>
+            </View>
+            <View style={gridStyles.nowDividerLine} />
+          </View>
+        ) : null}
+
+        {doneGroups.map((group) => (
+          <View key={`done-${group.key}`} style={gridStyles.monthSection}>
+            <Text style={gridStyles.monthHeaderDone}>{group.label}</Text>
+            <View style={[gridStyles.grid, { gap }]}>
+              {group.races.map(({ race, index }) => (
+                <View key={race.id} style={{ width: cardWidth }}>
+                  {(() => {
+                    const canManage = !!userId && race.created_by === userId && !race.isDemo;
+                    const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
+                    const handleDelete = canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined;
+                    return (
+                      <MiniCard
+                        race={race}
+                        isSelected={bulkMode ? selectedRaceIds.has(race.id) : race.id === selectedRaceId}
+                        isNext={index === nextRaceIndex}
+                        canManage={canManage}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        isMenuOpen={openMenuRaceId === race.id}
+                        onOpenMenu={() => setOpenMenuRaceId(race.id)}
+                        onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
+                        onPress={() => handleCardPress(index, race)}
+                        isReorderMode={reorderMode}
+                        isDragging={dragRaceId === race.id}
+                        onLongPressCard={() => {
+                          if (!reorderMode || Platform.OS === 'web') return;
+                          setDragRaceId(race.id);
+                        }}
+                        onDragStartCard={() => setDragRaceId(race.id)}
+                        onDragEnterCard={() => {
+                          if (dragRaceId && dragRaceId !== race.id) {
+                            applyReorder(dragRaceId, race.id);
+                          }
+                        }}
+                        onDropCard={() => {
+                          if (dragRaceId && dragRaceId !== race.id) {
+                            applyReorder(dragRaceId, race.id);
+                          }
+                          setDragRaceId(null);
+                        }}
+                      />
                     );
                   })()}
                 </View>
@@ -484,6 +711,21 @@ const miniStyles = StyleSheet.create({
   cardNext: {
     borderWidth: 2,
     borderColor: IOS_COLORS.green,
+  },
+  cardReorderMode: {
+    ...Platform.select({
+      web: {
+        cursor: 'grab',
+      } as any,
+    }),
+  },
+  cardDragging: {
+    opacity: 0.55,
+    ...Platform.select({
+      web: {
+        cursor: 'grabbing',
+      } as any,
+    }),
   },
   statusBadge: {
     alignSelf: 'flex-start',
@@ -690,6 +932,15 @@ const gridStyles = StyleSheet.create({
   bulkDeleteText: {
     color: '#B91C1C',
   },
+  reorderHelpBar: {
+    marginBottom: 10,
+    paddingHorizontal: 6,
+  },
+  reorderHelpText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+  },
   monthSection: {
     marginBottom: 20,
   },
@@ -700,8 +951,40 @@ const gridStyles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 4,
   },
+  monthHeaderDone: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  nowDividerWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  nowDividerLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#CBD5E1',
+  },
+  nowDividerBadge: {
+    backgroundColor: '#0EA5E9',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  nowDividerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

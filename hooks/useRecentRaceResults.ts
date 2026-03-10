@@ -13,6 +13,18 @@ import { createLogger } from '@/lib/utils/logger';
 
 // Module-level cache: skip all queries once the table/columns are confirmed missing
 let tableUnavailable = false;
+const CACHE_TTL_MS = 60_000;
+
+type RecentRow = {
+  regatta_id?: string | null;
+  race_id?: string | null;
+  start_time: string;
+  self_reported_position: number | null;
+  self_reported_fleet_size: number | null;
+};
+
+const recentRowsCache = new Map<string, { expiresAt: number; rows: RecentRow[] }>();
+const inFlightByUser = new Map<string, Promise<RecentRow[]>>();
 
 export interface RecentRacePosition {
   raceId: string;
@@ -29,6 +41,61 @@ interface UseRecentRaceResultsResult {
 }
 
 const logger = createLogger('useRecentRaceResults');
+
+async function loadRecentRowsForUser(userId: string, limit: number): Promise<RecentRow[]> {
+  if (tableUnavailable) return [];
+
+  const now = Date.now();
+  const cached = recentRowsCache.get(userId);
+  if (cached && cached.expiresAt > now) return cached.rows;
+
+  const inFlight = inFlightByUser.get(userId);
+  if (inFlight) return inFlight;
+
+  const baseLimit = Math.max(limit * 4, 24);
+
+  const request = (async (): Promise<RecentRow[]> => {
+    let query = supabase
+      .from('race_timer_sessions')
+      .select('regatta_id, race_id, start_time, self_reported_position, self_reported_fleet_size')
+      .eq('sailor_id', userId)
+      .not('self_reported_position', 'is', null)
+      .not('self_reported_fleet_size', 'is', null)
+      .order('start_time', { ascending: false })
+      .limit(baseLimit);
+
+    let { data, error } = await query;
+    if (isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')) {
+      const fallback = await supabase
+        .from('race_timer_sessions')
+        .select('race_id, start_time, self_reported_position, self_reported_fleet_size')
+        .eq('sailor_id', userId)
+        .not('self_reported_position', 'is', null)
+        .not('self_reported_fleet_size', 'is', null)
+        .order('start_time', { ascending: false })
+        .limit(baseLimit);
+      data = fallback.data as any;
+      error = fallback.error;
+    }
+
+    if (error) {
+      logger.warn('Query error (suppressing future calls)', error);
+      tableUnavailable = true;
+      return [];
+    }
+
+    const rows = (data || []) as RecentRow[];
+    recentRowsCache.set(userId, { rows, expiresAt: Date.now() + CACHE_TTL_MS });
+    return rows;
+  })();
+
+  inFlightByUser.set(userId, request);
+  try {
+    return await request;
+  } finally {
+    inFlightByUser.delete(userId);
+  }
+}
 
 export function useRecentRaceResults(
   userId?: string,
@@ -76,49 +143,19 @@ export function useRecentRaceResults(
       setIsLoading(true);
 
       try {
-        let query = supabase
-          .from('race_timer_sessions')
-          .select('regatta_id, race_id, start_time, self_reported_position, self_reported_fleet_size')
-          .eq('sailor_id', targetUserId)
-          .not('self_reported_position', 'is', null)
-          .not('self_reported_fleet_size', 'is', null)
-          .order('start_time', { ascending: false })
-          .limit(limit + 1); // fetch one extra in case we need to filter current race
-
-        if (targetRaceId) {
-          query = query.neq('regatta_id', targetRaceId);
-        }
-
-        let { data, error } = await query.limit(limit);
-        if (isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')) {
-          let fallbackQuery = supabase
-            .from('race_timer_sessions')
-            .select('race_id, start_time, self_reported_position, self_reported_fleet_size')
-            .eq('sailor_id', targetUserId)
-            .not('self_reported_position', 'is', null)
-            .not('self_reported_fleet_size', 'is', null)
-            .order('start_time', { ascending: false })
-            .limit(limit + 1);
-          if (targetRaceId) {
-            fallbackQuery = fallbackQuery.neq('race_id', targetRaceId);
-          }
-          const fallback = await fallbackQuery.limit(limit);
-          data = fallback.data as any;
-          error = fallback.error;
-        }
-
-        if (error) {
-          logger.warn('Query error (suppressing future calls)', error);
-          tableUnavailable = true;
-          if (!canCommit()) return;
-          setRecentResults([]);
-          return;
-        }
+        const rows = await loadRecentRowsForUser(targetUserId, limit);
 
         if (!canCommit()) return;
 
-        const results: RecentRacePosition[] = (data || []).map((row) => ({
-          raceId: row.regatta_id || row.race_id,
+        const filtered = rows
+          .filter((row) => {
+            if (!targetRaceId) return true;
+            return (row.regatta_id || row.race_id) !== targetRaceId;
+          })
+          .slice(0, limit);
+
+        const results: RecentRacePosition[] = filtered.map((row) => ({
+          raceId: row.regatta_id || row.race_id || '',
           raceName: '', // Not needed for sparkline
           date: row.start_time,
           position: row.self_reported_position as number,

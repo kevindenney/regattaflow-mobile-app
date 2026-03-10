@@ -182,6 +182,8 @@ export const COMMON_FOOTER_ITEMS: NavItem[] = [
   { key: 'account', label: 'Account', route: '/account', icon: 'person-outline' },
 ];
 
+export const LEARNER_FOOTER_ITEMS: NavItem[] = [];
+
 export const INSTITUTION_FOOTER_ITEMS: NavItem[] = [
   { key: 'settings', label: 'Organization Access', route: '/settings/organization-access', icon: 'settings-outline' },
   { key: 'account', label: 'Organization', route: '/(tabs)/profile', icon: 'business-outline' },
@@ -211,7 +213,7 @@ export function getNavItemsForUserType(
 
   switch (userType) {
     case 'coach':
-      return { primary: COACH_NAV_ITEMS, secondary: COMMON_FOOTER_ITEMS };
+      return { primary: COACH_NAV_ITEMS, secondary: LEARNER_FOOTER_ITEMS };
     case 'club':
       if (isProgramWorkspace(workspaceContext?.organizationType, workspaceContext?.activeDomain)) {
         return {
@@ -233,7 +235,7 @@ export function getNavItemsForUserType(
           ? { ...item, label: eventTitle, route: learnerPrimaryRoute }
           : item
       );
-      return { primary, secondary: [...SAILOR_SECONDARY_ITEMS, ...COMMON_FOOTER_ITEMS] };
+      return { primary, secondary: [...SAILOR_SECONDARY_ITEMS, ...LEARNER_FOOTER_ITEMS] };
     }
   }
 }

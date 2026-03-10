@@ -297,6 +297,7 @@ export default function RacesScreen() {
   const [selectedDemoRaceId, setSelectedDemoRaceId] = useState<string | null>(MOCK_RACES[0]?.id ?? null);
   const [deletingRaceId, setDeletingRaceId] = useState<string | null>(null);
   const isDeletingRace = deletingRaceId !== null;
+  const [timelineCustomOrderIds, setTimelineCustomOrderIds] = useState<string[]>([]);
   const [raceDetailReloadKey, setRaceDetailReloadKey] = useState(0);
   // Trigger for AfterRaceContent to refetch data after PostRaceInterview completes
   const [refetchTrigger, setRefetchTrigger] = useState(0);
@@ -422,6 +423,10 @@ export default function RacesScreen() {
   // and events matching the active interest's slug for all others.
   const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
   const interestSlug = eventConfig.interestSlug;
+  const timelineOrderStorageKey = useMemo(
+    () => `timeline_custom_order:${user?.id || 'guest'}:${interestSlug}`,
+    [interestSlug, user?.id],
+  );
   const interestFilteredRaces = useMemo(() => {
     if (isSailingInterest) return liveRaces;
     // For non-sailing interests, show events whose metadata.interest_slug matches
@@ -440,6 +445,32 @@ export default function RacesScreen() {
       hasLoadedRacesOnce.current = true;
     }
   }, [liveRacesLoading, interestFilteredRaces]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadTimelineOrder = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(timelineOrderStorageKey);
+        const parsed = raw ? JSON.parse(raw) : [];
+        const normalized = Array.isArray(parsed)
+          ? parsed
+              .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+              .filter((entry) => entry.length > 0)
+          : [];
+        if (!cancelled) {
+          setTimelineCustomOrderIds(normalized);
+        }
+      } catch {
+        if (!cancelled) {
+          setTimelineCustomOrderIds([]);
+        }
+      }
+    };
+    void loadTimelineOrder();
+    return () => {
+      cancelled = true;
+    };
+  }, [timelineOrderStorageKey]);
 
   const scrollToPosition = useCallback((position: number) => {
     if (!mainScrollViewRef.current) {
@@ -873,6 +904,54 @@ export default function RacesScreen() {
     }));
   }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline, timelineStatusOverrides]);
 
+  const orderedBaseCardGridRaces: CardRaceData[] = useMemo(() => {
+    if (isViewingOtherTimeline || timelineCustomOrderIds.length === 0) {
+      return baseCardGridRaces;
+    }
+    const raceById = new Map(baseCardGridRaces.map((race) => [race.id, race]));
+    const ordered = timelineCustomOrderIds
+      .map((id) => raceById.get(id))
+      .filter((race): race is CardRaceData => !!race);
+    for (const race of baseCardGridRaces) {
+      if (!ordered.some((entry) => entry.id === race.id)) {
+        ordered.push(race);
+      }
+    }
+    return ordered;
+  }, [baseCardGridRaces, isViewingOtherTimeline, timelineCustomOrderIds]);
+
+  useEffect(() => {
+    if (isViewingOtherTimeline) return;
+    const validIds = new Set(baseCardGridRaces.map((race) => race.id));
+    setTimelineCustomOrderIds((prev) => {
+      const next = prev.filter((id) => validIds.has(id));
+      if (next.length === prev.length && next.every((id, idx) => id === prev[idx])) {
+        return prev;
+      }
+      return next;
+    });
+  }, [baseCardGridRaces, isViewingOtherTimeline]);
+
+  const handleTimelineGridReorder = useCallback(async (orderedRaceIds: string[]) => {
+    if (isViewingOtherTimeline) return;
+    const validIds = new Set(baseCardGridRaces.map((race) => race.id));
+    const deduped: string[] = [];
+    for (const id of orderedRaceIds) {
+      if (!validIds.has(id) || deduped.includes(id)) continue;
+      deduped.push(id);
+    }
+    const missingIds = baseCardGridRaces
+      .map((race) => race.id)
+      .filter((id) => !deduped.includes(id));
+    const nextOrder = [...deduped, ...missingIds];
+    setTimelineCustomOrderIds(nextOrder);
+    try {
+      await AsyncStorage.setItem(timelineOrderStorageKey, JSON.stringify(nextOrder));
+    } catch (error) {
+      logger.warn('Unable to persist timeline reorder', { error });
+    }
+  }, [baseCardGridRaces, isViewingOtherTimeline, logger, timelineOrderStorageKey]);
+
   // Calculate current season week (ISO week number with 'W' prefix)
   const currentSeasonWeek = useMemo(() => {
     const now = new Date();
@@ -887,7 +966,7 @@ export default function RacesScreen() {
     status: 'completed' | 'planned',
     opts?: {indexHint?: number}
   ) => {
-    const race = baseCardGridRaces.find((entry) => entry.id === raceId) as any;
+    const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId) as any;
     const nowMs = Date.now();
     const idx = opts?.indexHint ?? 0;
     const rawDate = race?.start_date || race?.date || race?.startTime;
@@ -966,7 +1045,7 @@ export default function RacesScreen() {
         },
       };
     });
-  }, [baseCardGridRaces]);
+  }, [orderedBaseCardGridRaces]);
 
   const handleMoveStepToPlannedNext = useCallback((raceId: string) => {
     if (!raceId) return;
@@ -1474,7 +1553,7 @@ export default function RacesScreen() {
         void (async () => {
           try {
             for (const raceId of raceIds) {
-              const race = baseCardGridRaces.find((row) => row.id === raceId);
+              const race = orderedBaseCardGridRaces.find((row) => row.id === raceId);
               await deleteRaceById(raceId, race?.name, { showSuccessAlert: false, skipRefetch: true });
             }
             await refetchRacesRef.current?.();
@@ -1486,7 +1565,7 @@ export default function RacesScreen() {
       },
       { destructive: true, confirmText: 'Delete' }
     );
-  }, [baseCardGridRaces, deleteRaceById]);
+  }, [orderedBaseCardGridRaces, deleteRaceById]);
 
   // Delete the currently selected race with confirmation
   const handleDeleteSelectedRace = useCallback(() => {
@@ -2828,7 +2907,7 @@ export default function RacesScreen() {
 
   // Enriched CardGrid races - merges detailed data for the selected race
   const cardGridRaces: CardRaceData[] = useMemo(() => {
-    return baseCardGridRaces.map((race) => {
+    return orderedBaseCardGridRaces.map((race) => {
       // Only enrich the selected race with detailed data from hooks
       if (race.id === selectedRaceId) {
         return {
@@ -2867,7 +2946,7 @@ export default function RacesScreen() {
       }
       return race;
     });
-  }, [baseCardGridRaces, selectedRaceId, selectedRaceData, selectedRaceTuningRecommendation, selectedRaceClassName, raceDocumentsForDisplay]);
+  }, [orderedBaseCardGridRaces, selectedRaceId, selectedRaceData, selectedRaceTuningRecommendation, selectedRaceClassName, raceDocumentsForDisplay]);
 
   const profileOnboardingStep = (profile as { onboarding_step?: string } | null | undefined)?.onboarding_step;
 
@@ -3157,6 +3236,7 @@ export default function RacesScreen() {
               }}
               onBulkUpdateStatus={isViewingOtherTimeline ? undefined : handleTimelineGridBulkStatusUpdate}
               onBulkDeleteRaces={isViewingOtherTimeline ? undefined : handleTimelineGridBulkDelete}
+              onReorderRaces={isViewingOtherTimeline ? undefined : handleTimelineGridReorder}
               topInset={totalHeaderHeight}
             />
           ) : (

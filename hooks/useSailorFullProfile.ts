@@ -5,7 +5,7 @@
  * stats, achievements, boats, and follow status.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import {
@@ -13,10 +13,14 @@ import {
   type FullSailorProfile,
 } from '@/services/SailorProfileService';
 import { CrewFinderService } from '@/services/CrewFinderService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useSailorFullProfile');
 
 export function useSailorFullProfile(userId: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const profileFetchRunRef = useRef(0);
 
   const profileQueryKey = ['sailor-full-profile', userId];
 
@@ -28,10 +32,33 @@ export function useSailorFullProfile(userId: string) {
     refetch,
   } = useQuery({
     queryKey: profileQueryKey,
-    queryFn: () => SailorProfileService.getFullProfile(userId, user?.id),
+    queryFn: async () => {
+      const run = ++profileFetchRunRef.current;
+      logger.info('[diagnostic] profile query start', {
+        run,
+        userId,
+        viewerId: user?.id || null,
+      });
+      const profileResult = await SailorProfileService.getFullProfile(userId, user?.id);
+      logger.info('[diagnostic] profile query result', {
+        run,
+        userId,
+        foundProfile: !!profileResult,
+        displayName: profileResult?.displayName || null,
+      });
+      return profileResult;
+    },
     enabled: !!userId,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
+  useEffect(() => {
+    if (!error) return;
+    logger.warn('[diagnostic] profile query error', {
+      userId,
+      error: (error as any)?.message || String(error),
+    });
+  }, [error, userId]);
 
   // Follow mutation
   const followMutation = useMutation({

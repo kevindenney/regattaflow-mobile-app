@@ -111,6 +111,15 @@ export function InterestSwitcher() {
             >
               <Text style={styles.manageBtnText}>Manage Catalog</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => {
+                setOpen(false)
+                router.push('/account?section=interest')
+              }}
+            >
+              <Text style={styles.settingsBtnText}>Interest Settings</Text>
+            </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
@@ -217,5 +226,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#4338CA',
+  },
+  settingsBtn: {
+    marginTop: 10,
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#ECFDF5',
+  },
+  settingsBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#047857',
   },
 })

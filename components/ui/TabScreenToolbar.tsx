@@ -7,7 +7,7 @@
  * Inspired by the Apple Health "Records" screen pattern.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -106,6 +106,7 @@ function getInitials(name?: string): string {
 function ProfileAvatarButton() {
   const { user, userProfile, isGuest } = useAuth();
   const scale = useSharedValue(1);
+  const [imageFailed, setImageFailed] = useState(false);
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -113,10 +114,20 @@ function ProfileAvatarButton() {
 
   const initials = isGuest ? '?' : getInitials(userProfile?.full_name || user?.email);
   const avatarUrl = userProfile?.avatar_url;
+  const safeAvatarUrl = useMemo(() => {
+    const raw = String(avatarUrl || '').trim();
+    if (!raw) return null;
+    // Web cannot load app-local Android/iOS file paths. Fall back to initials.
+    if (Platform.OS === 'web' && /^(file:|content:|\/data\/|data\/user\/)/i.test(raw)) {
+      return null;
+    }
+    return raw;
+  }, [avatarUrl]);
+  const showAvatarImage = Boolean(!isGuest && safeAvatarUrl && !imageFailed);
 
   return (
     <AnimatedPressable
-      style={[styles.profileAvatar, avatarUrl && styles.profileAvatarWithImage, animStyle]}
+      style={[styles.profileAvatar, showAvatarImage && styles.profileAvatarWithImage, animStyle]}
       accessibilityLabel="Account"
       accessibilityRole="button"
       onPress={() => {
@@ -132,8 +143,12 @@ function ProfileAvatarButton() {
     >
       {isGuest ? (
         <Ionicons name="person-circle-outline" size={PROFILE_AVATAR_SIZE} color={IOS_COLORS.secondaryLabel} />
-      ) : avatarUrl ? (
-        <Image source={{ uri: avatarUrl }} style={styles.profileAvatarImage} />
+      ) : showAvatarImage ? (
+        <Image
+          source={{ uri: safeAvatarUrl! }}
+          style={styles.profileAvatarImage}
+          onError={() => setImageFailed(true)}
+        />
       ) : (
         <Text style={styles.profileAvatarText}>{initials}</Text>
       )}

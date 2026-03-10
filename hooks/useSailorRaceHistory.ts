@@ -2,20 +2,23 @@
  * useSailorRaceHistory - Hook for fetching sailor's race history (paginated)
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   SailorProfileService,
   type SailorRaceSummary,
 } from '@/services/SailorProfileService';
+import { createLogger } from '@/lib/utils/logger';
 
 const PAGE_SIZE = 10;
+const logger = createLogger('useSailorRaceHistory');
 
 export function useSailorRaceHistory(
   userId: string,
   options?: { pastOnly?: boolean; upcomingOnly?: boolean }
 ) {
   const { pastOnly, upcomingOnly } = options || {};
+  const historyFetchRunRef = useRef(0);
 
   const {
     data,
@@ -28,12 +31,28 @@ export function useSailorRaceHistory(
   } = useInfiniteQuery({
     queryKey: ['sailor-race-history', userId, pastOnly, upcomingOnly],
     queryFn: async ({ pageParam = 0 }) => {
-      return SailorProfileService.getRaceHistory(userId, {
+      const run = ++historyFetchRunRef.current;
+      logger.info('[diagnostic] race history query start', {
+        run,
+        userId,
+        pageParam,
+        pastOnly: !!pastOnly,
+        upcomingOnly: !!upcomingOnly,
+      });
+      const result = await SailorProfileService.getRaceHistory(userId, {
         limit: PAGE_SIZE,
         offset: pageParam,
         pastOnly,
         upcomingOnly,
       });
+      logger.info('[diagnostic] race history query result', {
+        run,
+        userId,
+        pageParam,
+        raceCount: result.races.length,
+        hasMore: result.hasMore,
+      });
+      return result;
     },
     getNextPageParam: (lastPage, allPages) => {
       if (!lastPage.hasMore) return undefined;

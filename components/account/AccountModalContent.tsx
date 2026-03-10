@@ -7,10 +7,11 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  LayoutChangeEvent,
   Modal,
   ScrollView,
   StyleSheet,
@@ -25,7 +26,10 @@ import { TeamSeatManager } from '@/components/subscription/TeamSeatManager';
 import { useUserSettings, UNIT_SHORT_LABELS } from '@/hooks/useUserSettings';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
+import { useVocabulary } from '@/hooks/useVocabulary';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
+import { useOrganization } from '@/providers/OrganizationProvider';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { supabase } from '@/services/supabase';
 
@@ -54,6 +58,10 @@ interface ProfileUpdates {
 
 export default function AccountModalContent() {
   const { user, userProfile, signOut, updateUserProfile, isDemoSession, capabilities, coachProfile } = useAuth();
+  const { currentInterest } = useInterest();
+  const { activeDomain } = useOrganization();
+  const { vocab } = useVocabulary();
+  const params = useLocalSearchParams<{ section?: string }>();
   // User settings (tips, learning links, units)
   const { settings: userSettings } = useUserSettings();
   const insets = useSafeAreaInsets();
@@ -71,6 +79,8 @@ export default function AccountModalContent() {
   const [teamManagerVisible, setTeamManagerVisible] = useState(false);
   const [allowFollowerSharing, setAllowFollowerSharing] = useState(true);
   const [sharingSettingLoading, setSharingSettingLoading] = useState(false);
+  const [interestSectionY, setInterestSectionY] = useState<number>(0);
+  const [didAutoScrollInterest, setDidAutoScrollInterest] = useState(false);
 
   // Derived state
   const isDemoProfile = useMemo(
@@ -85,6 +95,15 @@ export default function AccountModalContent() {
 
   // Check if user has a team subscription
   const isTeamSubscriber = userProfile?.subscription_tier === 'team';
+  const interestSlug = String(currentInterest?.slug || '').toLowerCase();
+  const isSailingInterest = interestSlug === 'sail-racing' || interestSlug.includes('sail');
+  const learningInsightsLabel = isSailingInterest
+    ? 'Race Learning Insights'
+    : `${vocab('Learning') || 'Learning'} Insights`;
+  const scrollToInterestRequested = String(params.section || '').toLowerCase() === 'interest';
+  const showInterestSettingsSection = Boolean(currentInterest);
+  const showOrganizationAccessSetting =
+    activeDomain === 'nursing' || String(currentInterest?.slug || '').toLowerCase() === 'nursing';
 
   const loadBoats = useCallback(async () => {
     if (!user?.id) return;
@@ -114,6 +133,12 @@ export default function AccountModalContent() {
       void loadBoats();
     }
   }, [user?.id, loadBoats]);
+
+  useEffect(() => {
+    if (!scrollToInterestRequested || !showInterestSettingsSection || didAutoScrollInterest) return;
+    if (!interestSectionY) return;
+    setDidAutoScrollInterest(true);
+  }, [didAutoScrollInterest, interestSectionY, scrollToInterestRequested, showInterestSettingsSection]);
 
   // Load follower sharing setting on mount
   useEffect(() => {
@@ -332,7 +357,17 @@ export default function AccountModalContent() {
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={accountStyles.scrollContent}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={accountStyles.scrollContent}
+        ref={(ref) => {
+          if (!ref || !scrollToInterestRequested || !showInterestSettingsSection || !interestSectionY || didAutoScrollInterest) return;
+          requestAnimationFrame(() => {
+            ref.scrollTo({ y: Math.max(interestSectionY - 16, 0), animated: true });
+            setDidAutoScrollInterest(true);
+          });
+        }}
+      >
         {/* ── Profile Card ─────────────────────────────────────── */}
         <TufteProfileHeader
           name={userProfile?.full_name || 'User'}
@@ -345,45 +380,47 @@ export default function AccountModalContent() {
           onSave={handleProfileSave}
         />
 
-        {/* ── Boats ────────────────────────────────────────────── */}
-        <IOSListSection header="Boats">
-          {boatsLoading ? (
-            <View style={accountStyles.emptyState}>
-              <ActivityIndicator size="small" color={IOS_COLORS.systemGray} />
-            </View>
-          ) : boats.length === 0 ? (
-            <View style={accountStyles.emptyState}>
-              <Text style={accountStyles.emptyText}>No boats added yet</Text>
-            </View>
-          ) : (
-            boats.map((boat) => (
-              <IOSListItem
-                key={boat.id}
-                title={`${boat.boat_name}${boat.is_primary ? ' \u00b7 Primary' : ''}`}
-                subtitle={`${boat.boat_class_name}${boat.sail_number ? ` ${boat.sail_number}` : ''}`}
-                leadingIcon="boat-outline"
-                leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
-                trailingAccessory="badge"
-                badgeText={boat.status === 'active' ? 'active' : boat.status === 'stored' ? 'stored' : 'inactive'}
-                badgeColor={
-                  boat.status === 'active'
-                    ? IOS_COLORS.systemGreen
-                    : boat.status === 'stored'
-                      ? IOS_COLORS.systemOrange
-                      : IOS_COLORS.systemGray
-                }
-                onPress={() => router.push(`/(tabs)/boat/${boat.id}`)}
-              />
-            ))
-          )}
-          <IOSListItem
-            title="Add Boat"
-            leadingIcon="add-circle-outline"
-            leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
-            trailingAccessory="chevron"
-            onPress={() => router.push('/(tabs)/boat/add')}
-          />
-        </IOSListSection>
+        {/* ── Boats (sailing only) ─────────────────────────────── */}
+        {isSailingInterest && (
+          <IOSListSection header="Boats">
+            {boatsLoading ? (
+              <View style={accountStyles.emptyState}>
+                <ActivityIndicator size="small" color={IOS_COLORS.systemGray} />
+              </View>
+            ) : boats.length === 0 ? (
+              <View style={accountStyles.emptyState}>
+                <Text style={accountStyles.emptyText}>No boats added yet</Text>
+              </View>
+            ) : (
+              boats.map((boat) => (
+                <IOSListItem
+                  key={boat.id}
+                  title={`${boat.boat_name}${boat.is_primary ? ' \u00b7 Primary' : ''}`}
+                  subtitle={`${boat.boat_class_name}${boat.sail_number ? ` ${boat.sail_number}` : ''}`}
+                  leadingIcon="boat-outline"
+                  leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+                  trailingAccessory="badge"
+                  badgeText={boat.status === 'active' ? 'active' : boat.status === 'stored' ? 'stored' : 'inactive'}
+                  badgeColor={
+                    boat.status === 'active'
+                      ? IOS_COLORS.systemGreen
+                      : boat.status === 'stored'
+                        ? IOS_COLORS.systemOrange
+                        : IOS_COLORS.systemGray
+                  }
+                  onPress={() => router.push(`/(tabs)/boat/${boat.id}`)}
+                />
+              ))
+            )}
+            <IOSListItem
+              title="Add Boat"
+              leadingIcon="add-circle-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+              trailingAccessory="chevron"
+              onPress={() => router.push('/(tabs)/boat/add')}
+            />
+          </IOSListSection>
+        )}
 
         {/* ── Subscription ─────────────────────────────────────── */}
         <IOSListSection header="Subscription">
@@ -435,11 +472,54 @@ export default function AccountModalContent() {
           />
         </IOSListSection>
 
+        {/* ── Interests ────────────────────────────────────────── */}
+        {showInterestSettingsSection && (
+          <View
+            onLayout={(event: LayoutChangeEvent) => setInterestSectionY(event.nativeEvent.layout.y)}
+          >
+            <IOSListSection header="Interests">
+              <IOSListItem
+                title="Current Interest"
+                leadingIcon="compass-outline"
+                leadingIconBackgroundColor={ICON_BACKGROUNDS.teal}
+                trailingAccessory="none"
+                trailingComponent={
+                  <View style={styles.interestValueWrap}>
+                    <View
+                      style={[
+                        styles.interestDot,
+                        { backgroundColor: currentInterest?.accent_color || IOS_COLORS.systemBlue },
+                      ]}
+                    />
+                    <Text style={accountStyles.trailingValueText}>{currentInterest?.name || 'Interest'}</Text>
+                  </View>
+                }
+              />
+              <IOSListItem
+                title="Manage Interests & Catalog"
+                leadingIcon="library-outline"
+                leadingIconBackgroundColor={ICON_BACKGROUNDS.blue}
+                trailingAccessory="chevron"
+                onPress={() => router.push('/catalog')}
+              />
+              {showOrganizationAccessSetting && (
+                <IOSListItem
+                  title="Organization Access"
+                  leadingIcon="business-outline"
+                  leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+                  trailingAccessory="chevron"
+                  onPress={() => router.push('/settings/organization-access')}
+                />
+              )}
+            </IOSListSection>
+          </View>
+        )}
+
         {/* ── My Learning (sailors only) ─────────────────────── */}
         {userProfile?.user_type === 'sailor' && (
           <IOSListSection header="My Learning">
             <IOSListItem
-              title="Race Learning Insights"
+              title={learningInsightsLabel}
               leadingIcon="analytics-outline"
               leadingIconBackgroundColor={ICON_BACKGROUNDS.green}
               trailingAccessory="chevron"
@@ -738,5 +818,15 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: IOS_COLORS.systemBlue,
+  },
+  interestValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  interestDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
   },
 });

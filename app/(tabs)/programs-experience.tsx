@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -1378,11 +1379,18 @@ const styles = StyleSheet.create({
   highlightCard: {
     borderColor: '#2563EB',
     borderWidth: 2,
-    shadowColor: '#2563EB',
-    shadowOpacity: 0.14,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 10px rgba(37, 99, 235, 0.14)',
+      },
+      default: {
+        shadowColor: '#2563EB',
+        shadowOpacity: 0.14,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 2,
+      },
+    }),
   },
   cardHeader: {
     flexDirection: 'row',

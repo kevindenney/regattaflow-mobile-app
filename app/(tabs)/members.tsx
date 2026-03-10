@@ -17,6 +17,7 @@ import { useRouter, Href } from 'expo-router';
 import { format } from 'date-fns';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 import {
   clubMemberService,
   ClubMember,
@@ -303,7 +304,7 @@ export default function MembersScreen() {
   ] as const;
 
   const renderMemberCard = (member: ClubMember) => {
-    const avatarUri = member.user?.avatar_url || null;
+    const avatarUri = getSafeImageUri(member.user?.avatar_url);
     const membershipType = formatLabel(member.membership_type);
     const joinedDate = member.joined_date ? format(new Date(member.joined_date), 'MMM d, yyyy') : '—';
     const paymentStatus = member.payment_status ? formatLabel(member.payment_status) : 'Unknown';
