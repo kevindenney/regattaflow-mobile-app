@@ -50,6 +50,7 @@ export function CardShell({
   style,
   testID,
   isNextRace = false,
+  isLastDone = false,
   isPast = false,
   isDeleting = false,
 }: CardShellProps) {
@@ -126,10 +127,22 @@ export function CardShell({
         cardStyle,
         Platform.OS !== 'web' && CARD_SHADOW_DRAMATIC,
         animatedStyle,
-        style,
-      ]}
+      style,
+      isNextRace && styles.nextRaceCard,
+      isLastDone && styles.lastDoneCard,
+    ]}
       testID={testID}
     >
+      {isNextRace ? (
+        <View style={styles.nextRaceBadge}>
+          <Text style={styles.nextRaceBadgeText}>NEXT</Text>
+        </View>
+      ) : null}
+      {isLastDone ? (
+        <View style={styles.lastDoneBadge}>
+          <Text style={styles.lastDoneBadgeText}>LAST DONE</Text>
+        </View>
+      ) : null}
       {children}
       {isDeleting && (
         <View style={styles.deletingOverlay} pointerEvents="box-only">
@@ -176,6 +189,50 @@ const styles = StyleSheet.create({
   nextRaceBorder: {
     borderLeftWidth: NEXT_RACE_BORDER_WIDTH,
     borderLeftColor: NEXT_RACE_BORDER_COLOR,
+  },
+  nextRaceCard: {
+    borderWidth: 2,
+    borderColor: 'rgba(52, 199, 89, 0.65)',
+  },
+  lastDoneCard: {
+    borderWidth: 2,
+    borderColor: 'rgba(107, 114, 128, 0.55)',
+  },
+  nextRaceBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 44,
+    zIndex: 12,
+    backgroundColor: 'rgba(52, 199, 89, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  nextRaceBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    color: IOS_COLORS.green,
+  },
+  lastDoneBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 44,
+    zIndex: 12,
+    backgroundColor: 'rgba(107, 114, 128, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(107, 114, 128, 0.35)',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  lastDoneBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    color: '#4B5563',
   },
 });
 

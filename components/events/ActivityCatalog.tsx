@@ -5,9 +5,9 @@
  * Templates are grouped by publisher and filtered by current interest + event type.
  */
 
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, FlatList } from 'react-native';
-import { Building2, User, Calendar, MapPin, Users as UsersIcon } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View, Pressable } from 'react-native';
+import { Building2, User, Calendar, MapPin, Users as UsersIcon, ChevronDown, ChevronRight } from 'lucide-react-native';
 import type { ActivityTemplate, CatalogGroup } from '@/types/activities';
 import { groupTemplatesByPublisher } from '@/services/activityCatalog';
 
@@ -76,23 +76,46 @@ function TemplateCard({
 function PublisherGroup({
   group,
   onSelectTemplate,
+  expanded,
+  onToggleExpanded,
 }: {
   group: CatalogGroup;
   onSelectTemplate: (t: ActivityTemplate) => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
 }) {
   const Icon = group.publisherType === 'organization' ? Building2 : User;
 
   return (
     <View style={styles.publisherGroup}>
-      <View style={styles.publisherHeader}>
-        <View style={styles.publisherIcon}>
-          <Icon size={14} color={COLORS.blue} />
+      <Pressable style={styles.publisherHeader} onPress={onToggleExpanded}>
+        <View style={styles.publisherHeaderLeft}>
+          <View style={styles.publisherIcon}>
+            <Icon size={14} color={COLORS.blue} />
+          </View>
+          <View style={styles.publisherTextWrap}>
+            <Text style={styles.publisherName}>{group.publisherName}</Text>
+            <Text style={styles.publisherMeta}>
+              {group.templates.length} {group.templates.length === 1 ? 'template' : 'templates'}
+            </Text>
+          </View>
         </View>
-        <Text style={styles.publisherName}>{group.publisherName}</Text>
-      </View>
-      {group.templates.map((t) => (
-        <TemplateCard key={t.id} template={t} onPress={() => onSelectTemplate(t)} />
-      ))}
+        <View style={styles.publisherHeaderRight}>
+          <Text style={styles.browseLabel}>{expanded ? 'Hide' : 'Browse'}</Text>
+          {expanded ? (
+            <ChevronDown size={14} color={COLORS.tertiaryLabel} />
+          ) : (
+            <ChevronRight size={14} color={COLORS.tertiaryLabel} />
+          )}
+        </View>
+      </Pressable>
+      {expanded ? (
+        <View style={styles.templatesList}>
+          {group.templates.map((t) => (
+            <TemplateCard key={t.id} template={t} onPress={() => onSelectTemplate(t)} />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -103,6 +126,26 @@ export function ActivityCatalog({
   isLoading,
 }: ActivityCatalogProps) {
   const groups = useMemo(() => groupTemplatesByPublisher(templates), [templates]);
+  const [expandedPublisherKeys, setExpandedPublisherKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (groups.length === 0) {
+      setExpandedPublisherKeys(new Set());
+      return;
+    }
+    setExpandedPublisherKeys((prev) => {
+      if (prev.size > 0) {
+        const valid = new Set(
+          Array.from(prev).filter((key) =>
+            groups.some((group) => `${group.publisherType}-${group.publisherId}` === key),
+          ),
+        );
+        if (valid.size > 0) return valid;
+      }
+      const firstKey = `${groups[0].publisherType}-${groups[0].publisherId}`;
+      return new Set([firstKey]);
+    });
+  }, [groups]);
 
   if (isLoading) {
     return (
@@ -119,12 +162,32 @@ export function ActivityCatalog({
   return (
     <View style={styles.container}>
       <Text style={styles.sectionLabel}>FROM YOUR ORGANIZATIONS & COACHES</Text>
+      <Text style={styles.sectionSubLabel}>Tap an organization or coach to browse available templates.</Text>
       {groups.map((group) => (
+        (() => {
+          const key = `${group.publisherType}-${group.publisherId}`;
+          const expanded = expandedPublisherKeys.has(key);
+          const handleToggle = () => {
+            setExpandedPublisherKeys((prev) => {
+              const next = new Set(prev);
+              if (next.has(key)) {
+                next.delete(key);
+              } else {
+                next.add(key);
+              }
+              return next;
+            });
+          };
+          return (
         <PublisherGroup
-          key={`${group.publisherType}-${group.publisherId}`}
+          key={key}
           group={group}
           onSelectTemplate={onSelectTemplate}
+          expanded={expanded}
+          onToggleExpanded={handleToggle}
         />
+          );
+        })()
       ))}
     </View>
   );
@@ -140,12 +203,43 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     paddingHorizontal: 4,
   },
-  publisherGroup: { gap: 6 },
+  sectionSubLabel: {
+    fontSize: 12,
+    color: COLORS.tertiaryLabel,
+    marginTop: -6,
+    paddingHorizontal: 4,
+  },
+  publisherGroup: {
+    gap: 8,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.gray5,
+  },
   publisherHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  publisherHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    paddingVertical: 4,
+    flexShrink: 1,
+  },
+  publisherHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  browseLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.blue,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   publisherIcon: {
     width: 28,
@@ -155,15 +249,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  publisherTextWrap: {
+    flexShrink: 1,
+  },
   publisherName: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.label,
   },
+  publisherMeta: {
+    fontSize: 12,
+    color: COLORS.tertiaryLabel,
+    marginTop: 1,
+  },
+  templatesList: {
+    gap: 6,
+    paddingLeft: 2,
+  },
   templateCard: {
     padding: 12,
-    backgroundColor: COLORS.gray6,
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.gray5,
     gap: 4,
   },
   templateTitle: { fontSize: 15, fontWeight: '600', color: COLORS.label },

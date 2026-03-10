@@ -27,6 +27,7 @@ import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { TUFTE_BACKGROUND } from '@/components/cards';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function EditProfileScreen() {
   const [fullName, setFullName] = React.useState('');
   const [photoUri, setPhotoUri] = React.useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = React.useState(false);
+  const safePhotoUri = getSafeImageUri(photoUri);
 
   // Initialize from userProfile
   React.useEffect(() => {
@@ -205,8 +207,8 @@ export default function EditProfileScreen() {
             disabled={saving || uploadingPhoto}
             activeOpacity={0.8}
           >
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={styles.photo} />
+            {safePhotoUri ? (
+              <Image source={{ uri: safePhotoUri }} style={styles.photo} />
             ) : (
               <View style={styles.photoPlaceholder}>
                 <Text style={styles.initials}>{getInitials(fullName || user?.email || '')}</Text>

@@ -16,7 +16,7 @@ import React, {
   useEffect,
   useState,
 } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Text } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 import {
@@ -24,6 +24,7 @@ import {
   CardRaceData,
   CardType,
   CardDimensions,
+  isRacePast,
 } from './types';
 import {
   calculateCardDimensions,
@@ -110,6 +111,17 @@ function CardGridComponent({
   // Calculate arrow visibility
   const showLeftArrow = currentRaceIndex > 0;
   const showRightArrow = currentRaceIndex < races.length - 1;
+  const lastDoneIndex = useMemo(() => {
+    if (races.length === 0) return null;
+    if (nextRaceIndex != null) {
+      if (nextRaceIndex <= 0) return null;
+      return Math.min(nextRaceIndex - 1, races.length - 1);
+    }
+    for (let i = races.length - 1; i >= 0; i -= 1) {
+      if (isRacePast(races[i].date, races[i].startTime)) return i;
+    }
+    return null;
+  }, [nextRaceIndex, races]);
 
   // Observe container width changes (e.g. shelf open/close)
   useEffect(() => {
@@ -295,6 +307,8 @@ function CardGridComponent({
   const renderCard = useCallback(
     (race: CardRaceData, raceIndex: number) => {
       const isActive = raceIndex === currentRaceIndex;
+      const isNextRace = nextRaceIndex != null && raceIndex === nextRaceIndex;
+      const isLastDone = lastDoneIndex != null && raceIndex === lastDoneIndex;
 
       // Determine if user can manage this race
       const canManage = !!userId && race.created_by === userId;
@@ -326,8 +340,22 @@ function CardGridComponent({
               opacity: isActive ? 1 : 0.7,
               transform: [{ scale: isActive ? 1 : 0.95 }],
             },
+            isNextRace && styles.cardNext,
+            isLastDone && styles.cardLastDone,
           ]}
         >
+          {isNextRace ? (
+            <View style={styles.badgeNext}>
+              <View style={styles.badgeDotNext} />
+              <Text style={styles.badgeTextNext}>NEXT</Text>
+            </View>
+          ) : null}
+          {isLastDone ? (
+            <View style={styles.badgeDone}>
+              <View style={styles.badgeDotDone} />
+              <Text style={styles.badgeTextDone}>LAST DONE</Text>
+            </View>
+          ) : null}
           <CardWidthContext.Provider value={{ cardWidth: dimensions.cardWidth }}>
             {renderCardContent(
             race,
@@ -373,6 +401,8 @@ function CardGridComponent({
       onOpenPostRaceInterview,
       races.length,
       refetchTrigger,
+      nextRaceIndex,
+      lastDoneIndex,
     ]
   );
 
@@ -488,6 +518,68 @@ const styles = StyleSheet.create({
     // @ts-ignore - Web-only property
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
     transition: 'transform 0.2s ease, opacity 0.2s ease',
+  },
+  cardNext: {
+    borderWidth: 2,
+    borderColor: 'rgba(52, 199, 89, 0.65)',
+  },
+  cardLastDone: {
+    borderWidth: 2,
+    borderColor: 'rgba(107, 114, 128, 0.55)',
+  },
+  badgeNext: {
+    position: 'absolute',
+    top: 8,
+    right: 40,
+    zIndex: 12,
+    backgroundColor: 'rgba(52, 199, 89, 0.12)',
+    borderColor: 'rgba(52, 199, 89, 0.35)',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  badgeDone: {
+    position: 'absolute',
+    top: 8,
+    right: 40,
+    zIndex: 12,
+    backgroundColor: 'rgba(107, 114, 128, 0.12)',
+    borderColor: 'rgba(107, 114, 128, 0.35)',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  badgeDotNext: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#34C759',
+  },
+  badgeDotDone: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#6B7280',
+  },
+  badgeTextNext: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    color: '#1F7A3B',
+  },
+  badgeTextDone: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    color: '#4B5563',
   },
   navArrow: {
     position: 'absolute',

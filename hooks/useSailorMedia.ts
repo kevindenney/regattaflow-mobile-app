@@ -9,16 +9,29 @@ import {
   SailorProfileService,
   type SailorMedia,
 } from '@/services/SailorProfileService';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('useSailorMedia');
 
 export function useSailorMedia(userId: string, options?: { featuredOnly?: boolean }) {
   const queryClient = useQueryClient();
+  const mediaFetchKey = `${userId}:${options?.featuredOnly ? 'featured' : 'all'}`;
 
   const { data: media = [], isLoading, error, refetch } = useQuery({
     queryKey: ['sailor-media', userId, options?.featuredOnly],
-    queryFn: () =>
-      SailorProfileService.getMedia(userId, {
+    queryFn: async () => {
+      logger.info('[diagnostic] sailor media query start', {
+        key: mediaFetchKey,
+      });
+      const result = await SailorProfileService.getMedia(userId, {
         featuredOnly: options?.featuredOnly,
-      }),
+      });
+      logger.info('[diagnostic] sailor media query result', {
+        key: mediaFetchKey,
+        mediaCount: result.length,
+      });
+      return result;
+    },
     enabled: !!userId,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

@@ -12,8 +12,27 @@
 import { supabase } from '@/services/supabase';
 import { CrewFinderService } from '@/services/CrewFinderService';
 import { createLogger } from '@/lib/utils/logger';
+import { isMissingRelationError, isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 
 const logger = createLogger('SailorProfileService');
+const ENABLE_SAILOR_OPTIONAL_TABLES =
+  String(process.env.EXPO_PUBLIC_ENABLE_SAILOR_PROFILE_TABLES || '').toLowerCase() === 'true';
+
+const isSchemaUnavailableError = (error: any): boolean => {
+  if (!error) return false;
+  if (isMissingRelationError(error) || isMissingSupabaseColumn(error)) return true;
+
+  const code = typeof error.code === 'string' ? error.code : '';
+  if (code.startsWith('PGRST') || code === '42P01' || code === '42703') return true;
+
+  const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+  return (
+    message.includes('does not exist') ||
+    message.includes('could not find') ||
+    message.includes('schema cache') ||
+    message.includes('not found in the schema')
+  );
+};
 
 // =============================================================================
 // TYPES
@@ -131,6 +150,9 @@ export interface FollowCounts {
 // =============================================================================
 
 class SailorProfileServiceClass {
+  private sailorProfilesUnavailable = !ENABLE_SAILOR_OPTIONAL_TABLES;
+  private sailorBoatsUnavailable = !ENABLE_SAILOR_OPTIONAL_TABLES;
+
   /**
    * Get complete sailor profile with stats, achievements, and social data
    */
@@ -199,27 +221,58 @@ class SailorProfileServiceClass {
       return null;
     }
 
-    // Fetch sailor_profiles data
-    const { data: sailorProfile } = await supabase
-      .from('sailor_profiles')
-      .select(
+    let sailorProfile: any = null;
+    if (!this.sailorProfilesUnavailable) {
+      // Fetch sailor_profiles data
+      let sailorProfileQuery = await supabase
+        .from('sailor_profiles')
+        .select(
+          `
+          user_id,
+          display_name,
+          avatar_url,
+          avatar_emoji,
+          avatar_color,
+          bio,
+          location,
+          sailing_since,
+          home_club_id,
+          website_url,
+          instagram_handle,
+          is_profile_public
         `
-        user_id,
-        display_name,
-        avatar_url,
-        avatar_emoji,
-        avatar_color,
-        bio,
-        location,
-        sailing_since,
-        home_club_id,
-        website_url,
-        instagram_handle,
-        is_profile_public
-      `
-      )
-      .eq('user_id', userId)
-      .single();
+        )
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (sailorProfileQuery.error && isMissingSupabaseColumn(sailorProfileQuery.error)) {
+        logger.warn('[diagnostic] getProfile fallback -> minimal sailor_profiles select', {
+          userId,
+          code: sailorProfileQuery.error.code,
+          message: sailorProfileQuery.error.message,
+        });
+        sailorProfileQuery = await supabase
+          .from('sailor_profiles')
+          .select('user_id,display_name,is_profile_public')
+          .eq('user_id', userId)
+          .maybeSingle();
+      }
+
+      if (sailorProfileQuery.error) {
+        if (isSchemaUnavailableError(sailorProfileQuery.error)) {
+          this.sailorProfilesUnavailable = true;
+          logger.warn('[diagnostic] getProfile disabling sailor_profiles queries for this session', {
+            userId,
+            code: sailorProfileQuery.error.code,
+            message: sailorProfileQuery.error.message,
+          });
+        } else {
+          logger.warn('Error fetching sailor_profiles', { userId, error: sailorProfileQuery.error });
+        }
+      } else {
+        sailorProfile = sailorProfileQuery.data as any;
+      }
+    }
 
     // Fetch home club name if exists
     let homeClubName: string | undefined;
@@ -257,11 +310,11 @@ class SailorProfileServiceClass {
       .from('sailor_stats')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       // Stats might not exist yet - return null
-      if (error.code === 'PGRST116') {
+      if (error.code === 'PGRST116' || isMissingRelationError(error)) {
         return null;
       }
       logger.warn('Error fetching stats', { userId, error });
@@ -285,7 +338,7 @@ class SailorProfileServiceClass {
    * Get achievements for a sailor
    */
   async getAchievements(userId: string): Promise<SailorAchievement[]> {
-    const { data, error } = await supabase
+    let result = await supabase
       .from('sailor_achievements')
       .select(
         `
@@ -302,12 +355,27 @@ class SailorProfileServiceClass {
       .eq('user_id', userId)
       .order('earned_at', { ascending: false });
 
-    if (error) {
-      logger.warn('Error fetching achievements', { userId, error });
+    if (result.error && isMissingSupabaseColumn(result.error)) {
+      logger.info('[diagnostic] getAchievements fallback -> no regattas join', {
+        userId,
+        code: result.error.code,
+        message: result.error.message,
+      });
+      result = await supabase
+        .from('sailor_achievements')
+        .select('id,achievement_type,title,description,icon,earned_at,related_regatta_id')
+        .eq('user_id', userId)
+        .order('earned_at', { ascending: false });
+    }
+
+    if (result.error) {
+      if (!isMissingRelationError(result.error)) {
+        logger.warn('Error fetching achievements', { userId, error: result.error });
+      }
       return [];
     }
 
-    return (data || []).map((a: any) => ({
+    return ((result.data as any[]) || []).map((a: any) => ({
       id: a.id,
       achievementType: a.achievement_type,
       title: a.title,
@@ -323,7 +391,11 @@ class SailorProfileServiceClass {
    * Get boats for a sailor
    */
   async getBoats(userId: string): Promise<SailorBoat[]> {
-    const { data, error } = await supabase
+    if (this.sailorBoatsUnavailable) {
+      return [];
+    }
+
+    let result = await supabase
       .from('sailor_boats')
       .select(
         `
@@ -338,12 +410,63 @@ class SailorProfileServiceClass {
       )
       .eq('sailor_id', userId);
 
-    if (error) {
-      logger.warn('Error fetching boats', { userId, error });
+    if (result.error && isMissingSupabaseColumn(result.error, 'sailor_boats.sailor_id')) {
+      logger.info('[diagnostic] getBoats fallback -> sailor_id missing, trying user_id', {
+        userId,
+        code: result.error.code,
+        message: result.error.message,
+      });
+      result = await supabase
+        .from('sailor_boats')
+        .select(
+          `
+          id,
+          sail_number,
+          name,
+          class_id,
+          manufacturer,
+          year,
+          boat_classes(id, name)
+        `
+        )
+        .eq('user_id', userId);
+    }
+
+    if (result.error && (isMissingRelationError(result.error) || isMissingSupabaseColumn(result.error))) {
+      // fallback without relational join
+      logger.warn('[diagnostic] getBoats fallback -> relation-free select', {
+        userId,
+        code: result.error.code,
+        message: result.error.message,
+      });
+      let fallback = await supabase
+        .from('sailor_boats')
+        .select('id,sail_number,name,class_id,manufacturer,year')
+        .eq('sailor_id', userId);
+      if (fallback.error && isMissingSupabaseColumn(fallback.error, 'sailor_boats.sailor_id')) {
+        fallback = await supabase
+          .from('sailor_boats')
+          .select('id,sail_number,name,class_id,manufacturer,year')
+          .eq('user_id', userId);
+      }
+      result = fallback as any;
+    }
+
+    if (result.error) {
+      if (isSchemaUnavailableError(result.error)) {
+        this.sailorBoatsUnavailable = true;
+        logger.warn('[diagnostic] getBoats disabling sailor_boats queries for this session', {
+          userId,
+          code: result.error.code,
+          message: result.error.message,
+        });
+      } else if (!isMissingRelationError(result.error)) {
+        logger.warn('Error fetching boats', { userId, error: result.error });
+      }
       return [];
     }
 
-    return (data || []).map((b: any) => ({
+    return (((result.data as any[]) || [])).map((b: any) => ({
       id: b.id,
       sailNumber: b.sail_number,
       name: b.name,
@@ -469,11 +592,29 @@ class SailorProfileServiceClass {
       query = query.gte('start_date', now);
     }
 
-    const { data, error, count } = await query;
+    let { data, error, count } = await query;
+
+    if (error && isMissingSupabaseColumn(error, 'regattas.start_date')) {
+      logger.info('[diagnostic] getRaceHistory fallback -> start_date missing, ordering by created_at', {
+        userId,
+        code: error.code,
+        message: error.message,
+      });
+      const fallback = await supabase
+        .from('regattas')
+        .select('*', { count: 'exact' })
+        .eq('created_by', userId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+      data = fallback.data as any;
+      error = fallback.error as any;
+      count = fallback.count as any;
+    }
 
     if (error) {
-      logger.error('Error fetching race history', { userId, error });
-      throw error;
+      // Avoid throwing into UI for schema/permission differences.
+      logger.warn('Error fetching race history', { userId, error });
+      return { races: [], hasMore: false };
     }
 
     const today = new Date();
@@ -482,12 +623,12 @@ class SailorProfileServiceClass {
     const races: SailorRaceSummary[] = (data || []).map((r: any) => ({
       id: r.id,
       name: r.name,
-      startDate: r.start_date,
-      venue: r.venue,
-      boatClass: r.boat_class,
+      startDate: r.start_date || r.event_date || r.created_at || new Date().toISOString(),
+      venue: r.venue || r.start_area_name || r.venue_name,
+      boatClass: r.boat_class || r.class_name,
       result: r.result_position,
       fleetSize: r.fleet_size,
-      isPast: new Date(r.start_date) < today,
+      isPast: new Date(r.start_date || r.event_date || r.created_at || Date.now()) < today,
     }));
 
     return {

@@ -277,6 +277,8 @@ export interface CardShellProps {
   testID?: string;
   /** Whether this is the next upcoming race (subtle background tint) */
   isNextRace?: boolean;
+  /** Whether this is the most recently completed race */
+  isLastDone?: boolean;
   /** Whether this race is in the past (warm off-white background) */
   isPast?: boolean;
   /** Whether this race is currently being deleted (show loading overlay) */

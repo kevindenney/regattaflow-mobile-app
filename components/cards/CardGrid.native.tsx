@@ -216,6 +216,18 @@ function CardGridComponent({
   );
 
   const racesCount = races.length;
+  const lastDoneIndex = useMemo(() => {
+    if (races.length === 0) return null;
+    if (nextRaceIndex != null) {
+      if (nextRaceIndex <= 0) return null;
+      return Math.min(nextRaceIndex - 1, races.length - 1);
+    }
+    for (let i = races.length - 1; i >= 0; i -= 1) {
+      const row = races[i];
+      if (isRacePast(row.date, row.startTime)) return i;
+    }
+    return null;
+  }, [nextRaceIndex, races]);
 
   // Convert races to TimeAxisRace format for Tufte-inspired time axis
   const timeAxisRaces: TimeAxisRace[] = useMemo(() => {
@@ -350,6 +362,7 @@ function CardGridComponent({
       // Determine if this is the next upcoming race (for subtle styling)
       // Use != to catch both null and undefined
       const isNextRace = nextRaceIndex != null && raceIndex === nextRaceIndex;
+      const isLastDone = lastDoneIndex != null && raceIndex === lastDoneIndex;
 
       // Determine if race is in the past (for warm off-white background)
       const isPastRace = isRacePast(race.date, race.startTime);
@@ -367,6 +380,7 @@ function CardGridComponent({
         >
           <CardShell
             isNextRace={isNextRace}
+            isLastDone={isLastDone}
             isPast={isPastRace}
             position={position}
             dimensions={dimensions}
