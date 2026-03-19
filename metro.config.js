@@ -108,5 +108,9 @@ if (process.env.NODE_ENV === 'production') {
   };
 }
 
-// Only apply Sentry serializer in production — it crashes dev bundles with Debug ID errors
-module.exports = process.env.NODE_ENV === 'production' ? withSentryConfig(config) : config;
+// Only apply Sentry serializer for native production builds.
+// withSentryConfig crashes web exports — its resolver calls .match() on undefined
+// module names during web bundling (Sentry RN SDK bug).
+const isWebExport = process.argv.some(a => a === '--platform' && process.argv[process.argv.indexOf(a) + 1] === 'web') ||
+  process.argv.includes('web');
+module.exports = (process.env.NODE_ENV === 'production' && !isWebExport) ? withSentryConfig(config) : config;
