@@ -4,6 +4,10 @@
  */
 
 import { supabase } from './supabase';
+import { withSupabaseError } from '@/lib/utils/withErrorHandling';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('CommitteeLogService');
 
 // ============================================================================
 // TYPES
@@ -220,14 +224,10 @@ class CommitteeLogService {
    * Get a single log entry
    */
   async getEntry(entryId: string): Promise<LogEntry | null> {
-    const { data, error } = await supabase
-      .from('committee_boat_log')
-      .select('*')
-      .eq('id', entryId)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('committee_boat_log').select('*').eq('id', entryId).single(),
+      { service: 'CommitteeLogService', method: 'getEntry', fallback: null, level: 'warn', context: { entryId } }
+    );
   }
 
   /**
@@ -584,7 +584,10 @@ class CommitteeLogService {
       .eq('log_date', dateStr)
       .single();
 
-    if (error) return null;
+    if (error) {
+      logger.warn('[CommitteeLogService.getDailySummary] Failed', { error, regattaId, dateStr });
+      return null;
+    }
     return data;
   }
 

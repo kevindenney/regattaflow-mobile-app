@@ -12,8 +12,8 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 
@@ -84,17 +84,17 @@ export default function ProtestModal({
   const handleSubmit = async () => {
     // Validation
     if (!protestType) {
-      Alert.alert('Error', 'Please select a protest type');
+      showAlert('Error', 'Please select a protest type');
       return;
     }
 
     if (protestType === 'boat_to_boat' && (!protestorEntryId || !protesteeEntryId)) {
-      Alert.alert('Error', 'Please select both protestor and protestee');
+      showAlert('Error', 'Please select both protestor and protestee');
       return;
     }
 
     if (!description.trim()) {
-      Alert.alert('Error', 'Please provide a description of the incident');
+      showAlert('Error', 'Please provide a description of the incident');
       return;
     }
 
@@ -122,13 +122,13 @@ export default function ProtestModal({
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Protest filed successfully');
+      showAlert('Success', 'Protest filed successfully');
       resetForm();
       onSubmit?.();
       onClose();
     } catch (error) {
       console.error('Error filing protest:', error);
-      Alert.alert('Error', 'Could not file protest. Please try again.');
+      showAlert('Error', 'Could not file protest. Please try again.');
     } finally {
       setSubmitting(false);
     }

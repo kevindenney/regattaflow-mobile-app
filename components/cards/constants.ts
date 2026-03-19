@@ -67,6 +67,9 @@ export const IOS_COLORS = {
   // Grouped Background Colors (using Tufte warm paper)
   systemGroupedBackground: TUFTE_BACKGROUND,
   secondarySystemGroupedBackground: '#FFFFFF',
+
+  // Separator
+  separator: '#3C3C434A',
 } as const;
 import {
   SNAP_SPRING_CONFIG,
@@ -312,23 +315,26 @@ export function getScreenDimensions() {
  * - 4 tiles: 656 + 32 = 688px minimum
  */
 export function calculateWebCardWidth(containerWidth: number): number {
-  // Mobile: use standard ratio (will get 2 tiles)
+  // Target ~30px peek of adjacent card (enough to hint, not enough to show clipped text)
+  const peekAndGap = 30 + HORIZONTAL_CARD_GAP; // peek + gap on each side
+
+  // Mobile: use standard ratio
   if (containerWidth < 600) {
     return Math.round(containerWidth * CARD_WIDTH_RATIO);
   }
-  // Small tablet / large phone: 3 tiles width
+  // Small tablet / large phone
   if (containerWidth < 800) {
-    return Math.max(521, Math.round(containerWidth * 0.85));
+    return Math.max(521, containerWidth - peekAndGap * 2);
   }
-  // Tablet: 4 tiles width or 80% of container
+  // Tablet
   if (containerWidth < 1024) {
-    return Math.max(688, Math.min(800, Math.round(containerWidth * 0.8)));
+    return Math.max(688, Math.min(800, containerWidth - peekAndGap * 2));
   }
-  // Desktop: 4 tiles width or 70% of container, max 900px
+  // Desktop: cap at 900px
   if (containerWidth < 1440) {
-    return Math.max(688, Math.min(900, Math.round(containerWidth * 0.7)));
+    return Math.max(688, Math.min(900, containerWidth - peekAndGap * 2));
   }
-  // Large desktop: max 900px (comfortable for 4+ tiles)
+  // Large desktop: max 900px
   return 900;
 }
 

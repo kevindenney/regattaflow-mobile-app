@@ -23,9 +23,9 @@ import {
   Platform,
   Modal,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, Plus, ChevronRight, X } from 'lucide-react-native';
@@ -369,7 +369,7 @@ function AddSailModal({ visible, boatId, sailorId, classId, className, onClose, 
       `${sailType} ${sailNumber}`.trim();
 
     if (!effectiveName && !sailNumber.trim()) {
-      Alert.alert('Required', 'Enter a sail name or number');
+      showAlert('Required', 'Enter a sail name or number');
       return;
     }
 
@@ -426,7 +426,7 @@ function AddSailModal({ visible, boatId, sailorId, classId, className, onClose, 
       onClose();
     } catch (err) {
       logger.error('Failed to add sail:', err);
-      Alert.alert('Error', 'Failed to add sail. Please try again.');
+      showAlert('Error', 'Failed to add sail. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -780,7 +780,7 @@ function AddEquipmentModal({
       `${getCategoryName(selectedCategory || '')} ${model}`.trim();
 
     if (!effectiveName && !selectedCategory) {
-      Alert.alert('Required', 'Select a category and enter a name');
+      showAlert('Required', 'Select a category and enter a name');
       return;
     }
 
@@ -824,7 +824,7 @@ function AddEquipmentModal({
     } catch (err: any) {
       logger.error('Failed to add equipment:', err);
       const errorMessage = err?.message || err?.toString() || 'Unknown error';
-      Alert.alert('Error', `Failed to add equipment: ${errorMessage}`);
+      showAlert('Error', `Failed to add equipment: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -1451,7 +1451,7 @@ export function TufteBoatDetail() {
                         sail.needs_inspection && '⚠️ Needs inspection',
                       ].filter(Boolean).join('\n');
 
-                      Alert.alert(
+                      showAlertWithButtons(
                         sail.name || sail.sail_type || 'Sail',
                         details || 'No details available',
                         [
@@ -1484,7 +1484,7 @@ export function TufteBoatDetail() {
                                 loadData(); // Refresh the list
                               } catch (err) {
                                 logger.error('Failed to delete sail:', err);
-                                Alert.alert('Error', 'Failed to delete sail');
+                                showAlert('Error', 'Failed to delete sail');
                               }
                             },
                           },

@@ -208,7 +208,7 @@ function GenericModuleTile({
     }
     hintText = parts.join(' · ');
   } else {
-    hintText = description.length > 30 ? description.slice(0, 28) + '...' : description;
+    hintText = description;
   }
 
   return (
@@ -243,7 +243,7 @@ function GenericModuleTile({
 
 const genericTileStyles = StyleSheet.create({
   label: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#000000',
     textAlign: 'center',

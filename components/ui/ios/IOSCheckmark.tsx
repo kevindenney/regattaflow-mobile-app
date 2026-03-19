@@ -190,7 +190,7 @@ export function IOSCircleCheckmark({
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       <Ionicons
-        name={checked ? 'checkmark-circle-fill' : 'circle-outline'}
+        name={checked ? 'checkmark-circle' : 'ellipse-outline'}
         size={dimensions.container.width}
         color={checked ? color : IOS_COLORS.systemGray3}
       />

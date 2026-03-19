@@ -333,6 +333,11 @@ export function NotificationsList({
             router.push(`/race/${notification.regattaId}`);
           }
           break;
+        case 'followed_user_step_completed':
+          if (notification.actorId) {
+            router.push(`/person/${notification.actorId}` as any);
+          }
+          break;
       }
     },
     [router, onMarkRead]

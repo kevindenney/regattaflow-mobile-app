@@ -149,39 +149,28 @@ class RaceSuggestionService {
       gteStartDate,
     } = options;
 
-    const ownerColumns: ('created_by' | 'user_id')[] = ['created_by', 'user_id'];
+    let query = supabase
+      .from('regattas')
+      .select(select)
+      .eq('created_by', userId)
+      .order(orderBy, { ascending });
 
-    for (const ownerColumn of ownerColumns) {
-      let query = supabase
-        .from('regattas')
-        .select(select)
-        .eq(ownerColumn, userId)
-        .order(orderBy, { ascending });
-
-      if (ltStartDate) {
-        query = query.lt('start_date', ltStartDate);
-      }
-      if (gteStartDate) {
-        query = query.gte('start_date', gteStartDate);
-      }
-      if (typeof limit === 'number') {
-        query = query.limit(limit);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        if (this.isSchemaFallbackError(error, `regattas.${ownerColumn}`)) {
-          continue;
-        }
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        return data;
-      }
+    if (ltStartDate) {
+      query = query.lt('start_date', ltStartDate);
+    }
+    if (gteStartDate) {
+      query = query.gte('start_date', gteStartDate);
+    }
+    if (typeof limit === 'number') {
+      query = query.limit(limit);
     }
 
-    return [];
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
   }
 
   private async fetchRegattasForOwners(
@@ -204,36 +193,25 @@ class RaceSuggestionService {
       gteStartDate,
     } = options;
 
-    const ownerColumns: ('created_by' | 'user_id')[] = ['created_by', 'user_id'];
+    let query = supabase
+      .from('regattas')
+      .select(select)
+      .in('created_by', ownerIds)
+      .order(orderBy, { ascending });
 
-    for (const ownerColumn of ownerColumns) {
-      let query = supabase
-        .from('regattas')
-        .select(select)
-        .in(ownerColumn, ownerIds)
-        .order(orderBy, { ascending });
-
-      if (gteStartDate) {
-        query = query.gte('start_date', gteStartDate);
-      }
-      if (typeof limit === 'number') {
-        query = query.limit(limit);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        if (this.isSchemaFallbackError(error, `regattas.${ownerColumn}`)) {
-          continue;
-        }
-        throw error;
-      }
-
-      if (data && data.length > 0) {
-        return data;
-      }
+    if (gteStartDate) {
+      query = query.gte('start_date', gteStartDate);
+    }
+    if (typeof limit === 'number') {
+      query = query.limit(limit);
     }
 
-    return [];
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
   }
 
   private delay(ms: number): Promise<void> {
@@ -1420,30 +1398,13 @@ class RaceSuggestionService {
    */
   async getCatalogMatches(userId: string): Promise<RaceSuggestion[]> {
     try {
-      // Get user's boat classes (support both user_id and sailor_id schema variants)
-      let sailorBoats: any[] | null = null;
-      const boatsByUser = await supabase
+      // Get user's boat classes
+      const { data: sailorBoats, error: sailorBoatsError } = await supabase
         .from('sailor_boats')
         .select('boat_classes(name)')
-        .eq('user_id', userId);
-      if (boatsByUser.error && !this.isNonCriticalSuggestionError(boatsByUser.error, 'sailor_boats.user_id')) {
-        throw boatsByUser.error;
-      }
-      const shouldTrySailorId =
-        (isMissingSupabaseColumn(boatsByUser.error, 'sailor_boats.user_id')) ||
-        (!boatsByUser.error && (!boatsByUser.data || boatsByUser.data.length === 0));
-
-      if (shouldTrySailorId) {
-        const boatsBySailor = await supabase
-          .from('sailor_boats')
-          .select('boat_classes(name)')
-          .eq('sailor_id', userId);
-        if (boatsBySailor.error && !this.isNonCriticalSuggestionError(boatsBySailor.error, 'sailor_boats.sailor_id')) {
-          throw boatsBySailor.error;
-        }
-        sailorBoats = boatsBySailor.data || boatsByUser.data;
-      } else {
-        sailorBoats = boatsByUser.data;
+        .eq('sailor_id', userId);
+      if (sailorBoatsError && !this.isNonCriticalSuggestionError(sailorBoatsError, 'sailor_boats.sailor_id')) {
+        throw sailorBoatsError;
       }
 
       const userClasses = (sailorBoats || [])
@@ -1461,35 +1422,8 @@ class RaceSuggestionService {
 
       const followedIds = new Set((followedRaces || []).map((r) => r.catalog_race_id));
 
-      // Get user's region from profile
-      let profile: { country?: string | null; region?: string | null } | null = null;
-      const profileById = await supabase
-        .from('profiles')
-        .select('country, region')
-        .eq('id', userId)
-        .maybeSingle();
-      if (profileById.error && !this.isNonCriticalSuggestionError(profileById.error, 'profiles.id')) {
-        throw profileById.error;
-      }
-      const shouldTryProfileByUserId =
-        (isMissingSupabaseColumn(profileById.error, 'profiles.id')) ||
-        (!profileById.error && !profileById.data);
-
-      if (shouldTryProfileByUserId) {
-        const profileByUserId = await supabase
-          .from('profiles')
-          .select('country, region')
-          .eq('user_id', userId)
-          .maybeSingle();
-        if (profileByUserId.error && !this.isNonCriticalSuggestionError(profileByUserId.error, 'profiles.user_id')) {
-          throw profileByUserId.error;
-        }
-        profile = profileByUserId.data;
-      } else {
-        profile = profileById.data;
-      }
-
-      const userCountry = profile?.country;
+      // Profile doesn't have country/region columns; skip region-based matching
+      const userCountry: string | null | undefined = null;
 
       // Query catalog races matching boat classes or upcoming
       const now = new Date();

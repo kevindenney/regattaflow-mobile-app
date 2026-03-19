@@ -338,7 +338,7 @@ class SailorProfileServiceClass {
    * Get achievements for a sailor
    */
   async getAchievements(userId: string): Promise<SailorAchievement[]> {
-    let result = await supabase
+    let result: { data: any[] | null; error: any } = await supabase
       .from('sailor_achievements')
       .select(
         `

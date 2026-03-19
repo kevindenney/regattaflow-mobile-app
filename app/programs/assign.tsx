@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { formatDistanceToNow } from 'date-fns';
@@ -300,7 +300,7 @@ export default function ProgramAssignmentsScreen() {
 
   const exportFilteredCsv = () => {
     if (filteredAssignments.length === 0) {
-      Alert.alert('Nothing to export', 'No assignments match the current filters.');
+      showAlert('Nothing to export', 'No assignments match the current filters.');
       return;
     }
     const csv = buildProgramAssignmentsCsv(filteredAssignments, programById, sessionById);
@@ -318,7 +318,7 @@ export default function ProgramAssignmentsScreen() {
       return;
     }
 
-    Alert.alert('Export unavailable', 'CSV export is currently available on web.');
+    showAlert('Export unavailable', 'CSV export is currently available on web.');
   };
 
   const pendingByEvaluatorId = useMemo(() => {
@@ -339,15 +339,15 @@ export default function ProgramAssignmentsScreen() {
 
   const submit = async () => {
     if (!activeOrganization?.id) {
-      Alert.alert('Missing organization', 'Select an active workspace first.');
+      showAlert('Missing organization', 'Select an active workspace first.');
       return;
     }
     if (!selectedProgramId) {
-      Alert.alert('Missing program', 'Choose a program before assigning.');
+      showAlert('Missing program', 'Choose a program before assigning.');
       return;
     }
     if (!displayName.trim() && !email.trim()) {
-      Alert.alert('Missing person details', 'Provide at least a name or an email.');
+      showAlert('Missing person details', 'Provide at least a name or an email.');
       return;
     }
 
@@ -376,7 +376,7 @@ export default function ProgramAssignmentsScreen() {
       setStatus('active');
       setHasMutations(true);
     } catch (error: any) {
-      Alert.alert('Assignment failed', error?.message || 'Unable to assign participant');
+      showAlert('Assignment failed', error?.message || 'Unable to assign participant');
     } finally {
       setSaving(false);
     }
@@ -396,32 +396,30 @@ export default function ProgramAssignmentsScreen() {
       setParticipants(nextParticipants);
       setHasMutations(true);
     } catch (error: any) {
-      Alert.alert('Update failed', error?.message || 'Unable to update assignment');
+      showAlert('Update failed', error?.message || 'Unable to update assignment');
     }
   };
 
   const removeParticipant = async (participantId: string) => {
     if (!activeOrganization?.id || !selectedProgramId) return;
-    Alert.alert('Remove assignment', 'Remove this person from the selected program?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await programService.removeProgramParticipant(participantId);
-            const nextParticipants = await programService.listProgramParticipants(selectedProgramId, {
-              sessionId: selectedSessionId,
-              limit: 1000,
-            });
-            setParticipants(nextParticipants);
-            setHasMutations(true);
-          } catch (error: any) {
-            Alert.alert('Remove failed', error?.message || 'Unable to remove assignment');
-          }
-        },
+    showConfirm(
+      'Remove assignment',
+      'Remove this person from the selected program?',
+      async () => {
+        try {
+          await programService.removeProgramParticipant(participantId);
+          const nextParticipants = await programService.listProgramParticipants(selectedProgramId, {
+            sessionId: selectedSessionId,
+            limit: 1000,
+          });
+          setParticipants(nextParticipants);
+          setHasMutations(true);
+        } catch (error: any) {
+          showAlert('Remove failed', error?.message || 'Unable to remove assignment');
+        }
       },
-    ]);
+      { destructive: true },
+    );
   };
 
   if (ready && (!activeOrganization?.id || !isInstitutionOrganization)) {

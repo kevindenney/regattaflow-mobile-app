@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, ViewStyle, TextStyle, Platform } from 'react-native';
 import Animated, {
   useAnimatedStyle,
+  useSharedValue,
+  useAnimatedScrollHandler,
   interpolate,
   Extrapolation,
   SharedValue,
@@ -144,9 +146,9 @@ export function IOSLargeTitle({
  * Hook to create a scroll handler for large title collapse
  */
 export function useLargeTitleScroll() {
-  const scrollY = Animated.useSharedValue(0);
+  const scrollY = useSharedValue(0);
 
-  const scrollHandler = Animated.useAnimatedScrollHandler({
+  const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
     },

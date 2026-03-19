@@ -5,7 +5,8 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, ActivityIndicator, Platform, Alert } from 'react-native';
+import { View, ScrollView, ActivityIndicator, Platform } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from '@/components/ui/text';
 import { VStack } from '@/components/ui/vstack';
@@ -170,7 +171,7 @@ export default function RaceResultsEntryScreen() {
       }
     } catch (error) {
       console.error('Failed to load race data:', error);
-      Alert.alert('Error', 'Failed to load race data');
+      showAlert('Error', 'Failed to load race data');
     } finally {
       setLoading(false);
     }
@@ -200,7 +201,7 @@ export default function RaceResultsEntryScreen() {
     }
 
     if (!startTime) {
-      Alert.alert('Set Start Time', 'Please set the race start time first.');
+      showAlert('Set Start Time', 'Please set the race start time first.');
       return;
     }
 
@@ -215,7 +216,7 @@ export default function RaceResultsEntryScreen() {
     }
 
     if (finish.getTime() < start.getTime()) {
-      Alert.alert('Invalid Time', 'Finish time cannot be before the start time.');
+      showAlert('Invalid Time', 'Finish time cannot be before the start time.');
       return;
     }
 
@@ -312,11 +313,11 @@ export default function RaceResultsEntryScreen() {
         .update({ status: 'completed' })
         .eq('id', raceId);
 
-      Alert.alert('Success', 'Results saved successfully');
+      showAlert('Success', 'Results saved successfully');
       router.back();
     } catch (error) {
       console.error('Failed to save results:', error);
-      Alert.alert('Error', 'Failed to save results');
+      showAlert('Error', 'Failed to save results');
     } finally {
       setSaving(false);
     }

@@ -376,7 +376,7 @@ export function useRaceAnalysisData(
         const hasDebriefResponses = debriefResponses && Object.keys(debriefResponses).length > 0;
 
         setAnalysisData({
-          hasDebrief: hasNotes || !!aiAnalysis || !!raceAnalysis || !!explicitKeyMoment || !!hasDebriefResponses || (raceResults && raceResults.length > 0),
+          hasDebrief: !!(hasNotes || aiAnalysis || raceAnalysis || explicitKeyMoment || hasDebriefResponses || (raceResults && raceResults.length > 0)),
           analysisId: aiAnalysis?.id || raceAnalysis?.id,
           analysisSummary: aiAnalysis?.overall_summary,
           analysisInsights: analysisInsights.length > 0 ? analysisInsights : undefined,

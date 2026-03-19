@@ -11,7 +11,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   Share,
   Platform,
   Pressable,
@@ -19,6 +18,7 @@ import {
   Modal,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { SubscriptionTeamService } from '@/services/SubscriptionTeamService';
 import {
@@ -48,14 +48,14 @@ export function TeamInviteSheet({
 
   const handleSendInvite = async () => {
     if (!email.trim()) {
-      Alert.alert('Error', 'Please enter an email address');
+      showAlert('Error', 'Please enter an email address');
       return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      showAlert('Error', 'Please enter a valid email address');
       return;
     }
 
@@ -63,14 +63,14 @@ export function TeamInviteSheet({
     try {
       const result = await SubscriptionTeamService.inviteByEmail(teamId, email.trim());
       if (result.success) {
-        Alert.alert('Invite Sent', `An invitation has been sent to ${email.trim()}`);
+        showAlert('Invite Sent', `An invitation has been sent to ${email.trim()}`);
         setEmail('');
         onSuccess();
       } else {
-        Alert.alert('Error', result.error || 'Failed to send invite');
+        showAlert('Error', result.error || 'Failed to send invite');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to send invite');
+      showAlert('Error', 'Failed to send invite');
     } finally {
       setSending(false);
     }
@@ -81,14 +81,14 @@ export function TeamInviteSheet({
 
     const link = getInviteLink(currentInviteCode);
     await Clipboard.setStringAsync(link);
-    Alert.alert('Copied', 'Invite link copied to clipboard');
+    showAlert('Copied', 'Invite link copied to clipboard');
   };
 
   const handleCopyCode = async () => {
     if (!currentInviteCode) return;
 
     await Clipboard.setStringAsync(currentInviteCode);
-    Alert.alert('Copied', 'Invite code copied to clipboard');
+    showAlert('Copied', 'Invite code copied to clipboard');
   };
 
   const handleShare = async () => {
@@ -111,12 +111,12 @@ export function TeamInviteSheet({
       const newCode = await SubscriptionTeamService.generateInviteCode(teamId);
       if (newCode) {
         setCurrentInviteCode(newCode);
-        Alert.alert('Success', 'Invite code regenerated');
+        showAlert('Success', 'Invite code regenerated');
       } else {
-        Alert.alert('Error', 'Failed to regenerate invite code');
+        showAlert('Error', 'Failed to regenerate invite code');
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to regenerate invite code');
+      showAlert('Error', 'Failed to regenerate invite code');
     } finally {
       setRegenerating(false);
     }

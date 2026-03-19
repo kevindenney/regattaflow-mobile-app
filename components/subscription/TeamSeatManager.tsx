@@ -14,9 +14,9 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { SubscriptionTeamService } from '@/services/SubscriptionTeamService';
 import { TeamMemberRow } from './TeamMemberRow';
@@ -80,24 +80,18 @@ export function TeamSeatManager({ onClose }: TeamSeatManagerProps) {
   const handleRemoveMember = async (memberId: string) => {
     if (!team) return;
 
-    Alert.alert(
+    showConfirm(
       'Remove Team Member',
       'Are you sure you want to remove this member from your team?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            const success = await SubscriptionTeamService.removeMember(team.id, memberId);
-            if (success) {
-              loadTeamData();
-            } else {
-              Alert.alert('Error', 'Failed to remove team member');
-            }
-          },
-        },
-      ]
+      async () => {
+        const success = await SubscriptionTeamService.removeMember(team.id, memberId);
+        if (success) {
+          loadTeamData();
+        } else {
+          showAlert('Error', 'Failed to remove team member');
+        }
+      },
+      { destructive: true }
     );
   };
 
@@ -108,31 +102,25 @@ export function TeamSeatManager({ onClose }: TeamSeatManagerProps) {
     if (success) {
       loadTeamData();
     } else {
-      Alert.alert('Error', 'Failed to cancel invite');
+      showAlert('Error', 'Failed to cancel invite');
     }
   };
 
   const handleLeaveTeam = async () => {
     if (!user?.id) return;
 
-    Alert.alert(
+    showConfirm(
       'Leave Team',
       'Are you sure you want to leave this team? You will lose access to team features.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave Team',
-          style: 'destructive',
-          onPress: async () => {
-            const success = await SubscriptionTeamService.leaveTeam(user.id);
-            if (success) {
-              onClose?.();
-            } else {
-              Alert.alert('Error', 'Failed to leave team');
-            }
-          },
-        },
-      ]
+      async () => {
+        const success = await SubscriptionTeamService.leaveTeam(user.id);
+        if (success) {
+          onClose?.();
+        } else {
+          showAlert('Error', 'Failed to leave team');
+        }
+      },
+      { destructive: true }
     );
   };
 

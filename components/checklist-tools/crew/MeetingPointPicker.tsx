@@ -58,7 +58,7 @@ interface MeetingPointPickerProps extends ChecklistToolProps {}
 
 export function MeetingPointPicker({
   item,
-  raceEventId,
+  regattaId: raceEventId,
   boatId,
   onComplete,
   onCancel,

@@ -174,6 +174,9 @@ const IOS_COLORS = {
   purple: '#5856D6',
   pink: '#FF2D55',
   teal: '#0D9488',
+  systemBackground: '#FFFFFF',
+  secondarySystemBackground: '#F2F2F7',
+  separator: '#3C3C434A',
 };
 
 // Icon mapping for categories
@@ -190,6 +193,8 @@ const CATEGORY_ICONS: Record<ChecklistCategory, React.ComponentType<any>> = {
   morning: CloudSun,
   on_water: Compass,
   documents: FileText,
+  strategy: Target,
+  review: BookOpen,
 };
 
 interface DaysBeforeContentProps {
@@ -664,7 +669,7 @@ export function DaysBeforeContent({
     },
     coordinates_lat: String(coords.lat),
     coordinates_lng: String(coords.lng),
-  } : null;
+  } as any : null;
 
   // Fetch user's primary boat for sail inspection on mount (not on every tab focus)
   // Note: sailor_boats.sailor_id = auth.uid() (user.id), not sailor_profiles.id
@@ -937,7 +942,7 @@ export function DaysBeforeContent({
       // Fallback to course overview
       const courseId = academyLinks?.courseId || 'race-preparation-mastery';
       router.push({
-        pathname: `/(tabs)/learn/${courseId}`,
+        pathname: `/(tabs)/learn/${courseId}` as any,
         params: { moduleId },
       });
     }
@@ -1167,21 +1172,22 @@ export function DaysBeforeContent({
 
               // Validate generated marks have valid coordinates
               const validMarks = generatedCourse.marks.filter(
-                mark => Number.isFinite(mark.lat) && Number.isFinite(mark.lng)
+                mark => Number.isFinite(mark.latitude) && Number.isFinite(mark.longitude)
               );
 
               // Validate startLine coordinates
               const startLine = generatedCourse.startLine;
               const validStartLine = startLine &&
-                Number.isFinite(startLine.portEnd?.lat) &&
-                Number.isFinite(startLine.portEnd?.lng) &&
-                Number.isFinite(startLine.starboardEnd?.lat) &&
-                Number.isFinite(startLine.starboardEnd?.lng);
+                Number.isFinite(startLine.pin?.lat) &&
+                Number.isFinite(startLine.pin?.lng) &&
+                Number.isFinite(startLine.committee?.lat) &&
+                Number.isFinite(startLine.committee?.lng);
 
               if (validMarks.length > 0 && validStartLine) {
                 setPositionedCourse({
                   id: 'auto-generated',
                   regattaId: race.id,
+                  userId: '',
                   courseType,
                   marks: validMarks,
                   startLine,
@@ -1306,11 +1312,11 @@ export function DaysBeforeContent({
 
       // Extract wind direction - try multiple sources
       windDirection = raceWindow?.windDirectionDegreesAtStart;
-      windSpeed = windSpeed ?? raceWindow?.windSpeedAtStart;
-      currentDirection = raceWindow?.currentDirection;
-      currentSpeed = raceWindow?.currentSpeed;
-      waveHeight = latest.waveHeight;
-      waveDirection = latest.waveDirection;
+      windSpeed = windSpeed ?? raceWindow?.windAtStart;
+      currentDirection = raceWindow?.currentDirectionAtStart;
+      currentSpeed = raceWindow?.currentSpeedAtStart;
+      waveHeight = raceWindow?.waveHeightAtStart;
+      waveDirection = raceWindow?.waveDirectionAtStart != null ? parseFloat(String(raceWindow.waveDirectionAtStart)) || undefined : undefined;
     }
 
     // Third priority: Try strategy notes for wind if not found
@@ -1343,10 +1349,10 @@ export function DaysBeforeContent({
 
     // Final fallback: race.wind data (may be stale or static)
     if (windDirection === undefined && race.wind?.direction !== undefined) {
-      windDirection = race.wind.direction;
+      windDirection = parseFloat(race.wind.direction) || undefined;
     }
-    if (windSpeed === undefined && race.wind?.speed !== undefined) {
-      windSpeed = race.wind.speed;
+    if (windSpeed === undefined && race.wind?.speedMax !== undefined) {
+      windSpeed = race.wind.speedMax;
     }
 
     // Fallback: estimate current from TidalCurrentEstimator if we have venue coords
@@ -1357,11 +1363,11 @@ export function DaysBeforeContent({
         const { TidalCurrentEstimator } = require('@/services/tides/TidalCurrentEstimator');
 
         // Use race start time or current time
-        const targetTime = race.start_time ? new Date(race.start_time) : new Date();
+        const targetTime = race.start_time ? new Date(race.start_time as string) : new Date();
 
         // Get tide extremes if available
-        const highTide = race.tide?.extremes?.find((e: any) => e.type === 'high');
-        const lowTide = race.tide?.extremes?.find((e: any) => e.type === 'low');
+        const highTide = (race.tide as any)?.extremes?.find((e: any) => e.type === 'high');
+        const lowTide = (race.tide as any)?.extremes?.find((e: any) => e.type === 'low');
 
         const estimate = TidalCurrentEstimator.estimateCurrent(
           coords.lat,
@@ -1516,8 +1522,8 @@ export function DaysBeforeContent({
         <View style={styles.container}>
           <TeamSetupCard
             raceName={race.name}
-            onCreateTeam={createTeamEntry}
-            onJoinTeam={(code) => joinTeam({ inviteCode: code })}
+            onCreateTeam={async (teamName) => { await createTeamEntry(teamName); }}
+            onJoinTeam={async (code) => { await joinTeam({ inviteCode: code }); }}
             isCreating={isCreating}
             isJoining={isJoining}
             error={teamError?.message}
@@ -2011,7 +2017,7 @@ export function DaysBeforeContent({
       )}
 
       {/* Team Racing */}
-      {raceType === 'team' && !isTeamRace && (
+      {(raceType as string) === 'team' && !isTeamRace && (
         <TileSection
           title="Team Racing"
           subtitle="Team coordination and combo plays"
@@ -2112,7 +2118,7 @@ export function DaysBeforeContent({
         >
           <SafetyGearWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
@@ -2129,7 +2135,7 @@ export function DaysBeforeContent({
         >
           <RiggingInspectionWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
@@ -2146,7 +2152,7 @@ export function DaysBeforeContent({
         >
           <WatchScheduleWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             raceStartTime={race.startTime}
             raceDate={race.date}
@@ -2172,7 +2178,7 @@ export function DaysBeforeContent({
         >
           <ForecastCheckWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             venue={venueForForecast}
             raceDate={race.date}
@@ -2199,7 +2205,7 @@ export function DaysBeforeContent({
         >
           <DocumentReviewWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             venue={venueForForecast}
             onComplete={handleToolComplete}
@@ -2218,7 +2224,7 @@ export function DaysBeforeContent({
         >
           <DocumentReviewWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             venue={venueForForecast}
             onComplete={handleToolComplete}
@@ -2237,9 +2243,9 @@ export function DaysBeforeContent({
         >
           <CourseMapWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
-            course={race.course}
+            course={race.course as any}
             venue={venueForForecast}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
@@ -2437,7 +2443,7 @@ export function DaysBeforeContent({
         >
           <ElectronicsChecklist
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
@@ -2455,7 +2461,7 @@ export function DaysBeforeContent({
         >
           <PositionAssignmentPanel
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             classId={userBoat?.class_id}
             onComplete={handleToolComplete}
@@ -2474,7 +2480,7 @@ export function DaysBeforeContent({
         >
           <MeetingPointPicker
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
@@ -2492,7 +2498,7 @@ export function DaysBeforeContent({
         >
           <CrewManagementWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             classId={userBoat?.class_id}
             onComplete={async () => {
@@ -2522,7 +2528,7 @@ export function DaysBeforeContent({
         >
           <LogisticsPlannerWizard
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             onComplete={() => setActiveTool(null)}
             onCancel={handleToolCancel}
@@ -2556,7 +2562,7 @@ export function DaysBeforeContent({
         >
           <InteractiveChecklist
             item={activeTool}
-            raceEventId={race.id}
+            regattaId={race.id}
             boatId={userBoat?.id}
             onComplete={handleToolComplete}
             onCancel={handleToolCancel}
@@ -2566,7 +2572,7 @@ export function DaysBeforeContent({
 
       {/* Quick Tips Panel (bottom sheet, not modal) */}
       <QuickTipsPanel
-        item={activeTool ?? { id: '', label: '', priority: 'normal' }}
+        item={(activeTool ?? { id: '', label: '', priority: 'normal' }) as any}
         visible={activeTool?.toolType === 'quick_tips'}
         onComplete={handleToolComplete}
         onCancel={handleToolCancel}

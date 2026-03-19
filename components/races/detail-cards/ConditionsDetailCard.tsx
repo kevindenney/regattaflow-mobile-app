@@ -44,7 +44,7 @@ import {
 import { useRaceWeatherForecast } from '@/hooks/useRaceWeatherForecast';
 import { useRaceTuningRecommendation } from '@/hooks/useRaceTuningRecommendation';
 import type { SailSelectionIntention, SailInventoryItem } from '@/types/raceIntentions';
-import type { SailingVenue } from '@/types/venue';
+import type { SailingVenue } from '@/services/LocationDetectionService';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -263,7 +263,7 @@ export function ConditionsDetailCard({
   // Use raceStartTime if provided, otherwise fall back to raceDate
   const effectiveRaceDate = raceStartTime || raceDate;
   const { data: forecastData, loading: forecastLoading } = useRaceWeatherForecast(
-    venue,
+    venue as any,
     effectiveRaceDate,
     !!venue,
     expectedDurationMinutes
@@ -309,13 +309,13 @@ export function ConditionsDetailCard({
     (category: keyof SailSelectionIntention, id?: string): string | null => {
       if (!id) return null;
       const allSails = [
-        ...sails.mainsail,
-        ...sails.jib,
-        ...sails.genoa,
-        ...sails.spinnaker,
+        ...sails.mainsails,
+        ...sails.jibs,
+        ...sails.genoas,
+        ...sails.spinnakers,
       ];
       const sail = allSails.find((s) => s.id === id);
-      return sail?.name || null;
+      return sail?.customName || sail?.model || null;
     },
     [sails]
   );
@@ -327,7 +327,7 @@ export function ConditionsDetailCard({
     const mainName = getSailName('mainsail', sailSelection.mainsail);
     const headsailName =
       getSailName('jib', sailSelection.jib) ||
-      getSailName('genoa', sailSelection.genoa);
+      getSailName('jib' as any, sailSelection.jib);
     const spinName = getSailName('spinnaker', sailSelection.spinnaker);
     if (mainName) parts.push(mainName);
     if (headsailName) parts.push(headsailName);
@@ -848,36 +848,30 @@ export function ConditionsDetailCard({
                     <SailSelector
                       label="Mainsail"
                       category="mainsail"
-                      sails={sails.mainsail}
+                      sails={sails.mainsails}
                       selectedId={sailSelection?.mainsail}
                       onSelect={(sail) => handleSailSelect('mainsail', sail)}
                       disabled={sailsLoading}
                     />
 
-                    {(sails.jib.length > 0 || sails.genoa.length > 0) && (
+                    {(sails.jibs.length > 0 || sails.genoas.length > 0) && (
                       <SailSelector
                         label="Headsail"
-                        category={sails.jib.length > 0 ? 'jib' : 'genoa'}
-                        sails={[...sails.jib, ...sails.genoa]}
-                        selectedId={sailSelection?.jib || sailSelection?.genoa}
+                        category={'jib'}
+                        sails={[...sails.jibs, ...sails.genoas]}
+                        selectedId={sailSelection?.jib}
                         onSelect={(sail) => {
-                          if (sail?.category === 'genoa') {
-                            handleSailSelect('genoa', sail);
-                            handleSailSelect('jib', null);
-                          } else {
-                            handleSailSelect('jib', sail);
-                            handleSailSelect('genoa', null);
-                          }
+                          handleSailSelect('jib' as any, sail);
                         }}
                         disabled={sailsLoading}
                       />
                     )}
 
-                    {sails.spinnaker.length > 0 && (
+                    {sails.spinnakers.length > 0 && (
                       <SailSelector
                         label="Spinnaker"
                         category="spinnaker"
-                        sails={sails.spinnaker}
+                        sails={sails.spinnakers}
                         selectedId={sailSelection?.spinnaker}
                         onSelect={(sail) => handleSailSelect('spinnaker', sail)}
                         disabled={sailsLoading}

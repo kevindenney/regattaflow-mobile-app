@@ -1,8 +1,8 @@
 /**
  * Onboarding Pricing Screen
  *
- * Updated: 2026-01-30
- * New pricing: Individual $10/mo ($120/yr) / Team $40/mo ($480/yr)
+ * Updated: 2026-03-15
+ * Pricing: Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +13,7 @@ import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } fr
 
 export default function PricingScreen() {
     const router = useRouter();
-    const [selectedPlan, setSelectedPlan] = useState<'individual' | 'team' | null>('individual');
+    const [selectedPlan, setSelectedPlan] = useState<'individual' | 'pro' | null>('individual');
     const [loading, setLoading] = useState(false);
 
     const handleContinue = async () => {
@@ -25,18 +25,17 @@ export default function PricingScreen() {
         setTimeout(() => {
             setLoading(false);
             router.push({
-                pathname: '/onboarding/register',
+                pathname: '/(auth)/signup',
                 params: { plan: selectedPlan }
-            });
+            } as any);
         }, 500);
     };
 
     const handleSkip = () => {
-        // Skip pricing, go to registration with free plan
         router.push({
-            pathname: '/onboarding/register',
+            pathname: '/(auth)/signup',
             params: { plan: 'free' }
-        });
+        } as any);
     };
 
     return (
@@ -88,33 +87,33 @@ export default function PricingScreen() {
                             </View>
                             <Text style={styles.planName}>Individual</Text>
                             <Text style={styles.planPrice}>$10<Text style={styles.period}>/month</Text></Text>
-                            <Text style={styles.annualPrice}>$120/year when billed annually</Text>
-                            <Text style={styles.planDesc}>Full racing features for solo sailors tracking their progress.</Text>
+                            <Text style={styles.annualPrice}>$100/year when billed annually</Text>
+                            <Text style={styles.planDesc}>AI-powered race preparation with 50,000 AI tokens per month.</Text>
                         </TouchableOpacity>
 
-                        {/* Team Plan */}
+                        {/* Pro Plan */}
                         <TouchableOpacity
                             style={[
                                 styles.planCard,
-                                selectedPlan === 'team' && styles.selectedCard
+                                selectedPlan === 'pro' && styles.selectedCard
                             ]}
-                            onPress={() => setSelectedPlan('team')}
+                            onPress={() => setSelectedPlan('pro')}
                             activeOpacity={0.9}
                         >
                             <View style={styles.cardHeader}>
                                 <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
                                     <Users size={24} color="#9333EA" />
                                 </View>
-                                {selectedPlan === 'team' && (
+                                {selectedPlan === 'pro' && (
                                     <View style={styles.checkCircle}>
                                         <Ionicons name="checkmark" size={16} color="#FFF" />
                                     </View>
                                 )}
                             </View>
-                            <Text style={styles.planName}>Team</Text>
-                            <Text style={styles.planPrice}>$40<Text style={styles.period}>/month</Text></Text>
-                            <Text style={styles.annualPrice}>$480/year when billed annually</Text>
-                            <Text style={styles.planDesc}>Up to 5 team members. Ideal for crews and sailing teams.</Text>
+                            <Text style={styles.planName}>Pro</Text>
+                            <Text style={styles.planPrice}>$100<Text style={styles.period}>/month</Text></Text>
+                            <Text style={styles.annualPrice}>$800/year when billed annually</Text>
+                            <Text style={styles.planDesc}>Maximum AI power with 500,000 tokens per month. Priority support.</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -126,7 +125,7 @@ export default function PricingScreen() {
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                            <Text style={styles.featureText}>Unlimited AI Queries</Text>
+                            <Text style={styles.featureText}>AI-Powered Analysis</Text>
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
@@ -142,13 +141,6 @@ export default function PricingScreen() {
                         </View>
                     </View>
 
-                    <View style={styles.learningNote}>
-                        <Ionicons name="school-outline" size={20} color="#F59E0B" />
-                        <Text style={styles.learningNoteText}>
-                            Learning modules available separately at $30/year each
-                        </Text>
-                    </View>
-
                 </ScrollView>
 
                 <View style={styles.footer}>
@@ -158,7 +150,7 @@ export default function PricingScreen() {
                         disabled={loading}
                     >
                         <Text style={styles.continueButtonText}>
-                            {loading ? 'Processing...' : `Start ${selectedPlan === 'individual' ? 'Individual' : 'Team'} Plan`}
+                            {loading ? 'Processing...' : `Start ${selectedPlan === 'individual' ? 'Individual' : 'Pro'} Plan`}
                         </Text>
                     </TouchableOpacity>
 
@@ -328,19 +320,6 @@ const styles = StyleSheet.create({
     featureText: {
         fontSize: 16,
         color: '#334155',
-    },
-    learningNote: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FEF3C7',
-        padding: 12,
-        borderRadius: 8,
-        gap: 8,
-    },
-    learningNoteText: {
-        fontSize: 14,
-        color: '#92400E',
-        flex: 1,
     },
     footer: {
         padding: 24,

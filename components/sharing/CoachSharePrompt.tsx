@@ -11,9 +11,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Alert,
   Platform,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/services/supabase';
@@ -142,18 +142,10 @@ export function CoachSharePrompt({
       onShareComplete?.(result);
       onDismiss();
 
-      if (Platform.OS === 'web') {
-        alert(`Shared with ${coach.display_name}!`);
-      } else {
-        Alert.alert('Shared!', `Your analysis has been shared with ${coach.display_name}.`);
-      }
+      showAlert('Shared!', `Your analysis has been shared with ${coach.display_name}.`);
     } catch (error) {
       logger.error('Failed to share with coach:', error);
-      if (Platform.OS === 'web') {
-        alert('Failed to share. Please try again.');
-      } else {
-        Alert.alert('Error', 'Failed to share. Please try again.');
-      }
+      showAlert('Error', 'Failed to share. Please try again.');
     } finally {
       setSharing(false);
     }

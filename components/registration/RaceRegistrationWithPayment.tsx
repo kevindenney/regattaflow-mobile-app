@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { View, Platform, Alert } from 'react-native';
+import { View, Platform } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useRouter } from 'expo-router';
 import { VStack, Text, Button, Card } from '@/components/ui';
 import { CheckCircle } from 'lucide-react-native';
@@ -59,14 +60,14 @@ export function RaceRegistrationWithPayment({
       }
     } catch (error: any) {
       console.error('Error processing registration:', error);
-      Alert.alert('Error', error.message || 'Failed to process registration');
+      showAlert('Error', error.message || 'Failed to process registration');
     } finally {
       setProcessing(false);
     }
   };
 
   const handleFormQueued = (entry: RaceEntry) => {
-    Alert.alert('Offline', 'Your entry will sync automatically once you are back online.');
+    showAlert('Offline', 'Your entry will sync automatically once you are back online.');
     handleFormCancel();
   };
 
@@ -92,26 +93,18 @@ export function RaceRegistrationWithPayment({
    * Handle payment cancellation
    */
   const handlePaymentCancel = () => {
-    Alert.alert(
+    showConfirm(
       'Cancel Registration',
       'Are you sure you want to cancel your registration? Your entry will be saved as a draft.',
-      [
-        {
-          text: 'Continue Registration',
-          style: 'cancel',
-        },
-        {
-          text: 'Cancel',
-          style: 'destructive',
-          onPress: () => {
-            if (onComplete) {
-              onComplete();
-            } else {
-              router.back();
-            }
-          },
-        },
-      ]
+      () => {
+        if (onComplete) {
+          onComplete();
+        } else {
+          router.back();
+        }
+      },
+      { destructive: true }
+
     );
   };
 

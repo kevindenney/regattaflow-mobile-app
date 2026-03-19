@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, View, Alert, TouchableOpacity, Linking } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, Linking } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 // import { Canvas, useThree, useFrame } from '@react-three/fiber'; // TODO: Re-enable with ES module fix
@@ -170,7 +171,7 @@ export function ProfessionalMapScreen({
 
   const handleCenterOnLocation = useCallback(() => {
     setFollowingGPS(prev => !prev);
-    Alert.alert('GPS Center', followingGPS ? 'GPS following disabled' : 'Centering on GPS location');
+    showAlert('GPS Center', followingGPS ? 'GPS following disabled' : 'Centering on GPS location');
   }, [followingGPS]);
 
   const handleWeatherUpdate = useCallback((weather: AdvancedWeatherConditions) => {
@@ -232,19 +233,13 @@ export function ProfessionalMapScreen({
         onCenterOnLocation={handleCenterOnLocation}
         onOpenLayerMenu={() => setShowLayerMenu(true)}
         onOpenOfflineManager={() =>
-          Alert.alert(
+          showConfirm(
             'Offline Maps',
             'Offline map packs are managed by support right now.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Contact Support',
-                onPress: () =>
-                  Linking.openURL(
-                    'mailto:support@regattaflow.com?subject=Offline%20Map%20Pack%20Request'
-                  ),
-              },
-            ]
+            () =>
+              Linking.openURL(
+                'mailto:support@regattaflow.com?subject=Offline%20Map%20Pack%20Request'
+              )
           )
         }
         onOpenMeasurementTools={() => setShowMeasurementTools(true)}
@@ -267,7 +262,7 @@ export function ProfessionalMapScreen({
             <TouchableOpacity
               key={index}
               style={styles.insightChip}
-              onPress={() => Alert.alert(insight.title, insight.description)}
+              onPress={() => showAlert(insight.title, insight.description)}
             >
               <ThemedText style={styles.insightText}>{insight.title}</ThemedText>
             </TouchableOpacity>

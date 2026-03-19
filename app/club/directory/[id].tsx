@@ -15,7 +15,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Alert,
   Linking,
   StyleSheet,
 } from 'react-native';
@@ -40,6 +39,7 @@ import {
   IOS_SPACING,
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 export default function GlobalClubDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -69,10 +69,10 @@ export default function GlobalClubDetailScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-global-clubs', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['global-club', id] });
-      Alert.alert('Joined!', `You are now a member of ${club?.name}`);
+      showAlert('Joined!', `You are now a member of ${club?.name}`);
     },
     onError: (error: Error) => {
-      Alert.alert('Error', error.message || 'Failed to join club');
+      showAlert('Error', error.message || 'Failed to join club');
     },
   });
 
@@ -84,27 +84,21 @@ export default function GlobalClubDetailScreen() {
       queryClient.invalidateQueries({ queryKey: ['global-club', id] });
     },
     onError: (error: Error) => {
-      Alert.alert('Error', error.message || 'Failed to leave club');
+      showAlert('Error', error.message || 'Failed to leave club');
     },
   });
 
   const handleToggleMembership = useCallback(() => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to join clubs.');
+      showAlert('Sign In Required', 'Please sign in to join clubs.');
       return;
     }
     if (isMember) {
-      Alert.alert(
+      showConfirm(
         'Leave Club',
         `Are you sure you want to leave ${club?.name}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Leave',
-            style: 'destructive',
-            onPress: () => leaveMutation.mutate(),
-          },
-        ]
+        () => leaveMutation.mutate(),
+        { destructive: true }
       );
     } else {
       joinMutation.mutate();

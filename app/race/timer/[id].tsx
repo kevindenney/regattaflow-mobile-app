@@ -13,6 +13,7 @@ import {
 
   Platform,
 } from "react-native";
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -161,7 +162,7 @@ export default function RaceTimerScreen() {
     } catch (error) {
       console.error('Error loading race data:', error);
       if (canCommit()) {
-        Alert.alert('Error', 'Could not load race information');
+        showAlert('Error', 'Could not load race information');
       }
     }
   }, [id]);
@@ -232,14 +233,14 @@ export default function RaceTimerScreen() {
         setRaceTime((prev) => prev + 1);
       }, 1000);
 
-      Alert.alert(
+      showAlert(
         'Race Started',
         'Race timer is active. GPS tracks will be recorded when location services are available.'
       );
     } catch (error) {
       console.error('Error starting race:', error);
       if (isMountedRef.current) {
-        Alert.alert('Error', 'Could not start race timer');
+        showAlert('Error', 'Could not start race timer');
       }
     }
   }, [id, user, windData.direction, windData.speed]);
@@ -253,7 +254,7 @@ export default function RaceTimerScreen() {
         // If denied, continue with countdown/race timing without GPS.
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert(
+          showAlert(
             'GPS Permission Denied',
             'Race timing will continue without GPS track recording on this device.'
           );
@@ -281,7 +282,7 @@ export default function RaceTimerScreen() {
       }, 1000);
     } catch (error) {
       console.error('Error starting countdown:', error);
-      Alert.alert('Error', 'Could not start countdown');
+      showAlert('Error', 'Could not start countdown');
     }
   }, [startRace]);
 
@@ -321,7 +322,7 @@ export default function RaceTimerScreen() {
                 setSessionId(null);
               }
 
-              Alert.alert(
+              showAlertWithButtons(
                 'Session Saved',
                 `Recorded ${trackPointCount} GPS track points`,
                 [
@@ -339,7 +340,7 @@ export default function RaceTimerScreen() {
       );
     } catch (error) {
       console.error('Error stopping race:', error);
-      Alert.alert('Error', 'Could not stop race timer');
+      showAlert('Error', 'Could not stop race timer');
     }
   }, [router, sessionId, trackPointCount]);
 

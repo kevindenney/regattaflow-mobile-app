@@ -10,7 +10,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { crewManagementService, CrewMemberWithAssignment } from '@/services/crewManagementService';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface CrewEquipmentCardProps {
   raceId: string;
@@ -88,7 +89,7 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
       await loadCrew(); // Refresh the list
     } catch (error) {
       console.error('Error assigning crew:', error);
-      Alert.alert('Error', 'Failed to assign crew member');
+      showAlert('Error', 'Failed to assign crew member');
     }
   };
 
@@ -98,7 +99,7 @@ export function CrewEquipmentCard({ raceId, classId, raceDate, onManageCrew }: C
       await loadCrew(); // Refresh the list
     } catch (error) {
       console.error('Error unassigning crew:', error);
-      Alert.alert('Error', 'Failed to unassign crew member');
+      showAlert('Error', 'Failed to unassign crew member');
     }
   };
 

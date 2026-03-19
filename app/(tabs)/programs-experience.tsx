@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -1073,7 +1073,7 @@ export default function RaceManagementScreen() {
           onClose={() => setSailwaveModalVisible(false)}
           onImportComplete={(data) => {
             setSailwaveModalVisible(false);
-            Alert.alert(
+            showAlertWithButtons(
               'Import Successful',
               `Imported ${data.competitors?.length || 0} competitors and ${data.races?.length || 0} races from Sailwave.`,
               [{ text: 'View Results', onPress: () => router.push('/club/results/entry') }]

@@ -12,11 +12,11 @@ import {
   StyleSheet,
   Dimensions,
   Vibration,
-  Alert,
   StatusBar,
   Platform,
   Linking,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import * as KeepAwake from 'expo-keep-awake';
 import { raceStrategyEngine, type RaceStrategy, type RaceConditions } from '@/services/ai/RaceStrategyEngine';
@@ -738,7 +738,7 @@ export const RaceDayInterface: React.FC<RaceDayInterfaceProps> = ({
           style={styles.emergencyButton}
           onPress={() => {
             addEmergencyAlert('Race Abandoned', 'Race abandonment signal acknowledged. Return-to-harbor protocol enabled.', 'weather_alert');
-            Alert.alert('Race Abandoned', 'Return to overview and notify fleet communications.');
+            showAlert('Race Abandoned', 'Return to overview and notify fleet communications.');
             setActiveView('overview');
           }}
         >

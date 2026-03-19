@@ -14,8 +14,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -63,7 +63,7 @@ export function DiscussionThread({
 
   const handleVote = (vote: 1 | -1) => {
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to vote');
+      showAlert('Sign in required', 'Please sign in to vote');
       return;
     }
 
@@ -81,7 +81,7 @@ export function DiscussionThread({
     if (!replyText.trim()) return;
 
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to comment');
+      showAlert('Sign in required', 'Please sign in to comment');
       return;
     }
 
@@ -94,7 +94,7 @@ export function DiscussionThread({
       setReplyText('');
       setReplyingTo(null);
     } catch (error) {
-      Alert.alert('Error', 'Failed to post comment. Please try again.');
+      showAlert('Error', 'Failed to post comment. Please try again.');
     }
   };
 

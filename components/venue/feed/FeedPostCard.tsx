@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 import type { FeedPost, TopicTag, ConditionTag } from '@/types/community-feed';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 
 interface FeedPostCardProps {
   post: FeedPost;
@@ -124,6 +125,7 @@ export function FeedPostCard({
   showVenueName = false,
 }: FeedPostCardProps) {
   const typeConfig = POST_TYPE_CONFIG[post.post_type] || POST_TYPE_CONFIG.discussion;
+  const safeAuthorAvatarUrl = getSafeImageUri(post.author?.avatar_url);
 
   // Memoize avatar color to be consistent
   const avatarColor = useMemo(
@@ -163,9 +165,9 @@ export function FeedPostCard({
     >
       {/* Author line with avatar, name, badge, and timestamp */}
       <View style={styles.authorRow}>
-        {post.author?.avatar_url ? (
+        {safeAuthorAvatarUrl ? (
           <Image
-            source={{ uri: post.author.avatar_url }}
+            source={{ uri: safeAuthorAvatarUrl }}
             style={styles.authorAvatarImage}
           />
         ) : (

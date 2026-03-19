@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { 
   ChevronLeft, Calendar, Clock, Users, MapPin, DollarSign, 
   FileText, Send, Save, Upload, CheckCircle
@@ -124,15 +125,15 @@ const SeriesRaceConfigScreen = () => {
   };
 
   const handleSaveAsDraft = () => {
-    Alert.alert('Draft Saved', 'Your race configuration has been saved as a draft.');
+    showAlert('Draft Saved', 'Your race configuration has been saved as a draft.');
   };
 
   const handleCreateAndPublish = () => {
-    Alert.alert('Race Published', 'Your race has been created and published successfully.');
+    showAlert('Race Published', 'Your race has been created and published successfully.');
   };
 
   const handleSaveAsTemplate = () => {
-    Alert.alert('Template Saved', 'Your race configuration has been saved as a template.');
+    showAlert('Template Saved', 'Your race configuration has been saved as a template.');
   };
 
   return (

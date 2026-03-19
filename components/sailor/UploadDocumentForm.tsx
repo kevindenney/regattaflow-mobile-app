@@ -7,7 +7,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import React, { useState } from 'react';
 import {
-  Alert,
   Modal,
   ScrollView,
   StyleSheet,
@@ -16,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface UploadDocumentFormProps {
   visible: boolean;
@@ -77,7 +77,7 @@ export function UploadDocumentForm({
         name: prev.name?.trim() ? prev.name : selectedName.replace(/\.[^.]+$/, ''),
       }));
     } catch (error: any) {
-      Alert.alert(
+      showAlert(
         'File selection failed',
         error?.message || 'Unable to select a file right now. Please try again.'
       );

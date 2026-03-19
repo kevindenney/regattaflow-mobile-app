@@ -419,7 +419,7 @@ const ActionsheetBackdrop = React.forwardRef<
       className={actionsheetBackdropStyle({
         class: className,
       })}
-      style={[{ zIndex: 9998, elevation: 99 }, style]}
+      style={[{ zIndex: 9998, elevation: 99 }, style] as any}
       ref={ref}
     />
   );

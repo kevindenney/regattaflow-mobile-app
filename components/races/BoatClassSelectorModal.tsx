@@ -12,7 +12,6 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -20,6 +19,7 @@ import { supabase } from '@/services/supabase';
 import { tuningGuideService } from '@/services/tuningGuideService';
 import { getDefaultGuidesForClass } from '@/data/default-tuning-guides';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 const logger = createLogger('BoatClassSelectorModal');
 
@@ -78,7 +78,7 @@ export function BoatClassSelectorModal({
       setClasses(data || []);
     } catch (err: any) {
       logger.error('Error loading boat classes:', err);
-      Alert.alert('Error', 'Failed to load boat classes');
+      showAlert('Error', 'Failed to load boat classes');
     } finally {
       setLoading(false);
     }
@@ -100,7 +100,7 @@ export function BoatClassSelectorModal({
 
       if (fetchError) {
         logger.error('Error fetching current race data:', fetchError);
-        Alert.alert('Error', 'Failed to load race data');
+        showAlert('Error', 'Failed to load race data');
         setSelectedClassId(currentClassId || null);
         return;
       }
@@ -123,7 +123,7 @@ export function BoatClassSelectorModal({
 
       if (error) {
         logger.error('Error updating race class:', error);
-        Alert.alert('Error', 'Failed to update race class');
+        showAlert('Error', 'Failed to update race class');
         setSelectedClassId(currentClassId || null);
         return;
       }
@@ -149,7 +149,7 @@ export function BoatClassSelectorModal({
       }
     } catch (err: any) {
       logger.error('Exception updating race class:', err);
-      Alert.alert('Error', 'Failed to update race class');
+      showAlert('Error', 'Failed to update race class');
       setSelectedClassId(currentClassId || null);
     } finally {
       setSaving(false);
@@ -194,36 +194,30 @@ export function BoatClassSelectorModal({
     try {
       setFetchingGuides(true);
       
-      Alert.alert(
+      showConfirm(
         `Fetch ${selectedClassName} Tuning Guides`,
         `Search for tuning guides from North Sails, Quantum, and other major sailmakers for ${selectedClassName}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Fetch Guides',
-            onPress: async () => {
-              await tuningGuideService.triggerAutoScrape(selectedClassId);
-              Alert.alert(
-                'Search Started',
-                `Searching for ${selectedClassName} tuning guides... Check the Tuning Guides tab in a few moments.`,
-                [
-                  {
-                    text: 'View Tuning Guides',
-                    onPress: () => {
-                      onClose();
-                      router.push('/(tabs)/tuning-guides');
-                    },
-                  },
-                  { text: 'OK', style: 'cancel' },
-                ]
-              );
-            },
-          },
-        ]
+        async () => {
+          await tuningGuideService.triggerAutoScrape(selectedClassId);
+          showAlertWithButtons(
+            'Search Started',
+            `Searching for ${selectedClassName} tuning guides... Check the Tuning Guides tab in a few moments.`,
+            [
+              {
+                text: 'View Tuning Guides',
+                onPress: () => {
+                  onClose();
+                  router.push('/(tabs)/tuning-guides');
+                },
+              },
+              { text: 'OK', style: 'cancel' },
+            ]
+          );
+        },
       );
     } catch (err: any) {
       logger.error('Error fetching guides:', err);
-      Alert.alert('Error', 'Failed to start guide search');
+      showAlert('Error', 'Failed to start guide search');
     } finally {
       setFetchingGuides(false);
     }

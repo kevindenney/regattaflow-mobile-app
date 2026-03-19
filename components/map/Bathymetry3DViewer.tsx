@@ -6,7 +6,8 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Text } from '@react-three/drei';
@@ -107,11 +108,10 @@ export function Bathymetry3DViewer({
 
     onDepthQuery?.(depth, location);
 
-    Alert.alert(
+    showAlert(
       'Depth Information',
       `Depth: ${Math.abs(depth).toFixed(1)}m\n` +
-      `Position: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`,
-      [{ text: 'OK' }]
+      `Position: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`
     );
   };
 

@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Alert } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('useStrategySharing');
@@ -66,19 +66,19 @@ export function useStrategySharing({
 
     if (!selectedRaceId) {
       logger.warn('[handleOpenStrategySharing] No race selected');
-      Alert.alert('Error', 'Please select a race first.');
+      showAlert('Error', 'Please select a race first.');
       return;
     }
 
     if (!sailorId) {
       logger.warn('[handleOpenStrategySharing] No sailor ID');
-      Alert.alert('Error', 'Unable to identify your account. Please try refreshing the page.');
+      showAlert('Error', 'Unable to identify your account. Please try refreshing the page.');
       return;
     }
 
     if (!selectedRaceData) {
       logger.warn('[handleOpenStrategySharing] No race data');
-      Alert.alert('Error', 'Race data not loaded. Please try again.');
+      showAlert('Error', 'Race data not loaded. Please try again.');
       return;
     }
 
@@ -89,7 +89,7 @@ export function useStrategySharing({
       const raceEventId = await ensureRaceEventId();
       if (!raceEventId) {
         logger.error('[handleOpenStrategySharing] Failed to get race_event_id');
-        Alert.alert('Error', 'Unable to prepare race for sharing. Please try again.');
+        showAlert('Error', 'Unable to prepare race for sharing. Please try again.');
         return;
       }
 
@@ -104,7 +104,7 @@ export function useStrategySharing({
     } catch (error) {
       logger.error('[handleOpenStrategySharing] Error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      Alert.alert('Error', `Failed to prepare sharing: ${errorMessage}`);
+      showAlert('Error', `Failed to prepare sharing: ${errorMessage}`);
     } finally {
       setSharingStrategy(false);
     }

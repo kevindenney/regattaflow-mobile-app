@@ -12,10 +12,10 @@ import {
   StyleSheet,
   Pressable,
   Share,
-  Alert,
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 
@@ -179,7 +179,7 @@ export function ShareActivityButton({
     } catch (error) {
       const err = error as Error;
       onShareError?.(err);
-      Alert.alert('Share Failed', 'Could not share this activity. Please try again.');
+      showAlert('Share Failed', 'Could not share this activity. Please try again.');
     } finally {
       setIsSharing(false);
     }

@@ -23,6 +23,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { CardRaceData, isRacePast, formatTimeUntilRace } from './types';
 import { IOS_COLORS } from './constants';
 import { triggerHaptic } from '@/lib/haptics';
@@ -93,6 +94,13 @@ function groupByMonthIndexed(indexedRaces: IndexedRace[]): MonthGroup[] {
 
 function getRaceStatusColor(race: CardRaceData, isNext: boolean): string {
   if (isNext) return IOS_COLORS.green;
+  // Timeline steps carry an explicit status — use it instead of date logic
+  if ((race as any).isTimelineStep) {
+    const s = (race as any).status;
+    if (s === 'completed') return IOS_COLORS.gray3;
+    if (s === 'in_progress') return IOS_COLORS.green;
+    return IOS_COLORS.blue; // scheduled / abandoned
+  }
   const dateStr = (race as any).start_date || race.date;
   const isPast = isRacePast(dateStr, race.startTime);
   if (isPast) return IOS_COLORS.gray3;
@@ -101,6 +109,13 @@ function getRaceStatusColor(race: CardRaceData, isNext: boolean): string {
 
 function getRaceStatusLabel(race: CardRaceData, isNext: boolean): string {
   if (isNext) return 'NEXT';
+  // Timeline steps carry an explicit status — use it instead of date logic
+  if ((race as any).isTimelineStep) {
+    const s = (race as any).status;
+    if (s === 'completed') return 'DONE';
+    if (s === 'in_progress') return 'NOW';
+    return 'PLANNED';
+  }
   const dateStr = (race as any).start_date || race.date;
   const isPast = isRacePast(dateStr, race.startTime);
   if (isPast) return 'DONE';
@@ -131,6 +146,7 @@ const MiniCard = React.memo(function MiniCard({
   canManage,
   onEdit,
   onDelete,
+  onOpenDetail,
   isMenuOpen,
   onOpenMenu,
   onCloseMenu,
@@ -148,6 +164,7 @@ const MiniCard = React.memo(function MiniCard({
   canManage: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
+  onOpenDetail?: () => void;
   isMenuOpen: boolean;
   onOpenMenu: () => void;
   onCloseMenu: () => void;
@@ -171,26 +188,66 @@ const MiniCard = React.memo(function MiniCard({
   const dayNum = d.getDate();
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
   const isBlankActivity = (race as any).metadata?.event_subtype === 'blank_activity';
+  const isTimelineStep = !!(race as any).isTimelineStep;
 
-  const webDnDProps: any = Platform.OS === 'web' && isReorderMode
-    ? {
-        draggable: true,
-        onDragStart: () => onDragStartCard?.(),
-        onDragEnter: (event: any) => {
-          event?.preventDefault?.();
-          onDragEnterCard?.();
-        },
-        onDragOver: (event: any) => {
-          event?.preventDefault?.();
-        },
-        onDrop: (event: any) => {
-          event?.preventDefault?.();
-          onDropCard?.();
-        },
-      }
-    : {};
+  // Compute phase badge + progress counts for timeline steps
+  const stepPhase = useMemo(() => {
+    if (!isTimelineStep) return null;
+    const status = (race as any).status;
+    if (status === 'completed') return { label: 'Done', color: IOS_COLORS.gray3 };
+    if (status === 'in_progress') return { label: 'Do', color: IOS_COLORS.green };
+    return { label: 'Plan', color: IOS_COLORS.blue };
+  }, [isTimelineStep, (race as any).status]);
+
+  const stepProgress = useMemo(() => {
+    if (!isTimelineStep) return null;
+    const metadata = (race as any).metadata;
+    const howSubSteps: any[] = metadata?.plan?.how_sub_steps || [];
+    const subStepProgress: Record<string, boolean> = metadata?.act?.sub_step_progress || {};
+    const totalSubSteps = howSubSteps.length;
+    const completedSubSteps = Object.values(subStepProgress).filter(Boolean).length;
+
+    const mediaUploads: any[] = metadata?.act?.media_uploads || [];
+    const mediaLinks: any[] = metadata?.act?.media_links || [];
+    const evidenceCount = mediaUploads.length + mediaLinks.length;
+
+    return { totalSubSteps, completedSubSteps, evidenceCount };
+  }, [isTimelineStep, (race as any).metadata]);
+
+  // Web DnD: attach native HTML drag events via ref since AnimatedPressable
+  // doesn't forward unknown DOM props like draggable/onDragStart.
+  // Use stable refs for callbacks so the effect only runs when reorderMode changes,
+  // preventing listener churn that breaks mid-drag event sequences.
+  const dndRef = React.useRef<any>(null);
+  const dndCallbacks = React.useRef({ onDragStartCard, onDragEnterCard, onDropCard });
+  dndCallbacks.current = { onDragStartCard, onDragEnterCard, onDropCard };
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || !isReorderMode) {
+      if (dndRef.current) dndRef.current.removeAttribute?.('draggable');
+      return;
+    }
+    const el = dndRef.current;
+    if (!el) return;
+    el.setAttribute('draggable', 'true');
+    const handleDragStart = () => dndCallbacks.current.onDragStartCard?.();
+    const handleDragEnter = (e: Event) => { e.preventDefault(); dndCallbacks.current.onDragEnterCard?.(); };
+    const handleDragOver = (e: Event) => { e.preventDefault(); };
+    const handleDrop = (e: Event) => { e.preventDefault(); dndCallbacks.current.onDropCard?.(); };
+    el.addEventListener('dragstart', handleDragStart);
+    el.addEventListener('dragenter', handleDragEnter);
+    el.addEventListener('dragover', handleDragOver);
+    el.addEventListener('drop', handleDrop);
+    return () => {
+      el.removeAttribute('draggable');
+      el.removeEventListener('dragstart', handleDragStart);
+      el.removeEventListener('dragenter', handleDragEnter);
+      el.removeEventListener('dragover', handleDragOver);
+      el.removeEventListener('drop', handleDrop);
+    };
+  }, [isReorderMode]);
 
   return (
+    <View ref={dndRef}>
     <AnimatedPressable
       style={[
         miniStyles.card,
@@ -216,14 +273,13 @@ const MiniCard = React.memo(function MiniCard({
       onPressOut={() => {
         scale.value = withSpring(1, { damping: 15, stiffness: 300 });
       }}
-      {...webDnDProps}
     >
       <View style={miniStyles.topRow}>
         {/* Status badge */}
         <View style={[miniStyles.statusBadge, { backgroundColor: statusColor }]}>
           <Text style={miniStyles.statusText}>{statusLabel}</Text>
         </View>
-        {canManage && !isReorderMode && (onEdit || onDelete) ? (
+        {!isReorderMode && (onOpenDetail || (canManage && (onEdit || onDelete))) ? (
           <Pressable
             style={miniStyles.menuButton}
             onPress={(event) => {
@@ -245,6 +301,18 @@ const MiniCard = React.memo(function MiniCard({
 
       {isMenuOpen ? (
         <View style={miniStyles.menuPopover}>
+          {onOpenDetail ? (
+            <Pressable
+              style={miniStyles.menuItem}
+              onPress={(event) => {
+                (event as any)?.stopPropagation?.();
+                onCloseMenu();
+                onOpenDetail();
+              }}
+            >
+              <Text style={miniStyles.menuItemText}>Open</Text>
+            </Pressable>
+          ) : null}
           {onEdit ? (
             <Pressable
               style={miniStyles.menuItem}
@@ -272,36 +340,103 @@ const MiniCard = React.memo(function MiniCard({
         </View>
       ) : null}
 
-      {/* Date circle */}
-      <View style={miniStyles.dateCircle}>
-        <Text style={miniStyles.dateDay}>{dayNum}</Text>
-        <Text style={miniStyles.dateDayName}>{dayName}</Text>
-      </View>
+      {isTimelineStep && stepPhase ? (
+        <>
+          {/* Phase badge */}
+          <View style={miniStyles.phaseBadgeRow}>
+            <View style={[miniStyles.phaseBadge, { backgroundColor: stepPhase.color + '18' }]}>
+              <Ionicons
+                name={
+                  stepPhase.label === 'Done'
+                    ? 'checkmark-circle'
+                    : stepPhase.label === 'Do'
+                    ? 'play-circle'
+                    : 'bulb-outline'
+                }
+                size={12}
+                color={stepPhase.color}
+              />
+              <Text style={[miniStyles.phaseBadgeText, { color: stepPhase.color }]}>
+                {stepPhase.label}
+              </Text>
+            </View>
+          </View>
 
-      {/* Race name */}
-      <Text style={miniStyles.raceName} numberOfLines={2}>
-        {race.name || (isBlankActivity ? 'Blank Step' : 'Untitled')}
-      </Text>
+          {/* Step name */}
+          <Text style={miniStyles.raceName} numberOfLines={2}>
+            {race.name || (isBlankActivity ? 'Blank Step' : 'Untitled')}
+          </Text>
 
-      {/* Venue */}
-      {race.venue && race.venue !== 'Venue TBD' && (
-        <Text style={miniStyles.venue} numberOfLines={1}>
-          {race.venue}
-        </Text>
+          {/* Venue */}
+          {race.venue && race.venue !== 'Venue TBD' && (
+            <Text style={miniStyles.venue} numberOfLines={1}>
+              {race.venue}
+            </Text>
+          )}
+
+          {/* Progress indicators */}
+          <View style={miniStyles.typeRow}>
+            {stepProgress && stepProgress.totalSubSteps > 0 && (
+              <View style={miniStyles.progressChip}>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={12}
+                  color={IOS_COLORS.secondaryLabel}
+                />
+                <Text style={miniStyles.progressText}>
+                  {stepProgress.completedSubSteps}/{stepProgress.totalSubSteps}
+                </Text>
+              </View>
+            )}
+            {stepProgress && stepProgress.evidenceCount > 0 && (
+              <View style={miniStyles.progressChip}>
+                <Ionicons
+                  name="camera-outline"
+                  size={12}
+                  color={IOS_COLORS.secondaryLabel}
+                />
+                <Text style={miniStyles.progressText}>
+                  {stepProgress.evidenceCount}
+                </Text>
+              </View>
+            )}
+          </View>
+        </>
+      ) : (
+        <>
+          {/* Date circle */}
+          <View style={miniStyles.dateCircle}>
+            <Text style={miniStyles.dateDay}>{dayNum}</Text>
+            <Text style={miniStyles.dateDayName}>{dayName}</Text>
+          </View>
+
+          {/* Race name */}
+          <Text style={miniStyles.raceName} numberOfLines={2}>
+            {race.name || (isBlankActivity ? 'Blank Step' : 'Untitled')}
+          </Text>
+
+          {/* Venue */}
+          {race.venue && race.venue !== 'Venue TBD' && (
+            <Text style={miniStyles.venue} numberOfLines={1}>
+              {race.venue}
+            </Text>
+          )}
+
+          {/* Race type icon */}
+          <View style={miniStyles.typeRow}>
+            <Ionicons
+              name={getRaceTypeIcon(race) as any}
+              size={12}
+              color={IOS_COLORS.tertiaryLabel}
+            />
+            {race.boatClass && race.boatClass !== 'Class TBD' && (
+              <Text style={miniStyles.boatClass} numberOfLines={1}>{race.boatClass}</Text>
+            )}
+          </View>
+        </>
       )}
-
-      {/* Race type icon */}
-      <View style={miniStyles.typeRow}>
-        <Ionicons
-          name={getRaceTypeIcon(race) as any}
-          size={12}
-          color={IOS_COLORS.tertiaryLabel}
-        />
-        {race.boatClass && race.boatClass !== 'Class TBD' && (
-          <Text style={miniStyles.boatClass} numberOfLines={1}>{race.boatClass}</Text>
-        )}
-      </View>
     </AnimatedPressable>
+    </View>
   );
 });
 
@@ -330,6 +465,9 @@ export function TimelineGridView({
   const [selectedRaceIds, setSelectedRaceIds] = useState<Set<string>>(new Set());
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
   const [dragRaceId, setDragRaceId] = useState<string | null>(null);
+  const dragRaceIdRef = useRef<string | null>(null);
+  // Keep ref in sync so native DnD event callbacks always read the latest value
+  dragRaceIdRef.current = dragRaceId;
 
   // Responsive columns
   const columns = screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : 2;
@@ -368,19 +506,25 @@ export function TimelineGridView({
     [orderedRaces],
   );
   const doneIndexedRaces = useMemo<IndexedRace[]>(() => {
-    if (nextRaceIndex != null) {
-      return indexedRaces.filter(({ index }) => index < nextRaceIndex);
-    }
-    return indexedRaces.filter(({ race }) => {
+    return indexedRaces.filter(({ race, index }) => {
+      // Timeline steps: use explicit status instead of date
+      if ((race as any).isTimelineStep) {
+        return (race as any).status === 'completed';
+      }
+      // Sailing races: use nextRaceIndex or date
+      if (nextRaceIndex != null) return index < nextRaceIndex;
       const dateStr = (race as any).start_date || race.date;
       return isRacePast(dateStr, race.startTime);
     });
   }, [indexedRaces, nextRaceIndex]);
   const plannedIndexedRaces = useMemo<IndexedRace[]>(() => {
-    if (nextRaceIndex != null) {
-      return indexedRaces.filter(({ index }) => index >= nextRaceIndex);
-    }
-    return indexedRaces.filter(({ race }) => {
+    return indexedRaces.filter(({ race, index }) => {
+      // Timeline steps: use explicit status instead of date
+      if ((race as any).isTimelineStep) {
+        return (race as any).status !== 'completed';
+      }
+      // Sailing races: use nextRaceIndex or date
+      if (nextRaceIndex != null) return index >= nextRaceIndex;
       const dateStr = (race as any).start_date || race.date;
       return !isRacePast(dateStr, race.startTime);
     });
@@ -426,6 +570,7 @@ export function TimelineGridView({
 
   const applyReorder = useCallback((fromId: string, toId: string) => {
     if (!fromId || !toId || fromId === toId) return;
+    let reorderedIds: string[] | null = null;
     setOrderedIds((prev) => {
       const current = prev.length ? [...prev] : races.map((race) => race.id);
       const fromIdx = current.indexOf(fromId);
@@ -434,8 +579,12 @@ export function TimelineGridView({
       const next = [...current];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
-      void onReorderRaces?.(next);
+      reorderedIds = next;
       return next;
+    });
+    // Defer parent callback to avoid setState-during-render error
+    queueMicrotask(() => {
+      if (reorderedIds) void onReorderRaces?.(reorderedIds);
     });
   }, [onReorderRaces, races]);
 
@@ -564,6 +713,8 @@ export function TimelineGridView({
                     const canManage = !!userId && race.created_by === userId && !race.isDemo;
                     const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
                     const handleDelete = canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined;
+                    const isStep = !!(race as any).isTimelineStep;
+                    const handleOpenDetail = isStep ? () => router.push(`/step/${race.id}`) : undefined;
                     return (
                   <MiniCard
                     race={race}
@@ -572,6 +723,7 @@ export function TimelineGridView({
                     canManage={canManage}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
+                    onOpenDetail={handleOpenDetail}
                     isMenuOpen={openMenuRaceId === race.id}
                     onOpenMenu={() => setOpenMenuRaceId(race.id)}
                     onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
@@ -582,17 +734,15 @@ export function TimelineGridView({
                       if (!reorderMode || Platform.OS === 'web') return;
                       setDragRaceId(race.id);
                     }}
-                    onDragStartCard={() => setDragRaceId(race.id)}
+                    onDragStartCard={() => { dragRaceIdRef.current = race.id; setDragRaceId(race.id); }}
                     onDragEnterCard={() => {
-                      if (dragRaceId && dragRaceId !== race.id) {
-                        applyReorder(dragRaceId, race.id);
+                      const from = dragRaceIdRef.current;
+                      if (from && from !== race.id) {
+                        applyReorder(from, race.id);
                       }
                     }}
                     onDropCard={() => {
-                      if (dragRaceId && dragRaceId !== race.id) {
-                        applyReorder(dragRaceId, race.id);
-                      }
-                      setDragRaceId(null);
+                      dragRaceIdRef.current = null; setDragRaceId(null);
                     }}
                   />
                     );
@@ -623,6 +773,8 @@ export function TimelineGridView({
                     const canManage = !!userId && race.created_by === userId && !race.isDemo;
                     const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
                     const handleDelete = canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined;
+                    const isStep = !!(race as any).isTimelineStep;
+                    const handleOpenDetail = isStep ? () => router.push(`/step/${race.id}`) : undefined;
                     return (
                       <MiniCard
                         race={race}
@@ -631,6 +783,7 @@ export function TimelineGridView({
                         canManage={canManage}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
+                        onOpenDetail={handleOpenDetail}
                         isMenuOpen={openMenuRaceId === race.id}
                         onOpenMenu={() => setOpenMenuRaceId(race.id)}
                         onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
@@ -641,17 +794,15 @@ export function TimelineGridView({
                           if (!reorderMode || Platform.OS === 'web') return;
                           setDragRaceId(race.id);
                         }}
-                        onDragStartCard={() => setDragRaceId(race.id)}
+                        onDragStartCard={() => { dragRaceIdRef.current = race.id; setDragRaceId(race.id); }}
                         onDragEnterCard={() => {
-                          if (dragRaceId && dragRaceId !== race.id) {
-                            applyReorder(dragRaceId, race.id);
+                          const from = dragRaceIdRef.current;
+                          if (from && from !== race.id) {
+                            applyReorder(from, race.id);
                           }
                         }}
                         onDropCard={() => {
-                          if (dragRaceId && dragRaceId !== race.id) {
-                            applyReorder(dragRaceId, race.id);
-                          }
-                          setDragRaceId(null);
+                          dragRaceIdRef.current = null; setDragRaceId(null);
                         }}
                       />
                     );
@@ -831,6 +982,33 @@ const miniStyles = StyleSheet.create({
     fontSize: 10,
     color: IOS_COLORS.tertiaryLabel,
     fontWeight: '500',
+  },
+  phaseBadgeRow: {
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  phaseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  phaseBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  progressChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  progressText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
   },
 });
 

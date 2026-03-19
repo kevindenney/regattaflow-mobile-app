@@ -10,8 +10,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { RaceTimerService } from '@/services/RaceTimerService';
 
@@ -77,11 +77,11 @@ export function RaceCountdownTimer({ regattaId, startTime }: RaceCountdownTimerP
 
       if (session) {
         setIsActive(true);
-        Alert.alert('Timer Started', 'GPS tracking active');
+        showAlert('Timer Started', 'GPS tracking active');
       }
     } catch (error) {
       console.error('Error starting timer:', error);
-      Alert.alert('Error', 'Failed to start timer');
+      showAlert('Error', 'Failed to start timer');
     }
   };
 
@@ -89,25 +89,19 @@ export function RaceCountdownTimer({ regattaId, startTime }: RaceCountdownTimerP
     const sessionId = RaceTimerService.getActiveSessionId();
     if (!sessionId) return;
 
-    Alert.alert(
+    showConfirm(
       'Finish Race',
       'Enter your finishing position',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Finish',
-          onPress: async () => {
-            try {
-              await RaceTimerService.endSession(sessionId);
-              setIsActive(false);
-              setTrackPoints(0);
-              Alert.alert('Race Complete', 'Session saved for analysis');
-            } catch (error) {
-              console.error('Error stopping timer:', error);
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await RaceTimerService.endSession(sessionId);
+          setIsActive(false);
+          setTrackPoints(0);
+          showAlert('Race Complete', 'Session saved for analysis');
+        } catch (error) {
+          console.error('Error stopping timer:', error);
+        }
+      }
     );
   };
 

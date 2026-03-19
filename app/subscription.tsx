@@ -1,9 +1,8 @@
 /**
- * Subscription Page - Compact Sailor Plans (Annual Only)
+ * Subscription Page
  *
- * Updated: 2026-01-30
- * New pricing: Free / Individual $120/yr / Team $480/yr
- * Learning modules purchased separately ($30/yr each)
+ * Updated: 2026-03-15
+ * Pricing: Free / Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
  */
 
 import React, { useState } from 'react';
@@ -13,9 +12,9 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Alert,
   StyleSheet,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -76,15 +75,15 @@ const PLANS: Plan[] = [
   {
     id: 'individual',
     name: 'Individual',
-    annualPrice: 120,
+    annualPrice: 100,
     monthlyEquivalent: '$10/mo',
-    description: 'Full racing features for solo sailors',
+    description: 'AI-powered race preparation',
     icon: Zap,
     color: IOS_COLORS.systemBlue,
     popular: true,
     features: [
       'Unlimited races',
-      'Unlimited AI queries',
+      '50,000 AI tokens per month',
       'AI strategy analysis',
       'Venue intelligence',
       'Historical race data',
@@ -93,18 +92,18 @@ const PLANS: Plan[] = [
     ],
   },
   {
-    id: 'team',
-    name: 'Team',
-    annualPrice: 480,
-    monthlyEquivalent: '$40/mo',
-    description: 'Full racing features for teams',
+    id: 'pro',
+    name: 'Pro',
+    annualPrice: 800,
+    monthlyEquivalent: '$100/mo',
+    description: 'Maximum AI power for serious racers',
     icon: Users,
     color: IOS_COLORS.systemPurple,
     features: [
       'Everything in Individual',
-      'Up to 5 team members',
+      '500,000 AI tokens per month',
+      'Priority AI processing',
       'Team sharing & collaboration',
-      'Shared race preparation',
       'Team analytics dashboard',
       'Priority support',
     ],
@@ -138,7 +137,7 @@ export default function SubscriptionPage() {
 
   const handleCheckout = async (planId: string) => {
     if (!user?.id) {
-      Alert.alert('Error', 'Please log in to subscribe.');
+      showAlert('Error', 'Please log in to subscribe.');
       return;
     }
 
@@ -167,7 +166,7 @@ export default function SubscriptionPage() {
       }
     } catch (error) {
       console.error('Checkout error:', error);
-      Alert.alert(
+      showAlert(
         'Checkout Error',
         'Unable to start checkout. Please try again or contact support.',
       );
@@ -183,8 +182,8 @@ export default function SubscriptionPage() {
   let currentPlan = 'free';
   if (rawTier === 'individual' || rawTier === 'basic') {
     currentPlan = 'individual';
-  } else if (rawTier === 'team' || rawTier === 'pro' || rawTier === 'championship') {
-    currentPlan = 'team';
+  } else if (rawTier === 'pro' || rawTier === 'team' || rawTier === 'championship') {
+    currentPlan = 'pro';
   }
 
   const formatPrice = (plan: Plan) => {
@@ -251,7 +250,7 @@ export default function SubscriptionPage() {
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id;
           const isFree = plan.annualPrice === 0;
-          const isTeam = plan.id === 'team';
+          const isPro = plan.id === 'pro';
           const isProcessing = processingPlan === plan.id;
 
           const sectionHeader = plan.popular
@@ -284,8 +283,8 @@ export default function SubscriptionPage() {
                 trailingAccessory="none"
               />
 
-              {/* Team members highlight (Team only) */}
-              {isTeam && (
+              {/* Team members highlight (Pro only) */}
+              {isPro && (
                 <IOSListItem
                   title="Team Collaboration"
                   subtitle="Invite up to 5 team members to share your subscription"
@@ -350,18 +349,6 @@ export default function SubscriptionPage() {
             </IOSListSection>
           );
         })}
-
-        {/* -- Learning Modules Note ------------------------------------------ */}
-        <IOSListSection header="LEARNING MODULES">
-          <IOSListItem
-            title="Racing Academy"
-            subtitle="Purchase learning modules separately at $30/yr each. One free module included for everyone."
-            leadingIcon="school-outline"
-            leadingIconBackgroundColor={IOS_COLORS.systemOrange}
-            trailingAccessory="chevron"
-            onPress={() => router.push('/learn')}
-          />
-        </IOSListSection>
 
         {/* -- Security footnote ---------------------------------------------- */}
         <Text style={s.securityFootnote}>

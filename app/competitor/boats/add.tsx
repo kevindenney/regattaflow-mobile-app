@@ -12,11 +12,11 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import competitorService, { CompetitorBoat, OwnershipType } from '../../../services/CompetitorService';
@@ -56,7 +56,7 @@ export default function AddBoatScreen() {
   
   const handleSave = async () => {
     if (!name.trim() || !sailNumber.trim() || !boatClass.trim()) {
-      Alert.alert('Required Fields', 'Please fill in boat name, sail number, and class');
+      showAlert('Required Fields', 'Please fill in boat name, sail number, and class');
       return;
     }
     
@@ -89,7 +89,7 @@ export default function AddBoatScreen() {
       router.back();
     } catch (error) {
       console.error('Error saving boat:', error);
-      Alert.alert('Error', 'Failed to save boat');
+      showAlert('Error', 'Failed to save boat');
     } finally {
       setSaving(false);
     }

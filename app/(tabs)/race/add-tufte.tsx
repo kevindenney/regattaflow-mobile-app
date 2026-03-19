@@ -31,7 +31,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -42,6 +41,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
@@ -371,9 +371,9 @@ export default function AddRaceScreen() {
     ];
     try {
       await Clipboard.setStringAsync(lines.join('\n'));
-      Alert.alert('Copied', 'Suggestion diagnostics copied to clipboard.');
+      showAlert('Copied', 'Suggestion diagnostics copied to clipboard.');
     } catch (_error) {
-      Alert.alert('Copy failed', 'Clipboard is unavailable on this device.');
+      showAlert('Copy failed', 'Clipboard is unavailable on this device.');
     }
   }, [suggestionsError, suggestionFailureSources]);
 
@@ -555,18 +555,11 @@ export default function AddRaceScreen() {
 
     // Multiple races selected - create all in database
     if (!user?.id || isGuest) {
-      if (Platform.OS === 'web') {
-        window.alert('Please sign up to create multiple races at once.');
-      } else {
-        Alert.alert(
-          'Sign Up Required',
-          'Please sign up to create multiple races at once.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Sign Up', onPress: () => router.push('/(auth)/signup') }
-          ]
-        );
-      }
+      showConfirm(
+        'Sign Up Required',
+        'Please sign up to create multiple races at once.',
+        () => router.push('/(auth)/signup'),
+      );
       return;
     }
 
@@ -709,25 +702,16 @@ export default function AddRaceScreen() {
 
       if (createdRaces.length > 0) {
         const message = `Successfully created ${createdRaces.length} race${createdRaces.length > 1 ? 's' : ''}.`;
-        if (Platform.OS === 'web') {
-          window.alert(`Races Created!\n\n${message}`);
-          router.replace('/(tabs)/races');
-        } else {
-          Alert.alert(
-            'Races Created!',
-            message,
-            [{ text: 'View Races', onPress: () => router.replace('/(tabs)/races') }]
-          );
-        }
+        showAlertWithButtons(
+          'Races Created!',
+          message,
+          [{ text: 'View Races', onPress: () => router.replace('/(tabs)/races') }]
+        );
       }
     } catch (err) {
       console.error('[handleMultiRaceConfirm] Multi-race creation failed:', err);
       logger.error('[AddRaceScreen] Multi-race creation failed:', err);
-      if (Platform.OS === 'web') {
-        window.alert('Error: Failed to create races');
-      } else {
-        Alert.alert('Error', 'Failed to create races');
-      }
+      showAlert('Error', 'Failed to create races');
     } finally {
       setIsCreatingMultiple(false);
       setShowMultiRaceModal(false);
@@ -821,16 +805,10 @@ export default function AddRaceScreen() {
 
       // Guest Restriction: Prevent saving for guests and prompt to sign up
       if (isGuest || !user?.id) {
-        Alert.alert(
+        showConfirm(
           'Sign Up Required',
           'Please sign up to create and save races, and access advanced features like AI extraction and weather integration.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Sign Up',
-              onPress: () => router.push('/(auth)/signup')
-            }
-          ]
+          () => router.push('/(auth)/signup'),
         );
         setIsSaving(false);
         return;
@@ -1043,7 +1021,7 @@ export default function AddRaceScreen() {
       router.replace(`/(tabs)/races?selected=${savedRace.id}`);
     } catch (err) {
       logger.error('[AddRaceScreen] Save failed:', err);
-      Alert.alert('Error', isEditing ? 'Failed to update step' : 'Failed to create race');
+      showAlert('Error', isEditing ? 'Failed to update step' : 'Failed to create race');
     } finally {
       setIsSaving(false);
     }

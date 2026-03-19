@@ -4,12 +4,13 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Alert, Platform, Linking } from 'react-native';
+import { View, Platform, Linking } from 'react-native';
 import { VStack, HStack, Text, Button, Card, Spinner, Divider } from '@/components/ui';
 import { CreditCard, CheckCircle, AlertCircle } from 'lucide-react-native';
 import { raceRegistrationService } from '@/services/RaceRegistrationService';
 import { supabase } from '@/services/supabase';
 import { useStripe } from '@stripe/stripe-react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 interface PaymentFlowProps {
   entryId: string;
@@ -87,7 +88,7 @@ export function PaymentFlowComponent({
       if (Platform.OS === 'web') {
         // For web, direct users to use mobile or contact organizer
         // In a production app, you would implement Stripe Checkout or Elements here
-        Alert.alert(
+        showAlertWithButtons(
           'Payment Not Available on Web',
           'Please use the RegattaFlow mobile app to complete payment, or contact the race organizer for alternative payment methods.',
           [
@@ -167,18 +168,11 @@ export function PaymentFlowComponent({
         }
 
         // Payment successful
-        Alert.alert(
+        showAlert(
           'Payment Successful',
-          'Your race entry has been confirmed! You will receive a confirmation email shortly.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                onSuccess();
-              },
-            },
-          ]
+          'Your race entry has been confirmed! You will receive a confirmation email shortly.'
         );
+        onSuccess();
       } catch (stripeError: any) {
         console.error('Stripe payment error:', stripeError);
         throw new Error(stripeError.message || 'Payment processing failed');
@@ -186,28 +180,19 @@ export function PaymentFlowComponent({
     } catch (error: any) {
       console.error('Payment error:', error);
       setError(error.message || 'Payment processing failed');
-      Alert.alert('Payment Error', error.message || 'Failed to process payment');
+      showAlert('Payment Error', error.message || 'Failed to process payment');
     } finally {
       setProcessing(false);
     }
   };
 
   const handleSkipPayment = async () => {
-    Alert.alert(
+    showConfirm(
       'Skip Payment',
       'You can pay later, but your entry will remain in "Pending Payment" status until payment is received.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Skip for Now',
-          onPress: () => {
-            onSuccess();
-          },
-        },
-      ]
+      () => {
+        onSuccess();
+      }
     );
   };
 

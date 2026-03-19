@@ -4,6 +4,10 @@
  */
 
 import { supabase } from './supabase';
+import { withSupabaseError } from '@/lib/utils/withErrorHandling';
+import { createLogger } from '@/lib/utils/logger';
+
+const logger = createLogger('StartSchedulerService');
 
 // ============================================================================
 // TYPES
@@ -185,14 +189,10 @@ class StartSchedulerService {
    * Get a schedule by ID
    */
   async getSchedule(scheduleId: string): Promise<StartSchedule | null> {
-    const { data, error } = await supabase
-      .from('race_start_schedules')
-      .select('*')
-      .eq('id', scheduleId)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('race_start_schedules').select('*').eq('id', scheduleId).single(),
+      { service: 'StartSchedulerService', method: 'getSchedule', fallback: null, level: 'warn', context: { scheduleId } }
+    );
   }
 
   /**
@@ -213,14 +213,10 @@ class StartSchedulerService {
    * Get schedule status summary
    */
   async getScheduleStatus(scheduleId: string): Promise<ScheduleStatusSummary | null> {
-    const { data, error } = await supabase
-      .from('schedule_status')
-      .select('*')
-      .eq('schedule_id', scheduleId)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('schedule_status').select('*').eq('schedule_id', scheduleId).single(),
+      { service: 'StartSchedulerService', method: 'getScheduleStatus', fallback: null, level: 'warn', context: { scheduleId } }
+    );
   }
 
   // -------------------------------------------------------------------------

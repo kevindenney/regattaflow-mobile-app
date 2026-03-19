@@ -36,7 +36,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -46,6 +45,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // iOS System Colors
@@ -248,11 +248,11 @@ export function SailSelectionWizard({
     setIsSaving(true);
     try {
       if (!user?.id) {
-        Alert.alert('Sign in required', 'Please sign in to save sail selection.');
+        showAlert('Sign in required', 'Please sign in to save sail selection.');
         return;
       }
       if (!regattaId) {
-        Alert.alert('Race unavailable', 'Unable to save sail selection without a race id.');
+        showAlert('Race unavailable', 'Unable to save sail selection without a race id.');
         return;
       }
 
@@ -284,14 +284,14 @@ export function SailSelectionWizard({
         intention
       );
       if (!saved) {
-        Alert.alert('Unable to save', 'Sail selection could not be saved right now. Please try again.');
+        showAlert('Unable to save', 'Sail selection could not be saved right now. Please try again.');
         return;
       }
 
       onComplete();
     } catch (error) {
       console.error('Failed to save sail selection intention:', error);
-      Alert.alert('Save failed', 'Failed to save sail selection. Please try again.');
+      showAlert('Save failed', 'Failed to save sail selection. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -302,7 +302,7 @@ export function SailSelectionWizard({
     onCancel(); // Close modal first
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn/race-preparation-mastery',
+        pathname: '/(tabs)/learn/race-preparation-mastery' as any,
         params: {
           moduleId: 'module-13-3', // Equipment & Rigging module
         },
@@ -615,7 +615,7 @@ export function SailSelectionWizard({
               channel="checklist"
               maxVisible={3}
               isLoading={isLoadingNudges}
-              onRecordDelivery={recordDelivery}
+              onRecordDelivery={recordDelivery as any}
             />
           )}
 

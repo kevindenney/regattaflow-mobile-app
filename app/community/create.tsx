@@ -13,12 +13,12 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -74,12 +74,12 @@ export default function CreateCommunityScreen() {
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
-      Alert.alert('Name Required', 'Please enter a name for your community.');
+      showAlert('Name Required', 'Please enter a name for your community.');
       return;
     }
 
     if (name.trim().length < 3) {
-      Alert.alert('Name Too Short', 'Community name must be at least 3 characters.');
+      showAlert('Name Too Short', 'Community name must be at least 3 characters.');
       return;
     }
 
@@ -103,19 +103,17 @@ export default function CreateCommunityScreen() {
       const message = error?.message?.includes('duplicate')
         ? 'A community with this name already exists.'
         : 'Failed to create community. Please try again.';
-      Alert.alert('Error', message);
+      showAlert('Error', message);
     }
   }, [name, description, communityType, getCategoryForType, createCommunity, router]);
 
   const handleCancel = useCallback(() => {
     if (name.trim() || description.trim()) {
-      Alert.alert(
+      showConfirm(
         'Discard Changes?',
         'You have unsaved changes. Are you sure you want to discard?',
-        [
-          { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => router.back() },
-        ]
+        () => router.back(),
+        { destructive: true }
       );
     } else {
       router.back();

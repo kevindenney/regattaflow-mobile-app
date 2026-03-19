@@ -3,7 +3,7 @@
  */
 
 import { SimpleLandingNav } from '@/components/landing/SimpleLandingNav';
-import { SimpleLandingPage } from '@/components/landing/SimpleLandingPage';
+import { DataBrowserLandingPage } from '@/components/landing/DataBrowserLandingPage';
 import { ScrollFix } from '@/components/landing/ScrollFix';
 import { DashboardSkeleton } from '@/components/ui/loading';
 import { getLastTabRoute } from '@/lib/utils/userTypeRouting';
@@ -85,7 +85,7 @@ export default function LandingPage() {
     <Container style={containerStyle}>
       <ScrollFix />
       <SimpleLandingNav />
-      <SimpleLandingPage />
+      <DataBrowserLandingPage />
     </Container>
   );
 }

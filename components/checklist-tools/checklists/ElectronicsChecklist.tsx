@@ -93,7 +93,7 @@ interface ElectronicsChecklistProps extends ChecklistToolProps {}
 
 export function ElectronicsChecklist({
   item,
-  raceEventId,
+  regattaId: raceEventId,
   boatId,
   onComplete,
   onCancel,

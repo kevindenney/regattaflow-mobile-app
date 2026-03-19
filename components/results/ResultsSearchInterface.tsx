@@ -13,8 +13,8 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -97,11 +97,11 @@ export const ResultsSearchInterface: React.FC<ResultsSearchInterfaceProps> = ({
         setResults(formattedResults);
         setTotalCount(data.totalCount);
       } else {
-        Alert.alert('Error', 'Failed to search results');
+        showAlert('Error','Failed to search results');
       }
     } catch (error) {
       console.error('Error searching results:', error);
-      Alert.alert('Error', 'Search failed');
+      showAlert('Error', 'Search failed');
     } finally {
       setLoading(false);
     }

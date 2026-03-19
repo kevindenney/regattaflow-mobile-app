@@ -7,8 +7,8 @@ import {
   StyleSheet,
   View,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { VenueDiscussionComment } from '@/services/venue/VenueDiscussionService';
@@ -40,7 +40,7 @@ export function CommentThread({
 
   const handleVote = (vote: 1 | -1) => {
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to vote');
+      showAlert('Sign in required', 'Please sign in to vote');
       return;
     }
 
@@ -56,7 +56,7 @@ export function CommentThread({
 
   const handleReply = () => {
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to reply');
+      showAlert('Sign in required', 'Please sign in to reply');
       return;
     }
     onReply(comment.id);

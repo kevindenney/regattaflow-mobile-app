@@ -9,11 +9,11 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Modal,
   TextInput,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import {
   Code,
   Copy,
@@ -76,7 +76,7 @@ export function WidgetManager({ clubId, regattaId, onClose }: WidgetManagerProps
 
   const handleCreateWidget = async () => {
     if (!newWidget.name.trim()) {
-      Alert.alert('Error', 'Please enter a widget name');
+      showAlert('Error', 'Please enter a widget name');
       return;
     }
 
@@ -94,7 +94,7 @@ export function WidgetManager({ clubId, regattaId, onClose }: WidgetManagerProps
         showBranding: true,
       });
     } else {
-      Alert.alert('Error', 'Failed to create widget');
+      showAlert('Error', 'Failed to create widget');
     }
   };
 
@@ -108,22 +108,16 @@ export function WidgetManager({ clubId, regattaId, onClose }: WidgetManagerProps
   };
 
   const handleDeleteWidget = async (widget: WidgetConfig) => {
-    Alert.alert(
+    showConfirm(
       'Delete Widget',
       `Are you sure you want to delete "${widget.name}"? Existing embeds will stop working.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const success = await PublicPublishingService.deleteWidget(widget.id);
-            if (success) {
-              setWidgets(widgets.filter(w => w.id !== widget.id));
-            }
-          },
-        },
-      ]
+      async () => {
+        const success = await PublicPublishingService.deleteWidget(widget.id);
+        if (success) {
+          setWidgets(widgets.filter(w => w.id !== widget.id));
+        }
+      },
+      { destructive: true }
     );
   };
 

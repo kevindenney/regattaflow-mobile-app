@@ -12,9 +12,9 @@ import {
   StyleSheet,
   Pressable,
   Modal,
-  Alert,
   Linking,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Plus, FileText, Info } from 'lucide-react-native';
 import { DocumentList } from './DocumentList';
@@ -87,25 +87,19 @@ export function DocumentManagementScreen({
   }, [loadDocuments]);
 
   const handleDeleteDocument = useCallback(async (document: RaceSourceDocument) => {
-    Alert.alert(
+    showConfirm(
       'Delete Document',
       `Are you sure you want to delete "${document.title}"? This will also remove any field provenance from this document.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await UnifiedDocumentService.deleteDocument(document.id);
-              loadDocuments();
-            } catch (error) {
-              console.error('[DocumentManagementScreen] Failed to delete:', error);
-              Alert.alert('Error', 'Failed to delete document');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await UnifiedDocumentService.deleteDocument(document.id);
+          loadDocuments();
+        } catch (error) {
+          console.error('[DocumentManagementScreen] Failed to delete:', error);
+          showAlert('Error', 'Failed to delete document');
+        }
+      },
+      { destructive: true }
     );
   }, [loadDocuments]);
 
@@ -113,14 +107,14 @@ export function DocumentManagementScreen({
     if (document.sourceUrl) {
       Linking.openURL(document.sourceUrl).catch((error) => {
         console.error('[DocumentManagementScreen] Failed to open source URL:', error);
-        Alert.alert(
+        showAlert(
           'Unable to open link',
           'The source URL could not be opened. Please verify the document source and try again.'
         );
       });
       return;
     }
-    Alert.alert('No source URL', 'This document does not have a source link.');
+    showAlert('No source URL', 'This document does not have a source link.');
   }, []);
 
   const handleToggleShare = useCallback(async (document: RaceSourceDocument) => {
@@ -129,7 +123,7 @@ export function DocumentManagementScreen({
       loadDocuments();
     } catch (error) {
       console.error('[DocumentManagementScreen] Failed to toggle share:', error);
-      Alert.alert(
+      showAlert(
         'Unable to update sharing',
         'The document sharing status could not be updated. Please try again.'
       );

@@ -60,13 +60,6 @@ export function usePhaseCompletionCounts({
     includeCarryover: true,
   });
 
-  const raceMorningChecklist = useRaceChecklist({
-    regattaId,
-    raceType,
-    phase: 'race_morning',
-    includeCarryover: false,
-  });
-
   const onWaterChecklist = useRaceChecklist({
     regattaId,
     raceType,
@@ -84,7 +77,6 @@ export function usePhaseCompletionCounts({
   // Aggregate loading state
   const isLoading =
     daysBeforeChecklist.isLoading ||
-    raceMorningChecklist.isLoading ||
     onWaterChecklist.isLoading ||
     afterRaceChecklist.isLoading;
 
@@ -105,10 +97,6 @@ export function usePhaseCompletionCounts({
         daysBeforeChecklist.completedCount,
         daysBeforeChecklist.totalCount
       ),
-      race_morning: buildPhaseCount(
-        raceMorningChecklist.completedCount,
-        raceMorningChecklist.totalCount
-      ),
       on_water: buildPhaseCount(
         onWaterChecklist.completedCount,
         onWaterChecklist.totalCount
@@ -121,8 +109,6 @@ export function usePhaseCompletionCounts({
   }, [
     daysBeforeChecklist.completedCount,
     daysBeforeChecklist.totalCount,
-    raceMorningChecklist.completedCount,
-    raceMorningChecklist.totalCount,
     onWaterChecklist.completedCount,
     onWaterChecklist.totalCount,
     afterRaceChecklist.completedCount,

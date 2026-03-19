@@ -17,7 +17,6 @@ import {
   ScrollView,
   Pressable,
   Platform,
-  Alert,
   Share,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -25,6 +24,7 @@ import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
 import { RaceCollaborator, AccessLevel } from '@/types/raceCollaboration';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   UserPlus,
   Trash2,
@@ -141,7 +141,7 @@ export function CollaboratorList({
             await nav.share({ title: 'Join my race', text: message });
           } else if (nav?.clipboard?.writeText) {
             await nav.clipboard.writeText(message);
-            Alert.alert('Copied', 'Invite link copied to clipboard');
+            showAlert('Copied', 'Invite link copied to clipboard');
           }
         } else {
           await Share.share({ message, title: 'Join my race' });

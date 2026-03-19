@@ -10,10 +10,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Alert,
-  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ExtractionStatusBadge } from './ExtractionStatusBadge';
 import { DocumentViewer } from './DocumentViewer';
 import type { RaceCourseExtraction } from '@/lib/types/ai-knowledge';
@@ -52,29 +51,12 @@ export function DocumentList({
   };
 
   const handleDeleteDocument = (document: Document) => {
-    if (Platform.OS === 'web') {
-      // Use native browser confirm dialog on web
-      const confirmed = window.confirm(
-        `Are you sure you want to delete "${document.name}"?`
-      );
-      if (confirmed) {
-        onDelete?.(document.id);
-      }
-    } else {
-      // Use React Native Alert on mobile
-      Alert.alert(
-        'Delete Document',
-        `Are you sure you want to delete "${document.name}"?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => onDelete?.(document.id),
-          },
-        ]
-      );
-    }
+    showConfirm(
+      'Delete Document',
+      `Are you sure you want to delete "${document.name}"?`,
+      () => onDelete?.(document.id),
+      { destructive: true },
+    );
   };
 
   const formatFileSize = (bytes?: number) => {

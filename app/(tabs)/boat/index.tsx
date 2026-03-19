@@ -8,7 +8,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   ScrollView,
   StyleSheet,
@@ -21,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSailorDashboardData } from '@/hooks';
 import { SailorBoatService, UserBoatWithDetails } from '@/services/SailorBoatService';
@@ -204,11 +204,11 @@ export default function BoatsScreen() {
       try {
         setExtracting((prev) => ({ ...prev, [guide.id]: true }));
         await tuningGuideExtractionService.extractContent(guide.id, guide.fileUrl, guide.fileType);
-        Alert.alert('Success', 'Content extracted successfully!');
+        showAlert('Success', 'Content extracted successfully!');
         await loadGuides();
       } catch (error) {
         logger.error('Error extracting content:', error);
-        Alert.alert('Error', 'Failed to extract content from guide');
+        showAlert('Error', 'Failed to extract content from guide');
       } finally {
         setExtracting((prev) => ({ ...prev, [guide.id]: false }));
       }
@@ -234,20 +234,15 @@ export default function BoatsScreen() {
 
   const handleAutoFetchGuides = useCallback(
     async (className: string, classId: string) => {
-      Alert.alert(
+      showConfirm(
         `Fetch ${className} Guides`,
         `Search for tuning guides from North Sails, Quantum, and other sailmakers?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Fetch',
-            onPress: async () => {
-              await tuningGuideService.triggerAutoScrape(classId);
-              Alert.alert('Searching...', `Looking for ${className} tuning guides...`);
-              setTimeout(() => loadGuides(), 2000);
-            },
-          },
-        ]
+        async () => {
+          await tuningGuideService.triggerAutoScrape(classId);
+          showAlert('Searching...', `Looking for ${className} tuning guides...`);
+          setTimeout(() => loadGuides(), 2000);
+        },
+        { confirmLabel: 'Fetch' }
       );
     },
     [loadGuides]

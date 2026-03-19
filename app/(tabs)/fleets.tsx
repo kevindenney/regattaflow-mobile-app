@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, Pressable, Modal, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Pressable, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -104,7 +105,7 @@ export default function FleetsScreen() {
   // Join a fleet
   const handleJoinFleet = useCallback(async (fleetToJoin: DiscoveredFleet) => {
     if (!user?.id) {
-      Alert.alert('Error', 'Please sign in to join a fleet');
+      showAlert('Error', 'Please sign in to join a fleet');
       return;
     }
 
@@ -124,11 +125,11 @@ export default function FleetsScreen() {
         setShowJoinModal(false);
         setSearchQuery('');
         setSearchResults([]);
-        Alert.alert('Success', `You've joined ${fleetToJoin.name}!`);
+        showAlert('Success', `You've joined ${fleetToJoin.name}!`);
       }
     } catch (error) {
       console.error('Error joining fleet:', error);
-      Alert.alert('Error', 'Failed to join fleet. Please try again.');
+      showAlert('Error', 'Failed to join fleet. Please try again.');
     } finally {
       setIsJoining(null);
     }
@@ -137,12 +138,12 @@ export default function FleetsScreen() {
   // Create a new fleet
   const handleCreateFleet = useCallback(async () => {
     if (!user?.id) {
-      Alert.alert('Error', 'Please sign in to create a fleet');
+      showAlert('Error', 'Please sign in to create a fleet');
       return;
     }
 
     if (!newFleetName.trim()) {
-      Alert.alert('Error', 'Please enter a fleet name');
+      showAlert('Error', 'Please enter a fleet name');
       return;
     }
 
@@ -172,11 +173,11 @@ export default function FleetsScreen() {
         setShowCreateModal(false);
         setNewFleetName('');
         setNewFleetDescription('');
-        Alert.alert('Success', `Fleet "${newFleet.name}" created!`);
+        showAlert('Success', `Fleet "${newFleet.name}" created!`);
       }
     } catch (error) {
       console.error('Error creating fleet:', error);
-      Alert.alert('Error', 'Failed to create fleet. Please try again.');
+      showAlert('Error', 'Failed to create fleet. Please try again.');
     } finally {
       setIsCreating(false);
     }

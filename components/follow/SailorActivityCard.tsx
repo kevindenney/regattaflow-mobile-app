@@ -22,6 +22,7 @@ import { ActivityCommentSection } from './ActivityCommentSection';
 import { SuggestionSubmitSheet } from '@/components/races/suggestions/SuggestionSubmitSheet';
 import type { PublicRacePreview } from '@/services/CrewFinderService';
 import type { ActivityType } from '@/services/ActivityCommentService';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 
 // =============================================================================
 // TYPES
@@ -172,6 +173,7 @@ export function SailorActivityCard({
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [expandedSection, setExpandedSection] = useState<ExpandedSection>(null);
   const [showSuggestSheet, setShowSuggestSheet] = useState(false);
+  const safeAvatarUrl = getSafeImageUri(race.avatarUrl);
 
   // Only show suggest button on other people's races
   const isOwnRace = user?.id === race.userId;
@@ -255,8 +257,8 @@ export function SailorActivityCard({
       <Pressable onPress={handleRacePress} style={styles.card}>
         {/* Sailor Header */}
         <Pressable onPress={handleSailorPress} style={styles.sailorRow}>
-          {race.avatarUrl ? (
-            <Image source={{ uri: race.avatarUrl }} style={styles.avatarImage} />
+          {safeAvatarUrl ? (
+            <Image source={{ uri: safeAvatarUrl }} style={styles.avatarImage} />
           ) : (
             <View
               style={[

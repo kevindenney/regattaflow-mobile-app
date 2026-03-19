@@ -465,7 +465,10 @@ class RaceSignalService {
     }
 
     const { data, error } = result;
-    if (error) return null;
+    if (error) {
+      logger.warn('[RaceSignalService.getRaceState] Failed', { error, regattaId, raceNumber });
+      return null;
+    }
     return data;
   }
 

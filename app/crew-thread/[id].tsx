@@ -31,6 +31,7 @@ import {
   IOS_SPACING,
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 export default function CrewThreadScreen() {
   const router = useRouter();
@@ -110,7 +111,7 @@ export default function CrewThreadScreen() {
       if (ok) {
         setThread((prev) => (prev ? { ...prev, name: trimmed } : prev));
       } else {
-        Alert.alert('Error', 'Could not update thread name.');
+        showAlert('Error', 'Could not update thread name.');
       }
     };
 
@@ -129,61 +130,46 @@ export default function CrewThreadScreen() {
     }
 
     const suggestedName = `${thread.name} (Edited)`;
-    Alert.alert(
+    showConfirm(
       'Edit Thread',
       `Rename thread to "${suggestedName}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Rename', onPress: () => void submitRename(suggestedName) },
-      ]
+      () => void submitRename(suggestedName)
     );
   }, [thread]);
 
   const handleLeaveThread = useCallback(async () => {
     setShowOptions(false);
-    Alert.alert(
+    showConfirm(
       'Leave Thread',
       'Are you sure you want to leave this thread?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            if (!id) return;
-            const success = await CrewThreadService.leaveThread(id);
-            if (success) {
-              router.replace('/messages');
-            } else {
-              Alert.alert('Error', 'Could not leave thread');
-            }
-          },
-        },
-      ]
+      async () => {
+        if (!id) return;
+        const success = await CrewThreadService.leaveThread(id);
+        if (success) {
+          router.replace('/messages');
+        } else {
+          showAlert('Error', 'Could not leave thread');
+        }
+      },
+      { destructive: true }
     );
   }, [id, router]);
 
   const handleDeleteThread = useCallback(async () => {
     setShowOptions(false);
-    Alert.alert(
+    showConfirm(
       'Delete Thread',
       'Are you sure you want to delete this thread? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            if (!id) return;
-            const success = await CrewThreadService.deleteThread(id);
-            if (success) {
-              router.replace('/messages');
-            } else {
-              Alert.alert('Error', 'Could not delete thread');
-            }
-          },
-        },
-      ]
+      async () => {
+        if (!id) return;
+        const success = await CrewThreadService.deleteThread(id);
+        if (success) {
+          router.replace('/messages');
+        } else {
+          showAlert('Error', 'Could not delete thread');
+        }
+      },
+      { destructive: true }
     );
   }, [id, router]);
 

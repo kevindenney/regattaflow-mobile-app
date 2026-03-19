@@ -22,8 +22,8 @@ import {
   Sun,
   Map,
 } from 'lucide-react-native';
-import React, { useCallback, useMemo, useState, Component, ErrorInfo, useEffect } from 'react';
-import { ActionSheetIOS, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useMemo, useState, useRef, Component, ErrorInfo, useEffect } from 'react';
+import { ActionSheetIOS, LayoutAnimation, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, runOnJS } from 'react-native-reanimated';
@@ -77,6 +77,10 @@ import {
   DaysBeforeContent,
   OnWaterContent,
 } from './phases';
+import { StepPlanQuestions } from '@/components/step/StepPlanQuestions';
+import { StepDrawContent } from '@/components/step/StepDrawContent';
+import { StepCritiqueContent } from '@/components/step/StepCritiqueContent';
+import { useUpdateStep } from '@/hooks/useTimelineSteps';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)
@@ -685,12 +689,63 @@ export function RaceSummaryCard({
   const interestSlug = currentInterest?.slug || eventConfig.interestSlug || 'sail-racing';
   const isSailing = interestSlug === 'sail-racing';
 
-  // Temporal phase state
-  const currentPhase = useMemo(
-    () => getCurrentPhaseForRace(race.date, race.startTime),
-    [race.date, race.startTime]
-  );
-  const [selectedPhase, setSelectedPhase] = useState<RacePhase>(currentPhase);
+  // Temporal phase state — for timeline steps, map status to the right tab
+  const isTimelineStep = Boolean((race as any).isTimelineStep);
+  const stepStatus = (race as any).stepStatus ?? (race as any).status;
+  const currentPhase = useMemo(() => {
+    if (isTimelineStep) {
+      if (stepStatus === 'completed' || stepStatus === 'done') return 'after_race' as RacePhase;
+      if (stepStatus === 'in_progress') return 'on_water' as RacePhase;
+      return 'days_before' as RacePhase; // pending, planned, or any other
+    }
+    return getCurrentPhaseForRace(race.date, race.startTime);
+  }, [race.date, race.startTime, isTimelineStep, stepStatus]);
+  // Restore last-used tab for this step, falling back to status-derived default
+  const [selectedPhase, setSelectedPhase] = useState<RacePhase>(() => {
+    if (isTimelineStep && typeof window !== 'undefined') {
+      const saved = window.localStorage?.getItem(`step_tab:${race.id}`);
+      if (saved === 'days_before' || saved === 'on_water' || saved === 'after_race') return saved;
+    }
+    return currentPhase;
+  });
+
+  // Persist tab selection for timeline steps
+  useEffect(() => {
+    if (isTimelineStep && typeof window !== 'undefined') {
+      window.localStorage?.setItem(`step_tab:${race.id}`, selectedPhase);
+    }
+  }, [selectedPhase, isTimelineStep, race.id]);
+
+  // Inline title editing for timeline steps
+  const updateStepMutation = useUpdateStep();
+  const queryClient = useQueryClient();
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const titleInputRef = useRef<TextInput>(null);
+
+  const handleTitleTap = useCallback(() => {
+    if (!isTimelineStep) return;
+    setEditTitle(race.name || '');
+    setIsEditingTitle(true);
+    setTimeout(() => titleInputRef.current?.focus(), 50);
+  }, [isTimelineStep, race.name]);
+
+  const handleTitleSubmit = useCallback(() => {
+    const trimmed = editTitle.trim();
+    setIsEditingTitle(false);
+    if (!trimmed || trimmed === race.name) return;
+
+    // Optimistically update all timeline-steps caches so the title sticks immediately
+    queryClient.setQueriesData<any[]>(
+      { queryKey: ['timeline-steps'] },
+      (old) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((s) => (s.id === race.id ? { ...s, title: trimmed } : s));
+      },
+    );
+
+    updateStepMutation.mutate({ stepId: race.id, input: { title: trimmed } });
+  }, [editTitle, race.name, race.id, updateStepMutation, queryClient]);
 
   // Detail bottom sheet state
   const [activeDetailSheet, setActiveDetailSheet] = useState<DetailCardType | null>(null);
@@ -808,11 +863,11 @@ export function RaceSummaryCard({
   // Chat drawer state
   const [showChat, setShowChat] = useState(false);
   const [showCollabPopover, setShowCollabPopover] = useState(false);
-  const { collaborators } = useRaceCollaborators(race.id);
+  const { collaborators } = useRaceCollaborators(isTimelineStep ? null : race.id);
 
   // Messages for collaboration popover activity feed
   const { messages: raceMessages } = useRaceMessages({
-    regattaId: race.id,
+    regattaId: isTimelineStep ? undefined : race.id,
     realtime: FEATURE_FLAGS.ENABLE_RACE_CREW_CHAT,
   });
 
@@ -837,8 +892,6 @@ export function RaceSummaryCard({
       // User cancelled — no-op
     }
   }, [eventConfig.eventNoun, isSailing, race.name, race.date, race.venue]);
-
-  const queryClient = useQueryClient();
 
   // Extract collaboration flags from race
   const isOwner = (race as any).isOwner ?? true; // Default true for backward compatibility
@@ -1017,7 +1070,7 @@ export function RaceSummaryCard({
   );
   const rawTimelineStatus = String((race as any)?.status || (race as any)?.metadata?.status || '').toLowerCase();
   const isExplicitlyCompleted = rawTimelineStatus === 'completed' || rawTimelineStatus === 'done';
-  const isOverdue = !isExplicitlyCompleted && countdown.isPast;
+  const isOverdue = !isExplicitlyCompleted && countdown.isPast && !isTimelineStep;
   const isTimelineDone = isExplicitlyCompleted;
   const isNextStepCard =
     typeof raceNumber === 'number' &&
@@ -1053,10 +1106,14 @@ export function RaceSummaryCard({
     return race.name;
   })();
 
+  // For timeline steps that aren't done, never show gray "past" styling —
+  // the step is still active regardless of its calendar date.
+  const effectiveIsPast = isTimelineStep ? isExplicitlyCompleted : countdown.isPast;
+
   // Get urgency colors
   const urgency = useMemo(
-    () => getUrgencyColor(countdown.days, countdown.hours, countdown.isPast),
-    [countdown.days, countdown.hours, countdown.isPast]
+    () => getUrgencyColor(countdown.days, countdown.hours, effectiveIsPast),
+    [countdown.days, countdown.hours, effectiveIsPast]
   );
 
   // Extract distance race fields
@@ -1309,7 +1366,6 @@ export function RaceSummaryCard({
       segments={phaseTabs}
       selectedValue={selectedPhase}
       onValueChange={handlePhaseChange}
-      size="regular"
       style={{ marginTop: 12, marginBottom: 12, maxWidth: 322 }}
     />
   );
@@ -1348,6 +1404,25 @@ export function RaceSummaryCard({
     // blank_activity events also use config-driven rendering even for sailing
     const isBlankActivity = (race as any)?.metadata?.event_subtype === 'blank_activity';
     if (!isSailing || isBlankActivity) {
+      // Timeline steps get dedicated step content per phase
+      if (isTimelineStep && isActive) {
+        if (selectedPhase === 'days_before') {
+          return (
+            <StepPlanQuestions
+              stepId={race.id}
+              interestId={(race as any).interest_id ?? currentInterest?.id}
+            />
+          );
+        }
+        if (selectedPhase === 'on_water') {
+          return <StepDrawContent stepId={race.id} />;
+        }
+        if (selectedPhase === 'after_race') {
+          return <StepCritiqueContent stepId={race.id} />;
+        }
+      }
+
+      // Non-timeline or inactive cards use config-driven rendering
       return (
         <ConfigDrivenPhaseContent
           phase={selectedPhase}
@@ -1379,7 +1454,6 @@ export function RaceSummaryCard({
             race={cardRaceData}
             userId={userId}
             onOpenPostRaceInterview={onOpenPostRaceInterview}
-            onOpenDetailedReview={handleOpenDetailedReview}
             isExpanded={true}
             refetchTrigger={refetchTrigger}
           />
@@ -1454,8 +1528,8 @@ export function RaceSummaryCard({
 
   // Get urgency color for countdown display
   const urgencyColor = useMemo(() => {
-    return getUrgencyColor(countdown.days, countdown.hours, countdown.isPast);
-  }, [countdown.days, countdown.hours, countdown.isPast]);
+    return getUrgencyColor(countdown.days, countdown.hours, effectiveIsPast);
+  }, [countdown.days, countdown.hours, effectiveIsPast]);
 
   // Build season context text (e.g., "W26 · Race 2/10")
   const seasonContextText = useMemo(() => {
@@ -1504,15 +1578,15 @@ export function RaceSummaryCard({
 
   // Get active phase for inline progress bar
   const activePhase = useMemo(() => {
-    return getActivePhaseForProgress(phaseCounts, countdown.isPast);
-  }, [phaseCounts, countdown.isPast]);
+    return getActivePhaseForProgress(phaseCounts, effectiveIsPast);
+  }, [phaseCounts, effectiveIsPast]);
 
   const showNextRibbon = isNextStepCard && !isTimelineDone && !isOverdue;
   const hideTypeChipForNextNonSailing = showNextRibbon && !isSailing;
 
   return (
     <>
-        <Pressable onPress={onCardPress || (() => {})} onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1 }}>
+        <Pressable onPress={onCardPress || (() => {})} onLongPress={handleLongPress} delayLongPress={500} style={{ flex: 1, opacity: 1 }} disabled={isActive}>
           <ScrollView
             style={styles.container}
             contentContainerStyle={styles.scrollContent}
@@ -1601,12 +1675,28 @@ export function RaceSummaryCard({
           </View>
         )}
 
-        {/* Full race name */}
-        <Text
-          style={styles.raceNameLarge}
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >{displayRaceName || '[No Step Name]'}</Text>
+        {/* Full race/step name — tappable to edit for timeline steps */}
+        {isTimelineStep && isEditingTitle ? (
+          <TextInput
+            ref={titleInputRef}
+            style={[styles.raceNameLarge, styles.raceNameInput]}
+            value={editTitle}
+            onChangeText={setEditTitle}
+            onBlur={handleTitleSubmit}
+            onSubmitEditing={handleTitleSubmit}
+            returnKeyType="done"
+            autoFocus
+            selectTextOnFocus
+          />
+        ) : (
+          <Pressable onPress={isTimelineStep ? handleTitleTap : undefined} disabled={!isTimelineStep}>
+            <Text
+              style={styles.raceNameLarge}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >{displayRaceName || '[No Step Name]'}</Text>
+          </Pressable>
+        )}
         {isNursingInterest && visibleTemplateSuggestedTitles.length > 0 ? (
           <View style={styles.templateSuggestedRow}>
             <Text style={styles.templateSuggestedLabel}>Suggested:</Text>
@@ -1637,17 +1727,26 @@ export function RaceSummaryCard({
           </View>
         ) : null}
 
-        {/* Location */}
-        <View style={styles.simpleDetailRow}>
-          <Ionicons name="location-outline" size={16} color={IOS_COLORS.secondaryLabel} />
-          <Text style={styles.simpleDetailText}>{venue?.name || race.venue || 'Venue TBD'}</Text>
-        </View>
+        {/* Location — hide for timeline steps with no venue; show "Venue TBD" only for sailing races */}
+        {(venue?.name || race.venue) ? (
+          <View style={styles.simpleDetailRow}>
+            <Ionicons name="location-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+            <Text style={styles.simpleDetailText}>{venue?.name || race.venue}</Text>
+          </View>
+        ) : !isTimelineStep ? (
+          <View style={styles.simpleDetailRow}>
+            <Ionicons name="location-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+            <Text style={styles.simpleDetailText}>Venue TBD</Text>
+          </View>
+        ) : null}
 
-        {/* Date/time */}
-        <View style={styles.simpleDetailRow}>
-          <Ionicons name="calendar-outline" size={16} color={IOS_COLORS.secondaryLabel} />
-          <Text style={styles.simpleDetailText}>{formatFullDate(race.date, race.startTime)}</Text>
-        </View>
+        {/* Date/time — hide for timeline steps (they use created_at, not a scheduled date) */}
+        {!isTimelineStep && (
+          <View style={styles.simpleDetailRow}>
+            <Ionicons name="calendar-outline" size={16} color={IOS_COLORS.secondaryLabel} />
+            <Text style={styles.simpleDetailText}>{formatFullDate(race.date, race.startTime)}</Text>
+          </View>
+        )}
 
         {/* Collaborator avatar row */}
         {FEATURE_FLAGS.ENABLE_CREW_AVATARS_HEADER && collaborators.length > 0 && (
@@ -1741,7 +1840,7 @@ export function RaceSummaryCard({
               ]}
               onPress={() => {
                 if (currentRaceIndex && currentRaceIndex > 0) {
-                  triggerHaptic('light');
+                  triggerHaptic('impactLight');
                   onSelectRace(currentRaceIndex - 1);
                 }
               }}
@@ -1769,7 +1868,7 @@ export function RaceSummaryCard({
                     <Pressable
                       key={tlRace.id}
                       onPress={() => {
-                        triggerHaptic('light');
+                        triggerHaptic('impactLight');
                         onSelectRace(index);
                       }}
                       style={[
@@ -1811,7 +1910,7 @@ export function RaceSummaryCard({
               ]}
               onPress={() => {
                 if (currentRaceIndex !== undefined && currentRaceIndex < timelineRaces.length - 1) {
-                  triggerHaptic('light');
+                  triggerHaptic('impactLight');
                   onSelectRace(currentRaceIndex + 1);
                 }
               }}
@@ -1859,7 +1958,7 @@ export function RaceSummaryCard({
         venueId={venue?.id}
         conditions={windData ? {
           windSpeed: windData.speedMin || windData.speedMax,
-          windDirection: windData.direction,
+          windDirection: parseFloat(windData.direction) || undefined,
         } : undefined}
         onClose={handleCloseDetailedReview}
         onComplete={handleDetailedReviewComplete}
@@ -1872,21 +1971,20 @@ export function RaceSummaryCard({
         className={boatClassName}
         regattaId={race.id}
         raceName={race.name}
-        interestSlug={interestSlug}
-        eventNoun={eventConfig.eventNoun}
-        teamNoun={eventConfig.teamNoun}
         isOpen={showCrewHub}
         onClose={() => setShowCrewHub(false)}
         initialTab={crewHubInitialTab}
       />
 
-      {/* Race Chat Drawer */}
-      <RaceChatDrawer
-        regattaId={race.id}
-        raceName={race.name}
-        isOpen={showChat}
-        onClose={() => setShowChat(false)}
-      />
+      {/* Race Chat Drawer — skip for timeline steps */}
+      {!isTimelineStep && (
+        <RaceChatDrawer
+          regattaId={race.id}
+          raceName={race.name}
+          isOpen={showChat}
+          onClose={() => setShowChat(false)}
+        />
+      )}
 
       {/* Collaboration Popover */}
       {FEATURE_FLAGS.ENABLE_COLLABORATION_POPOVER && (
@@ -1918,7 +2016,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    // Background controlled by CardShell (allows next race tinting)
+    backgroundColor: '#FFFFFF',
   },
 
   // ==========================================================================
@@ -3198,10 +3296,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   nextBookmarkRibbon: {
-    position: 'absolute',
-    top: -14,
-    left: 8,
-    zIndex: 3,
+    alignSelf: 'flex-start',
+    marginLeft: 8,
+    marginBottom: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -3305,6 +3402,15 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.label,
     lineHeight: 22,
     marginBottom: 10,
+  },
+  raceNameInput: {
+    borderBottomWidth: 1,
+    borderBottomColor: IOS_COLORS.blue,
+    paddingVertical: 2,
+    marginBottom: 8,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as any,
+    }),
   },
   templateSuggestedRow: {
     marginTop: -2,

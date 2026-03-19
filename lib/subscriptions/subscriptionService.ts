@@ -2,11 +2,10 @@
 
 /**
  * Subscription Service
- * Marine-grade subscription management for professional sailing platform
  * Handles native in-app purchases and subscription lifecycle
  *
- * Updated: 2026-01-30
- * New pricing: Individual $120/yr, Team $480/yr
+ * Updated: 2026-03-15
+ * Pricing: Individual $10/mo ($100/yr), Pro $100/mo ($800/yr)
  *
  * NOTE: expo-in-app-purchases was deprecated in SDK 50.
  * Using mock implementation until expo-iap is configured.
@@ -28,7 +27,8 @@ const InAppPurchases = {
   setPurchaseListener: (_callback: any) => {},
 };
 
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -41,14 +41,14 @@ export interface SubscriptionProduct {
   priceCurrencyCode: string;
   features: string[];
   isPopular?: boolean;
-  billingPeriod: 'yearly';
+  billingPeriod: 'monthly' | 'yearly';
   effectiveMonthly?: string;
 }
 
 export interface SubscriptionStatus {
   isActive: boolean;
   productId: string | null;
-  tier: 'free' | 'individual' | 'team';
+  tier: 'free' | 'individual' | 'pro';
   expiresAt: Date | null;
   isTrialing?: boolean;
   trialEndsAt?: Date | null;
@@ -64,12 +64,6 @@ export interface PurchaseResult {
   needsRestore?: boolean;
 }
 
-/**
- * RegattaFlow Subscription Products
- * Professional sailing platform pricing tiers
- * Updated: 2026-01-30
- */
-
 const logger = createLogger('subscriptionService');
 
 /**
@@ -77,28 +71,29 @@ const logger = createLogger('subscriptionService');
  * Note: Native uses App Store/Play Store product IDs
  */
 const STRIPE_PRICE_IDS = {
-  individual_yearly: 'price_1Splo2BbfEeOhHXbHi1ENal0',  // $120/year
-  team_yearly: 'price_1SplqqBbfEeOhHXbTeam480Y',       // $480/year
+  individual_monthly: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_MONTHLY_PRICE_ID || 'price_individual_monthly_10',
+  individual_yearly: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_YEARLY_PRICE_ID || 'price_individual_yearly_100',
+  pro_monthly: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly_100',
+  pro_yearly: process.env.EXPO_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID || 'price_pro_yearly_800',
 };
 
 export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
-  individual: {
+  individual_monthly: {
     id: Platform.select({
-      ios: 'regattaflow_individual_yearly',
-      android: 'regattaflow_individual_yearly',
-      default: STRIPE_PRICE_IDS.individual_yearly,
+      ios: 'regattaflow_individual_monthly',
+      android: 'regattaflow_individual_monthly',
+      default: STRIPE_PRICE_IDS.individual_monthly,
     }),
     title: 'Individual',
-    description: 'Full racing features for solo sailors',
-    price: '$120/year',
-    priceAmountMicros: 120000000,
+    description: 'AI-powered race preparation',
+    price: '$10/month',
+    priceAmountMicros: 10000000,
     priceCurrencyCode: 'USD',
-    billingPeriod: 'yearly',
-    effectiveMonthly: '$10/mo',
+    billingPeriod: 'monthly',
     isPopular: true,
     features: [
       'Unlimited races',
-      'Unlimited AI queries',
+      '50,000 AI tokens per month',
       'AI strategy analysis',
       'Automatic weather updates',
       'Historical race data',
@@ -107,24 +102,70 @@ export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
       'Cloud backup & sync',
     ],
   },
-  team: {
+  individual_yearly: {
     id: Platform.select({
-      ios: 'regattaflow_team_yearly',
-      android: 'regattaflow_team_yearly',
-      default: STRIPE_PRICE_IDS.team_yearly,
+      ios: 'regattaflow_individual_yearly',
+      android: 'regattaflow_individual_yearly',
+      default: STRIPE_PRICE_IDS.individual_yearly,
     }),
-    title: 'Team',
-    description: 'Full racing features for teams',
-    price: '$480/year',
-    priceAmountMicros: 480000000,
+    title: 'Individual',
+    description: 'AI-powered race preparation',
+    price: '$100/year',
+    priceAmountMicros: 100000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
-    effectiveMonthly: '$40/mo',
+    effectiveMonthly: '$8.33/mo',
+    isPopular: true,
+    features: [
+      'Unlimited races',
+      '50,000 AI tokens per month',
+      'AI strategy analysis',
+      'Automatic weather updates',
+      'Historical race data',
+      'Offline mode',
+      'Advanced analytics',
+      'Cloud backup & sync',
+    ],
+  },
+  pro_monthly: {
+    id: Platform.select({
+      ios: 'regattaflow_pro_monthly',
+      android: 'regattaflow_pro_monthly',
+      default: STRIPE_PRICE_IDS.pro_monthly,
+    }),
+    title: 'Pro',
+    description: 'Maximum AI power for serious racers',
+    price: '$100/month',
+    priceAmountMicros: 100000000,
+    priceCurrencyCode: 'USD',
+    billingPeriod: 'monthly',
     features: [
       'Everything in Individual',
-      'Up to 5 team members',
+      '500,000 AI tokens per month',
+      'Priority AI processing',
       'Team sharing & collaboration',
-      'Shared race preparation',
+      'Team analytics dashboard',
+      'Priority support',
+    ],
+  },
+  pro_yearly: {
+    id: Platform.select({
+      ios: 'regattaflow_pro_yearly',
+      android: 'regattaflow_pro_yearly',
+      default: STRIPE_PRICE_IDS.pro_yearly,
+    }),
+    title: 'Pro',
+    description: 'Maximum AI power for serious racers',
+    price: '$800/year',
+    priceAmountMicros: 800000000,
+    priceCurrencyCode: 'USD',
+    billingPeriod: 'yearly',
+    effectiveMonthly: '$66.67/mo',
+    features: [
+      'Everything in Individual',
+      '500,000 AI tokens per month',
+      'Priority AI processing',
+      'Team sharing & collaboration',
       'Team analytics dashboard',
       'Priority support',
     ],
@@ -234,14 +275,13 @@ export class SubscriptionService {
       // Finish the transaction
       await InAppPurchases.finishTransactionAsync(purchase, true);
 
-      Alert.alert(
+      showAlert(
         'Subscription Active',
-        'Welcome to RegattaFlow! Your subscription is now active and all features are unlocked.',
-        [{ text: 'Start Racing', style: 'default' }]
+        'Welcome to RegattaFlow! Your subscription is now active and all features are unlocked.'
       );
     } catch (error) {
 
-      Alert.alert(
+      showAlert(
         'Purchase Error',
         'There was an issue processing your purchase. Please contact support if the problem persists.'
       );
@@ -402,12 +442,12 @@ export class SubscriptionService {
       }
 
       // Normalize tier name (handle legacy values)
-      let tier: 'free' | 'individual' | 'team' = 'free';
+      let tier: 'free' | 'individual' | 'pro' = 'free';
       const rawTier = data.subscription_tier?.toLowerCase();
       if (rawTier === 'individual' || rawTier === 'basic') {
         tier = 'individual';
-      } else if (rawTier === 'team' || rawTier === 'pro' || rawTier === 'championship') {
-        tier = 'team';
+      } else if (rawTier === 'pro' || rawTier === 'team' || rawTier === 'championship') {
+        tier = 'pro';
       }
 
       this.currentStatus = {
@@ -451,19 +491,14 @@ export class SubscriptionService {
         default: 'Subscription cancellation is handled through your app store.',
       });
 
-      Alert.alert(
+      showConfirm(
         'Cancel Subscription',
         message,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Open Settings',
-            onPress: () => {
-              // Open device settings (implementation depends on platform)
-              logger.debug('Opening device subscription settings...');
-            }
-          },
-        ]
+        () => {
+          // Open device settings (implementation depends on platform)
+          logger.debug('Opening device subscription settings...');
+        },
+        { confirmText: 'Open Settings' }
       );
 
       return true;

@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Text } from '@/components/ui/text';
 import { supabase } from '@/services/supabase';
 import { ArrowLeft, CreditCard, FileText, Users } from 'lucide-react-native';
@@ -199,9 +199,9 @@ const EntryDetailScreen = () => {
       try {
         await action();
         await fetchEntry();
-        Alert.alert('Entry updated', successMessage);
+        showAlert('Entry updated', successMessage);
       } catch (err: any) {
-        Alert.alert('Update failed', err?.message || 'Please try again in a moment.');
+        showAlert('Update failed', err?.message || 'Please try again in a moment.');
       } finally {
         setActionLoading(null);
       }
@@ -237,7 +237,7 @@ const EntryDetailScreen = () => {
   }, [entry, runAction]);
 
   const handleStubAction = (message: string) => {
-    Alert.alert('Coming soon', message);
+    showAlert('Coming soon', message);
   };
 
   if (!entryId) {

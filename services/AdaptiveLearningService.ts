@@ -698,7 +698,7 @@ export class AdaptiveLearningService {
       windSpeed?: number;
       windDirection?: number;
       boatClassId?: string;
-      raceType?: string;
+      raceType?: 'fleet' | 'team' | 'match' | 'distance';
     }
   ): { score: number; reasons: string[] } {
     let score = 0.3; // Base score

@@ -222,7 +222,7 @@ export function RiggingInspectionWizard({
     onCancel(); // Close modal first
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn/race-preparation-mastery',
+        pathname: '/(tabs)/learn/race-preparation-mastery' as any,
         params: {
           moduleId: 'module-13-3', // Equipment & Rigging module
         },

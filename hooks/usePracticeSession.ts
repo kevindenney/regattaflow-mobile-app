@@ -374,7 +374,7 @@ export function usePracticeSession({
 
   return {
     // Data
-    session,
+    session: session ?? null,
     members,
     focusAreas,
     drills,

@@ -12,7 +12,8 @@ import Voice, {
   SpeechStartEvent,
   SpeechEndEvent
 } from '@react-native-voice/voice';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { createLogger } from '@/lib/utils/logger';
@@ -340,10 +341,9 @@ class VoiceCommandService {
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        showAlert(
           'Microphone Permission Required',
-          'Please grant microphone access to use voice commands.',
-          [{ text: 'OK' }]
+          'Please grant microphone access to use voice commands.'
         );
         return false;
       }

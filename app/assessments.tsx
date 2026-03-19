@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { formatDistanceToNow } from 'date-fns';
@@ -361,7 +361,7 @@ export default function AssessmentsScreen() {
 
   const submitCreate = async () => {
     if (!activeOrganization?.id || !user?.id) {
-      Alert.alert('Not ready', 'Authentication or organization context is missing.');
+      showAlert('Not ready', 'Authentication or organization context is missing.');
       return;
     }
 
@@ -369,7 +369,7 @@ export default function AssessmentsScreen() {
       setSaving(true);
       const parsedScore = newScoreText.trim() ? Number(newScoreText.trim()) : null;
       if (parsedScore !== null && Number.isNaN(parsedScore)) {
-        Alert.alert('Invalid score', 'Score must be numeric.');
+        showAlert('Invalid score', 'Score must be numeric.');
         return;
       }
 
@@ -443,7 +443,7 @@ export default function AssessmentsScreen() {
       resetCreate();
       setShowCreate(false);
     } catch (error: any) {
-      Alert.alert('Failed to create assessment', error?.message || 'Unknown error');
+      showAlert('Failed to create assessment', error?.message || 'Unknown error');
     } finally {
       setSaving(false);
     }

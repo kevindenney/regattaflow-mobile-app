@@ -14,7 +14,8 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import { View, StyleSheet, Alert, ActionSheetIOS, Platform } from 'react-native';
+import { View, StyleSheet, ActionSheetIOS, Platform } from 'react-native';
+import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { useRouter } from 'expo-router';
 import { useDiscoveryFeed, FeedItem } from '@/hooks/useDiscoveryFeed';
 import { VerticalRacePager } from './VerticalRacePager';
@@ -112,7 +113,7 @@ export function DiscoverScreen() {
         );
       } else {
         // Android/Web fallback
-        Alert.alert(
+        showAlertWithButtons(
           'Use as Template',
           'Copy this sailor\'s race preparation to your own race',
           [

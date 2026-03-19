@@ -9,7 +9,8 @@ import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 type MemberRow = {
   id: string;
@@ -402,19 +403,11 @@ export default function OrganizationMembersScreen() {
         })();
       };
 
-      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
-        const confirmed = window.confirm('Reset this member to pending? They will appear as a join request again.');
-        if (confirmed) runReset();
-        return;
-      }
-
-      Alert.alert(
+      showConfirm(
         'Reset to pending?',
         'Reset this member to pending? They will appear as a join request again.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Reset', style: 'destructive', onPress: runReset },
-        ]
+        runReset,
+        { destructive: true },
       );
     },
     [canManage, loadMembers, resolvedActiveOrgId, user?.id]

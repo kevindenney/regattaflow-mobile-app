@@ -279,15 +279,18 @@ export function RouteBriefingWizard({
 
   // Weather integration - use venue coordinates from props or first waypoint
   const firstWaypoint = raceData?.route_waypoints?.[0];
-  const weatherData = useRaceWeatherForecast({
-    venue: {
-      latitude: venue?.latitude || firstWaypoint?.latitude,
-      longitude: venue?.longitude || firstWaypoint?.longitude,
-    },
-    raceDate: raceData?.start_date || raceDate || null,
-    raceDurationMinutes: (raceData?.time_limit_hours || 24) * 60,
-    forecastHours: (raceData?.time_limit_hours || 24) + 4,
-  });
+  const weatherVenue = useMemo(() => {
+    const lat = venue?.latitude || firstWaypoint?.latitude;
+    const lng = venue?.longitude || firstWaypoint?.longitude;
+    if (!lat || !lng) return null;
+    return { id: 'route', name: 'Route', coordinates_lat: String(lat), coordinates_lng: String(lng) } as any;
+  }, [venue, firstWaypoint]);
+  const weatherData = useRaceWeatherForecast(
+    weatherVenue,
+    raceData?.start_date || raceDate || null,
+    true,
+    (raceData?.time_limit_hours || 24) * 60,
+  );
 
   // Calculate legs from waypoints
   const legs = useMemo((): RouteLeg[] => {
@@ -326,9 +329,9 @@ export function RouteBriefingWizard({
 
       // Find weather at ETA
       let legWeather: { windSpeed: number; windDirection: string } | undefined;
-      if (weatherData.hourlyWind && weatherData.hourlyWind.length > 0) {
+      if (weatherData.data?.hourlyWind && weatherData.data?.hourlyWind.length > 0) {
         const etaTimestamp = eta.getTime();
-        const closest = weatherData.hourlyWind.reduce((prev, curr) => {
+        const closest = weatherData.data?.hourlyWind.reduce((prev: any, curr: any) => {
           const prevTs = new Date(prev.timestamp).getTime();
           const currTs = new Date(curr.timestamp).getTime();
           return Math.abs(currTs - etaTimestamp) < Math.abs(prevTs - etaTimestamp)
@@ -354,7 +357,7 @@ export function RouteBriefingWizard({
     }
 
     return calculatedLegs;
-  }, [raceData, averageSpeedKts, weatherData.hourlyWind]);
+  }, [raceData, averageSpeedKts, weatherData.data?.hourlyWind]);
 
   // Calculate total distance
   const totalDistance = useMemo(() => {
@@ -368,7 +371,7 @@ export function RouteBriefingWizard({
     onCancel();
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn/distance-racing-strategy',
+        pathname: '/(tabs)/learn/distance-racing-strategy' as any,
         params: { moduleId: 'module-12-1' },
       });
     }, 150);

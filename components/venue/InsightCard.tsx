@@ -8,8 +8,8 @@ import {
   View,
   TouchableOpacity,
   Platform,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -56,7 +56,7 @@ export function InsightCard({
 
   const handleVerify = (verified: boolean) => {
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to verify insights');
+      showAlert('Sign in required', 'Please sign in to verify insights');
       return;
     }
 

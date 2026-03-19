@@ -13,7 +13,8 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Alert, StyleSheet, Vibration, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Vibration, Modal } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Play, Square, Navigation, Timer, RotateCcw, RefreshCw, MapPin, Flag, X, ChartBar, FileText, RotateCw } from 'lucide-react-native';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { gpsTracker } from '@/services/GPSTracker';
@@ -345,7 +346,7 @@ export function RaceCountdownTimer({
       const trackingStarted = await gpsTracker.startTracking(session.id);
 
       if (!trackingStarted) {
-        Alert.alert(
+        showAlert(
           'GPS Permission Required',
           'Please enable location permissions to track your race.'
         );
@@ -360,7 +361,7 @@ export function RaceCountdownTimer({
 
     } catch (error: any) {
       logger.error('Error starting race timer', error);
-      Alert.alert('Error', 'Failed to start race timer. Please try again.');
+      showAlert('Error', 'Failed to start race timer. Please try again.');
     }
   }, [user, raceId]);
 
@@ -400,7 +401,7 @@ export function RaceCountdownTimer({
       setShowStopModal(true);
     } catch (error: any) {
       logger.error('Error stopping race timer', error);
-      Alert.alert('Error', 'Failed to stop race timer.');
+      showAlert('Error', 'Failed to stop race timer.');
     }
   }, [sessionId, elapsedSeconds, gpsPointCount, startMarkedAt]);
 

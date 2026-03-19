@@ -13,12 +13,12 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  Alert,
   ActivityIndicator,
   Platform,
   Dimensions,
   Linking,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import * as Clipboard from 'expo-clipboard';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -97,7 +97,7 @@ export function InstagramExporter({
 
   const showMissingNativeExportTools = useCallback(async () => {
     const quickCaption = `RegattaFlow carousel: ${skillName}\n\nSlides: ${slides.length}\n#Sailing #RegattaFlow`;
-    Alert.alert(
+    showAlertWithButtons(
       'Export Tools Missing',
       'Image export is not available in this build. You can copy a caption template or contact support for setup help.',
       [
@@ -106,7 +106,7 @@ export function InstagramExporter({
           text: 'Copy Caption',
           onPress: async () => {
             await Clipboard.setStringAsync(quickCaption);
-            Alert.alert('Copied', 'Caption template copied to clipboard.');
+            showAlert('Copied', 'Caption template copied to clipboard.');
           },
         },
         {
@@ -197,15 +197,14 @@ export function InstagramExporter({
 
       setIsExporting(false);
 
-      Alert.alert(
-        '✅ Export Complete!',
-        `${capturedCount.length} slides saved to ZIP!\n\n1. Unzip the downloaded file\n2. Upload all images to Instagram in order (01, 02, 03...)\n3. Add your captions and hashtags`,
-        [{ text: 'Done' }]
+      showAlert(
+        'Export Complete!',
+        `${capturedCount.length} slides saved to ZIP!\n\n1. Unzip the downloaded file\n2. Upload all images to Instagram in order (01, 02, 03...)\n3. Add your captions and hashtags`
       );
     } catch (error) {
       console.error('Export error:', error);
       setIsExporting(false);
-      Alert.alert('Export Failed', 'Unable to export images. Please try again.');
+      showAlert('Export Failed', 'Unable to export images. Please try again.');
     }
   }, [slides]);
 
@@ -219,10 +218,9 @@ export function InstagramExporter({
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        showAlert(
           'Permission Required',
-          'Please grant access to save images to your camera roll.',
-          [{ text: 'OK' }]
+          'Please grant access to save images to your camera roll.'
         );
         return;
       }
@@ -271,15 +269,14 @@ export function InstagramExporter({
       setExportProgress(100);
       setIsExporting(false);
 
-      Alert.alert(
-        '✅ Export Complete!',
-        `${savedUris.length} slides saved to your camera roll in the "RegattaFlow" album.\n\nOpen Instagram → New Post → Select all ${savedUris.length} images as a carousel.`,
-        [{ text: 'Done' }]
+      showAlert(
+        'Export Complete!',
+        `${savedUris.length} slides saved to your camera roll in the "RegattaFlow" album.\n\nOpen Instagram → New Post → Select all ${savedUris.length} images as a carousel.`
       );
     } catch (error) {
       console.error('Export error:', error);
       setIsExporting(false);
-      Alert.alert('Export Failed', 'Unable to save images. Please try again.');
+      showAlert('Export Failed', 'Unable to save images. Please try again.');
     }
   }, [selectedAspect, showMissingNativeExportTools, slides]);
 
@@ -320,7 +317,7 @@ export function InstagramExporter({
         URL.revokeObjectURL(url);
       } catch (error) {
         console.error('Share error:', error);
-        Alert.alert('Export Failed', 'Unable to export this slide.');
+        showAlert('Export Failed', 'Unable to export this slide.');
       }
     } else if (captureRef && Sharing) {
       try {
@@ -344,12 +341,12 @@ export function InstagramExporter({
           const { status } = await MediaLibrary.requestPermissionsAsync();
           if (status === 'granted') {
             await MediaLibrary.createAssetAsync(uri);
-            Alert.alert('Saved!', 'Slide saved to camera roll.');
+            showAlert('Saved!', 'Slide saved to camera roll.');
           }
         }
       } catch (error) {
         console.error('Share error:', error);
-        Alert.alert('Share Failed', 'Unable to share this slide.');
+        showAlert('Share Failed', 'Unable to share this slide.');
       }
     } else {
       await showMissingNativeExportTools();

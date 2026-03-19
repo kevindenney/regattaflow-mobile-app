@@ -17,8 +17,8 @@ import {
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   X,
@@ -194,7 +194,7 @@ export function TacticsReviewWizard({
     if (rawVenueInsights && rawVenueInsights.insights.length > 0) {
       rawVenueInsights.insights.forEach((insightText) => {
         briefing.venueInsights.push({
-          category: 'venue',
+          category: 'general' as any,
           recommendation: insightText,
           reasoning: '',
           source: 'venue_history',
@@ -204,7 +204,7 @@ export function TacticsReviewWizard({
       // Add key learnings from venue as learning insights
       rawVenueInsights.keyLearnings.forEach((learning) => {
         briefing.learningInsights.push({
-          category: 'learning',
+          category: 'general' as any,
           recommendation: learning,
           reasoning: '',
           source: 'learning',
@@ -218,7 +218,7 @@ export function TacticsReviewWizard({
     if (rawConditionsInsights && rawConditionsInsights.insights.length > 0) {
       rawConditionsInsights.insights.forEach((insightText) => {
         briefing.conditionsInsights.push({
-          category: 'conditions',
+          category: 'general' as any,
           recommendation: insightText,
           reasoning: '',
           source: 'conditions',
@@ -228,7 +228,7 @@ export function TacticsReviewWizard({
       // Add key learnings from conditions
       rawConditionsInsights.keyLearnings.forEach((learning) => {
         briefing.learningInsights.push({
-          category: 'learning',
+          category: 'general' as any,
           recommendation: learning,
           reasoning: '',
           source: 'learning',
@@ -293,11 +293,11 @@ export function TacticsReviewWizard({
     setIsSaving(true);
     try {
       if (!user?.id) {
-        Alert.alert('Sign in required', 'Please sign in to save tactical review.');
+        showAlert('Sign in required', 'Please sign in to save tactical review.');
         return;
       }
       if (!regattaId) {
-        Alert.alert('Race unavailable', 'Unable to save tactical review without a race id.');
+        showAlert('Race unavailable', 'Unable to save tactical review without a race id.');
         return;
       }
 
@@ -323,14 +323,14 @@ export function TacticsReviewWizard({
         },
       });
       if (!saved) {
-        Alert.alert('Unable to save', 'Tactical review could not be saved right now. Please try again.');
+        showAlert('Unable to save', 'Tactical review could not be saved right now. Please try again.');
         return;
       }
 
       onComplete();
     } catch (error) {
       console.error('Failed to save tactical intention:', error);
-      Alert.alert('Save failed', 'Failed to save tactical review. Please try again.');
+      showAlert('Save failed', 'Failed to save tactical review. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -341,7 +341,7 @@ export function TacticsReviewWizard({
     onCancel(); // Close modal first
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn/race-preparation-mastery',
+        pathname: '/(tabs)/learn/race-preparation-mastery' as any,
         params: {
           moduleId: 'module-13-2', // Tactical Planning module
         },
@@ -488,7 +488,7 @@ export function TacticsReviewWizard({
               channel="briefing"
               maxVisible={4}
               isLoading={isLoadingNudges}
-              onRecordDelivery={recordDelivery}
+              onRecordDelivery={recordDelivery as any}
               showMatchReasons
             />
           )}

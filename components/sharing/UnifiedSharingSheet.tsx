@@ -12,9 +12,9 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Actionsheet,
@@ -127,22 +127,14 @@ export function UnifiedSharingSheet({
 
       onShareComplete?.(result);
 
-      if (Platform.OS === 'web') {
-        alert(`Shared with ${primaryCoach.display_name}!`);
-      } else {
-        Alert.alert(
-          'Shared!',
-          `Your ${context === 'pre-race' ? 'strategy' : 'analysis'} has been shared with ${primaryCoach.display_name}.`,
-          [{ text: 'OK', onPress: onClose }]
-        );
-      }
+      showAlert(
+        'Shared!',
+        `Your ${context === 'pre-race' ? 'strategy' : 'analysis'} has been shared with ${primaryCoach.display_name}.`
+      );
+      onClose?.();
     } catch (error) {
       logger.error('Failed to share with coach:', error);
-      if (Platform.OS === 'web') {
-        alert('Failed to share. Please try again.');
-      } else {
-        Alert.alert('Error', 'Failed to share. Please try again.');
-      }
+      showAlert('Error', 'Failed to share. Please try again.');
     } finally {
       setSharing(false);
     }

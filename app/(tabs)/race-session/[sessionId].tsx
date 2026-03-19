@@ -12,10 +12,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   ChevronLeft,
   Navigation,
@@ -131,10 +131,10 @@ export default function RaceSessionDetailScreen() {
       if (result) {
         loadData();
       } else {
-        Alert.alert('Error', 'Failed to generate analysis');
+        showAlert('Error', 'Failed to generate analysis');
       }
     } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to generate analysis');
+      showAlert('Error', error?.message || 'Failed to generate analysis');
     } finally {
       setGenerating(false);
     }

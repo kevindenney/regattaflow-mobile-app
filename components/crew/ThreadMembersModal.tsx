@@ -14,11 +14,11 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  Alert,
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Crown, Shield, UserMinus } from 'lucide-react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { CrewThreadService, CrewThreadMember } from '@/services/CrewThreadService';
 import { getInitials } from '@/components/account/accountStyles';
 import {
@@ -225,28 +225,22 @@ export function ThreadMembersModal({
 
   const handleRemoveMember = useCallback(
     async (member: CrewThreadMember) => {
-      Alert.alert(
+      showConfirm(
         'Remove Member',
         `Remove ${member.fullName || 'this member'} from the thread?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Remove',
-            style: 'destructive',
-            onPress: async () => {
-              setRemovingId(member.userId);
-              const success = await CrewThreadService.removeMember(threadId, member.userId);
-              setRemovingId(null);
+        async () => {
+          setRemovingId(member.userId);
+          const success = await CrewThreadService.removeMember(threadId, member.userId);
+          setRemovingId(null);
 
-              if (success) {
-                setMembers((prev) => prev.filter((m) => m.userId !== member.userId));
-                onMemberRemoved?.();
-              } else {
-                Alert.alert('Error', 'Could not remove member');
-              }
-            },
-          },
-        ]
+          if (success) {
+            setMembers((prev) => prev.filter((m) => m.userId !== member.userId));
+            onMemberRemoved?.();
+          } else {
+            showAlert('Error', 'Could not remove member');
+          }
+        },
+        { destructive: true }
       );
     },
     [threadId, onMemberRemoved]

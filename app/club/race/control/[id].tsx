@@ -15,7 +15,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     FlatList,
     Platform,
     ScrollView,
@@ -25,6 +24,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 // Types
 interface Regatta {
@@ -184,7 +184,7 @@ export default function RaceControlScreen() {
       setRegatta(data);
     } catch (error) {
       console.error('Error loading regatta:', error);
-      Alert.alert('Error', 'Could not load regatta data');
+      showAlert('Error', 'Could not load regatta data');
     }
   };
 
@@ -328,49 +328,37 @@ export default function RaceControlScreen() {
   };
 
   const postponeRace = async () => {
-    Alert.alert(
+    showConfirm(
       'Postpone Race',
       'Display Postponement flag?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Postpone',
-          onPress: async () => {
-            stopCountdown();
-            await recordFlag('ap', 'Postponement');
-          },
-        },
-      ]
+      async () => {
+        stopCountdown();
+        await recordFlag('ap', 'Postponement');
+      }
     );
   };
 
   const abandonRace = async () => {
-    Alert.alert(
+    showConfirm(
       'Abandon Race',
       'Are you sure you want to abandon this race?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Abandon',
-          style: 'destructive',
-          onPress: async () => {
-            stopCountdown();
-            await recordFlag('n', 'Abandonment');
-            setSequenceStatus('idle');
+      async () => {
+        stopCountdown();
+        await recordFlag('n', 'Abandonment');
+        setSequenceStatus('idle');
 
-            // Update all results to DNS
-            await withRaceResultsColumnFallback((column) =>
-              supabase
-                .from('race_results')
-                .update({ status: 'dnc' })
-                .eq(column, id)
-                .eq('race_number', raceNumber)
-            );
+        // Update all results to DNS
+        await withRaceResultsColumnFallback((column) =>
+          supabase
+            .from('race_results')
+            .update({ status: 'dnc' })
+            .eq(column, id)
+            .eq('race_number', raceNumber)
+        );
 
-            loadResults();
-          },
-        },
-      ]
+        loadResults();
+      },
+      { destructive: true }
     );
   };
 
@@ -404,7 +392,7 @@ export default function RaceControlScreen() {
       loadResults();
     } catch (error) {
       console.error('Error recording finish:', error);
-      Alert.alert('Error', 'Could not record finish time');
+      showAlert('Error', 'Could not record finish time');
     }
   };
 
@@ -464,7 +452,7 @@ export default function RaceControlScreen() {
       a.click();
     } else {
       // Mobile sharing would use react-native-share or similar
-      Alert.alert('Export', 'CSV export prepared:\n\n' + csv.substring(0, 200) + '...');
+      showAlert('Export', 'CSV export prepared:\n\n' + csv.substring(0, 200) + '...');
     }
   };
 
@@ -607,7 +595,7 @@ export default function RaceControlScreen() {
                   <TouchableOpacity
                     style={styles.statusButton}
                     onPress={() => {
-                      Alert.alert('Update Status', 'Select status:', [
+                      showAlertWithButtons('Update Status', 'Select status:', [
                         { text: 'DNF', onPress: () => updateBoatStatus(item.id, 'dnf') },
                         { text: 'DNS', onPress: () => updateBoatStatus(item.id, 'dns') },
                         { text: 'OCS', onPress: () => updateBoatStatus(item.id, 'ocs') },

@@ -11,12 +11,12 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
-  Alert,
   Switch,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { EventType, EventVisibility, CreateEventInput } from '@/services/eventService';
@@ -79,7 +79,7 @@ export default function CreateEventScreen() {
 
   const handleCreate = async () => {
     if (!clubId) {
-      Alert.alert(
+      showAlert(
         'Club workspace required',
         'Please finish connecting your club profile before creating events.'
       );
@@ -91,12 +91,12 @@ export default function CreateEventScreen() {
 
       // Validation
       if (!formData.title.trim()) {
-        Alert.alert('Error', 'Please enter event title');
+        showAlert('Error', 'Please enter event title');
         return;
       }
 
       if (!formData.start_date || !formData.end_date) {
-        Alert.alert('Error', 'Please select event dates');
+        showAlert('Error', 'Please select event dates');
         return;
       }
 
@@ -110,7 +110,7 @@ export default function CreateEventScreen() {
       };
 
       const event = await EventService.createEvent(eventData);
-      Alert.alert('Success', 'Event created successfully', [
+      showAlertWithButtons('Success', 'Event created successfully', [
         {
           text: 'OK',
           onPress: () => router.replace(`/club/event/${event.id}`),
@@ -118,7 +118,7 @@ export default function CreateEventScreen() {
       ]);
     } catch (error) {
       console.error('Error creating event:', error);
-      Alert.alert('Error', 'Failed to create event');
+      showAlert('Error', 'Failed to create event');
     } finally {
       setLoading(false);
     }

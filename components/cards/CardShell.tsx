@@ -114,10 +114,9 @@ export function CardShell({
       width: dimensions.cardWidth,
       height: dimensions.cardHeight,
       borderRadius: dimensions.borderRadius,
-      backgroundColor: isPast ? PAST_CARD_BG : IOS_COLORS.systemBackground,
-      ...(isPast ? { opacity: PAST_CARD_OPACITY } : {}),
+      backgroundColor: IOS_COLORS.systemBackground,
     }),
-    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius, isPast]
+    [dimensions.cardWidth, dimensions.cardHeight, dimensions.borderRadius]
   );
 
   return (
@@ -133,12 +132,9 @@ export function CardShell({
     ]}
       testID={testID}
     >
-      {isNextRace ? (
-        <View style={styles.nextRaceBadge}>
-          <Text style={styles.nextRaceBadgeText}>NEXT</Text>
-        </View>
-      ) : null}
-      {isLastDone ? (
+      {/* NEXT badge removed — RaceSummaryCard renders its own inline "Next"
+         ribbon that scrolls with content instead of floating over it. */}
+      {isLastDone && relativeX !== gridState.currentRaceIndex.value ? (
         <View style={styles.lastDoneBadge}>
           <Text style={styles.lastDoneBadgeText}>LAST DONE</Text>
         </View>

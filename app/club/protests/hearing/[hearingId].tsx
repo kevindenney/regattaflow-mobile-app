@@ -9,12 +9,12 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   TextInput,
   Platform,
   Modal,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   ChevronLeft,
@@ -130,7 +130,7 @@ export default function HearingRoom() {
       setPanel(panelData);
     } catch (error) {
       console.error('Error loading hearing:', error);
-      Alert.alert('Error', 'Failed to load hearing details');
+      showAlert('Error', 'Failed to load hearing details');
     } finally {
       setLoading(false);
     }
@@ -141,38 +141,33 @@ export default function HearingRoom() {
       await protestService.startHearing(hearingId!);
       await loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to start hearing');
+      showAlert('Error', 'Failed to start hearing');
     }
   };
 
   const endHearing = async () => {
-    Alert.alert(
+    showConfirm(
       'End Hearing',
       'Are you sure you want to end this hearing?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'End Hearing',
-          onPress: async () => {
-            try {
-              await protestService.endHearing(hearingId!);
-              await loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to end hearing');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await protestService.endHearing(hearingId!);
+          await loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to end hearing');
+        }
+      },
+      { confirmLabel: 'End Hearing' }
     );
   };
 
   const handleSubmitDecision = async () => {
     if (!factsFound.trim()) {
-      Alert.alert('Required', 'Please enter the facts found');
+      showAlert('Required', 'Please enter the facts found');
       return;
     }
     if (!conclusions.trim()) {
-      Alert.alert('Required', 'Please enter the conclusions');
+      showAlert('Required', 'Please enter the conclusions');
       return;
     }
 
@@ -191,10 +186,10 @@ export default function HearingRoom() {
       await protestService.enterDecision(protest!.id, hearingId!, decision);
       setShowDecisionModal(false);
       await loadData();
-      Alert.alert('Success', 'Decision recorded and penalties applied');
+      showAlert('Success', 'Decision recorded and penalties applied');
     } catch (error) {
       console.error('Error submitting decision:', error);
-      Alert.alert('Error', 'Failed to record decision');
+      showAlert('Error', 'Failed to record decision');
     } finally {
       setSubmittingDecision(false);
     }

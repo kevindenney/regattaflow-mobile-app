@@ -1602,7 +1602,7 @@ export function CoursePositionEditor({
         marker.on('dragend', () => {
           const lngLat = marker.getLngLat();
           setMarks((prev) =>
-            CoursePositioningService.updateMarkPosition(prev, mark.id, {
+            CoursePositioningService.updateMarkPosition(prev, mark.id!, {
               lat: lngLat.lat,
               lng: lngLat.lng,
             })
@@ -1610,7 +1610,7 @@ export function CoursePositionEditor({
           setHasManualAdjustments(true);
         });
 
-        markersRef.current.set(mark.id, marker);
+        markersRef.current.set(mark.id!, marker);
       });
 
       // Fit bounds to show all marks

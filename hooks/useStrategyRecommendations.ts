@@ -69,7 +69,7 @@ const logger = createLogger('useStrategyRecommendations');
 /**
  * Maps PostRaceLearningService phase keys to our strategy phases
  */
-const PHASE_TO_SERVICE_KEY: Record<StrategyPhase, PhaseInsightKey> = {
+const PHASE_TO_SERVICE_KEY: Partial<Record<StrategyPhase, PhaseInsightKey>> = {
   start: 'start',
   upwind: 'upwind',
   downwind: 'downwind',

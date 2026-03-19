@@ -8,13 +8,13 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Modal,
   TextInput,
   ScrollView,
   Platform,
   Vibration,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Text } from '@/components/ui/text';
 import {
   Clock,
@@ -143,7 +143,7 @@ export function TimeLimitTracker({
     if (Platform.OS !== 'web') {
       Vibration.vibrate([0, 500, 200, 500]);
     }
-    Alert.alert('⏱️ Time Limit', message);
+    showAlert('⏱️ Time Limit', message);
   };
 
   const handleCreateTimeLimit = async () => {
@@ -161,7 +161,7 @@ export function TimeLimitTracker({
       setTimeLimit(limit);
       setShowSetupModal(false);
     } catch (error) {
-      Alert.alert('Error', 'Failed to create time limit');
+      showAlert('Error', 'Failed to create time limit');
     }
   };
 
@@ -171,7 +171,7 @@ export function TimeLimitTracker({
       const updated = await timeLimitService.recordRaceStart(timeLimit.id);
       setTimeLimit(updated);
     } catch (error) {
-      Alert.alert('Error', 'Failed to start race timer');
+      showAlert('Error', 'Failed to start race timer');
     }
   };
 
@@ -181,14 +181,14 @@ export function TimeLimitTracker({
       const updated = await timeLimitService.recordFirstFinish(timeLimit.id);
       setTimeLimit(updated);
     } catch (error) {
-      Alert.alert('Error', 'Failed to record first finish');
+      showAlert('Error', 'Failed to record first finish');
     }
   };
 
   const handleExpire = async () => {
     if (!timeLimit) return;
     
-    Alert.alert(
+    showAlertWithButtons(
       'Expire Time Limit',
       'This will mark the time limit as expired. Apply auto-DNF to unfinished boats?',
       [
@@ -220,7 +220,7 @@ export function TimeLimitTracker({
       const updated = await timeLimitService.completeTimeLimit(timeLimit.id);
       setTimeLimit(updated);
     } catch (error) {
-      Alert.alert('Error', 'Failed to complete time limit');
+      showAlert('Error', 'Failed to complete time limit');
     }
   };
 

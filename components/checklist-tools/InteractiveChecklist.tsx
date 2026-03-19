@@ -60,7 +60,7 @@ interface InteractiveChecklistProps extends ChecklistToolProps {
 
 export function InteractiveChecklist({
   item,
-  raceEventId,
+  regattaId: raceEventId,
   onComplete,
   onCancel,
 }: InteractiveChecklistProps) {

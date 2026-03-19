@@ -9,13 +9,13 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   TextInput,
   Platform,
   Modal,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   ChevronLeft,
@@ -152,7 +152,7 @@ export default function CommitteeBoatLog() {
   // Handle new entry
   const handleCreateEntry = async () => {
     if (!newTitle.trim()) {
-      Alert.alert('Required', 'Please enter a title');
+      showAlert('Required', 'Please enter a title');
       return;
     }
 
@@ -173,7 +173,7 @@ export default function CommitteeBoatLog() {
       setNewCategory('general');
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to create log entry');
+      showAlert('Error', 'Failed to create log entry');
     } finally {
       setSubmitting(false);
     }
@@ -188,7 +188,7 @@ export default function CommitteeBoatLog() {
       setShowNewEntryModal(false);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to create entry from template');
+      showAlert('Error', 'Failed to create entry from template');
     }
   };
 
@@ -198,30 +198,24 @@ export default function CommitteeBoatLog() {
       await committeeLogService.verifyEntry(entryId);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to verify entry');
+      showAlert('Error', 'Failed to verify entry');
     }
   };
 
   // Handle delete
   const handleDelete = (entry: LogEntry) => {
-    Alert.alert(
+    showConfirm(
       'Delete Entry',
       `Delete "${entry.title}"? This will be preserved for audit purposes.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await committeeLogService.deleteEntry(entry.id);
-              loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete entry');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await committeeLogService.deleteEntry(entry.id);
+          loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to delete entry');
+        }
+      },
+      { destructive: true }
     );
   };
 
@@ -229,9 +223,9 @@ export default function CommitteeBoatLog() {
   const handleExport = async () => {
     try {
       const text = await committeeLogService.exportToText(regattaId!, selectedDate);
-      Alert.alert('Export', 'Log exported:\n\n' + text.substring(0, 500) + '...');
+      showAlert('Export', 'Log exported:\n\n' + text.substring(0, 500) + '...');
     } catch (error) {
-      Alert.alert('Error', 'Failed to export log');
+      showAlert('Error', 'Failed to export log');
     }
   };
 

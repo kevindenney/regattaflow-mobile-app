@@ -14,7 +14,6 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import {
   Mountain,
@@ -35,6 +34,7 @@ import {
   FOUR_PEAKS,
   getPeakById,
 } from '@/types/multiActivitySchedule';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -139,7 +139,7 @@ export function ClimbLogCard({
       await onUpdateTask(editingTaskId, updates);
       cancelEditing();
     } catch (err) {
-      Alert.alert('Error', 'Failed to save. Please try again.');
+      showAlert('Error', 'Failed to save. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -170,7 +170,7 @@ export function ClimbLogCard({
 
         await onUpdateTask(taskId, updates);
       } catch (err) {
-        Alert.alert('Error', 'Failed to save. Please try again.');
+        showAlert('Error', 'Failed to save. Please try again.');
       } finally {
         setIsSaving(false);
       }

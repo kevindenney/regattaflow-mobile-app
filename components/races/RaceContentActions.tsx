@@ -91,7 +91,7 @@ export function RaceContentActions({
         .from('regattas')
         .select('prep_notes, post_race_notes, lessons_learned')
         .eq('id', regattaId)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setContentStatus({

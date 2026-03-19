@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -197,14 +198,10 @@ export function RaceSeriesManager({ courses }: RaceSeriesManagerProps) {
   };
 
   const handleCreateSeries = () => {
-    Alert.alert(
+    showConfirm(
       'Create New Series',
       'This will start the series creation wizard.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create',
-          onPress: () => {
+      () => {
             const draftSeries = createDraftSeries();
             setRaceSeries((prev) => [draftSeries, ...prev]);
             setSeriesEvents((prev) => [
@@ -219,58 +216,44 @@ export function RaceSeriesManager({ courses }: RaceSeriesManagerProps) {
               ...prev,
             ]);
             setSelectedTab('series');
-            Alert.alert('Series Created', `"${draftSeries.name}" was added in planning status.`);
+            showAlert('Series Created', `"${draftSeries.name}" was added in planning status.`);
           }
-        }
-      ]
     );
   };
 
   const handleEditSeries = (series: RaceSeries) => {
-    Alert.alert(
+    showConfirm(
       'Edit Series',
       `Modify settings for "${series.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Edit',
-          onPress: () => {
-            setRaceSeries((prev) =>
-              prev.map((entry) =>
-                entry.id === series.id
-                  ? {
-                      ...entry,
-                      status: entry.status === 'planning' ? 'open' : entry.status,
-                      name: entry.name.endsWith('(Edited)')
-                        ? entry.name
-                        : `${entry.name} (Edited)`,
-                    }
-                  : entry
-              )
-            );
-            Alert.alert('Series Updated', `"${series.name}" settings were updated.`);
-          }
-        }
-      ]
+      () => {
+        setRaceSeries((prev) =>
+          prev.map((entry) =>
+            entry.id === series.id
+              ? {
+                  ...entry,
+                  status: entry.status === 'planning' ? 'open' : entry.status,
+                  name: entry.name.endsWith('(Edited)')
+                    ? entry.name
+                    : `${entry.name} (Edited)`,
+                }
+              : entry
+          )
+        );
+        showAlert('Series Updated', `"${series.name}" settings were updated.`);
+      }
     );
   };
 
   const handlePublishResults = (series: RaceSeries) => {
-    Alert.alert(
+    showConfirm(
       'Publish Results',
       `Publish final results for "${series.name}" to all participants?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Publish',
-          onPress: () => {
-            setRaceSeries(prev => prev.map(s =>
-              s.id === series.id ? { ...s, status: 'completed' as const } : s
-            ));
-            Alert.alert('Results Published', 'Final results have been distributed to all participants.');
-          }
-        }
-      ]
+      () => {
+        setRaceSeries(prev => prev.map(s =>
+          s.id === series.id ? { ...s, status: 'completed' as const } : s
+        ));
+        showAlert('Results Published', 'Final results have been distributed to all participants.');
+      }
     );
   };
 

@@ -104,7 +104,7 @@ export default function AuthChoiceNewScreen() {
   };
 
   const handleEmailSignUp = () => {
-    router.push('/onboarding/register');
+    router.push('/(auth)/signup');
   };
 
   const handleSignIn = () => {

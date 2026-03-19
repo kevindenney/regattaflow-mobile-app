@@ -17,6 +17,7 @@ import Animated, {
   useAnimatedStyle,
   interpolate,
   Extrapolation,
+  SharedValue,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
@@ -92,7 +93,7 @@ interface AnimatedDetailCardProps {
   children: ReactElement;
   index: number;
   cardHeight: number;
-  scrollOffset: Animated.SharedValue<number>;
+  scrollOffset: SharedValue<number>;
   snapInterval: number;
   style?: ViewStyle;
   onPress?: () => void;
@@ -278,8 +279,8 @@ export function DetailCardPager({
     <View style={[styles.container, { height: zoneHeight }, style]} testID={testID}>
       {/* Vertical detail card pager */}
       <Animated.FlatList
-        ref={flatListRef}
-        data={detailCards}
+        ref={flatListRef as any}
+        data={detailCards as any}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         extraData={expandedCardId}
@@ -287,6 +288,7 @@ export function DetailCardPager({
         horizontal={false}
         showsVerticalScrollIndicator={false}
         // Allow immediate touch response on iOS (prevents FlatList from swallowing taps)
+        // @ts-expect-error - delaysContentTouches exists on iOS FlatList but not in Reanimated types
         delaysContentTouches={false}
         // Snap behavior
         snapToInterval={snapInterval}

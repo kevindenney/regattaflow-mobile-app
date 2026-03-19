@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
 import { AiDraftActions } from './AiDraftActions';
@@ -47,7 +47,7 @@ export function RaceCommsModal({
 }: RaceCommsModalProps) {
   const copyContent = async (content: string) => {
     const copied = await copyToClipboard(content);
-    Alert.alert(
+    showAlert(
       copied ? 'Copied' : 'Clipboard unavailable',
       copied ? 'Text copied to your clipboard.' : 'Copy is not supported on this device yet.'
     );
@@ -72,7 +72,7 @@ export function RaceCommsModal({
       .join('\n');
 
     const copied = await copyToClipboard(bundle);
-    Alert.alert(
+    showAlert(
       copied ? 'Copied' : 'Clipboard unavailable',
       copied ? 'Draft copied to your clipboard.' : 'Copy is not supported on this device yet.'
     );

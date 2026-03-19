@@ -21,9 +21,9 @@ import {
   ActivityIndicator,
   TurboModuleRegistry,
   Dimensions,
-  Alert,
   Linking,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronDown,
@@ -359,7 +359,7 @@ export function CoursePositionEditor({
   // Save course
   const handleSave = async () => {
     if (!startLineCenter || !startLine || marks.length === 0) {
-      Alert.alert('Error', 'Please position the course before saving.');
+      showAlert('Error', 'Please position the course before saving.');
       return;
     }
 
@@ -382,7 +382,7 @@ export function CoursePositionEditor({
 
       onSave(courseData);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to save course position.');
+      showAlert('Error', error.message || 'Failed to save course position.');
     } finally {
       setSaving(false);
     }
@@ -391,13 +391,11 @@ export function CoursePositionEditor({
   // Handle cancel
   const handleCancel = useCallback(() => {
     if (hasChanges) {
-      Alert.alert(
+      showConfirm(
         'Discard Changes?',
         'You have unsaved changes. Are you sure you want to discard them?',
-        [
-          { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: onCancel },
-        ]
+        onCancel,
+        { destructive: true },
       );
     } else {
       onCancel();

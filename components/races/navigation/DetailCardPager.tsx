@@ -75,4 +75,3 @@ export interface DetailCardPagerProps {
 // - DetailCardPager.web.tsx for web
 
 export { DetailCardPager } from './DetailCardPager.native';
-export type { DetailCardPagerProps, DetailCardData, RenderCardOptions };

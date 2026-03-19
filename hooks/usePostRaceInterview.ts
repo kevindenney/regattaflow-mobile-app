@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
@@ -194,12 +194,12 @@ export function usePostRaceInterview({
     });
 
     if (!user?.id) {
-      Alert.alert('Post-Race Interview', 'You need to be signed in to add post-race notes.');
+      showAlert('Post-Race Interview', 'You need to be signed in to add post-race notes.');
       return;
     }
 
     if (!effectiveRaceId || !effectiveRaceData) {
-      Alert.alert('Post-Race Interview', 'Select a race first to add your post-race interview.');
+      showAlert('Post-Race Interview', 'Select a race first to add your post-race interview.');
       return;
     }
 
@@ -308,7 +308,7 @@ export function usePostRaceInterview({
       setShowPostRaceInterview(true);
     } catch (error: any) {
       logger.error('[usePostRaceInterview] Failed to open post-race interview manually', error);
-      Alert.alert(
+      showAlert(
         'Post-Race Interview',
         error?.message
           ? `Unable to open interview: ${error.message}`

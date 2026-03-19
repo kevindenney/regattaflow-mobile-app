@@ -20,8 +20,8 @@ import {
   ScrollView,
   StyleSheet,
   Platform,
-  Alert
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import {
   VenuePackageService,
   type PackageDownloadStatus,
@@ -89,13 +89,10 @@ export function OfflineMapControls({
     const hasStorage = await packageService.hasEnoughStorage(pkg.estimatedSizeMB);
 
     if (!hasStorage) {
-      Alert.alert(
+      showConfirm(
         'Insufficient Storage',
         `This package requires ${pkg.estimatedSizeMB} MB but you may not have enough space. Continue anyway?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Continue', onPress: () => startDownload(venue, preset) }
-        ]
+        () => startDownload(venue, preset)
       );
       return;
     }
@@ -118,13 +115,13 @@ export function OfflineMapControls({
       await refreshDownloadedPackages();
       onDownloadComplete?.(venue);
 
-      Alert.alert(
+      showAlert(
         'Download Complete',
         `${venue.name} offline maps are now available.`
       );
     } catch (error) {
       logger.error('Download failed', error);
-      Alert.alert(
+      showAlert(
         'Download Failed',
         `Failed to download ${venue.name}. Please try again.`
       );
@@ -135,20 +132,14 @@ export function OfflineMapControls({
   };
 
   const handleDeletePackage = async (venueId: string, venueName: string) => {
-    Alert.alert(
+    showConfirm(
       'Delete Offline Maps',
       `Delete offline maps for ${venueName}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await packageService.deleteVenuePackage(venueId);
-            await refreshDownloadedPackages();
-          }
-        }
-      ]
+      async () => {
+        await packageService.deleteVenuePackage(venueId);
+        await refreshDownloadedPackages();
+      },
+      { destructive: true }
     );
   };
 

@@ -13,9 +13,9 @@ import {
   Pressable,
   ScrollView,
   Share,
-  Alert,
   Modal,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 import type { SeasonRecap, SeasonHighlight } from '@/hooks/useReflectProfile';
@@ -185,7 +185,7 @@ Top moment: ${recap.highlights[0]?.title} - ${recap.highlights[0]?.value}
     try {
       await Share.share({ message: shareText });
     } catch (error) {
-      Alert.alert('Error', 'Could not share recap');
+      showAlert('Error', 'Could not share recap');
     }
   };
 

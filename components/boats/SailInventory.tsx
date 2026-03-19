@@ -13,7 +13,6 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   RefreshControl,
@@ -24,6 +23,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Camera, AlertTriangle, CheckCircle2, Clock, Plus, Search } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { SailInspectionService, type SailWithHealth } from '@/services/SailInspectionService';
@@ -225,7 +225,7 @@ function AddSailModal({ visible, boatId, onClose, onSailAdded }: AddSailModalPro
 
   const handleSave = async () => {
     if (!formData.name.trim() && !formData.sailNumber.trim()) {
-      Alert.alert('Required', 'Please enter a sail name or number');
+      showAlert('Required', 'Please enter a sail name or number');
       return;
     }
 
@@ -276,7 +276,7 @@ function AddSailModal({ visible, boatId, onClose, onSailAdded }: AddSailModalPro
       });
     } catch (error) {
       console.error('Failed to add sail:', error);
-      Alert.alert('Error', 'Failed to add sail. Please try again.');
+      showAlert('Error', 'Failed to add sail. Please try again.');
     } finally {
       setSaving(false);
     }

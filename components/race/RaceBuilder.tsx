@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui';
@@ -75,7 +76,7 @@ export function RaceBuilder() {
       } = await supabase.auth.getUser();
 
       if (!user?.id) {
-        Alert.alert('Sign in required', 'Please sign in to publish a race course.');
+        showAlert('Sign in required', 'Please sign in to publish a race course.');
         return;
       }
 
@@ -116,10 +117,10 @@ export function RaceBuilder() {
         raceCourseId: data?.id,
         sourceCourseId: currentCourse.id,
       });
-      Alert.alert('Course Published', 'Your course was saved to the shared course library.');
+      showAlert('Course Published', 'Your course was saved to the shared course library.');
     } catch (error) {
       logger.error('Failed to publish course', error);
-      Alert.alert(
+      showAlert(
         'Publish failed',
         error instanceof Error ? error.message : 'Unable to publish course right now.'
       );

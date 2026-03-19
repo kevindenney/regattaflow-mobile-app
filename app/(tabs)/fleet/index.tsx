@@ -11,7 +11,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
 import {
-  Alert,
   ActivityIndicator,
   Linking,
   ScrollView,
@@ -20,6 +19,7 @@ import {
   View,
   TouchableOpacity,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { useFleetOverview, useUserFleets } from '@/hooks/useFleetData';
 import { useFleetPosts } from '@/hooks/useFleetSocial';
@@ -67,28 +67,22 @@ export default function FleetOverviewScreen() {
   const { posts, loading: postsLoading } = useFleetPosts(activeFleet?.id, { limit: 10 });
 
   const handleLeaveFleet = useCallback(async (fleetId: string, fleetName?: string) => {
-    Alert.alert(
+    showConfirm(
       `Leave ${fleetName ?? 'this fleet'}?`,
       'You will lose access to shared content.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            if (!user?.id) return;
-            setLeavingFleetId(fleetId);
-            try {
-              await fleetService.leaveFleet(user.id, fleetId);
-              await refreshFleets();
-            } catch (error: any) {
-              Alert.alert('Error', error?.message ?? 'Could not leave fleet');
-            } finally {
-              setLeavingFleetId(null);
-            }
-          },
-        },
-      ]
+      async () => {
+        if (!user?.id) return;
+        setLeavingFleetId(fleetId);
+        try {
+          await fleetService.leaveFleet(user.id, fleetId);
+          await refreshFleets();
+        } catch (error: any) {
+          showAlert('Error', error?.message ?? 'Could not leave fleet');
+        } finally {
+          setLeavingFleetId(null);
+        }
+      },
+      { destructive: true }
     );
   }, [user?.id, refreshFleets]);
 

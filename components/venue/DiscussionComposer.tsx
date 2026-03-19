@@ -15,8 +15,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { useCreateDiscussion, useDiscussionCategories } from '@/hooks/useVenueDiscussions';
@@ -60,7 +60,7 @@ export function DiscussionComposer({
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert('Title required', 'Please enter a title for your discussion');
+      showAlert('Title required', 'Please enter a title for your discussion');
       return;
     }
 
@@ -84,31 +84,25 @@ export function DiscussionComposer({
       onSuccess?.();
       onClose();
     } catch (error) {
-      Alert.alert('Error', 'Failed to create discussion. Please try again.');
+      showAlert('Error', 'Failed to create discussion. Please try again.');
       console.error('[DiscussionComposer] Create error:', error);
     }
   };
 
   const handleClose = () => {
     if (title.trim() || body.trim()) {
-      Alert.alert(
+      showConfirm(
         'Discard draft?',
         'You have unsaved changes. Are you sure you want to close?',
-        [
-          { text: 'Keep editing', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => {
-              setTitle('');
-              setBody('');
-              setCategory('general');
-              setSelectedRacingAreaId(defaultRacingAreaId ?? null);
-              setSelectedRaceRouteId(defaultRaceRouteId ?? null);
-              onClose();
-            },
-          },
-        ]
+        () => {
+          setTitle('');
+          setBody('');
+          setCategory('general');
+          setSelectedRacingAreaId(defaultRacingAreaId ?? null);
+          setSelectedRaceRouteId(defaultRaceRouteId ?? null);
+          onClose();
+        },
+        { destructive: true }
       );
     } else {
       onClose();

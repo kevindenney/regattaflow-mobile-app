@@ -46,7 +46,7 @@ function parseSectionId(sectionId: StrategySectionId): { phase: StrategyPhase; f
 /**
  * Debounce helper for auto-saving
  */
-function useDebouncedCallback<T extends (...args: unknown[]) => unknown>(
+function useDebouncedCallback<T extends (...args: any[]) => any>(
   callback: T,
   delay: number
 ): T {

@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
     Modal,
     Platform,
     RefreshControl,
@@ -21,6 +20,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import safetyBoatService, {
     AssignmentStatus,
     IncidentSeverity,
@@ -111,7 +111,7 @@ export default function SafetyDashboard() {
       setCoverage(coverageData);
     } catch (error) {
       console.error('Error loading safety data:', error);
-      Alert.alert('Error', 'Failed to load safety data');
+      showAlert('Error', 'Failed to load safety data');
     }
   }, [regattaId, clubId, today]);
   
@@ -146,7 +146,7 @@ export default function SafetyDashboard() {
       setShowAssignModal(false);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to assign boat');
+      showAlert('Error', 'Failed to assign boat');
     }
   };
   
@@ -158,7 +158,7 @@ export default function SafetyDashboard() {
       }
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to update status');
+      showAlert('Error', 'Failed to update status');
     }
   };
   
@@ -167,7 +167,7 @@ export default function SafetyDashboard() {
       await safetyBoatService.quickRadioCheck(assignmentId);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to record radio check');
+      showAlert('Error', 'Failed to record radio check');
     }
   };
   
@@ -184,7 +184,7 @@ export default function SafetyDashboard() {
       Vibration.vibrate([0, 500]);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to report incident');
+      showAlert('Error', 'Failed to report incident');
     }
   };
   
@@ -194,7 +194,7 @@ export default function SafetyDashboard() {
       Vibration.vibrate([0, 200, 100, 200, 100, 200]);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to assign responder');
+      showAlert('Error', 'Failed to assign responder');
     }
   };
   
@@ -208,7 +208,7 @@ export default function SafetyDashboard() {
             await safetyBoatService.resolveIncident(incidentId, 'resolved_on_water', text);
             loadData();
           } catch (error) {
-            Alert.alert('Error', 'Failed to resolve incident');
+            showAlert('Error', 'Failed to resolve incident');
           }
         }
       }
@@ -227,7 +227,7 @@ export default function SafetyDashboard() {
       setNewCrew({ name: '', role: 'crew' });
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to add crew');
+      showAlert('Error', 'Failed to add crew');
     }
   };
   

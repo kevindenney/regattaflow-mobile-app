@@ -10,7 +10,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Alert,
   ActivityIndicator,
   TextInput,
   KeyboardAvoidingView,
@@ -20,6 +19,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { ClubEvent, CreateRegistrationInput } from '@/services/eventService';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { format } from 'date-fns';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -71,7 +71,7 @@ export default function EventRegistrationScreen() {
       }
     } catch (error) {
       console.error('Error loading event:', error);
-      Alert.alert('Error', 'Failed to load event details');
+      showAlert('Error', 'Failed to load event details');
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ export default function EventRegistrationScreen() {
   const handleSubmit = async () => {
     const error = validateForm();
     if (error) {
-      Alert.alert('Missing Information', error);
+      showAlert('Missing Information', error);
       return;
     }
 
@@ -112,14 +112,14 @@ export default function EventRegistrationScreen() {
 
       await EventService.createRegistration(input);
 
-      Alert.alert(
+      showAlert(
         'Registration Submitted!',
-        'Your registration has been submitted. You will receive a confirmation email once approved.',
-        [{ text: 'OK', onPress: () => router.replace(`/event/${eventId}`) }]
+        'Your registration has been submitted. You will receive a confirmation email once approved.'
       );
+      router.replace(`/event/${eventId}`);
     } catch (error: any) {
       console.error('Error registering:', error);
-      Alert.alert(
+      showAlert(
         'Registration Failed',
         error.message || 'Failed to submit registration. Please try again.'
       );

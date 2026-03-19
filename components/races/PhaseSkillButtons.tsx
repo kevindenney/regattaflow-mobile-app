@@ -9,8 +9,6 @@ import {
   Text,
   Pressable,
   ScrollView,
-  Alert,
-  Platform,
   StyleSheet,
   ActivityIndicator,
   useWindowDimensions,
@@ -27,6 +25,7 @@ import {
   type SkillDisplayDefinition,
 } from '@/components/coaching/skillInvocation';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 const logger = createLogger('PhaseSkillButtons');
 
@@ -138,19 +137,11 @@ export function PhaseSkillButtons({
         ? `${advice.primary}\n\n${advice.details}`
         : advice.primary;
 
-      if (Platform.OS === 'web') {
-        window.alert(`${title}\n\n${message}`);
-      } else {
-        Alert.alert(title, message);
-      }
+      showAlert(title, message);
     } catch (error) {
       logger.error('Skill invocation failed', error);
       const message = 'Unable to get AI advice right now. Please try again.';
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert('AI Coach unavailable', message);
-      }
+      showAlert('AI Coach unavailable', message);
     } finally {
       setLoadingSkill(null);
     }
@@ -161,11 +152,7 @@ export function PhaseSkillButtons({
     if (!definition) return;
 
     const title = `${definition.icon} ${definition.label}`;
-    if (Platform.OS === 'web') {
-      window.alert(`${title}\n\n${definition.description}`);
-    } else {
-      Alert.alert(title, definition.description);
-    }
+    showAlert(title, definition.description);
   };
 
   const renderSkillButton = (definition: SkillDisplayDefinition) => {

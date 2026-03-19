@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, FlatList, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, FlatList } from 'react-native';
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Check, X, Plus, Edit3, Trash2, Calendar, ChevronLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -92,13 +93,11 @@ export default function RaceSeriesVerificationScreen() {
   };
 
   const deleteSeries = (id: string) => {
-    Alert.alert(
+    showConfirm(
       "Delete Race Series",
       "Are you sure you want to delete this race series?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => setRaceSeries(raceSeries.filter(series => series.id !== id)) }
-      ]
+      () => setRaceSeries(raceSeries.filter(series => series.id !== id)),
+      { destructive: true },
     );
   };
 

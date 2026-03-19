@@ -17,7 +17,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   Modal,
   FlatList,
   Vibration,
@@ -51,6 +50,7 @@ import {
   Timer,
   Trophy,
 } from 'lucide-react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { Audio } from 'expo-av';
@@ -438,61 +438,49 @@ export default function RaceCommitteeConsole() {
   };
 
   const postponeRace = async () => {
-    Alert.alert(
+    showConfirm(
       'Postpone Race',
       'Display AP flag and postpone the race?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Postpone',
-          onPress: async () => {
-            stopSequence();
-            setActiveFlags(prev => new Set([...prev, 'AP']));
-            await playHorn(1000, 2);
-            
-            await supabase.from('race_flags').insert({
-              regatta_id: regattaId,
-              race_number: raceNumber,
-              flag_type: 'AP',
-              action: 'display',
-              recorded_by: user?.id,
-            });
-          },
-        },
-      ]
+      async () => {
+        stopSequence();
+        setActiveFlags(prev => new Set([...prev, 'AP']));
+        await playHorn(1000, 2);
+
+        await supabase.from('race_flags').insert({
+          regatta_id: regattaId,
+          race_number: raceNumber,
+          flag_type: 'AP',
+          action: 'display',
+          recorded_by: user?.id,
+        });
+      }
     );
   };
 
   const generalRecall = async () => {
-    Alert.alert(
+    showConfirm(
       'General Recall',
       'Display 1st Substitute flag for General Recall?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Recall',
-          onPress: async () => {
-            stopSequence();
-            setActiveFlags(prev => new Set([...prev, '1st Sub']));
-            await playHorn(1000, 2);
-            
-            await supabase.from('race_flags').insert({
-              regatta_id: regattaId,
-              race_number: raceNumber,
-              flag_type: '1st Sub',
-              action: 'display',
-              recorded_by: user?.id,
-            });
-          },
-        },
-      ]
+      async () => {
+        stopSequence();
+        setActiveFlags(prev => new Set([...prev, '1st Sub']));
+        await playHorn(1000, 2);
+
+        await supabase.from('race_flags').insert({
+          regatta_id: regattaId,
+          race_number: raceNumber,
+          flag_type: '1st Sub',
+          action: 'display',
+          recorded_by: user?.id,
+        });
+      }
     );
   };
 
   // Finish recording functions
   const recordFinish = async (entry: RaceEntry) => {
     if (timerState !== 'racing') {
-      Alert.alert('Race Not Started', 'Start the race before recording finishes.');
+      showAlert('Race Not Started', 'Start the race before recording finishes.');
       return;
     }
 
@@ -527,7 +515,7 @@ export default function RaceCommitteeConsole() {
       loadResults();
     } catch (error) {
       console.error('Error recording finish:', error);
-      Alert.alert('Error', 'Failed to record finish');
+      showAlert('Error', 'Failed to record finish');
     }
   };
 
@@ -592,12 +580,12 @@ export default function RaceCommitteeConsole() {
 
       // TODO: Trigger push notifications to registered sailors
 
-      Alert.alert('Sent', 'Announcement published successfully');
+      showAlert('Sent', 'Announcement published successfully');
       setAnnouncementText('');
       setAnnouncementPriority('normal');
     } catch (error) {
       console.error('Error sending announcement:', error);
-      Alert.alert('Error', 'Failed to send announcement');
+      showAlert('Error', 'Failed to send announcement');
     }
   };
 
@@ -869,7 +857,7 @@ export default function RaceCommitteeConsole() {
                   updateStatus(selectedEntry.id, status);
                   setSelectedEntry(null);
                 } else {
-                  Alert.alert('Select Boat', 'Tap a boat first, then assign status');
+                  showAlert('Select Boat', 'Tap a boat first, then assign status');
                 }
               }}
             >
@@ -904,7 +892,7 @@ export default function RaceCommitteeConsole() {
                 course_designation: courseDesignation,
                 signaled_at: new Date().toISOString(),
               });
-              Alert.alert('Course Set', `Course ${courseDesignation} signaled`);
+              showAlert('Course Set', `Course ${courseDesignation} signaled`);
             }}
           >
             <Navigation size={20} color="#FFFFFF" />

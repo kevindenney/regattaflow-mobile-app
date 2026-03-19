@@ -16,7 +16,6 @@ import {
   TextInput,
   Platform,
   TurboModuleRegistry,
-  Alert,
 } from 'react-native';
 import {
   Anchor,
@@ -32,6 +31,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native';
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 // Types
 export interface RouteWaypoint {
@@ -248,20 +248,14 @@ export function DistanceRouteMap({
 
   // Clear all waypoints
   const clearWaypoints = useCallback(() => {
-    Alert.alert(
+    showConfirm(
       'Clear All Waypoints',
       'Are you sure you want to remove all waypoints?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            onWaypointsChange([]);
-            setNextWaypointType('start');
-          },
-        },
-      ]
+      () => {
+        onWaypointsChange([]);
+        setNextWaypointType('start');
+      },
+      { destructive: true },
     );
   }, [onWaypointsChange]);
 

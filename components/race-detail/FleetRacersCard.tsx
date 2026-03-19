@@ -12,7 +12,8 @@ import { raceParticipantService } from '@/services/RaceParticipantService';
 import { supabase } from '@/services/supabase';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface RaceParticipant {
   id: string;
@@ -211,11 +212,11 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
     try {
       await FleetDiscoveryService.joinFleet(user.id, fleet.id, true);
       setUserFleetMemberships(prev => new Set([...prev, fleet.id]));
-      Alert.alert('Success', `You've joined ${fleet.name}!`);
+      showAlert('Success', `You've joined ${fleet.name}!`);
       onJoinFleet?.(fleet.id);
     } catch (error) {
       console.error('Error joining fleet:', error);
-      Alert.alert('Error', 'Failed to join fleet');
+      showAlert('Error', 'Failed to join fleet');
     }
   };
 
@@ -241,12 +242,12 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
 
       setIsRegistered(true);
       setShowRegisterModal(false);
-      Alert.alert('Success', 'You are now registered for this race!');
+      showAlert('Success', 'You are now registered for this race!');
       loadParticipants(); // Refresh the list
       onRegister?.();
     } catch (error: any) {
       console.error('Error registering for race:', error);
-      Alert.alert('Error', error.message || 'Failed to register for race');
+      showAlert('Error', error.message || 'Failed to register for race');
     } finally {
       setRegisteringRace(false);
     }
@@ -256,7 +257,7 @@ export function FleetRacersCard({ raceId, venueId, clubId, classId, onJoinFleet,
     if (!fleet.whatsapp_link) return;
 
     Linking.openURL(fleet.whatsapp_link).catch(() => {
-      Alert.alert('Error', 'Could not open WhatsApp group');
+      showAlert('Error', 'Could not open WhatsApp group');
     });
   };
 

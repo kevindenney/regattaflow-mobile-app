@@ -128,8 +128,8 @@ export function DetailBottomSheet({
 
         {/* Scrollable content with detail card */}
         <ActionsheetScrollView
-          className="w-full"
-          contentContainerClassName="pb-8"
+          style={{ width: '100%' }}
+          contentContainerStyle={{ paddingBottom: 32 }}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.cardContainer}>

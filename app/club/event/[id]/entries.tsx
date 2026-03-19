@@ -11,6 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import EventService, { EventRegistration, RegistrationStatus, EventRegistrationStats, ClubEvent, PaymentStatus, } from '@/services/eventService';
 import { supabase } from '@/services/supabase';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 export default function EventEntriesScreen() {
     const router = useRouter();
     const { id } = useLocalSearchParams();
@@ -43,7 +44,7 @@ export default function EventEntriesScreen() {
         }
         catch (error) {
             console.error('Error loading registrations:', error);
-            Alert.alert('Error', 'Failed to load registrations');
+            showAlert('Error', 'Failed to load registrations');
         }
         finally {
             setLoading(false);
@@ -53,11 +54,11 @@ export default function EventEntriesScreen() {
         try {
             await EventService.updateRegistrationStatus(registrationId, 'approved');
             await loadRegistrations();
-            Alert.alert('Success', 'Registration approved');
+            showAlert('Success', 'Registration approved');
         }
         catch (error) {
             console.error('Error approving registration:', error);
-            Alert.alert('Error', 'Failed to approve registration');
+            showAlert('Error', 'Failed to approve registration');
         }
     };
   const handleReject = async (registrationId: string) => {
@@ -73,17 +74,17 @@ export default function EventEntriesScreen() {
             onPress: async (reason?: string) => {
               const trimmedReason = reason?.trim();
               if (!trimmedReason) {
-                Alert.alert('Reason required', 'Please provide a reason to reject this registration.');
+                showAlert('Reason required', 'Please provide a reason to reject this registration.');
                 return;
               }
 
               try {
                 await EventService.updateRegistrationStatus(registrationId, 'rejected', trimmedReason);
                 await loadRegistrations();
-                Alert.alert('Success', 'Registration rejected');
+                showAlert('Success', 'Registration rejected');
               } catch (error) {
                 console.error('Error rejecting registration:', error);
-                Alert.alert('Error', 'Failed to reject registration');
+                showAlert('Error', 'Failed to reject registration');
               }
             },
           },
@@ -93,41 +94,35 @@ export default function EventEntriesScreen() {
       return;
     }
 
-    Alert.alert(
+    showConfirm(
       'Reject Registration',
       'Reason entry is only supported on iOS. Reject this registration with a default note?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await EventService.updateRegistrationStatus(
-                registrationId,
-                'rejected',
-                'Rejected via mobile app'
-              );
-              await loadRegistrations();
-              Alert.alert('Success', 'Registration rejected');
-            } catch (error) {
-              console.error('Error rejecting registration:', error);
-              Alert.alert('Error', 'Failed to reject registration');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await EventService.updateRegistrationStatus(
+            registrationId,
+            'rejected',
+            'Rejected via mobile app'
+          );
+          await loadRegistrations();
+          showAlert('Success', 'Registration rejected');
+        } catch (error) {
+          console.error('Error rejecting registration:', error);
+          showAlert('Error', 'Failed to reject registration');
+        }
+      },
+      { destructive: true }
     );
   };
     const handleMoveToWaitlist = async (registrationId: string) => {
         try {
             await EventService.updateRegistrationStatus(registrationId, 'waitlist');
             await loadRegistrations();
-            Alert.alert('Success', 'Moved to waitlist');
+            showAlert('Success', 'Moved to waitlist');
         }
         catch (error) {
             console.error('Error moving to waitlist:', error);
-            Alert.alert('Error', 'Failed to move to waitlist');
+            showAlert('Error', 'Failed to move to waitlist');
         }
     };
   const handleMarkAsPaid = async (registrationId: string, registrationFee: number) => {
@@ -144,10 +139,10 @@ export default function EventEntriesScreen() {
                 const paidAmount = parseFloat(amount?.trim() || registrationFee.toString());
                 await EventService.markRegistrationPaid(registrationId, paidAmount, 'cash');
                 await loadRegistrations();
-                Alert.alert('Success', 'Marked as paid');
+                showAlert('Success', 'Marked as paid');
               } catch (error) {
                 console.error('Error marking as paid:', error);
-                Alert.alert('Error', 'Failed to mark as paid');
+                showAlert('Error', 'Failed to mark as paid');
               }
             },
           },
@@ -158,10 +153,10 @@ export default function EventEntriesScreen() {
                 const paidAmount = parseFloat(amount?.trim() || registrationFee.toString());
                 await EventService.markRegistrationPaid(registrationId, paidAmount, 'check');
                 await loadRegistrations();
-                Alert.alert('Success', 'Marked as paid');
+                showAlert('Success', 'Marked as paid');
               } catch (error) {
                 console.error('Error marking as paid:', error);
-                Alert.alert('Error', 'Failed to mark as paid');
+                showAlert('Error', 'Failed to mark as paid');
               }
             },
           },
@@ -172,54 +167,38 @@ export default function EventEntriesScreen() {
       return;
     }
 
-    Alert.alert(
+    showConfirm(
       'Mark as Paid',
       `Mark this registration as paid for $${registrationFee.toFixed(2)}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Mark Paid',
-          onPress: async () => {
-            try {
-              await EventService.markRegistrationPaid(registrationId, registrationFee, 'manual');
-              await loadRegistrations();
-              Alert.alert('Success', 'Marked as paid');
-            } catch (error) {
-              console.error('Error marking as paid:', error);
-              Alert.alert('Error', 'Failed to mark as paid');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await EventService.markRegistrationPaid(registrationId, registrationFee, 'manual');
+          await loadRegistrations();
+          showAlert('Success', 'Marked as paid');
+        } catch (error) {
+          console.error('Error marking as paid:', error);
+          showAlert('Error', 'Failed to mark as paid');
+        }
+      }
     );
   };
     const handleWaivePayment = async (registrationId: string) => {
-        Alert.alert('Waive Payment', 'Are you sure you want to waive the payment for this registration?', [
-            {
-                text: 'Cancel',
-                style: 'cancel',
-            },
-            {
-                text: 'Waive',
-                style: 'destructive',
-                onPress: async () => {
-                    try {
-                        const { error } = await supabase
-                            .from('event_registrations')
-                            .update({ payment_status: 'waived' })
-                            .eq('id', registrationId);
-                        if (error)
-                            throw error;
-                        await loadRegistrations();
-                        Alert.alert('Success', 'Payment waived');
-                    }
-                    catch (error) {
-                        console.error('Error waiving payment:', error);
-                        Alert.alert('Error', 'Failed to waive payment');
-                    }
-                },
-            },
-        ]);
+        showConfirm('Waive Payment', 'Are you sure you want to waive the payment for this registration?', async () => {
+            try {
+                const { error } = await supabase
+                    .from('event_registrations')
+                    .update({ payment_status: 'waived' })
+                    .eq('id', registrationId);
+                if (error)
+                    throw error;
+                await loadRegistrations();
+                showAlert('Success', 'Payment waived');
+            }
+            catch (error) {
+                console.error('Error waiving payment:', error);
+                showAlert('Error', 'Failed to waive payment');
+            }
+        }, { destructive: true });
     };
     const getStatusColor = (status: RegistrationStatus) => {
         switch (status) {

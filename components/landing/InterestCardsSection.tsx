@@ -32,9 +32,9 @@ const INTERESTS = [
     icon: '\u270F\uFE0F',
   },
   {
-    slug: 'fitness',
-    name: 'Fitness',
-    description: 'Training plans & performance coaching',
+    slug: 'health-and-fitness',
+    name: 'Health & Fitness',
+    description: 'Food, exercise, social & spiritual wellness',
     color: '#2E7D32',
     icon: '\uD83C\uDFCB',
   },

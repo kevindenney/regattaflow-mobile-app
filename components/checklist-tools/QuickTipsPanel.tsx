@@ -64,7 +64,7 @@ export function QuickTipsPanel({
     if (item.learningModuleSlug) {
       // Navigate directly to the lesson player
       router.push({
-        pathname: `/(tabs)/learn/${item.learningModuleSlug}/player`,
+        pathname: `/(tabs)/learn/${item.learningModuleSlug}/player` as any,
         params: {
           lessonId: item.learningModuleId,
         },

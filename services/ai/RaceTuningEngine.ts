@@ -468,7 +468,7 @@ ${JSON.stringify(payload, null, 2)}`;
         const firstBrace = combinedText.indexOf('{');
 
         if (firstBracket === -1 && firstBrace === -1) {
-          logger.error('No JSON found in boat tuning skill response', {
+          logger.debug('No JSON found in boat tuning skill response', {
             responsePreview: combinedText.substring(0, 500),
           });
           throw new Error('Unable to find JSON in boat tuning skill response');
@@ -512,7 +512,7 @@ ${JSON.stringify(payload, null, 2)}`;
       try {
         parsed = JSON.parse(cleanedJson);
       } catch (parseError: any) {
-        logger.error('JSON parse error in boat tuning skill', {
+        logger.debug('JSON parse error in boat tuning skill', {
           error: parseError.message,
           jsonLength: cleanedJson.length,
           jsonPreview: cleanedJson.substring(0, 200),
@@ -548,11 +548,25 @@ ${JSON.stringify(payload, null, 2)}`;
         return [this.transformAIOnlyRecommendation(mockRec)];
       }
 
-      logger.error('Boat tuning skill generation failed', error);
       const message = (error as Error)?.message || 'Unknown guide-based tuning generation error';
+      const shouldDegradeToGuideOnly =
+        message.includes('Unable to find JSON in boat tuning skill response') ||
+        message.includes('Unable to find valid JSON structure in boat tuning skill response') ||
+        message.includes('Failed to parse JSON from boat tuning skill') ||
+        message.includes('Boat tuning skill response was not a valid JSON object or array');
+      if (shouldDegradeToGuideOnly) {
+        logger.debug('Boat tuning skill response invalid; degrading to guide-only recommendations', {
+          message: message.substring(0, 240),
+        });
+        throw this.createTaggedError('AI_TUNING_INVALID_RESPONSE', message, error);
+      }
       if (message.includes('[AI_TUNING_')) {
+        logger.debug('Boat tuning skill fallback triggered', {
+          message: message.substring(0, 240),
+        });
         throw error;
       }
+      logger.error('Boat tuning skill generation failed', error);
       throw this.createTaggedError('AI_TUNING_GUIDE_GENERATION_FAILED', message, error);
     }
   }

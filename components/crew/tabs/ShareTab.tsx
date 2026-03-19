@@ -18,7 +18,6 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  Alert,
   Share,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -36,6 +35,7 @@ import {
   Shield,
   Search,
 } from 'lucide-react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { useRaceCollaboration } from '@/hooks/useRaceCollaboration';
 import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
@@ -133,7 +133,7 @@ export function ShareTab({
       setInviteCode(code);
     } catch (error) {
       console.error('Failed to create invite:', error);
-      Alert.alert('Error', 'Failed to create invite code');
+      showAlert('Error', 'Failed to create invite code');
     } finally {
       setIsCreatingInvite(false);
     }
@@ -166,7 +166,7 @@ export function ShareTab({
         setInviteCode(code);
       } catch (error) {
         console.error('Failed to create invite:', error);
-        Alert.alert('Error', 'Failed to create invite code');
+        showAlert('Error', 'Failed to create invite code');
         setIsCreatingInvite(false);
         return;
       }
@@ -188,13 +188,13 @@ export function ShareTab({
             });
           }
         } catch (error) {
-          Alert.alert('Share Unavailable', 'Could not open WhatsApp. Try Copy Link or Email.');
+          showAlert('Share Unavailable', 'Could not open WhatsApp. Try Copy Link or Email.');
         }
         break;
 
       case 'copy':
         await Clipboard.setStringAsync(message);
-        Alert.alert('Copied!', 'Invite link copied to clipboard');
+        showAlert('Copied!', 'Invite link copied to clipboard');
         break;
 
       case 'email':
@@ -203,7 +203,7 @@ export function ShareTab({
         try {
           await Linking.openURL(emailUrl);
         } catch (error) {
-          Alert.alert('Error', 'Could not open email client');
+          showAlert('Error', 'Could not open email client');
         }
         break;
 
@@ -216,7 +216,7 @@ export function ShareTab({
               await nav.share({ title, text: message });
             } else if (nav?.clipboard?.writeText) {
               await nav.clipboard.writeText(message);
-              Alert.alert('Copied', 'Invite link copied to clipboard');
+              showAlert('Copied', 'Invite link copied to clipboard');
             }
           } else {
             await Share.share({ message, title });
@@ -233,17 +233,11 @@ export function ShareTab({
   // ---------------------------------------------------------------------------
 
   const handleRemoveCollaborator = useCallback((collaboratorId: string) => {
-    Alert.alert(
+    showConfirm(
       'Remove Collaborator',
       'Are you sure you want to remove this person from the race?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeCollaborator(collaboratorId),
-        },
-      ]
+      () => removeCollaborator(collaboratorId),
+      { destructive: true }
     );
   }, [removeCollaborator]);
 

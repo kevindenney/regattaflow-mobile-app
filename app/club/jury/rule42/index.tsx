@@ -3,6 +3,7 @@
  * Track propulsion infractions - SAILTI-competitive feature
  */
 
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
@@ -18,7 +19,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     RefreshControl,
     ScrollView,
@@ -93,7 +93,7 @@ export default function Rule42Screen() {
 
   const handleQuickLog = async () => {
     if (!quickLogSailNumber.trim() || !quickLogRace.trim()) {
-      Alert.alert('Missing Info', 'Please enter sail number and race number');
+      showAlert('Missing Info', 'Please enter sail number and race number');
       return;
     }
 
@@ -115,36 +115,30 @@ export default function Rule42Screen() {
       // Reload data
       await loadData();
 
-      Alert.alert(
+      showAlert(
         'Logged',
         `${quickLogIsWarning ? 'Warning' : 'Penalty'} logged for ${quickLogSailNumber.toUpperCase()}`
       );
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to log infraction');
+      showAlert('Error', error.message || 'Failed to log infraction');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteInfraction = async (id: string) => {
-    Alert.alert(
+    showConfirm(
       'Delete Infraction',
       'Are you sure you want to delete this infraction?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await rule42Service.deleteInfraction(id);
-              await loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete infraction');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await rule42Service.deleteInfraction(id);
+          await loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to delete infraction');
+        }
+      },
+      { destructive: true }
     );
   };
 

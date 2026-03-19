@@ -29,13 +29,19 @@ export function TileGrid({ children, gap = TILE_GAP }: TileGridProps) {
     setContainerWidth(e.nativeEvent.layout.width);
   }, []);
 
-  // On mobile native, calculate tile width to fit 2 per row
-  const isMobileNative = Platform.OS !== 'web' && containerWidth > 0 && containerWidth < MOBILE_BREAKPOINT;
-  const mobileTileSize = isMobileNative
-    ? Math.floor((containerWidth - gap) / 2)
-    : TILE_SIZE_FIXED;
-
-  const tileSize = isMobileNative ? mobileTileSize : TILE_SIZE_FIXED;
+  // Calculate tile size based on platform and container width
+  let tileSize = TILE_SIZE_FIXED;
+  if (containerWidth > 0) {
+    if (Platform.OS !== 'web' && containerWidth < MOBILE_BREAKPOINT) {
+      // Mobile native: fit 2 per row
+      tileSize = Math.floor((containerWidth - gap) / 2);
+    } else if (Platform.OS === 'web' && containerWidth > 0) {
+      // Web: fit tiles to fill available width (target ~4 per row, min 2)
+      const count = childArray.length;
+      const cols = Math.min(count, containerWidth > 700 ? 4 : containerWidth > 450 ? 3 : 2);
+      tileSize = Math.floor((containerWidth - gap * (cols - 1)) / cols);
+    }
+  }
 
   return (
     <View style={[styles.container, { gap }]} onLayout={onLayout}>

@@ -126,11 +126,12 @@ export class RaceWeatherService {
       
       return weatherMetadata;
 
-    } catch (_error: any) {
+    } catch (error: unknown) {
+      logger.warn('[RaceWeatherService.fetchWeatherByCoordinates] Failed', { error, lat, lng, raceDate });
       return null;
     }
   }
-  
+
   /**
    * Check if coordinates are in Hong Kong waters
    */
@@ -321,7 +322,8 @@ export class RaceWeatherService {
 
       return weatherMetadata;
 
-    } catch (_error: any) {
+    } catch (error: unknown) {
+      logger.warn('[RaceWeatherService.fetchWeatherForRace] Failed', { error, venue: venue.name, raceDate });
       return null;
     }
   }
@@ -372,10 +374,12 @@ export class RaceWeatherService {
       logger.debug(`[RaceWeatherService] Venue query completed`, { venues: venues?.length, error });
 
       if (error) {
+        logger.warn('[RaceWeatherService.fetchWeatherByVenueName] Venue lookup failed', { error, venueName });
         return null;
       }
 
       if (!venues || venues.length === 0) {
+        logger.debug('[RaceWeatherService.fetchWeatherByVenueName] No venue found', { venueName });
         return null;
       }
 
@@ -409,7 +413,8 @@ export class RaceWeatherService {
 
       return this.fetchWeatherForRace(sailingVenue, targetDate.toISOString());
 
-    } catch (_error: any) {
+    } catch (error: unknown) {
+      logger.warn('[RaceWeatherService.fetchWeatherByVenueName] Failed', { error, venueName, raceDate });
       return null;
     }
   }
@@ -487,7 +492,8 @@ export class RaceWeatherService {
 
       const offset = zonedUTC - utcDate.getTime();
       return new Date(utcDate.getTime() - offset);
-    } catch (_error) {
+    } catch (error: unknown) {
+      logger.warn('[RaceWeatherService.combineDateWithTimeZone] Failed, using raw date', { error, dateString, timeString });
       return new Date(dateString);
     }
   }

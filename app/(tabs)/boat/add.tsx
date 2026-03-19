@@ -12,7 +12,6 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -25,6 +24,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { createLogger } from '@/lib/utils/logger';
 
 interface BoatClass {
@@ -120,20 +120,13 @@ export default function AddBoatScreen() {
       setBoatClasses(FALLBACK_BOAT_CLASSES);
       setUsingFallbackClasses(true);
 
-      // Show a non-blocking alert on native, or a simple message on web
+      // Show a non-blocking alert
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (Platform.OS === 'web') {
-        console.warn('Using offline boat class data:', errorMessage);
-      } else {
-        // Use a timeout to allow the UI to render first
-        setTimeout(() => {
-          Alert.alert(
-            'Using Offline Data',
-            'Could not connect to server. Using a default list of boat classes.',
-            [{ text: 'OK' }]
-          );
-        }, 100);
-      }
+      console.warn('Using offline boat class data:', errorMessage);
+      // Use a timeout to allow the UI to render first
+      setTimeout(() => {
+        showAlert('Using Offline Data', 'Could not connect to server. Using a default list of boat classes.');
+      }, 100);
     } finally {
       setLoadingClasses(false);
       logger.debug('loadBoatClasses finished, loadingClasses set to false');
@@ -144,7 +137,7 @@ export default function AddBoatScreen() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (status !== 'granted') {
-      Alert.alert('Permission Required', 'Please grant camera roll permissions to upload photos');
+      showAlert('Permission Required', 'Please grant camera roll permissions to upload photos');
       return;
     }
 
@@ -164,49 +157,31 @@ export default function AddBoatScreen() {
 
     if (!user) {
 
-      if (Platform.OS === 'web') {
-        window.alert('Not authenticated. Please sign in.');
-      } else {
-        Alert.alert('Error', 'Not authenticated. Please sign in.');
-      }
+      showAlert('Error', 'Not authenticated. Please sign in.');
       return;
     }
 
     // Validation
     if (!name.trim()) {
 
-      if (Platform.OS === 'web') {
-        window.alert('Please enter a boat name');
-      } else {
-        Alert.alert('Required Field', 'Please enter a boat name');
-      }
+      showAlert('Required Field', 'Please enter a boat name');
       return;
     }
 
     if (!selectedClassId) {
 
-      if (Platform.OS === 'web') {
-        window.alert('Please select a boat class');
-      } else {
-        Alert.alert('Required Field', 'Please select a boat class');
-      }
+      showAlert('Required Field', 'Please select a boat class');
       return;
     }
 
     // Check if using fallback/mock classes (they won't work with the database)
     if (usingFallbackClasses || selectedClassId.startsWith('mock-')) {
-      if (Platform.OS === 'web') {
-        window.alert('Cannot save boat: Unable to connect to server to load boat classes. Please check your internet connection and try again.');
-      } else {
-        Alert.alert(
-          'Connection Required',
-          'Unable to connect to server to load boat classes. Please check your internet connection and try again.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Retry', onPress: loadBoatClasses },
-          ]
-        );
-      }
+      showConfirm(
+        'Connection Required',
+        'Unable to connect to server to load boat classes. Please check your internet connection and try again.',
+        loadBoatClasses,
+        { confirmLabel: 'Retry' }
+      );
       return;
     }
 
@@ -240,17 +215,8 @@ export default function AddBoatScreen() {
       // TODO: Upload photo to Supabase storage if photoUri exists
       // For now, we'll skip photo upload as it requires storage bucket setup
 
-      if (Platform.OS === 'web') {
-        window.alert('Boat added successfully!');
-        router.push(`/boat/${boat.id}`);
-      } else {
-        Alert.alert('Success', 'Boat added successfully', [
-          {
-            text: 'OK',
-            onPress: () => router.push(`/boat/${boat.id}`),
-          },
-        ]);
-      }
+      showAlert('Success', 'Boat added successfully');
+      router.push(`/boat/${boat.id}`);
     } catch (error) {
 
 
@@ -276,11 +242,7 @@ export default function AddBoatScreen() {
                           supabaseError?.message ||
                           'Unknown error';
 
-      if (Platform.OS === 'web') {
-        window.alert(`Failed to save boat: ${errorMessage}`);
-      } else {
-        Alert.alert('Error', `Failed to save boat: ${errorMessage}`);
-      }
+      showAlert('Error', `Failed to save boat: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

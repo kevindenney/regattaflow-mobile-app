@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Alert } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import type { RaceDocumentType, RaceDocumentWithDetails } from '@/services/RaceDocumentService';
 import { raceDocumentService } from '@/services/RaceDocumentService';
 import { documentStorageService } from '@/services/storage/DocumentStorageService';
@@ -343,17 +343,17 @@ export function useRaceDocuments(
     if (isUploading) return;
 
     if (isDemoSession) {
-      Alert.alert('Unavailable in demo mode', 'Sign in to upload race documents.');
+      showAlert('Unavailable in demo mode', 'Sign in to upload race documents.');
       return;
     }
 
     if (!targetUserId) {
-      Alert.alert('Sign in required', 'Please sign in to upload documents.');
+      showAlert('Sign in required', 'Please sign in to upload documents.');
       return;
     }
 
     if (!targetRaceId) {
-      Alert.alert('Select a race', 'Choose a race to attach documents to.');
+      showAlert('Select a race', 'Choose a race to attach documents to.');
       return;
     }
 
@@ -384,7 +384,7 @@ export function useRaceDocuments(
         if (isUserCancel) {
           logger.debug('Document picker cancelled by user');
         } else {
-          Alert.alert('Upload failed', errorMessage);
+          showAlert('Upload failed', errorMessage);
         }
         return;
       }
@@ -397,7 +397,7 @@ export function useRaceDocuments(
       });
 
       if (!linked) {
-        Alert.alert('Upload failed', 'We uploaded the file but could not attach it to this race.');
+        showAlert('Upload failed', 'We uploaded the file but could not attach it to this race.');
         return;
       }
 
@@ -444,7 +444,7 @@ export function useRaceDocuments(
       }
     } catch (err) {
       logger.error('Error uploading document', { error: err });
-      Alert.alert('Upload failed', 'An unexpected error occurred.');
+      showAlert('Upload failed', 'An unexpected error occurred.');
     } finally {
       if (isMountedRef.current && activeRaceIdRef.current === targetRaceId && activeUserIdRef.current === targetUserId) {
         setIsUploading(false);
@@ -460,22 +460,22 @@ export function useRaceDocuments(
       logger.debug('addFromUrl called', { url, documentType, name, userId, raceId, isDemoSession });
 
       if (isDemoSession) {
-        Alert.alert('Unavailable in demo mode', 'Sign in to add documents.');
+        showAlert('Unavailable in demo mode', 'Sign in to add documents.');
         return false;
       }
 
       if (!targetUserId) {
-        Alert.alert('Sign in required', 'Please sign in to add documents.');
+        showAlert('Sign in required', 'Please sign in to add documents.');
         return false;
       }
 
       if (!targetRaceId) {
-        Alert.alert('Select a race', 'Choose a race to attach documents to.');
+        showAlert('Select a race', 'Choose a race to attach documents to.');
         return false;
       }
 
       if (!url.trim()) {
-        Alert.alert('Invalid URL', 'Please enter a valid URL.');
+        showAlert('Invalid URL', 'Please enter a valid URL.');
         return false;
       }
 
@@ -489,7 +489,7 @@ export function useRaceDocuments(
         logger.debug('addFromUrl: saveDocumentFromUrl result', { success: result.success, error: result.error, docId: result.document?.id });
 
         if (!result.success || !result.document) {
-          Alert.alert('Failed to add document', result.error || 'Unable to save document.');
+          showAlert('Failed to add document', result.error || 'Unable to save document.');
           return false;
         }
 
@@ -504,7 +504,7 @@ export function useRaceDocuments(
         logger.debug('addFromUrl: linkDocumentToRace result', { linked });
 
         if (!linked) {
-          Alert.alert('Failed to link document', 'Document saved but could not be linked to this race.');
+          showAlert('Failed to link document', 'Document saved but could not be linked to this race.');
           return false;
         }
 
@@ -570,7 +570,7 @@ export function useRaceDocuments(
         return true;
       } catch (err) {
         logger.error('Error adding document from URL', { error: err });
-        Alert.alert('Error', 'An unexpected error occurred.');
+        showAlert('Error', 'An unexpected error occurred.');
         return false;
       } finally {
         if (isMountedRef.current && activeRaceIdRef.current === targetRaceId && activeUserIdRef.current === targetUserId) {
@@ -589,22 +589,22 @@ export function useRaceDocuments(
       logger.debug('addFromText called', { textLength: textContent.length, documentType, name, userId, raceId, isDemoSession });
 
       if (isDemoSession) {
-        Alert.alert('Unavailable in demo mode', 'Sign in to add documents.');
+        showAlert('Unavailable in demo mode', 'Sign in to add documents.');
         return false;
       }
 
       if (!targetUserId) {
-        Alert.alert('Sign in required', 'Please sign in to add documents.');
+        showAlert('Sign in required', 'Please sign in to add documents.');
         return false;
       }
 
       if (!targetRaceId) {
-        Alert.alert('Select a race', 'Choose a race to attach documents to.');
+        showAlert('Select a race', 'Choose a race to attach documents to.');
         return false;
       }
 
       if (!textContent.trim()) {
-        Alert.alert('No content', 'Please paste document text content.');
+        showAlert('No content', 'Please paste document text content.');
         return false;
       }
 
@@ -618,7 +618,7 @@ export function useRaceDocuments(
         logger.debug('addFromText: saveDocumentFromText result', { success: result.success, error: result.error, docId: result.document?.id });
 
         if (!result.success || !result.document) {
-          Alert.alert('Failed to save document', result.error || 'Unable to save document.');
+          showAlert('Failed to save document', result.error || 'Unable to save document.');
           return false;
         }
 
@@ -633,7 +633,7 @@ export function useRaceDocuments(
         logger.debug('addFromText: linkDocumentToRace result', { linked });
 
         if (!linked) {
-          Alert.alert('Failed to link document', 'Document saved but could not be linked to this race.');
+          showAlert('Failed to link document', 'Document saved but could not be linked to this race.');
           return false;
         }
 
@@ -681,7 +681,7 @@ export function useRaceDocuments(
         return true;
       } catch (err) {
         logger.error('Error adding document from text', { error: err });
-        Alert.alert('Error', 'An unexpected error occurred.');
+        showAlert('Error', 'An unexpected error occurred.');
         return false;
       } finally {
         if (isMountedRef.current && activeRaceIdRef.current === targetRaceId && activeUserIdRef.current === targetUserId) {
@@ -696,7 +696,7 @@ export function useRaceDocuments(
   const deleteDocument = useCallback(
     async (documentId: string): Promise<boolean> => {
       if (isDemoSession) {
-        Alert.alert('Unavailable in demo mode', 'Sign in to delete documents.');
+        showAlert('Unavailable in demo mode', 'Sign in to delete documents.');
         return false;
       }
 

@@ -1,19 +1,19 @@
 /**
  * Sailor Tier Definitions
  *
- * Freemium model for individual sailors:
- * - Free: Limited races, basic features
- * - Individual: Full race features for solo sailors ($10/mo or $120/yr)
- * - Team: Full race features for teams up to 5 people ($40/mo or $480/yr)
- *
- * Learning modules are purchased separately ($30/yr each)
+ * Updated: 2026-03-15
+ * Pricing:
+ * - Free: Limited races, basic features, 5 AI queries/month
+ * - Individual: $10/mo or $100/yr — 50,000 AI tokens/month
+ * - Pro: $100/mo or $800/yr — 500,000 AI tokens/month
  */
 
-export type SailorTier = 'free' | 'individual' | 'team';
+export type SailorTier = 'free' | 'individual' | 'pro';
 
 export interface TierLimits {
   maxRaces: number;
   aiQueriesPerMonth: number;
+  aiTokensPerMonth: number;
   teamSharing: boolean;
   weatherAutomation: boolean;
   historicalData: boolean;
@@ -36,12 +36,7 @@ export interface TierDefinition {
 
 /**
  * Sailor tier configuration
- * Updated: 2026-01-30
- *
- * New pricing structure:
- * - Free: $0
- * - Individual: $10/mo ($120/yr) - renamed from Basic
- * - Team: $40/mo ($480/yr) - renamed from Pro/Championship
+ * Updated: 2026-03-15
  */
 export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
   free: {
@@ -54,6 +49,7 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
     limits: {
       maxRaces: 3,
       aiQueriesPerMonth: 5,
+      aiTokensPerMonth: 5000,
       teamSharing: false,
       weatherAutomation: false,
       historicalData: false,
@@ -72,13 +68,14 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
   individual: {
     id: 'individual',
     name: 'Individual',
-    description: 'Full racing features for solo sailors',
-    price: '$120/year',
+    description: 'AI-powered race preparation',
+    price: '$10/month',
     priceMonthly: '$10',
-    priceYearly: '$120',
+    priceYearly: '$100',
     limits: {
       maxRaces: Infinity,
       aiQueriesPerMonth: Infinity,
+      aiTokensPerMonth: 50000,
       teamSharing: false,
       weatherAutomation: true,
       historicalData: true,
@@ -88,7 +85,7 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
     },
     features: [
       'Unlimited races',
-      'Unlimited AI queries',
+      '50,000 AI tokens per month',
       'AI strategy analysis',
       'Automatic weather updates',
       'Historical race data',
@@ -98,16 +95,17 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
     ],
     isPopular: true,
   },
-  team: {
-    id: 'team',
-    name: 'Team',
-    description: 'Full racing features for teams',
-    price: '$480/year',
-    priceMonthly: '$40',
-    priceYearly: '$480',
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    description: 'Maximum AI power for serious racers',
+    price: '$100/month',
+    priceMonthly: '$100',
+    priceYearly: '$800',
     limits: {
       maxRaces: Infinity,
       aiQueriesPerMonth: Infinity,
+      aiTokensPerMonth: 500000,
       teamSharing: true,
       weatherAutomation: true,
       historicalData: true,
@@ -117,9 +115,9 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
     },
     features: [
       'Everything in Individual',
-      'Up to 5 team members',
+      '500,000 AI tokens per month',
+      'Priority AI processing',
       'Team sharing & collaboration',
-      'Shared race preparation',
       'Team analytics dashboard',
       'Priority support',
     ],
@@ -128,12 +126,11 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
 
 /**
  * Legacy tier mapping for backward compatibility
- * Maps old tier names to new tier names
  */
 export const LEGACY_TIER_MAP: Record<string, SailorTier> = {
   basic: 'individual',
-  pro: 'team',
-  championship: 'team',
+  team: 'pro',
+  championship: 'pro',
 };
 
 /**
@@ -164,13 +161,13 @@ export type GatedFeature =
   | 'advanced_analytics';
 
 export const FEATURE_REQUIREMENTS: Record<GatedFeature, SailorTier[]> = {
-  unlimited_races: ['individual', 'team'],
-  ai_strategy: ['individual', 'team'],
-  team_sharing: ['team'],
-  weather_automation: ['individual', 'team'],
-  historical_data: ['individual', 'team'],
-  offline_mode: ['individual', 'team'],
-  advanced_analytics: ['individual', 'team'],
+  unlimited_races: ['individual', 'pro'],
+  ai_strategy: ['individual', 'pro'],
+  team_sharing: ['pro'],
+  weather_automation: ['individual', 'pro'],
+  historical_data: ['individual', 'pro'],
+  offline_mode: ['individual', 'pro'],
+  advanced_analytics: ['individual', 'pro'],
 };
 
 /**
@@ -227,4 +224,12 @@ export function hasTeamFeatures(tier: SailorTier): boolean {
 export function getMaxSeats(tier: SailorTier): number {
   const normalizedTier = normalizeTier(tier);
   return SAILOR_TIERS[normalizedTier].limits.maxSeats;
+}
+
+/**
+ * Get AI token limit for a tier
+ */
+export function getAiTokenLimit(tier: SailorTier): number {
+  const normalizedTier = normalizeTier(tier);
+  return SAILOR_TIERS[normalizedTier].limits.aiTokensPerMonth;
 }

@@ -185,7 +185,7 @@ export function useTeamRaceEntry({
         setError(err instanceof Error ? err : new Error('Failed to create team'));
         throw err;
       } finally {
-        if (!isMountedRef.current || activeRaceEventIdRef.current !== targetRaceEventId) return;
+        if (!isMountedRef.current || activeRaceEventIdRef.current !== targetRaceEventId) return undefined as any;
         setIsCreating(false);
       }
     },

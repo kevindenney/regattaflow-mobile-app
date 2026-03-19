@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { Image } from '@/components/ui';
 import { ChevronLeft, Globe, Shield, Download, Zap, Check, Search, Copy } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/services/supabase';
 import { ClubVerificationService, ClubExtractedData } from '@/services/ClubVerificationService';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 const ClubOnboardingWebsiteVerification = () => {
   const router = useRouter();
@@ -30,7 +31,7 @@ const ClubOnboardingWebsiteVerification = () => {
 
   const handleGenerateToken = async () => {
     if (!userId) {
-      Alert.alert('Error', 'User not authenticated');
+      showAlert('Error', 'User not authenticated');
       return;
     }
 
@@ -40,7 +41,7 @@ const ClubOnboardingWebsiteVerification = () => {
       setVerificationToken(token);
       setShowVerificationInstructions(true);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to generate verification token');
+      showAlert('Error', error.message || 'Failed to generate verification token');
     } finally {
       setIsLoading(false);
     }
@@ -48,17 +49,17 @@ const ClubOnboardingWebsiteVerification = () => {
 
   const handleVerifyWebsite = async () => {
     if (!websiteUrl.trim()) {
-      Alert.alert('Validation Error', 'Please enter a website URL');
+      showAlert('Validation Error', 'Please enter a website URL');
       return;
     }
 
     if (!websiteUrl.includes('.') || !websiteUrl.startsWith('http')) {
-      Alert.alert('Validation Error', 'Please enter a valid website URL (e.g., https://www.yourclub.com)');
+      showAlert('Validation Error', 'Please enter a valid website URL (e.g., https://www.yourclub.com)');
       return;
     }
 
     if (!userId) {
-      Alert.alert('Error', 'User not authenticated');
+      showAlert('Error', 'User not authenticated');
       return;
     }
 
@@ -90,16 +91,15 @@ const ClubOnboardingWebsiteVerification = () => {
           onConflict: 'user_id',
         });
 
-        Alert.alert(
+        showAlert(
           'Website Verified',
-          'We successfully verified and extracted information from your website. Please review the details.',
-          [{ text: 'Continue', style: 'default' }]
+          'We successfully verified and extracted information from your website. Please review the details.'
         );
       } else {
-        Alert.alert('Verification Failed', result.error || 'Unable to verify website');
+        showAlert('Verification Failed', result.error || 'Unable to verify website');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to verify website');
+      showAlert('Error', error.message || 'Failed to verify website');
     } finally {
       setIsLoading(false);
     }
@@ -108,17 +108,17 @@ const ClubOnboardingWebsiteVerification = () => {
   const copyToClipboard = (_text: string) => {
     // In React Native, we'd use @react-native-clipboard/clipboard
     // For now, just show an alert
-    Alert.alert('Copied', 'Verification code copied to clipboard');
+    showAlert('Copied', 'Verification code copied to clipboard');
   };
 
   const handleContinue = () => {
     if (!isVerified) {
-      Alert.alert('Verification Required', 'Please verify your website first');
+      showAlert('Verification Required', 'Please verify your website first');
       return;
     }
 
     if (!consentGiven) {
-      Alert.alert('Consent Required', 'Please grant permission to extract racing data');
+      showAlert('Consent Required', 'Please grant permission to extract racing data');
       return;
     }
 

@@ -19,14 +19,15 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Search, UserPlus, Users, Sailboat, UserCheck, Globe } from 'lucide-react-native';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { CrewFinderService, SailorProfileSummary, DiscoverableUser, SimilarSailor } from '@/services/CrewFinderService';
 import { crewManagementService, CrewRole } from '@/services/crewManagementService';
 import { useCrewFinder } from '@/hooks/useCrewFinder';
+// @ts-ignore - lodash/debounce has no bundled types
 import debounce from 'lodash/debounce';
 
 // =============================================================================
@@ -222,7 +223,7 @@ export function CrewMemberFinderModal({
         role
       );
 
-      Alert.alert('Success', `${user.fullName} added as ${ROLE_LABELS[role]}`);
+      showAlert('Success', `${user.fullName} added as ${ROLE_LABELS[role]}`);
       setShowRolePicker(null);
       onCrewAdded?.();
 
@@ -231,7 +232,7 @@ export function CrewMemberFinderModal({
       setSearchResults((prev) => prev.filter((s) => s.userId !== user.userId));
     } catch (error: any) {
       console.error('Error adding crew member:', error);
-      Alert.alert('Error', error.message || 'Failed to add crew member');
+      showAlert('Error', error.message || 'Failed to add crew member');
     } finally {
       setAddingUserId(null);
     }
@@ -260,7 +261,7 @@ export function CrewMemberFinderModal({
       }
     } catch (error) {
       console.error('Error toggling follow:', error);
-      Alert.alert('Error', 'Failed to update follow status');
+      showAlert('Error', 'Failed to update follow status');
     } finally {
       setFollowingUserId(null);
     }

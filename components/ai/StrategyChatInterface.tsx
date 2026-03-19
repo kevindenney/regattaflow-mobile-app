@@ -10,10 +10,10 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  Alert,
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 // import { BottomSheet } from '@gorhom/bottom-sheet'; // TODO: Re-enable with animation support
@@ -133,7 +133,7 @@ export function StrategyChatInterface({
   };
 
   const handleDocumentUpload = async () => {
-    Alert.alert(
+    showAlertWithButtons(
       'Upload Sailing Document',
       'Upload sailing instructions, strategy guides, or tactical documents to enhance AI analysis.',
       [
@@ -171,7 +171,7 @@ export function StrategyChatInterface({
       });
 
     } catch (error: any) {
-      Alert.alert('Upload Failed', error.message);
+      showAlert('Upload Failed', error.message);
     }
   };
 
@@ -238,7 +238,7 @@ export function StrategyChatInterface({
                 key={index}
                 style={styles.insightChip}
                 onPress={() => {
-                  Alert.alert(insight.title, `${insight.description}\n\nTactical Advice: ${insight.tacticalAdvice}`);
+                  showAlert(insight.title, `${insight.description}\n\nTactical Advice: ${insight.tacticalAdvice}`);
                 }}
               >
                 <ThemedText style={styles.insightText}>

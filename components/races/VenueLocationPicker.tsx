@@ -18,7 +18,6 @@ import {
   Modal,
   StyleSheet,
   Platform,
-  Alert,
   Linking,
   ActivityIndicator,
 } from 'react-native';
@@ -26,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapPin } from 'lucide-react-native';
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface VenueLocation {
@@ -576,7 +576,7 @@ export function VenueLocationPicker({
       await Linking.openURL(url);
     } catch (error) {
       logger.error('[VenueLocationPicker] Failed to open maps app:', error);
-      Alert.alert('Map Unavailable', 'Could not open a maps app on this device.');
+      showAlert('Map Unavailable', 'Could not open a maps app on this device.');
     }
   };
 

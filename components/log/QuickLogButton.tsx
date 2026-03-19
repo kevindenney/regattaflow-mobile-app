@@ -11,8 +11,8 @@ import {
   Modal,
   ScrollView,
   TextInput,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Text } from '@/components/ui/text';
 import {
   Plus,
@@ -174,7 +174,7 @@ export function QuickLogButton({ regattaId, raceNumber, onLogCreated }: QuickLog
       setSelectedAction(null);
       onLogCreated?.();
     } catch (error) {
-      Alert.alert('Error', 'Failed to create log entry');
+      showAlert('Error', 'Failed to create log entry');
     } finally {
       setSubmitting(false);
     }
@@ -184,7 +184,7 @@ export function QuickLogButton({ regattaId, raceNumber, onLogCreated }: QuickLog
     if (selectedAction && description.trim()) {
       createLogEntry(selectedAction, description);
     } else {
-      Alert.alert('Required', 'Please enter a description');
+      showAlert('Required', 'Please enter a description');
     }
   };
 

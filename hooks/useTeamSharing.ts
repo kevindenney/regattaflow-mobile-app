@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Alert, Platform } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
 import { crewManagementService, type CrewMember } from '@/services/crewManagementService';
 import { createLogger } from '@/lib/utils/logger';
@@ -327,11 +327,7 @@ export function useTeamSharing({
         ]);
 
         const message = `Shared with ${primaryCoach.display_name}!`;
-        if (Platform.OS === 'web') {
-          alert(message);
-        } else {
-          Alert.alert('Shared!', message);
-        }
+        showAlert('Shared!', message);
 
         return {
           success: true,
@@ -341,11 +337,7 @@ export function useTeamSharing({
       } catch (err) {
         logger.error('Failed to share with coach:', err);
         const errorMessage = 'Failed to share with coach';
-        if (Platform.OS === 'web') {
-          alert(errorMessage);
-        } else {
-          Alert.alert('Error', errorMessage);
-        }
+        showAlert('Error', errorMessage);
         return {
           success: false,
           channel: 'coach',
@@ -418,11 +410,7 @@ export function useTeamSharing({
       if (successful.length > 0) {
         const names = successful.map((r) => r.recipientName).join(', ');
         const message = `Shared with ${names}!`;
-        if (Platform.OS === 'web') {
-          alert(message);
-        } else {
-          Alert.alert('Shared!', message);
-        }
+        showAlert('Shared!', message);
       }
 
       return results;

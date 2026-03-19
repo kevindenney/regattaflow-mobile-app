@@ -114,8 +114,8 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
 
           <PricingCard
             title={SAILOR_TIERS.individual.name}
-            price={SAILOR_TIERS.individual.priceYearly || '$120'}
-            sublabel={`${SAILOR_TIERS.individual.priceMonthly || '$10'}/mo billed yearly`}
+            price={`${SAILOR_TIERS.individual.priceMonthly || '$10'}/mo`}
+            sublabel={`or ${SAILOR_TIERS.individual.priceYearly || '$100'}/year`}
             features={SAILOR_TIERS.individual.features.slice(0, 6)}
             cta="Choose Individual"
             outlined
@@ -123,24 +123,14 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
           />
 
           <PricingCard
-            title={SAILOR_TIERS.team.name}
-            price={SAILOR_TIERS.team.priceYearly || '$480'}
-            sublabel={`${SAILOR_TIERS.team.priceMonthly || '$40'}/mo billed yearly`}
-            features={SAILOR_TIERS.team.features}
-            cta="Choose Team"
+            title={SAILOR_TIERS.pro.name}
+            price={`${SAILOR_TIERS.pro.priceMonthly || '$100'}/mo`}
+            sublabel={`or ${SAILOR_TIERS.pro.priceYearly || '$800'}/year`}
+            features={SAILOR_TIERS.pro.features}
+            cta="Choose Pro"
             featured
             persona={variant}
           />
-        </View>
-
-        <View style={styles.learnCallout}>
-          <Ionicons name="school-outline" size={20} color="#6D28D9" />
-          <Text style={styles.learnCalloutText}>
-            Learn modules are separate and purchased individually (from $30/year per module).
-          </Text>
-          <TouchableOpacity style={styles.learnCalloutButton} onPress={() => router.push('/(tabs)/learn')}>
-            <Text style={styles.learnCalloutButtonText}>Explore Learn</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -274,37 +264,6 @@ const styles = StyleSheet.create({
   ctaButtonFeatured: { backgroundColor: '#3E92CC' },
   ctaText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   ctaTextOutline: { color: '#3E92CC' },
-  learnCallout: {
-    marginTop: 18,
-    borderWidth: 1,
-    borderColor: '#DDD6FE',
-    backgroundColor: '#F5F3FF',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  learnCalloutText: {
-    color: '#5B21B6',
-    flexShrink: 1,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  learnCalloutButton: {
-    marginLeft: 'auto',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#E9D5FF',
-  },
-  learnCalloutButtonText: {
-    color: '#6D28D9',
-    fontSize: 13,
-    fontWeight: '700',
-  },
   offerCard: {
     maxWidth: 760,
     alignSelf: 'center',

@@ -6,9 +6,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
-  
+
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { LearningService, type LearningCourse, type LearningLesson } from '@/services/LearningService';
 import { LessonProgressService } from '@/services/LessonProgressService';
@@ -434,8 +434,8 @@ export default function LessonPlayerScreen() {
         style: nextLesson ? 'cancel' : 'default',
       });
 
-      Alert.alert(
-        '🎉 Lesson Complete!',
+      showAlertWithButtons(
+        'Lesson Complete!',
         nextLesson
           ? `Great job! Ready for "${nextLesson.title}"?`
           : 'Great job! You\'ve completed all lessons in this course!',
@@ -445,8 +445,8 @@ export default function LessonPlayerScreen() {
       console.error('[LessonPlayer] Failed to mark complete:', err);
       // Still show success - the user completed the lesson even if we couldn't save
       setIsCompleted(true);
-      Alert.alert(
-        '🎉 Lesson Complete!',
+      showAlertWithButtons(
+        'Lesson Complete!',
         'Great job! (Progress may not be saved for this course)',
         [{ text: 'OK', onPress: () => router.back() }]
       );

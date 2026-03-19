@@ -72,9 +72,9 @@ export function HistoricalSummaryCard({
   return (
     <View style={styles.container}>
       <Pressable
-        style={({ pressed }) => [
+        style={({ pressed }: { pressed: boolean }) => [
           styles.header,
-          pressed && showExpander && styles.headerPressed,
+          pressed && showExpander ? styles.headerPressed : undefined,
         ]}
         onPress={handleToggle}
         disabled={!showExpander}

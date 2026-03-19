@@ -272,7 +272,7 @@ export function InterestProvider({ children }: PropsWithChildren) {
         // 3. Existing-user fallback for fresh browsers/incognito:
         // if profile indicates this is not a new user, pick a deterministic
         // default and persist it so we don't re-enter onboarding.
-        if (signedIn && user?.id) {
+        if (signedIn && user?.id && chosenRoute === 'show-interest-selection') {
           const currentProfile = userProfile ?? (await fetchUserProfile(user.id))
           const metadata = (user.user_metadata ?? {}) as Record<string, unknown>
 

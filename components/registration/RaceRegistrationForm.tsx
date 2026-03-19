@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useForm, Controller } from 'react-hook-form';
 import {
   VStack,
@@ -110,7 +111,7 @@ export function RaceRegistrationForm({
       setRegattaDetails(data);
     } catch (error) {
       console.error('Failed to load regatta details:', error);
-      Alert.alert('Error', 'Failed to load regatta details');
+      showAlert('Error', 'Failed to load regatta details');
     }
   };
 
@@ -183,11 +184,11 @@ export function RaceRegistrationForm({
 
       if (result.success && result.entry) {
         if (result.queued) {
-          Alert.alert('Offline', 'Entry saved locally and will sync when you are back online.');
+          showAlert('Offline', 'Entry saved locally and will sync when you are back online.');
           onQueued?.(result.entry);
           onCancel?.();
         } else {
-          Alert.alert('Success', 'Race entry created successfully!');
+          showAlert('Success', 'Race entry created successfully!');
           onSuccess(result.entry.id);
         }
       } else {
@@ -196,11 +197,11 @@ export function RaceRegistrationForm({
     } catch (error: any) {
       console.error('Registration error:', error);
       if (error?.queuedForSync && error?.entity) {
-        Alert.alert('Offline', 'Entry will sync once you are online.');
+        showAlert('Offline', 'Entry will sync once you are online.');
         onQueued?.(error.entity as RaceEntry);
         onCancel?.();
       } else {
-        Alert.alert('Error', error.message || 'Failed to create race entry');
+        showAlert('Error', error.message || 'Failed to create race entry');
       }
     } finally {
       setLoading(false);

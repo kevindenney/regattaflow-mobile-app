@@ -56,11 +56,12 @@ import {
   Platform,
   TextInput,
   KeyboardAvoidingView,
-  Alert,
   Image,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { X } from 'lucide-react-native';
 import * as LucideIcons from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -2247,7 +2248,7 @@ export function ModuleDetailBottomSheet({
       case 'photo': {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Please allow access to your photo library.');
+          showAlert('Permission needed', 'Please allow access to your photo library.');
           return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -2272,7 +2273,7 @@ export function ModuleDetailBottomSheet({
       case 'video': {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission needed', 'Please allow access to your photo library.');
+          showAlert('Permission needed', 'Please allow access to your photo library.');
           return;
         }
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -2320,7 +2321,7 @@ export function ModuleDetailBottomSheet({
           Alert.prompt(
             'Add Idea',
             'Capture a quick thought, insight, or idea.',
-            (text) => {
+            (text: string) => {
               if (text && text.trim()) {
                 addAttachment(moduleId, {
                   id: `idea-${Date.now()}`,
@@ -2866,8 +2867,8 @@ export function ModuleDetailBottomSheet({
           style={{ flex: 1 }}
         >
           <ActionsheetScrollView
-            className="w-full"
-            contentContainerClassName="pb-12"
+            style={{ width: '100%' }}
+            contentContainerStyle={{ paddingBottom: 48 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >

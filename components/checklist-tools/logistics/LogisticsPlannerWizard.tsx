@@ -123,7 +123,7 @@ interface LogisticsPlannerWizardProps extends ChecklistToolProps {
 
 export function LogisticsPlannerWizard({
   item,
-  raceEventId,
+  regattaId: raceEventId,
   boatId,
   onComplete,
   onCancel,

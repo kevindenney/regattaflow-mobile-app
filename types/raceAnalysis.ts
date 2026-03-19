@@ -61,6 +61,8 @@ export interface RaceAnalysis {
   start_notes?: string;
   start_position?: StartPosition;
   start_speed?: StartSpeed;
+  start_line_bias?: StartLineBias;
+  start_strategy?: StartStrategy[];
 
   // Upwind Leg
   upwind_rating?: number; // 1-5
@@ -90,9 +92,14 @@ export interface RaceAnalysis {
   finish_notes?: string;
 
   // Rules & Protests
+  rules_incidents?: boolean;
+  rules_incident_types?: string[];
   rules_violations?: string[];
-  protests_filed?: string[];
-  protests_received?: string[];
+  protests_filed?: boolean;
+  protests_received?: boolean;
+  penalty_taken?: boolean;
+  rules_questions?: string;
+  rules_notes?: string;
 
   // AI Analysis
   ai_coaching_feedback?: CoachingFeedback[];
@@ -109,6 +116,16 @@ export interface RaceAnalysis {
 export type StartPosition = 'pin_end' | 'middle' | 'boat_end';
 
 export type StartSpeed = 'full_speed' | 'moderate' | 'slow';
+
+export type StartLineBias = 'pin_favored' | 'square' | 'boat_favored' | 'not_sure';
+
+export type StartStrategy =
+  | 'port_tack_approach'
+  | 'barging'
+  | 'mid_line_sag'
+  | 'time_on_distance'
+  | 'dip_start'
+  | 'conservative';
 
 export type PuffHandling = 'traveler' | 'mainsheet' | 'feathered' | 'not_sure';
 

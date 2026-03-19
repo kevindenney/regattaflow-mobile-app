@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Image } from '@/components/ui';
 import { createLogger } from '@/lib/utils/logger';
 import {
@@ -64,24 +65,20 @@ export default function ConfirmCrewScreen() {
   });
 
   const handleEditSection = (section: string) => {
-    Alert.alert(
+    showConfirm(
       "Edit Section",
       `Would you like to edit your ${section}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Edit", onPress: () => logger.debug(`Editing ${section}`) }
-      ]
+      () => logger.debug(`Editing ${section}`),
+      { confirmLabel: 'Edit' }
     );
   };
 
   const handleCompleteSetup = () => {
-    Alert.alert(
+    showAlert(
       "Setup Complete!",
-      "Your club profile has been successfully verified and is now active.",
-      [
-        { text: "Go to Dashboard", onPress: () => logger.debug("Navigating to dashboard") }
-      ]
+      "Your club profile has been successfully verified and is now active."
     );
+    logger.debug("Navigating to dashboard");
   };
 
   const getStatusColor = (status: string) => {

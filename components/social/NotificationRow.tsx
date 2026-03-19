@@ -24,9 +24,11 @@ import {
   Flag,
   Bell,
   Trash2,
+  CheckCircle2,
 } from 'lucide-react-native';
 import { type SocialNotification } from '@/services/NotificationService';
 import { getInitials } from '@/components/account/accountStyles';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 import {
   IOS_COLORS,
   IOS_SPACING,
@@ -68,6 +70,8 @@ function getNotificationIcon(type: SocialNotification['type']) {
       return <MessageCircle {...iconProps} color="#FFFFFF" />;
     case 'followed_user_race':
       return <Flag {...iconProps} color="#FFFFFF" />;
+    case 'followed_user_step_completed':
+      return <CheckCircle2 {...iconProps} color="#FFFFFF" />;
     default:
       return <Bell {...iconProps} color="#FFFFFF" />;
   }
@@ -87,6 +91,8 @@ function getIconBgColor(type: SocialNotification['type']): string {
       return IOS_COLORS.systemGreen;
     case 'followed_user_race':
       return IOS_COLORS.systemOrange;
+    case 'followed_user_step_completed':
+      return IOS_COLORS.systemGreen;
     default:
       return IOS_COLORS.systemGray;
   }
@@ -115,6 +121,10 @@ function getActionText(notification: SocialNotification, hasActor: boolean): str
       return notification.regattaName
         ? `added ${notification.regattaName}`
         : 'added a new race';
+    case 'followed_user_step_completed':
+      return notification.body
+        ? `completed "${notification.body}"`
+        : 'completed a learning step';
     default:
       return notification.body || notification.title;
   }
@@ -152,6 +162,7 @@ export function NotificationRow({
   const isUnread = !notification.isRead;
   const isFollowerNotification = notification.type === 'new_follower' && notification.actorId;
   const hasActor = Boolean(notification.actorId && notification.actorName);
+  const safeActorAvatarUrl = getSafeImageUri(notification.actorAvatarUrl);
   const leadText = hasActor ? (notification.actorName as string) : (notification.title || 'Update');
   const actionText = getActionText(notification, hasActor);
   const timeText = formatTime(notification.createdAt);
@@ -198,9 +209,9 @@ export function NotificationRow({
       >
         {/* Avatar with type icon overlay */}
         <View style={styles.avatarWrapper}>
-          {notification.actorAvatarUrl ? (
+          {safeActorAvatarUrl ? (
             <Image
-              source={{ uri: notification.actorAvatarUrl }}
+              source={{ uri: safeActorAvatarUrl }}
               style={styles.avatarImage}
             />
           ) : (

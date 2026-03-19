@@ -9,13 +9,13 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   TextInput,
   Platform,
   Modal,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   ChevronLeft,
@@ -129,7 +129,7 @@ export default function HandicapCalculatorDashboard() {
   // Add rating
   const handleAddRating = async () => {
     if (!selectedSystem || !newSailNumber || !newRating) {
-      Alert.alert('Required', 'Please enter sail number and rating');
+      showAlert('Required', 'Please enter sail number and rating');
       return;
     }
 
@@ -147,7 +147,7 @@ export default function HandicapCalculatorDashboard() {
       setNewRating('');
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to add rating');
+      showAlert('Error', 'Failed to add rating');
     }
   };
 
@@ -164,7 +164,7 @@ export default function HandicapCalculatorDashboard() {
         distance
       );
 
-      Alert.alert(
+      showAlert(
         'Calculated',
         `Corrected times calculated for ${result.length} boats`
       );
@@ -173,7 +173,7 @@ export default function HandicapCalculatorDashboard() {
       setCourseDistance('');
       loadData();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to calculate');
+      showAlert('Error', error.message || 'Failed to calculate');
     }
   };
 
@@ -181,57 +181,46 @@ export default function HandicapCalculatorDashboard() {
   const handleCalculateAll = async () => {
     if (!selectedSystem) return;
 
-    Alert.alert(
+    showConfirm(
       'Calculate All Races',
       `This will calculate corrected times for all races using ${selectedSystem.name}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Calculate',
-          onPress: async () => {
-            try {
-              const distance = courseDistance ? parseFloat(courseDistance) : undefined;
-              const result = await handicapService.calculateRegattaResults(
-                regattaId!,
-                selectedSystem.code,
-                distance
-              );
+      async () => {
+        try {
+          const distance = courseDistance ? parseFloat(courseDistance) : undefined;
+          const result = await handicapService.calculateRegattaResults(
+            regattaId!,
+            selectedSystem.code,
+            distance
+          );
 
-              Alert.alert(
-                'Calculated',
-                `${result.results} results calculated across ${result.races} races`
-              );
+          showAlert(
+            'Calculated',
+            `${result.results} results calculated across ${result.races} races`
+          );
 
-              loadData();
-            } catch (error: any) {
-              Alert.alert('Error', error.message || 'Failed to calculate');
-            }
-          },
-        },
-      ]
+          loadData();
+        } catch (error: any) {
+          showAlert('Error', error.message || 'Failed to calculate');
+        }
+      },
+      { confirmLabel: 'Calculate' }
     );
   };
 
   // Delete rating
   const handleDeleteRating = (rating: BoatRating) => {
-    Alert.alert(
+    showConfirm(
       'Delete Rating',
       `Remove rating for ${rating.sail_number}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await handicapService.deactivateRating(rating.id);
-              loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete rating');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await handicapService.deactivateRating(rating.id);
+          loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to delete rating');
+        }
+      },
+      { destructive: true }
     );
   };
 

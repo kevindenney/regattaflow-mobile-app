@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Alert, Platform } from 'react-native';
+import { View, Platform } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import * as DocumentPicker from 'expo-document-picker';
 import {
   VStack,
@@ -89,7 +90,7 @@ export function DocumentChecklistComponent({
       return documentStatus;
     } catch (error) {
       logger.error('Failed to load document requirements', error);
-      Alert.alert('Error', 'Failed to load document requirements');
+      showAlert('Error', 'Failed to load document requirements');
       return null;
     } finally {
       setLoading(false);
@@ -115,7 +116,7 @@ export function DocumentChecklistComponent({
 
       // Check file size (max 10MB)
       if (file.size && file.size > 10 * 1024 * 1024) {
-        Alert.alert('Error', 'File size must be less than 10MB');
+        showAlert('Error', 'File size must be less than 10MB');
         setUploading(null);
         return;
       }
@@ -139,7 +140,7 @@ export function DocumentChecklistComponent({
       );
 
       if (uploadResult.success) {
-        Alert.alert('Success', 'Document uploaded successfully');
+        showAlert('Success', 'Document uploaded successfully');
         const latestDocuments = await loadDocumentRequirements(); // Reload to show updated status
         checkAllDocumentsComplete(latestDocuments ?? documents);
       } else {
@@ -147,7 +148,7 @@ export function DocumentChecklistComponent({
       }
     } catch (error: any) {
       logger.error('Upload error', error);
-      Alert.alert('Error', error.message || 'Failed to upload document');
+      showAlert('Error', error.message || 'Failed to upload document');
     } finally {
       setUploading(null);
     }

@@ -9,12 +9,12 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   TextInput,
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   ChevronLeft,
@@ -171,27 +171,25 @@ export default function FileProtest() {
   const handleSubmit = async () => {
     // Validate required fields
     if (!raceNumber) {
-      Alert.alert('Required', 'Please select a race');
+      showAlert('Required', 'Please select a race');
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Required', 'Please provide a description of the incident');
+      showAlert('Required', 'Please provide a description of the incident');
       return;
     }
     if (protestType === 'boat_vs_boat' && !protestorEntryId) {
-      Alert.alert('Required', 'Please select the protestor boat');
+      showAlert('Required', 'Please select the protestor boat');
       return;
     }
 
     // Warn about expired deadline
     if (deadline.isExpired) {
-      Alert.alert(
+      showConfirm(
         'Time Limit Expired',
         'The protest time limit has passed. Your protest may be rejected unless the protest committee extends the time limit. Continue?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'File Anyway', onPress: submitProtest },
-        ]
+        submitProtest,
+        { confirmLabel: 'File Anyway' }
       );
       return;
     }
@@ -218,12 +216,11 @@ export default function FileProtest() {
       };
 
       await protestService.fileProtest(protestData);
-      Alert.alert('Success', 'Protest filed successfully', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+      showAlert('Success', 'Protest filed successfully');
+      router.back();
     } catch (error) {
       console.error('Error filing protest:', error);
-      Alert.alert('Error', 'Failed to file protest. Please try again.');
+      showAlert('Error', 'Failed to file protest. Please try again.');
     } finally {
       setSubmitting(false);
     }

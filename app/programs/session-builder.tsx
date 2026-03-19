@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/themed-view';
@@ -142,7 +142,7 @@ export default function SessionBuilderScreen() {
 
   const saveSessionBuilder = async () => {
     if (!selectedSession?.id || !user?.id) {
-      Alert.alert('Not ready', 'Select a session and ensure you are signed in.');
+      showAlert('Not ready', 'Select a session and ensure you are signed in.');
       return;
     }
     try {
@@ -163,9 +163,9 @@ export default function SessionBuilderScreen() {
         metadata: nextMetadata,
       });
       setSessions((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
-      Alert.alert('Saved', 'Session builder details were saved.');
+      showAlert('Saved', 'Session builder details were saved.');
     } catch (error: any) {
-      Alert.alert('Save failed', error?.message || 'Unable to save session details.');
+      showAlert('Save failed', error?.message || 'Unable to save session details.');
     } finally {
       setSaving(false);
     }

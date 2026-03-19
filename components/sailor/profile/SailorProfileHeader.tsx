@@ -9,8 +9,8 @@ import {
   Pressable,
   StyleSheet,
   Share,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ChevronLeft, Share2 } from 'lucide-react-native';
 import { getInitials } from '@/components/account/accountStyles';
 import { FollowButton } from '@/components/social/FollowButton';
@@ -79,7 +79,7 @@ export function SailorProfileHeader({
       });
     } catch (error) {
       if ((error as Error).message !== 'User did not share') {
-        Alert.alert('Error', 'Failed to share profile');
+        showAlert('Error', 'Failed to share profile');
       }
     }
   };

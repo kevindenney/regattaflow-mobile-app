@@ -5,12 +5,13 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Alert, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Play, Square, Navigation } from 'lucide-react-native';
 import { gpsTracker } from '@/services/GPSTracker';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 const DEFAULT_RACE_TIME = '10:00';
 const logger = createLogger('RaceTimer');
@@ -199,7 +200,7 @@ export function RaceTimer({
       const trackingStarted = await gpsTracker.startTracking(session.id);
 
       if (!trackingStarted) {
-        Alert.alert(
+        showAlert(
           'GPS Permission Required',
           'Please enable location permissions to track your race.'
         );
@@ -215,7 +216,7 @@ export function RaceTimer({
 
     } catch (error: any) {
       logger.error('Error starting race timer', error);
-      Alert.alert('Error', 'Failed to start race timer. Please try again.');
+      showAlert('Error', 'Failed to start race timer. Please try again.');
     }
   }, [user, raceId]);
 
@@ -233,7 +234,7 @@ export function RaceTimer({
       onRaceComplete(sessionId);
     } catch (error: any) {
       logger.error('Error stopping race timer', error);
-      Alert.alert('Error', 'Failed to stop race timer.');
+      showAlert('Error', 'Failed to stop race timer.');
     }
   }, [sessionId, onRaceComplete]);
 

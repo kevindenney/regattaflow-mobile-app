@@ -188,7 +188,7 @@ export function AfterRaceContent({
       .from('regattas')
       .select('prep_notes, post_race_notes')
       .eq('id', race.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setContentStatus({
@@ -432,7 +432,7 @@ export function AfterRaceContent({
 
   // AI enabled when result + debrief complete
   const equipmentIssueCount = currentRaceIssues.length + carryoverIssues.length;
-  const canGenerateAI = hasResult && debriefComplete;
+  const canGenerateAI = !!(hasResult && debriefComplete);
 
   // Section completion states
   const debriefSectionComplete = debriefComplete;
@@ -811,7 +811,7 @@ export function AfterRaceContent({
                   .from('regattas')
                   .select('prep_notes, post_race_notes')
                   .eq('id', race.id)
-                  .single()
+                  .maybeSingle()
                   .then(({ data }) => {
                     if (data) {
                       setContentStatus({

@@ -14,16 +14,16 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { usePracticeSuggestions } from '@/hooks/usePracticeSuggestions';
-import { practiceSessionService } from '@/services/PracticeSessionService';
+import { createStep, resolveInterestId } from '@/services/TimelineStepService';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
 import { SKILL_AREA_LABELS, buildSkillAreaLabelMap } from '@/types/practice';
-import type { PracticeSuggestion, SkillArea } from '@/types/practice';
+import type { SkillArea } from '@/types/practice';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 
 // Ink-like color palette
@@ -137,11 +137,9 @@ const INTEREST_VOCABULARY: Record<string, { loadingText: string; aiSubtitle: str
 
 export default function PracticeCreateScreen() {
   const { user } = useAuth();
+  const { currentInterest } = useInterest();
   const { suggestions, isLoading } = usePracticeSuggestions();
   const eventConfig = useInterestEventConfig();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [duration, setDuration] = useState(30);
-  const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const slug = eventConfig.interestSlug;
@@ -169,51 +167,45 @@ export default function PracticeCreateScreen() {
     }
   };
 
-  const handleSelectSuggestion = (suggestion: (typeof displaySuggestions)[0]) => {
-    if (selectedId === suggestion.id) {
-      setSelectedId(null);
-    } else {
-      setSelectedId(suggestion.id);
-      setDuration(suggestion.estimatedDuration);
-    }
-  };
+  const handleSelect = async (suggestion: (typeof displaySuggestions)[0]) => {
+    if (!user?.id || isSubmitting) return;
 
-  const handleLog = async () => {
-    if (!user?.id || !selectedId) return;
-
-    const suggestion = displaySuggestions.find((s) => s.id === selectedId);
-    if (!suggestion) return;
+    const label = skillLabels[suggestion.skillArea]
+      ?? SKILL_AREA_LABELS[suggestion.skillArea as SkillArea]
+      ?? suggestion.skillArea;
 
     setIsSubmitting(true);
     try {
-      const session = await practiceSessionService.createSession({
-        createdBy: user.id,
-        sailorId: user.id,
-        sessionType: 'logged',
-        status: 'completed',
-        actualDurationMinutes: duration,
-        reflectionNotes: notes || null,
-        aiSuggested: hasAISuggestions,
-        aiReasoning: suggestion.reason,
-      });
+      const interestId = currentInterest?.id ?? await resolveInterestId(slug);
+      if (!interestId) throw new Error('Could not resolve interest');
 
-      await practiceSessionService.addFocusAreas(session.id, [
-        { skillArea: suggestion.skillArea, priority: 1 },
-      ]);
+      const drillInfo = suggestion.drillName ? `\nTry: ${suggestion.drillName}` : '';
+
+      const step = await createStep({
+        user_id: user.id,
+        interest_id: interestId,
+        title: label,
+        description: suggestion.reason,
+        category: 'practice',
+        status: 'pending',
+        metadata: {
+          plan: {
+            what_will_you_do: `${suggestion.reason}${drillInfo}`,
+          },
+        },
+      });
 
       router.replace({
-        pathname: '/practice/[id]',
-        params: { id: session.id },
+        pathname: '/step/[id]',
+        params: { id: step.id },
       });
     } catch (error) {
-      console.error('Failed to log practice:', error);
-      alert('Failed to log practice. Please try again.');
+      console.error('Failed to create step:', error);
+      alert('Failed to create practice step. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const selectedSuggestion = displaySuggestions.find((s) => s.id === selectedId);
 
   return (
     <>
@@ -254,17 +246,12 @@ export default function PracticeCreateScreen() {
                   <TouchableOpacity
                     key={suggestion.id}
                     style={styles.suggestionRow}
-                    onPress={() => handleSelectSuggestion(suggestion)}
+                    onPress={() => handleSelect(suggestion)}
+                    disabled={isSubmitting}
                     activeOpacity={0.7}
                   >
                     <View style={styles.suggestionContent}>
-                      <Text
-                        style={[
-                          styles.suggestionSkill,
-                          selectedId === suggestion.id &&
-                            styles.suggestionSkillSelected,
-                        ]}
-                      >
+                      <Text style={styles.suggestionSkill}>
                         {skillLabels[suggestion.skillArea] ?? SKILL_AREA_LABELS[suggestion.skillArea as SkillArea] ?? suggestion.skillArea}
                       </Text>
                       <Text style={styles.suggestionReason}>
@@ -283,63 +270,9 @@ export default function PracticeCreateScreen() {
                 ))}
               </View>
 
-              {/* Log form - appears when suggestion selected */}
-              {selectedSuggestion && (
-                <View style={styles.logForm}>
-                  <View style={styles.rule} />
-
-                  <Text style={styles.logPrompt}>
-                    Log {SKILL_AREA_LABELS[selectedSuggestion.skillArea]} practice
-                  </Text>
-
-                  {/* Duration selector */}
-                  <View style={styles.durationRow}>
-                    <Text style={styles.durationLabel}>Duration</Text>
-                    <View style={styles.durationOptions}>
-                      {[15, 30, 45, 60].map((mins) => (
-                        <TouchableOpacity
-                          key={mins}
-                          onPress={() => setDuration(mins)}
-                          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                        >
-                          <Text
-                            style={[
-                              styles.durationOption,
-                              duration === mins && styles.durationSelected,
-                            ]}
-                          >
-                            {mins}m
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Notes */}
-                  <View style={styles.notesRow}>
-                    <TextInput
-                      style={styles.notesInput}
-                      value={notes}
-                      onChangeText={setNotes}
-                      placeholder="What did you learn?"
-                      placeholderTextColor={COLORS.faint}
-                      multiline
-                    />
-                  </View>
-
-                  {/* Submit */}
-                  <TouchableOpacity
-                    style={styles.logButton}
-                    onPress={handleLog}
-                    disabled={isSubmitting}
-                    activeOpacity={0.6}
-                  >
-                    {isSubmitting ? (
-                      <ActivityIndicator size="small" color={COLORS.accent} />
-                    ) : (
-                      <Text style={styles.logButtonText}>Log Practice →</Text>
-                    )}
-                  </TouchableOpacity>
+              {isSubmitting && (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={COLORS.muted} />
                 </View>
               )}
             </>
@@ -420,10 +353,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: COLORS.ink,
   },
-  suggestionSkillSelected: {
-    color: COLORS.accent,
-    textDecorationLine: 'underline',
-  },
   suggestionReason: {
     fontSize: 14,
     color: COLORS.muted,
@@ -440,63 +369,5 @@ const styles = StyleSheet.create({
     color: COLORS.faint,
     fontVariant: ['tabular-nums'],
     marginLeft: 16,
-  },
-  logForm: {
-    marginTop: 8,
-  },
-  rule: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: COLORS.rule,
-    marginVertical: 24,
-  },
-  logPrompt: {
-    fontSize: 16,
-    color: COLORS.ink,
-    marginBottom: 20,
-  },
-  durationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  durationLabel: {
-    fontSize: 15,
-    color: COLORS.muted,
-    marginRight: 16,
-  },
-  durationOptions: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-  durationOption: {
-    fontSize: 15,
-    color: COLORS.faint,
-    fontVariant: ['tabular-nums'],
-  },
-  durationSelected: {
-    color: COLORS.ink,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-    textDecorationColor: COLORS.accent,
-  },
-  notesRow: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: COLORS.rule,
-    marginBottom: 24,
-    paddingBottom: 8,
-  },
-  notesInput: {
-    fontSize: 15,
-    color: COLORS.ink,
-    padding: 0,
-    minHeight: 40,
-  },
-  logButton: {
-    alignItems: 'flex-end',
-  },
-  logButtonText: {
-    fontSize: 16,
-    color: COLORS.accent,
-    fontWeight: '500',
   },
 });

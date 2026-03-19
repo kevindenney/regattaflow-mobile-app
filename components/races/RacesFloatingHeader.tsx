@@ -100,6 +100,8 @@ export interface RacesFloatingHeaderProps {
   seasonLabel?: string;
   /** Opens season picker/settings */
   onSeasonPress?: () => void;
+  /** Opens step picker (when "X of Y" is tapped) */
+  onStepPickerPress?: () => void;
   /** Callback reporting the measured height of the toolbar (for content paddingTop) */
   onMeasuredHeight?: (height: number) => void;
   /** When true the toolbar slides up off-screen */
@@ -142,6 +144,7 @@ export function RacesFloatingHeader({
   onUpcomingPress,
   seasonLabel,
   onSeasonPress,
+  onStepPickerPress,
   onMeasuredHeight,
   hidden,
 }: RacesFloatingHeaderProps) {
@@ -262,6 +265,43 @@ export function RacesFloatingHeader({
   }
   const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' | ') : undefined;
 
+  // Build custom subtitle content with separately tappable parts:
+  // "All Clinicals" → season selector | "2 of 3" → step picker | "1 upcoming" → next step
+  const hasMultipleActions = Boolean(onSeasonPress && (hasIndexCounter || hasUpcoming));
+  const subtitleContent = hasMultipleActions ? (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {seasonLabel && (
+        <Pressable onPress={onSeasonPress} hitSlop={{ top: 8, bottom: 8, right: 4 }}>
+          <Text style={{ fontSize: 13, color: IOS_COLORS.systemBlue, fontWeight: '500' }}>
+            {seasonLabel}
+          </Text>
+        </Pressable>
+      )}
+      {seasonLabel && (hasIndexCounter || hasUpcoming) && (
+        <Text style={{ fontSize: 13, color: IOS_COLORS.secondaryLabel, marginHorizontal: 4 }}>|</Text>
+      )}
+      {hasIndexCounter && (
+        <>
+          <Pressable onPress={onStepPickerPress} hitSlop={{ top: 8, bottom: 8 }}>
+            <Text style={{ fontSize: 13, color: onStepPickerPress ? IOS_COLORS.systemBlue : IOS_COLORS.secondaryLabel, fontWeight: onStepPickerPress ? '500' : '400' }}>
+              {currentRaceIndex} of {totalRaces}
+            </Text>
+          </Pressable>
+          {hasUpcoming && (
+            <Text style={{ fontSize: 13, color: IOS_COLORS.secondaryLabel, marginHorizontal: 4 }}>|</Text>
+          )}
+        </>
+      )}
+      {hasUpcoming && (
+        <Pressable onPress={onUpcomingPress} hitSlop={{ top: 8, bottom: 8, left: 4 }}>
+          <Text style={{ fontSize: 13, color: IOS_COLORS.systemBlue, fontWeight: '500' }}>
+            {upcomingRaces} upcoming
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  ) : undefined;
+
   // Custom right capsule with notification bell, grid toggle, and add button
   const rightCapsule = (
     <View style={capsuleStyles.capsule}>
@@ -321,8 +361,9 @@ export function RacesFloatingHeader({
     <>
       <TabScreenToolbar
         title={config.eventNoun}
-        subtitle={subtitle}
-        onSubtitlePress={onSeasonPress ?? (hasUpcoming ? onUpcomingPress : undefined)}
+        subtitle={subtitleContent ? undefined : subtitle}
+        subtitleContent={subtitleContent}
+        onSubtitlePress={subtitleContent ? undefined : (onSeasonPress ?? (hasUpcoming ? onUpcomingPress : undefined))}
         topInset={topInset}
         isLoading={isLoading}
         rightContent={rightCapsule}

@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Linking,
     ScrollView,
     StyleSheet,
@@ -16,6 +15,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 interface TuningGuidesSectionProps {
   classId: string;
@@ -69,61 +69,45 @@ export function TuningGuidesSection({
         if (canOpen) {
           await Linking.openURL(urlToOpen);
         } else {
-          Alert.alert(
+          showConfirm(
             'Link Not Available',
             `This guide links to ${guide.source}, but the URL may not be accessible. Would you like to visit ${guide.source}'s main website instead?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Visit Website',
-                onPress: async () => {
-                  const mainUrl = guide.sourceUrl || guide.fileUrl;
-                  if (mainUrl) await Linking.openURL(mainUrl);
-                },
-              },
-            ]
+            async () => {
+              const mainUrl = guide.sourceUrl || guide.fileUrl;
+              if (mainUrl) await Linking.openURL(mainUrl);
+            }
           );
         }
       } else {
-        Alert.alert(
+        showConfirm(
           'Not Available Yet',
           `This ${guide.source} guide hasn't been uploaded yet. You can search for more guides or upload your own.`,
-          [
-            { text: 'OK', style: 'cancel' },
-            { text: 'Search Guides', onPress: handleAutoScrape },
-          ]
+          handleAutoScrape
         );
       }
     } catch (err) {
       console.error('Error opening guide:', err);
-      Alert.alert(
+      showAlert(
         'Could Not Open Guide',
-        `There was a problem opening the guide from ${guide.source}. The link may be broken or require a login.`,
-        [{ text: 'OK' }]
+        `There was a problem opening the guide from ${guide.source}. The link may be broken or require a login.`
       );
     }
   };
 
   const handleAutoScrape = async () => {
     try {
-      Alert.alert(
+      showConfirm(
         'Auto-Scrape Tuning Guides',
         `This will search for ${className} tuning guides from popular sources like North Sails and Quantum.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Search',
-            onPress: async () => {
-              await tuningGuideService.triggerAutoScrape(classId);
-              Alert.alert('Success', 'Searching for tuning guides...');
-              setTimeout(() => loadGuides(), 2000);
-            },
-          },
-        ]
+        async () => {
+          await tuningGuideService.triggerAutoScrape(classId);
+          showAlert('Success', 'Searching for tuning guides...');
+          setTimeout(() => loadGuides(), 2000);
+        }
       );
     } catch (err) {
       console.error('Error auto-scraping:', err);
-      Alert.alert('Error', 'Failed to search for tuning guides');
+      showAlert('Error', 'Failed to search for tuning guides');
     }
   };
 
@@ -277,7 +261,7 @@ export function TuningGuidesSection({
             if (onViewAll) {
               onViewAll();
             } else {
-              Alert.alert(
+              showAlertWithButtons(
                 `${className} Tuning Guides`,
                 `You have ${guides.length} guide${guides.length > 1 ? 's' : ''} available.`,
                 [

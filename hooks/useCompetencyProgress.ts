@@ -66,9 +66,9 @@ export function useCompetencyProgress(): UseCompetencyProgressResult {
 
   // Mutation for logging a new attempt
   const attemptMutation = useMutation<void, Error, LogAttemptPayload>({
-    mutationFn: (payload) => {
-      logger.info('Logging new attempt', { competencyId: payload.competencyId });
-      return logAttempt(payload);
+    mutationFn: async (payload) => {
+      logger.info('Logging new attempt', { competencyId: payload.competency_id });
+      await logAttempt(userId!, payload);
     },
     onSuccess: () => {
       logger.info('Attempt logged successfully, invalidating queries');
@@ -90,7 +90,7 @@ export function useCompetencyProgress(): UseCompetencyProgressResult {
 
   const getByStatus = useMemo(() => {
     return (status: CompetencyStatus): CompetencyWithProgress[] =>
-      competencies.filter((c) => c.status === status);
+      competencies.filter((c) => c.progress?.status === status);
   }, [competencies]);
 
   const refresh = () => {

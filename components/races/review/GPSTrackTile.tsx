@@ -707,7 +707,7 @@ export function GPSTrackTile({
           .from('regattas')
           .select('latitude, longitude, metadata')
           .eq('id', raceId)
-          .single();
+          .maybeSingle();
 
         if (cancelled || !data) return;
 

@@ -6,8 +6,8 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
@@ -243,7 +243,7 @@ export function useAddRace({
         // Notify caller
         onRaceCreated?.(guestRace.id);
       } catch (err) {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save race');
+        showAlert('Error', err instanceof Error ? err.message : 'Failed to save race');
       } finally {
         setIsAddingRace(false);
       }
@@ -267,7 +267,7 @@ export function useAddRace({
 
       if (error) {
         logger.error('[useAddRace] Quick add error:', error);
-        Alert.alert('Error', error.message || 'Failed to create race');
+        showAlert('Error', error.message || 'Failed to create race');
         return;
       }
 
@@ -280,7 +280,7 @@ export function useAddRace({
         onRaceCreated?.(newRace.id);
       }
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
+      showAlert('Error', err instanceof Error ? err.message : 'Failed to create race');
     } finally {
       setIsAddingRace(false);
     }
@@ -363,7 +363,7 @@ export function useAddRace({
         // Notify caller
         onRaceCreated?.(guestRace.id);
       } catch (err) {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save race');
+        showAlert('Error', err instanceof Error ? err.message : 'Failed to save race');
       } finally {
         setIsAddingRace(false);
       }
@@ -626,7 +626,7 @@ export function useAddRace({
 
       if (error) {
         logger.error('[useAddRace] Create error:', error);
-        Alert.alert('Error', error.message || 'Failed to create race');
+        showAlert('Error', error.message || 'Failed to create race');
         return;
       }
 
@@ -642,7 +642,7 @@ export function useAddRace({
       }
     } catch (err) {
       logger.error('[useAddRace] Exception:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to create race');
+      showAlert('Error', err instanceof Error ? err.message : 'Failed to create race');
     } finally {
       setIsAddingRace(false);
     }

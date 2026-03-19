@@ -14,10 +14,10 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { UserPlus, Search, Star, Mail, MoreHorizontal, Users } from 'lucide-react-native';
 import { IOS_COLORS } from '@/components/cards/constants';
 import {
@@ -158,14 +158,14 @@ export function RosterTab({
 
   const handleAddCrew = async () => {
     if (!addForm.name) {
-      Alert.alert('Error', 'Please enter a name');
+      showAlert('Error', 'Please enter a name');
       return;
     }
 
     try {
       if (addForm.email && addForm.email.trim()) {
         await crewManagementService.inviteCrewMember(sailorId, classId, addForm);
-        Alert.alert('Success', `Invite sent to ${addForm.name}`);
+        showAlert('Success', `Invite sent to ${addForm.name}`);
       } else {
         await crewManagementService.addCrewMember(sailorId, classId, {
           name: addForm.name,
@@ -174,7 +174,7 @@ export function RosterTab({
           accessLevel: addForm.accessLevel,
           notes: addForm.notes,
         });
-        Alert.alert('Success', `${addForm.name} added to crew`);
+        showAlert('Success', `${addForm.name} added to crew`);
       }
       setShowAddModal(false);
       setAddForm({ email: '', name: '', role: 'trimmer' });
@@ -184,7 +184,7 @@ export function RosterTab({
       if (err?.queuedForSync && err?.entity) {
         setCrew((prev) => [...prev, err.entity as CrewMember]);
         const action = addForm.email ? 'invited' : 'added';
-        Alert.alert(
+        showAlert(
           'Offline',
           `${addForm.name} will be ${action} once you're back online.`
         );
@@ -192,7 +192,7 @@ export function RosterTab({
         setAddForm({ email: '', name: '', role: 'trimmer' });
       } else {
         console.error('Error adding/inviting crew:', err);
-        Alert.alert(
+        showAlert(
           'Error',
           addForm.email ? 'Failed to send invite' : 'Failed to add crew member'
         );
@@ -219,7 +219,7 @@ export function RosterTab({
         role: editForm.role,
         notes: editForm.notes,
       });
-      Alert.alert('Success', 'Crew member updated');
+      showAlert('Success', 'Crew member updated');
       setShowEditModal(false);
       setSelectedMember(null);
       loadCrew();
@@ -237,49 +237,42 @@ export function RosterTab({
             } as CrewMember;
           })
         );
-        Alert.alert('Offline', 'Changes saved locally and will sync when online.');
+        showAlert('Offline', 'Changes saved locally and will sync when online.');
         setShowEditModal(false);
         setSelectedMember(null);
       } else {
         console.error('Error updating crew:', err);
-        Alert.alert('Error', 'Failed to update crew member');
+        showAlert('Error', 'Failed to update crew member');
       }
     }
   };
 
   const handleRemoveCrew = (member: CrewMember) => {
-    Alert.alert('Remove Crew Member', `Remove ${member.name} from your crew?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await crewManagementService.removeCrewMember(member.id);
-            loadCrew();
-            onCrewChange?.();
-          } catch (err: any) {
-            if (err?.queuedForSync) {
-              setCrew((prev) => prev.filter((c) => c.id !== member.id));
-              Alert.alert(
-                'Offline',
-                `${member.name} will be removed when you're back online.`
-              );
-            } else {
-              Alert.alert('Error', 'Failed to remove crew member');
-            }
-          }
-        },
-      },
-    ]);
+    showConfirm('Remove Crew Member', `Remove ${member.name} from your crew?`, async () => {
+      try {
+        await crewManagementService.removeCrewMember(member.id);
+        loadCrew();
+        onCrewChange?.();
+      } catch (err: any) {
+        if (err?.queuedForSync) {
+          setCrew((prev) => prev.filter((c) => c.id !== member.id));
+          showAlert(
+            'Offline',
+            `${member.name} will be removed when you're back online.`
+          );
+        } else {
+          showAlert('Error', 'Failed to remove crew member');
+        }
+      }
+    }, { destructive: true });
   };
 
   const handleResendInvite = async (member: CrewMember) => {
     try {
       await crewManagementService.resendInvite(member.id);
-      Alert.alert('Success', `Invite resent to ${member.name}`);
+      showAlert('Success', `Invite resent to ${member.name}`);
     } catch (err) {
-      Alert.alert('Error', 'Failed to resend invite');
+      showAlert('Error', 'Failed to resend invite');
     }
   };
 
@@ -289,7 +282,7 @@ export function RosterTab({
       loadCrew();
       onCrewChange?.();
     } catch (err) {
-      Alert.alert('Error', 'Failed to update primary crew status');
+      showAlert('Error', 'Failed to update primary crew status');
     }
   };
 

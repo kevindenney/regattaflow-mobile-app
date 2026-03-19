@@ -13,7 +13,6 @@ import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 type OrgStepTemplateRow = {
   id: string;
@@ -166,7 +166,7 @@ export default function OrganizationTemplatesScreen() {
       if (error) throw error;
       setTemplates((data || []) as OrgStepTemplateRow[]);
     } catch (error: any) {
-      Alert.alert('Unable to load templates', error?.message || 'Please try again.');
+      showAlert('Unable to load templates', error?.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
@@ -271,7 +271,7 @@ export default function OrganizationTemplatesScreen() {
 
   const handleCreateTemplate = useCallback(async () => {
     if (!canSubmit || !activeOrganization?.id || !user?.id) {
-      Alert.alert('Missing fields', 'Add a title and step type first.');
+      showAlert('Missing fields', 'Add a title and step type first.');
       return;
     }
 
@@ -305,7 +305,7 @@ export default function OrganizationTemplatesScreen() {
       setModuleIds([]);
       setSuggestedCompetencyIds([]);
     } catch (error: any) {
-      Alert.alert('Unable to save template', error?.message || 'Please try again.');
+      showAlert('Unable to save template', error?.message || 'Please try again.');
     } finally {
       setSaving(false);
     }
@@ -324,7 +324,7 @@ export default function OrganizationTemplatesScreen() {
 
       setTemplates((prev) => prev.map((row) => row.id === template.id ? { ...row, is_published: nextPublished } : row));
     } catch (error: any) {
-      Alert.alert('Unable to update template', error?.message || 'Please try again.');
+      showAlert('Unable to update template', error?.message || 'Please try again.');
     }
   }, [canManageActiveOrganization]);
 
@@ -358,7 +358,7 @@ export default function OrganizationTemplatesScreen() {
         [templateId]: Array.from(currentIds),
       }));
     } catch (error: any) {
-      Alert.alert('Unable to update cohort assignment', error?.message || 'Please try again.');
+      showAlert('Unable to update cohort assignment', error?.message || 'Please try again.');
     } finally {
       setAssigningKey(null);
     }

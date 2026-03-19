@@ -19,9 +19,9 @@ import {
   Platform,
   UIManager,
   Pressable,
-  Alert,
   Share,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   Users,
   UserPlus,
@@ -153,7 +153,7 @@ export function CrewDetailCard({
             await nav.share({ text: message });
           } else if (nav?.clipboard?.writeText) {
             await nav.clipboard.writeText(message);
-            Alert.alert('Copied', 'Invite link copied to clipboard');
+            showAlert('Copied', 'Invite link copied to clipboard');
           }
         } else {
           await Share.share({ message });

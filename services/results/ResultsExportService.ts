@@ -5,7 +5,8 @@
  * Handles exporting race results to various formats (CSV, PDF, Sailwave)
  */
 
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import * as FileSystem from 'expo-file-system/legacy';
 import ResultsService from '../ResultsService';
 import { SeriesStanding } from '../scoring/ScoringEngine';
@@ -68,10 +69,9 @@ export class ResultsExportService {
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
       await FileSystem.writeAsStringAsync(fileUri, csv);
 
-      Alert.alert(
+      showAlert(
         'Export Complete',
-        `Results saved to:\n${fileUri}`,
-        [{ text: 'OK' }]
+        `Results saved to:\n${fileUri}`
       );
     }
   }
@@ -306,10 +306,9 @@ export class ResultsExportService {
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
       await FileSystem.writeAsStringAsync(fileUri, blwContent);
 
-      Alert.alert(
+      showAlert(
         'Export Complete',
-        `Sailwave file saved to:\n${fileUri}`,
-        [{ text: 'OK' }]
+        `Sailwave file saved to:\n${fileUri}`
       );
     }
   }

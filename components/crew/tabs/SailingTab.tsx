@@ -14,9 +14,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Anchor, Users, Check, AlertCircle, UserPlus } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { useAuth } from '@/providers/AuthProvider';
 import {
@@ -106,7 +106,7 @@ export function SailingTab({
         setIsLoading(true);
 
         // Get all crew for this sailor/class
-        const crew = await crewManagementService.getCrewByClass(sailorId, classId);
+        const crew = await crewManagementService.getCrewForClass(sailorId, classId);
         setCrew(crew);
         setError(null);
 
@@ -114,8 +114,8 @@ export function SailingTab({
         const newAssignments = { ...assignments };
         for (const member of crew) {
           if (POSITIONS.some((p) => p.role === member.role)) {
-            if (!newAssignments[member.role]) {
-              newAssignments[member.role] = member.id;
+            if (!newAssignments[member.role as CrewRole]) {
+              newAssignments[member.role as CrewRole] = member.id;
             }
           }
         }
@@ -186,7 +186,6 @@ export function SailingTab({
           crewManagementService.assignCrewToRace(
             regattaId,
             crewMemberId!,
-            user.id,
             `Position: ${role}`
           )
         );
@@ -196,7 +195,7 @@ export function SailingTab({
       // Sync collaborators: add newly assigned crew, remove de-assigned crew
       await syncCrewCollaborators();
 
-      Alert.alert('Saved', 'Position assignments saved successfully');
+      showAlert('Saved', 'Position assignments saved successfully');
       setHasChanges(false);
       // Update initial assignments ref to current state
       initialAssignmentsRef.current = { ...assignments };

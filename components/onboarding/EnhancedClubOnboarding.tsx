@@ -12,10 +12,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
 import { Sparkles, Send, Globe, MapPin, Users } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
 import { ClubOnboardingService, type ClubSuggestion, type ClassSuggestion } from '@/services/ClubOnboardingService';
@@ -178,7 +178,7 @@ export function EnhancedClubOnboarding({
       }
     } catch (error) {
       logger.error('Error processing AI input:', error);
-      Alert.alert('Error', 'Failed to process input. Please try again.');
+      showAlert('Error', 'Failed to process input. Please try again.');
     } finally {
       setProcessing(false);
     }
@@ -251,9 +251,9 @@ export function EnhancedClubOnboarding({
           setUpcomingEvents(scrapedData.events);
         }
 
-        Alert.alert('Success', 'Website scraped successfully! Review and accept/reject suggestions below.');
+        showAlert('Success', 'Website scraped successfully! Review and accept/reject suggestions below.');
       } else {
-        Alert.alert('Error', data?.error || 'Failed to scrape website');
+        showAlert('Error', data?.error || 'Failed to scrape website');
       }
     } catch (error) {
       logger.error('Error scraping URL:', error);
@@ -385,13 +385,13 @@ export function EnhancedClubOnboarding({
    */
   const handleSave = async () => {
     if (!user) {
-      Alert.alert('Error', 'Please sign in to create a club');
+      showAlert('Error', 'Please sign in to create a club');
       return;
     }
 
     // Validation
     if (!clubName.trim()) {
-      Alert.alert('Error', 'Please enter a club name');
+      showAlert('Error', 'Please enter a club name');
       return;
     }
 
@@ -473,16 +473,12 @@ export function EnhancedClubOnboarding({
         }
       }
 
-      Alert.alert('Success', 'Club created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => onComplete?.(clubId),
-        },
-      ]);
+      showAlert('Success', 'Club created successfully!');
+      onComplete?.(clubId);
     } catch (error) {
       logger.error('Error saving club:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to save club. Please try again.';
-      Alert.alert('Error', errorMessage);
+      showAlert('Error', errorMessage);
     } finally {
       setSaving(false);
     }

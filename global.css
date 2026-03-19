@@ -249,6 +249,42 @@ select[aria-invalid="true"] {
 }
 
 /* ============================================
+   TIMELINE SCROLLBAR (hover-reveal, thin)
+   ============================================ */
+
+/* Hide scrollbar by default, show on hover */
+.timeline-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.timeline-scroll:hover {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+.timeline-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.timeline-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.timeline-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+}
+
+.timeline-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.timeline-scroll:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================
    DEVELOPMENT TOOLS OVERRIDES
    ============================================ */
 

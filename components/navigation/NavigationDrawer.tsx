@@ -73,7 +73,6 @@ export function NavigationDrawerContent({
   onPricingItemLayout,
   measureRelativeTo,
 }: NavigationDrawerContentProps) {
-  const collapsableProp = Platform.OS === 'web' ? undefined : false;
   const { userType, userProfile, user, signOut, isGuest } = useAuth();
   const { isFree } = useFeatureGate();
   const { vocabulary } = useVocabulary();
@@ -264,7 +263,11 @@ export function NavigationDrawerContent({
 
             if (itemRef) {
               return (
-                <View key={item.key} ref={itemRef} collapsable={collapsableProp}>
+                <View
+                  key={item.key}
+                  ref={itemRef}
+                  {...(Platform.OS === 'web' ? {} : { collapsable: false as const })}
+                >
                   {navButton}
                 </View>
               );
@@ -311,7 +314,11 @@ export function NavigationDrawerContent({
 
                 if (itemRef) {
                   return (
-                    <View key={item.key} ref={itemRef} collapsable={collapsableProp}>
+                    <View
+                      key={item.key}
+                      ref={itemRef}
+                      {...(Platform.OS === 'web' ? {} : { collapsable: false as const })}
+                    >
                       {navButton}
                     </View>
                   );
@@ -358,7 +365,10 @@ export function NavigationDrawerContent({
 
           {/* Plans - visible to guests and free users */}
           {(isGuest || isFree) && (
-            <View ref={pricingItemRef} collapsable={collapsableProp}>
+            <View
+              ref={pricingItemRef}
+              {...(Platform.OS === 'web' ? {} : { collapsable: false as const })}
+            >
               <TouchableOpacity
                 style={styles.navItem}
                 onPress={() => handleNavigation('/pricing')}
@@ -614,7 +624,11 @@ export function NavigationDrawer({
               // Wrap with ref if needed for onboarding tour
               if (itemRef) {
                 return (
-                  <View key={item.key} ref={itemRef} collapsable={collapsableProp}>
+                  <View
+                    key={item.key}
+                    ref={itemRef}
+                    {...(Platform.OS === 'web' ? {} : { collapsable: false as const })}
+                  >
                     {navButton}
                   </View>
                 );
@@ -663,7 +677,11 @@ export function NavigationDrawer({
                   // Wrap with ref if needed for onboarding tour
                   if (itemRef) {
                     return (
-                      <View key={item.key} ref={itemRef} collapsable={collapsableProp}>
+                      <View
+                        key={item.key}
+                        ref={itemRef}
+                        {...(Platform.OS === 'web' ? {} : { collapsable: false as const })}
+                      >
                         {navButton}
                       </View>
                     );
@@ -710,7 +728,10 @@ export function NavigationDrawer({
 
             {/* Plans - visible to guests and free users */}
             {(isGuest || isFree) && (
-              <View ref={pricingItemRef} collapsable={collapsableProp}>
+              <View
+                ref={pricingItemRef}
+                {...(Platform.OS === 'web' ? {} : { collapsable: false as const })}
+              >
                 <TouchableOpacity
                   style={styles.navItem}
                   onPress={() => handleNavigation('/pricing')}

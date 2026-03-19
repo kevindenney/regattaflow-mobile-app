@@ -23,6 +23,8 @@ const FOOTER_LINKS = {
     { label: 'Sail Racing', href: '/sail-racing' },
     { label: 'Nursing', href: '/nursing' },
     { label: 'Drawing', href: '/drawing' },
+    { label: 'Design', href: '/design' },
+    { label: 'Golf', href: '/golf' },
     { label: 'Fitness', href: '/fitness' },
     { label: 'Pricing', href: '/pricing' },
   ],

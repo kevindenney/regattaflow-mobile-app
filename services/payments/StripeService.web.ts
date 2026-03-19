@@ -2,8 +2,8 @@
  * Stripe Payment Service for RegattaFlow (Web)
  * Handles subscriptions, payment methods, and billing for web platform
  *
- * Updated: 2026-01-30
- * New pricing: Individual $120/yr, Team $480/yr
+ * Updated: 2026-03-15
+ * Pricing: Individual $10/mo ($100/yr), Pro $100/mo ($800/yr)
  */
 
 import { supabase } from '@/services/supabase';
@@ -14,6 +14,7 @@ export interface SubscriptionPlan {
   name: string;
   price: number;
   priceId: string;
+  billingPeriod: 'monthly' | 'yearly';
   features: string[];
   popular?: boolean;
 }
@@ -30,50 +31,85 @@ const logger = createLogger('StripeService.web');
 export class StripeService {
   private readonly apiUrl = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:3000';
 
-  // Subscription Plans - Updated 2026-01-30
+  // Subscription Plans - Updated 2026-03-15
   readonly plans: SubscriptionPlan[] = [
     {
       id: 'free',
       name: 'Free',
       price: 0,
       priceId: '',
+      billingPeriod: 'monthly',
       features: [
         'Up to 3 races',
         'Basic race checklists',
         'Manual weather lookup',
-        '5 AI queries per month'
-      ]
+        '5 AI queries per month',
+      ],
     },
     {
-      id: 'individual',
+      id: 'individual_monthly',
       name: 'Individual',
-      price: 120,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_PRICE_ID || 'price_1Splo2BbfEeOhHXbHi1ENal0',
+      price: 10,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_MONTHLY_PRICE_ID || 'price_individual_monthly_10',
+      billingPeriod: 'monthly',
       features: [
         'Unlimited races',
-        'Unlimited AI queries',
+        '50,000 AI tokens per month',
         'AI strategy analysis',
         'Venue intelligence',
         'Historical race data',
         'Offline mode',
         'Advanced analytics',
       ],
-      popular: true
+      popular: true,
     },
     {
-      id: 'team',
-      name: 'Team',
-      price: 480,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_TEAM_PRICE_ID || 'price_1SplqqBbfEeOhHXbTeam480Y',
+      id: 'individual_yearly',
+      name: 'Individual',
+      price: 100,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_YEARLY_PRICE_ID || 'price_individual_yearly_100',
+      billingPeriod: 'yearly',
+      features: [
+        'Unlimited races',
+        '50,000 AI tokens per month',
+        'AI strategy analysis',
+        'Venue intelligence',
+        'Historical race data',
+        'Offline mode',
+        'Advanced analytics',
+      ],
+      popular: true,
+    },
+    {
+      id: 'pro_monthly',
+      name: 'Pro',
+      price: 100,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly_100',
+      billingPeriod: 'monthly',
       features: [
         'Everything in Individual',
-        'Up to 5 team members',
+        '500,000 AI tokens per month',
+        'Priority AI processing',
         'Team sharing & collaboration',
-        'Shared race preparation',
         'Team analytics dashboard',
         'Priority support',
-      ]
-    }
+      ],
+    },
+    {
+      id: 'pro_yearly',
+      name: 'Pro',
+      price: 800,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID || 'price_pro_yearly_800',
+      billingPeriod: 'yearly',
+      features: [
+        'Everything in Individual',
+        '500,000 AI tokens per month',
+        'Priority AI processing',
+        'Team sharing & collaboration',
+        'Team analytics dashboard',
+        'Priority support',
+      ],
+    },
   ];
 
   /**
@@ -262,21 +298,26 @@ export class StripeService {
     const status = await this.getSubscriptionStatus(userId);
 
     if (!status.active) {
-      // Check free tier features
       const freeTierFeatures = ['basic_tracking', 'weather', 'limited_documents'];
       return freeTierFeatures.includes(feature);
     }
 
-    // Define feature access by plan
     const featureMap: Record<string, string[]> = {
-      individual: [
+      individual_monthly: [
         'unlimited_documents',
         'ai_analysis',
         'advanced_analytics',
         'multi_venue',
         'performance_insights'
       ],
-      team: [
+      individual_yearly: [
+        'unlimited_documents',
+        'ai_analysis',
+        'advanced_analytics',
+        'multi_venue',
+        'performance_insights'
+      ],
+      pro_monthly: [
         'unlimited_documents',
         'ai_analysis',
         'advanced_analytics',
@@ -285,7 +326,17 @@ export class StripeService {
         'team_collaboration',
         'coach_integration',
         'api_access'
-      ]
+      ],
+      pro_yearly: [
+        'unlimited_documents',
+        'ai_analysis',
+        'advanced_analytics',
+        'multi_venue',
+        'performance_insights',
+        'team_collaboration',
+        'coach_integration',
+        'api_access'
+      ],
     };
 
     const planFeatures = featureMap[status.plan?.id || ''] || [];
@@ -333,7 +384,6 @@ export class StripeService {
         throw new Error(data.error || 'Failed to create payment intent');
       }
 
-      // Redirect to payment page
       if (data.paymentUrl && typeof window !== 'undefined') {
         window.location.href = data.paymentUrl;
       }

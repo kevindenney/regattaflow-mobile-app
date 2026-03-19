@@ -16,6 +16,7 @@ import { Image } from 'expo-image';
 import { useAuth } from '@/providers/AuthProvider';
 import { CommentInput } from './CommentInput';
 import { getInitials } from '@/components/account/accountStyles';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -130,6 +131,7 @@ export function CommentsSection({
       const isOwn = user?.id === comment.userId;
       const hasReplies = comment.replies && comment.replies.length > 0;
       const isExpanded = expandedThreads.has(comment.id);
+      const safeAvatarUrl = getSafeImageUri(comment.userAvatarUrl);
 
       return (
         <View
@@ -147,9 +149,9 @@ export function CommentsSection({
           <View style={styles.commentContent}>
             <View style={styles.commentHeader}>
               <View style={[styles.avatar, { backgroundColor: comment.userAvatarColor || IOS_COLORS.systemBlue }]}>
-                {comment.userAvatarUrl ? (
+                {safeAvatarUrl ? (
                   <Image
-                    source={{ uri: comment.userAvatarUrl }}
+                    source={{ uri: safeAvatarUrl }}
                     style={styles.avatarImage}
                     contentFit="cover"
                   />

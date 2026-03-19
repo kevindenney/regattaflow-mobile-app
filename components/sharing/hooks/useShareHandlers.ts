@@ -4,7 +4,8 @@
  */
 
 import { useCallback } from 'react';
-import { Alert, Linking, Platform, Share } from 'react-native';
+import { Linking, Platform, Share } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import * as Clipboard from 'expo-clipboard';
 import * as MailComposer from 'expo-mail-composer';
 import { createLogger } from '@/lib/utils/logger';
@@ -43,9 +44,7 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
       const text = generateShareableText();
       await Clipboard.setStringAsync(text);
 
-      if (Platform.OS !== 'web') {
-        Alert.alert('Copied!', 'Content copied to clipboard');
-      }
+      showAlert('Copied!', 'Content copied to clipboard');
 
       const result: ShareResult = { success: true, channel: 'copy' };
       onShareComplete?.(result);
@@ -150,9 +149,7 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
       }
     } catch (error) {
       logger.error('Failed to share via WhatsApp:', error);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Error', 'Failed to open WhatsApp');
-      }
+      showAlert('Error', 'Failed to open WhatsApp');
       const result: ShareResult = {
         success: false,
         channel: 'whatsapp',
@@ -226,9 +223,7 @@ export function useShareHandlers({ content, onShareComplete }: UseShareHandlersO
       return result;
     } catch (error) {
       logger.error('Failed to share via email:', error);
-      if (Platform.OS !== 'web') {
-        Alert.alert('Error', 'Failed to open email app');
-      }
+      showAlert('Error', 'Failed to open email app');
       const result: ShareResult = {
         success: false,
         channel: 'email',

@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import {
   isValidInviteToken,
@@ -36,7 +37,7 @@ export default function OrgInviteEntryScreen() {
       return;
     }
     malformedAlertShownRef.current = malformedToken;
-    Alert.alert(
+    showAlert(
       'Invalid Invite Token',
       'This invite token format is invalid. Paste a valid 24-character token to continue.'
     );
@@ -56,11 +57,11 @@ export default function OrgInviteEntryScreen() {
   const handleContinue = async () => {
     const nextToken = String(manualToken || '').trim().toLowerCase();
     if (!nextToken) {
-      Alert.alert('Enter Invite Token', 'Paste the invite token to continue.');
+      showAlert('Enter Invite Token', 'Paste the invite token to continue.');
       return;
     }
     if (!isValidInviteToken(nextToken)) {
-      Alert.alert(
+      showAlert(
         'Invalid Invite Token',
         'Invite tokens must be 24 lowercase letters or numbers.'
       );

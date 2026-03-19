@@ -385,7 +385,10 @@ export function RigDetailCard({
 
       const newIntentions: RigIntentions = {
         ...rigIntentions,
-        [settingKey]: intention,
+        settings: {
+          ...rigIntentions?.settings,
+          [settingKey]: intention,
+        },
       };
       onRigIntentionsChange(newIntentions);
     },
@@ -499,7 +502,7 @@ export function RigDetailCard({
                         key={setting.key}
                         setting={setting}
                         showTensionBar={isTensionSetting(setting.key)}
-                        intention={rigIntentions?.[setting.key]}
+                        intention={rigIntentions?.settings?.[setting.key]}
                         onIntentionChange={(intention) => handleSettingIntentionChange(setting.key, intention)}
                       />
                     ))}

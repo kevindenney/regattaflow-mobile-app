@@ -5,12 +5,12 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ArrowLeft, Eye, EyeOff, Lock } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/services/supabase';
@@ -46,23 +46,23 @@ export default function ChangePasswordScreen() {
   const handleChangePassword = async () => {
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Error', 'All fields are required');
+      showAlert('Error', 'All fields are required');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      showAlert('Error', 'New passwords do not match');
       return;
     }
 
     const passwordError = validatePassword(newPassword);
     if (passwordError) {
-      Alert.alert('Error', passwordError);
+      showAlert('Error', passwordError);
       return;
     }
 
     if (currentPassword === newPassword) {
-      Alert.alert('Error', 'New password must be different from current password');
+      showAlert('Error', 'New password must be different from current password');
       return;
     }
 
@@ -76,7 +76,7 @@ export default function ChangePasswordScreen() {
       });
 
       if (signInError) {
-        Alert.alert('Error', 'Current password is incorrect');
+        showAlert('Error', 'Current password is incorrect');
         return;
       }
 
@@ -87,19 +87,11 @@ export default function ChangePasswordScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
-        'Success',
-        'Your password has been changed successfully',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back()
-          }
-        ]
-      );
+      showAlert('Success', 'Your password has been changed successfully');
+      router.back();
     } catch (error: any) {
       console.error('Error changing password:', error);
-      Alert.alert('Error', error.message || 'Failed to change password');
+      showAlert('Error', error.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }
@@ -266,23 +258,18 @@ export default function ChangePasswordScreen() {
         {/* Forgot Password Link */}
         <TouchableOpacity
           onPress={() => {
-            Alert.alert(
+            showConfirm(
               'Reset Password',
               'A password reset link will be sent to your email',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Send Link',
-                  onPress: async () => {
-                    try {
-                      await supabase.auth.resetPasswordForEmail(user?.email || '');
-                      Alert.alert('Success', 'Password reset link sent to your email');
-                    } catch (error) {
-                      Alert.alert('Error', 'Failed to send reset link');
-                    }
-                  }
+              async () => {
+                try {
+                  await supabase.auth.resetPasswordForEmail(user?.email || '');
+                  showAlert('Success', 'Password reset link sent to your email');
+                } catch (error) {
+                  showAlert('Error', 'Failed to send reset link');
                 }
-              ]
+              },
+              { confirmLabel: 'Send Link' }
             );
           }}
           className="mt-4 py-3"

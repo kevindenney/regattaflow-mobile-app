@@ -1,3 +1,6 @@
+// Re-export step metadata types for convenience
+export type { StepMetadata, StepPlanData, StepActData, StepReviewData } from './step-detail';
+
 export type TimelineStepSourceType = 'manual' | 'template' | 'copied' | 'program_session';
 export type TimelineStepStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
 export type TimelineStepVisibility = 'private' | 'followers' | 'coaches' | 'organization';
@@ -25,7 +28,10 @@ export type TimelineStepRecord = {
   location_place_id: string | null;
   visibility: TimelineStepVisibility;
   share_approximate_location: boolean;
+  copied_from_user_id: string | null;
+  sort_order: number;
   metadata: Record<string, unknown>;
+  collaborator_user_ids: string[];
   created_at: string;
   updated_at: string;
 };

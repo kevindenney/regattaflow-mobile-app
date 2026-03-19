@@ -160,7 +160,7 @@ export function EquipmentIssuesSheet({
           </Pressable>
         </View>
 
-        <ActionsheetScrollView contentContainerClassName="pb-8">
+        <ActionsheetScrollView contentContainerStyle={{ paddingBottom: 32 }}>
           <View style={styles.content}>
             {/* Add New Issue */}
             <View style={styles.section}>

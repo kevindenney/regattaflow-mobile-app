@@ -208,7 +208,7 @@ export interface ExtractionInput {
     windSpeed?: number;
     windDirection?: number;
     tide?: string;
-    raceType?: string;
+    raceType?: 'fleet' | 'team' | 'match' | 'distance';
     boatClass?: string;
     date?: string;
   };

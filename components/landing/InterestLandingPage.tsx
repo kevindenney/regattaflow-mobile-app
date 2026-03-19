@@ -12,7 +12,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { SimpleLandingNav } from './SimpleLandingNav';
-import { Footer } from './Footer';
 import { ScrollFix } from './ScrollFix';
 
 interface InterestLandingPageProps {
@@ -163,7 +162,6 @@ export function InterestLandingPage({
         </View>
       </LinearGradient>
 
-      <Footer />
     </View>
   );
 }

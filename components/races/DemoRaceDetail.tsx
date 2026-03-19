@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, Alert, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Card } from '@/components/ui/card';
 import { Button, ButtonText } from '@/components/ui/button';
 import { MockRace } from '@/constants/mockData';
@@ -105,8 +106,8 @@ function DemoRegulatoryDigestCard({ digest, acknowledgements, onToggle, onAddRac
           <TouchableOpacity
             key={item.key}
             onPress={() => {
-              Alert.alert(
-                '🎯 Create Your Race',
+              showAlertWithButtons(
+                'Create Your Race',
                 'You\'re exploring demo mode! Create your first race to acknowledge regulatory requirements.',
                 [
                   { text: 'Create Race', onPress: onAddRace },
@@ -220,9 +221,9 @@ export function DemoRaceDetail({ race, onAddRace, onLogisticsSectionLayout, onRe
   ];
 
   const handleDemoInteraction = () => {
-    Alert.alert(
-      '🎯 Create Your Race',
-      'You\'re exploring demo mode! Create your first race to:\n\n• Save custom rig settings\n• Track tuning notes\n• Get AI-powered recommendations\n• Sync with your crew',
+    showAlertWithButtons(
+      'Create Your Race',
+      'You\'re exploring demo mode! Create your first race to:\n\n- Save custom rig settings\n- Track tuning notes\n- Get AI-powered recommendations\n- Sync with your crew',
       [
         { text: 'Create Race', onPress: onAddRace },
         { text: 'Keep Exploring', style: 'cancel' }

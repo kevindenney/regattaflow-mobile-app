@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui';
@@ -111,10 +112,9 @@ export function YachtClubRaceBuilder() {
 
   const handleCoursePublish = async (course: OfficialRaceCourse) => {
     if (!course.validationStatus.isValid) {
-      Alert.alert(
+      showAlert(
         'Cannot Publish Course',
-        'Course has validation errors that must be resolved before publishing.',
-        [{ text: 'OK' }]
+        'Course has validation errors that must be resolved before publishing.'
       );
       return;
     }
@@ -169,14 +169,13 @@ export function YachtClubRaceBuilder() {
         localCourseId: course.id,
         raceCourseId: data?.id,
       });
-      Alert.alert(
+      showAlert(
         'Course Published Successfully',
-        `${course.name} has been published and distributed to registered sailors.`,
-        [{ text: 'OK' }]
+        `${course.name} has been published and distributed to registered sailors.`
       );
     } catch (error: any) {
       logger.error('Failed to publish yacht-club course', error);
-      Alert.alert('Publish failed', error?.message || 'Unable to publish course right now.');
+      showAlert('Publish failed', error?.message || 'Unable to publish course right now.');
     }
   };
 

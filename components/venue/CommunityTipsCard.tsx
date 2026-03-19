@@ -19,7 +19,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -31,6 +30,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 interface CommunityTipsCardProps {
   venueId: string;
@@ -73,7 +73,7 @@ export function CommunityTipsCard({
 
   const handleVote = async (tipId: string, voteType: 'up' | 'down') => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to vote on tips.');
+      showAlert('Sign In Required', 'Please sign in to vote on tips.');
       return;
     }
 
@@ -366,7 +366,7 @@ function AddTipModal({ visible, onClose, onSuccess, venueId, venueName }: AddTip
 
   const handleSubmit = async () => {
     if (!title.trim() || !description.trim()) {
-      Alert.alert('Required Fields', 'Please enter a title and description.');
+      showAlert('Required Fields', 'Please enter a title and description.');
       return;
     }
 
@@ -388,22 +388,15 @@ function AddTipModal({ visible, onClose, onSuccess, venueId, venueName }: AddTip
 
       const result = await venueCommunityTipsService.createTip(input);
 
-      // Alert doesn't work well on web, so just close and reset
-      if (Platform.OS === 'web') {
-        window.alert('Tip Shared! 🎉\n\nThanks for sharing your local knowledge. Other sailors will benefit from your experience!');
-        resetForm();
-        onSuccess();
-      } else {
-        Alert.alert(
-          'Tip Shared! 🎉',
-          'Thanks for sharing your local knowledge. Other sailors will benefit from your experience!',
-          [{ text: 'OK', onPress: () => { resetForm(); onSuccess(); } }]
-        );
-      }
+      showAlertWithButtons(
+        'Tip Shared! 🎉',
+        'Thanks for sharing your local knowledge. Other sailors will benefit from your experience!',
+        [{ text: 'OK', onPress: () => { resetForm(); onSuccess(); } }]
+      );
     } catch (error: any) {
       console.error('Failed to create tip:', error);
       const message = error?.message || error?.toString() || 'Unknown error';
-      Alert.alert('Error', `Failed to share tip: ${message}`);
+      showAlert('Error', `Failed to share tip: ${message}`);
     } finally {
       setSubmitting(false);
     }

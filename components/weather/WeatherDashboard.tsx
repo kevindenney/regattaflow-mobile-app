@@ -11,11 +11,11 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
   RefreshControl,
   Dimensions,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   Wind,
   Compass,
@@ -127,7 +127,7 @@ export function WeatherDashboard({
 
   const handleAddReading = async () => {
     if (!windDirection || !windSpeed) {
-      Alert.alert('Required', 'Please enter wind direction and speed');
+      showAlert('Required', 'Please enter wind direction and speed');
       return;
     }
 
@@ -150,7 +150,7 @@ export function WeatherDashboard({
       setNotes('');
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to record reading');
+      showAlert('Error', 'Failed to record reading');
     } finally {
       setSubmitting(false);
     }
@@ -161,7 +161,7 @@ export function WeatherDashboard({
       await weatherService.acknowledgeAlert(alertId);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to acknowledge alert');
+      showAlert('Error', 'Failed to acknowledge alert');
     }
   };
 

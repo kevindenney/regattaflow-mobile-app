@@ -9,12 +9,12 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   Modal,
   Platform,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   AlertTriangle,
@@ -95,7 +95,7 @@ export default function ProtestManagement() {
       setStats(statsData);
     } catch (error) {
       console.error('Error loading protests:', error);
-      Alert.alert('Error', 'Failed to load protest data');
+      showAlert('Error', 'Failed to load protest data');
     } finally {
       setLoading(false);
     }

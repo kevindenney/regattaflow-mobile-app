@@ -20,8 +20,8 @@ import {
   Pressable,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
 import { RaceMessage } from '@/types/raceCollaboration';
 import { IOS_COLORS } from '@/components/cards/constants';
@@ -113,7 +113,7 @@ export function ChatView({
       logger.error('Failed to send message', error);
       // Restore text if send failed
       setInputText(text);
-      Alert.alert(
+      showAlert(
         'Message not sent',
         'Could not deliver your message. Check your connection and try again.',
       );
@@ -204,21 +204,15 @@ interface MessageBubbleProps {
 function MessageBubble({ message, isOwn, onDelete }: MessageBubbleProps) {
   const handleLongPress = () => {
     if (!isOwn || !onDelete) return;
-    Alert.alert(
+    showConfirm(
       'Delete Message',
       'Are you sure you want to delete this message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            onDelete(message.id).catch(() => {
-              Alert.alert('Error', 'Could not delete message.');
-            });
-          },
-        },
-      ],
+      () => {
+        onDelete(message.id).catch(() => {
+          showAlert('Error', 'Could not delete message.');
+        });
+      },
+      { destructive: true },
     );
   };
 

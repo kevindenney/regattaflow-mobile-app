@@ -12,12 +12,23 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { BetterAtLogo } from '@/components/BetterAtLogo';
+import { InterestDropdown } from './InterestDropdown';
+import { useAuth } from '@/providers/AuthProvider';
+import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
+import { usePathname } from 'expo-router';
 
-export function SimpleLandingNav() {
+interface SimpleLandingNavProps {
+  currentInterestSlug?: string;
+}
+
+export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps = {}) {
   const { width } = useWindowDimensions();
   const [mounted, setMounted] = React.useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const { user, userProfile, isGuest } = useAuth();
+  const isLoggedIn = !!user && !isGuest;
+  const pathname = usePathname();
 
   React.useEffect(() => {
     setMounted(true);
@@ -25,34 +36,27 @@ export function SimpleLandingNav() {
 
   const isDesktop = mounted && width > 768;
 
-  // Track scroll position for background opacity
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 40);
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const scrollToSection = (id: string) => {
+  const goToDashboard = () => {
     setMobileMenuOpen(false);
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      const el = document.getElementById(id);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }
+    const dest = getDashboardRoute(userProfile?.user_type ?? null);
+    router.push(dest as any);
   };
+
+  const initials = userProfile?.display_name
+    ? userProfile.display_name
+        .split(' ')
+        .map((n: string) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : user?.email?.[0]?.toUpperCase() ?? '?';
 
   return (
     <>
       <View
         style={[
           styles.nav,
-          isScrolled && styles.navScrolled,
           Platform.OS === 'web' && (styles.navWeb as any),
         ]}
       >
@@ -74,16 +78,7 @@ export function SimpleLandingNav() {
           {/* Desktop links */}
           {isDesktop ? (
             <View style={styles.desktopLinks}>
-              <TouchableOpacity
-                onPress={() => router.push('/sail-racing' as any)}
-              >
-                <Text style={styles.navLink}>Sail Racing</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => router.push('/nursing' as any)}
-              >
-                <Text style={styles.navLink}>Nursing</Text>
-              </TouchableOpacity>
+              <InterestDropdown currentSlug={currentInterestSlug} />
               <TouchableOpacity
                 onPress={() => router.push('/pricing')}
               >
@@ -92,17 +87,64 @@ export function SimpleLandingNav() {
 
               <View style={styles.divider} />
 
-              <TouchableOpacity
-                onPress={() => router.push('/(auth)/login')}
-              >
-                <Text style={styles.navLink}>Log In</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.getStartedBtn}
-                onPress={() => router.push('/(auth)/signup')}
-              >
-                <Text style={styles.getStartedText}>Get Started Free</Text>
-              </TouchableOpacity>
+              {isLoggedIn ? (
+                <View style={styles.profileContainer}>
+                  <TouchableOpacity
+                    style={styles.avatarBtn}
+                    onPress={() => setProfileMenuOpen(!profileMenuOpen)}
+                    accessibilityLabel="Open profile menu"
+                  >
+                    <Text style={styles.avatarText}>{initials}</Text>
+                  </TouchableOpacity>
+                  {profileMenuOpen && (
+                    <Pressable
+                      style={styles.profileBackdrop}
+                      onPress={() => setProfileMenuOpen(false)}
+                    >
+                      <Pressable
+                        style={styles.profileDropdown}
+                        onPress={(e) => e.stopPropagation?.()}
+                      >
+                        <TouchableOpacity
+                          style={styles.profileMenuItem}
+                          onPress={() => { setProfileMenuOpen(false); goToDashboard(); }}
+                        >
+                          <Ionicons name="grid-outline" size={16} color="#374151" />
+                          <Text style={styles.profileMenuText}>Dashboard</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.profileMenuItem}
+                          onPress={() => { setProfileMenuOpen(false); router.push('/(tabs)/reflect' as any); }}
+                        >
+                          <Ionicons name="person-outline" size={16} color="#374151" />
+                          <Text style={styles.profileMenuText}>My Profile</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.profileMenuItem}
+                          onPress={() => { setProfileMenuOpen(false); router.push('/(tabs)/settings' as any); }}
+                        >
+                          <Ionicons name="settings-outline" size={16} color="#374151" />
+                          <Text style={styles.profileMenuText}>Settings</Text>
+                        </TouchableOpacity>
+                      </Pressable>
+                    </Pressable>
+                  )}
+                </View>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    onPress={() => router.push({ pathname: '/(auth)/login', params: { returnTo: pathname } } as any)}
+                  >
+                    <Text style={styles.navLink}>Log In</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.getStartedBtn}
+                    onPress={() => router.push('/(auth)/signup')}
+                  >
+                    <Text style={styles.getStartedText}>Get Started Free</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           ) : (
             /* Mobile hamburger */
@@ -195,6 +237,36 @@ export function SimpleLandingNav() {
                   style={styles.mobileMenuItem}
                   onPress={() => {
                     setMobileMenuOpen(false);
+                    router.push('/design' as any);
+                  }}
+                >
+                  <Ionicons
+                    name="brush-outline"
+                    size={22}
+                    color="#7B1FA2"
+                  />
+                  <Text style={styles.mobileMenuText}>Design</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.mobileMenuItem}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/golf' as any);
+                  }}
+                >
+                  <Ionicons
+                    name="golf-outline"
+                    size={22}
+                    color="#1B5E20"
+                  />
+                  <Text style={styles.mobileMenuText}>Golf</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.mobileMenuItem}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
                     router.push('/fitness' as any);
                   }}
                 >
@@ -223,32 +295,65 @@ export function SimpleLandingNav() {
 
                 <View style={styles.mobileMenuDivider} />
 
-                <TouchableOpacity
-                  style={styles.mobileMenuItem}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/(auth)/login');
-                  }}
-                >
-                  <Ionicons
-                    name="log-in-outline"
-                    size={22}
-                    color="rgba(255, 255, 255, 0.7)"
-                  />
-                  <Text style={styles.mobileMenuText}>Log In</Text>
-                </TouchableOpacity>
+                {isLoggedIn ? (
+                  <>
+                    <TouchableOpacity
+                      style={styles.mobileMenuItem}
+                      onPress={goToDashboard}
+                    >
+                      <Ionicons
+                        name="grid-outline"
+                        size={22}
+                        color="rgba(255, 255, 255, 0.7)"
+                      />
+                      <Text style={styles.mobileMenuText}>Dashboard</Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.mobileGetStarted}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/(auth)/signup');
-                  }}
-                >
-                  <Text style={styles.mobileGetStartedText}>
-                    Get Started Free
-                  </Text>
-                </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.mobileMenuItem}
+                      onPress={() => {
+                        setMobileMenuOpen(false);
+                        router.push('/(tabs)/reflect' as any);
+                      }}
+                    >
+                      <Ionicons
+                        name="person-outline"
+                        size={22}
+                        color="rgba(255, 255, 255, 0.7)"
+                      />
+                      <Text style={styles.mobileMenuText}>My Profile</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.mobileMenuItem}
+                      onPress={() => {
+                        setMobileMenuOpen(false);
+                        router.push({ pathname: '/(auth)/login', params: { returnTo: pathname } } as any);
+                      }}
+                    >
+                      <Ionicons
+                        name="log-in-outline"
+                        size={22}
+                        color="rgba(255, 255, 255, 0.7)"
+                      />
+                      <Text style={styles.mobileMenuText}>Log In</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.mobileGetStarted}
+                      onPress={() => {
+                        setMobileMenuOpen(false);
+                        router.push('/(auth)/signup');
+                      }}
+                    >
+                      <Text style={styles.mobileGetStartedText}>
+                        Get Started Free
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </Pressable>
           </Pressable>
@@ -265,12 +370,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 100,
-    backgroundColor: 'transparent',
+    backgroundColor: '#1A1A1A',
     paddingVertical: 12,
     paddingHorizontal: 16,
-  },
-  navScrolled: {
-    backgroundColor: 'rgba(26, 26, 26, 0.95)',
   },
   navWeb: {
     position: 'fixed',
@@ -322,7 +424,7 @@ const styles = StyleSheet.create({
   },
 
   getStartedBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#3E92CC',
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -333,7 +435,69 @@ const styles = StyleSheet.create({
   getStartedText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1A1A1A',
+    color: '#FFFFFF',
+  },
+
+  profileContainer: {
+    position: 'relative',
+  },
+  profileBackdrop: {
+    ...Platform.select({
+      web: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 999,
+      } as any,
+    }),
+  },
+  profileDropdown: {
+    position: 'absolute',
+    top: 44,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 6,
+    minWidth: 180,
+    zIndex: 1000,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+      } as any,
+    }),
+  },
+  profileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  profileMenuText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  avatarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    ...Platform.select({
+      web: { cursor: 'pointer' },
+    }),
+  },
+  avatarText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   hamburger: {

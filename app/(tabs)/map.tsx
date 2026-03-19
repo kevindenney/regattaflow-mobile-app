@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, Alert, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Map3DView } from '@/components/map/Map3DView';
@@ -73,10 +74,9 @@ export default function MapScreen() {
 
   const handleMarkPress = (mark: RaceMark) => {
     setSelectedMark(mark);
-    Alert.alert(
+    showAlert(
       `Race Mark: ${mark.name}`,
-      `Type: ${mark.type}\nRounding: ${mark.rounding}`,
-      [{ text: 'OK' }]
+      `Type: ${mark.type}\nRounding: ${mark.rounding}`
     );
   };
 
@@ -89,13 +89,12 @@ export default function MapScreen() {
   };
 
   const handleNavigationCalculated = (result: any) => {
-    Alert.alert(
+    showAlert(
       'Tactical Analysis',
       `Distance: ${result.distance.nauticalMiles} nm\n` +
       `Bearing: ${result.bearing.true}°T\n` +
       `ETA: ${result.time.estimatedDuration * 60} minutes\n` +
-      `Recommendation: ${result.time.courseRecommendation}`,
-      [{ text: 'OK' }]
+      `Recommendation: ${result.time.courseRecommendation}`
     );
   };
 

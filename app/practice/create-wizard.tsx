@@ -22,7 +22,6 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { Calendar, ChevronLeft, Clock, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -31,6 +30,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 let DateTimePicker: any = null;
@@ -115,20 +115,18 @@ export default function PracticeCreateWizardScreen() {
   const canProceed = wizard.state.what.focusAreas.length > 0 && wizard.state.what.drills.length > 0;
 
   const handleBack = () => {
-    Alert.alert('Discard Practice?', 'Your progress will be lost.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Discard',
-        style: 'destructive',
-        onPress: () => {
-          if (router.canGoBack()) {
-            router.back();
-          } else {
-            router.replace('/(tabs)/races');
-          }
-        },
+    showConfirm(
+      'Discard Practice?',
+      'Your progress will be lost.',
+      () => {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)/races');
+        }
       },
-    ]);
+      { destructive: true },
+    );
   };
 
   const handleClose = handleBack;
@@ -136,16 +134,10 @@ export default function PracticeCreateWizardScreen() {
   const handleCreate = async () => {
     // Guest Restriction
     if (isGuest || !user?.id) {
-      Alert.alert(
+      showConfirm(
         'Sign Up Required',
         'Please sign up to create practice sessions and track your progress.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Sign Up',
-            onPress: () => router.push('/(auth)/signup')
-          }
-        ]
+        () => router.push('/(auth)/signup'),
       );
       return;
     }
@@ -157,7 +149,7 @@ export default function PracticeCreateWizardScreen() {
         params: { id: sessionId },
       });
     } catch (error) {
-      Alert.alert('Error', 'Failed to create practice session. Please try again.');
+      showAlert('Error', 'Failed to create practice session. Please try again.');
     }
   };
 
@@ -215,7 +207,7 @@ export default function PracticeCreateWizardScreen() {
     const plusTwo = new Date();
     plusTwo.setDate(plusTwo.getDate() + 2);
 
-    Alert.alert('Select Date', 'Date picker is unavailable, choose a quick date:', [
+    showAlertWithButtons('Select Date', 'Date picker is unavailable, choose a quick date:', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: `Today (${formatDate(new Date())})`,
@@ -252,7 +244,7 @@ export default function PracticeCreateWizardScreen() {
       { label: '4:00 PM', hours: 16, minutes: 0 },
     ];
 
-    Alert.alert('Select Time', 'Time picker is unavailable, choose a quick time:', [
+    showAlertWithButtons('Select Time', 'Time picker is unavailable, choose a quick time:', [
       { text: 'Cancel', style: 'cancel' },
       ...options.map((option) => ({
         text: option.label,

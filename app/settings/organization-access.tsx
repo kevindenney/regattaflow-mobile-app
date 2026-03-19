@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, CheckCircle2, Circle } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
@@ -120,7 +121,7 @@ export default function OrganizationAccessSettingsScreen() {
     try {
       await updateDefaultContentVisibility(next);
     } catch (error) {
-      Alert.alert('Unable to update visibility', 'Please try again in a moment.');
+      showAlert('Unable to update visibility', 'Please try again in a moment.');
     } finally {
       setSavingVisibility(false);
     }
@@ -158,7 +159,7 @@ export default function OrganizationAccessSettingsScreen() {
       } catch (error) {
         console.error('[organization-access] Failed to resolve invite token:', error);
         setResolvedTokenInvite(null);
-        Alert.alert('Invite Not Found', 'This invite token is invalid or no longer active.');
+        showAlert('Invite Not Found', 'This invite token is invalid or no longer active.');
         return null;
       } finally {
         setTokenLookupLoading(false);
@@ -174,7 +175,7 @@ export default function OrganizationAccessSettingsScreen() {
     if (!isValidInviteToken(token)) {
       if (invalidParamAlertShownRef.current !== token) {
         invalidParamAlertShownRef.current = token;
-        Alert.alert(
+        showAlert(
           'Invalid Invite Token',
           'This invite token format is invalid. Paste a valid 24-character token to continue.'
         );
@@ -197,7 +198,7 @@ export default function OrganizationAccessSettingsScreen() {
     async (status: 'accepted' | 'declined') => {
       if (!resolvedTokenInvite?.id) return;
       if (!canRespondToTokenInvite) {
-        Alert.alert(
+        showAlert(
           'Invite Email Mismatch',
           'Sign in with the invited email address to respond to this invite.'
         );
@@ -208,7 +209,7 @@ export default function OrganizationAccessSettingsScreen() {
         setTokenActionLoading(true);
         const token = String(resolvedTokenInvite.invite_token || '').trim();
         if (!token) {
-          Alert.alert('Invite Token Missing', 'This invite cannot be responded to because its token is missing.');
+          showAlert('Invite Token Missing', 'This invite cannot be responded to because its token is missing.');
           return;
         }
         const next = status === 'accepted'
@@ -220,11 +221,11 @@ export default function OrganizationAccessSettingsScreen() {
         }
         if (status === 'accepted') {
           await refreshMemberships();
-          Alert.alert('Invite Accepted', 'Your organization access has been activated.');
+          showAlert('Invite Accepted', 'Your organization access has been activated.');
         }
       } catch (error) {
         console.error('[organization-access] Failed to update token invite status:', error);
-        Alert.alert('Unable to update invite', 'Please try again in a moment.');
+        showAlert('Unable to update invite', 'Please try again in a moment.');
       } finally {
         setTokenActionLoading(false);
       }
@@ -235,11 +236,11 @@ export default function OrganizationAccessSettingsScreen() {
   const handleLookupInviteToken = React.useCallback(async () => {
     const token = normalizeInviteToken(tokenLookupInput);
     if (!token) {
-      Alert.alert('Enter Invite Token', 'Paste the invite token to continue.');
+      showAlert('Enter Invite Token', 'Paste the invite token to continue.');
       return;
     }
     if (!isValidInviteToken(token)) {
-      Alert.alert('Invalid Invite Token', 'Invite tokens must be 24 lowercase letters or numbers.');
+      showAlert('Invalid Invite Token', 'Invite tokens must be 24 lowercase letters or numbers.');
       return;
     }
 
@@ -340,7 +341,7 @@ export default function OrganizationAccessSettingsScreen() {
       try {
         await Linking.openURL(mailto);
       } catch (error) {
-        Alert.alert('Unable to open email app', 'Please configure an email app and try again.');
+        showAlert('Unable to open email app', 'Please configure an email app and try again.');
       }
     },
     [

@@ -238,6 +238,7 @@ interface RaceConditionsState {
   clearScenario: () => void;
 
   refreshAI: () => Promise<void>;
+  shouldRefreshAI: (envUpdate: Partial<Environment>) => boolean;
 
   setLoading: (key: keyof RaceConditionsState['isLoading'], loading: boolean) => void;
   setError: (key: keyof RaceConditionsState['errors'], error: string | undefined) => void;

@@ -15,7 +15,6 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Alert,
   Dimensions,
   Platform,
   Linking,
@@ -28,6 +27,7 @@ import { X, Flashlight, FlashlightOff, Camera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { IOS_COLORS, IOS_TYPOGRAPHY } from '@/lib/design-tokens-ios';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 // Dynamic import for expo-camera to handle cases where native module isn't available
 let CameraView: any = null;
@@ -124,7 +124,7 @@ function CameraUnavailable({ onClose }: { onClose: () => void }) {
           style={styles.secondaryActionButton}
           onPress={async () => {
             await Clipboard.setStringAsync(rebuildCommand);
-            Alert.alert('Copied', 'Rebuild command copied to clipboard.');
+            showAlert('Copied', 'Rebuild command copied to clipboard.');
           }}
         >
           <Text style={styles.secondaryActionText}>Copy Rebuild Command</Text>
@@ -197,7 +197,7 @@ export default function ScanQRScreen() {
         router.replace(`/sailor-journey/${sailorId}/latest`);
       } else {
         // Invalid QR code
-        Alert.alert(
+        showAlertWithButtons(
           'Invalid QR Code',
           'This QR code doesn\'t contain a valid RegattaFlow sailor profile.',
           [

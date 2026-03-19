@@ -14,7 +14,6 @@ import { createLogger } from '@/lib/utils/logger';
 import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     Platform,
     ScrollView,
@@ -24,6 +23,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface RouteWaypoint {
   name: string;
@@ -473,7 +473,7 @@ export function CourseEntryPanel({
   // Save course to database
   const handleSaveCourse = useCallback(async () => {
     if (!courseName.trim()) {
-      Alert.alert('Name Required', 'Please enter a name for this course.');
+      showAlert('Name Required', 'Please enter a name for this course.');
       return;
     }
 
@@ -497,7 +497,7 @@ export function CourseEntryPanel({
       logger.debug('Session result:', sessionData?.session ? 'found' : 'not found');
       
       if (!sessionData?.session?.user) {
-        Alert.alert('Sign In Required', 'Please sign in to save courses.');
+        showAlert('Sign In Required', 'Please sign in to save courses.');
         setIsSaving(false);
         return;
       }
@@ -557,7 +557,7 @@ export function CourseEntryPanel({
 
       if (saveError) {
         logger.error('Save error:', saveError);
-        Alert.alert('Save Failed', saveError.message);
+        showAlert('Save Failed', saveError.message);
         setIsSaving(false);
         return;
       }
@@ -565,14 +565,13 @@ export function CourseEntryPanel({
       logger.debug('Course saved:', data?.id);
       
       // Success!
-      Alert.alert(
+      showAlert(
         'Course Saved! 🎉',
         `"${courseName}" has been saved to ${
           courseVisibility === 'private' ? 'your private courses' :
           courseVisibility === 'venue' ? `courses at ${venueName || 'this venue'}` :
           'public courses'
-        }.`,
-        [{ text: 'Great!' }]
+        }.`
       );
 
       setShowSaveModal(false);
@@ -582,7 +581,7 @@ export function CourseEntryPanel({
       handleConfirmWaypoints();
     } catch (err) {
       logger.error('Save exception:', err);
-      Alert.alert('Error', 'Failed to save course. Please try again.');
+      showAlert('Error', 'Failed to save course. Please try again.');
     } finally {
       setIsSaving(false);
     }

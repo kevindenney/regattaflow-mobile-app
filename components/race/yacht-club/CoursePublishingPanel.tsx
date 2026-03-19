@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -94,46 +95,33 @@ export function CoursePublishingPanel({
 
   const handlePublishCourse = (course: OfficialRaceCourse) => {
     if (!course.validationStatus.isValid) {
-      Alert.alert(
+      showAlert(
         'Cannot Publish Course',
-        `Course has ${course.validationStatus.errors.length} validation errors that must be resolved first.`,
-        [{ text: 'OK' }]
+        `Course has ${course.validationStatus.errors.length} validation errors that must be resolved first.`
       );
       return;
     }
 
-    Alert.alert(
+    showConfirm(
       'Publish Course',
       `Are you ready to publish "${course.name}"? This will distribute the course to all selected channels.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Publish',
-          onPress: () => onCoursePublish(course)
-        }
-      ]
+      () => onCoursePublish(course)
     );
   };
 
   const handleAmendCourse = (course: OfficialRaceCourse) => {
-    Alert.alert(
+    showConfirm(
       'Amend Published Course',
       'Changes to published courses will immediately notify all participants. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Amend',
-          onPress: () => {
-            const amendedCourse: OfficialRaceCourse = {
-              ...course,
-              status: course.status === 'active' ? 'active' : 'published',
-              publishedAt: new Date(),
-            };
-            onCourseUpdate(amendedCourse);
-            Alert.alert('Amendment Sent', 'Course amendment distributed to all participants.');
-          }
-        }
-      ]
+      () => {
+        const amendedCourse: OfficialRaceCourse = {
+          ...course,
+          status: course.status === 'active' ? 'active' : 'published',
+          publishedAt: new Date(),
+        };
+        onCourseUpdate(amendedCourse);
+        showAlert('Amendment Sent', 'Course amendment distributed to all participants.');
+      }
     );
   };
 

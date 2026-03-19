@@ -1,0 +1,241 @@
+/**
+ * SubStepEditor — ordered list of sub-steps with add/remove/reorder.
+ *
+ * Each sub-step row manages its own local text state to prevent cursor jumps
+ * from parent re-renders caused by debounced saves.
+ *
+ * Reorder via up/down arrow buttons on each row.
+ */
+
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { View, Text, TextInput, Pressable, StyleSheet, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
+import { STEP_COLORS } from '@/lib/step-theme';
+import type { SubStep } from '@/types/step-detail';
+
+// ---------------------------------------------------------------------------
+// Individual sub-step row with local text state
+// ---------------------------------------------------------------------------
+
+function SubStepRow({
+  step,
+  index,
+  total,
+  onTextChange,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: {
+  step: SubStep;
+  index: number;
+  total: number;
+  onTextChange: (id: string, text: string) => void;
+  onRemove: (id: string) => void;
+  onMoveUp: (id: string) => void;
+  onMoveDown: (id: string) => void;
+}) {
+  const [localText, setLocalText] = useState(step.text);
+  const initializedRef = useRef(false);
+
+  // Seed from prop on mount only
+  useEffect(() => {
+    if (!initializedRef.current) {
+      setLocalText(step.text);
+      initializedRef.current = true;
+    }
+  }, [step.text]);
+
+  const handleChange = useCallback((text: string) => {
+    setLocalText(text);
+    onTextChange(step.id, text);
+  }, [step.id, onTextChange]);
+
+  const isFirst = index === 0;
+  const isLast = index === total - 1;
+  const showReorderButtons = total > 1;
+
+  return (
+    <View style={styles.row}>
+      {/* Reorder controls */}
+      {showReorderButtons && (
+        <View style={styles.reorderColumn}>
+          <Pressable
+            onPress={() => onMoveUp(step.id)}
+            hitSlop={4}
+            disabled={isFirst}
+            style={[styles.reorderButton, isFirst && styles.reorderButtonDisabled]}
+          >
+            <Ionicons
+              name="chevron-up"
+              size={16}
+              color={isFirst ? IOS_COLORS.systemGray4 : IOS_COLORS.systemGray}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => onMoveDown(step.id)}
+            hitSlop={4}
+            disabled={isLast}
+            style={[styles.reorderButton, isLast && styles.reorderButtonDisabled]}
+          >
+            <Ionicons
+              name="chevron-down"
+              size={16}
+              color={isLast ? IOS_COLORS.systemGray4 : IOS_COLORS.systemGray}
+            />
+          </Pressable>
+        </View>
+      )}
+
+      <Text style={styles.stepNumber}>{index + 1}.</Text>
+      <TextInput
+        style={styles.input}
+        value={localText}
+        onChangeText={handleChange}
+        placeholder="Describe this sub-step..."
+        placeholderTextColor={IOS_COLORS.tertiaryLabel}
+        multiline
+      />
+      <Pressable
+        onPress={() => onRemove(step.id)}
+        hitSlop={8}
+        style={styles.removeButton}
+      >
+        <Ionicons name="close-circle" size={20} color={IOS_COLORS.systemGray3} />
+      </Pressable>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SubStepEditor
+// ---------------------------------------------------------------------------
+
+interface SubStepEditorProps {
+  subSteps: SubStep[];
+  onChange: (subSteps: SubStep[]) => void;
+}
+
+export function SubStepEditor({ subSteps, onChange }: SubStepEditorProps) {
+  const subStepsRef = useRef(subSteps);
+  subStepsRef.current = subSteps;
+
+  const addSubStep = useCallback(() => {
+    const newStep: SubStep = {
+      id: `ss_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      text: '',
+      sort_order: subStepsRef.current.length,
+      completed: false,
+    };
+    onChange([...subStepsRef.current, newStep]);
+  }, [onChange]);
+
+  const updateText = useCallback((id: string, text: string) => {
+    onChange(subStepsRef.current.map((s) => (s.id === id ? { ...s, text } : s)));
+  }, [onChange]);
+
+  const removeSubStep = useCallback((id: string) => {
+    onChange(
+      subStepsRef.current
+        .filter((s) => s.id !== id)
+        .map((s, i) => ({ ...s, sort_order: i })),
+    );
+  }, [onChange]);
+
+  const moveUp = useCallback((id: string) => {
+    const items = [...subStepsRef.current];
+    const idx = items.findIndex((s) => s.id === id);
+    if (idx <= 0) return;
+    [items[idx - 1], items[idx]] = [items[idx], items[idx - 1]];
+    onChange(items.map((s, i) => ({ ...s, sort_order: i })));
+  }, [onChange]);
+
+  const moveDown = useCallback((id: string) => {
+    const items = [...subStepsRef.current];
+    const idx = items.findIndex((s) => s.id === id);
+    if (idx < 0 || idx >= items.length - 1) return;
+    [items[idx], items[idx + 1]] = [items[idx + 1], items[idx]];
+    onChange(items.map((s, i) => ({ ...s, sort_order: i })));
+  }, [onChange]);
+
+  return (
+    <View style={styles.container}>
+      {subSteps.map((step, index) => (
+        <SubStepRow
+          key={step.id}
+          step={step}
+          index={index}
+          total={subSteps.length}
+          onTextChange={updateText}
+          onRemove={removeSubStep}
+          onMoveUp={moveUp}
+          onMoveDown={moveDown}
+        />
+      ))}
+
+      <Pressable style={styles.addButton} onPress={addSubStep}>
+        <Ionicons name="add-circle-outline" size={20} color={STEP_COLORS.accent} />
+        <Text style={styles.addText}>Add sub-step</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    gap: IOS_SPACING.xs,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: IOS_SPACING.xs,
+    paddingVertical: IOS_SPACING.xs,
+  },
+  reorderColumn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 0,
+    paddingTop: Platform.OS === 'web' ? 0 : 2,
+  },
+  reorderButton: {
+    padding: 2,
+  },
+  reorderButtonDisabled: {
+    opacity: 0.3,
+  },
+  stepNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    paddingTop: Platform.OS === 'web' ? 4 : 8,
+    minWidth: 20,
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    backgroundColor: IOS_COLORS.systemGray6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.systemGray4,
+    padding: IOS_SPACING.sm,
+    minHeight: 36,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as any,
+    }),
+  },
+  removeButton: {
+    paddingTop: Platform.OS === 'web' ? 4 : 8,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.xs,
+    paddingVertical: IOS_SPACING.sm,
+  },
+  addText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: STEP_COLORS.accent,
+  },
+});

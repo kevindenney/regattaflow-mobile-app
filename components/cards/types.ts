@@ -10,6 +10,26 @@ import { SharedValue } from 'react-native-reanimated';
 import { ViewStyle } from 'react-native';
 
 // =============================================================================
+// GESTURE AXIS
+// =============================================================================
+
+/**
+ * Gesture axis for axis-locking behavior
+ */
+export type GestureAxis = 'horizontal' | 'vertical' | null;
+
+/**
+ * Return type for useAxisLock hook
+ */
+export interface UseAxisLockReturn {
+  lockedAxis: SharedValue<GestureAxis>;
+  updateLock: (translationX: number, translationY: number) => void;
+  releaseLock: () => void;
+  isLocked: () => boolean;
+  getLockedAxis: () => GestureAxis;
+}
+
+// =============================================================================
 // CARD TYPES (Simplified - single card type)
 // =============================================================================
 
@@ -174,6 +194,8 @@ export function getTimeContext(date: string, startTime?: string): { value: strin
 export interface CardPosition {
   /** Horizontal position (race index in timeline) */
   x: number;
+  /** Vertical position (card detail level) */
+  y: number;
 }
 
 /**
@@ -194,6 +216,8 @@ export interface CardDimensions {
   horizontalPeek: number;
   /** Horizontal snap interval (cardWidth + gap) */
   horizontalSnapInterval: number;
+  /** Vertical snap interval (cardHeight + gap) */
+  verticalSnapInterval: number;
   /** Left padding to center first card */
   contentPaddingLeft: number;
   /** Top padding */
@@ -404,6 +428,14 @@ export interface CardContentProps {
   onCardPress?: () => void;
   /** Incrementing counter to trigger data refetch (e.g., after PostRaceInterview completes) */
   refetchTrigger?: number;
+  /** Callback to move a timeline step earlier */
+  onMoveStepEarlier?: () => void;
+  /** Callback to move a timeline step later */
+  onMoveStepLater?: () => void;
+  /** Callback to move step to planned-next position */
+  onMoveStepToPlannedNext?: () => void;
+  /** Callback to move step to completed-most-recent position */
+  onMoveStepToCompletedMostRecent?: () => void;
 }
 
 // =============================================================================
@@ -418,6 +450,8 @@ export interface CardNavigationPersistedState {
   lastRaceId: string | null;
   /** Last viewed race index */
   lastRaceIndex: number;
+  /** Per-race vertical positions */
+  verticalPositions?: Record<number, number>;
   /** Timestamp of last update */
   updatedAt: string;
 }
@@ -436,8 +470,16 @@ export interface UseCardGridReturn {
   dimensions: CardDimensions;
   /** Navigate to specific race */
   goToRace: (index: number, animated?: boolean) => void;
+  /** Navigate to specific card (detail level) */
+  goToCard: (index: number, animated?: boolean) => void;
+  /** Navigate to specific position */
+  goToPosition?: (position: CardPosition, animated?: boolean) => void;
   /** Current race index (JS thread value) */
   currentRaceIndex: number;
+  /** Current card index (JS thread value) */
+  currentCardIndex?: number;
+  /** Current card type */
+  currentCardType?: CardType;
   /** Save state to storage */
   saveState: () => Promise<void>;
   /** Load state from storage */

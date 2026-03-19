@@ -8,7 +8,6 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     ScrollView,
     StyleSheet,
@@ -17,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 export default function MembershipRequestsScreen() {
   const router = useRouter();
@@ -67,7 +67,7 @@ export default function MembershipRequestsScreen() {
       setRequests(requestsData);
     } catch (error) {
       console.error('Error loading requests:', error);
-      Alert.alert('Error', 'Failed to load membership requests');
+      showAlert('Error', 'Failed to load membership requests');
     }
   };
 
@@ -77,37 +77,31 @@ export default function MembershipRequestsScreen() {
     try {
       setProcessingId(request.id);
 
-      Alert.alert(
+      showConfirm(
         'Approve Membership',
         `Approve ${request.user?.full_name || request.user?.email}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Approve',
-            onPress: async () => {
-              try {
-                await clubMemberService.approveRequest(
-                  request.id,
-                  currentUserId,
-                  'member'
-                );
+        async () => {
+          try {
+            await clubMemberService.approveRequest(
+              request.id,
+              currentUserId,
+              'member'
+            );
 
-                Alert.alert(
-                  'Approved',
-                  'Membership approved. Welcome email sent.'
-                );
+            showAlert(
+              'Approved',
+              'Membership approved. Welcome email sent.'
+            );
 
-                // Reload requests
-                await loadRequests(clubId);
-              } catch (error) {
-                console.error('Error approving request:', error);
-                Alert.alert('Error', 'Failed to approve membership');
-              } finally {
-                setProcessingId(null);
-              }
-            },
-          },
-        ]
+            // Reload requests
+            await loadRequests(clubId);
+          } catch (error) {
+            console.error('Error approving request:', error);
+            showAlert('Error', 'Failed to approve membership');
+          } finally {
+            setProcessingId(null);
+          }
+        },
       );
     } catch (error) {
       setProcessingId(null);
@@ -124,7 +118,7 @@ export default function MembershipRequestsScreen() {
     if (!selectedRequest || !currentUserId || !clubId) return;
 
     if (!rejectionReason.trim()) {
-      Alert.alert('Reason Required', 'Please provide a reason for rejection');
+      showAlert('Reason Required', 'Please provide a reason for rejection');
       return;
     }
 
@@ -138,13 +132,13 @@ export default function MembershipRequestsScreen() {
         rejectionReason
       );
 
-      Alert.alert('Rejected', 'Membership request rejected');
+      showAlert('Rejected', 'Membership request rejected');
 
       // Reload requests
       await loadRequests(clubId);
     } catch (error) {
       console.error('Error rejecting request:', error);
-      Alert.alert('Error', 'Failed to reject membership');
+      showAlert('Error', 'Failed to reject membership');
     } finally {
       setProcessingId(null);
       setSelectedRequest(null);

@@ -2,8 +2,8 @@
  * Subscription Manager Component
  * Handles subscription display, upgrade, and management
  *
- * Updated: 2026-01-30
- * New pricing: Free / Individual $120/yr / Team $480/yr
+ * Updated: 2026-03-15
+ * Pricing: Free / Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -14,12 +14,12 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Platform,
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 
 interface SubscriptionPlan {
   id: string;
@@ -43,11 +43,11 @@ const webStripeService = {
     {
       id: 'individual',
       name: 'Individual',
-      price: 120,
-      priceId: 'price_1Splo2BbfEeOhHXbHi1ENal0',
+      price: 10,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_MONTHLY_PRICE_ID || 'price_individual_monthly_10',
       features: [
         'Unlimited races',
-        'Unlimited AI queries',
+        '50,000 AI tokens per month',
         'AI strategy analysis',
         'Venue intelligence',
         'Historical race data',
@@ -57,15 +57,15 @@ const webStripeService = {
       popular: true
     },
     {
-      id: 'team',
-      name: 'Team',
-      price: 480,
-      priceId: 'price_1SplqqBbfEeOhHXbTeam480Y',
+      id: 'pro',
+      name: 'Pro',
+      price: 100,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly_100',
       features: [
         'Everything in Individual',
-        'Up to 5 team members',
+        '500,000 AI tokens per month',
+        'Priority AI processing',
         'Team sharing & collaboration',
-        'Shared race preparation',
         'Team analytics dashboard',
         'Priority support',
       ]
@@ -124,19 +124,19 @@ export const SubscriptionManager: React.FC = () => {
 
   const handleSelectPlan = async (plan: SubscriptionPlan) => {
     if (!user?.id) {
-      Alert.alert('Sign In Required', 'Please sign in to subscribe');
+      showAlert('Sign In Required', 'Please sign in to subscribe');
       return;
     }
 
     if (plan.price === 0) {
       // Free plan
-      Alert.alert('Free Plan', 'You are currently on the free plan');
+      showAlert('Free Plan', 'You are currently on the free plan');
       return;
     }
 
     if (subscriptionStatus.plan?.id === plan.id) {
       // Already on this plan
-      Alert.alert('Current Plan', 'You are already subscribed to this plan');
+      showAlert('Current Plan', 'You are already subscribed to this plan');
       return;
     }
 
@@ -152,7 +152,7 @@ export const SubscriptionManager: React.FC = () => {
           window.location.href = result.url;
         } else {
           // For mobile, you'd typically use a WebView or in-app browser
-          Alert.alert('Checkout', 'Opening payment page...');
+          showAlert('Checkout', 'Opening payment page...');
         }
       } else {
         if (Platform.OS === 'web') {
@@ -160,11 +160,11 @@ export const SubscriptionManager: React.FC = () => {
             `mailto:support@regattaflow.com?subject=Subscription%20Checkout%20Request&body=User%20ID%3A%20${encodeURIComponent(user.id)}%0APlan%3A%20${encodeURIComponent(plan.name)}`
           );
         } else {
-          Alert.alert('Error', result.error);
+          showAlert('Error', result.error);
         }
       }
     } catch (error: unknown) {
-      Alert.alert('Error', 'Failed to start checkout process');
+      showAlert('Error', 'Failed to start checkout process');
     } finally {
       setProcessingPlan(null);
     }
@@ -181,7 +181,7 @@ export const SubscriptionManager: React.FC = () => {
         if (Platform.OS === 'web') {
           window.location.href = result.url;
         } else {
-          Alert.alert('Billing Portal', 'Opening billing management...');
+          showAlert('Billing Portal', 'Opening billing management...');
         }
       } else {
         if (Platform.OS === 'web') {
@@ -189,41 +189,35 @@ export const SubscriptionManager: React.FC = () => {
             `mailto:support@regattaflow.com?subject=Billing%20Portal%20Request&body=User%20ID%3A%20${encodeURIComponent(user.id)}`
           );
         } else {
-          Alert.alert('Error', result.error);
+          showAlert('Error', result.error);
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to open billing portal');
+      showAlert('Error', 'Failed to open billing portal');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancelSubscription = async () => {
-    Alert.alert(
+    showConfirm(
       'Cancel Subscription',
       'Are you sure you want to cancel your subscription? You will retain access until the end of the billing period.',
-      [
-        { text: 'Keep Subscription', style: 'cancel' },
-        {
-          text: 'Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            if (!user?.id) return;
+      async () => {
+        if (!user?.id) return;
 
-            setLoading(true);
-            const result = await stripeService.cancelSubscription(user.id);
+        setLoading(true);
+        const result = await stripeService.cancelSubscription(user.id);
 
-            if (result.success) {
-              Alert.alert('Subscription Cancelled', 'Your subscription will end at the current period');
-              await loadSubscriptionStatus();
-            } else {
-              Alert.alert('Error', result.error || 'Failed to cancel subscription');
-            }
-            setLoading(false);
-          }
+        if (result.success) {
+          showAlert('Subscription Cancelled', 'Your subscription will end at the current period');
+          await loadSubscriptionStatus();
+        } else {
+          showAlert('Error', result.error || 'Failed to cancel subscription');
         }
-      ]
+        setLoading(false);
+      },
+      { destructive: true }
     );
   };
 
@@ -234,17 +228,17 @@ export const SubscriptionManager: React.FC = () => {
     const result = await stripeService.resumeSubscription(user.id);
 
     if (result.success) {
-      Alert.alert('Subscription Resumed', 'Your subscription has been reactivated');
+      showAlert('Subscription Resumed', 'Your subscription has been reactivated');
       await loadSubscriptionStatus();
     } else {
-      Alert.alert('Error', result.error || 'Failed to resume subscription');
+      showAlert('Error', result.error || 'Failed to resume subscription');
     }
     setLoading(false);
   };
 
   const formatPrice = (price: number) => {
     if (price === 0) return '$0';
-    return `$${price}/year`;
+    return `$${price}/mo`;
   };
 
   if (loading) {
@@ -342,7 +336,7 @@ export const SubscriptionManager: React.FC = () => {
                 <Text style={styles.priceAmount}>{formatPrice(plan.price)}</Text>
                 {plan.price > 0 && (
                   <Text style={styles.pricePeriod}>
-                    ({plan.id === 'individual' ? '$10/mo' : '$40/mo'})
+                    ({plan.id === 'individual' ? '$100/yr' : '$800/yr'})
                   </Text>
                 )}
               </View>
@@ -392,16 +386,16 @@ export const SubscriptionManager: React.FC = () => {
             <Text style={styles.comparisonValue}>Unlimited</Text>
           </View>
           <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonFeature}>AI Queries</Text>
-            <Text style={styles.comparisonValue}>5/mo</Text>
-            <Text style={styles.comparisonValue}>Unlimited</Text>
-            <Text style={styles.comparisonValue}>Unlimited</Text>
+            <Text style={styles.comparisonFeature}>AI Tokens</Text>
+            <Text style={styles.comparisonValue}>5K/mo</Text>
+            <Text style={styles.comparisonValue}>50K/mo</Text>
+            <Text style={styles.comparisonValue}>500K/mo</Text>
           </View>
           <View style={styles.comparisonRow}>
-            <Text style={styles.comparisonFeature}>Team Members</Text>
+            <Text style={styles.comparisonFeature}>Team Sharing</Text>
             <Ionicons name="close" size={20} color="#FF3B30" />
             <Ionicons name="close" size={20} color="#FF3B30" />
-            <Text style={styles.comparisonValue}>5</Text>
+            <Ionicons name="checkmark" size={20} color="#4CAF50" />
           </View>
         </View>
       </View>

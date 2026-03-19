@@ -12,10 +12,10 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
-  Alert,
   ScrollView,
   Platform
 } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { documentStorageService } from '@/services/storage/DocumentStorageService';
 import { DocumentProcessingService } from '@/services/ai/DocumentProcessingService';
@@ -119,8 +119,8 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
           uploadDocumentWithType('book', 'tides_currents', 'Tides and Current Strategy Guide');
       }
     } else {
-      // Fallback for mobile - use the original React Native Alert
-      Alert.alert(
+      // Fallback for mobile - use cross-platform alert
+      showAlertWithButtons(
         'Document Type',
         'What type of sailing document are you uploading?',
         [
@@ -144,8 +144,7 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
             text: 'Other',
             onPress: () => uploadDocumentWithType('strategy_guide', 'tactics', 'Sailing Document')
           }
-        ],
-        { cancelable: true }
+        ]
       );
     }
   }, [user]);
@@ -205,11 +204,11 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
         }
       } else if (result.error) {
         logger.error('Upload failed:', result.error);
-        Alert.alert('Upload Failed', result.error);
+        showAlert('Upload Failed', result.error);
       }
     } catch (error: any) {
       logger.error('Exception during upload:', error);
-      Alert.alert('Error', 'Failed to upload document');
+      showAlert('Error', 'Failed to upload document');
     } finally {
       setIsUploading(false);
     }
@@ -264,7 +263,7 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
 
     } catch (error: any) {
       logger.error('Processing error:', error);
-      Alert.alert('Processing Failed', 'Unable to analyze document');
+      showAlert('Processing Failed', 'Unable to analyze document');
     } finally {
       setIsProcessing(false);
     }
@@ -273,24 +272,18 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   const handleDeleteDocument = async (documentId: string) => {
     if (!user?.id) return;
 
-    Alert.alert(
+    showConfirm(
       'Delete Document',
       'Are you sure you want to delete this document?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            const success = await documentStorageService.deleteDocument(documentId, user.id);
-            if (success) {
-              setUploadedDocuments(prev => prev.filter(d => d.id !== documentId));
-            } else {
-              Alert.alert('Error', 'Failed to delete document');
-            }
-          }
+      async () => {
+        const success = await documentStorageService.deleteDocument(documentId, user.id);
+        if (success) {
+          setUploadedDocuments(prev => prev.filter(d => d.id !== documentId));
+        } else {
+          showAlert('Error', 'Failed to delete document');
         }
-      ]
+      },
+      { destructive: true }
     );
   };
 

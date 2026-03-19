@@ -13,7 +13,6 @@
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -26,6 +25,7 @@ import {
   Dimensions,
   Linking,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronDown,
@@ -285,7 +285,7 @@ export function CoursePositionEditor({
   // Save course
   const handleSave = async () => {
     if (!startLineCenter || !startLine || marks.length === 0) {
-      Alert.alert('Error', 'Please position the course before saving.');
+      showAlert('Error', 'Please position the course before saving.');
       return;
     }
 
@@ -296,7 +296,7 @@ export function CoursePositionEditor({
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        Alert.alert('Error', 'You must be logged in to save.');
+        showAlert('Error', 'You must be logged in to save.');
         return;
       }
 
@@ -343,7 +343,7 @@ export function CoursePositionEditor({
       onSave(positionedCourse);
     } catch (error: any) {
       logger.error('Failed to save positioned course:', error);
-      Alert.alert('Error', error.message || 'Failed to save course position.');
+      showAlert('Error', error.message || 'Failed to save course position.');
     } finally {
       setSaving(false);
     }
@@ -352,13 +352,11 @@ export function CoursePositionEditor({
   // Handle cancel
   const handleCancel = useCallback(() => {
     if (hasChanges) {
-      Alert.alert(
+      showConfirm(
         'Discard Changes?',
         'You have unsaved changes. Are you sure you want to discard them?',
-        [
-          { text: 'Keep Editing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: onCancel },
-        ]
+        onCancel,
+        { destructive: true },
       );
     } else {
       onCancel();

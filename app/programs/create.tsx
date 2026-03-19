@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -141,22 +141,22 @@ export default function CreateProgramScreen() {
 
   const submit = async () => {
     if (!activeOrganization?.id) {
-      Alert.alert('Missing workspace', 'No active organization selected.');
+      showAlert('Missing workspace', 'No active organization selected.');
       return;
     }
     if (!title.trim()) {
-      Alert.alert('Missing title', 'Program title is required.');
+      showAlert('Missing title', 'Program title is required.');
       return;
     }
 
     const startAt = toIsoFromDateInput(startDateInput);
     const endAt = toIsoFromDateInput(endDateInput);
     if (startDateInput.trim() && !startAt) {
-      Alert.alert('Invalid start date', 'Use YYYY-MM-DD format.');
+      showAlert('Invalid start date', 'Use YYYY-MM-DD format.');
       return;
     }
     if (endDateInput.trim() && !endAt) {
-      Alert.alert('Invalid end date', 'Use YYYY-MM-DD format.');
+      showAlert('Invalid end date', 'Use YYYY-MM-DD format.');
       return;
     }
 
@@ -203,7 +203,7 @@ export default function CreateProgramScreen() {
         },
       } as any);
     } catch (error: any) {
-      Alert.alert('Create failed', error?.message || 'Unable to create program');
+      showAlert('Create failed', error?.message || 'Unable to create program');
     } finally {
       setSaving(false);
     }

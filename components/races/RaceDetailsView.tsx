@@ -13,7 +13,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     ScrollView,
     StyleSheet,
@@ -27,6 +26,7 @@ import { CoursePositionEditor } from './CoursePositionEditor';
 import { CourseSelector } from './CourseSelector';
 import { RaceDocumentsDisplay } from './RaceDocumentsDisplay';
 import { UnifiedDocumentInput } from '@/components/documents/UnifiedDocumentInput';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface RaceDetailsViewProps {
   raceData: any;
@@ -516,12 +516,12 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
 
       if (error) throw error;
 
-      Alert.alert('Success', 'Race details updated successfully');
+      showAlert('Success', 'Race details updated successfully');
       setEditMode(false);
       onUpdate?.();
     } catch (error: any) {
       logger.error('Error saving race details', error);
-      Alert.alert('Error', error.message || 'Failed to save changes');
+      showAlert('Error', error.message || 'Failed to save changes');
     } finally {
       setSaving(false);
     }
@@ -555,10 +555,9 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
     // TODO: In Phase 2, we'll also populate race_marks table
     // For now, just populate the basic course info
 
-    Alert.alert(
+    showAlert(
       'Course Selected',
       `${course.name} has been selected. The course details have been populated.`,
-      [{ text: 'OK' }]
     );
   };
 
@@ -968,10 +967,9 @@ export function RaceDetailsView({ raceData, onUpdate }: RaceDetailsViewProps) {
         onCourseSelected={handleCourseSelected}
         onCreateNew={() => {
           setShowCourseSelector(false);
-          Alert.alert(
+          showAlert(
             'Create Course',
             'Course builder coming in Phase 2!',
-            [{ text: 'OK' }]
           );
         }}
         venueId={raceData.metadata?.venue_id}

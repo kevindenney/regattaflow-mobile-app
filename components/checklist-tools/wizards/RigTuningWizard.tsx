@@ -186,11 +186,11 @@ export function RigTuningWizard({
   // Derive windForecast from props or weather data
   const windForecast = useMemo(() => {
     if (windForecastProp) return windForecastProp;
-    if (weatherData?.sparklines?.wind) {
-      return weatherData.sparklines.wind;
+    if (weatherData?.windForecast) {
+      return weatherData.windForecast;
     }
     return null;
-  }, [windForecastProp, weatherData?.sparklines]);
+  }, [windForecastProp, weatherData?.windForecast]);
 
   // Calculate average wind
   const averageWind = useMemo(() => {
@@ -439,7 +439,7 @@ export function RigTuningWizard({
                 <Text style={[styles.listHeaderLabel, { flex: 1.2, textAlign: 'right' }]}>PLAN</Text>
               </View>
 
-              {displayedRecommendation.settings.map((setting, index) => {
+              {displayedRecommendation.settings.map((setting: any, index: number) => {
                 const plannedValue = plannedSettings[setting.key] || '';
                 const isExpanded = expandedSetting === setting.key;
                 const learning = getSettingLearning(setting.key);
@@ -520,7 +520,7 @@ export function RigTuningWizard({
                 <Gauge size={16} color={IOS_COLORS.orange} />
                 <Text style={styles.notesTitle}>Equipment Notes</Text>
               </View>
-              {displayedRecommendation.equipmentSpecificNotes.map((note, i) => (
+              {displayedRecommendation.equipmentSpecificNotes.map((note: string, i: number) => (
                 <Text key={i} style={styles.noteText}>• {note}</Text>
               ))}
             </View>

@@ -5,7 +5,8 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   subscriptionService,
   SubscriptionProduct,
@@ -153,17 +154,15 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
 
         // Show success feedback
         const product = products.find(p => p.id === productId);
-        Alert.alert(
-          '🌊 Welcome to RegattaFlow Pro!',
-          `You now have access to ${product?.title || 'premium features'}. Start exploring advanced sailing features!`,
-          [{ text: 'Start Racing', style: 'default' }]
+        showAlert(
+          'Welcome to RegattaFlow Pro!',
+          `You now have access to ${product?.title || 'premium features'}. Start exploring advanced sailing features!`
         );
       } else if (result.error && !result.error.includes('cancelled')) {
         // Show error for non-cancellation errors
-        Alert.alert(
-          '🔴 Purchase Failed',
-          result.error || 'Unable to complete purchase. Please try again.',
-          [{ text: 'OK', style: 'default' }]
+        showAlert(
+          'Purchase Failed',
+          result.error || 'Unable to complete purchase. Please try again.'
         );
       }
 
@@ -190,16 +189,14 @@ export function SubscriptionProvider({ children }: SubscriptionProviderProps) {
 
       if (result.success) {
         await refreshStatus();
-        Alert.alert(
-          '✅ Purchases Restored',
-          'Your previous purchases have been successfully restored.',
-          [{ text: 'OK', style: 'default' }]
+        showAlert(
+          'Purchases Restored',
+          'Your previous purchases have been successfully restored.'
         );
       } else {
-        Alert.alert(
-          '📱 No Purchases Found',
-          'No previous purchases were found for this account.',
-          [{ text: 'OK', style: 'default' }]
+        showAlert(
+          'No Purchases Found',
+          'No previous purchases were found for this account.'
         );
       }
 

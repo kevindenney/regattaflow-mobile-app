@@ -310,6 +310,7 @@ function CardGridComponent({
       const isNextRace = nextRaceIndex != null && raceIndex === nextRaceIndex;
       const isLastDone = lastDoneIndex != null && raceIndex === lastDoneIndex;
 
+
       // Determine if user can manage this race
       const canManage = !!userId && race.created_by === userId;
       const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
@@ -337,8 +338,6 @@ function CardGridComponent({
               width: dimensions.cardWidth,
               height: cardHeight,
               borderRadius: CARD_BORDER_RADIUS,
-              opacity: isActive ? 1 : 0.7,
-              transform: [{ scale: isActive ? 1 : 0.95 }],
             },
             isNextRace && styles.cardNext,
             isLastDone && styles.cardLastDone,
@@ -350,7 +349,7 @@ function CardGridComponent({
               <Text style={styles.badgeTextNext}>NEXT</Text>
             </View>
           ) : null}
-          {isLastDone ? (
+          {isLastDone && !isActive ? (
             <View style={styles.badgeDone}>
               <View style={styles.badgeDotDone} />
               <Text style={styles.badgeTextDone}>LAST DONE</Text>
@@ -517,7 +516,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     // @ts-ignore - Web-only property
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
-    transition: 'transform 0.2s ease, opacity 0.2s ease',
   },
   cardNext: {
     borderWidth: 2,

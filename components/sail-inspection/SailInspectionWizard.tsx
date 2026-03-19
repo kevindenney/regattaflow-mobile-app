@@ -12,7 +12,6 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Platform,
 } from 'react-native';
@@ -27,6 +26,7 @@ import {
   Camera,
 } from 'lucide-react-native';
 
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SailZoneSelector, ZoneStatus } from './SailZoneSelector';
 import { PhotoCaptureModal } from './PhotoCaptureModal';
 import { SailZone, ZoneAnalysisResult, SailContext, SailType } from '@/services/ai/SailAnalysisAIService';
@@ -120,7 +120,7 @@ export function SailInspectionWizard({
       setCurrentZoneIndex(0);
     } catch (err: any) {
       setError(err.message || 'Failed to start inspection');
-      Alert.alert('Error', 'Failed to start inspection. Please try again.');
+      showAlert('Error', 'Failed to start inspection. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -164,7 +164,7 @@ export function SailInspectionWizard({
         setStep('review');
       }
     } catch (err: any) {
-      Alert.alert('Analysis Error', err.message || 'Failed to analyze photo');
+      showAlert('Analysis Error', err.message || 'Failed to analyze photo');
     } finally {
       setIsAnalyzing(false);
     }
@@ -182,7 +182,7 @@ export function SailInspectionWizard({
       );
       onComplete(inspection);
     } catch (err: any) {
-      Alert.alert('Analysis Error', err.message || 'Failed to analyze photo');
+      showAlert('Analysis Error', err.message || 'Failed to analyze photo');
       setStep('mode-select');
     } finally {
       setIsAnalyzing(false);
@@ -202,7 +202,7 @@ export function SailInspectionWizard({
       );
       onComplete(inspection);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to complete inspection');
+      showAlert('Error', err.message || 'Failed to complete inspection');
     } finally {
       setIsLoading(false);
     }

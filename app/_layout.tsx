@@ -4,6 +4,10 @@ import { NetworkStatusBanner } from '@/components/ui/network';
 import { PushNotificationHandler } from '@/components/notifications/PushNotificationHandler';
 import '@/global.css';
 import { initializeImageCache } from '@/lib/imageConfig';
+import { initSentry } from '@/lib/sentry';
+
+// Initialize Sentry as early as possible
+initSentry();
 import {
   extractSessionTokensFromUrl,
   setSessionFromBridgeTokens,

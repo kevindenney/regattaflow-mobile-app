@@ -10,11 +10,11 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   TextInput,
   ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { developerDocumentService, DeveloperTrainingUtils, type TrainingDocumentBatch } from '@/services/storage/DeveloperDocumentService';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -54,11 +54,11 @@ export const DeveloperDocumentUploader: React.FC = () => {
       }
 
       setBatches(prev => [batch, ...prev]);
-      Alert.alert('Success', `Training batch "${batch.batchName}" created with ${batch.documentCount} documents`);
+      showAlert('Success', `Training batch "${batch.batchName}" created with ${batch.documentCount} documents`);
 
     } catch (error: any) {
       console.error('Training batch creation failed:', error);
-      Alert.alert('Error', `Failed to create training batch: ${error.message}`);
+      showAlert('Error', `Failed to create training batch: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -67,7 +67,7 @@ export const DeveloperDocumentUploader: React.FC = () => {
   const handleBulkUploadDocuments = useCallback(async () => {
     if (!user) return;
 
-    Alert.alert(
+    showAlertWithButtons(
       'Bulk Upload',
       'Select training scenario:',
       [
@@ -89,7 +89,7 @@ export const DeveloperDocumentUploader: React.FC = () => {
   }, [handleQuickTraining]);
 
   const handleUploadFromFileSystem = useCallback(async () => {
-    Alert.alert(
+    showAlertWithButtons(
       'File System Upload',
       'This would open a file picker to select multiple documents from your filesystem for bulk training upload.',
       [
@@ -116,10 +116,10 @@ export const DeveloperDocumentUploader: React.FC = () => {
               );
 
               setBatches(prev => [batch, ...prev]);
-              Alert.alert('Success', `Uploaded ${batch.documentCount} documents for training`);
+              showAlert('Success', `Uploaded ${batch.documentCount} documents for training`);
 
             } catch (error: any) {
-              Alert.alert('Error', error.message);
+              showAlert('Error', error.message);
             } finally {
               setIsProcessing(false);
             }

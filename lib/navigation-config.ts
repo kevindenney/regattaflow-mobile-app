@@ -42,7 +42,7 @@ const isProgramWorkspace = (
 ): boolean => {
   const domain = String(activeDomain || '').toLowerCase().trim();
   if (domain === 'sailing') return false;
-  if (domain === 'nursing' || domain === 'drawing' || domain === 'fitness') return true;
+  if (domain === 'nursing' || domain === 'drawing' || domain === 'fitness' || domain === 'health-and-fitness') return true;
   return organizationType === 'institution';
 };
 
@@ -162,7 +162,9 @@ export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },
 ];
 
-export const SAILOR_SECONDARY_ITEMS: NavItem[] = [];
+export const SAILOR_SECONDARY_ITEMS: NavItem[] = [
+  { key: 'library', label: 'Library', route: '/library', icon: 'library-outline' },
+];
 
 export const COACH_NAV_ITEMS: NavItem[] = [
   { key: 'clients', label: 'Clients', route: '/(tabs)/clients', icon: 'people-outline' },

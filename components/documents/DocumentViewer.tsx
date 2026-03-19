@@ -11,12 +11,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Platform,
   Modal,
   Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { documentStorageService, StoredDocument } from '@/services/storage/DocumentStorageService';
 import { DocumentProcessingService } from '@/services/ai/DocumentProcessingService';
 import { useAuth } from '@/providers/AuthProvider';
@@ -60,7 +60,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ onInsightSelect 
       setDocuments(docs);
     } catch (error) {
       console.error('📄 DocumentViewer: Failed to load documents:', error);
-      Alert.alert('Error', 'Failed to load documents');
+      showAlert('Error', 'Failed to load documents');
     } finally {
       setLoading(false);
     }
@@ -79,7 +79,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ onInsightSelect 
 
   const handleQueryKnowledgeBase = async () => {
     if (!searchQuery.trim()) {
-      Alert.alert('Query Required', 'Please enter a question or search term');
+      showAlert('Query Required', 'Please enter a question or search term');
       return;
     }
 
@@ -92,7 +92,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({ onInsightSelect 
       setQueryResult(insights);
     } catch (error) {
       console.error('Query failed:', error);
-      Alert.alert('Query Failed', 'Unable to search knowledge base');
+      showAlert('Query Failed', 'Unable to search knowledge base');
     } finally {
       setQueryLoading(false);
     }

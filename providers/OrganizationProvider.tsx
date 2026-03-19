@@ -292,7 +292,7 @@ function resolveWorkspaceDomain(org: OrganizationRecord | null): WorkspaceDomain
   if (interestSlug.includes('sail') || interestSlug.includes('regatta')) return 'sailing';
   if (interestSlug.includes('nurs') || interestSlug.includes('clinical')) return 'nursing';
   if (interestSlug.includes('draw') || interestSlug.includes('art')) return 'drawing';
-  if (interestSlug.includes('fit') || interestSlug.includes('golf')) return 'fitness';
+  if (interestSlug.includes('health') || interestSlug.includes('fit') || interestSlug.includes('golf')) return 'fitness';
 
   if (org.organization_type === 'institution') return 'nursing';
   if (org.organization_type === 'club') return 'sailing';
@@ -816,7 +816,7 @@ export function useOrganization() {
   const ctx = useContext(Ctx);
   if ((__DEV__ || process.env.NODE_ENV !== 'production') && !ctx.organizationProviderActive && !hasLoggedMissingOrganizationProvider) {
     hasLoggedMissingOrganizationProvider = true;
-    console.error('[OrganizationProvider] useOrganization is running outside <OrganizationProvider>', {
+    console.warn('[OrganizationProvider] useOrganization is running outside <OrganizationProvider>', {
       pathname: typeof window !== 'undefined' ? window.location?.pathname || null : null,
     });
   }

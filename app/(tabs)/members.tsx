@@ -2,7 +2,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Linking,
   Modal,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Href } from 'expo-router';
 import { format } from 'date-fns';
@@ -146,7 +146,7 @@ export default function MembersScreen() {
       setStats(statsData);
     } catch (error) {
       console.error('Error loading members:', error);
-      Alert.alert('Error', 'Failed to load members');
+      showAlert('Error', 'Failed to load members');
     } finally {
       setLoading(false);
     }
@@ -173,7 +173,7 @@ export default function MembersScreen() {
       await clubMemberService.shareExportedMembers(clubId, 'Club');
     } catch (error) {
       console.error('Error exporting members:', error);
-      Alert.alert('Error', 'Failed to export members');
+      showAlert('Error', 'Failed to export members');
     }
   };
 

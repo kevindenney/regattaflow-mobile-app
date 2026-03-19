@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, Alert } from 'react-native';
+import { View, Text } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Plus } from 'lucide-react-native';
 import { FamilyButton } from '@/components/ui/FamilyButton';
 import { QuickAddRaceForm } from '@/components/races/QuickAddRaceForm';
@@ -49,7 +50,7 @@ export function AddRaceFamilyButton({
         });
 
         if (error) {
-          Alert.alert('Error', error.message || 'Failed to create race');
+          showAlert('Error', error.message || 'Failed to create race');
           return;
         }
 
@@ -57,7 +58,7 @@ export function AddRaceFamilyButton({
         onExpandedChange(false);
         onRaceCreated();
       } catch (err) {
-        Alert.alert(
+        showAlert(
           'Error',
           err instanceof Error ? err.message : 'Failed to create race'
         );

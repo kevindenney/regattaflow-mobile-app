@@ -17,8 +17,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import {
   IOS_COLORS,
@@ -58,7 +58,7 @@ export function AddRacingAreaSheet({
   const handleSubmit = useCallback(async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      Alert.alert('Name Required', 'Please enter a name for the racing area.');
+      showAlert('Name Required', 'Please enter a name for the racing area.');
       return;
     }
 
@@ -80,7 +80,7 @@ export function AddRacingAreaSheet({
       onSuccess?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Something went wrong';
-      Alert.alert('Error', message);
+      showAlert('Error', message);
     } finally {
       setSubmitting(false);
     }

@@ -6,7 +6,8 @@
  */
 
 import React, { ReactElement } from 'react';
-import type { DetailCardData, DetailCardType } from '@/constants/navigationAnimations';
+import type { DetailCardType } from '@/constants/navigationAnimations';
+import type { DetailCardData } from '@/components/races/navigation/DetailCardPager';
 import { detectRaceType } from '@/lib/races/raceDataUtils';
 
 // Component exports - Upcoming race cards

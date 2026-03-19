@@ -98,7 +98,7 @@ interface CrewManagementWizardProps extends ChecklistToolProps {
 
 export function CrewManagementWizard({
   item,
-  raceEventId,
+  regattaId: raceEventId,
   boatId,
   classId,
   onComplete,
@@ -386,7 +386,6 @@ export function CrewManagementWizard({
             crewManagementService.assignCrewToRace(
               raceEventId,
               crewMemberId!,
-              user?.id,
               `Position: ${role}`
             )
           );

@@ -79,11 +79,11 @@ export function TacticalCurrentZones({
           properties: {
             id: zone.id,
             type: zone.type,
-            name: zone.name,
-            description: zone.description,
-            confidence: zone.confidence,
-            timing: zone.timing,
-            advantage: zone.advantage,
+            name: zone.properties.name,
+            description: zone.properties.description,
+            confidence: zone.properties.confidence,
+            timing: zone.properties.validTime,
+            advantage: zone.properties.advantage,
             color: colors.fill,
             borderColor: colors.border,
             opacity
@@ -195,9 +195,9 @@ export function getTacticalZoneLabelLayerSpec(
     type: 'FeatureCollection',
     features: zones.map(zone => {
       // Calculate centroid of polygon (simplified - use actual centroid calculation)
-      const coords = zone.geometry.coordinates[0];
+      const coords = (zone.geometry.coordinates[0] as number[][]) || [];
       const centroid = coords.reduce(
-        (acc, coord) => [acc[0] + coord[0] / coords.length, acc[1] + coord[1] / coords.length],
+        (acc: number[], coord: number[]) => [acc[0] + coord[0] / coords.length, acc[1] + coord[1] / coords.length],
         [0, 0]
       );
 
@@ -209,10 +209,10 @@ export function getTacticalZoneLabelLayerSpec(
           coordinates: centroid
         },
         properties: {
-          name: zone.name,
+          name: zone.properties.name,
           type: zone.type,
-          advantage: zone.advantage || '',
-          confidence: zone.confidence
+          advantage: zone.properties.advantage || '',
+          confidence: zone.properties.confidence
         }
       };
     })
@@ -270,7 +270,7 @@ export function getTacticalZoneConfidenceLayerSpec(
   zones: TacticalZone[]
 ): mapboxgl.FillLayer {
   // Create a secondary fill layer with striped pattern for low confidence zones
-  const lowConfidenceZones = zones.filter(z => z.confidence < 0.7);
+  const lowConfidenceZones = zones.filter(z => (z as any).confidence < 0.7 || z.properties.confidence === 'low');
 
   const geoJSON: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
@@ -279,7 +279,7 @@ export function getTacticalZoneConfidenceLayerSpec(
       id: `${zone.id}-confidence`,
       geometry: zone.geometry,
       properties: {
-        confidence: zone.confidence
+        confidence: zone.properties.confidence
       }
     }))
   };
@@ -364,7 +364,7 @@ export function getHighConfidenceZones(
   zones: TacticalZone[],
   threshold: number = 0.7
 ): TacticalZone[] {
-  return zones.filter(z => z.confidence >= threshold);
+  return zones.filter(z => z.properties.confidence === 'high' || z.properties.confidence === 'moderate');
 }
 
 /**
@@ -375,9 +375,9 @@ export function getActiveZones(
   time: Date = new Date()
 ): TacticalZone[] {
   return zones.filter(zone => {
-    if (!zone.timing) return true;
+    if (!zone.properties.validTime) return true;
 
-    const { validFrom, validUntil } = zone.timing;
+    const { start: validFrom, end: validUntil } = zone.properties.validTime;
     const now = time.getTime();
 
     if (validFrom && now < new Date(validFrom).getTime()) return false;
@@ -393,8 +393,8 @@ export function getActiveZones(
 export function sortZonesByAdvantage(zones: TacticalZone[]): TacticalZone[] {
   return [...zones].sort((a, b) => {
     // Extract numeric advantage if present (e.g., "+2 BL" -> 2)
-    const aAdv = parseFloat(a.advantage?.match(/[+-]?[\d.]+/)?.[0] || '0');
-    const bAdv = parseFloat(b.advantage?.match(/[+-]?[\d.]+/)?.[0] || '0');
+    const aAdv = parseFloat(a.properties.advantage?.match(/[+-]?[\d.]+/)?.[0] || '0');
+    const bAdv = parseFloat(b.properties.advantage?.match(/[+-]?[\d.]+/)?.[0] || '0');
     return bAdv - aAdv;
   });
 }

@@ -12,7 +12,7 @@
  * - equipment_issue: Equipment learnings
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ import {
 import { History, Lightbulb, MapPin, Target, Wrench } from 'lucide-react-native';
 import { usePersonalizedNudges } from '@/hooks/useAdaptiveLearning';
 import { NudgeList } from '@/components/checklist-tools/NudgeBanner';
-import type { PersonalizedNudge, LearnableEventType } from '@/types/adaptiveLearning';
+import type { PersonalizedNudge, LearnableEventType, NudgeDeliveryChannel } from '@/types/adaptiveLearning';
 
 // iOS System Colors
 const IOS_COLORS = {
@@ -93,13 +93,22 @@ export function ReviewPhaseNudges({
   const {
     allNudges,
     isLoading,
-    recordDelivery,
+    recordDelivery: rawRecordDelivery,
   } = usePersonalizedNudges(raceEventId, {
     venueId,
     forecast: conditions?.windSpeed && conditions?.windDirection
       ? { windSpeed: conditions.windSpeed, windDirection: conditions.windDirection }
       : undefined,
   });
+
+  // Wrap recordDelivery to match NudgeList's expected signature (Promise<string>)
+  const recordDelivery = useCallback(
+    async (learnableEventId: string, channel: NudgeDeliveryChannel): Promise<string> => {
+      const result = await rawRecordDelivery(learnableEventId, channel);
+      return result?.id ?? '';
+    },
+    [rawRecordDelivery],
+  );
 
   // Filter to review-relevant categories
   const reviewNudges = useMemo(() => {

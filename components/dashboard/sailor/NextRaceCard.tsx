@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Animated, Vibration, Platform, Alert, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Animated, Vibration, Platform, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { createLogger } from '@/lib/utils/logger';
 
 // Dynamic import helper for expo-location (native only)
@@ -126,7 +127,7 @@ export function NextRaceCard({
       // Request permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Location permission is needed to track your race.');
+        showAlert('Permission Required', 'Location permission is needed to track your race.');
         return;
       }
 
@@ -152,7 +153,7 @@ export function NextRaceCard({
       setIsTracking(true);
     } catch (error) {
       console.error('Error starting GPS tracking:', error);
-      Alert.alert('GPS Error', 'Failed to start GPS tracking');
+      showAlert('GPS Error', 'Failed to start GPS tracking');
     }
   };
 
@@ -164,10 +165,9 @@ export function NextRaceCard({
 
       // TODO: Save track to database with race ID
       if (trackPoints.length > 0) {
-        Alert.alert(
+        showAlert(
           'Race Track Saved',
-          `Recorded ${trackPoints.length} GPS points. Track saved for analysis.`,
-          [{ text: 'OK' }]
+          `Recorded ${trackPoints.length} GPS points. Track saved for analysis.`
         );
       }
     }

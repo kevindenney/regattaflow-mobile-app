@@ -6,7 +6,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   
@@ -17,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { CourseBuilder, type CourseDraft } from '@/components/courses';
@@ -158,7 +158,7 @@ export default function CoursesScreen() {
       setEditingCourseId(undefined);
     } catch (err) {
       console.error('[Courses] Failed to save course:', err);
-      Alert.alert(
+      showAlert(
         'Unable to save',
         'We kept your changes locally. Try again when you have a connection.'
       );
@@ -185,22 +185,20 @@ export default function CoursesScreen() {
 
   const handleDeleteCourse = (courseId: string) => {
     const courseName = savedCourses.find((c) => c.id === courseId)?.name ?? 'this course';
-    Alert.alert('Delete course?', `Remove ${courseName} from your library?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await CourseLibraryService.deleteCourse(courseId);
-          } catch (err) {
-            console.error('[Courses] Failed to delete course in Supabase:', err);
-          } finally {
-            setSavedCourses((prev) => prev.filter((course) => course.id !== courseId));
-          }
-        },
+    showConfirm(
+      'Delete course?',
+      `Remove ${courseName} from your library?`,
+      async () => {
+        try {
+          await CourseLibraryService.deleteCourse(courseId);
+        } catch (err) {
+          console.error('[Courses] Failed to delete course in Supabase:', err);
+        } finally {
+          setSavedCourses((prev) => prev.filter((course) => course.id !== courseId));
+        }
       },
-    ]);
+      { destructive: true }
+    );
   };
 
   const openAssignModal = (course: RaceCourse) => {

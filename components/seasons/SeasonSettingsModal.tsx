@@ -18,7 +18,6 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   ActivityIndicator,
@@ -27,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
 import {
   useCreateSeason,
@@ -112,7 +112,7 @@ export function SeasonSettingsModal({
   // Handle create season
   const handleCreate = useCallback(async () => {
     if (!formData.name.trim()) {
-      Alert.alert('Name Required', 'Please enter a season name.');
+      showAlert('Name Required', 'Please enter a season name.');
       return;
     }
 
@@ -137,7 +137,7 @@ export function SeasonSettingsModal({
       onSeasonCreated?.(newSeason.id);
       onClose();
     } catch (error) {
-      Alert.alert('Error', 'Failed to create season. Please try again.');
+      showAlert('Error', 'Failed to create season. Please try again.');
     }
   }, [formData, createSeason, onSeasonCreated, onClose]);
 
@@ -146,7 +146,7 @@ export function SeasonSettingsModal({
     if (!season) return;
 
     if (!formData.name.trim()) {
-      Alert.alert('Name Required', 'Please enter a season name.');
+      showAlert('Name Required', 'Please enter a season name.');
       return;
     }
 
@@ -163,7 +163,7 @@ export function SeasonSettingsModal({
       onSeasonUpdated?.(season.id);
       onClose();
     } catch (error) {
-      Alert.alert('Error', 'Failed to update season. Please try again.');
+      showAlert('Error', 'Failed to update season. Please try again.');
     }
   }, [season, formData, updateSeason, onSeasonUpdated, onClose]);
 
@@ -193,7 +193,7 @@ export function SeasonSettingsModal({
       setFormData(nextSeasonDefaults);
       setMode('create-after-end');
     } catch (error) {
-      Alert.alert('Error', 'Failed to end season. Please try again.');
+      showAlert('Error', 'Failed to end season. Please try again.');
     }
   }, [season, updateSeason, onSeasonEnded]);
 

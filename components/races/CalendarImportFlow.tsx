@@ -10,9 +10,9 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Alert,
   Platform,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Calendar, Upload, CheckCircle, XCircle, AlertTriangle } from 'lucide-react-native';
@@ -70,7 +70,7 @@ export function CalendarImportFlow({
       }
 
       if (!result.assets || result.assets.length === 0) {
-        Alert.alert('Error', 'No file was selected');
+        showAlert('Error', 'No file was selected');
         setLoading(false);
         return;
       }
@@ -98,7 +98,7 @@ export function CalendarImportFlow({
       const parseResult = CalendarImportService.parseCSV(csvContent);
 
       if (!parseResult.success) {
-        Alert.alert('Parse Error', parseResult.error || 'Failed to parse CSV file');
+        showAlert('Parse Error', parseResult.error || 'Failed to parse CSV file');
         setLoading(false);
         return;
       }
@@ -121,7 +121,7 @@ export function CalendarImportFlow({
 
       // Preview what will be created
       if (!user) {
-        Alert.alert('Error', 'You must be logged in to import races');
+        showAlert('Error', 'You must be logged in to import races');
         setLoading(false);
         return;
       }
@@ -141,14 +141,14 @@ export function CalendarImportFlow({
 
     } catch (error: any) {
       logger.error('Upload error', error);
-      Alert.alert('Error', error.message || 'Failed to upload file');
+      showAlert('Error', error.message || 'Failed to upload file');
       setLoading(false);
     }
   };
 
   const handleConfirmImport = async () => {
     if (!user) {
-      Alert.alert('Error', 'You must be logged in');
+      showAlert('Error', 'You must be logged in');
       return;
     }
 
@@ -173,7 +173,7 @@ export function CalendarImportFlow({
 
     } catch (error: any) {
       logger.error('Import error', error);
-      Alert.alert('Import Error', error.message || 'Failed to import races');
+      showAlert('Import Error', error.message || 'Failed to import races');
       setLoading(false);
       setStep('preview'); // Go back to preview
     }

@@ -12,12 +12,12 @@ import {
   TouchableOpacity,
   Platform,
   ActivityIndicator,
-  Alert,
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { format, formatDistanceToNow } from 'date-fns';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
@@ -201,7 +201,7 @@ export default function LiveSignalsScreen() {
       
       await loadData();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to send signal');
+      showAlert('Error', error.message || 'Failed to send signal');
     } finally {
       setSending(false);
     }
@@ -209,7 +209,7 @@ export default function LiveSignalsScreen() {
 
   const handleSendAnnouncement = async () => {
     if (!announcementTitle.trim()) {
-      Alert.alert('Error', 'Please enter announcement title');
+      showAlert('Error', 'Please enter announcement title');
       return;
     }
 
@@ -228,7 +228,7 @@ export default function LiveSignalsScreen() {
       setAnnouncementMessage('');
       await loadData();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to send announcement');
+      showAlert('Error', error.message || 'Failed to send announcement');
     } finally {
       setSending(false);
     }
@@ -363,13 +363,11 @@ export default function LiveSignalsScreen() {
                 key={signal.key}
                 style={[styles.signalButton, { borderColor: signal.color }]}
                 onPress={() => {
-                  Alert.alert(
+                  showConfirm(
                     signal.label,
                     `Send ${signal.label} signal?`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Send', onPress: () => handleQuickSignal(signal.key) },
-                    ]
+                    () => handleQuickSignal(signal.key),
+                    { confirmLabel: 'Send' }
                   );
                 }}
                 disabled={sending}

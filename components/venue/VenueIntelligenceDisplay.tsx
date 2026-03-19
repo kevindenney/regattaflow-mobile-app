@@ -4,7 +4,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { useVenueIntelligence } from '@/hooks/useVenueIntelligence';
 import type { RegionalIntelligenceData } from '@/services/venue/RegionalIntelligenceService';
@@ -46,7 +47,7 @@ export function VenueIntelligenceDisplay({ style }: VenueIntelligenceDisplayProp
     const initialize = async () => {
       const success = await initializeDetection();
       if (!success) {
-        Alert.alert('Location Error', 'Could not initialize venue detection. Please check location permissions.');
+        showAlert('Location Error', 'Could not initialize venue detection. Please check location permissions.');
       }
     };
 

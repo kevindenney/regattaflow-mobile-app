@@ -12,11 +12,11 @@ import {
   Pressable,
   StyleSheet,
   TextInput,
-  Alert,
   Keyboard,
   ActivityIndicator,
 } from 'react-native';
 import { ChevronLeft, X } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ContactPicker } from './ContactPicker';
 import { CrewThreadService } from '@/services/CrewThreadService';
 import {
@@ -90,7 +90,7 @@ function GroupDetailsStep({
 
   const handleCreate = useCallback(() => {
     if (!groupName.trim()) {
-      Alert.alert('Error', 'Please enter a group name');
+      showAlert('Error', 'Please enter a group name');
       return;
     }
     Keyboard.dismiss();
@@ -215,7 +215,7 @@ export function GroupCreationFlow({
       if (thread) {
         onCreated(thread.id);
       } else {
-        Alert.alert('Error', 'Could not create group');
+        showAlert('Error', 'Could not create group');
       }
     },
     [selectedUserIds, onCreated]

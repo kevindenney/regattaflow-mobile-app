@@ -151,7 +151,7 @@ export function StartPlannerWizard({
     }
     return {
       direction: currentForecast.raceWindow.windDirectionAtStart,
-      speed: currentForecast.raceWindow.windSpeedAtStart,
+      speed: currentForecast.raceWindow.windAtStart,
     };
   }, [currentForecast]);
 

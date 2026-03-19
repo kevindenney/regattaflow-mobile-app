@@ -166,6 +166,7 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+    flexShrink: 1,
   },
   body: {
     flex: 1,

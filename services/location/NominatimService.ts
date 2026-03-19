@@ -42,6 +42,7 @@ export class NominatimService {
             headers: {
               'User-Agent': this.userAgent,
             },
+            signal: AbortSignal.timeout(30_000),
           });
         })
         .then(resolve)

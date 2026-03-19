@@ -108,7 +108,7 @@ export function AnalysisDetailCard({
       <View style={styles.header}>
         <View style={[styles.headerIcon, hasAnalysis && styles.headerIconActive]}>
           <MaterialCommunityIcons
-            name="sparkles"
+            name={"sparkles" as any}
             size={18}
             color={hasAnalysis ? IOS_COLORS.purple : IOS_COLORS.gray}
           />

@@ -17,6 +17,7 @@ import {
   Share,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   ChevronLeft,
@@ -167,7 +168,7 @@ export default function CheckInDashboard() {
       await checkInService.checkIn(regattaId, raceNumber, entryId);
     } catch (error) {
       console.error('Error checking in:', error);
-      Alert.alert('Error', 'Failed to check in');
+      showAlert('Error', 'Failed to check in');
     }
   };
 
@@ -185,7 +186,7 @@ export default function CheckInDashboard() {
             try {
               await checkInService.scratch(regattaId, raceNumber, entry.entry_id, reason);
             } catch (error) {
-              Alert.alert('Error', 'Failed to scratch entry');
+              showAlert('Error', 'Failed to scratch entry');
             }
           },
         },
@@ -198,23 +199,17 @@ export default function CheckInDashboard() {
 
   // Handle DNS
   const handleDNS = (entry: CheckIn) => {
-    Alert.alert(
+    showConfirm(
       'Mark DNS',
       `Mark ${entry.entry?.sail_number} as Did Not Start?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Mark DNS',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await checkInService.markDNS(regattaId, raceNumber, entry.entry_id);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to mark DNS');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await checkInService.markDNS(regattaId, raceNumber, entry.entry_id);
+        } catch (error) {
+          showAlert('Error', 'Failed to mark DNS');
+        }
+      },
+      { destructive: true }
     );
   };
 
@@ -223,7 +218,7 @@ export default function CheckInDashboard() {
     try {
       await checkInService.undoCheckIn(regattaId, raceNumber, entryId);
     } catch (error) {
-      Alert.alert('Error', 'Failed to undo check-in');
+      showAlert('Error', 'Failed to undo check-in');
     }
   };
 
@@ -231,32 +226,27 @@ export default function CheckInDashboard() {
   const handleCheckInAll = () => {
     const pendingEntries = roster.filter(r => r.status === 'pending');
     if (pendingEntries.length === 0) {
-      Alert.alert('No Pending', 'All entries have already been checked in');
+      showAlert('No Pending', 'All entries have already been checked in');
       return;
     }
 
-    Alert.alert(
+    showConfirm(
       'Check In All',
       `Check in ${pendingEntries.length} pending entries?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Check In All',
-          onPress: async () => {
-            try {
-              const count = await checkInService.batchCheckIn(
-                regattaId,
-                raceNumber,
-                pendingEntries.map(e => e.entry_id)
-              );
-              Alert.alert('Success', `${count} entries checked in`);
-              loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to check in entries');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          const count = await checkInService.batchCheckIn(
+            regattaId,
+            raceNumber,
+            pendingEntries.map(e => e.entry_id)
+          );
+          showAlert('Success', `${count} entries checked in`);
+          loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to check in entries');
+        }
+      },
+      { confirmLabel: 'Check In All' }
     );
   };
 
@@ -272,7 +262,7 @@ export default function CheckInDashboard() {
           await nav.share({ text: `Check in for Race ${raceNumber}: ${url}`, url });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(url);
-          Alert.alert('Copied', 'Check-in link copied to clipboard');
+          showAlert('Copied', 'Check-in link copied to clipboard');
         }
       } else {
         await Share.share({

@@ -13,8 +13,8 @@ import {
   Share,
   Platform,
   StyleSheet,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Users, Send } from 'lucide-react-native';
 import {
   IOS_COLORS,
@@ -71,7 +71,7 @@ export function InviteFriendsBanner({
       }
     } catch (error) {
       if ((error as Error).message !== 'User did not share') {
-        Alert.alert('Error', 'Failed to open share sheet. Please try again.');
+        showAlert('Error', 'Failed to open share sheet. Please try again.');
       }
     }
   }, [onShare]);

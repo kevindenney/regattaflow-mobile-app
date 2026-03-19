@@ -14,13 +14,13 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  Alert,
   Animated,
   TextInput,
   Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Search, UserPlus, Check } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { CrewThreadService, CrewThreadMember } from '@/services/CrewThreadService';
 import { getInitials } from '@/components/account/accountStyles';
 import {
@@ -234,7 +234,7 @@ export function AddMemberModal({
         setAddedIds((prev) => new Set(prev).add(user.id));
         onMemberAdded?.();
       } else {
-        Alert.alert('Error', 'Could not add member');
+        showAlert('Error', 'Could not add member');
       }
     },
     [threadId, onMemberAdded]

@@ -45,7 +45,6 @@ import {
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     Platform,
     Pressable,
@@ -54,6 +53,7 @@ import {
     TextInput,
     View
 } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { AIValidationScreen, type ExtractedData, type FieldConfidenceMap, type MultiRaceExtractedData } from './AIValidationScreen';
 import { BoatSelector } from './BoatSelector';
 import { DistanceRouteMap, type RouteWaypoint } from './DistanceRouteMap';
@@ -154,9 +154,9 @@ export function ComprehensiveRaceEntry({
     ];
     try {
       await Clipboard.setStringAsync(lines.join('\n'));
-      Alert.alert('Copied', 'Suggestion diagnostics copied to clipboard.');
+      showAlert('Copied', 'Suggestion diagnostics copied to clipboard.');
     } catch (_error) {
-      Alert.alert('Copy failed', 'Clipboard is unavailable on this device.');
+      showAlert('Copy failed', 'Clipboard is unavailable on this device.');
     }
   }, [suggestionsError, suggestionFailureSources]);
 
@@ -466,13 +466,13 @@ export function ComprehensiveRaceEntry({
             errorMessage: error.message,
             existingRaceId
           });
-          Alert.alert('Error', `Failed to load race data: ${error.message}`);
+          showAlert('Error', `Failed to load race data: ${error.message}`);
           return;
         }
 
         if (!race) {
           logger.error('[ComprehensiveRaceEntry] Race not found for ID:', existingRaceId);
-          Alert.alert('Error', 'Race not found');
+          showAlert('Error', 'Race not found');
           return;
         }
 
@@ -691,7 +691,7 @@ export function ComprehensiveRaceEntry({
         logger.debug('[ComprehensiveRaceEntry] Race data loaded successfully');
       } catch (err: any) {
         logger.error('[ComprehensiveRaceEntry] Error loading race:', err);
-        Alert.alert('Error', 'Failed to load race data');
+        showAlert('Error', 'Failed to load race data');
       } finally {
         setLoading(false);
       }
@@ -853,7 +853,7 @@ export function ComprehensiveRaceEntry({
 
       if (!user) {
         logger.error('[handleFileUpload] No user authenticated!');
-        Alert.alert('Not Authenticated', 'Please log in to upload documents');
+        showAlert('Not Authenticated', 'Please log in to upload documents');
         return;
       }
 
@@ -875,7 +875,7 @@ export function ComprehensiveRaceEntry({
 
       if (!result.assets || result.assets.length === 0) {
         logger.error('[handleFileUpload] No assets in result:', result);
-        Alert.alert('Error', 'No file was selected');
+        showAlert('Error', 'No file was selected');
         return;
       }
 
@@ -969,7 +969,7 @@ export function ComprehensiveRaceEntry({
       logger.error('[handleFileUpload] Full error:', error);
       setExtracting(false);
       setCurrentDocType(null);
-      Alert.alert('Upload Error', error.message || 'Failed to upload document');
+      showAlert('Upload Error', error.message || 'Failed to upload document');
     }
   };
 
@@ -1141,7 +1141,7 @@ export function ComprehensiveRaceEntry({
 
     if (!text.trim()) {
       logger.debug('[extractFromText] No text provided');
-      Alert.alert('No Text', 'Please enter race information to extract');
+      showAlert('No Text', 'Please enter race information to extract');
       setExtracting(false);
       return;
     }
@@ -1223,7 +1223,7 @@ export function ComprehensiveRaceEntry({
         const errorMsg = error.message || 'Could not fetch or extract PDF from URL. Please check the URL and try again.';
         // Alert.alert may not work on web, so also log prominently
         logger.error('❌ PDF FETCH FAILED:', errorMsg);
-        Alert.alert('PDF Fetch Failed', errorMsg);
+        showAlert('PDF Fetch Failed', errorMsg);
         setExtracting(false);
         return;
       }
@@ -1257,7 +1257,7 @@ export function ComprehensiveRaceEntry({
 
       if (!result.success || !result.data) {
         logger.error('[extractFromText] Extraction failed:', result.error);
-        Alert.alert('Extraction Failed', result.error || 'Could not extract race details');
+        showAlert('Extraction Failed', result.error || 'Could not extract race details');
         setExtracting(false);
         return;
       }
@@ -1335,7 +1335,7 @@ export function ComprehensiveRaceEntry({
       setUploadedFileName(''); // Reset filename
     } catch (error: any) {
       logger.error('[extractFromText] Error:', error);
-      Alert.alert('Error', error.message || 'Failed to extract race details');
+      showAlert('Error', error.message || 'Failed to extract race details');
     } finally {
       setExtracting(false);
     }
@@ -1351,7 +1351,7 @@ export function ComprehensiveRaceEntry({
   // Re-import waypoints from text/URL (simplified extraction)
   const handleReimportWaypoints = async () => {
     if (!waypointReimportText.trim() && !waypointReimportUrl.trim()) {
-      Alert.alert('No Input', 'Please paste text or enter a URL to extract waypoints from');
+      showAlert('No Input', 'Please paste text or enter a URL to extract waypoints from');
       return;
     }
 
@@ -1376,7 +1376,7 @@ export function ComprehensiveRaceEntry({
             throw new Error('Failed to extract text from PDF');
           }
         } catch (error: any) {
-          Alert.alert('URL Error', error.message || 'Failed to fetch PDF from URL');
+          showAlert('URL Error', error.message || 'Failed to fetch PDF from URL');
           setReimportingWaypoints(false);
           return;
         }
@@ -1477,13 +1477,13 @@ export function ComprehensiveRaceEntry({
         setWaypointReimportText('');
         setWaypointReimportUrl('');
         
-        Alert.alert('Success', `Imported ${convertedWaypoints.length} waypoints from document`);
+        showAlert('Success', `Imported ${convertedWaypoints.length} waypoints from document`);
       } else {
-        Alert.alert('No Waypoints Found', 'Could not find any waypoints with coordinates in the provided text/URL');
+        showAlert('No Waypoints Found', 'Could not find any waypoints with coordinates in the provided text/URL');
       }
     } catch (error: any) {
       logger.error('[handleReimportWaypoints] Error:', error);
-      Alert.alert('Error', error.message || 'Failed to extract waypoints');
+      showAlert('Error', error.message || 'Failed to extract waypoints');
     } finally {
       setReimportingWaypoints(false);
     }
@@ -1506,7 +1506,7 @@ export function ComprehensiveRaceEntry({
     const completedDocs = uploadedDocuments.filter(doc => doc.status === 'complete' && doc.content);
 
     if (completedDocs.length === 0) {
-      Alert.alert('No Documents', 'Please upload at least one document first');
+      showAlert('No Documents', 'Please upload at least one document first');
       return;
     }
 
@@ -1584,7 +1584,7 @@ export function ComprehensiveRaceEntry({
     } catch (error: any) {
       logger.error('[processMultipleDocuments] Error:', error);
       setAggregationStatus('error');
-      Alert.alert('Processing Error', error.message || 'Failed to process documents');
+      showAlert('Processing Error', error.message || 'Failed to process documents');
     } finally {
       setExtracting(false);
     }
@@ -1911,7 +1911,7 @@ export function ComprehensiveRaceEntry({
       ? 'Data validated and populated. Review and edit as needed.'
       : 'Data populated! Please fill in the missing race date and any other required fields.';
 
-    Alert.alert('Success!', message, [{ text: 'OK' }]);
+    showAlert('Success!', message);
   };
 
   /**
@@ -2030,7 +2030,7 @@ export function ComprehensiveRaceEntry({
           window.alert(message);
           router.replace('/(tabs)/races');
         } else {
-          Alert.alert(
+          showAlertWithButtons(
             'Races Created!',
             message,
             [{
@@ -2046,7 +2046,7 @@ export function ComprehensiveRaceEntry({
           window.alert(message);
           router.replace('/(tabs)/races');
         } else {
-          Alert.alert(
+          showAlertWithButtons(
             'Partially Complete',
             message,
             [{
@@ -2061,7 +2061,7 @@ export function ComprehensiveRaceEntry({
         if (Platform.OS === 'web') {
           window.alert(errorMsg);
         } else {
-          Alert.alert('Error', errorMsg);
+          showAlert('Error', errorMsg);
         }
       }
     } catch (error) {
@@ -2069,11 +2069,7 @@ export function ComprehensiveRaceEntry({
       setIsCreatingMultipleRaces(false);
       setMultiRaceProgress(null);
       const errorMsg = 'An error occurred while creating races. Please try again.';
-      if (Platform.OS === 'web') {
-        window.alert(errorMsg);
-      } else {
-        Alert.alert('Error', errorMsg);
-      }
+      showAlert('Error', errorMsg);
     }
   };
 
@@ -2160,15 +2156,15 @@ export function ComprehensiveRaceEntry({
 
     // Validate required fields
     if (!suggestion.raceData.raceName) {
-      Alert.alert('Error', 'Cannot create race: missing race name');
+      showAlert('Error', 'Cannot create race: missing race name');
       return;
     }
     if (!suggestion.raceData.startDate) {
-      Alert.alert('Error', 'Cannot create race: missing start date');
+      showAlert('Error', 'Cannot create race: missing start date');
       return;
     }
     if (!suggestion.raceData.venue && !suggestion.raceData.venueCoordinates) {
-      Alert.alert('Error', 'Cannot create race: missing venue information');
+      showAlert('Error', 'Cannot create race: missing venue information');
       return;
     }
 
@@ -2176,7 +2172,7 @@ export function ComprehensiveRaceEntry({
 
     try {
       if (!user?.id) {
-        Alert.alert('Authentication Error', 'You must be logged in to create a race');
+        showAlert('Authentication Error', 'You must be logged in to create a race');
         return;
       }
 
@@ -2286,7 +2282,7 @@ export function ComprehensiveRaceEntry({
       }
     } catch (error: any) {
       logger.error('[handleDirectRaceCreation] Error:', error);
-      Alert.alert('Error', error.message || 'Failed to create race from suggestion');
+      showAlert('Error', error.message || 'Failed to create race from suggestion');
     } finally {
       setSaving(false);
     }
@@ -2486,7 +2482,7 @@ export function ComprehensiveRaceEntry({
       } catch (error: any) {
         logger.error('[uploadPendingDocuments] Error uploading document:', doc.file.name, error);
         // Continue with other documents even if one fails
-        Alert.alert(
+        showAlert(
           'Document Upload Warning',
           `Failed to upload "${doc.file.name}": ${error.message}. Other documents may have been uploaded successfully.`
         );
@@ -2519,12 +2515,12 @@ export function ComprehensiveRaceEntry({
     // Validation
     if (!raceName.trim()) {
       logger.debug('[handleSubmit] VALIDATION FAILED: No race name');
-      Alert.alert('Required', 'Please enter a race name');
+      showAlert('Required', 'Please enter a race name');
       return;
     }
     if (!raceDate) {
       logger.debug('[handleSubmit] VALIDATION FAILED: No race date');
-      Alert.alert('Required', 'Please enter a race date');
+      showAlert('Required', 'Please enter a race date');
       return;
     }
     // Allow omission of venue as long as we have coordinates (e.g. drawn racing area)
@@ -2535,7 +2531,7 @@ export function ComprehensiveRaceEntry({
     );
     if (!hasVenueText && !hasCoordinates) {
       logger.debug('[handleSubmit] VALIDATION FAILED: No venue text or coordinates');
-      Alert.alert('Required', 'Please enter a venue or draw a racing area so we can determine the location.');
+      showAlert('Required', 'Please enter a venue or draw a racing area so we can determine the location.');
       return;
     }
 
@@ -2550,7 +2546,7 @@ export function ComprehensiveRaceEntry({
 
       if (!user?.id) {
         logger.error('[handleSubmit] No user found in AuthProvider');
-        Alert.alert('Authentication Error', 'You must be logged in to create a race. Please log in and try again.');
+        showAlert('Authentication Error', 'You must be logged in to create a race. Please log in and try again.');
         setSaving(false);
         return;
       }
@@ -2781,7 +2777,7 @@ export function ComprehensiveRaceEntry({
           await uploadPendingDocuments(existingRaceId);
         }
 
-        Alert.alert('Success', 'Race updated successfully!');
+        showAlert('Success', 'Race updated successfully!');
 
         // For updates, also pass metadata (though CourseSetupPrompt won't show for edits)
         const extractionMetadata: ExtractionMetadata = {
@@ -2843,7 +2839,7 @@ export function ComprehensiveRaceEntry({
 
           if (raceEventError) {
             logger.error('[handleSubmit] Error creating race_event:', raceEventError);
-            Alert.alert('Warning', 'Race created but course marks could not be saved');
+            showAlert('Warning', 'Race created but course marks could not be saved');
           } else {
             raceEventId = raceEventResult.id;
             logger.debug('[handleSubmit] Race event created:', raceEventId);
@@ -2874,7 +2870,7 @@ export function ComprehensiveRaceEntry({
           if (marksError) {
             logger.error('[handleSubmit] Error saving marks:', marksError);
             // Don't throw - race was created successfully, just log the error
-            Alert.alert('Warning', 'Race created but some marks could not be saved');
+            showAlert('Warning', 'Race created but some marks could not be saved');
           } else {
             logger.debug('[handleSubmit] Marks saved successfully');
           }
@@ -2926,7 +2922,7 @@ export function ComprehensiveRaceEntry({
           if (areaError) {
             logger.error('[handleSubmit] Error saving racing area:', areaError);
             // Don't throw - race was created successfully, just log the error
-            Alert.alert('Warning', 'Race created but racing area could not be saved');
+            showAlert('Warning', 'Race created but racing area could not be saved');
           } else {
             logger.debug('[handleSubmit] Racing area saved successfully');
           }
@@ -3012,7 +3008,7 @@ export function ComprehensiveRaceEntry({
       logger.error('[handleSubmit] Error message:', error?.message);
       logger.error('[handleSubmit] Error stack:', error?.stack);
       logger.error('[handleSubmit] Full error object:', error);
-      Alert.alert('Error', error.message || 'Failed to save race');
+      showAlert('Error', error.message || 'Failed to save race');
     } finally {
       logger.debug('[handleSubmit] Finally block - setting saving=false');
       setSaving(false);
@@ -3203,7 +3199,7 @@ export function ComprehensiveRaceEntry({
             if (Platform.OS === 'web') {
               window.alert('Please select at least one race to create.');
             } else {
-              Alert.alert('No Races Selected', 'Please select at least one race to create.');
+              showAlert('No Races Selected', 'Please select at least one race to create.');
             }
             return;
           }
@@ -3224,19 +3220,10 @@ export function ComprehensiveRaceEntry({
                 handleBatchCreateRaces(selectedRaces);
               }
             } else {
-              Alert.alert(
+              showConfirm(
                 'Create Multiple Races',
                 `You've selected ${selectedRaces.length} races from this document.\n\nEach race will be created with the extracted details. You can edit them individually after creation.`,
-                [
-                  {
-                    text: 'Cancel',
-                    style: 'cancel',
-                  },
-                  {
-                    text: `Create ${selectedRaces.length} Races`,
-                    onPress: () => handleBatchCreateRaces(selectedRaces),
-                  },
-                ]
+                () => handleBatchCreateRaces(selectedRaces),
               );
             }
           }

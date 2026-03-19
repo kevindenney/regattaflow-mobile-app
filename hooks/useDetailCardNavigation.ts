@@ -5,7 +5,7 @@
  * Handles card selection, scroll position, and animations.
  */
 
-import { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { Dimensions, FlatList, Platform } from 'react-native';
 import {
   useSharedValue,
@@ -128,7 +128,7 @@ export function useDetailCardNavigation(
     enableHaptics = true,
   } = options;
 
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<FlatList>(null) as React.RefObject<FlatList>;
   const scrollOffset = useSharedValue(0);
   const activeIndex = useSharedValue(initialIndex);
   const lastReportedIndex = useRef(initialIndex);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/constants/Colors';
 import { executionEvaluationService, ExecutionRatings, ExecutionNotes } from '@/services/ExecutionEvaluationService';
@@ -218,10 +219,9 @@ export function ExecutionEvaluationCard({ raceId, sailorId, coachId, onEvaluatio
 
   const handleShareToggle = async () => {
     if (!coachId) {
-      Alert.alert(
+      showAlert(
         'No Coach Assigned',
-        'You need to assign a coach before sharing your execution evaluation.',
-        [{ text: 'OK' }]
+        'You need to assign a coach before sharing your execution evaluation.'
       );
       return;
     }
@@ -234,19 +234,19 @@ export function ExecutionEvaluationCard({ raceId, sailorId, coachId, onEvaluatio
         const success = await executionEvaluationService.unshareFromCoach(raceId, sailorId);
         if (success) {
           setIsShared(false);
-          Alert.alert('Success', 'Execution evaluation unshared from coach');
+          showAlert('Success', 'Execution evaluation unshared from coach');
         }
       } else {
         // Share
         const success = await executionEvaluationService.shareWithCoach(raceId, sailorId, coachId);
         if (success) {
           setIsShared(true);
-          Alert.alert('Success', 'Execution evaluation shared with your coach');
+          showAlert('Success', 'Execution evaluation shared with your coach');
         }
       }
     } catch (error) {
       console.error('Error toggling share:', error);
-      Alert.alert('Error', 'Failed to update sharing. Please try again.');
+      showAlert('Error', 'Failed to update sharing. Please try again.');
     } finally {
       setSharingWithCoach(false);
     }

@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
@@ -85,7 +85,7 @@ export default function ProgramTemplatesScreen() {
         setEditingTemplateId(null);
       }
     } catch (error: any) {
-      Alert.alert('Unable to load templates', error?.message || 'Please try again.');
+      showAlert('Unable to load templates', error?.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
@@ -99,12 +99,12 @@ export default function ProgramTemplatesScreen() {
   const createTemplate = async () => {
     if (!user?.id) return;
     if (!canManageActiveOrganization) {
-      Alert.alert('Permission required', 'You need organization management access to create templates.');
+      showAlert('Permission required', 'You need organization management access to create templates.');
       return;
     }
     const nextTitle = title.trim();
     if (!nextTitle) {
-      Alert.alert('Title required', 'Enter a template title.');
+      showAlert('Title required', 'Enter a template title.');
       return;
     }
 
@@ -125,7 +125,7 @@ export default function ProgramTemplatesScreen() {
       setDescription('');
       setHasMutations(true);
     } catch (error: any) {
-      Alert.alert('Unable to create template', error?.message || 'Please try again.');
+      showAlert('Unable to create template', error?.message || 'Please try again.');
     } finally {
       setCreating(false);
     }
@@ -149,7 +149,7 @@ export default function ProgramTemplatesScreen() {
     if (!canManageActiveOrganization) return;
     const nextTitle = title.trim();
     if (!nextTitle) {
-      Alert.alert('Title required', 'Enter a template title.');
+      showAlert('Title required', 'Enter a template title.');
       return;
     }
     try {
@@ -165,7 +165,7 @@ export default function ProgramTemplatesScreen() {
       setDescription('');
       setHasMutations(true);
     } catch (error: any) {
-      Alert.alert('Unable to update template', error?.message || 'Please try again.');
+      showAlert('Unable to update template', error?.message || 'Please try again.');
     } finally {
       setCreating(false);
     }
@@ -178,7 +178,7 @@ export default function ProgramTemplatesScreen() {
       setTemplates((prev) => prev.filter((row) => row.id !== templateId));
       setHasMutations(true);
     } catch (error: any) {
-      Alert.alert('Unable to delete template', error?.message || 'Please try again.');
+      showAlert('Unable to delete template', error?.message || 'Please try again.');
     }
   };
 

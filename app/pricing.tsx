@@ -1,12 +1,12 @@
 /**
- * Pricing Page - Tufte-Style Design
+ * Pricing Page
  *
- * Updated: 2026-01-30
- * New pricing: Free / Individual $120/yr / Team $480/yr
- * Learning modules: $30/yr each (purchased separately)
+ * Updated: 2026-03-15
+ * Pricing: Free / Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
+ * Design: Matches landing/catalog page aesthetic
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -21,38 +21,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 
-// Tufte design tokens
-const TUFTE = {
-  background: '#F2F2F7',
-  backgroundSecondary: '#E8E5DF',
-  text: '#3D3832',
-  textMuted: '#6B6560',
-  textLight: '#8C8780',
-  accent: '#0284c7',
-  accentHover: '#0369a1',
-  border: '#D4D0C8',
-};
+type BillingPeriod = 'monthly' | 'yearly';
 
 interface PlanTier {
   id: string;
   name: string;
-  price: string;
-  period: string;
-  monthlyEquivalent?: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
   description: string;
   features: string[];
   cta: string;
   highlighted?: boolean;
+  badge?: string;
+  accentColor: string;
+  iconName: keyof typeof Ionicons.glyphMap;
 }
 
-type PricingTab = 'strategy' | 'learning';
-
-const STRATEGY_PLANS: PlanTier[] = [
+const PLANS: PlanTier[] = [
   {
     id: 'free',
     name: 'Free',
-    price: '$0',
-    period: '',
+    monthlyPrice: 0,
+    yearlyPrice: 0,
     description: 'Get started with race preparation',
     features: [
       'Up to 3 races',
@@ -62,17 +52,18 @@ const STRATEGY_PLANS: PlanTier[] = [
       'Document upload',
     ],
     cta: 'Start Free',
+    accentColor: '#6B7280',
+    iconName: 'boat-outline',
   },
   {
     id: 'individual',
     name: 'Individual',
-    price: '$120',
-    period: '/year',
-    monthlyEquivalent: '$10/mo',
-    description: 'Full racing features for solo sailors',
+    monthlyPrice: 10,
+    yearlyPrice: 100,
+    description: 'AI-powered race preparation',
     features: [
       'Unlimited races',
-      'Unlimited AI queries',
+      '50,000 AI tokens per month',
       'AI strategy analysis',
       'Venue intelligence',
       'Historical race data',
@@ -81,56 +72,27 @@ const STRATEGY_PLANS: PlanTier[] = [
     ],
     cta: 'Go Individual',
     highlighted: true,
+    badge: 'MOST POPULAR',
+    accentColor: '#2563EB',
+    iconName: 'flash-outline',
   },
   {
-    id: 'team',
-    name: 'Team',
-    price: '$480',
-    period: '/year',
-    monthlyEquivalent: '$40/mo',
-    description: 'Full racing features for teams',
+    id: 'pro',
+    name: 'Pro',
+    monthlyPrice: 100,
+    yearlyPrice: 800,
+    description: 'Maximum AI power for serious racers',
     features: [
       'Everything in Individual',
-      'Up to 5 team members',
+      '500,000 AI tokens per month',
+      'Priority AI processing',
       'Team sharing & collaboration',
-      'Shared race preparation',
       'Team analytics dashboard',
       'Priority support',
     ],
-    cta: 'Go Team',
-  },
-];
-
-const LEARNING_PLANS: PlanTier[] = [
-  {
-    id: 'learn-free',
-    name: 'Free Lesson',
-    price: '$0',
-    period: '',
-    description: 'Try our learning content',
-    features: [
-      'Introduction to Racing',
-      'Basic concepts & terminology',
-      'Interactive lesson format',
-      'Progress tracking',
-    ],
-    cta: 'Start Learning',
-  },
-  {
-    id: 'learn-module',
-    name: 'Single Module',
-    price: '$30',
-    period: '/year',
-    description: 'Deep dive on one topic',
-    features: [
-      'Choose any learning module',
-      'Interactive lessons',
-      'Simulations & exercises',
-      'Progress tracking',
-      'Certificate on completion',
-    ],
-    cta: 'Get Module',
-    highlighted: true,
+    cta: 'Go Pro',
+    accentColor: '#7C3AED',
+    iconName: 'rocket-outline',
   },
 ];
 
@@ -138,47 +100,115 @@ export default function PricingScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { isGuest, user } = useAuth();
-  const params = useLocalSearchParams<{ upgrade?: string; tab?: string }>();
-  const [activeTab, setActiveTab] = React.useState<PricingTab>(
-    (params.tab as PricingTab) || 'strategy'
-  );
+  const params = useLocalSearchParams<{ upgrade?: string }>();
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
 
-  const isWideScreen = width >= 768;
-  const currentPlans = activeTab === 'strategy' ? STRATEGY_PLANS : LEARNING_PLANS;
+  const isDesktop = width >= 768;
 
   const handleSelectPlan = (planId: string) => {
-    if (planId === 'free' || planId === 'learn-free') {
+    if (planId === 'free') {
       if (isGuest) {
         router.push('/(auth)/signup');
       } else {
         router.back();
       }
     } else {
-      // For paid plans, direct to signup first if guest, then payment
       if (isGuest) {
         router.push(`/(auth)/signup?plan=${planId}`);
       } else {
-        // Direct to subscription page for checkout
         router.push('/subscription');
       }
     }
   };
 
-  const handleBack = () => {
-    router.back();
+  const getDisplayPrice = (plan: PlanTier) => {
+    if (plan.monthlyPrice === 0) return '$0';
+    return billingPeriod === 'monthly'
+      ? `$${plan.monthlyPrice}`
+      : `$${plan.yearlyPrice}`;
+  };
+
+  const getPeriodLabel = (plan: PlanTier) => {
+    if (plan.monthlyPrice === 0) return '';
+    return billingPeriod === 'monthly' ? '/month' : '/year';
+  };
+
+  const getAltPrice = (plan: PlanTier) => {
+    if (plan.monthlyPrice === 0) return null;
+    if (billingPeriod === 'monthly') {
+      return `$${plan.yearlyPrice}/year`;
+    }
+    return `$${plan.monthlyPrice}/month`;
+  };
+
+  const getSavings = (plan: PlanTier) => {
+    if (plan.monthlyPrice === 0 || billingPeriod === 'monthly') return null;
+    const monthlyCost = plan.monthlyPrice * 12;
+    const saved = monthlyCost - plan.yearlyPrice;
+    if (saved > 0) {
+      return `Save $${saved}/year`;
+    }
+    return null;
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Minimal header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleBack}
-          style={styles.backButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Ionicons name="arrow-back" size={24} color={TUFTE.text} />
-        </TouchableOpacity>
+    <View style={styles.container}>
+      {/* Dark header matching catalog page */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerContent}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Choose Your Plan</Text>
+          <Text style={styles.headerSubtitle}>
+            Race preparation tools for every sailor. AI-powered insights to help you win.
+          </Text>
+
+          {/* Billing toggle */}
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[
+                styles.toggleOption,
+                billingPeriod === 'monthly' && styles.toggleOptionActive,
+              ]}
+              onPress={() => setBillingPeriod('monthly')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  billingPeriod === 'monthly' && styles.toggleTextActive,
+                ]}
+              >
+                Monthly
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.toggleOption,
+                billingPeriod === 'yearly' && styles.toggleOptionActive,
+              ]}
+              onPress={() => setBillingPeriod('yearly')}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.toggleText,
+                  billingPeriod === 'yearly' && styles.toggleTextActive,
+                ]}
+              >
+                Yearly
+              </Text>
+              <View style={styles.saveBadge}>
+                <Text style={styles.saveBadgeText}>Save</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -189,114 +219,132 @@ export default function PricingScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Title */}
-        <View style={styles.titleSection}>
-          <Text style={styles.title}>Choose Your Plan</Text>
-          <Text style={styles.subtitle}>
-            {activeTab === 'strategy'
-              ? 'Race preparation tools for every sailor'
-              : 'Learn to race with interactive lessons'}
-          </Text>
-        </View>
-
-        {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'strategy' && styles.tabActive]}
-            onPress={() => setActiveTab('strategy')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'strategy' && styles.tabTextActive,
-              ]}
-            >
-              Race Strategy
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'learning' && styles.tabActive]}
-            onPress={() => setActiveTab('learning')}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === 'learning' && styles.tabTextActive,
-              ]}
-            >
-              Learning
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Plans grid */}
-        <View style={[styles.plansContainer, isWideScreen && styles.plansRow]}>
-          {currentPlans.map((plan) => (
-            <View
-              key={plan.id}
-              style={[
-                styles.planCard,
-                isWideScreen && styles.planCardWide,
-                plan.highlighted && styles.planCardHighlighted,
-              ]}
-            >
-              {/* Plan header */}
-              <View style={styles.planHeader}>
-                <Text style={styles.planName}>{plan.name}</Text>
-                <View style={styles.priceRow}>
-                  <Text style={styles.planPrice}>{plan.price}</Text>
-                  {plan.period && (
-                    <Text style={styles.planPeriod}>{plan.period}</Text>
-                  )}
-                </View>
-                {plan.monthlyEquivalent && (
-                  <Text style={styles.monthlyEquivalent}>{plan.monthlyEquivalent}</Text>
-                )}
-                <Text style={styles.planDescription}>{plan.description}</Text>
-              </View>
-
-              {/* Divider - subtle line */}
-              <View style={styles.divider} />
-
-              {/* Features - clean list, no icons */}
-              <View style={styles.featuresList}>
-                {plan.features.map((feature, index) => (
-                  <Text key={index} style={styles.featureItem}>
-                    {feature}
-                  </Text>
-                ))}
-              </View>
-
-              {/* CTA button */}
-              <TouchableOpacity
-                style={[
-                  styles.ctaButton,
-                  plan.highlighted && styles.ctaButtonHighlighted,
-                ]}
-                onPress={() => handleSelectPlan(plan.id)}
-                activeOpacity={0.8}
-              >
-                <Text
+        <View style={[styles.section, isDesktop && styles.sectionDesktop]}>
+          <View style={[styles.grid, isDesktop && styles.gridDesktop]}>
+            {PLANS.map((plan) => {
+              const savings = getSavings(plan);
+              return (
+                <View
+                  key={plan.id}
                   style={[
-                    styles.ctaText,
-                    plan.highlighted && styles.ctaTextHighlighted,
+                    styles.card,
+                    isDesktop && styles.cardDesktop,
+                    plan.highlighted && styles.cardHighlighted,
                   ]}
                 >
-                  {plan.cta}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+                  {/* Card header */}
+                  <View style={styles.cardHeader}>
+                    <View
+                      style={[
+                        styles.iconCircle,
+                        { backgroundColor: plan.accentColor + '15' },
+                      ]}
+                    >
+                      <Ionicons
+                        name={plan.iconName}
+                        size={24}
+                        color={plan.accentColor}
+                      />
+                    </View>
+                    {plan.badge && (
+                      <View
+                        style={[
+                          styles.badgePill,
+                          { backgroundColor: plan.accentColor + '15' },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.badgeText, { color: plan.accentColor }]}
+                        >
+                          {plan.badge}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Plan name & description */}
+                  <Text style={styles.cardName}>{plan.name}</Text>
+
+                  {/* Price */}
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceAmount}>
+                      {getDisplayPrice(plan)}
+                    </Text>
+                    {getPeriodLabel(plan) !== '' && (
+                      <Text style={styles.pricePeriod}>
+                        {getPeriodLabel(plan)}
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Alt price & savings */}
+                  <View style={styles.altPriceRow}>
+                    {getAltPrice(plan) && (
+                      <Text style={styles.altPrice}>{getAltPrice(plan)}</Text>
+                    )}
+                    {savings && (
+                      <View style={styles.savingsPill}>
+                        <Text style={styles.savingsText}>{savings}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text style={styles.cardDescription}>{plan.description}</Text>
+
+                  {/* Divider */}
+                  <View style={styles.divider} />
+
+                  {/* Features */}
+                  <View style={styles.featuresList}>
+                    {plan.features.map((feature, index) => (
+                      <View key={index} style={styles.featureRow}>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color={plan.accentColor}
+                        />
+                        <Text style={styles.featureText}>{feature}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {/* CTA button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.ctaButton,
+                      plan.highlighted
+                        ? { backgroundColor: plan.accentColor }
+                        : { borderColor: plan.accentColor + '40' },
+                    ]}
+                    onPress={() => handleSelectPlan(plan.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.ctaText,
+                        plan.highlighted
+                          ? styles.ctaTextHighlighted
+                          : { color: plan.accentColor },
+                      ]}
+                    >
+                      {plan.cta}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Footer note */}
+        {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            All plans include a 14-day money-back guarantee.
+            All plans include a 14-day money-back guarantee. Cancel anytime.
           </Text>
-          <Text style={styles.footerText}>Cancel anytime.</Text>
+          <Text style={styles.footerText}>
+            Secure payment via Stripe.
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -306,185 +354,260 @@ export default function PricingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: TUFTE.background,
+    backgroundColor: '#F8FAFC',
   },
+
+  // Header - dark, matching catalog/landing pages
   header: {
+    backgroundColor: '#1A1A1A',
+    paddingBottom: 32,
+    paddingHorizontal: 24,
+  },
+  headerContent: {
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.7)',
+    lineHeight: 24,
+    maxWidth: 500,
+    marginBottom: 24,
+  },
+
+  // Billing toggle
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    padding: 3,
+    alignSelf: 'flex-start',
+  },
+  toggleOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    gap: 6,
   },
-  backButton: {
-    padding: 4,
+  toggleOptionActive: {
+    backgroundColor: '#FFFFFF',
   },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  toggleTextActive: {
+    color: '#1A1A1A',
+  },
+  saveBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  saveBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Content
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
+    // padding handled by sections
   },
 
-  // Title section
-  titleSection: {
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 40,
+  section: {
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+    padding: 24,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '300',
-    color: TUFTE.text,
-    letterSpacing: -0.5,
-    marginBottom: 8,
-    // Serif feel with lighter weight
+  sectionDesktop: {
+    padding: 40,
+  },
+
+  // Grid
+  grid: {
+    gap: 16,
+  },
+  gridDesktop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 20,
+  },
+
+  // Card - matching InterestCatalogPage style
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     ...Platform.select({
-      web: { fontFamily: 'Georgia, serif' },
-      default: {},
+      web: {
+        cursor: 'default',
+        transition: 'box-shadow 0.2s, transform 0.2s',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      } as any,
     }),
   },
-  subtitle: {
-    fontSize: 16,
-    color: TUFTE.textMuted,
-    letterSpacing: 0.2,
-  },
-
-  // Tab navigation
-  tabContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 32,
-    gap: 8,
-  },
-  tab: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 2,
-    borderWidth: 1,
-    borderColor: TUFTE.border,
-    backgroundColor: 'transparent',
-  },
-  tabActive: {
-    borderColor: TUFTE.text,
-    backgroundColor: TUFTE.backgroundSecondary,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: TUFTE.textMuted,
-    letterSpacing: 0.3,
-  },
-  tabTextActive: {
-    color: TUFTE.text,
-  },
-
-  // Plans container
-  plansContainer: {
-    gap: 24,
-  },
-  plansRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 24,
-  },
-
-  // Plan card
-  planCard: {
-    backgroundColor: TUFTE.backgroundSecondary,
-    borderRadius: 2,
-    padding: 28,
-    borderWidth: 1,
-    borderColor: TUFTE.border,
-  },
-  planCardWide: {
+  cardDesktop: {
     flex: 1,
-    minWidth: 260,
-    maxWidth: 320,
+    flexBasis: 300,
+    maxWidth: 380,
   },
-  planCardHighlighted: {
-    borderColor: TUFTE.accent,
+  cardHighlighted: {
+    borderColor: '#2563EB',
     borderWidth: 2,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 12px rgba(37,99,235,0.15)',
+      } as any,
+    }),
   },
 
-  // Plan header
-  planHeader: {
-    marginBottom: 20,
+  // Card header
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  planName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: TUFTE.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+
+  // Card content
+  cardName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: 8,
   },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  planPrice: {
-    fontSize: 42,
-    fontWeight: '200',
-    color: TUFTE.text,
+  priceAmount: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#111827',
     letterSpacing: -1,
   },
-  planPeriod: {
+  pricePeriod: {
     fontSize: 16,
-    color: TUFTE.textLight,
+    color: '#9CA3AF',
     marginLeft: 4,
+    fontWeight: '500',
   },
-  monthlyEquivalent: {
+  altPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    minHeight: 20,
+  },
+  altPrice: {
+    fontSize: 13,
+    color: '#9CA3AF',
+  },
+  savingsPill: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  savingsText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  cardDescription: {
     fontSize: 14,
-    color: TUFTE.textMuted,
-    marginBottom: 8,
-  },
-  planDescription: {
-    fontSize: 15,
-    color: TUFTE.textMuted,
-    lineHeight: 22,
+    color: '#6B7280',
+    lineHeight: 20,
+    marginBottom: 16,
   },
 
   // Divider
   divider: {
     height: 1,
-    backgroundColor: TUFTE.border,
-    marginBottom: 20,
+    backgroundColor: '#F3F4F6',
+    marginBottom: 16,
   },
 
-  // Features list
+  // Features
   featuresList: {
-    marginBottom: 24,
+    gap: 10,
+    marginBottom: 20,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
   },
-  featureItem: {
-    fontSize: 15,
-    color: TUFTE.text,
-    lineHeight: 22,
-    paddingLeft: 12,
-    // Subtle indent effect
-    borderLeftWidth: 2,
-    borderLeftColor: 'transparent',
+  featureText: {
+    fontSize: 14,
+    color: '#374151',
+    flex: 1,
+    lineHeight: 20,
   },
 
   // CTA button
   ctaButton: {
     paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 2,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: TUFTE.text,
+    borderColor: 'transparent',
     alignItems: 'center',
-  },
-  ctaButtonHighlighted: {
-    backgroundColor: TUFTE.accent,
-    borderColor: TUFTE.accent,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
   },
   ctaText: {
     fontSize: 15,
-    fontWeight: '500',
-    color: TUFTE.text,
-    letterSpacing: 0.3,
+    fontWeight: '700',
   },
   ctaTextHighlighted: {
     color: '#FFFFFF',
@@ -492,13 +615,14 @@ const styles = StyleSheet.create({
 
   // Footer
   footer: {
-    marginTop: 48,
     alignItems: 'center',
-    paddingBottom: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    gap: 4,
   },
   footerText: {
     fontSize: 13,
-    color: TUFTE.textLight,
-    lineHeight: 20,
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
 });

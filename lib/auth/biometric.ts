@@ -6,7 +6,8 @@
 
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
+import { showConfirmAsync } from '@/lib/utils/crossPlatformAlert';
 import { createLogger } from '@/lib/utils/logger';
 
 const logger = createLogger('Biometric');
@@ -367,36 +368,19 @@ export const biometricLogin = async (): Promise<{
  * Marine-focused user experience for enabling biometric security
  */
 export const showBiometricSetupPrompt = async (): Promise<boolean> => {
-  return new Promise((resolve) => {
-    const capabilities = getBiometricCapabilities();
+  const caps = await getBiometricCapabilities();
 
-    capabilities.then((caps) => {
-      if (!caps.isAvailable) {
-        resolve(false);
-        return;
-      }
+  if (!caps.isAvailable) {
+    return false;
+  }
 
-      const biometricName = getBiometricTypeName(caps.supportedTypes);
+  const biometricName = getBiometricTypeName(caps.supportedTypes);
 
-      Alert.alert(
-        '🌊 Secure Your Sailing Data',
-        `Enable ${biometricName} for quick and secure access to RegattaFlow.\n\nPerfect for marine environments where you need fast access to race data.`,
-        [
-          {
-            text: 'Not Now',
-            style: 'cancel',
-            onPress: () => resolve(false),
-          },
-          {
-            text: `Enable ${biometricName}`,
-            style: 'default',
-            onPress: () => resolve(true),
-          },
-        ],
-        { cancelable: true, onDismiss: () => resolve(false) }
-      );
-    });
-  });
+  return showConfirmAsync(
+    'Secure Your Sailing Data',
+    `Enable ${biometricName} for quick and secure access to RegattaFlow.\n\nPerfect for marine environments where you need fast access to race data.`,
+    { confirmText: `Enable ${biometricName}`, cancelText: 'Not Now' }
+  );
 };
 
 export default {

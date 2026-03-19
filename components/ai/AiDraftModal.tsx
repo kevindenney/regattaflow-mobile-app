@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -9,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { AiDraftActions } from './AiDraftActions';
 import type { ClaudeDocumentDraft, ClaudeDocumentType } from '@/hooks/ai/useClaudeDraft';
@@ -66,9 +66,9 @@ export function AiDraftModal({
     if (!draft) return;
     const copied = await copyToClipboard(draft.markdown);
     if (copied) {
-      Alert.alert('Copied', 'Draft markdown copied to your clipboard.');
+      showAlert('Copied', 'Draft markdown copied to your clipboard.');
     } else {
-      Alert.alert('Clipboard unavailable', 'Copy is not supported on this device yet.');
+      showAlert('Clipboard unavailable', 'Copy is not supported on this device yet.');
     }
   };
 

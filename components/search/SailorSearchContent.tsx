@@ -7,7 +7,7 @@
  * - QR Code: Display user's QR code for sharing
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,9 @@ import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { SuggestedSailorsSection } from './SuggestedSailorsSection';
 import { ProfileQRCodeSection } from './ProfileQRCodeSection';
 import { InviteFriendsBanner } from './InviteFriendsBanner';
+import { DemoPeerCard } from '@/components/connect/DemoCards';
+import { getConnectDemoData } from '@/configs/connectDemoData';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -48,12 +51,41 @@ export function SailorSearchContent({
   onScroll,
 }: SailorSearchContentProps) {
   const { user } = useAuth();
+  const eventConfig = useInterestEventConfig();
+  const isSailing = eventConfig.interestSlug === 'sail-racing';
+  const demoData = useMemo(
+    () => (isSailing ? null : getConnectDemoData(eventConfig.interestSlug)),
+    [eventConfig.interestSlug, isSailing]
+  );
   const [activeSubTab, setActiveSubTab] = useState<SailorSubTab>('suggested');
   const [searchQuery, setSearchQuery] = useState('');
+  const [demoFollowedIds, setDemoFollowedIds] = useState<Set<string>>(new Set());
 
   const handleClearSearch = useCallback(() => {
     setSearchQuery('');
   }, []);
+
+  const handleToggleDemoFollow = useCallback((id: string) => {
+    setDemoFollowedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const filteredDemoPeers = useMemo(() => {
+    if (!demoData) return [];
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return demoData.peers;
+    return demoData.peers.filter((peer) => (
+      peer.name.toLowerCase().includes(query)
+      || peer.subtitle.toLowerCase().includes(query)
+    ));
+  }, [demoData, searchQuery]);
 
   return (
     <ScrollView
@@ -77,7 +109,7 @@ export function SailorSearchContent({
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search sailors"
+            placeholder={isSailing ? 'Search sailors' : (demoData?.searchPlaceholder || 'Search people')}
             placeholderTextColor={IOS_COLORS.placeholderText}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -94,23 +126,47 @@ export function SailorSearchContent({
       </View>
 
       {/* Sub-tabs */}
-      <View style={styles.subTabContainer}>
-        <IOSSegmentedControl<SailorSubTab>
-          segments={SUB_TABS}
-          selectedValue={activeSubTab}
-          onValueChange={setActiveSubTab}
-        />
-      </View>
+      {isSailing && (
+        <View style={styles.subTabContainer}>
+          <IOSSegmentedControl<SailorSubTab>
+            segments={SUB_TABS}
+            selectedValue={activeSubTab}
+            onValueChange={setActiveSubTab}
+          />
+        </View>
+      )}
 
       {/* Tab Content */}
-      {activeSubTab === 'suggested' && (
+      {!isSailing && demoData && (
+        <View style={styles.nonSailingSection}>
+          <Text style={styles.nonSailingHeader}>{demoData.peersHeader}</Text>
+          {filteredDemoPeers.map((peer) => (
+            <DemoPeerCard
+              key={peer.id}
+              peer={peer}
+              isFollowing={demoFollowedIds.has(peer.id)}
+              onToggleFollow={handleToggleDemoFollow}
+            />
+          ))}
+          {filteredDemoPeers.length === 0 && (
+            <View style={styles.placeholderContainer}>
+              <Text style={styles.placeholderTitle}>No people found</Text>
+              <Text style={styles.placeholderText}>
+                Try a different name or keyword.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {isSailing && activeSubTab === 'suggested' && (
         <>
           <SuggestedSailorsSection searchQuery={searchQuery} />
           <InviteFriendsBanner />
         </>
       )}
 
-      {activeSubTab === 'contacts' && (
+      {isSailing && activeSubTab === 'contacts' && (
         <View style={styles.placeholderContainer}>
           <Text style={styles.placeholderTitle}>Find Contacts</Text>
           <Text style={styles.placeholderText}>
@@ -119,7 +175,7 @@ export function SailorSearchContent({
         </View>
       )}
 
-      {activeSubTab === 'qr' && user && (
+      {isSailing && activeSubTab === 'qr' && user && (
         <ProfileQRCodeSection userId={user.id} />
       )}
     </ScrollView>
@@ -157,6 +213,17 @@ const styles = StyleSheet.create({
   subTabContainer: {
     paddingHorizontal: IOS_SPACING.lg,
     paddingBottom: IOS_SPACING.lg,
+  },
+  nonSailingSection: {
+    paddingHorizontal: IOS_SPACING.lg,
+    gap: IOS_SPACING.sm,
+  },
+  nonSailingHeader: {
+    ...IOS_TYPOGRAPHY.footnote,
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+    marginBottom: IOS_SPACING.xs,
   },
   placeholderContainer: {
     padding: IOS_SPACING.xl,

@@ -44,7 +44,8 @@ import {
   X
 } from 'lucide-react-native';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Alert, Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface Boat {
   className: string;
@@ -612,7 +613,7 @@ export default function SailorOnboardingComprehensive() {
   // Document management
   const addDocument = () => {
     if (!newDocUrl.trim()) {
-      Alert.alert('Missing URL', 'Please enter a document URL');
+      showAlert('Missing URL', 'Please enter a document URL');
       return;
     }
 
@@ -658,26 +659,17 @@ export default function SailorOnboardingComprehensive() {
 
     if (!validation.valid) {
       setValidationErrors(validation.errors);
-      // Use window.alert as fallback on web where Alert.alert may not work
-      if (typeof window !== 'undefined' && window.alert) {
-        window.alert(`Missing Required Information:\n• ${validation.errors.join('\n• ')}`);
-      } else {
-        Alert.alert(
-          'Missing Required Information',
-          `Please provide:\n• ${validation.errors.join('\n• ')}`
-        );
-      }
+      showAlert(
+        'Missing Required Information',
+        `Please provide:\n• ${validation.errors.join('\n• ')}`
+      );
       return;
     }
 
     setValidationErrors([]);
 
     if (!user?.id) {
-      if (typeof window !== 'undefined' && window.alert) {
-        window.alert('User not authenticated. Please sign in.');
-      } else {
-        Alert.alert('Error', 'User not authenticated');
-      }
+      showAlert('Error', 'User not authenticated');
       return;
     }
 
@@ -770,11 +762,7 @@ export default function SailorOnboardingComprehensive() {
       // Only show alert if component is still mounted
       if (isMounted) {
         const errorMsg = error.message || 'Failed to save profile. Please try again.';
-        if (typeof window !== 'undefined' && window.alert) {
-          window.alert(`Error: ${errorMsg}`);
-        } else {
-          Alert.alert('Error', errorMsg);
-        }
+        showAlert('Error', errorMsg);
       }
     } finally {
       // Always reset submitting state if still mounted

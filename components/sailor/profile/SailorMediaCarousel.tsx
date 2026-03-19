@@ -19,8 +19,8 @@ import {
   StyleSheet,
   Dimensions,
   Image,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { X, Plus, Camera, ImageIcon } from 'lucide-react-native';
@@ -81,7 +81,7 @@ export function SailorMediaCarousel({
     // Request permission
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
+      showAlert(
         'Permission Required',
         'Please grant access to your photo library to add photos.'
       );
@@ -112,7 +112,7 @@ export function SailorMediaCarousel({
       triggerHaptic('success');
       onMediaAdded?.();
     } catch (error) {
-      Alert.alert('Error', 'Failed to add photo. Please try again.');
+      showAlert('Error', 'Failed to add photo. Please try again.');
     } finally {
       setIsUploading(false);
     }

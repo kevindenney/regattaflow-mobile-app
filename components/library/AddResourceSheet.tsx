@@ -1,0 +1,481 @@
+/**
+ * AddResourceSheet — bottom sheet form for adding a library resource.
+ * When resource_type is 'online_course', shows a course lesson editor
+ * with optional AI decomposition.
+ */
+
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  Modal,
+  StyleSheet,
+  Platform,
+  KeyboardAvoidingView,
+  ActivityIndicator,
+} from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import { Ionicons } from '@expo/vector-icons';
+import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
+import { ResourceTypeIcon, getResourceTypeLabel } from './ResourceTypeIcon';
+import { CourseLessonEditor } from './CourseLessonEditor';
+import { decomposeCourse } from '@/services/ai/CourseDecompositionService';
+import { detectSourcePlatform, suggestResourceType } from '@/lib/utils/detectPlatform';
+import { fetchYouTubeMetadata } from '@/services/YouTubeMetadataService';
+import type { ResourceType, CreateLibraryResourceInput, CourseModule, CourseStructure } from '@/types/library';
+
+const RESOURCE_TYPES: ResourceType[] = [
+  'youtube_video',
+  'youtube_channel',
+  'online_course',
+  'website',
+  'book_digital',
+  'book_physical',
+  'social_media',
+  'cloud_folder',
+  'other',
+];
+
+interface AddResourceSheetProps {
+  visible: boolean;
+  libraryId: string;
+  interestName?: string;
+  onSubmit: (input: CreateLibraryResourceInput) => void;
+  onClose: () => void;
+}
+
+export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, onClose }: AddResourceSheetProps) {
+  const [title, setTitle] = useState('');
+  const [url, setUrl] = useState('');
+  const [resourceType, setResourceType] = useState<ResourceType>('website');
+  const [author, setAuthor] = useState('');
+  const [description, setDescription] = useState('');
+  const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
+
+  const handleUrlChange = useCallback((text: string) => {
+    setUrl(text);
+    const platform = detectSourcePlatform(text);
+    setDetectedPlatform(platform);
+    const suggestedType = suggestResourceType(text);
+    if (suggestedType) {
+      setResourceType(suggestedType);
+    }
+  }, []);
+
+  // YouTube auto-fill state
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
+  const isYouTube = detectedPlatform === 'YouTube';
+
+  const handleAutoFill = useCallback(async () => {
+    if (!url.trim()) return;
+    setIsAutoFilling(true);
+    try {
+      const meta = await fetchYouTubeMetadata(url.trim(), {
+        interestName: interestName || undefined,
+      });
+      if (meta) {
+        if (meta.title && !title.trim()) setTitle(meta.title);
+        if (meta.author) setAuthor(meta.author);
+        if (meta.description) setDescription(meta.description);
+      } else {
+        showAlert('Could Not Extract', 'Unable to fetch video metadata. You can fill in the fields manually.');
+      }
+    } catch (err: any) {
+      showAlert('Auto-fill Failed', err?.message || 'Something went wrong.');
+    } finally {
+      setIsAutoFilling(false);
+    }
+  }, [url, title, interestName]);
+
+  // Course-specific state
+  const [courseModules, setCourseModules] = useState<CourseModule[]>([]);
+  const [isDecomposing, setIsDecomposing] = useState(false);
+
+  const isCourse = resourceType === 'online_course';
+
+  const handleSubmit = useCallback(() => {
+    if (!title.trim()) return;
+
+    const metadata: Record<string, unknown> = {};
+
+    if (isCourse && courseModules.length > 0) {
+      let totalLessons = 0;
+      let totalMinutes = 0;
+      for (const m of courseModules) {
+        totalLessons += m.lessons.length;
+        for (const l of m.lessons) {
+          totalMinutes += l.duration_minutes ?? 0;
+        }
+      }
+      const courseStructure: CourseStructure = {
+        modules: courseModules,
+        total_lessons: totalLessons,
+        estimated_hours: totalMinutes > 0 ? Math.round(totalMinutes / 60 * 10) / 10 : undefined,
+      };
+      metadata.course_structure = courseStructure;
+      metadata.progress = { completed_lesson_ids: [] };
+    }
+
+    onSubmit({
+      library_id: libraryId,
+      title: title.trim(),
+      url: url.trim() || null,
+      resource_type: resourceType,
+      source_platform: detectedPlatform,
+      author_or_creator: author.trim() || null,
+      description: description.trim() || null,
+      metadata,
+    });
+    // Reset form
+    setTitle('');
+    setUrl('');
+    setResourceType('website');
+    setAuthor('');
+    setDescription('');
+    setDetectedPlatform(null);
+    setCourseModules([]);
+  }, [title, url, resourceType, author, description, libraryId, onSubmit, isCourse, courseModules]);
+
+  const handleAIDecompose = useCallback(async () => {
+    if (!title.trim()) return;
+    setIsDecomposing(true);
+    try {
+      const structure = await decomposeCourse({
+        courseTitle: title.trim(),
+        courseUrl: url.trim() || undefined,
+        authorOrCreator: author.trim() || undefined,
+        description: description.trim() || undefined,
+        interestName: interestName || 'general',
+      });
+      setCourseModules(structure.modules);
+    } catch (err: any) {
+      showAlert(
+        'Could Not Extract Lessons',
+        err?.message || 'AI extraction failed. You can add lessons manually instead.',
+      );
+    } finally {
+      setIsDecomposing(false);
+    }
+  }, [title, url, author, description, interestName]);
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable onPress={onClose}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
+          <Text style={styles.headerTitle}>Add Resource</Text>
+          <Pressable onPress={handleSubmit} disabled={!title.trim()}>
+            <Text style={[styles.saveText, !title.trim() && styles.saveTextDisabled]}>
+              Save
+            </Text>
+          </Pressable>
+        </View>
+
+        <ScrollView
+          style={styles.form}
+          contentContainerStyle={styles.formContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Title */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Title *</Text>
+            <TextInput
+              style={styles.input}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="e.g., Pen & Ink Drawing Course"
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              autoFocus
+            />
+          </View>
+
+          {/* URL */}
+          <View style={styles.field}>
+            <Text style={styles.label}>URL</Text>
+            <TextInput
+              style={styles.input}
+              value={url}
+              onChangeText={handleUrlChange}
+              placeholder="https://..."
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {detectedPlatform && (
+              <View style={styles.detectedRow}>
+                <Text style={styles.detectedPlatform}>Detected: {detectedPlatform}</Text>
+                {isYouTube && (
+                  <Pressable
+                    style={styles.autoFillButton}
+                    onPress={handleAutoFill}
+                    disabled={isAutoFilling}
+                  >
+                    {isAutoFilling ? (
+                      <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+                    ) : (
+                      <>
+                        <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
+                        <Text style={styles.autoFillText}>Auto-fill</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </View>
+
+          {/* Resource Type */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Type</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.typeRow}
+            >
+              {RESOURCE_TYPES.map((type) => (
+                <Pressable
+                  key={type}
+                  style={[
+                    styles.typeChip,
+                    resourceType === type && styles.typeChipSelected,
+                  ]}
+                  onPress={() => setResourceType(type)}
+                >
+                  <ResourceTypeIcon type={type} size={14} />
+                  <Text
+                    style={[
+                      styles.typeChipText,
+                      resourceType === type && styles.typeChipTextSelected,
+                    ]}
+                  >
+                    {getResourceTypeLabel(type)}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Author */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Author / Creator</Text>
+            <TextInput
+              style={styles.input}
+              value={author}
+              onChangeText={setAuthor}
+              placeholder="Who created this?"
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+            />
+          </View>
+
+          {/* Description */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Notes</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Why is this resource useful?"
+              placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* Course Lessons Section — only for online_course */}
+          {isCourse && (
+            <View style={styles.courseSection}>
+              <View style={styles.courseSectionHeader}>
+                <Text style={styles.label}>Course Lessons</Text>
+                <Pressable
+                  style={styles.aiButton}
+                  onPress={handleAIDecompose}
+                  disabled={isDecomposing || !title.trim()}
+                >
+                  {isDecomposing ? (
+                    <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+                  ) : (
+                    <>
+                      <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
+                      <Text style={styles.aiButtonText}>AI: Extract Lessons</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+              <Text style={styles.courseHint}>
+                {courseModules.length === 0
+                  ? 'Add lesson structure manually or use AI to extract it from the course info.'
+                  : `${courseModules.reduce((n, m) => n + m.lessons.length, 0)} lessons in ${courseModules.length} module${courseModules.length !== 1 ? 's' : ''}`}
+              </Text>
+              <CourseLessonEditor
+                modules={courseModules}
+                onChange={setCourseModules}
+              />
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: IOS_COLORS.systemGroupedBackground,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: IOS_SPACING.md,
+    paddingVertical: IOS_SPACING.sm,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: IOS_COLORS.systemGray4,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.label,
+  },
+  cancelText: {
+    fontSize: 17,
+    color: IOS_COLORS.systemBlue,
+  },
+  saveText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: IOS_COLORS.systemBlue,
+  },
+  saveTextDisabled: {
+    color: IOS_COLORS.systemGray3,
+  },
+  form: {
+    flex: 1,
+  },
+  formContent: {
+    padding: IOS_SPACING.md,
+    gap: IOS_SPACING.md,
+    paddingBottom: 100,
+  },
+  field: {
+    gap: IOS_SPACING.xs,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  input: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.systemGray4,
+    padding: IOS_SPACING.sm,
+    fontSize: 16,
+    color: IOS_COLORS.label,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as any,
+    }),
+  },
+  textArea: {
+    minHeight: 80,
+  },
+  detectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  detectedPlatform: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.systemBlue,
+  },
+  autoFillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(175,82,222,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  autoFillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.systemPurple,
+  },
+  typeRow: {
+    gap: IOS_SPACING.xs,
+    paddingVertical: 2,
+  },
+  typeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.systemGray4,
+  },
+  typeChipSelected: {
+    backgroundColor: 'rgba(0,122,255,0.1)',
+    borderColor: IOS_COLORS.systemBlue,
+  },
+  typeChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+  },
+  typeChipTextSelected: {
+    color: IOS_COLORS.systemBlue,
+    fontWeight: '600',
+  },
+  courseSection: {
+    gap: IOS_SPACING.xs,
+  },
+  courseSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  aiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(175,82,222,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  aiButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.systemPurple,
+  },
+  courseHint: {
+    fontSize: 13,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 18,
+  },
+});

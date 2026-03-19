@@ -369,10 +369,15 @@ async function fetchRaceData(regattaId: string): Promise<ExtractedRaceData | nul
         entry_form_url
       `)
       .eq('id', regattaId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('[PreRaceBriefingWizard] Error fetching race data:', error);
+      return null;
+    }
+
+    if (!data) {
+      console.warn('[PreRaceBriefingWizard] No race found for id:', regattaId);
       return null;
     }
 

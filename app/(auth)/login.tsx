@@ -1,12 +1,14 @@
 import { Link, router } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import type { ViewStyle } from 'react-native';
 import { useAuth } from '../../providers/AuthProvider';
 import { supabase } from '../../services/supabase';
 import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
 import { getLastTabRoute } from '@/lib/utils/userTypeRouting';
+import { useLocalSearchParams } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 const cardShadowStyle: ViewStyle =
@@ -81,8 +83,10 @@ const getAuthErrorMessage = (error: any): string => {
 
 export default function Login() {
   const { signIn, signInWithGoogle, signInWithApple, loading, enterGuestMode, signedIn, ready, userProfile } = useAuth();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Apple Sign In is available on web and iOS, not Android
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(Platform.OS === 'web');
@@ -94,11 +98,26 @@ export default function Login() {
     }
   }, []);
 
+  // Redirect after successful sign-in
   useEffect(() => {
     if (!ready || !signedIn) return;
+    // If a returnTo path was provided (e.g. from a landing page), go back there
+    if (returnTo && typeof returnTo === 'string' && returnTo.startsWith('/')) {
+      router.replace(returnTo as any);
+      return;
+    }
+    // Also check window.location for returnTo on web (fallback for query string params)
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlReturnTo = urlParams.get('returnTo');
+      if (urlReturnTo && urlReturnTo.startsWith('/')) {
+        router.replace(urlReturnTo as any);
+        return;
+      }
+    }
     const destination = getLastTabRoute(userProfile?.user_type ?? null);
     router.replace(destination as any);
-  }, [ready, signedIn, userProfile?.user_type]);
+  }, [ready, signedIn, userProfile?.user_type, returnTo]);
 
   const onEmailLogin = async () => {
     setErrorMessage(null); // Clear previous errors
@@ -113,10 +132,8 @@ export default function Login() {
       console.error('[LOGIN] Sign in failed:', e);
       const friendlyMessage = getAuthErrorMessage(e);
       setErrorMessage(friendlyMessage);
-      // Also show alert on mobile for better visibility
-      if (Platform.OS !== 'web') {
-        Alert.alert('Sign in failed', friendlyMessage);
-      }
+      // Also show alert for better visibility
+      showAlert('Sign in failed', friendlyMessage);
     }
   };
 
@@ -130,9 +147,7 @@ export default function Login() {
       // Don't show error message if user cancelled
       if (friendlyMessage) {
         setErrorMessage(friendlyMessage);
-        if (Platform.OS !== 'web') {
-          Alert.alert('Google sign-in failed', friendlyMessage);
-        }
+        showAlert('Google sign-in failed', friendlyMessage);
       }
     }
   };
@@ -147,9 +162,7 @@ export default function Login() {
       // Don't show error message if user cancelled
       if (friendlyMessage) {
         setErrorMessage(friendlyMessage);
-        if (Platform.OS !== 'web') {
-          Alert.alert('Apple sign-in failed', friendlyMessage);
-        }
+        showAlert('Apple sign-in failed', friendlyMessage);
       }
     }
   };
@@ -183,25 +196,23 @@ export default function Login() {
         }
       }
     } else {
-      // Mobile: use Alert.alert
-      Alert.alert(
-        'Reset Password',
-        email ? `Send password reset link to ${email}?` : 'Enter your email address',
-        email ? [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Send Link',
-            onPress: async () => {
-              try {
-                await supabase.auth.resetPasswordForEmail(email);
-                Alert.alert('Success', 'Password reset link sent to your email');
-              } catch (error) {
-                Alert.alert('Error', 'Failed to send reset link');
-              }
+      // Mobile: use cross-platform alert
+      if (email) {
+        showConfirm(
+          'Reset Password',
+          `Send password reset link to ${email}?`,
+          async () => {
+            try {
+              await supabase.auth.resetPasswordForEmail(email);
+              showAlert('Success', 'Password reset link sent to your email');
+            } catch (error) {
+              showAlert('Error', 'Failed to send reset link');
             }
-          }
-        ] : [{ text: 'OK' }]
-      );
+          },
+        );
+      } else {
+        showAlert('Reset Password', 'Enter your email address');
+      }
     }
   };
 
@@ -312,18 +323,27 @@ export default function Login() {
             />
 
             {/* Password */}
-            <TextInput
-              testID="login-password-input"
-              accessibilityLabel="Password"
-              style={styles.input}
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!loading}
-              textContentType="password"
-              importantForAccessibility="yes"
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput
+                testID="login-password-input"
+                accessibilityLabel="Password"
+                style={styles.passwordInput}
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                editable={!loading}
+                textContentType="password"
+                importantForAccessibility="yes"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeButton}
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              >
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
 
             {/* Forgot Password Link */}
             <TouchableOpacity testID="login-forgot-password" onPress={onForgotPassword}>
@@ -479,6 +499,25 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 16,
     backgroundColor: '#FFFFFF'
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: '#FFFFFF',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  eyeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   primaryButton: {
     backgroundColor: '#3B82F6',

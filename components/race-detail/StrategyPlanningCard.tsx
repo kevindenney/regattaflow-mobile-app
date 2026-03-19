@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/constants/Colors';
 import { strategicPlanningService, RaceStrategyPlan, AIStrategySuggestions } from '@/services/StrategicPlanningService';
@@ -177,7 +178,7 @@ export function StrategyPlanningCard({ raceEventId, sailorId, coachId, onPlanUpd
       }
     } catch (error) {
       console.error('Error updating phase strategy:', error);
-      Alert.alert('Error', 'Failed to save strategy. Please try again.');
+      showAlert('Error', 'Failed to save strategy. Please try again.');
     }
   };
 
@@ -200,10 +201,9 @@ export function StrategyPlanningCard({ raceEventId, sailorId, coachId, onPlanUpd
 
   const handleShareToggle = async () => {
     if (!coachId) {
-      Alert.alert(
+      showAlert(
         'No Coach Assigned',
-        'You need to assign a coach before sharing your strategy plan.',
-        [{ text: 'OK' }]
+        'You need to assign a coach before sharing your strategy plan.'
       );
       return;
     }
@@ -216,19 +216,19 @@ export function StrategyPlanningCard({ raceEventId, sailorId, coachId, onPlanUpd
         const success = await strategicPlanningService.unshareFromCoach(raceEventId, sailorId);
         if (success) {
           setIsShared(false);
-          Alert.alert('Success', 'Strategy plan unshared from coach');
+          showAlert('Success', 'Strategy plan unshared from coach');
         }
       } else {
         // Share
         const success = await strategicPlanningService.shareWithCoach(raceEventId, sailorId, coachId);
         if (success) {
           setIsShared(true);
-          Alert.alert('Success', 'Strategy plan shared with your coach');
+          showAlert('Success', 'Strategy plan shared with your coach');
         }
       }
     } catch (error) {
       console.error('Error toggling share:', error);
-      Alert.alert('Error', 'Failed to update sharing. Please try again.');
+      showAlert('Error', 'Failed to update sharing. Please try again.');
     } finally {
       setSharingWithCoach(false);
     }

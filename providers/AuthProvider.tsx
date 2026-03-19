@@ -3,8 +3,10 @@ import { extractOAuthDisplayName } from '@/lib/utils/oauthName'
 import { nativeGoogleSignIn, nativeAppleSignIn, signOutFromNativeProviders } from '@/lib/auth/nativeOAuth'
 import { createLogger } from '@/lib/utils/logger'
 import { clearLastTab } from '@/lib/utils/lastTab'
+import { clearLastViewState } from '@/lib/utils/lastViewState'
 import { GuestStorageService } from '@/services/GuestStorageService'
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService'
+import { setSentryUser } from '@/lib/sentry'
 import { supabase, UserType } from '@/services/supabase'
 import { bindAuthDiagnostics } from '@/utils/authDebug'
 import { logAuthEvent, logAuthState } from '@/utils/errToText'
@@ -810,6 +812,8 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       authDebugLog('🔔 [AUTH] Updating auth state...')
       setSignedIn(!!session)
       setUser(session?.user || null)
+      // Identify user in Sentry for error attribution
+      setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
       if (session?.user) {
         setIsDemoSession(false)
         setIsGuest(false) // Clear guest mode when user signs in
@@ -985,8 +989,9 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   }
 
   const signOut = async () => {
-    // Clear saved tab so next login starts fresh
+    // Clear saved tab and view state so next login starts fresh
     clearLastTab();
+    clearLastViewState();
 
     authDebugLog('🚪 [AUTH] ===== SIGNOUT PROCESS STARTING =====')
     authDebugLog('🚪 [AUTH] Current state before signOut:', {

@@ -47,7 +47,7 @@ export function SuggestionDetailSheet({
 
   const handleAccept = useCallback(() => {
     if (!suggestion) return;
-    triggerHaptic('success');
+    triggerHaptic('notificationSuccess');
     onAccept(suggestion.id);
     onClose();
   }, [suggestion, onAccept, onClose]);

@@ -5,9 +5,11 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/contexts/AuthContext';
+import { getOnboardingContext } from '@/lib/onboarding/interestContext';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -15,12 +17,17 @@ interface Message {
   timestamp: Date;
 }
 
-export function ClubOnboardingChat() {
+interface ClubOnboardingChatProps {
+  interestSlug?: string;
+}
+
+export function ClubOnboardingChat({ interestSlug }: ClubOnboardingChatProps) {
   const { user } = useAuth();
+  const ctx = getOnboardingContext(interestSlug);
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Welcome to RegattaFlow Clubs! 🎉\n\nI'm your AI assistant. I'll help you set up your club in about 5 minutes.\n\nWhat's your club's name or location?",
+      content: ctx.onboarding.chatGreeting,
       timestamp: new Date(),
     },
   ]);
@@ -133,6 +140,8 @@ export function ClubOnboardingChat() {
         body: {
           messages: payloadMessages,
           skillId: onboardingSkillId,
+          interestSlug: interestSlug || undefined,
+          organizationLabel: ctx.organizationLabel,
         },
       });
 
@@ -147,7 +156,7 @@ export function ClubOnboardingChat() {
 
       const responseText = typeof data.message === 'string' && data.message.length > 0
         ? data.message
-        : 'Thanks! I captured that. Could you share a bit more about your club?';
+        : `Thanks! I captured that. Could you share a bit more about your ${ctx.organizationLabel}?`;
 
       const assistantEntry: Message = {
         role: 'assistant',
@@ -160,7 +169,7 @@ export function ClubOnboardingChat() {
     } catch (error: any) {
       console.error('Chat error:', error);
       const fallback = error?.message
-        ? `I ran into an issue: ${error.message}. Let's try again — what's your club name or location?`
+        ? `I ran into an issue: ${error.message}. Let's try again — ${ctx.onboarding.organizationPrompt}`
         : 'Sorry, I had a technical issue. Please try again or contact support if this persists.';
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -168,7 +177,7 @@ export function ClubOnboardingChat() {
         timestamp: new Date(),
       }]);
       if (Platform.OS === 'web') {
-        Alert.alert?.('Onboarding error', error?.message || 'Something went wrong');
+        showAlert('Onboarding error', error?.message || 'Something went wrong');
       }
     } finally {
       setLoading(false);
@@ -179,7 +188,7 @@ export function ClubOnboardingChat() {
     setMessages([
       {
         role: 'assistant',
-        content: "Let's start fresh! 🎉\n\nWhat's your club's name or location?",
+        content: `Let's start fresh!\n\n${ctx.onboarding.organizationPrompt}`,
         timestamp: new Date(),
       },
     ]);

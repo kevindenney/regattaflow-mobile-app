@@ -6,7 +6,6 @@ import {
   RefreshControl,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   TextInput,
   Linking,
   ActivityIndicator,
@@ -40,6 +39,7 @@ import {
 import { ensureUuid, generateUuid } from '@/utils/uuid';
 import { createLogger } from '@/lib/utils/logger';
 import rhkycClubData from '@/data/demo/rhkycClubData.json';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 type ManualClub = {
   id: string;
@@ -485,7 +485,7 @@ export default function ClubsScreen() {
           } catch (queueError) {
             logger.warn('Failed to clear manual club queue after RLS violation', queueError);
           }
-          Alert.alert(
+          showAlert(
             'Cleaned up personal clubs',
             'Some locally stored clubs could not be synced and were removed because they belonged to a different account.'
           );
@@ -513,7 +513,7 @@ export default function ClubsScreen() {
     if (message.includes('relation') || message.includes('does not exist')) return;
     if (lastMembershipErrorAlertRef.current === message) return;
     lastMembershipErrorAlertRef.current = message;
-    Alert.alert('Error', `Failed to load clubs: ${message}`);
+    showAlert('Error', `Failed to load clubs: ${message}`);
   }, [error]);
 
   useEffect(() => {
@@ -523,7 +523,7 @@ export default function ClubsScreen() {
     }
     if (lastIntegrationErrorAlertRef.current === integrationError) return;
     lastIntegrationErrorAlertRef.current = integrationError;
-    Alert.alert('Club data unavailable', integrationError);
+    showAlert('Club data unavailable', integrationError);
   }, [integrationError]);
 
   const rawMembershipCount = memberships?.length || 0;
@@ -692,9 +692,9 @@ export default function ClubsScreen() {
     const payload = [`Reason: ${emptyClubStateReason}`, ...clubDiagnosticLines].join('\n');
     try {
       await Clipboard.setStringAsync(payload);
-      Alert.alert('Copied', 'Club diagnostics copied to clipboard.');
+      showAlert('Copied', 'Club diagnostics copied to clipboard.');
     } catch (_error) {
-      Alert.alert('Copy failed', 'Clipboard is unavailable on this device.');
+      showAlert('Copy failed', 'Clipboard is unavailable on this device.');
     }
   }, [emptyClubStateReason, clubDiagnosticLines]);
   const selectedSnapshot = useMemo<ClubIntegrationSnapshot | null>(() => {
@@ -780,7 +780,7 @@ export default function ClubsScreen() {
     const notes = manualForm.notes.trim();
 
     if (!name) {
-      Alert.alert('Add club', 'Please provide a club or association name.');
+      showAlert('Add club', 'Please provide a club or association name.');
       return;
     }
 
@@ -789,7 +789,7 @@ export default function ClubsScreen() {
     );
 
     if (exists) {
-      Alert.alert('Already tracked', 'You are already tracking this club.');
+      showAlert('Already tracked', 'You are already tracking this club.');
       return;
     }
 
@@ -817,7 +817,7 @@ export default function ClubsScreen() {
       if (user?.id) {
         const result = await upsertUserManualClub(user.id, newClub);
         if (result.error && !result.missingTable) {
-          Alert.alert('Sync issue', 'Saved locally but we could not sync to the cloud yet.');
+          showAlert('Sync issue', 'Saved locally but we could not sync to the cloud yet.');
         }
       }
     } finally {
@@ -834,7 +834,7 @@ export default function ClubsScreen() {
       if (user?.id) {
         const result = await deleteUserManualClub(user.id, clubId);
         if (result.error && !result.missingTable) {
-          Alert.alert('Sync issue', 'Removed locally but the cloud record may still exist.');
+          showAlert('Sync issue', 'Removed locally but the cloud record may still exist.');
         }
       }
     },
@@ -844,7 +844,7 @@ export default function ClubsScreen() {
   const handleQuickTrack = useCallback(
     async (name: string) => {
       if (manualClubs.some((club) => club.name.toLowerCase() === name.toLowerCase())) {
-        Alert.alert('Already saved', 'This club is already in your personal tracker.');
+        showAlert('Already saved', 'This club is already in your personal tracker.');
         return;
       }
 
@@ -864,11 +864,11 @@ export default function ClubsScreen() {
       if (user?.id) {
         const result = await upsertUserManualClub(user.id, next[next.length - 1]);
         if (result.error && !result.missingTable) {
-          Alert.alert('Sync issue', 'We saved this club locally but cloud sync failed.');
+          showAlert('Sync issue', 'We saved this club locally but cloud sync failed.');
         }
       }
 
-      Alert.alert('Tracked', `${name} was added to your personal club list.`);
+      showAlert('Tracked', `${name} was added to your personal club list.`);
     },
     [manualClubs, persistManualClubs, user?.id]
   );
@@ -876,21 +876,21 @@ export default function ClubsScreen() {
   const handleConnectClub = useCallback(
     async (clubId: string, clubName: string) => {
       if (!user?.id) {
-        Alert.alert('Sign in required', 'Sign in to connect with clubs and sync their schedules.');
+        showAlert('Sign in required', 'Sign in to connect with clubs and sync their schedules.');
         return;
       }
 
       try {
         setConnectingClubId(clubId);
         await joinClub({ clubId, membershipType: 'member' });
-        Alert.alert(
+        showAlert(
           'Connection requested',
           `We've notified ${clubName}. Their calendars will appear once the club accepts your connection.`
         );
         await Promise.allSettled([refetch?.(), refetchSnapshots()]);
       } catch (err: any) {
         logger.error('Failed to connect to club', err);
-        Alert.alert('Unable to connect', err?.message || 'Please try again later.');
+        showAlert('Unable to connect', err?.message || 'Please try again later.');
       } finally {
         setConnectingClubId(null);
       }
@@ -902,7 +902,7 @@ export default function ClubsScreen() {
     try {
       await Linking.openURL(url);
     } catch (err) {
-      Alert.alert('Unable to open website', 'Please try again later.');
+      showAlert('Unable to open website', 'Please try again later.');
     }
   }, []);
 
@@ -929,49 +929,49 @@ export default function ClubsScreen() {
 
       switch (actionId) {
         case 'create-regatta':
-          Alert.alert(
+          showAlert(
             'Regatta workspace',
             `The regatta creation flow for ${clubName} is being finalised. Your admin board will soon let you add dates, fleets, and scoring in one place.`
           );
           return;
         case 'manage-entries':
-          Alert.alert(
+          showAlert(
             'Entries & payments',
             'Entry approvals, invoices, and refunds are wiring up now. Expect a ledger view and payout reconciliation in the next build.'
           );
           return;
         case 'publish-documents':
-          Alert.alert(
+          showAlert(
             'Publishing tools',
             'Document automation will roll out with template support and scheduled expiry. For now, upload documents via the web console.'
           );
           return;
         case 'configure-microsite':
-          Alert.alert(
+          showAlert(
             'Microsite configuration',
             'Branding, custom domains, and widget embeds are on the roadmap. We will notify you when the white-label publisher is ready.'
           );
           return;
         case 'membership-approvals':
-          Alert.alert(
+          showAlert(
             'Membership approvals',
             'The role-based approval queue is nearly complete. You will soon be able to approve members and assign roles here.'
           );
           return;
         case 'volunteer-roster':
-          Alert.alert(
+          showAlert(
             'Volunteer roster',
             'Volunteer scheduling and race committee assignments are in development. Keep an eye on updates in the Club Control Center.'
           );
           return;
         case 'results-center':
-          Alert.alert(
+          showAlert(
             'Results center',
             'Live scoring review, protest tracking, and standings publishing will land after the entry pipeline ships.'
           );
           return;
         default:
-          Alert.alert('Coming soon', 'Club control center modules are being assembled.');
+          showAlert('Coming soon', 'Club control center modules are being assembled.');
       }
     },
     [router, selectedSnapshot]

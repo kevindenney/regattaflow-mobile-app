@@ -78,7 +78,7 @@ interface PositionAssignmentPanelProps extends ChecklistToolProps {
 
 export function PositionAssignmentPanel({
   item,
-  raceEventId,
+  regattaId: raceEventId,
   boatId,
   onComplete,
   onCancel,
@@ -249,7 +249,6 @@ export function PositionAssignmentPanel({
           crewManagementService.assignCrewToRace(
             raceEventId,
             crewMemberId!,
-            user?.id,
             `Position: ${role}`
           )
         );

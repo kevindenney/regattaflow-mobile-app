@@ -10,7 +10,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Alert,
   ActivityIndicator,
   Linking,
   Share,
@@ -29,6 +28,7 @@ import { format, formatDistanceToNow, isPast, isFuture } from 'date-fns';
 import { useAuth } from '@/providers/AuthProvider';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
 import { supabase } from '@/services/supabase';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 export default function ParticipantEventScreen() {
   const router = useRouter();
@@ -86,7 +86,7 @@ export default function ParticipantEventScreen() {
       }
     } catch (error) {
       console.error('Error loading event:', error);
-      Alert.alert('Error', 'Failed to load event details');
+      showAlert('Error', 'Failed to load event details');
     } finally {
       setLoading(false);
     }
@@ -103,7 +103,7 @@ export default function ParticipantEventScreen() {
           await nav.share({ title: event.title, text: message });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(message);
-          Alert.alert('Copied', 'Event details copied to clipboard');
+          showAlert('Copied', 'Event details copied to clipboard');
         }
       } else {
         await Share.share({ title: event.title, message });
@@ -115,7 +115,7 @@ export default function ParticipantEventScreen() {
 
   const handleRegister = () => {
     if (!user) {
-      Alert.alert('Sign In Required', 'Please sign in to register for this event.', [
+      showAlertWithButtons('Sign In Required', 'Please sign in to register for this event.', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Sign In', onPress: () => router.push('/(auth)/login') },
       ]);
@@ -136,7 +136,7 @@ export default function ParticipantEventScreen() {
             ),
         });
       }
-      Alert.alert('Cannot Register', reason, actions);
+      showAlertWithButtons('Cannot Register', reason, actions);
       return;
     }
 
@@ -148,7 +148,7 @@ export default function ParticipantEventScreen() {
     try {
       await Linking.openURL(doc.file_url);
     } catch (error) {
-      Alert.alert('Error', 'Could not open document');
+      showAlert('Error', 'Could not open document');
     }
   };
 

@@ -13,8 +13,8 @@ import {
   Modal,
   ActivityIndicator,
   ScrollView,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { X, Upload, FileText, Sparkles } from 'lucide-react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -65,10 +65,9 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
       });
 
       if (!extracted) {
-        Alert.alert(
+        showAlert(
           'Could Not Extract Race Details',
           'Please include race name, venue, and date in your text.',
-          [{ text: 'OK' }]
         );
         setIsProcessing(false);
         return;
@@ -107,11 +106,11 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
 
       // Show success message (works better on web than Alert)
       setTimeout(() => {
-        Alert.alert('Success', `Added: ${extractedName} at ${extractedVenue}`);
+        showAlert('Success', `Added: ${extractedName} at ${extractedVenue}`);
       }, 300);
     } catch (error: any) {
       logger.error('Error during text extraction flow', error);
-      Alert.alert('Error', error.message || 'Failed to add race. Please try again.');
+      showAlert('Error', error.message || 'Failed to add race. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -205,11 +204,11 @@ export function AddRaceModal({ visible, onClose, onRaceAdded }: AddRaceModalProp
       onRaceAdded();
       onClose();
       setTimeout(() => {
-        Alert.alert('Success', `Added: ${extractedName} (${extractedVenue})`);
+        showAlert('Success', `Added: ${extractedName} (${extractedVenue})`);
       }, 250);
     } catch (error) {
       logger.error('Error picking document', error);
-      Alert.alert(
+      showAlert(
         'Upload failed',
         error instanceof Error ? error.message : 'Failed to upload document.'
       );

@@ -30,7 +30,9 @@ export type SocialNotificationType =
   | 'thread_mention'
   | 'activity_comment'
   | 'org_membership_approved'
-  | 'org_membership_rejected';
+  | 'org_membership_rejected'
+  | 'followed_user_step_completed'
+  | 'step_collaborator_added';
 
 export interface SocialNotification {
   id: string;
@@ -84,6 +86,7 @@ const CANONICAL_NOTIFICATION_TYPES: ReadonlySet<SocialNotificationType> = new Se
   'activity_comment',
   'org_membership_approved',
   'org_membership_rejected',
+  'step_collaborator_added',
 ]);
 
 function normalizeMembershipDecisionType(
@@ -785,6 +788,25 @@ class NotificationServiceClass {
     }
 
     return data.id;
+  }
+
+  /**
+   * Notify a platform user that they were added as a collaborator on a step.
+   */
+  async notifyStepCollaboratorAdded(input: {
+    targetUserId: string;
+    actorId: string;
+    actorName: string;
+    stepId: string;
+    stepTitle: string;
+  }): Promise<string> {
+    return this.createNotification(input.targetUserId, {
+      type: 'step_collaborator_added',
+      title: 'Added as collaborator',
+      body: `${input.actorName} added you as a collaborator on "${input.stepTitle}"`,
+      actorId: input.actorId,
+      data: { step_id: input.stepId },
+    });
   }
 
   /**

@@ -1,3 +1,7 @@
+import { getAICircuitBreaker, CircuitOpenError } from '@/lib/utils/aiCircuitBreaker';
+import { shouldTriggerFallback, activateFallbackMode } from '@/lib/utils/aiFallback';
+import { invokeAIEdgeFunction, AI_EDGE_FUNCTION_TIMEOUT_MS } from './invokeAIEdgeFunction';
+
 export type ClaudeModel = 'claude-3-5-sonnet-20240620' | 'claude-3-haiku-20240307';
 
 export interface ClaudeRequest {
@@ -34,9 +38,7 @@ export class ClaudeClient {
     body: Record<string, unknown>
   ): Promise<{ data: any; error: any }> {
     if (!this.isNodeRuntime()) {
-      const sailingEdgeModulePath = '../domain/sailingEdgeFunctions';
-      const { invokeSailingEdgeFunction } = await import(sailingEdgeModulePath);
-      return invokeSailingEdgeFunction(functionName, { body });
+      return invokeAIEdgeFunction(functionName, { body });
     }
 
     const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -62,6 +64,7 @@ export class ClaudeClient {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(AI_EDGE_FUNCTION_TIMEOUT_MS),
       });
 
       const rawText = await response.text();
@@ -89,33 +92,42 @@ export class ClaudeClient {
   }
 
   async createMessage(request: ClaudeRequest): Promise<ClaudeResponse> {
-    const start = Date.now();
-    const promptSections: string[] = [];
+    const breaker = getAICircuitBreaker();
 
-    if (request.system) {
-      promptSections.push(request.system);
-    }
-    for (const msg of request.messages) {
-      promptSections.push(`[${msg.role}] ${msg.content}`);
-    }
-    const prompt = promptSections.join('\n\n').trim();
+    return breaker.execute(async () => {
+      const start = Date.now();
+      const promptSections: string[] = [];
 
-    const { data, error } = await this.invokeRaceCoachingEdgeFunction('race-coaching-chat', {
-      prompt,
-      max_tokens: request.maxTokens ?? 1024,
+      if (request.system) {
+        promptSections.push(request.system);
+      }
+      for (const msg of request.messages) {
+        promptSections.push(`[${msg.role}] ${msg.content}`);
+      }
+      const prompt = promptSections.join('\n\n').trim();
+
+      const { data, error } = await this.invokeRaceCoachingEdgeFunction('race-coaching-chat', {
+        prompt,
+        max_tokens: request.maxTokens ?? 1024,
+      });
+      if (error) {
+        const apiError = new Error(`Claude API error: ${error.message}`);
+        // Sync circuit breaker state with global fallback mode
+        if (shouldTriggerFallback(apiError)) {
+          activateFallbackMode(error.message);
+        }
+        throw apiError;
+      }
+
+      const text = typeof data?.text === 'string' ? data.text.trim() : '';
+
+      const durationMs = Date.now() - start;
+      return {
+        text,
+        tokensIn: 0,
+        tokensOut: 0,
+        raw: { provider: 'race-coaching-chat', modelRequested: request.model, durationMs, response: data },
+      };
     });
-    if (error) {
-      throw new Error(`Claude API error: ${error.message}`);
-    }
-
-    const text = typeof data?.text === 'string' ? data.text.trim() : '';
-
-    const durationMs = Date.now() - start;
-    return {
-      text,
-      tokensIn: 0,
-      tokensOut: 0,
-      raw: { provider: 'race-coaching-chat', modelRequested: request.model, durationMs, response: data },
-    };
   }
 }

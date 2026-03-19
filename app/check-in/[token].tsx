@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Platform,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
@@ -21,6 +20,7 @@ import {
   MapPin,
   Clock,
 } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
 import { checkInService } from '@/services/CheckInService';
 import { useAuth } from '@/providers/AuthProvider';
@@ -159,7 +159,7 @@ export default function SelfCheckIn() {
         e.id === entryId ? { ...e, checked_in: true, status: 'checked_in' } : e
       ));
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to check in');
+      showAlert('Error', err.message || 'Failed to check in');
     } finally {
       setChecking(false);
     }

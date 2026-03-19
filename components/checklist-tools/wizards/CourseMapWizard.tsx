@@ -18,8 +18,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Image,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -267,10 +267,9 @@ export function CourseMapWizard({
   const requestCameraPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
+      showAlert(
         'Camera Permission Required',
-        'Please grant camera access to take course photos.',
-        [{ text: 'OK' }]
+        'Please grant camera access to take course photos.'
       );
       return false;
     }
@@ -281,10 +280,9 @@ export function CourseMapWizard({
   const requestLibraryPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
+      showAlert(
         'Photo Library Permission Required',
-        'Please grant photo library access to select course diagrams.',
-        [{ text: 'OK' }]
+        'Please grant photo library access to select course diagrams.'
       );
       return false;
     }
@@ -339,7 +337,7 @@ export function CourseMapWizard({
       }
     } catch (error) {
       logger.error('Camera error:', { error });
-      Alert.alert('Error', 'Failed to capture photo. Please try again.');
+      showAlert('Error', 'Failed to capture photo. Please try again.');
     }
   }, [extractCourseFromImage]);
 
@@ -363,7 +361,7 @@ export function CourseMapWizard({
       }
     } catch (error) {
       logger.error('Library error:', { error });
-      Alert.alert('Error', 'Failed to select photo. Please try again.');
+      showAlert('Error', 'Failed to select photo. Please try again.');
     }
   }, [extractCourseFromImage]);
 
@@ -1017,7 +1015,7 @@ export function CourseMapWizard({
             {siExtractionResult.data.marks && siExtractionResult.data.marks.length > 0 ? (
               <View style={styles.siExtractedMarksContainer}>
                 <Text style={styles.siExtractedSectionTitle}>Course Marks from SI</Text>
-                {siExtractionResult.data.marks.map((mark, index) => (
+                {siExtractionResult.data.marks.map((mark: any, index: number) => (
                   <View key={index} style={styles.siExtractedMarkRow}>
                     <View style={[styles.siMarkTypeBadge, { backgroundColor: `${getMarkColor(mark.type)}20` }]}>
                       <Text style={[styles.siMarkTypeBadgeText, { color: getMarkColor(mark.type) }]}>

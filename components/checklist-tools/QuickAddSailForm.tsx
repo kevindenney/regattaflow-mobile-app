@@ -13,10 +13,10 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Plus, X, Sailboat, Check } from 'lucide-react-native';
-import { EquipmentService } from '@/services/EquipmentService';
+import { equipmentService } from '@/services/EquipmentService';
 
 const COLORS = {
   primary: '#007AFF',
@@ -73,14 +73,12 @@ export function QuickAddSailForm({
 
   const handleSave = useCallback(async () => {
     if (!category) {
-      Alert.alert('Error', 'Please select a sail category');
+      showAlert('Error', 'Please select a sail category');
       return;
     }
 
     setIsSaving(true);
     try {
-      const equipmentService = new EquipmentService();
-
       // Generate default name if not provided
       const sailName = name.trim() || `${SAIL_CATEGORIES.find(c => c.id === category)?.name || category} #1`;
 
@@ -96,7 +94,7 @@ export function QuickAddSailForm({
       onSuccess();
     } catch (error) {
       console.error('[QuickAddSailForm] Error saving sail:', error);
-      Alert.alert('Error', 'Failed to add sail. Please try again.');
+      showAlert('Error', 'Failed to add sail. Please try again.');
     } finally {
       setIsSaving(false);
     }

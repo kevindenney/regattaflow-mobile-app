@@ -355,7 +355,8 @@ export class StormGlassService {
       this.setCache(cacheKey, closestHeight, TIDE_CACHE_DURATION);
 
       return closestHeight;
-    } catch (_error) {
+    } catch (error: unknown) {
+      logger.warn('[StormGlassService.getTideHeight] Failed', { error });
       return 0;
     }
   }
@@ -471,7 +472,8 @@ export class StormGlassService {
       this.setCache(cacheKey, currents, DEFAULT_CACHE_DURATION);
 
       return currents;
-    } catch (_error) {
+    } catch (error: unknown) {
+      logger.warn('[StormGlassService.getOceanCurrents] Failed', { error });
       return [];
     }
   }

@@ -23,48 +23,6 @@ const FLOW_KEY = 'regattaflow_onboarding_flow';
 const ONBOARDING_SEEN_KEY = 'regattaflow_onboarding_seen';
 const CACHED_USERNAME_KEY = 'regattaflow_cached_username';
 
-// Step order for the full setup path (legacy)
-const FULL_SETUP_STEPS: OnboardingStep[] = [
-  'welcome',
-  'features',
-  'auth-choice',
-  'register',
-  'profile-setup',
-  'setup-choice',
-  'experience',
-  'boat-class',
-  'home-club',
-  'primary-fleet',
-  'find-races',
-  'complete',
-];
-
-// Step order for the quick setup path (legacy)
-const QUICK_SETUP_STEPS: OnboardingStep[] = [
-  'welcome',
-  'features',
-  'auth-choice',
-  'register',
-  'profile-setup',
-  'setup-choice',
-  'complete',
-];
-
-// NEW: Strava-inspired flow steps (legacy, includes value props)
-const NEW_ONBOARDING_STEPS: OnboardingStep[] = [
-  'value-track-races',
-  'value-prepare-pro',
-  'value-join-crew',
-  'auth-choice-new',
-  'name-photo',
-  'boat-picker',
-  'location-permission',
-  'club-nearby',
-  'find-sailors',
-  'race-calendar',
-  'add-race',
-];
-
 // Post-signup practical onboarding: name-only (boat/club deferred to in-app prompts)
 const POST_SIGNUP_STEPS: OnboardingStep[] = [
   'name-photo',
@@ -73,9 +31,9 @@ const POST_SIGNUP_STEPS: OnboardingStep[] = [
 /**
  * Create initial onboarding state
  */
-function createInitialState(useNewFlow: boolean = true): OnboardingState {
+function createInitialState(): OnboardingState {
   return {
-    currentStep: useNewFlow ? 'name-photo' : 'welcome',
+    currentStep: 'name-photo',
     completedSteps: [],
     preferences: {},
     startedAt: new Date().toISOString(),
@@ -85,7 +43,7 @@ function createInitialState(useNewFlow: boolean = true): OnboardingState {
 
 export class OnboardingStateService {
   private static state: OnboardingState | null = null;
-  private static useNewFlow: boolean = true; // Feature flag for new onboarding flow
+  private static useNewFlow: boolean = true;
 
   // ============================================================================
   // Returning User Detection
@@ -186,25 +144,21 @@ export class OnboardingStateService {
    * Get the appropriate step list based on flow type
    */
   private static getStepList(): OnboardingStep[] {
-    if (this.useNewFlow) {
-      return POST_SIGNUP_STEPS;
-    }
-    const path = this.state?.preferences.setupPath;
-    return path === 'quick' ? QUICK_SETUP_STEPS : FULL_SETUP_STEPS;
+    return POST_SIGNUP_STEPS;
   }
 
   /**
    * Get the first step for the current flow
    */
   static getFirstStep(): OnboardingStep {
-    return this.useNewFlow ? 'name-photo' : 'welcome';
+    return 'name-photo';
   }
 
   /**
    * Get the starting route for onboarding (practical onboarding only)
    */
   static async getStartingRoute(): Promise<string> {
-    return this.useNewFlow ? '/onboarding/profile/name-photo' : '/onboarding/welcome';
+    return '/onboarding/profile/name-photo';
   }
 
   /**
@@ -226,11 +180,11 @@ export class OnboardingStateService {
         return this.state;
       }
 
-      this.state = createInitialState(this.useNewFlow);
+      this.state = createInitialState();
       return this.state;
     } catch (error) {
       logger.error('[OnboardingStateService] Failed to load state', error);
-      this.state = createInitialState(this.useNewFlow);
+      this.state = createInitialState();
       return this.state;
     }
   }

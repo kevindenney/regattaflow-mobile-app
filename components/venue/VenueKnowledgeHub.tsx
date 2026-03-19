@@ -10,8 +10,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { LiveConditionsCard } from './LiveConditionsCard';
@@ -79,7 +79,7 @@ export function VenueKnowledgeHub({
 
   const handleCreateDiscussion = () => {
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to start a discussion');
+      showAlert('Sign in required', 'Please sign in to start a discussion');
       return;
     }
     setShowComposer(true);
@@ -87,7 +87,7 @@ export function VenueKnowledgeHub({
 
   const handleUploadDocument = () => {
     if (!user) {
-      Alert.alert('Sign in required', 'Please sign in to upload documents');
+      showAlert('Sign in required', 'Please sign in to upload documents');
       return;
     }
     setShowUploader(true);

@@ -12,10 +12,10 @@ import {
   StyleSheet,
   ScrollView,
   Platform,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -140,26 +140,19 @@ export function SailorSubscriptionChoice({
           onboarding_completed: true,
         });
         
-        Alert.alert(
-          '🎉 Trial Started!',
-          `You now have 7 days of full access to ${plan?.name}. Explore all premium features!`,
-          [
-            {
-              text: 'Start Exploring',
-              onPress: () => {
-                if (onComplete) {
-                  onComplete(selectedPlan);
-                } else {
-                  router.replace('/(tabs)/dashboard');
-                }
-              },
-            },
-          ]
+        showAlert(
+          'Trial Started!',
+          `You now have 7 days of full access to ${plan?.name}. Explore all premium features!`
         );
+        if (onComplete) {
+          onComplete(selectedPlan);
+        } else {
+          router.replace('/(tabs)/dashboard');
+        }
       }
     } catch (error: any) {
       console.error('Error selecting plan:', error);
-      Alert.alert('Error', error?.message || 'Failed to set up your subscription. Please try again.');
+      showAlert('Error', error?.message || 'Failed to set up your subscription. Please try again.');
     } finally {
       setIsProcessing(false);
     }

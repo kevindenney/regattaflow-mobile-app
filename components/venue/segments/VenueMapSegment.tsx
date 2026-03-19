@@ -9,7 +9,8 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { VenueMapView } from '../VenueMapView';
 import { MapControlsFAB } from '../map/MapControlsFAB';
 import { VenueBottomSheet } from '../map/VenueBottomSheet';
@@ -103,7 +104,7 @@ export function VenueMapSegment({
     setPreviewedVenue(null);
     const success = await onSwitchVenue(venueId);
     if (!success) {
-      Alert.alert('Switch Failed', 'Could not switch to the selected venue.');
+      showAlert('Switch Failed', 'Could not switch to the selected venue.');
     }
   }, [previewedVenue, onSwitchVenue]);
 

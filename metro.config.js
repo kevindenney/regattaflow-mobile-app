@@ -1,5 +1,6 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
+const { withSentryConfig } = require('@sentry/react-native/metro');
 const path = require('path');
 const { resolve } = require('metro-resolver');
 
@@ -107,4 +108,5 @@ if (process.env.NODE_ENV === 'production') {
   };
 }
 
-module.exports = config;
+// Only apply Sentry serializer in production — it crashes dev bundles with Debug ID errors
+module.exports = process.env.NODE_ENV === 'production' ? withSentryConfig(config) : config;

@@ -11,11 +11,11 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Modal,
   ScrollView,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
@@ -167,7 +167,7 @@ export function QuickAddBoatForm({
       setClasses(data || []);
     } catch (err: any) {
       console.error('[QuickAddBoatForm] Error loading classes:', err);
-      Alert.alert('Error', 'Failed to load boat classes');
+      showAlert('Error', 'Failed to load boat classes');
     } finally {
       setLoadingClasses(false);
     }
@@ -218,18 +218,18 @@ export function QuickAddBoatForm({
     // Validation
     if (!boatName.trim()) {
       console.warn('[QuickAddBoatForm] Validation failed: no boat name');
-      Alert.alert('Required Field', 'Please enter a boat name');
+      showAlert('Required Field', 'Please enter a boat name');
       return;
     }
     if (!classId) {
       console.warn('[QuickAddBoatForm] Validation failed: no class selected');
-      Alert.alert('Required Field', 'Please select a boat class');
+      showAlert('Required Field', 'Please select a boat class');
       return;
     }
 
     if (!user) {
       console.error('[QuickAddBoatForm] No user found');
-      Alert.alert('Error', 'You must be logged in to add a boat');
+      showAlert('Error', 'You must be logged in to add a boat');
       return;
     }
 
@@ -277,7 +277,7 @@ export function QuickAddBoatForm({
         ? ` with ${selectedSails.length} sail${selectedSails.length > 1 ? 's' : ''}`
         : '';
 
-      Alert.alert(
+      showAlert(
         'Success!',
         `Added boat: ${boatName}${sailNumber ? ` (Sail #${sailNumber})` : ''}${sailsText}`
       );
@@ -297,7 +297,7 @@ export function QuickAddBoatForm({
       onClose();
     } catch (err: any) {
       if (err?.queuedForSync && err?.entity) {
-        Alert.alert(
+        showAlert(
           'Offline',
           `${boatName} will be saved once you're back online. We'll sync this boat automatically.`
         );
@@ -317,7 +317,7 @@ export function QuickAddBoatForm({
           errorMessage = `You already have a ${boatName} with sail number ${sailNumber} in this class. Please use a different sail number or edit your existing boat.`;
         }
 
-        Alert.alert('Error', errorMessage);
+        showAlert('Error', errorMessage);
       }
     } finally {
       setLoading(false);

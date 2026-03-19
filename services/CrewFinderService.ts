@@ -1997,6 +1997,8 @@ class CrewFinderServiceClass {
         isPast: daysUntil < 0,
         daysUntil,
         isFollowing: followingSet.has(race.created_by),
+        hasSchedule: false,
+        hasCoursePlan: false,
       };
     });
 

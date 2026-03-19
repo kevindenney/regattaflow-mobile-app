@@ -16,7 +16,6 @@ import {
   Pressable,
   Share,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import {
   UserPlus,
@@ -26,6 +25,7 @@ import {
   BarChart3,
   MessageSquare,
 } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -108,7 +108,7 @@ export function ClubActionRow({
       });
     } catch (error) {
       if ((error as Error).message !== 'User did not share') {
-        Alert.alert('Error', 'Failed to share club');
+        showAlert('Error', 'Failed to share club');
       }
     }
   }, [clubId, clubName]);

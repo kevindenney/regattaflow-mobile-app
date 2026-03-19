@@ -1,25 +1,24 @@
 import { roleHome } from '@/lib/gates';
 import { useAuth } from '@/providers/AuthProvider';
 import { SUPABASE_CONFIG_ERROR } from '@/services/supabase';
-import { router, Stack, useSegments } from 'expo-router';
+import { router, Stack, useSegments, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 
 const ONBOARDING_ROUTES = new Set([
-  // New wizard-based club onboarding
+  // Club onboarding wizard
   'club-onboarding',
   'step-1-basics',
   'step-2-details',
   'step-3-contact',
   'step-4-launch',
-  // Legacy club onboarding (keep for backwards compatibility)
+  // Club onboarding chat + payment
   'club-onboarding-chat',
   'club-onboarding-enhanced',
-  'club-onboarding-simple',
   'club-onboarding-payment',
   'club-onboarding-payment-confirmation',
   'club-onboarding-website-verification',
-  'club-onboarding-complete',
+  // Coach onboarding
   'coach-onboarding-welcome',
   'coach-onboarding-expertise',
   'coach-onboarding-pricing',
@@ -28,10 +27,8 @@ const ONBOARDING_ROUTES = new Set([
   'coach-onboarding-profile-preview',
   'coach-onboarding-stripe-callback',
   'coach-onboarding-complete',
-  'sailor-onboarding-chat',
+  // Sailor onboarding
   'sailor-onboarding-comprehensive',
-  'onboarding',
-  'onboarding-redesign',
 ]);
 
 // Routes that should be accessible while signed out (OAuth callback needs to run)
@@ -40,6 +37,7 @@ const AUTH_ENTRY_ROUTES = new Set(['login', 'signup', 'callback']);
 export default function AuthLayout() {
   const { state, userType, isGuest } = useAuth();
   const segments = useSegments();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const currentRoute = segments[segments.length - 1];
   const onboardingRoutes = ONBOARDING_ROUTES;
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -88,9 +86,22 @@ export default function AuthLayout() {
       userType &&
       currentRoute && // Don't redirect during navigation transitions when route is not yet determined
       !isInOnboardingFlow && // Use the broader check that looks at all segments
-      !hasEnteredOnboarding.current && // If we've ever entered onboarding this session, don't redirect
-      !isInAuthGroup // If we're in the (auth) group at all, don't redirect - let the flow complete
+      !hasEnteredOnboarding.current // If we've ever entered onboarding this session, don't redirect
     ) {
+      // If the login/signup page has a returnTo param, honor it
+      const returnToParam = returnTo
+        || (Platform.OS === 'web' && typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('returnTo')
+          : null);
+
+      if (returnToParam && typeof returnToParam === 'string' && returnToParam.startsWith('/')) {
+        router.replace(returnToParam as any);
+        return;
+      }
+
+      // Don't redirect if we're in the (auth) group — let the flow complete
+      if (isInAuthGroup) return;
+
       const destination = roleHome(userType);
       const destinationSegment = destination.split('/').pop();
 
@@ -100,7 +111,7 @@ export default function AuthLayout() {
 
       router.replace(destination);
     }
-  }, [state, userType, currentRoute, isInOnboardingFlow, isInAuthGroup]);
+  }, [state, userType, currentRoute, isInOnboardingFlow, isInAuthGroup, returnTo]);
 
   // Show config error immediately if Supabase can't initialize
   if (SUPABASE_CONFIG_ERROR) {
@@ -180,11 +191,9 @@ export default function AuthLayout() {
       <Stack.Screen name="callback" />
       <Stack.Screen name="club-onboarding-chat" />
       <Stack.Screen name="club-onboarding-enhanced" />
-      <Stack.Screen name="club-onboarding-simple" />
       <Stack.Screen name="club-onboarding-payment" />
       <Stack.Screen name="club-onboarding-payment-confirmation" />
       <Stack.Screen name="club-onboarding-website-verification" />
-      <Stack.Screen name="club-onboarding-complete" />
       <Stack.Screen name="coach-onboarding-welcome" />
       <Stack.Screen name="coach-onboarding-expertise" />
       <Stack.Screen name="coach-onboarding-pricing" />
@@ -193,10 +202,7 @@ export default function AuthLayout() {
       <Stack.Screen name="coach-onboarding-profile-preview" />
       <Stack.Screen name="coach-onboarding-stripe-callback" />
       <Stack.Screen name="coach-onboarding-complete" />
-      <Stack.Screen name="sailor-onboarding-chat" />
       <Stack.Screen name="sailor-onboarding-comprehensive" />
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="onboarding-redesign" />
   </Stack>
   );
 }

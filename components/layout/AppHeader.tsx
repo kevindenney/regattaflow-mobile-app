@@ -15,9 +15,9 @@ import {
   useWindowDimensions,
   Platform,
   Modal,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { router } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { RegattaFlowLogo } from '@/components/RegattaFlowLogo';
@@ -70,26 +70,20 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   const handleSignOut = async () => {
-    Alert.alert(
+    showConfirm(
       'Sign Out',
       'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOutEverywhere();
-              setShowUserMenu(false);
-              setShowMobileMenu(false);
-              router.replace('/');
-            } catch (error) {
-              console.error('Sign out error:', error);
-            }
-          }
+      async () => {
+        try {
+          await signOutEverywhere();
+          setShowUserMenu(false);
+          setShowMobileMenu(false);
+          router.replace('/');
+        } catch (error) {
+          console.error('Sign out error:', error);
         }
-      ]
+      },
+      { destructive: true }
     );
   };
 

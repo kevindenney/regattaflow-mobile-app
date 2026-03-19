@@ -12,8 +12,8 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  Alert
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobalVenueIntelligence } from '@/hooks/useGlobalVenueIntelligence';
 import { WeatherIntelligence } from '@/components/weather/WeatherIntelligence';
@@ -89,7 +89,7 @@ export const GlobalVenueIntelligence: React.FC<GlobalVenueIntelligenceProps> = (
       await selectVenue(venue.id);
       onVenueSelected?.(venue);
     } catch (error: any) {
-      Alert.alert('Error', `Failed to select venue: ${error.message}`);
+      showAlert('Error', `Failed to select venue: ${error.message}`);
     }
   };
 

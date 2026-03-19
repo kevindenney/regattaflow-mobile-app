@@ -1,0 +1,859 @@
+/**
+ * StepCritiqueContent — Post-session reflection matching the Pencil Critique Tab design.
+ *
+ * Sections (top → bottom):
+ *   1. Auto-save indicator
+ *   2. Overall Rating — star rating with descriptive label
+ *   3. Skill Progress — per-capability dot rating + progress bar
+ *   4. Your Work — media thumbnails from act phase
+ *   5. What went well? — green thumbs-up prompt
+ *   6. What to improve? — coral target prompt
+ *   7. AI Feedback — session analysis card with suggestion pill
+ *   8. Save Review / Share with Coach buttons
+ */
+
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { STEP_COLORS } from '@/lib/step-theme';
+import { useStepDetail, useUpdateStepMetadata } from '@/hooks/useStepDetail';
+import { useUpdateStep } from '@/hooks/useTimelineSteps';
+import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
+import { createStep } from '@/services/TimelineStepService';
+import { generateCritiqueInsight, gatherEnrichedContext } from '@/services/ai/StepPlanAIService';
+import { markLessonCompleted } from '@/services/LibraryService';
+import { useQueryClient } from '@tanstack/react-query';
+import type { StepReviewData, StepActData, StepPlanData, StepMetadata } from '@/types/step-detail';
+import { ShareStepSheet } from '@/components/step/ShareStepSheet';
+
+// ---------------------------------------------------------------------------
+// Design tokens from Pencil Critique Tab
+// ---------------------------------------------------------------------------
+const C = {
+  pageBg: '#F5F4F1',
+  cardBg: '#FFFFFF',
+  cardBorder: '#E5E4E1',
+  sectionLabel: '#9C9B99',
+  labelDark: '#1A1918',
+  labelMid: '#6D6C6A',
+  labelLight: '#D1D0CD',
+  accent: '#3D8A5A',       // forest green
+  accentGlow: '#C8F0D8',
+  coral: '#D89575',
+  gold: '#D4A64A',
+  dotInactive: '#EDECEA',
+  suggestionBg: '#FAFAF8',
+  badgeBg: '#EDECEA',
+  badgeText: '#6D6C6A',
+  radius: 12,
+  radiusLg: 16,
+} as const;
+
+// ---------------------------------------------------------------------------
+// Rating labels
+// ---------------------------------------------------------------------------
+const RATING_LABELS = [
+  '',
+  'Struggled today',
+  'Below average',
+  'Good — Making progress',
+  'Great session',
+  'Outstanding!',
+];
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function SectionLabel({ children }: { children: string }) {
+  return <Text style={s.sectionLabel}>{children}</Text>;
+}
+
+/** 5 stars — filled up to `value` */
+function StarRating({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <View style={s.starRow}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Pressable key={i} onPress={() => onChange(i)} hitSlop={6}>
+          <Ionicons
+            name="star"
+            size={36}
+            color={i <= value ? C.gold : C.labelLight}
+          />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Dot rating (1-5 filled circles) */
+function DotRating({
+  value,
+  color,
+  onChange,
+}: {
+  value: number;
+  color: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <View style={s.dotRow}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Pressable key={i} onPress={() => onChange(i)} hitSlop={6}>
+          <View
+            style={[
+              s.dot,
+              { backgroundColor: i <= value ? color : C.dotInactive },
+            ]}
+          />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** Horizontal progress bar */
+function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.min(value / max, 1) : 0;
+  return (
+    <View style={s.progressBarTrack}>
+      <View style={[s.progressBarFill, { width: `${pct * 100}%`, backgroundColor: color }]} />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+interface StepCritiqueContentProps {
+  stepId: string;
+}
+
+export function StepCritiqueContent({ stepId }: StepCritiqueContentProps) {
+  const { data: step } = useStepDetail(stepId);
+  const updateMetadata = useUpdateStepMetadata(stepId);
+  const updateStep = useUpdateStep();
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initializedRef = useRef(false);
+
+  const metadata = (step?.metadata ?? {}) as StepMetadata;
+  const planData: StepPlanData = metadata.plan ?? {};
+  const actData: StepActData = metadata.act ?? {};
+  const reviewData: StepReviewData = metadata.review ?? {};
+
+  // Local state
+  const [overallRating, setOverallRating] = useState(0);
+  const [localWentWell, setLocalWentWell] = useState('');
+  const [localToImprove, setLocalToImprove] = useState('');
+  const [localNextNotes, setLocalNextNotes] = useState('');
+  const [localCapabilityRatings, setLocalCapabilityRatings] = useState<Record<string, number>>({});
+  const [lastSavedLabel, setLastSavedLabel] = useState('');
+
+  // Seed from server
+  useEffect(() => {
+    if (step && !initializedRef.current) {
+      setOverallRating(reviewData.overall_rating ?? 0);
+      setLocalWentWell(reviewData.what_learned ?? '');
+      setLocalToImprove(reviewData.deviation_reason ?? '');
+      setLocalNextNotes(reviewData.next_step_notes ?? '');
+      setLocalCapabilityRatings(reviewData.capability_progress ?? {});
+      initializedRef.current = true;
+    }
+  }, [step]);
+
+  const metadataRef = useRef(metadata);
+  metadataRef.current = metadata;
+
+  const debouncedSaveReview = useCallback(
+    (partial: Partial<StepReviewData>) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        const current = metadataRef.current;
+        updateMetadata.mutate({ review: { ...(current.review ?? {}), ...partial } });
+        setLastSavedLabel('Saved just now');
+      }, 600);
+    },
+    [updateMetadata],
+  );
+
+  // Handlers
+  const handleOverallRating = useCallback(
+    (value: number) => {
+      setOverallRating(value);
+      debouncedSaveReview({ overall_rating: value });
+    },
+    [debouncedSaveReview],
+  );
+
+  const handleWentWellChange = useCallback(
+    (text: string) => {
+      setLocalWentWell(text);
+      debouncedSaveReview({ what_learned: text });
+    },
+    [debouncedSaveReview],
+  );
+
+  const handleToImproveChange = useCallback(
+    (text: string) => {
+      setLocalToImprove(text);
+      debouncedSaveReview({ deviation_reason: text });
+    },
+    [debouncedSaveReview],
+  );
+
+  const handleNextNotesChange = useCallback(
+    (text: string) => {
+      setLocalNextNotes(text);
+      debouncedSaveReview({ next_step_notes: text });
+    },
+    [debouncedSaveReview],
+  );
+
+  const handleCapabilityRating = useCallback(
+    (goal: string, rating: number) => {
+      setLocalCapabilityRatings((prev) => {
+        const updated = { ...prev, [goal]: rating };
+        debouncedSaveReview({ capability_progress: updated });
+        return updated;
+      });
+    },
+    [debouncedSaveReview],
+  );
+
+  // Complete / save review
+  const handleSaveReview = useCallback(() => {
+    updateStep.mutate(
+      { stepId, input: { status: 'completed' } },
+      {
+        onSuccess: () => {
+          const courseCtx = (step?.metadata as any)?.course_context;
+          if (courseCtx?.resource_id && courseCtx?.lesson_id) {
+            markLessonCompleted(courseCtx.resource_id, courseCtx.lesson_id).catch(() => {});
+          }
+        },
+      },
+    );
+  }, [stepId, updateStep, step]);
+
+  const isCompleted = step?.status === 'completed';
+
+  // Sub-step summary
+  const subSteps = planData.how_sub_steps ?? [];
+  const subStepProgress = actData.sub_step_progress ?? {};
+  const completedCount = subSteps.filter((ss) => subStepProgress[ss.id]).length;
+
+  // Capability goals
+  const capabilityGoals = planData.capability_goals ?? [];
+
+  // --- AI Insight ---
+  const { user } = useAuth();
+  const { currentInterest } = useInterest();
+  const [aiInsight, setAiInsight] = useState('');
+  const [aiSuggestion, setAiSuggestion] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const handleAiInsight = useCallback(async () => {
+    if (aiLoading || !user?.id || !step) return;
+    setAiLoading(true);
+    setAiInsight('');
+    setAiSuggestion('');
+    try {
+      const resolvedInterestId = step.interest_id || currentInterest?.id;
+      const enriched = resolvedInterestId
+        ? await gatherEnrichedContext(user.id, resolvedInterestId)
+        : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [] };
+
+      const text = await generateCritiqueInsight({
+        interestName: currentInterest?.name || 'this interest',
+        stepTitle: step.title,
+        planWhat: planData.what_will_you_do ?? '',
+        actNotes: actData.notes ?? '',
+        subStepsCompleted: completedCount,
+        subStepsTotal: subSteps.length,
+        workedToPlan: null,
+        deviationReason: localToImprove,
+        whatLearned: localWentWell,
+        capabilityRatings: localCapabilityRatings,
+        stepHistory: enriched.stepHistory,
+      });
+
+      // Try to split out a suggestion line (last sentence starting with "Suggested" or "Try")
+      const lines = text.split('\n').filter(Boolean);
+      const suggestionIdx = lines.findIndex((l) => /^(Suggested|Try|Next:)/i.test(l.trim()));
+      if (suggestionIdx >= 0) {
+        setAiSuggestion(lines[suggestionIdx].trim());
+        setAiInsight(lines.filter((_, i) => i !== suggestionIdx).join('\n'));
+      } else {
+        setAiInsight(text);
+      }
+    } catch {
+      setAiInsight('Could not generate insight right now. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiLoading, user?.id, step, currentInterest, planData, actData, completedCount, subSteps.length, localToImprove, localWentWell, localCapabilityRatings]);
+
+  // Auto-trigger AI insight when the tab is first opened and has content
+  const autoTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (!autoTriggeredRef.current && step && (localWentWell || localToImprove) && user?.id) {
+      autoTriggeredRef.current = true;
+      // Small delay to let the UI render first
+      const t = setTimeout(handleAiInsight, 500);
+      return () => clearTimeout(t);
+    }
+  }, [step, localWentWell, localToImprove, user?.id]);
+
+  // --- Share ---
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+
+  // --- Create Next Step ---
+  const queryClient = useQueryClient();
+  const [createdNextId, setCreatedNextId] = useState<string | null>(null);
+  const [creatingNext, setCreatingNext] = useState(false);
+
+  const handleCreateNextStep = useCallback(async () => {
+    if (!user?.id || !step || createdNextId || creatingNext) return;
+    setCreatingNext(true);
+    try {
+      const unfinished = (planData.how_sub_steps ?? [])
+        .filter((ss) => !subStepProgress[ss.id])
+        .map((ss) => ({ ...ss, completed: false }));
+      const rawTitle = `Follow-up: ${step.title}`;
+      const title = rawTitle.length > 60 ? rawTitle.slice(0, 57) + '...' : rawTitle;
+      const nextPlan: StepPlanData = {
+        what_will_you_do: reviewData.next_step_notes ?? '',
+        how_sub_steps: unfinished,
+        linked_resource_ids: planData.linked_resource_ids ?? [],
+        capability_goals: planData.capability_goals ?? [],
+      };
+      const created = await createStep({
+        user_id: user.id,
+        interest_id: step.interest_id,
+        title,
+        status: 'pending',
+        source_type: 'manual',
+        metadata: { plan: nextPlan },
+      });
+      setCreatedNextId(created.id);
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+    } catch {
+      setCreatingNext(false);
+    }
+  }, [user?.id, step, createdNextId, creatingNext, planData, subStepProgress, reviewData, queryClient]);
+
+  // Media from act phase
+  const actMedia: string[] = (actData as any).media_urls ?? [];
+
+  if (!step) return null;
+
+  return (
+    <View style={s.container}>
+      {/* Auto-save indicator */}
+      {lastSavedLabel !== '' && (
+        <View style={s.autoSave}>
+          <Ionicons name="cloud-outline" size={12} color={C.labelLight} />
+          <Text style={s.autoSaveText}>{lastSavedLabel}</Text>
+        </View>
+      )}
+
+      {/* ── OVERALL RATING ── */}
+      <View style={s.sectionWrap}>
+        <SectionLabel>OVERALL RATING</SectionLabel>
+        <View style={s.overallCard}>
+          <Text style={s.overallQuestion}>How did this session go?</Text>
+          <StarRating value={overallRating} onChange={handleOverallRating} />
+          <Text style={s.overallLabel}>
+            {RATING_LABELS[overallRating] || 'Tap a star to rate'}
+          </Text>
+        </View>
+      </View>
+
+      {/* ── SKILL PROGRESS ── */}
+      {capabilityGoals.length > 0 && (
+        <View style={s.sectionWrap}>
+          <SectionLabel>SKILL PROGRESS</SectionLabel>
+          {capabilityGoals.map((goal, idx) => {
+            const rating = localCapabilityRatings[goal] ?? 0;
+            const color = idx % 2 === 0 ? C.accent : C.coral;
+            const hint =
+              rating >= 3
+                ? 'Improving steadily — good consistency'
+                : rating > 0
+                ? 'Needs work — keep practicing'
+                : 'Rate your progress';
+            return (
+              <View key={goal} style={s.skillCard}>
+                <View style={s.skillHeader}>
+                  <Text style={s.skillName} numberOfLines={1}>{goal}</Text>
+                  <DotRating
+                    value={rating}
+                    color={color}
+                    onChange={(v) => handleCapabilityRating(goal, v)}
+                  />
+                </View>
+                <ProgressBar value={rating} max={5} color={color} />
+                <Text style={s.skillHint}>{hint}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {/* ── YOUR WORK ── */}
+      {actMedia.length > 0 && (
+        <View style={s.sectionWrap}>
+          <SectionLabel>YOUR WORK</SectionLabel>
+          <View style={s.thumbRow}>
+            {actMedia.slice(0, 2).map((url, i) => (
+              <View key={url} style={s.thumb}>
+                <Text style={s.thumbLabel}>Step {i + 1}</Text>
+              </View>
+            ))}
+            <View style={[s.thumb, s.thumbAdd]}>
+              <Ionicons name="add" size={24} color={C.accent} />
+              <Text style={s.thumbAddLabel}>Add</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* ── WHAT WENT WELL? ── */}
+      <View style={s.sectionWrap}>
+        <View style={s.promptHeader}>
+          <Ionicons name="thumbs-up" size={18} color={C.accent} />
+          <Text style={s.promptTitle}>What went well?</Text>
+        </View>
+        <TextInput
+          style={s.inputBox}
+          value={localWentWell}
+          onChangeText={handleWentWellChange}
+          placeholder="My line weight was much more consistent today..."
+          placeholderTextColor={C.labelLight}
+          multiline
+          textAlignVertical="top"
+        />
+      </View>
+
+      {/* ── WHAT TO IMPROVE? ── */}
+      <View style={s.sectionWrapTight}>
+        <View style={s.promptHeader}>
+          <Ionicons name="locate-outline" size={18} color={C.coral} />
+          <Text style={s.promptTitle}>What to improve?</Text>
+        </View>
+        <TextInput
+          style={s.inputBox}
+          value={localToImprove}
+          onChangeText={handleToImproveChange}
+          placeholder="Need to slow down on contour edges..."
+          placeholderTextColor={C.labelLight}
+          multiline
+          textAlignVertical="top"
+        />
+      </View>
+
+      {/* ── AI FEEDBACK ── */}
+      <View style={s.sectionWrap}>
+        <SectionLabel>AI FEEDBACK</SectionLabel>
+        {aiInsight ? (
+          <View style={s.aiCard}>
+            <View style={s.aiCardHeader}>
+              <Ionicons name="sparkles" size={18} color={C.accent} />
+              <Text style={s.aiCardTitle}>Session Analysis</Text>
+            </View>
+            <Text style={s.aiBody}>{aiInsight}</Text>
+            {aiSuggestion !== '' && (
+              <View style={s.aiSuggestionPill}>
+                <Ionicons name="bulb-outline" size={16} color={C.gold} />
+                <Text style={s.aiSuggestionText}>{aiSuggestion}</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <Pressable
+            style={[s.aiTrigger, aiLoading && { opacity: 0.7 }]}
+            onPress={handleAiInsight}
+            disabled={aiLoading}
+          >
+            {aiLoading ? (
+              <ActivityIndicator size="small" color={C.accent} />
+            ) : (
+              <Ionicons name="sparkles" size={16} color={C.accent} />
+            )}
+            <Text style={s.aiTriggerText}>
+              {aiLoading ? 'Analyzing...' : 'Analyze My Progress'}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* ── BUTTONS ── */}
+      {!isCompleted ? (
+        <View style={s.buttonGroup}>
+          <Pressable style={s.saveButton} onPress={handleSaveReview}>
+            <Ionicons name="save-outline" size={18} color="#FFFFFF" />
+            <Text style={s.saveButtonText}>Save Review</Text>
+          </Pressable>
+          <Pressable style={s.shareButton} onPress={() => setShareSheetOpen(true)}>
+            <Ionicons name="share-outline" size={18} color={C.labelMid} />
+            <Text style={s.shareButtonText}>Share with Coach</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={s.buttonGroup}>
+          <View style={s.completedBadge}>
+            <Ionicons name="checkmark-circle" size={18} color={C.accent} />
+            <Text style={s.completedText}>Review Complete</Text>
+          </View>
+          {!createdNextId ? (
+            <Pressable
+              style={[s.saveButton, creatingNext && { opacity: 0.6 }]}
+              onPress={handleCreateNextStep}
+              disabled={creatingNext}
+            >
+              {creatingNext ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="arrow-forward-circle" size={18} color="#FFFFFF" />
+              )}
+              <Text style={s.saveButtonText}>
+                {creatingNext ? 'Creating...' : 'Create Next Step'}
+              </Text>
+            </Pressable>
+          ) : (
+            <View style={s.nextCreatedBadge}>
+              <Ionicons name="checkmark-circle" size={16} color={C.accent} />
+              <Text style={s.nextCreatedText}>Next step created!</Text>
+            </View>
+          )}
+          <Pressable style={s.shareButton} onPress={() => setShareSheetOpen(true)}>
+            <Ionicons name="share-outline" size={18} color={C.labelMid} />
+            <Text style={s.shareButtonText}>Share with Coach</Text>
+          </Pressable>
+        </View>
+      )}
+
+      <ShareStepSheet
+        isOpen={shareSheetOpen}
+        onClose={() => setShareSheetOpen(false)}
+        stepTitle={step.title}
+        planData={planData}
+        actData={actData}
+        reviewData={reviewData}
+      />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+const s = StyleSheet.create({
+  container: {
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    gap: 0,
+  },
+
+  // Auto-save
+  autoSave: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  autoSaveText: {
+    fontSize: 11,
+    color: C.labelLight,
+  },
+
+  // Section wrappers
+  sectionWrap: {
+    gap: 12,
+    paddingTop: 16,
+  },
+  sectionWrapTight: {
+    gap: 8,
+    paddingTop: 12,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.sectionLabel,
+    letterSpacing: 1,
+  },
+
+  // Overall rating card
+  overallCard: {
+    alignItems: 'center',
+    backgroundColor: C.cardBg,
+    borderRadius: C.radiusLg,
+    padding: 20,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 12px rgba(26,25,24,0.03)' } as any,
+    }),
+  },
+  overallQuestion: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: C.labelDark,
+  },
+  starRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  overallLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: C.labelMid,
+  },
+
+  // Skill progress
+  skillCard: {
+    backgroundColor: C.cardBg,
+    borderRadius: C.radius,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+  },
+  skillHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  skillName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.labelDark,
+    flex: 1,
+  },
+  dotRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  progressBarTrack: {
+    height: 4,
+    borderRadius: 100,
+    backgroundColor: C.dotInactive,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 100,
+  },
+  skillHint: {
+    fontSize: 12,
+    color: C.labelMid,
+  },
+
+  // Your Work thumbnails
+  thumbRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  thumb: {
+    flex: 1,
+    height: 120,
+    backgroundColor: C.cardBg,
+    borderRadius: C.radius,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  thumbLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: C.labelMid,
+  },
+  thumbAdd: {
+    borderColor: C.accent,
+    borderWidth: 1.5,
+    borderStyle: 'dashed' as any,
+  },
+  thumbAddLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: C.accent,
+  },
+
+  // Prompt sections (went well / improve)
+  promptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  promptTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: C.labelDark,
+  },
+  inputBox: {
+    fontSize: 13,
+    color: C.labelDark,
+    lineHeight: 20,
+    backgroundColor: C.cardBg,
+    borderRadius: C.radius,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+    padding: 14,
+    minHeight: 80,
+    ...Platform.select({
+      web: { outlineStyle: 'none', resize: 'vertical' } as any,
+    }),
+  },
+
+  // AI Feedback
+  aiCard: {
+    backgroundColor: C.cardBg,
+    borderRadius: C.radiusLg,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: C.accentGlow,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 12px rgba(26,25,24,0.03)' } as any,
+    }),
+  },
+  aiCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  aiCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.accent,
+  },
+  aiBody: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: C.labelDark,
+  },
+  aiSuggestionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: C.suggestionBg,
+    borderRadius: 10,
+    padding: 12,
+  },
+  aiSuggestionText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+    color: C.labelMid,
+  },
+  aiTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(61,138,90,0.08)',
+    borderRadius: C.radius,
+    paddingVertical: 14,
+  },
+  aiTriggerText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.accent,
+  },
+
+  // Buttons
+  buttonGroup: {
+    gap: 8,
+    paddingTop: 16,
+  },
+  saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: C.accent,
+    borderRadius: C.radius,
+    paddingVertical: 14,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(61,138,90,0.25)' } as any,
+    }),
+  },
+  saveButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: C.cardBg,
+    borderRadius: C.radius,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: C.cardBorder,
+  },
+  shareButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: C.labelMid,
+  },
+
+  // Completed state
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(61,138,90,0.10)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  completedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.accent,
+  },
+  nextCreatedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(61,138,90,0.10)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  nextCreatedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.accent,
+  },
+});

@@ -12,6 +12,7 @@ import {
   Pressable,
   StyleSheet,
   Animated,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -73,6 +74,7 @@ function ProgressRing({
   percent: number;
   accentColor: string;
 }) {
+  const isWeb = Platform.OS === 'web';
   const animValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -88,6 +90,8 @@ function ProgressRing({
     outputRange: [RING_CIRCUMFERENCE, 0],
     extrapolate: 'clamp',
   });
+  const clampedPercent = Math.max(0, Math.min(100, percent));
+  const webStrokeDashoffset = RING_CIRCUMFERENCE - (clampedPercent / 100) * RING_CIRCUMFERENCE;
 
   return (
     <View style={ringStyles.container}>
@@ -102,19 +106,35 @@ function ProgressRing({
           fill="none"
         />
         {/* Filled arc */}
-        <AnimatedCircle
-          cx={RING_SIZE / 2}
-          cy={RING_SIZE / 2}
-          r={RING_RADIUS}
-          stroke={accentColor}
-          strokeWidth={RING_STROKE}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${RING_CIRCUMFERENCE}`}
-          strokeDashoffset={strokeDashoffset}
-          rotation="-90"
-          origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
-        />
+        {isWeb ? (
+          <Circle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke={accentColor}
+            strokeWidth={RING_STROKE}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${RING_CIRCUMFERENCE}`}
+            strokeDashoffset={webStrokeDashoffset}
+            transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+          />
+        ) : (
+          <AnimatedCircle
+            cx={RING_SIZE / 2}
+            cy={RING_SIZE / 2}
+            r={RING_RADIUS}
+            stroke={accentColor}
+            strokeWidth={RING_STROKE}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${RING_CIRCUMFERENCE}`}
+            strokeDashoffset={strokeDashoffset}
+            rotation="-90"
+            originX={RING_SIZE / 2}
+            originY={RING_SIZE / 2}
+          />
+        )}
       </Svg>
       {/* Center label */}
       <View style={ringStyles.labelWrap}>

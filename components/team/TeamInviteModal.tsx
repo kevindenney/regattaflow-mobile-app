@@ -14,10 +14,10 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
-  Alert,
   Share,
 } from 'react-native';
 import { X, Copy, Share2, Check, RefreshCw, Users } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import * as Clipboard from 'expo-clipboard';
 
 // iOS System Colors
@@ -85,7 +85,7 @@ export function TeamInviteModal({
           await nav.share({ title, text: message });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(message);
-          Alert.alert('Copied', 'Invite link copied to clipboard');
+          showAlert('Copied', 'Invite link copied to clipboard');
         }
       } else {
         await Share.share({ message, title });

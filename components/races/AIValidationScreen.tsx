@@ -10,10 +10,10 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   Platform,
 } from 'react-native';
 import { ArrowLeft, CheckCircle } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ValidationSummary } from './ValidationSummary';
 import { EditableField } from './EditableField';
 
@@ -293,10 +293,9 @@ export function AIValidationScreen({
     const missingCritical = criticalFields.filter(field => !data[field]);
 
     if (missingCritical.length > 0) {
-      Alert.alert(
+      showAlert(
         'Missing Required Fields',
         `Please provide: ${missingCritical.join(', ')}`,
-        [{ text: 'OK' }]
       );
       return;
     }

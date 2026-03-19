@@ -4,6 +4,7 @@
  */
 
 import { supabase } from './supabase';
+import { withSupabaseError } from '@/lib/utils/withErrorHandling';
 
 // ============================================================================
 // TYPES
@@ -185,14 +186,10 @@ class WeatherService {
    * Get latest weather for a regatta
    */
   async getLatestWeather(regattaId: string): Promise<LatestWeather | null> {
-    const { data, error } = await supabase
-      .from('latest_weather')
-      .select('*')
-      .eq('regatta_id', regattaId)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('latest_weather').select('*').eq('regatta_id', regattaId).single(),
+      { service: 'WeatherService', method: 'getLatestWeather', fallback: null, level: 'warn', context: { regattaId } }
+    );
   }
 
   /**

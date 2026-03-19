@@ -90,6 +90,13 @@ module.exports = {
           iosUrlScheme: 'com.googleusercontent.apps.176626806015-2aa2ujl7jiierinonf1v5rmnkjfhmodp',
         },
       ],
+      [
+        '@sentry/react-native/expo',
+        {
+          organization: process.env.SENTRY_ORG,
+          project: process.env.SENTRY_PROJECT,
+        },
+      ],
     ],
     updates: {
       enabled: false,

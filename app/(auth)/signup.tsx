@@ -7,6 +7,8 @@ import { isAppleSignInAvailable } from '@/lib/auth/nativeOAuth';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { normalizePersonaParam, type PersonaRole } from '@/lib/auth/signupPersona';
+import { getOnboardingContext } from '@/lib/onboarding/interestContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Helper to get user-friendly error messages for signup
 const getSignupErrorMessage = (error: any): string => {
@@ -42,7 +44,9 @@ const PERSONA_SUBTITLES: Record<PersonaRole, string> = {
 
 export default function SignUp() {
   const { signUp, signInWithGoogle, signInWithApple, loading: authLoading, enterGuestMode } = useAuth();
-  const params = useLocalSearchParams<{ persona?: string }>();
+  const params = useLocalSearchParams<{ persona?: string; interest?: string }>();
+  const interestSlug = params.interest || undefined;
+  const interestCtx = getOnboardingContext(interestSlug);
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -63,6 +67,19 @@ export default function SignUp() {
   useEffect(() => {
     setPersona(normalizePersonaParam(params.persona));
   }, [params.persona]);
+
+  // When an interest is provided, adapt club labels
+  const personaLabels: Record<PersonaRole, string> = {
+    ...PERSONA_LABELS,
+    ...(interestSlug ? { club: 'Organization' } : {}),
+  };
+
+  const getSubtitle = () => {
+    if (persona === 'club' && interestSlug) {
+      return interestCtx.signupSubtitle;
+    }
+    return PERSONA_SUBTITLES[persona];
+  };
 
   const getButtonText = () => {
     if (isLoading) return 'Creating account...';
@@ -104,13 +121,21 @@ export default function SignUp() {
     try {
       const result = await signUp(trimmedEmail, trimmedUsername, password, persona);
 
+      // Store interest context for onboarding steps to read
+      if (interestSlug) {
+        await AsyncStorage.setItem('onboarding_interest_slug', interestSlug);
+      }
+
       if (persona === 'sailor') {
         // All new users go through name-only onboarding, then get 14-day Pro trial
         router.replace('/onboarding/profile/name-photo');
       } else if (persona === 'coach') {
         router.replace('/(auth)/coach-onboarding-welcome');
       } else if (persona === 'club') {
-        router.replace('/(auth)/club-onboarding-chat');
+        const chatRoute = interestSlug
+          ? `/(auth)/club-onboarding-chat?interest=${interestSlug}`
+          : '/(auth)/club-onboarding-chat';
+        router.replace(chatRoute as any);
       }
     } catch (error: any) {
       console.error('[Signup] Account creation error:', error);
@@ -169,7 +194,7 @@ export default function SignUp() {
           </View>
 
           <Text testID="signup-title" style={styles.title}>Create your account</Text>
-          <Text style={styles.subtitle}>{PERSONA_SUBTITLES[persona]}</Text>
+          <Text style={styles.subtitle}>{getSubtitle()}</Text>
 
           {/* Persona Picker */}
           <View style={styles.personaPicker}>
@@ -190,7 +215,7 @@ export default function SignUp() {
                     persona === p && styles.personaPillTextActive,
                   ]}
                 >
-                  {PERSONA_LABELS[p]}
+                  {personaLabels[p]}
                 </Text>
               </TouchableOpacity>
             ))}

@@ -15,8 +15,8 @@ import {
   Platform,
   Modal,
   FlatList,
-  Alert
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -145,10 +145,9 @@ export const VoiceNoteRecorder: React.FC<VoiceNoteRecorderProps> = ({
 
     } catch (error) {
 
-      Alert.alert(
+      showAlert(
         'Recording Error',
-        'Failed to start voice recording. Please check microphone permissions.',
-        [{ text: 'OK' }]
+        'Failed to start voice recording. Please check microphone permissions.'
       );
     }
   };

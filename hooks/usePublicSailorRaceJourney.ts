@@ -102,7 +102,7 @@ function calculateChecklistSummary(intentions: RaceIntentions | null): Checklist
   const completions = intentions.checklistCompletions;
   const totalItems = Object.keys(completions).length;
   const completedItems = Object.values(completions).filter(
-    (c) => c.completed || c.status === 'completed'
+    (c) => c.completedAt
   ).length;
 
   if (totalItems === 0) {

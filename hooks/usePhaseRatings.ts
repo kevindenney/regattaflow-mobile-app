@@ -274,7 +274,7 @@ export function usePhaseRatings({
             throw createError;
           }
 
-          currentSessionId = newSession.id;
+          currentSessionId = newSession!.id;
           if (canCommit()) {
             setSessionId(currentSessionId);
           }

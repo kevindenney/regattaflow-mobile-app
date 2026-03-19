@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useClubWorkspace } from '@/hooks/useClubWorkspace';
@@ -153,7 +154,7 @@ export default function ResultsEntryScreen() {
       setFinishOrder(existingOrder);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load race data');
+      showAlert('Error', 'Failed to load race data');
     } finally {
       setLoading(false);
     }
@@ -169,14 +170,14 @@ export default function ResultsEntryScreen() {
     );
 
     if (!entry) {
-      Alert.alert('Not Found', `Sail number ${sailNumber} not found in entries`);
+      showAlert('Not Found', `Sail number ${sailNumber} not found in entries`);
       setQuickSailNumber('');
       return;
     }
 
     // Check if already in finish order
     if (finishOrder.includes(sailNumber)) {
-      Alert.alert('Duplicate', `${sailNumber} is already in finish order`);
+      showAlert('Duplicate', `${sailNumber} is already in finish order`);
       setQuickSailNumber('');
       return;
     }
@@ -258,33 +259,27 @@ export default function ResultsEntryScreen() {
       // Recalculate standings
       await scoringService.recalculateStandings(regattaId!);
 
-      Alert.alert(
+      showAlertWithButtons(
         'Saved',
         `Results saved for Race ${raceNumber}`,
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error: any) {
       console.error('Error saving results:', error);
-      Alert.alert('Error', error.message || 'Failed to save results');
+      showAlert('Error', error.message || 'Failed to save results');
     } finally {
       setSaving(false);
     }
   };
 
   const handlePublish = async () => {
-    Alert.alert(
+    showConfirm(
       'Publish Results',
       'This will make results visible to competitors and notify them. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Publish',
-          onPress: async () => {
-            await handleSave();
-            // TODO: Send notifications
-          },
-        },
-      ]
+      async () => {
+        await handleSave();
+        // TODO: Send notifications
+      }
     );
   };
 
@@ -466,7 +461,7 @@ export default function ResultsEntryScreen() {
                         if (entry) {
                           handleStatusChange(entry.id, status.value);
                         } else {
-                          Alert.alert('Not Found', `Sail number ${sailNumber} not found`);
+                          showAlert('Not Found', `Sail number ${sailNumber} not found`);
                         }
                       }
                     );

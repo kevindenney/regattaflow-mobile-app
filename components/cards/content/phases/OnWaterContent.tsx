@@ -96,6 +96,7 @@ const IOS_COLORS = {
   gray6: '#F2F2F7',
   label: '#000000',
   secondaryLabel: '#3C3C43',
+  secondaryBackground: '#F2F2F7',
 };
 
 // Icon mapping for categories

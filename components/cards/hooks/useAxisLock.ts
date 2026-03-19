@@ -118,19 +118,9 @@ export function useAxisLock(options: UseAxisLockOptions = {}): UseAxisLockReturn
       unlockPending.current = true;
     })();
 
-    // Delay unlock to prevent rapid axis switching
-    lockedAxis.value = withDelay(
-      unlockDelay,
-      withTiming(null as unknown as number, { duration: 0 }, () => {
-        'worklet';
-        // Note: This is a workaround for setting to null
-        // The actual null assignment happens via direct assignment
-      })
-    );
-
-    // Actually set to null after delay
+    // Actually set to null after delay to prevent rapid axis switching
     setTimeout(() => {
-      lockedAxis.value = null;
+      lockedAxis.value = null as GestureAxis;
       jsLockedAxis.current = null;
       unlockPending.current = false;
 

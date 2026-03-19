@@ -8,7 +8,8 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { View, Text, Pressable, Share, StyleSheet, Alert } from 'react-native';
+import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Share2 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
 import {
@@ -42,7 +43,7 @@ export function ProfileQRCodeSection({ userId }: ProfileQRCodeSectionProps) {
       });
     } catch (error) {
       if ((error as Error).message !== 'User did not share') {
-        Alert.alert('Error', 'Failed to share profile');
+        showAlert('Error', 'Failed to share profile');
       }
     }
   }, [profileUrl]);

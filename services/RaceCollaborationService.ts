@@ -447,7 +447,10 @@ class RaceCollaborationServiceClass {
       throw insertError;
     }
 
-    logger.info('Created join request', { regattaId, userId, collaboratorId: newCollab?.id });
+    if (!newCollab) {
+      throw new Error('Insert succeeded but returned no data');
+    }
+    logger.info('Created join request', { regattaId, userId, collaboratorId: newCollab.id });
     return { collaboratorId: newCollab.id };
   }
 
@@ -578,6 +581,9 @@ class RaceCollaborationServiceClass {
       throw insertError;
     }
 
+    if (!newCollab) {
+      throw new Error('Insert succeeded but returned no data');
+    }
     logger.info('Added crew as collaborator', { regattaId, userId, role });
     return { collaboratorId: newCollab.id, isNew: true };
   }

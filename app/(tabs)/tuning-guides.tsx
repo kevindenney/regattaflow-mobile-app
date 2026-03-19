@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Linking,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSailorDashboardData } from '@/hooks';
@@ -66,7 +66,7 @@ export default function TuningGuidesScreen() {
       setClassGuides(uniqueClassGuides);
     } catch (error) {
       console.error('Error loading guides:', error);
-      Alert.alert('Error', 'Failed to load tuning guides');
+      showAlert('Error', 'Failed to load tuning guides');
     } finally {
       setLoading(false);
     }
@@ -84,11 +84,11 @@ export default function TuningGuidesScreen() {
         guide.fileType
       );
 
-      Alert.alert('Success', 'Content extracted successfully! You can now search within this guide.');
+      showAlert('Success', 'Content extracted successfully! You can now search within this guide.');
       await loadGuides();
     } catch (error) {
       console.error('Error extracting content:', error);
-      Alert.alert('Error', 'Failed to extract content from guide');
+      showAlert('Error', 'Failed to extract content from guide');
     } finally {
       setExtracting(prev => ({ ...prev, [guide.id]: false }));
     }
@@ -218,24 +218,18 @@ export default function TuningGuidesScreen() {
 
   const handleAutoFetchGuides = async (className: string, classId: string) => {
     try {
-      Alert.alert(
+      showConfirm(
         `Fetch ${className} Tuning Guides`,
         `Search for tuning guides from North Sails, Quantum, and other major sailmakers for ${className}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Fetch Guides',
-            onPress: async () => {
-              await tuningGuideService.triggerAutoScrape(classId);
-              Alert.alert('Success', `Searching for ${className} tuning guides...`);
-              setTimeout(() => loadGuides(), 2000);
-            },
-          },
-        ]
+        async () => {
+          await tuningGuideService.triggerAutoScrape(classId);
+          showAlert('Success', `Searching for ${className} tuning guides...`);
+          setTimeout(() => loadGuides(), 2000);
+        }
       );
     } catch (error) {
       console.error('Error auto-fetching guides:', error);
-      Alert.alert('Error', 'Failed to fetch tuning guides');
+      showAlert('Error', 'Failed to fetch tuning guides');
     }
   };
 

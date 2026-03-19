@@ -11,9 +11,9 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   RefreshControl
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VoiceNoteRecorder } from './VoiceNoteRecorder';
@@ -172,7 +172,7 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
 
   const generateRaceStrategy = async () => {
     if (!state.currentConditions) {
-      Alert.alert('Missing Data', 'Weather conditions required for strategy generation');
+      showAlert('Missing Data', 'Weather conditions required for strategy generation');
       return;
     }
 
@@ -214,7 +214,7 @@ export const AIRaceAnalysisDashboard: React.FC<AIRaceAnalysisDashboardProps> = (
 
     } catch (error) {
 
-      Alert.alert('Strategy Error', 'Failed to generate race strategy. Please try again.');
+      showAlert('Strategy Error', 'Failed to generate race strategy. Please try again.');
     } finally {
       setState(prev => ({ ...prev, isGeneratingStrategy: false }));
     }

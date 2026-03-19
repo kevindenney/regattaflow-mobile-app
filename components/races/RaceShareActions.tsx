@@ -14,7 +14,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   Platform,
 } from 'react-native';
@@ -23,6 +22,7 @@ import { CrewFinderService } from '@/services/CrewFinderService';
 import { RaceCollaborationService } from '@/services/RaceCollaborationService';
 import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import * as Haptics from 'expo-haptics';
 
 const logger = createLogger('RaceShareActions');
@@ -90,18 +90,16 @@ export function RaceShareActions({
         triggerHaptic();
         onRaceCopied?.(result.raceId);
 
-        Alert.alert(
+        showAlert(
           'Added to Timeline',
           `"${raceName}" has been added to your race timeline.`,
-          [{ text: 'OK' }]
         );
       }
     } catch (error: any) {
       logger.error('Failed to copy race:', error);
-      Alert.alert(
+      showAlert(
         'Unable to Add',
         error?.message || 'Could not add this race to your timeline. Please try again.',
-        [{ text: 'OK' }]
       );
     } finally {
       setCopying(false);
@@ -125,17 +123,15 @@ export function RaceShareActions({
       triggerHaptic();
       onJoinRequested?.();
 
-      Alert.alert(
+      showAlert(
         'Request Sent',
         `Your request to join "${raceName}" has been sent to the organizer.`,
-        [{ text: 'OK' }]
       );
     } catch (error: any) {
       logger.error('Failed to request join:', error);
-      Alert.alert(
+      showAlert(
         'Request Failed',
         error?.message || 'Could not send your request. Please try again.',
-        [{ text: 'OK' }]
       );
     } finally {
       setRequesting(false);
@@ -163,10 +159,9 @@ export function RaceShareActions({
       }
     } catch (error: any) {
       logger.error('Failed to start planning:', error);
-      Alert.alert(
+      showAlert(
         'Unable to Start Planning',
         error?.message || 'Could not copy this race to your timeline. Please try again.',
-        [{ text: 'OK' }]
       );
     } finally {
       setStartingPlanning(false);

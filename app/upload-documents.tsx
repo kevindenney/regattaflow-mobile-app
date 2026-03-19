@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { Image } from '@/components/ui';
 import { Upload, File, Plus, Camera, FileText, Award, Calendar } from 'lucide-react-native';
 import { createLogger } from '@/lib/utils/logger';
@@ -46,7 +47,7 @@ const UploadDocumentsScreen = () => {
   ]);
 
   const handleUpload = () => {
-    Alert.alert(
+    showAlertWithButtons(
       'Upload Document',
       'Select document source',
       [
@@ -66,8 +67,7 @@ const UploadDocumentsScreen = () => {
           text: 'Cancel',
           style: 'cancel',
         },
-      ],
-      { cancelable: true }
+      ]
     );
   };
 

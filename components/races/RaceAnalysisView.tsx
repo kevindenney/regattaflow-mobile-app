@@ -11,8 +11,8 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import {
   TrendingUp,
   Flag,
@@ -87,43 +87,37 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
   };
 
   const handleRegenerate = async () => {
-    Alert.alert(
+    showConfirm(
       'Regenerate Analysis',
       'This will create a new AI analysis. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Regenerate',
-          onPress: async () => {
-            try {
-              setRegenerating(true);
+      async () => {
+        try {
+          setRegenerating(true);
 
-              if (analysis) {
-                const deleted = await RaceAnalysisService.deleteAnalysis(sessionId);
-                if (!deleted) {
-                  Alert.alert('Error', 'Failed to clear previous analysis.');
-                  setRegenerating(false);
-                  return;
-                }
-              }
-
-              const result = await RaceAnalysisService.analyzeRaceSession(sessionId, { force: true });
-
-              if (result) {
-                Alert.alert('Success', 'New analysis generated!');
-                loadAnalysis();
-              } else {
-                Alert.alert('Error', 'Failed to generate analysis');
-              }
-            } catch (error: any) {
-              logger.error('Error regenerating analysis', error);
-              Alert.alert('Error', error?.message || 'Failed to regenerate analysis');
-            } finally {
+          if (analysis) {
+            const deleted = await RaceAnalysisService.deleteAnalysis(sessionId);
+            if (!deleted) {
+              showAlert('Error', 'Failed to clear previous analysis.');
               setRegenerating(false);
+              return;
             }
-          },
-        },
-      ]
+          }
+
+          const result = await RaceAnalysisService.analyzeRaceSession(sessionId, { force: true });
+
+          if (result) {
+            showAlert('Success', 'New analysis generated!');
+            loadAnalysis();
+          } else {
+            showAlert('Error', 'Failed to generate analysis');
+          }
+        } catch (error: any) {
+          logger.error('Error regenerating analysis', error);
+          showAlert('Error', error?.message || 'Failed to regenerate analysis');
+        } finally {
+          setRegenerating(false);
+        }
+      },
     );
   };
 
@@ -154,14 +148,14 @@ export function RaceAnalysisView({ sessionId, raceName }: RaceAnalysisViewProps)
               const result = await RaceAnalysisService.analyzeRaceSession(sessionId);
 
               if (result) {
-                Alert.alert('Success', 'Race analysis generated successfully!');
+                showAlert('Success', 'Race analysis generated successfully!');
                 loadAnalysis();
               } else {
-                Alert.alert('Error', 'Failed to generate analysis');
+                showAlert('Error', 'Failed to generate analysis');
               }
             } catch (error: any) {
               logger.error('Error generating analysis', error);
-              Alert.alert('Error', error?.message || 'Failed to generate analysis. Please try again.');
+              showAlert('Error', error?.message || 'Failed to generate analysis. Please try again.');
             } finally {
               setRegenerating(false);
             }

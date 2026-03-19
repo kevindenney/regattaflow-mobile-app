@@ -106,12 +106,12 @@ export function useFeatureGate(): UseFeatureGateReturn {
 
     // Check user profile for subscription tier
     const subscriptionTier = profile?.subscription_tier;
-    if (subscriptionTier && ['free', 'individual', 'team'].includes(subscriptionTier)) {
+    if (subscriptionTier && ['free', 'individual', 'pro'].includes(subscriptionTier)) {
       return subscriptionTier as SailorTier;
     }
     // Legacy tier names
     if (subscriptionTier === 'basic') return 'individual';
-    if (subscriptionTier === 'pro') return 'team';
+    if (subscriptionTier === 'team' || subscriptionTier === 'championship') return 'pro';
 
     return 'free';
   }, [user, isGuest, userProfile]);

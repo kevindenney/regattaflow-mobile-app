@@ -14,6 +14,7 @@ import { supabase } from '@/services/supabase';
 
 // Module-level flag: skip Supabase calls once the table is confirmed missing
 let tableUnavailable = false;
+const emptyVocabularyLoggedInterests = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,7 +32,7 @@ export const FALLBACK_VOCABULARY: VocabularyMap = {
   'Plan Phase': 'Race Prep',
   'Do Phase': 'On the Water',
   'Review Phase': 'Debrief',
-  'Practice': 'Drill Session',
+  'Practice': 'Practice Session',
   'Institution': 'Yacht Club',
   'Coach': 'Sailing Coach',
   'Passport': 'Sailor Record',
@@ -100,6 +101,7 @@ export const INTEREST_FALLBACK_VOCABULARIES: Record<string, VocabularyMap> = {
   nursing: NURSING_VOCABULARY,
   drawing: DRAWING_VOCABULARY,
   fitness: FITNESS_VOCABULARY,
+  'health-and-fitness': FITNESS_VOCABULARY,
 };
 
 /**
@@ -140,7 +142,13 @@ export async function fetchVocabulary(interestId: string, interestSlug?: string)
     }
 
     if (!data || data.length === 0) {
-      console.warn('[vocabulary] No rows returned for interest', interestId, '– using fallback');
+      if (!emptyVocabularyLoggedInterests.has(interestId)) {
+        emptyVocabularyLoggedInterests.add(interestId);
+        console.debug('[vocabulary] No rows returned for interest; using fallback', {
+          interestId,
+          interestSlug: interestSlug ?? null,
+        });
+      }
       return fallback;
     }
 

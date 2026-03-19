@@ -59,6 +59,8 @@ export interface ToolbarAction {
 export interface TabScreenToolbarProps {
   title: string;
   subtitle?: string;
+  /** Custom subtitle content — replaces the default text rendering */
+  subtitleContent?: React.ReactNode;
   onSubtitlePress?: () => void;
   actions?: ToolbarAction[];
   /**
@@ -214,6 +216,7 @@ function ActionButton({ action }: { action: ToolbarAction }) {
 export function TabScreenToolbar({
   title,
   subtitle,
+  subtitleContent,
   onSubtitlePress,
   actions,
   rightContent,
@@ -315,7 +318,11 @@ export function TabScreenToolbar({
           )}
         </View>
 
-        {subtitle ? (
+        {subtitleContent ? (
+          <View style={styles.subtitleContainer}>
+            {subtitleContent}
+          </View>
+        ) : subtitle ? (
           <Pressable
             style={styles.subtitleContainer}
             onPress={onSubtitlePress ? () => onSubtitlePress() : undefined}

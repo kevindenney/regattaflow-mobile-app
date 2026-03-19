@@ -283,7 +283,7 @@ export function ForecastCheckWizard({
     onCancel(); // Close modal first
     setTimeout(() => {
       router.push({
-        pathname: '/(tabs)/learn/launch-phase-strategy/player',
+        pathname: '/(tabs)/learn/launch-phase-strategy/player' as any,
         params: {
           lessonId: 'lesson-14-1-1', // Decoding Race Day Wind lesson
         },
@@ -1034,7 +1034,7 @@ export function ForecastCheckWizard({
               <View style={tufteCompStyles.sparklineWithLabel}>
                 <Text style={tufteCompStyles.sparklineLabel}>was</Text>
                 <TinySparkline
-                  data={previous.windForecast}
+                  data={previous.windForecast.map((d: any) => d.value ?? d)}
                   width={120}
                   height={24}
                   color={IOS_COLORS.gray}
@@ -1044,7 +1044,7 @@ export function ForecastCheckWizard({
               <View style={tufteCompStyles.sparklineWithLabel}>
                 <Text style={tufteCompStyles.sparklineLabel}>now</Text>
                 <TinySparkline
-                  data={current.windForecast}
+                  data={current.windForecast.map((d: any) => d.value ?? d)}
                   width={120}
                   height={24}
                   color={IOS_COLORS.blue}
@@ -1101,7 +1101,7 @@ export function ForecastCheckWizard({
               <View style={tufteCompStyles.sparklineWithLabel}>
                 <Text style={tufteCompStyles.sparklineLabel}>was</Text>
                 <TinySparkline
-                  data={previous.tideForecast}
+                  data={previous.tideForecast.map((d: any) => d.value ?? d)}
                   width={120}
                   height={24}
                   color={IOS_COLORS.gray}
@@ -1111,7 +1111,7 @@ export function ForecastCheckWizard({
               <View style={tufteCompStyles.sparklineWithLabel}>
                 <Text style={tufteCompStyles.sparklineLabel}>now</Text>
                 <TinySparkline
-                  data={current.tideForecast}
+                  data={current.tideForecast.map((d: any) => d.value ?? d)}
                   width={120}
                   height={24}
                   color={IOS_COLORS.purple}

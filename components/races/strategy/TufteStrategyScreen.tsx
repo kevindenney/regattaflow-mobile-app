@@ -106,7 +106,7 @@ function getSectionNote(
     const [phase, field] = parts as [keyof RaceStrategyNotes, string];
     const phaseNotes = notes[phase];
     if (phaseNotes && typeof phaseNotes === 'object') {
-      return (phaseNotes as Record<string, StrategySectionNote>)[field];
+      return (phaseNotes as unknown as Record<string, StrategySectionNote>)[field];
     }
   }
 

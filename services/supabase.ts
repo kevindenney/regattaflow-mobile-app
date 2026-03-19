@@ -98,6 +98,9 @@ const ExpoSecureStorage = createStorageAdapter();
 export type UserType = 'sailor' | 'coach' | 'club' | null;
 export type UsersRow = { id: string; email: string | null; user_type: UserType; };
 
+/** Default request timeout in milliseconds for all Supabase calls */
+const SUPABASE_REQUEST_TIMEOUT_MS = 30_000;
+
 export const supabase = createClient(
   supabaseUrl || '',
   supabaseAnonKey || '',
@@ -116,7 +119,21 @@ export const supabase = createClient(
     global: {
       headers: {
         'x-client-info': 'regattaflow-app'
-      }
+      },
+      fetch: (url, options = {}) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), SUPABASE_REQUEST_TIMEOUT_MS);
+
+        // Merge with any existing signal
+        const existingSignal = options.signal;
+        if (existingSignal) {
+          existingSignal.addEventListener('abort', () => controller.abort());
+        }
+
+        return fetch(url, { ...options, signal: controller.signal }).finally(() => {
+          clearTimeout(timeoutId);
+        });
+      },
     }
   }
 );

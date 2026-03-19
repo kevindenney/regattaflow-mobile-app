@@ -13,8 +13,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 
@@ -102,14 +102,14 @@ export const ExternalResultsMonitor: React.FC<ExternalResultsMonitorProps> = ({ 
 
       if (response.ok) {
         const data = await response.json();
-        Alert.alert('Success', data.message);
+        showAlert('Success', data.message);
         await loadPollingData(); // Refresh data
       } else {
-        Alert.alert('Error', 'Failed to trigger polling');
+        showAlert('Error', 'Failed to trigger polling');
       }
     } catch (error) {
       console.error('Error triggering poll:', error);
-      Alert.alert('Error', 'Failed to trigger polling');
+      showAlert('Error', 'Failed to trigger polling');
     } finally {
       setTriggering(null);
     }

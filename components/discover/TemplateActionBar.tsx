@@ -13,13 +13,13 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Copy, Sparkles } from 'lucide-react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useAuth } from '@/providers/AuthProvider';
 import { templateService } from '@/services/TemplateService';
 import { RaceData } from '@/hooks/usePublicSailorRaceJourney';
@@ -51,40 +51,32 @@ export function TemplateActionBar({
   // Handle "Use as Template" - apply setup to existing race
   const handleUseAsTemplate = useCallback(async () => {
     if (isGuest || !user) {
-      Alert.alert(
+      showAlert(
         'Sign In Required',
-        'Please sign in to use this feature.',
-        [{ text: 'OK' }]
+        'Please sign in to use this feature.'
       );
       return;
     }
 
     // For now, show a simple confirmation since we need to implement race picker
-    Alert.alert(
+    showConfirm(
       'Use as Template',
       'This will copy the strategy, rig settings, and sail selection to one of your races.\n\nWould you like to proceed?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Choose Race',
-          onPress: () => {
-            router.push({
-              pathname: '/(tabs)/races',
-              params: { templateSourceRaceId: raceId },
-            });
-          },
-        },
-      ]
+      () => {
+        router.push({
+          pathname: '/(tabs)/races',
+          params: { templateSourceRaceId: raceId },
+        });
+      }
     );
   }, [user, isGuest, raceId, router]);
 
   // Handle "Copy Race & Prep" - create new race with all data
   const handleCopyRace = useCallback(async () => {
     if (isGuest || !user) {
-      Alert.alert(
+      showAlert(
         'Sign In Required',
-        'Please sign in to copy this race.',
-        [{ text: 'OK' }]
+        'Please sign in to copy this race.'
       );
       return;
     }
@@ -117,10 +109,9 @@ export function TemplateActionBar({
       }
     } catch (error) {
       console.error('[TemplateActionBar] Copy failed:', error);
-      Alert.alert(
+      showAlert(
         'Copy Failed',
-        'Unable to copy this race. Please try again.',
-        [{ text: 'OK' }]
+        'Unable to copy this race. Please try again.'
       );
     } finally {
       setIsCopying(false);

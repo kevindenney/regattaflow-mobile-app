@@ -9,8 +9,8 @@
  */
 
 import { useCallback } from 'react';
-import { Alert } from 'react-native';
 import { router } from 'expo-router';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { TemplateSectionAction } from '@/components/cards/types';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -108,23 +108,18 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
           const toolConfig = action.toolId ? TOOL_ROUTES[action.toolId] : null;
 
           if (!toolConfig) {
-            Alert.alert('Tool Not Found', `The tool "${action.toolId}" is not available.`);
+            showAlert('Tool Not Found', `The tool "${action.toolId}" is not available.`);
             return;
           }
 
           if (!toolConfig.available) {
-            Alert.alert(
+            showConfirm(
               toolConfig.name,
               'This tool is not available yet in this build. You can open Learn for related guidance right now.',
-              [
-                { text: 'Not now', style: 'cancel' },
-                {
-                  text: 'Open Learn',
-                  onPress: () => {
-                    router.push('/(tabs)/learn');
-                  },
-                },
-              ]
+              () => {
+                router.push('/(tabs)/learn');
+              },
+              { confirmText: 'Open Learn', cancelText: 'Not now' }
             );
             return;
           }
@@ -136,7 +131,7 @@ export function useSectionAction(options: UseSectionActionOptions = {}) {
               onNavigated?.(action);
             } else {
               // Fallback: show alert if no callback provided
-              Alert.alert(
+              showAlert(
                 toolConfig.name,
                 'This tool requires a parent component to handle modal display.',
               );

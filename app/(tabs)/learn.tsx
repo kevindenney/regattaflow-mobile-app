@@ -6,7 +6,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +14,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -604,19 +604,13 @@ export default function LearnScreen() {
       setJoinNotice('You need at least one organization.');
       return;
     }
-    Alert.alert(
+    showConfirm(
       'Leave organization?',
       `You will lose access to ${organizationName}. You can request access again later.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: () => {
-            void leaveOrganization(membershipId, organizationId);
-          },
-        },
-      ]
+      () => {
+        void leaveOrganization(membershipId, organizationId);
+      },
+      { destructive: true },
     );
   };
 

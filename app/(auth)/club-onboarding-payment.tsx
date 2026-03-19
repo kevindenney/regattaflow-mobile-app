@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { ChevronLeft, CreditCard, Lock, Shield, Check, Calendar, User, MapPin } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/services/supabase';
@@ -40,32 +41,32 @@ const ClubOnboardingPayment = () => {
   const handleContinue = async () => {
     // Basic validation
     if (!cardNumber || cardNumber.replace(/\s/g, '').length < 16) {
-      Alert.alert('Validation Error', 'Please enter a valid card number');
+      showAlert('Validation Error', 'Please enter a valid card number');
       return;
     }
 
     if (!cardName.trim()) {
-      Alert.alert('Validation Error', 'Please enter the cardholder name');
+      showAlert('Validation Error', 'Please enter the cardholder name');
       return;
     }
 
     if (!expiryDate || expiryDate.length < 5) {
-      Alert.alert('Validation Error', 'Please enter a valid expiry date');
+      showAlert('Validation Error', 'Please enter a valid expiry date');
       return;
     }
 
     if (!cvv || cvv.length < 3) {
-      Alert.alert('Validation Error', 'Please enter a valid CVV');
+      showAlert('Validation Error', 'Please enter a valid CVV');
       return;
     }
 
     if (!billingAddress || !city || !zipCode) {
-      Alert.alert('Validation Error', 'Please complete the billing address');
+      showAlert('Validation Error', 'Please complete the billing address');
       return;
     }
 
     if (!userId) {
-      Alert.alert('Error', 'User not authenticated');
+      showAlert('Error', 'User not authenticated');
       return;
     }
 
@@ -97,24 +98,17 @@ const ClubOnboardingPayment = () => {
       });
 
       if (result.success) {
-        Alert.alert(
+        showAlert(
           'Payment Successful',
-          `Your subscription to ${plans.find(p => p.id === selectedPlan)?.name} has been activated!`,
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                // Navigate to payment confirmation screen
-                router.push('/(auth)/club-onboarding-payment-confirmation');
-              },
-            },
-          ]
+          `Your subscription to ${plans.find(p => p.id === selectedPlan)?.name} has been activated!`
         );
+        // Navigate to payment confirmation screen
+        router.push('/(auth)/club-onboarding-payment-confirmation');
       } else {
-        Alert.alert('Payment Failed', result.error || 'Unable to process payment');
+        showAlert('Payment Failed', result.error || 'Unable to process payment');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to process payment');
+      showAlert('Error', error.message || 'Failed to process payment');
     } finally {
       setIsProcessing(false);
     }

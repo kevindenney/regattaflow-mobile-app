@@ -11,11 +11,11 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   Dimensions,
   Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { raceStrategyEngine, type RaceStrategy, type RaceConditions } from '@/services/ai/RaceStrategyEngine';
 import { venueDetectionService, type SailingVenue, type LocationUpdate } from '@/services/location/VenueDetectionService';
 import { DocumentProcessingService } from '@/services/ai/DocumentProcessingService';
@@ -109,21 +109,18 @@ export const RaceDashboard: React.FC = () => {
     if (update.changed && update.venue) {
       setDashboardState(prev => ({ ...prev, currentVenue: update.venue }));
 
-      Alert.alert(
-        '📍 Venue Changed',
+      showConfirm(
+        'Venue Changed',
         `Now at ${update.venue.name}. Would you like to load local sailing intelligence?`,
-        [
-          { text: 'Not Now', style: 'cancel' },
-          { text: 'Load Intelligence', onPress: () => loadVenueIntelligence(update.venue!) }
-        ]
+        () => loadVenueIntelligence(update.venue!)
       );
     }
   };
 
   const loadVenueIntelligence = async (venue: SailingVenue) => {
 
-    Alert.alert(
-      '🧠 Local Intelligence Loaded',
+    showAlert(
+      'Local Intelligence Loaded',
       `Loaded sailing intelligence for ${venue.name}:\n\n` +
       `• ${venue.localKnowledge.bestRacingWinds}\n` +
       `• ${venue.localKnowledge.commonConditions}\n` +
@@ -137,13 +134,10 @@ export const RaceDashboard: React.FC = () => {
 
   const generateFullStrategy = async () => {
     if (!dashboardState.currentVenue) {
-      Alert.alert(
+      showConfirm(
         'Venue Required',
         'Please set your venue location to generate a strategy.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Set Venue', onPress: () => showVenueSelector() }
-        ]
+        () => showVenueSelector()
       );
       return;
     }
@@ -182,8 +176,8 @@ export const RaceDashboard: React.FC = () => {
 
       setDashboardState(prev => ({ ...prev, activeStrategy: strategy }));
 
-      Alert.alert(
-        '🏆 Strategy Complete!',
+      showAlert(
+        'Strategy Complete!',
         `AI has generated a comprehensive racing strategy for ${dashboardState.currentVenue.name}:\n\n` +
         `• Strategy confidence: ${Math.round(strategy.confidence * 100)}%\n` +
         `• ${strategy.insights.length} tactical insights\n` +
@@ -196,7 +190,7 @@ export const RaceDashboard: React.FC = () => {
 
     } catch (error) {
       console.error('Strategy generation error:', error);
-      Alert.alert('Strategy Error', 'Failed to generate strategy. Please try again.');
+      showAlert('Strategy Error', 'Failed to generate strategy. Please try again.');
     } finally {
       setDashboardState(prev => ({ ...prev, isGeneratingStrategy: false }));
     }
@@ -209,7 +203,7 @@ export const RaceDashboard: React.FC = () => {
       onPress: () => venueDetectionService.setManualVenue(venue.id)
     }));
 
-    Alert.alert(
+    showAlertWithButtons(
       'Select Venue',
       'Choose your sailing venue:',
       [
@@ -221,13 +215,10 @@ export const RaceDashboard: React.FC = () => {
 
   const enterRaceMode = () => {
     if (!dashboardState.activeStrategy) {
-      Alert.alert(
+      showConfirm(
         'Strategy Required',
         'Generate a race strategy first to enter race mode.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Generate Strategy', onPress: generateFullStrategy }
-        ]
+        generateFullStrategy
       );
       return;
     }
@@ -511,7 +502,7 @@ export const RaceDashboard: React.FC = () => {
           onStrategyUpdate={(strategy) =>
             setDashboardState(prev => ({ ...prev, activeStrategy: strategy }))
           }
-          onEmergencyAlert={() => Alert.alert('Emergency', 'Emergency protocols activated')}
+          onEmergencyAlert={() => showAlert('Emergency', 'Emergency protocols activated')}
         />
 
         <TouchableOpacity
@@ -569,7 +560,7 @@ export const RaceDashboard: React.FC = () => {
               conditions={demoConditions}
               venue={dashboardState.currentVenue?.id}
               onMarkSelected={(markName) =>
-                Alert.alert('Mark Selected', `Selected: ${markName}`)
+                showAlert('Mark Selected', `Selected: ${markName}`)
               }
               onTacticalLayerToggle={(layer, enabled) =>
                 logger.debug(`Layer ${layer}: ${enabled ? 'enabled' : 'disabled'}`)

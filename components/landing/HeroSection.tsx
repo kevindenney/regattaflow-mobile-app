@@ -67,7 +67,7 @@ export function HeroSection() {
             { name: 'Sail Racing', slug: 'sail-racing', color: '#003DA5' },
             { name: 'Nursing', slug: 'nursing', color: '#0097A7' },
             { name: 'Drawing', slug: 'drawing', color: '#E64A19' },
-            { name: 'Fitness', slug: 'fitness', color: '#2E7D32' },
+            { name: 'Health & Fitness', slug: 'health-and-fitness', color: '#2E7D32' },
           ].map((interest) => (
             <TouchableOpacity
               key={interest.slug}

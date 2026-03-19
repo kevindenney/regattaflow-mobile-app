@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/services/supabase';
-import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
+
 import { createLogger } from '@/lib/utils/logger';
 
 // Module-level cache: skip all queries once the table/columns are confirmed missing
@@ -17,7 +17,6 @@ const CACHE_TTL_MS = 60_000;
 
 type RecentRow = {
   regatta_id?: string | null;
-  race_id?: string | null;
   start_time: string;
   self_reported_position: number | null;
   self_reported_fleet_size: number | null;
@@ -57,7 +56,7 @@ async function loadRecentRowsForUser(userId: string, limit: number): Promise<Rec
   const request = (async (): Promise<RecentRow[]> => {
     let query = supabase
       .from('race_timer_sessions')
-      .select('regatta_id, race_id, start_time, self_reported_position, self_reported_fleet_size')
+      .select('regatta_id, start_time, self_reported_position, self_reported_fleet_size')
       .eq('sailor_id', userId)
       .not('self_reported_position', 'is', null)
       .not('self_reported_fleet_size', 'is', null)
@@ -65,19 +64,6 @@ async function loadRecentRowsForUser(userId: string, limit: number): Promise<Rec
       .limit(baseLimit);
 
     let { data, error } = await query;
-    if (isMissingIdColumn(error, 'race_timer_sessions', 'regatta_id')) {
-      const fallback = await supabase
-        .from('race_timer_sessions')
-        .select('race_id, start_time, self_reported_position, self_reported_fleet_size')
-        .eq('sailor_id', userId)
-        .not('self_reported_position', 'is', null)
-        .not('self_reported_fleet_size', 'is', null)
-        .order('start_time', { ascending: false })
-        .limit(baseLimit);
-      data = fallback.data as any;
-      error = fallback.error;
-    }
-
     if (error) {
       logger.warn('Query error (suppressing future calls)', error);
       tableUnavailable = true;
@@ -150,12 +136,12 @@ export function useRecentRaceResults(
         const filtered = rows
           .filter((row) => {
             if (!targetRaceId) return true;
-            return (row.regatta_id || row.race_id) !== targetRaceId;
+            return row.regatta_id !== targetRaceId;
           })
           .slice(0, limit);
 
         const results: RecentRacePosition[] = filtered.map((row) => ({
-          raceId: row.regatta_id || row.race_id || '',
+          raceId: row.regatta_id || '',
           raceName: '', // Not needed for sparkline
           date: row.start_time,
           position: row.self_reported_position as number,

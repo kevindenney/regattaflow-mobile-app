@@ -11,6 +11,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import {
   IOS_COLORS,
   IOS_TYPOGRAPHY,
@@ -23,6 +24,8 @@ interface Tab<T extends string> {
   value: T;
   label: string;
   badge?: number;
+  /** Show a completion checkmark icon before the label */
+  completed?: boolean;
 }
 
 interface IOSPillTabsProps<T extends string> {
@@ -40,6 +43,8 @@ interface IOSPillTabsProps<T extends string> {
   compact?: boolean;
   /** Background color for unselected pills */
   unselectedBgColor?: string;
+  /** Border color for unselected pills (shows outline style) */
+  unselectedBorderColor?: string;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -53,6 +58,7 @@ function PillTab<T extends string>({
   onPress,
   accentColor,
   unselectedBgColor,
+  unselectedBorderColor,
   compact,
 }: {
   tab: Tab<T>;
@@ -60,6 +66,7 @@ function PillTab<T extends string>({
   onPress: () => void;
   accentColor: string;
   unselectedBgColor: string;
+  unselectedBorderColor?: string;
   compact: boolean;
 }) {
   const scale = useSharedValue(1);
@@ -73,7 +80,12 @@ function PillTab<T extends string>({
       style={[
         styles.pill,
         compact && styles.pillCompact,
-        { backgroundColor: isSelected ? accentColor : unselectedBgColor },
+        {
+          backgroundColor: isSelected ? accentColor : unselectedBgColor,
+          ...(unselectedBorderColor && !isSelected
+            ? { borderWidth: 1, borderColor: unselectedBorderColor }
+            : { borderWidth: 1, borderColor: 'transparent' }),
+        },
         animatedTabStyle,
       ]}
       onPress={onPress}
@@ -85,11 +97,19 @@ function PillTab<T extends string>({
       }}
     >
       <View style={styles.pillContent}>
+        {tab.completed && !isSelected && (
+          <Ionicons
+            name="checkmark-circle"
+            size={compact ? 14 : 16}
+            color={IOS_COLORS.systemGreen}
+          />
+        )}
         <Text
           style={[
             styles.pillLabel,
             compact && styles.pillLabelCompact,
             isSelected && styles.pillLabelSelected,
+            tab.completed && !isSelected && styles.pillLabelCompleted,
           ]}
         >
           {tab.label}
@@ -129,6 +149,7 @@ export function IOSPillTabs<T extends string>({
   accentColor = IOS_COLORS.systemBlue,
   compact = false,
   unselectedBgColor = IOS_COLORS.systemGray6,
+  unselectedBorderColor,
 }: IOSPillTabsProps<T>) {
   const handleTabPress = useCallback((value: T) => {
     if (value !== selectedValue) {
@@ -147,6 +168,7 @@ export function IOSPillTabs<T extends string>({
           onPress={() => handleTabPress(tab.value)}
           accentColor={accentColor}
           unselectedBgColor={unselectedBgColor}
+          unselectedBorderColor={unselectedBorderColor}
           compact={compact}
         />
       ))}
@@ -225,6 +247,9 @@ const styles = StyleSheet.create({
   pillLabelSelected: {
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  pillLabelCompleted: {
+    color: IOS_COLORS.systemGreen,
   },
   badge: {
     minWidth: 18,

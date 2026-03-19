@@ -17,10 +17,10 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Users, UserPlus, UserCheck, Sailboat, X, Check, Globe } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { IOS_COLORS } from '@/components/cards/constants';
 import { CrewFinderService, SailorProfileSummary } from '@/services/CrewFinderService';
 import { supabase } from '@/services/supabase';
@@ -101,7 +101,7 @@ export function FleetPreviewModal({
         id: fleetData.id,
         name: fleetData.name,
         description: fleetData.description,
-        club: fleetData.clubs ? { id: fleetData.clubs.id, name: fleetData.clubs.name } : undefined,
+        club: fleetData.clubs ? { id: (fleetData.clubs as any).id ?? (fleetData.clubs as any)?.[0]?.id, name: (fleetData.clubs as any).name ?? (fleetData.clubs as any)?.[0]?.name } : undefined,
       });
 
       // Fetch fleet members
@@ -215,26 +215,23 @@ export function FleetPreviewModal({
         const memberIds = members.map((m) => m.userId);
         setFollowingIds(new Set([...followingIds, ...memberIds]));
 
-        Alert.alert(
+        showAlert(
           'Subscribed to Fleet',
-          `Now following ${result.followed} sailor${result.followed > 1 ? 's' : ''} from this fleet.`,
-          [{ text: 'OK' }]
+          `Now following ${result.followed} sailor${result.followed > 1 ? 's' : ''} from this fleet.`
         );
 
         onSubscribed?.();
       } else {
-        Alert.alert(
+        showAlert(
           'Already Following',
-          'You are already following all members of this fleet.',
-          [{ text: 'OK' }]
+          'You are already following all members of this fleet.'
         );
       }
     } catch (error: any) {
       logger.error('Error subscribing to fleet:', error);
-      Alert.alert(
+      showAlert(
         'Subscription Failed',
-        error?.message || 'Could not subscribe to fleet. Please try again.',
-        [{ text: 'OK' }]
+        error?.message || 'Could not subscribe to fleet. Please try again.'
       );
     } finally {
       setSubscribing(false);

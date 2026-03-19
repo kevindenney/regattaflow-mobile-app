@@ -9,12 +9,12 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   TextInput,
   Platform,
   Modal,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import {
   Check,
   X,
@@ -226,10 +226,10 @@ export default function QuickResultsEntry({
     setSaving(true);
     try {
       await onSave(results);
-      Alert.alert('Saved', `Race ${raceNumber} results saved successfully`);
+      showAlert('Saved', `Race ${raceNumber} results saved successfully`);
     } catch (error) {
       console.error('Error saving results:', error);
-      Alert.alert('Error', 'Failed to save results');
+      showAlert('Error', 'Failed to save results');
     } finally {
       setSaving(false);
     }
@@ -237,22 +237,16 @@ export default function QuickResultsEntry({
 
   // Auto-fill DNS for remaining entries
   const markRemainingDNS = () => {
-    Alert.alert(
+    showConfirm(
       'Mark Remaining DNS',
       `Mark ${unassigned.length} unassigned entries as DNS?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: () => {
-            setResults(prev => prev.map(r =>
-              !r.position && !r.scoreCode
-                ? { ...r, scoreCode: 'DNS' }
-                : r
-            ));
-          },
-        },
-      ]
+      () => {
+        setResults(prev => prev.map(r =>
+          !r.position && !r.scoreCode
+            ? { ...r, scoreCode: 'DNS' }
+            : r
+        ));
+      }
     );
   };
 

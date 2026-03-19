@@ -2,6 +2,7 @@ import React, { Component, ReactNode } from 'react';
 import { View, Text } from 'react-native';
 import { AlertTriangle } from 'lucide-react-native';
 import { Button, ButtonText } from '../button';
+import { captureError } from '@/lib/sentry';
 
 interface Props {
   children: ReactNode;
@@ -33,6 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return;
     }
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    captureError(error, { componentStack: errorInfo.componentStack });
   }
 
   resetError = () => {

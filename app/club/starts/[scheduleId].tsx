@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   TextInput,
   Platform,
@@ -17,6 +16,7 @@ import {
   Vibration,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   ChevronLeft,
@@ -164,7 +164,7 @@ export default function MultiClassStartScheduler() {
   // Fleet management
   const handleAddFleet = async () => {
     if (!newFleetName.trim()) {
-      Alert.alert('Required', 'Please enter a fleet name');
+      showAlert('Required', 'Please enter a fleet name');
       return;
     }
 
@@ -181,29 +181,23 @@ export default function MultiClassStartScheduler() {
       setNewRaceNumber('1');
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to add fleet');
+      showAlert('Error', 'Failed to add fleet');
     }
   };
 
   const handleRemoveFleet = async (entryId: string) => {
-    Alert.alert(
+    showConfirm(
       'Remove Fleet',
       'Remove this fleet from the schedule?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await startSchedulerService.removeFleet(entryId);
-              loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to remove fleet');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await startSchedulerService.removeFleet(entryId);
+          loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to remove fleet');
+        }
+      },
+      { destructive: true }
     );
   };
 
@@ -221,7 +215,7 @@ export default function MultiClassStartScheduler() {
       await startSchedulerService.reorderFleets(scheduleId!, newOrder.map(e => e.id));
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to reorder fleets');
+      showAlert('Error', 'Failed to reorder fleets');
     }
   };
 
@@ -229,24 +223,19 @@ export default function MultiClassStartScheduler() {
   const handleStartSequence = async () => {
     if (!schedule) return;
 
-    Alert.alert(
+    showConfirm(
       'Start Sequence',
       'Begin the start sequence? This will signal warning for the first fleet.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Start',
-          onPress: async () => {
-            try {
-              const firstFleet = await startSchedulerService.startSequence(scheduleId!);
-              setActiveFleet(firstFleet);
-              loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to start sequence');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          const firstFleet = await startSchedulerService.startSequence(scheduleId!);
+          setActiveFleet(firstFleet);
+          loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to start sequence');
+        }
+      },
+      { confirmLabel: 'Start' }
     );
   };
 
@@ -256,7 +245,7 @@ export default function MultiClassStartScheduler() {
       setActiveFleet(updated);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to signal warning');
+      showAlert('Error', 'Failed to signal warning');
     }
   };
 
@@ -266,7 +255,7 @@ export default function MultiClassStartScheduler() {
       setActiveFleet(updated);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to signal preparatory');
+      showAlert('Error', 'Failed to signal preparatory');
     }
   };
 
@@ -276,7 +265,7 @@ export default function MultiClassStartScheduler() {
       setActiveFleet(updated);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to signal one minute');
+      showAlert('Error', 'Failed to signal one minute');
     }
   };
 
@@ -286,7 +275,7 @@ export default function MultiClassStartScheduler() {
       setActiveFleet(null);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to signal start');
+      showAlert('Error', 'Failed to signal start');
     }
   };
 
@@ -300,28 +289,23 @@ export default function MultiClassStartScheduler() {
       setActiveFleet(null);
       loadData();
     } catch (error) {
-      Alert.alert('Error', 'Failed to process general recall');
+      showAlert('Error', 'Failed to process general recall');
     }
   };
 
   const handlePostpone = async (entryId: string) => {
-    Alert.alert(
+    showConfirm(
       'Postpone',
       'Postpone this fleet start?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Postpone',
-          onPress: async () => {
-            try {
-              await startSchedulerService.postponeFleet(entryId);
-              loadData();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to postpone');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await startSchedulerService.postponeFleet(entryId);
+          loadData();
+        } catch (error) {
+          showAlert('Error', 'Failed to postpone');
+        }
+      },
+      { confirmLabel: 'Postpone' }
     );
   };
 

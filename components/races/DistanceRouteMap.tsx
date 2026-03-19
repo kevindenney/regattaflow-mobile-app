@@ -608,14 +608,14 @@ export function DistanceRouteMap({
     
     if (validWaypoints.length > 0) {
       if (!hasFitBoundsRef.current || waypointsChanged) {
-        const bounds = validWaypoints.reduce(
-          (bounds, wp) => {
+        const bounds = validWaypoints.reduce<[[number, number], [number, number]]>(
+          (acc, wp) => {
             return [
-              [Math.min(bounds[0][0], wp.longitude), Math.min(bounds[0][1], wp.latitude)],
-              [Math.max(bounds[1][0], wp.longitude), Math.max(bounds[1][1], wp.latitude)],
+              [Math.min(acc[0][0], wp.longitude), Math.min(acc[0][1], wp.latitude)],
+              [Math.max(acc[1][0], wp.longitude), Math.max(acc[1][1], wp.latitude)],
             ];
           },
-          [[Infinity, Infinity], [-Infinity, -Infinity]] as [[number, number], [number, number]]
+          [[Infinity, Infinity], [-Infinity, -Infinity]]
         );
         
         if (bounds[0][0] !== Infinity) {
@@ -951,7 +951,7 @@ export function DistanceRouteMap({
               <Pressable
                 onPress={onReimportWaypoints}
                 className="p-2 rounded-lg bg-blue-100"
-                title="Re-import waypoints from SIs/NOR"
+                accessibilityLabel="Re-import waypoints from SIs/NOR"
               >
                 <Upload size={16} color="#2563eb" />
               </Pressable>

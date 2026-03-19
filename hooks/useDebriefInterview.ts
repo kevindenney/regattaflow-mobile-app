@@ -465,7 +465,7 @@ export function useDebriefInterview({
             throw createError;
           }
 
-          currentSessionId = newSession.id;
+          currentSessionId = newSession!.id;
           if (canCommit()) {
             setSessionId(currentSessionId);
           }

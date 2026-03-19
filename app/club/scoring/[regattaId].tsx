@@ -9,13 +9,13 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   Modal,
   TextInput,
   Platform,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   Trophy,
@@ -245,10 +245,10 @@ export default function ScoringDashboard() {
       const newStandings = await engine.calculateSeriesStandings(regattaId);
       
       setStandings(newStandings);
-      Alert.alert('Success', 'Standings calculated successfully');
+      showAlert('Success', 'Standings calculated successfully');
     } catch (error) {
       console.error('Error calculating standings:', error);
-      Alert.alert('Error', 'Failed to calculate standings');
+      showAlert('Error', 'Failed to calculate standings');
     } finally {
       setCalculating(false);
     }
@@ -259,71 +259,60 @@ export default function ScoringDashboard() {
 
     const statusLabel = status === 'provisional' ? 'Provisional' : 'Final';
     
-    Alert.alert(
+    showConfirm(
       `Publish ${statusLabel} Results`,
-      status === 'final' 
+      status === 'final'
         ? 'Final results cannot be changed. Are you sure?'
         : 'Provisional results can still be updated. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Publish',
-          onPress: async () => {
-            try {
-              // Calculate one more time to ensure current
-              await calculateStandings();
+      async () => {
+        try {
+          // Calculate one more time to ensure current
+          await calculateStandings();
 
-              // Update regatta status
-              await supabase
-                .from('regattas')
-                .update({
-                  results_published: true,
-                  results_published_at: new Date().toISOString(),
-                  results_status: status,
-                })
-                .eq('id', regattaId);
+          // Update regatta status
+          await supabase
+            .from('regattas')
+            .update({
+              results_published: true,
+              results_published_at: new Date().toISOString(),
+              results_status: status,
+            })
+            .eq('id', regattaId);
 
-              await loadRegatta();
-              Alert.alert('Published', `${statusLabel} results are now public`);
-            } catch (error) {
-              console.error('Error publishing results:', error);
-              Alert.alert('Error', 'Failed to publish results');
-            }
-          },
-        },
-      ]
+          await loadRegatta();
+          showAlert('Published', `${statusLabel} results are now public`);
+        } catch (error) {
+          console.error('Error publishing results:', error);
+          showAlert('Error', 'Failed to publish results');
+        }
+      },
+      { confirmLabel: 'Publish' }
     );
   };
 
   const unpublishResults = async () => {
     if (!regattaId) return;
 
-    Alert.alert(
+    showConfirm(
       'Unpublish Results',
       'Results will no longer be visible publicly. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unpublish',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await supabase
-                .from('regattas')
-                .update({
-                  results_published: false,
-                  results_status: 'draft',
-                })
-                .eq('id', regattaId);
+      async () => {
+        try {
+          await supabase
+            .from('regattas')
+            .update({
+              results_published: false,
+              results_status: 'draft',
+            })
+            .eq('id', regattaId);
 
-              await loadRegatta();
-              Alert.alert('Unpublished', 'Results are now hidden');
-            } catch (error) {
-              console.error('Error unpublishing results:', error);
-            }
-          },
-        },
-      ]
+          await loadRegatta();
+          showAlert('Unpublished', 'Results are now hidden');
+        } catch (error) {
+          console.error('Error unpublishing results:', error);
+        }
+      },
+      { destructive: true }
     );
   };
 
@@ -344,7 +333,7 @@ export default function ScoringDashboard() {
       a.download = filename;
       a.click();
     } else {
-      Alert.alert('Export', 'CSV generated:\n\n' + csv.substring(0, 300) + '...');
+      showAlert('Export', 'CSV generated:\n\n' + csv.substring(0, 300) + '...');
     }
   };
 
@@ -596,7 +585,7 @@ export default function ScoringDashboard() {
             .from('regattas')
             .update({ scoring_config: config })
             .eq('id', regattaId);
-          Alert.alert('Saved', 'Scoring configuration saved');
+          showAlert('Saved', 'Scoring configuration saved');
         }}
       >
         <Check size={20} color="#FFFFFF" />
@@ -743,9 +732,9 @@ export default function ScoringDashboard() {
               const url = `https://regattaflow.com/p/results/${regattaId}`;
               if (Platform.OS === 'web') {
                 navigator.clipboard.writeText(url);
-                Alert.alert('Copied', 'Link copied to clipboard');
+                showAlert('Copied', 'Link copied to clipboard');
               } else {
-                Alert.alert('Public Link', url);
+                showAlert('Public Link', url);
               }
             }}
           >

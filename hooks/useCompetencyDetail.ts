@@ -60,7 +60,7 @@ export function useCompetencyDetail(competencyId: string | undefined): UseCompet
   const preceptorValidationMutation = useMutation<void, Error, PreceptorValidationPayload>({
     mutationFn: (payload) => {
       logger.info('Submitting preceptor validation', { competencyId });
-      return submitPreceptorValidation(payload);
+      return submitPreceptorValidation(userId!, payload);
     },
     onSuccess: () => {
       logger.info('Preceptor validation submitted successfully');
@@ -75,7 +75,7 @@ export function useCompetencyDetail(competencyId: string | undefined): UseCompet
   const markValidatedMutation = useMutation<void, Error, string>({
     mutationFn: (progressId) => {
       logger.info('Marking competency as validated', { progressId });
-      return validateCompetency(progressId);
+      return validateCompetency(userId!, progressId);
     },
     onSuccess: () => {
       logger.info('Competency marked as validated');
@@ -90,7 +90,7 @@ export function useCompetencyDetail(competencyId: string | undefined): UseCompet
   const facultyReviewMutation = useMutation<void, Error, FacultyReviewPayload>({
     mutationFn: (payload) => {
       logger.info('Submitting faculty review', { competencyId });
-      return submitFacultyReview(payload);
+      return submitFacultyReview(userId!, payload);
     },
     onSuccess: () => {
       logger.info('Faculty review submitted successfully');

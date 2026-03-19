@@ -13,22 +13,22 @@ const INTERESTS = [
   { slug: 'sail-racing', name: 'Sailing', color: '#003DA5' },
   { slug: 'nursing', name: 'Nursing', color: '#0097A7' },
   { slug: 'drawing', name: 'Drawing', color: '#E64A19' },
-  { slug: 'fitness', name: 'Fitness', color: '#2E7D32' },
+  { slug: 'health-and-fitness', name: 'Health & Fitness', color: '#2E7D32' },
 ];
 
 const VOCAB: Record<string, Record<string, string>> = {
-  'Learning Event': { 'sail-racing': 'Race', nursing: 'Clinical Shift', drawing: 'Drawing Session', fitness: 'Workout' },
-  'Plan Phase': { 'sail-racing': 'Race Prep', nursing: 'Pre-Shift Prep', drawing: 'Sketch Planning', fitness: 'Warm-up Plan' },
-  'Do Phase': { 'sail-racing': 'On the Water', nursing: 'On-Unit Care', drawing: 'Active Drawing', fitness: 'Training' },
-  'Review Phase': { 'sail-racing': 'Debrief', nursing: 'Post-Shift Reflection', drawing: 'Critique', fitness: 'Cool-down Review' },
-  Practice: { 'sail-racing': 'Drill Session', nursing: 'Skills Lab', drawing: 'Study Sketch', fitness: 'Practice Set' },
-  Institution: { 'sail-racing': 'Yacht Club', nursing: 'Hospital / School', drawing: 'Art Studio', fitness: 'Gym / Club' },
-  Coach: { 'sail-racing': 'Sailing Coach', nursing: 'Clinical Instructor', drawing: 'Drawing Teacher', fitness: 'Personal Trainer' },
-  Passport: { 'sail-racing': 'Sailor Record', nursing: 'Competency Passport', drawing: 'Portfolio', fitness: 'Training Log' },
-  Period: { 'sail-racing': 'Season', nursing: 'Semester / Rotation', drawing: 'Project Series', fitness: 'Training Block' },
-  Milestone: { 'sail-racing': 'First Win', nursing: 'First IV Start', drawing: 'First Exhibition', fitness: 'First PR' },
-  Skill: { 'sail-racing': 'Tactical Skill', nursing: 'Clinical Competency', drawing: 'Technique', fitness: 'Movement Pattern' },
-  Equipment: { 'sail-racing': 'Boat / Sails', nursing: 'Stethoscope / Scrubs', drawing: 'Pencils / Tablet', fitness: 'Shoes / Watch' },
+  'Learning Event': { 'sail-racing': 'Race', nursing: 'Clinical Shift', drawing: 'Drawing Session', 'health-and-fitness': 'Workout' },
+  'Plan Phase': { 'sail-racing': 'Race Prep', nursing: 'Pre-Shift Prep', drawing: 'Sketch Planning', 'health-and-fitness': 'Warm-up Plan' },
+  'Do Phase': { 'sail-racing': 'On the Water', nursing: 'On-Unit Care', drawing: 'Active Drawing', 'health-and-fitness': 'Training' },
+  'Review Phase': { 'sail-racing': 'Debrief', nursing: 'Post-Shift Reflection', drawing: 'Critique', 'health-and-fitness': 'Cool-down Review' },
+  Practice: { 'sail-racing': 'Drill Session', nursing: 'Skills Lab', drawing: 'Study Sketch', 'health-and-fitness': 'Practice Set' },
+  Institution: { 'sail-racing': 'Yacht Club', nursing: 'Hospital / School', drawing: 'Art Studio', 'health-and-fitness': 'Gym / Club' },
+  Coach: { 'sail-racing': 'Sailing Coach', nursing: 'Clinical Instructor', drawing: 'Drawing Teacher', 'health-and-fitness': 'Personal Trainer' },
+  Passport: { 'sail-racing': 'Sailor Record', nursing: 'Competency Passport', drawing: 'Portfolio', 'health-and-fitness': 'Training Log' },
+  Period: { 'sail-racing': 'Season', nursing: 'Semester / Rotation', drawing: 'Project Series', 'health-and-fitness': 'Training Block' },
+  Milestone: { 'sail-racing': 'First Win', nursing: 'First IV Start', drawing: 'First Exhibition', 'health-and-fitness': 'First PR' },
+  Skill: { 'sail-racing': 'Tactical Skill', nursing: 'Clinical Competency', drawing: 'Technique', 'health-and-fitness': 'Movement Pattern' },
+  Equipment: { 'sail-racing': 'Boat / Sails', nursing: 'Stethoscope / Scrubs', drawing: 'Pencils / Tablet', 'health-and-fitness': 'Shoes / Watch' },
 };
 
 const UNIVERSAL_TERMS = Object.keys(VOCAB);

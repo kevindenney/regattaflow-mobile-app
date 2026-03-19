@@ -16,10 +16,9 @@ import {
   StyleSheet,
   Modal,
   ActivityIndicator,
-  Alert,
   Linking,
-  Platform,
 } from 'react-native';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StrategyCard } from './StrategyCard';
 import { ExecutionEvaluationCard } from './ExecutionEvaluationCard';
@@ -173,13 +172,13 @@ export function PostRaceAnalysisCard({
 
       if (profileError) {
         console.error('[PostRaceAnalysisCard] Error fetching sailor profile:', profileError);
-        alert('Error: Could not find your sailor profile. Please complete onboarding first.');
+        showAlert('Error', 'Could not find your sailor profile. Please complete onboarding first.');
         return;
       }
 
       if (!sailorProfile) {
         console.error('[PostRaceAnalysisCard] No sailor profile found for user:', user.id);
-        alert('Please complete your sailor profile in onboarding before submitting race analysis.');
+        showAlert('Profile Required', 'Please complete your sailor profile in onboarding before submitting race analysis.');
         return;
       }
 
@@ -230,7 +229,7 @@ export function PostRaceAnalysisCard({
           code: saveError.code,
         });
         console.error('[PostRaceAnalysisCard] Analysis data:', analysisData);
-        alert(`Failed to save analysis: ${saveError.message}\n\nCheck console for details.`);
+        showAlert('Error', `Failed to save analysis: ${saveError.message}`);
         return;
       }
 
@@ -306,7 +305,7 @@ export function PostRaceAnalysisCard({
       setShowCoaching(true);
     } catch (error) {
       console.error('[PostRaceAnalysisCard] Error:', error);
-      alert('Failed to generate coaching. Please try again.');
+      showAlert('Error', 'Failed to generate coaching. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -335,21 +334,13 @@ export function PostRaceAnalysisCard({
 
         if (coachingError) {
           console.error('[PostRaceAnalysisCard] Coaching generation failed:', coachingError);
-          if (Platform.OS === 'web') {
-            alert(`Failed to generate coaching: ${coachingError.message}`);
-          } else {
-            Alert.alert('Error', `Failed to generate coaching: ${coachingError.message}`);
-          }
+          showAlert('Error', `Failed to generate coaching: ${coachingError.message}`);
           return;
         }
 
         if (!coaching) {
           console.error('[PostRaceAnalysisCard] No coaching data returned');
-          if (Platform.OS === 'web') {
-            alert('No coaching data returned. Please try again.');
-          } else {
-            Alert.alert('Error', 'No coaching data returned. Please try again.');
-          }
+          showAlert('Error', 'No coaching data returned. Please try again.');
           return;
         }
 
@@ -371,11 +362,7 @@ export function PostRaceAnalysisCard({
         setShowCoaching(true);
       } catch (error) {
         console.error('[PostRaceAnalysisCard] Error generating coaching:', error);
-        if (Platform.OS === 'web') {
-          alert('Failed to generate coaching. Please try again.');
-        } else {
-          Alert.alert('Error', 'Failed to generate coaching. Please try again.');
-        }
+        showAlert('Error', 'Failed to generate coaching. Please try again.');
       } finally {
         setSubmitting(false);
       }
@@ -432,56 +419,28 @@ export function PostRaceAnalysisCard({
 
     const demo = demoContent[demoNumber];
     if (!demo) {
-      if (Platform.OS === 'web') {
-        const openPlaybook = confirm(
-          'Framework Demo\n\nOpen the RegattaFlow Playbook for the full framework library?'
-        );
-        if (openPlaybook) {
-          window.open('https://regattaflowplaybook.com', '_blank');
-        }
-      } else {
-        Alert.alert(
-          'Framework Demo',
-          'Open the RegattaFlow Playbook for the full framework library.',
-          [
-            { text: 'Close', style: 'cancel' },
-            {
-              text: 'Open Playbook',
-              onPress: () => Linking.openURL('https://regattaflowplaybook.com'),
-            },
-          ]
-        );
-      }
+      showConfirm(
+        'Framework Demo',
+        'Open the RegattaFlow Playbook for the full framework library?',
+        () => Linking.openURL('https://regattaflowplaybook.com')
+      );
       return;
     }
 
-    // Platform-specific alert handling
-    if (Platform.OS === 'web') {
-      // Web: Use native browser dialogs
-      const message = `${demo.title}\n\n${demo.description}`;
-      alert(message);
-
-      if (demo.url) {
-        const shouldOpenUrl = confirm('Learn more at RegattaFlow Playbook?');
-        if (shouldOpenUrl) {
-          window.open(demo.url, '_blank');
-        }
-      }
-    } else {
-      // iOS/Android: Use React Native Alert
-      Alert.alert(
+    if (demo.url) {
+      showAlertWithButtons(
         demo.title,
         demo.description,
         [
           { text: 'Close', style: 'cancel' },
-          demo.url
-            ? {
-                text: 'Learn More at RegattaFlow Playbook',
-                onPress: () => Linking.openURL(demo.url!),
-              }
-            : undefined,
-        ].filter(Boolean) as any
+          {
+            text: 'Learn More at RegattaFlow Playbook',
+            onPress: () => Linking.openURL(demo.url!),
+          },
+        ]
       );
+    } else {
+      showAlert(demo.title, demo.description);
     }
   };
 

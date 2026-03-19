@@ -13,8 +13,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons } from '@expo/vector-icons';
 import { useUploadDocument } from '@/hooks/useVenueDocuments';
@@ -97,23 +97,23 @@ export function DocumentUploader({
       }
     } catch (error) {
       console.error('[DocumentUploader] Pick error:', error);
-      Alert.alert('Error', 'Failed to pick document. Please try again.');
+      showAlert('Error', 'Failed to pick document. Please try again.');
     }
   };
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert('Title required', 'Please enter a title for this document');
+      showAlert('Title required', 'Please enter a title for this document');
       return;
     }
 
     if (documentType === 'pdf' && !selectedFile) {
-      Alert.alert('File required', 'Please select a PDF file to upload');
+      showAlert('File required', 'Please select a PDF file to upload');
       return;
     }
 
     if ((documentType === 'video_link' || documentType === 'external_url') && !externalUrl.trim()) {
-      Alert.alert('URL required', 'Please enter a URL');
+      showAlert('URL required', 'Please enter a URL');
       return;
     }
 
@@ -159,34 +159,28 @@ export function DocumentUploader({
       onSuccess?.();
       onClose();
     } catch (error) {
-      Alert.alert('Error', 'Failed to upload document. Please try again.');
+      showAlert('Error', 'Failed to upload document. Please try again.');
       console.error('[DocumentUploader] Upload error:', error);
     }
   };
 
   const handleClose = () => {
     if (title.trim() || selectedFile || externalUrl.trim()) {
-      Alert.alert(
+      showConfirm(
         'Discard draft?',
         'You have unsaved changes. Are you sure you want to close?',
-        [
-          { text: 'Keep editing', style: 'cancel' },
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: () => {
-              setTitle('');
-              setAuthorName('');
-              setDescription('');
-              setExternalUrl('');
-              setSelectedFile(null);
-              setDocumentType('pdf');
-              setSelectedRacingAreaId(defaultRacingAreaId ?? null);
-              setSelectedRaceRouteId(defaultRaceRouteId ?? null);
-              onClose();
-            },
-          },
-        ]
+        () => {
+          setTitle('');
+          setAuthorName('');
+          setDescription('');
+          setExternalUrl('');
+          setSelectedFile(null);
+          setDocumentType('pdf');
+          setSelectedRacingAreaId(defaultRacingAreaId ?? null);
+          setSelectedRaceRouteId(defaultRaceRouteId ?? null);
+          onClose();
+        },
+        { destructive: true }
       );
     } else {
       onClose();

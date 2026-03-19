@@ -21,8 +21,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  Alert,
 } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import {
   Actionsheet,
   ActionsheetBackdrop,
@@ -134,21 +134,15 @@ function MessageBubble({
 
   const handleLongPress = () => {
     if (!isOwnMessage || !onDelete) return;
-    Alert.alert(
+    showConfirm(
       'Delete Message',
       'Are you sure you want to delete this message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            onDelete(message.id).catch(() => {
-              Alert.alert('Error', 'Could not delete message.');
-            });
-          },
-        },
-      ],
+      () => {
+        onDelete(message.id).catch(() => {
+          showAlert('Error', 'Could not delete message.');
+        });
+      },
+      { destructive: true },
     );
   };
 
@@ -254,7 +248,7 @@ export function RaceCrewChat({
     } catch {
       // Restore text on failure
       setInputText(text);
-      Alert.alert(
+      showAlert(
         'Message not sent',
         'Could not deliver your message. Check your connection and try again.',
       );

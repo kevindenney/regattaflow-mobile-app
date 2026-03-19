@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { Image } from '@/components/ui';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
@@ -68,27 +69,27 @@ const [selectedRaces, setSelectedRaces] = useState([
 
 // Handle edit actions
 const handleEditLocation = () => {
-Alert.alert('Edit Location', 'Navigate to location selection screen');
+showAlert('Edit Location', 'Navigate to location selection screen');
 };
 
 const handleEditBoats = () => {
-Alert.alert('Edit Boats', 'Navigate to boat selection screen');
+showAlert('Edit Boats', 'Navigate to boat selection screen');
 };
 
 const handleEditFleets = () => {
-Alert.alert('Edit Fleets', 'Navigate to fleet selection screen');
+showAlert('Edit Fleets', 'Navigate to fleet selection screen');
 };
 
 const handleEditClubs = () => {
-Alert.alert('Edit Clubs', 'Navigate to club selection screen');
+showAlert('Edit Clubs', 'Navigate to club selection screen');
 };
 
 const handleEditRaceCalendar = () => {
-Alert.alert('Edit Race Calendar', 'Navigate to calendar import screen');
+showAlert('Edit Race Calendar', 'Navigate to calendar import screen');
 };
 
 const handleEditRaces = () => {
-Alert.alert('Edit Races', 'Navigate to race selection screen');
+showAlert('Edit Races', 'Navigate to race selection screen');
 };
 
 const handleEditCrew = () => {
@@ -154,24 +155,18 @@ try {
   await updateUserProfile({ onboarding_completed: true });
   router.replace('/(tabs)/dashboard');
 } catch (finalError) {
-  Alert.alert('Error', `Failed to complete setup: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
+  showAlert('Error', `Failed to complete setup: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`);
   setIsCompleting(false);
 }
 }
 };
 
 const handleRemoveClub = (clubId: string) => {
-Alert.alert(
+showConfirm(
 'Remove Club',
 'Are you sure you want to disconnect from this club?',
-[
-{ text: 'Cancel', style: 'cancel' },
-{ 
-text: 'Remove', 
-style: 'destructive',
-onPress: () => setClubs(clubs.filter(club => club.id !== clubId))
-}
-]
+() => setClubs(clubs.filter(club => club.id !== clubId)),
+{ destructive: true }
 );
 };
 

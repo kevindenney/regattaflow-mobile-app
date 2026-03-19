@@ -5,11 +5,11 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
+import { showAlert, showAlertWithButtons, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { useRouter, type Href } from 'expo-router';
 import { ArrowLeft, AlertTriangle, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/providers/AuthProvider';
@@ -24,82 +24,76 @@ export default function DeleteAccountScreen() {
 
   const handleDeleteAccount = async () => {
     if (confirmText !== 'DELETE') {
-      Alert.alert('Error', 'Please type DELETE to confirm');
+      showAlert('Error', 'Please type DELETE to confirm');
       return;
     }
 
     if (!password) {
-      Alert.alert('Error', 'Please enter your password to confirm');
+      showAlert('Error', 'Please enter your password to confirm');
       return;
     }
 
-    Alert.alert(
+    showConfirm(
       'Final Confirmation',
       'This is your last chance. Are you absolutely sure you want to delete your account? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Forever',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              // Verify password
-              const { error: signInError } = await supabase.auth.signInWithPassword({
-                email: user?.email || '',
-                password: password
-              });
+      async () => {
+        setLoading(true);
+        try {
+          // Verify password
+          const { error: signInError } = await supabase.auth.signInWithPassword({
+            email: user?.email || '',
+            password: password
+          });
 
-              if (signInError) {
-                Alert.alert('Error', 'Password is incorrect');
-                setLoading(false);
-                return;
-              }
-
-              // Delete user data (soft delete - mark as deleted)
-              // In production, you'd want to handle this via a database function
-              // that properly cascades the deletion or anonymizes the data
-              const { error: updateError } = await supabase
-                .from('users')
-                .update({
-                  deleted_at: new Date().toISOString(),
-                  email: `deleted_${Date.now()}@deleted.com`,
-                  name: 'Deleted User'
-                })
-                .eq('id', user?.id);
-
-              if (updateError) throw updateError;
-
-              // Delete auth user
-              const { error: deleteError } = await supabase.auth.admin.deleteUser(user?.id || '');
-
-              if (deleteError) {
-                // If we can't delete the auth user, try signing out anyway
-                console.error('Error deleting auth user:', deleteError);
-              }
-
-              // Sign out
-              await signOut();
-
-              Alert.alert(
-                'Account Deleted',
-                'Your account has been permanently deleted. We\'re sorry to see you go.',
-                [
-                  {
-                    text: 'OK',
-                    onPress: () => router.replace('/(auth)/login' as Href)
-                  }
-                ]
-              );
-            } catch (error: any) {
-              console.error('Error deleting account:', error);
-              Alert.alert('Error', error.message || 'Failed to delete account');
-            } finally {
-              setLoading(false);
-            }
+          if (signInError) {
+            showAlert('Error', 'Password is incorrect');
+            setLoading(false);
+            return;
           }
+
+          // Delete user data (soft delete - mark as deleted)
+          // In production, you'd want to handle this via a database function
+          // that properly cascades the deletion or anonymizes the data
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({
+              deleted_at: new Date().toISOString(),
+              email: `deleted_${Date.now()}@deleted.com`,
+              name: 'Deleted User'
+            })
+            .eq('id', user?.id);
+
+          if (updateError) throw updateError;
+
+          // Delete auth user
+          const { error: deleteError } = await supabase.auth.admin.deleteUser(user?.id || '');
+
+          if (deleteError) {
+            // If we can't delete the auth user, try signing out anyway
+            console.error('Error deleting auth user:', deleteError);
+          }
+
+          // Sign out
+          await signOut();
+
+          showAlertWithButtons(
+            'Account Deleted',
+            'Your account has been permanently deleted. We\'re sorry to see you go.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/(auth)/login' as Href)
+              }
+            ]
+          );
+        } catch (error: any) {
+          console.error('Error deleting account:', error);
+          showAlert('Error', error.message || 'Failed to delete account');
+        } finally {
+          setLoading(false);
         }
-      ]
+      },
+      { destructive: true },
     );
   };
 

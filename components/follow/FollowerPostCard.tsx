@@ -14,6 +14,7 @@ import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING, IOS_RADIUS } from '@/lib/desig
 import { triggerHaptic } from '@/lib/haptics';
 import { useAuth } from '@/providers/AuthProvider';
 import type { FollowerPost, FollowerPostType } from '@/services/FollowerPostService';
+import { getSafeImageUri } from '@/lib/utils/safeImageUri';
 
 // =============================================================================
 // CONSTANTS
@@ -42,6 +43,7 @@ export function FollowerPostCard({ post, onSailorPress, onDelete }: FollowerPost
   const { user } = useAuth();
   const isOwner = user?.id === post.userId;
   const typeConfig = POST_TYPE_CONFIG[post.postType] || POST_TYPE_CONFIG.general;
+  const safeAvatarUrl = getSafeImageUri(post.avatarUrl);
 
   const handleSailorPress = useCallback(() => {
     triggerHaptic('selection');
@@ -87,8 +89,8 @@ export function FollowerPostCard({ post, onSailorPress, onDelete }: FollowerPost
       <View style={styles.card}>
         {/* Author Header */}
         <Pressable onPress={handleSailorPress} style={styles.authorRow}>
-          {post.avatarUrl ? (
-            <Image source={{ uri: post.avatarUrl }} style={styles.avatarImage} />
+          {safeAvatarUrl ? (
+            <Image source={{ uri: safeAvatarUrl }} style={styles.avatarImage} />
           ) : (
             <View
               style={[

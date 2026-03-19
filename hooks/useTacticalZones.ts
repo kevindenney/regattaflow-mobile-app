@@ -108,7 +108,7 @@ export function useTacticalZones(
     }
 
     // Filter by confidence
-    result = result.filter(z => z.confidence >= minConfidence);
+    result = result.filter(z => z.properties.confidence !== 'low' || minConfidence <= 0.3);
 
     // Filter by active
     if (onlyActive) {
@@ -124,9 +124,9 @@ export function useTacticalZones(
   }, [zones, filterTypes, minConfidence, onlyActive, shouldSort]);
 
   // Zones by type
-  const reliefLanes = useMemo(() => getZonesByType(zones, 'relief-lane'), [zones]);
+  const reliefLanes = useMemo(() => getZonesByType(zones, 'relief'), [zones]);
   const accelerationZones = useMemo(() => getZonesByType(zones, 'acceleration'), [zones]);
-  const shearBoundaries = useMemo(() => getZonesByType(zones, 'shear-boundary'), [zones]);
+  const shearBoundaries = useMemo(() => getZonesByType(zones, 'shear'), [zones]);
   const leeBowZones = useMemo(() => getZonesByType(zones, 'lee-bow'), [zones]);
   const anchoringZones = useMemo(() => getZonesByType(zones, 'anchoring'), [zones]);
 

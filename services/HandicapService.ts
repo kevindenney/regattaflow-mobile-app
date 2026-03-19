@@ -6,6 +6,7 @@
 import { supabase } from './supabase';
 import { isMissingIdColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { createLogger } from '@/lib/utils/logger';
+import { withSupabaseError } from '@/lib/utils/withErrorHandling';
 
 const logger = createLogger('HandicapService');
 
@@ -169,28 +170,20 @@ class HandicapService {
    * Get a specific system by code
    */
   async getSystemByCode(code: string): Promise<HandicapSystem | null> {
-    const { data, error } = await supabase
-      .from('handicap_systems')
-      .select('*')
-      .eq('code', code)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('handicap_systems').select('*').eq('code', code).single(),
+      { service: 'HandicapService', method: 'getSystemByCode', fallback: null, level: 'warn', context: { code } }
+    );
   }
 
   /**
    * Get a specific system by ID
    */
   async getSystem(id: string): Promise<HandicapSystem | null> {
-    const { data, error } = await supabase
-      .from('handicap_systems')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('handicap_systems').select('*').eq('id', id).single(),
+      { service: 'HandicapService', method: 'getSystem', fallback: null, level: 'warn', context: { id } }
+    );
   }
 
   /**
@@ -256,16 +249,10 @@ class HandicapService {
     sailNumber: string,
     systemId: string
   ): Promise<BoatRating | null> {
-    const { data, error } = await supabase
-      .from('boat_ratings')
-      .select('*')
-      .eq('sail_number', sailNumber)
-      .eq('system_id', systemId)
-      .eq('is_active', true)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('boat_ratings').select('*').eq('sail_number', sailNumber).eq('system_id', systemId).eq('is_active', true).single(),
+      { service: 'HandicapService', method: 'getBoatRating', fallback: null, level: 'warn', context: { sailNumber, systemId } }
+    );
   }
 
   /**

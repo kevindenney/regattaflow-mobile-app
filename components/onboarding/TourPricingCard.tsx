@@ -20,12 +20,12 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { SAILOR_TIERS, type SailorTier } from '@/lib/subscriptions/sailorTiers';
 
-const TIER_ORDER: SailorTier[] = ['free', 'individual', 'team'];
+const TIER_ORDER: SailorTier[] = ['free', 'individual', 'pro'];
 
 const TIER_COLORS: Record<SailorTier, string> = {
   free: '#64748B',
   individual: '#2563EB',
-  team: '#7C3AED',
+  pro: '#7C3AED',
 };
 
 const TIER_DISPLAY_FEATURES: Record<SailorTier, string[]> = {
@@ -36,14 +36,14 @@ const TIER_DISPLAY_FEATURES: Record<SailorTier, string[]> = {
   ],
   individual: [
     'Unlimited races',
+    '50,000 AI tokens/month',
     'AI strategy analysis',
-    'Auto weather updates',
     'Offline mode',
   ],
-  team: [
+  pro: [
     'Everything in Individual',
-    'Up to 5 team members',
-    'Shared race prep',
+    '500,000 AI tokens/month',
+    'Priority AI processing',
   ],
 };
 

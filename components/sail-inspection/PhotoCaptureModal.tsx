@@ -13,11 +13,11 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  Alert,
   Platform,
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Camera, Image as ImageIcon, X, Check, RotateCcw, Info } from 'lucide-react-native';
 import { SailZone } from '@/services/ai/SailAnalysisAIService';
 
@@ -131,11 +131,7 @@ export function PhotoCaptureModal({
   const requestCameraPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
-        'Camera Permission Required',
-        'Please grant camera access to take inspection photos.',
-        [{ text: 'OK' }]
-      );
+      showAlert('Camera Permission Required', 'Please grant camera access to take inspection photos.');
       return false;
     }
     return true;
@@ -144,11 +140,7 @@ export function PhotoCaptureModal({
   const requestLibraryPermission = async (): Promise<boolean> => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
-        'Photo Library Permission Required',
-        'Please grant photo library access to select inspection photos.',
-        [{ text: 'OK' }]
-      );
+      showAlert('Photo Library Permission Required', 'Please grant photo library access to select inspection photos.');
       return false;
     }
     return true;
@@ -172,7 +164,7 @@ export function PhotoCaptureModal({
       }
     } catch (error) {
       console.error('Camera error:', error);
-      Alert.alert('Error', 'Failed to capture photo. Please try again.');
+      showAlert('Error', 'Failed to capture photo. Please try again.');
     }
   }, []);
 
@@ -194,7 +186,7 @@ export function PhotoCaptureModal({
       }
     } catch (error) {
       console.error('Library error:', error);
-      Alert.alert('Error', 'Failed to select photo. Please try again.');
+      showAlert('Error', 'Failed to select photo. Please try again.');
     }
   }, []);
 

@@ -97,7 +97,7 @@ export function DetailedReviewModal({
         const result = await RaceAnalysisService.analyzeRaceSession(timerSessionId, {
           force: true,
           detailedAnalysis: formData,
-        });
+        } as any);
 
         if (!result) {
           logger.warn('AI analysis returned no result');

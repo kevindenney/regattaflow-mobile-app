@@ -7,13 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { router } from 'expo-router';
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { CardMenu, CardMenuItem } from '../shared';
 import { createLogger } from '@/lib/utils/logger';
 
@@ -101,44 +101,32 @@ export function ClubsAssociationsSection({ sailorId, classId, className }: Clubs
   const [removedClubIds, setRemovedClubIds] = useState<Set<string>>(new Set());
 
   const handleAddClub = () => {
-    Alert.alert(
+    showConfirm(
       'Add Club or Association',
       'Search for yacht clubs and class associations to join.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Search',
-          onPress: () => {
-            router.push('/(tabs)/clubs');
-          },
-        },
-      ]
+      () => {
+        router.push('/(tabs)/clubs');
+      }
     );
   };
 
   const handleRemoveClub = (club: Club) => {
-    Alert.alert(
+    showConfirm(
       'Remove Club',
       `Are you sure you want to remove ${club.name} from your profile?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            setRemovedClubIds((prev) => {
-              const next = new Set(prev);
-              next.add(club.id);
-              return next;
-            });
-            logger.info('Club removed from local profile view', {
-              sailorId,
-              classId,
-              clubId: club.id,
-            });
-          },
-        },
-      ]
+      () => {
+        setRemovedClubIds((prev) => {
+          const next = new Set(prev);
+          next.add(club.id);
+          return next;
+        });
+        logger.info('Club removed from local profile view', {
+          sailorId,
+          classId,
+          clubId: club.id,
+        });
+      },
+      { destructive: true }
     );
   };
 

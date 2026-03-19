@@ -169,9 +169,9 @@ export function useSailorActiveCoaches(
 
       // Build ActiveCoach objects with relevance scoring
       const activeCoaches: ActiveCoach[] = clientRecords
-        .map(client => {
+        .reduce<ActiveCoach[]>((acc, client) => {
           const coachProfile = coachMap.get(client.coach_id);
-          if (!coachProfile) return null;
+          if (!coachProfile) return acc;
 
           const coachData = {
             specialties: coachProfile.specialties || [],
@@ -182,7 +182,7 @@ export function useSailorActiveCoaches(
 
           const relevanceScore = calculateRelevanceScore(coachData, options);
 
-          return {
+          acc.push({
             id: client.id,
             coachId: coachProfile.id,
             displayName: coachProfile.display_name || 'Coach',
@@ -192,9 +192,9 @@ export function useSailorActiveCoaches(
             totalSessions: client.total_sessions || 0,
             lastSessionDate: client.last_session_date,
             relevanceScore,
-          };
-        })
-        .filter((c): c is ActiveCoach => c !== null)
+          });
+          return acc;
+        }, [])
         .sort((a, b) => b.relevanceScore - a.relevanceScore);
 
       return activeCoaches;

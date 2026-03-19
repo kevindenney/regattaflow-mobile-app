@@ -22,10 +22,10 @@ import {
   Platform,
   UIManager,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import type { NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { useRouter } from 'expo-router';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import {
   Users,
   Anchor,
@@ -163,7 +163,7 @@ export function SailorsGroupedList({ toolbarOffset = 0, onScroll }: SailorsGroup
   // Handle like press with optimistic update
   const handleLikePress = useCallback(async (data: SailorRaceRowData) => {
     if (!user?.id) {
-      Alert.alert('Sign In Required', 'Please sign in to like races.');
+      showAlert('Sign In Required', 'Please sign in to like races.');
       return;
     }
 

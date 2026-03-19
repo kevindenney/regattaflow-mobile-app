@@ -16,10 +16,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Send } from 'lucide-react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import * as Haptics from 'expo-haptics';
 import { ChatMessageSkeleton } from './MessagingSkeleton';
 import {
@@ -158,21 +158,15 @@ function MessageBubble({
     if (!isOwnMessage || !onDelete) return;
     // Haptic feedback on long press
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    Alert.alert(
+    showConfirm(
       'Delete Message',
       'Are you sure you want to delete this message?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            onDelete(message.id).catch(() => {
-              Alert.alert('Error', 'Could not delete message.');
-            });
-          },
-        },
-      ]
+      () => {
+        onDelete(message.id).catch(() => {
+          showAlert('Error', 'Could not delete message.');
+        });
+      },
+      { destructive: true }
     );
   };
 
@@ -318,7 +312,7 @@ export function CrewThreadChat({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       // Restore text on failure
       setInputText(text);
-      Alert.alert(
+      showAlert(
         'Message not sent',
         'Could not deliver your message. Check your connection and try again.'
       );

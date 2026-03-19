@@ -3,13 +3,13 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ScrollView,
   Modal,
   ActivityIndicator,
   Platform,
 } from 'react-native';
 import { Text, Button, Card, Chip, ProgressBar } from 'react-native-paper';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { MaterialIcons } from '@expo/vector-icons';
 import DocumentParsingService from '../../services/DocumentParsingService';
 import RaceCourseVisualizationService from '../../services/RaceCourseVisualizationService';
@@ -185,7 +185,7 @@ export default function OnXMapsInterface({
 
     } catch (error) {
       console.error('Error processing document:', error);
-      Alert.alert('Processing Error', 'Failed to process sailing instructions. Please try again.');
+      showAlert('Processing Error', 'Failed to process sailing instructions. Please try again.');
       setShowDocumentModal(false);
       setDocumentState({
         stage: 'idle',
@@ -320,10 +320,10 @@ export default function OnXMapsInterface({
       );
 
       // Handle image export (save to device, share, etc.)
-      Alert.alert('Export Complete', 'Course visualization exported successfully!');
+      showAlert('Export Complete', 'Course visualization exported successfully!');
     } catch (error) {
       console.error('Error exporting course image:', error);
-      Alert.alert('Export Error', 'Failed to export course visualization.');
+      showAlert('Export Error', 'Failed to export course visualization.');
     }
   };
 

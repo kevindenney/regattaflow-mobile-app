@@ -913,26 +913,7 @@ export const DRAWING_EVENT_CONFIG: InterestEventConfig = {
   // Tile sections (visual grouping for config-driven rendering)
   // ---------------------------------------------------------------------------
   tileSections: {
-    days_before: [
-      {
-        id: 'reference-planning',
-        label: 'Reference & Planning',
-        subtitle: 'References, composition, and studies',
-        moduleIds: ['reference_images', 'composition', 'color_study', 'value_study'],
-      },
-      {
-        id: 'materials-setup',
-        label: 'Materials & Setup',
-        subtitle: 'Medium, tools, and workspace',
-        moduleIds: ['materials', 'checklist', 'time_plan'],
-      },
-      {
-        id: 'technique',
-        label: 'Technique',
-        subtitle: 'Focus areas and master studies',
-        moduleIds: ['technique_focus', 'artist_study'],
-      },
-    ],
+    days_before: [],
     on_water: [
       {
         id: 'in-session',

@@ -13,21 +13,24 @@ import { IOSSegmentedControl } from '@/components/ui/ios/IOSSegmentedControl';
 import { TabScreenToolbar, type ToolbarAction } from '@/components/ui/TabScreenToolbar';
 import { SailorSearchContent } from '@/components/search/SailorSearchContent';
 import { ClubSearchContent } from '@/components/search/ClubSearchContent';
+import { OrganizationSearchContent } from '@/components/search/OrganizationSearchContent';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
+import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { IOS_COLORS } from '@/lib/design-tokens-ios';
 
 type SearchSegment = 'sailors' | 'clubs';
-
-const SEGMENTS = [
-  { value: 'sailors' as const, label: 'Sailors' },
-  { value: 'clubs' as const, label: 'Clubs' },
-];
 
 export default function SearchTab() {
   const insets = useSafeAreaInsets();
   const [activeSegment, setActiveSegment] = useState<SearchSegment>('sailors');
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const { toolbarHidden, handleScroll } = useScrollToolbarHide();
+  const eventConfig = useInterestEventConfig();
+  const isSailing = eventConfig.interestSlug === 'sail-racing';
+  const segments = useMemo(() => ([
+    {value: 'sailors' as const, label: isSailing ? 'Sailors' : 'People'},
+    {value: 'clubs' as const, label: isSailing ? 'Clubs' : 'Organizations'},
+  ]), [isSailing]);
 
   // Toolbar actions (none — Search is a primary tab now)
   const toolbarActions: ToolbarAction[] = useMemo(() => [], []);
@@ -43,7 +46,7 @@ export default function SearchTab() {
       >
         <View style={styles.segmentContainer}>
           <IOSSegmentedControl<SearchSegment>
-            segments={SEGMENTS}
+            segments={segments}
             selectedValue={activeSegment}
             onValueChange={setActiveSegment}
           />
@@ -57,10 +60,17 @@ export default function SearchTab() {
         />
       )}
       {activeSegment === 'clubs' && (
-        <ClubSearchContent
-          toolbarOffset={toolbarHeight}
-          onScroll={handleScroll}
-        />
+        isSailing ? (
+          <ClubSearchContent
+            toolbarOffset={toolbarHeight}
+            onScroll={handleScroll}
+          />
+        ) : (
+          <OrganizationSearchContent
+            toolbarOffset={toolbarHeight}
+            onScroll={handleScroll}
+          />
+        )
       )}
     </View>
   );

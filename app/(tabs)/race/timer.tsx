@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Animated, Dimensions, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Animated, Dimensions, Platform } from 'react-native';
+import { showAlert, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { router } from 'expo-router';
 
 // Dynamic import helper for expo-location (native only)
@@ -201,10 +202,9 @@ const RaceTimerProScreen = () => {
       const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
 
       if (foregroundStatus !== 'granted') {
-        Alert.alert(
+        showAlert(
           'Permission Required',
-          'GPS tracking requires location permission for accurate race data.',
-          [{ text: 'OK' }]
+          'GPS tracking requires location permission for accurate race data.'
         );
         return false;
       }
@@ -213,10 +213,9 @@ const RaceTimerProScreen = () => {
       if (Platform.OS === 'android') {
         const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
         if (backgroundStatus !== 'granted') {
-          Alert.alert(
+          showAlert(
             'Background Location',
-            'Background location permission will improve GPS tracking during races.',
-            [{ text: 'OK' }]
+            'Background location permission will improve GPS tracking during races.'
           );
         }
       }
@@ -225,7 +224,7 @@ const RaceTimerProScreen = () => {
       return true;
     } catch (error) {
       console.error('Error requesting location permission:', error);
-      Alert.alert('Error', 'Failed to request location permission');
+      showAlert('Error', 'Failed to request location permission');
       return false;
     }
   };
@@ -284,7 +283,7 @@ const RaceTimerProScreen = () => {
       setGpsTracking(true);
     } catch (error) {
       console.error('Error starting GPS tracking:', error);
-      Alert.alert('GPS Error', 'Failed to start GPS tracking. Race will be recorded without GPS data.');
+      showAlert('GPS Error', 'Failed to start GPS tracking. Race will be recorded without GPS data.');
     }
   };
 
@@ -343,7 +342,7 @@ const RaceTimerProScreen = () => {
       return data.id;
     } catch (error: any) {
       console.error('Error creating timer session:', error);
-      Alert.alert('Database Error', 'Failed to create race session. GPS data will not be saved.');
+      showAlert('Database Error', 'Failed to create race session. GPS data will not be saved.');
       return null;
     }
   };
@@ -368,7 +367,7 @@ const RaceTimerProScreen = () => {
       return true;
     } catch (error: any) {
       console.error('Error updating timer session:', error);
-      Alert.alert('Save Error', 'Failed to save GPS track data.');
+      showAlert('Save Error', 'Failed to save GPS track data.');
       return false;
     } finally {
       setSavingSession(false);
@@ -383,10 +382,9 @@ const RaceTimerProScreen = () => {
       const analysis = await RaceAnalysisService.analyzeRaceSession(sessionId);
 
       if (analysis) {
-        Alert.alert(
+        showAlert(
           'Analysis Complete',
-          'AI Coach has analyzed your race! View the analysis in the Analysis tab.',
-          [{ text: 'OK' }]
+          'AI Coach has analyzed your race! View the analysis in the Analysis tab.'
         );
       } else {
         console.error('Race analysis failed: no analysis returned');
@@ -407,7 +405,7 @@ const RaceTimerProScreen = () => {
     if (!locationPermissionGranted) {
       const granted = await requestLocationPermission();
       if (!granted) {
-        Alert.alert(
+        showAlertWithButtons(
           'Start Without GPS?',
           'GPS tracking is recommended for race analysis. Start anyway?',
           [

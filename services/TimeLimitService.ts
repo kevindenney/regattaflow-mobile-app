@@ -5,6 +5,7 @@
 
 import { supabase } from './supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { withSupabaseError } from '@/lib/utils/withErrorHandling';
 
 const logger = createLogger('TimeLimitService');
 
@@ -198,7 +199,10 @@ class TimeLimitService {
     }
 
     const { data, error } = await query.single();
-    if (error) return null;
+    if (error) {
+      logger.warn('[TimeLimitService.getTimeLimit] Failed', { error, regattaId });
+      return null;
+    }
     return data;
   }
 
@@ -206,14 +210,10 @@ class TimeLimitService {
    * Get time limit by ID
    */
   async getTimeLimitById(id: string): Promise<TimeLimit | null> {
-    const { data, error } = await supabase
-      .from('race_time_limits')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) return null;
-    return data;
+    return withSupabaseError(
+      supabase.from('race_time_limits').select('*').eq('id', id).single(),
+      { service: 'TimeLimitService', method: 'getTimeLimitById', fallback: null, level: 'warn', context: { id } }
+    );
   }
 
   /**

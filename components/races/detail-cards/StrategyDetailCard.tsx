@@ -69,7 +69,7 @@ interface StrategyDetailCardProps {
 
 const PHASE_ORDER: StrategyPhase[] = ['start', 'upwind', 'downwind', 'markRounding', 'finish'];
 
-const PHASE_LABELS: Record<StrategyPhase, string> = {
+const PHASE_LABELS: Partial<Record<StrategyPhase, string>> = {
   start: 'Start Strategy',
   upwind: 'Upwind Strategy',
   downwind: 'Downwind Strategy',
@@ -77,7 +77,7 @@ const PHASE_LABELS: Record<StrategyPhase, string> = {
   finish: 'Finish Strategy',
 };
 
-const PHASE_ICONS: Record<StrategyPhase, string> = {
+const PHASE_ICONS: Partial<Record<StrategyPhase, string>> = {
   start: 'flag-checkered',
   upwind: 'arrow-up-bold',
   downwind: 'arrow-down-bold',

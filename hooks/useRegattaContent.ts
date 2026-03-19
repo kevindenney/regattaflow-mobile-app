@@ -6,8 +6,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { createLogger } from '@/lib/utils/logger';
@@ -113,7 +113,7 @@ export function useRegattaContent({
         .from('regattas')
         .select('prep_notes, tuning_settings, post_race_notes, lessons_learned, content_visibility')
         .eq('id', regattaId)
-        .single();
+        .maybeSingle();
 
       if (fetchError) {
         // Don't log error for non-existent records (404/PGRST116)
@@ -155,7 +155,7 @@ export function useRegattaContent({
       return false;
     }
     if (!user?.id) {
-      Alert.alert('Error', 'Must be logged in to save content');
+      showAlert('Error', 'Must be logged in to save content');
       return false;
     }
 
@@ -183,7 +183,7 @@ export function useRegattaContent({
 
       if (updateError) {
         logger.error('[useRegattaContent] Save pre-race error:', updateError);
-        Alert.alert('Error', updateError.message || 'Failed to save prep notes');
+        showAlert('Error', updateError.message || 'Failed to save prep notes');
         return false;
       }
 
@@ -204,7 +204,7 @@ export function useRegattaContent({
       return true;
     } catch (err) {
       logger.error('[useRegattaContent] Exception:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save');
+      showAlert('Error', err instanceof Error ? err.message : 'Failed to save');
       return false;
     } finally {
       setIsSaving(false);
@@ -222,7 +222,7 @@ export function useRegattaContent({
       return false;
     }
     if (!user?.id) {
-      Alert.alert('Error', 'Must be logged in to save content');
+      showAlert('Error', 'Must be logged in to save content');
       return false;
     }
 
@@ -251,7 +251,7 @@ export function useRegattaContent({
 
       if (updateError) {
         logger.error('[useRegattaContent] Save post-race error:', updateError);
-        Alert.alert('Error', updateError.message || 'Failed to save post-race notes');
+        showAlert('Error', updateError.message || 'Failed to save post-race notes');
         return false;
       }
 
@@ -273,7 +273,7 @@ export function useRegattaContent({
       return true;
     } catch (err) {
       logger.error('[useRegattaContent] Exception:', err);
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to save');
+      showAlert('Error', err instanceof Error ? err.message : 'Failed to save');
       return false;
     } finally {
       setIsSaving(false);

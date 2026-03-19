@@ -25,9 +25,9 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
-  Alert,
   Share,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
@@ -377,14 +377,14 @@ export function FourPeaksScheduleWizard({
           await nav.share({ title, text: message });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(message);
-          Alert.alert('Copied', 'Schedule copied to clipboard');
+          showAlert('Copied', 'Schedule copied to clipboard');
         }
       } else {
         await Share.share({ message, title });
       }
     } catch (err) {
       if ((err as Error).message !== 'User did not share') {
-        Alert.alert('Share Error', 'Unable to share schedule');
+        showAlert('Share Error', 'Unable to share schedule');
       }
     }
   }, [schedule, raceName]);

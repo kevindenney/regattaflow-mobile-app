@@ -15,7 +15,6 @@ import {
   View,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   Platform,
   Modal,
 } from 'react-native';
@@ -28,6 +27,7 @@ import {
   Edit3,
   Play,
 } from 'lucide-react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { IOS_COLORS, TUFTE_BACKGROUND } from '@/components/cards/constants';
 import { TufteSessionHeader, TuftePhaseNavigator } from '@/components/practice/tufte';
 import {
@@ -135,7 +135,7 @@ export default function PracticeDetailScreen() {
       refresh();
     } catch (err) {
       console.error('Failed to start session:', err);
-      Alert.alert('Error', 'Failed to start session');
+      showAlert('Error', 'Failed to start session');
     }
   };
 
@@ -148,7 +148,7 @@ export default function PracticeDetailScreen() {
       refresh();
     } catch (err) {
       console.error('Failed to complete session:', err);
-      Alert.alert('Error', 'Failed to complete session');
+      showAlert('Error', 'Failed to complete session');
     }
   };
 
@@ -191,25 +191,19 @@ export default function PracticeDetailScreen() {
   }, []);
 
   const handleDeleteSession = () => {
-    Alert.alert(
+    showConfirm(
       'Delete Practice',
       'Are you sure you want to delete this practice session?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await practiceSessionService.deleteSession(session!.id);
-              router.back();
-            } catch (err) {
-              console.error('Failed to delete session:', err);
-              Alert.alert('Error', 'Failed to delete session');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await practiceSessionService.deleteSession(session!.id);
+          router.back();
+        } catch (err) {
+          console.error('Failed to delete session:', err);
+          showAlert('Error', 'Failed to delete session');
+        }
+      },
+      { destructive: true }
     );
   };
 

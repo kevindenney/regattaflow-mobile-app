@@ -385,19 +385,19 @@ export function EditRaceForm({
         .from('regattas')
         .select('*')
         .eq('id', raceId)
-        .single();
+        .maybeSingle();
 
-      if (regattaError) {
+      if (regattaError || !regattaData) {
         // If regatta not found, try race_events table
         logger.debug('[EditRaceForm] Not found in regattas, trying race_events');
         const { data: raceEvent, error: raceEventError } = await supabase
           .from('race_events')
           .select('*')
           .eq('id', raceId)
-          .single();
+          .maybeSingle();
 
         if (raceEventError || !raceEvent) {
-          logger.error('[EditRaceForm] Error loading race:', regattaError);
+          logger.error('[EditRaceForm] Error loading race:', regattaError || raceEventError);
           showAlert('Error', 'Failed to load race data');
           return;
         }
@@ -763,7 +763,7 @@ export function EditRaceForm({
         .from('regattas')
         .select('metadata')
         .eq('id', raceId)
-        .single();
+        .maybeSingle();
 
       const existingMetadata = existingRace?.metadata || {};
 

@@ -72,7 +72,7 @@ export function useRaceEnrichment(raceId: string, enabled: boolean) {
           .from('regattas')
           .select('prep_notes, tuning_settings, post_race_notes, lessons_learned')
           .eq('id', raceId)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('race_timer_sessions')
           .select('position, fleet_size, race_count, race_results, phase_ratings')

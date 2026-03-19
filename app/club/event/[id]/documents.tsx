@@ -16,6 +16,7 @@ import { useClaudeDraft, ClaudeDocumentType, ClaudeDocumentDraft } from '@/hooks
 import { AiDraftModal } from '@/components/ai/AiDraftModal';
 import { supabase } from '@/services/supabase';
 import { copyToClipboard } from '@/utils/clipboard';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 
 type AiGeneratedDocument = {
   id: string;
@@ -86,7 +87,7 @@ export default function EventDocumentsScreen() {
         }
         catch (error) {
             console.error('Error loading documents:', error);
-            Alert.alert('Error', 'Failed to load documents');
+            showAlert('Error', 'Failed to load documents');
         }
         finally {
             setLoading(false);
@@ -137,7 +138,7 @@ export default function EventDocumentsScreen() {
               file.name
             );
           } else {
-            Alert.alert(
+            showAlertWithButtons(
               'Document Title',
               'Enter a title for this document in the next step.',
               [
@@ -157,11 +158,11 @@ export default function EventDocumentsScreen() {
             await EventService.uploadDocument(eventId, fileObj, documentType, title, undefined, false // Default to private
             );
             await loadDocuments();
-            Alert.alert('Success', 'Document uploaded successfully');
+            showAlert('Success', 'Document uploaded successfully');
         }
         catch (error) {
             console.error('Error uploading document:', error);
-            Alert.alert('Error', 'Failed to upload document');
+            showAlert('Error', 'Failed to upload document');
         }
         finally {
             setUploading(false);
@@ -170,10 +171,10 @@ export default function EventDocumentsScreen() {
     const handleCopyDraft = async (item: AiGeneratedDocument) => {
         const copied = await copyToClipboard(item.draft_text);
         if (copied) {
-            Alert.alert('Copied', 'Claude draft copied to your clipboard.');
+            showAlert('Copied', 'Claude draft copied to your clipboard.');
         }
         else {
-            Alert.alert('Clipboard unavailable', 'Copy is not supported on this device yet.');
+            showAlert('Clipboard unavailable', 'Copy is not supported on this device yet.');
         }
     };
     const extractSections = (value: any): Array<{ heading: string; body: string }> => {
@@ -218,43 +219,30 @@ export default function EventDocumentsScreen() {
         setOverrideGeneratedAt(null);
     };
     const handlePublish = async (documentId: string) => {
-        Alert.alert('Publish Document', 'Are you sure you want to make this document public?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Publish',
-                onPress: async () => {
-                    try {
-                        await EventService.publishDocument(documentId);
-                        await loadDocuments();
-                        Alert.alert('Success', 'Document published');
-                    }
-                    catch (error) {
-                        console.error('Error publishing document:', error);
-                        Alert.alert('Error', 'Failed to publish document');
-                    }
-                },
-            },
-        ]);
+        showConfirm('Publish Document', 'Are you sure you want to make this document public?', async () => {
+            try {
+                await EventService.publishDocument(documentId);
+                await loadDocuments();
+                showAlert('Success', 'Document published');
+            }
+            catch (error) {
+                console.error('Error publishing document:', error);
+                showAlert('Error', 'Failed to publish document');
+            }
+        });
     };
     const handleDelete = async (documentId: string) => {
-        Alert.alert('Delete Document', 'Are you sure you want to delete this document?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                    try {
-                        await EventService.deleteDocument(documentId);
-                        await loadDocuments();
-                        Alert.alert('Success', 'Document deleted');
-                    }
-                    catch (error) {
-                        console.error('Error deleting document:', error);
-                        Alert.alert('Error', 'Failed to delete document');
-                    }
-                },
-            },
-        ]);
+        showConfirm('Delete Document', 'Are you sure you want to delete this document?', async () => {
+            try {
+                await EventService.deleteDocument(documentId);
+                await loadDocuments();
+                showAlert('Success', 'Document deleted');
+            }
+            catch (error) {
+                console.error('Error deleting document:', error);
+                showAlert('Error', 'Failed to delete document');
+            }
+        }, { destructive: true });
     };
     const getDocumentIcon = (type: DocumentType) => {
         switch (type) {

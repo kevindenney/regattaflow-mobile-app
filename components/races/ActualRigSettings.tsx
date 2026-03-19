@@ -20,7 +20,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
 } from 'react-native';
 import {
   Wrench,
@@ -36,6 +35,7 @@ import {
   ChevronUp,
 } from 'lucide-react-native';
 import type { RaceTuningRecommendation, RaceTuningSetting } from '@/services/RaceTuningService';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
 export interface ActualRigSetting {
   key: string;
@@ -148,7 +148,7 @@ export function ActualRigSettings({
 
   const handleQuickAdd = (preset: typeof COMMON_SETTINGS[0]) => {
     if (settings.find(s => s.key === preset.key)) {
-      Alert.alert('Already Added', `${preset.label} is already in your list`);
+      showAlert('Already Added', `${preset.label} is already in your list`);
       return;
     }
     
@@ -171,7 +171,7 @@ export function ActualRigSettings({
     // Validate at least one setting has a value
     const filledSettings = settings.filter(s => s.value.trim());
     if (filledSettings.length === 0) {
-      Alert.alert('No Settings', 'Please enter at least one rig setting');
+      showAlert('No Settings', 'Please enter at least one rig setting');
       return;
     }
 

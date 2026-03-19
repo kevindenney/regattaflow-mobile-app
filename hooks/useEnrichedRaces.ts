@@ -352,7 +352,7 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
       // Step 1: Collect venue_ids from races that might need coordinate lookup
       const venueIdsNeedingLookup = races
         .filter(r => r.metadata?.venue_id && !extractVenueCoordinates(r))
-        .map(r => r.metadata.venue_id as string);
+        .map(r => r.metadata!.venue_id as string);
 
       // Step 2: Fetch venue coordinates from sailing_venues table
       const venueCoordinatesFromDB = venueIdsNeedingLookup.length > 0
@@ -369,6 +369,17 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
       const persistenceQueue: { regattaId: string; weather: RaceWeatherMetadata; metadata: any }[] = [];
 
       const enrichedPromises = races.map(async (regatta) => {
+        // Timeline steps don't need weather enrichment — pass through as-is
+        if ((regatta as any).isTimelineStep) {
+          // Pass through all fields — timeline steps don't need weather enrichment
+          return {
+            ...regatta,
+            venue: (regatta as any).venue || '',
+            date: (regatta as any).date || regatta.start_date,
+            isTimelineStep: true,
+          } as Race;
+        }
+
         // Check venue_name first (standard), then venue (legacy from EditRaceForm bug)
         const venueName = regatta.metadata?.venue_name || (regatta.metadata as any)?.venue || 'Venue TBD';
         const raceDate = regatta.start_date;
@@ -483,8 +494,8 @@ export function useEnrichedRaces(races: RegattaRaw[]) {
           logger.debug(`[useEnrichedRaces] Using existing real weather for ${regatta.name}`);
           return {
             ...baseRace,
-            wind: regatta.metadata.wind,
-            tide: regatta.metadata.tide,
+            wind: regatta.metadata!.wind,
+            tide: regatta.metadata!.tide,
           };
         }
 

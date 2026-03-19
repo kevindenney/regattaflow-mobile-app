@@ -1,10 +1,9 @@
 /**
  * Subscription Service - Web Version
- * Uses Stripe for web subscriptions instead of native in-app purchases
+ * Uses Stripe for web subscriptions
  *
- * Updated: 2026-01-30
- * New pricing: Individual $120/yr, Team $480/yr
- * Learning modules purchased separately at $30/yr each
+ * Updated: 2026-03-15
+ * Pricing: Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
  */
 
 import { supabase } from '@/services/supabase';
@@ -19,14 +18,14 @@ export interface SubscriptionProduct {
   priceCurrencyCode: string;
   features: string[];
   isPopular?: boolean;
-  billingPeriod: 'yearly';
+  billingPeriod: 'monthly' | 'yearly';
   effectiveMonthly?: string;
 }
 
 export interface SubscriptionStatus {
   isActive: boolean;
   productId: string | null;
-  tier: 'free' | 'individual' | 'team';
+  tier: 'free' | 'individual' | 'pro';
   expiresAt: Date | null;
   willRenew: boolean;
   platform: 'ios' | 'android' | 'web';
@@ -45,34 +44,31 @@ const logger = createLogger('subscriptionService.web');
 
 /**
  * Stripe Price IDs for subscriptions
- * Updated: 2026-01-30
- *
- * Race Strategy: Free / Individual $120/yr / Team $480/yr
- * Learning: $30/yr per module (purchased separately)
+ * Updated: 2026-03-15
  */
 export const STRIPE_PRICE_IDS = {
-  // Race Strategy Plans (yearly only)
-  individual_yearly: 'price_1SvDDBBbfEeOhHXbyxF7XSKY',  // $120/year
-  team_yearly: 'price_1SvDDCBbfEeOhHXbRi18kcG1',       // $480/year (up to 5 users)
+  // Individual Plan
+  individual_monthly: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_MONTHLY_PRICE_ID || 'price_individual_monthly_10',
+  individual_yearly: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_YEARLY_PRICE_ID || 'price_individual_yearly_100',
 
-  // Racing Academy / Learning (separate purchase)
-  academy_module: 'price_1Sl0mWBbfEeOhHXbcvQnBisj',    // $30/year per module
+  // Pro Plan
+  pro_monthly: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly_100',
+  pro_yearly: process.env.EXPO_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID || 'price_pro_yearly_800',
 };
 
 export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
-  individual: {
-    id: STRIPE_PRICE_IDS.individual_yearly,
+  individual_monthly: {
+    id: STRIPE_PRICE_IDS.individual_monthly,
     title: 'Individual',
-    description: 'Full racing features for solo sailors',
-    price: '$120/year',
-    priceAmountMicros: 120000000,
+    description: 'AI-powered race preparation',
+    price: '$10/month',
+    priceAmountMicros: 10000000,
     priceCurrencyCode: 'USD',
-    billingPeriod: 'yearly',
-    effectiveMonthly: '$10/mo',
+    billingPeriod: 'monthly',
     isPopular: true,
     features: [
       'Unlimited races',
-      'Unlimited AI queries',
+      '50,000 AI tokens per month',
       'AI strategy analysis',
       'Automatic weather updates',
       'Historical race data',
@@ -81,44 +77,60 @@ export const SUBSCRIPTION_PRODUCTS: Record<string, SubscriptionProduct> = {
       'Cloud backup & sync',
     ],
   },
-  team: {
-    id: STRIPE_PRICE_IDS.team_yearly,
-    title: 'Team',
-    description: 'Full racing features for teams',
-    price: '$480/year',
-    priceAmountMicros: 480000000,
+  individual_yearly: {
+    id: STRIPE_PRICE_IDS.individual_yearly,
+    title: 'Individual',
+    description: 'AI-powered race preparation',
+    price: '$100/year',
+    priceAmountMicros: 100000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
-    effectiveMonthly: '$40/mo',
+    effectiveMonthly: '$8.33/mo',
+    isPopular: true,
+    features: [
+      'Unlimited races',
+      '50,000 AI tokens per month',
+      'AI strategy analysis',
+      'Automatic weather updates',
+      'Historical race data',
+      'Offline mode',
+      'Advanced analytics',
+      'Cloud backup & sync',
+    ],
+  },
+  pro_monthly: {
+    id: STRIPE_PRICE_IDS.pro_monthly,
+    title: 'Pro',
+    description: 'Maximum AI power for serious racers',
+    price: '$100/month',
+    priceAmountMicros: 100000000,
+    priceCurrencyCode: 'USD',
+    billingPeriod: 'monthly',
     features: [
       'Everything in Individual',
-      'Up to 5 team members',
+      '500,000 AI tokens per month',
+      'Priority AI processing',
       'Team sharing & collaboration',
-      'Shared race preparation',
       'Team analytics dashboard',
       'Priority support',
     ],
   },
-};
-
-/**
- * Learning/Academy subscription products
- * Note: Learning modules are purchased separately, NOT bundled with subscriptions
- */
-export const LEARNING_PRODUCTS: Record<string, SubscriptionProduct> = {
-  module: {
-    id: STRIPE_PRICE_IDS.academy_module,
-    title: 'Single Module',
-    description: 'Access one learning module',
-    price: '$30/year',
-    priceAmountMicros: 30000000,
+  pro_yearly: {
+    id: STRIPE_PRICE_IDS.pro_yearly,
+    title: 'Pro',
+    description: 'Maximum AI power for serious racers',
+    price: '$800/year',
+    priceAmountMicros: 800000000,
     priceCurrencyCode: 'USD',
     billingPeriod: 'yearly',
+    effectiveMonthly: '$66.67/mo',
     features: [
-      'Choose any learning module',
-      'Interactive lessons',
-      'Progress tracking',
-      'Certificate on completion',
+      'Everything in Individual',
+      '500,000 AI tokens per month',
+      'Priority AI processing',
+      'Team sharing & collaboration',
+      'Team analytics dashboard',
+      'Priority support',
     ],
   },
 };
@@ -170,7 +182,6 @@ export class SubscriptionService {
         };
       }
 
-      // Create Stripe checkout session
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
         body: {
           priceId: productId,
@@ -202,9 +213,6 @@ export class SubscriptionService {
     }
   }
 
-  /**
-   * Restore purchases - redirects to customer portal on web
-   */
   async restorePurchases(): Promise<PurchaseResult> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -215,7 +223,6 @@ export class SubscriptionService {
         };
       }
 
-      // On web, we refresh status from backend
       await this.refreshSubscriptionStatus();
 
       if (this.currentStatus?.isActive) {
@@ -259,12 +266,12 @@ export class SubscriptionService {
       if (error) throw error;
 
       // Normalize tier name (handle legacy values)
-      let tier: 'free' | 'individual' | 'team' = 'free';
+      let tier: 'free' | 'individual' | 'pro' = 'free';
       const rawTier = data.subscription_tier?.toLowerCase();
       if (rawTier === 'individual' || rawTier === 'basic') {
         tier = 'individual';
-      } else if (rawTier === 'team' || rawTier === 'pro' || rawTier === 'championship') {
-        tier = 'team';
+      } else if (rawTier === 'pro' || rawTier === 'team' || rawTier === 'championship') {
+        tier = 'pro';
       }
 
       this.currentStatus = {
@@ -292,9 +299,6 @@ export class SubscriptionService {
     };
   }
 
-  /**
-   * Open Stripe customer portal for subscription management
-   */
   async cancelSubscription(): Promise<boolean> {
     try {
       const { data: { user } } = await supabase.auth.getUser();

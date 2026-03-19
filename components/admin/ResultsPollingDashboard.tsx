@@ -13,9 +13,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   Dimensions,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 import { ExternalResultsMonitor } from '@/components/results/ExternalResultsMonitor';
@@ -147,7 +147,7 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
   const handlePollAllSources = async () => {
     setRefreshing(true);
     await loadDashboardData();
-    Alert.alert('Poll Complete', 'All configured sources were refreshed.');
+    showAlert('Poll Complete', 'All configured sources were refreshed.');
   };
 
   const handleConfigureSources = () => {
@@ -160,7 +160,7 @@ export const ResultsPollingDashboard: React.FC<ResultsPollingDashboardProps> = (
       `Regattas: ${stats?.totalRegattas?.toLocaleString() ?? 0}`,
       `Success Rate: ${stats?.successRate ?? 0}%`,
     ].join('\n');
-    Alert.alert('Export Summary', exportSummary);
+    showAlert('Export Summary', exportSummary);
   };
 
   const handleOpenDebugMode = () => {

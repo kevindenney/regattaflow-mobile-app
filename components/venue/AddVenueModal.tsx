@@ -17,9 +17,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
   Dimensions,
 } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import {
   IOS_COLORS,
@@ -69,7 +69,7 @@ export function AddVenueModal({
       handleDismiss();
     },
     onError: (error) => {
-      Alert.alert('Error', error.message || 'Failed to create venue');
+      showAlert('Error', error.message || 'Failed to create venue');
     },
   });
 
@@ -97,12 +97,12 @@ export function AddVenueModal({
   const handleSubmit = useCallback(async () => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      Alert.alert('Name Required', 'Please enter a name for the venue.');
+      showAlert('Name Required', 'Please enter a name for the venue.');
       return;
     }
 
     if (!selectedLocation) {
-      Alert.alert('Location Required', 'Please tap on the map to set the venue location.');
+      showAlert('Location Required', 'Please tap on the map to set the venue location.');
       return;
     }
 

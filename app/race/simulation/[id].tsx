@@ -12,7 +12,8 @@
  */
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, ScrollView, ActivityIndicator } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { VStack } from '@/components/ui/vstack';
 import { HStack } from '@/components/ui/hstack';
@@ -134,13 +135,13 @@ export default function SimulationResultsScreen() {
       if (!isMountedRef.current) return;
       setResults(simulationResults);
 
-      Alert.alert(
+      showAlert(
         'Simulation Complete',
         `Analyzed ${simulationResults.totalIterations} race scenarios`
       );
     } catch (error) {
       console.error('Error running simulation:', error);
-      Alert.alert('Error', 'Failed to run simulation. Please try again.');
+      showAlert('Error', 'Failed to run simulation. Please try again.');
     } finally {
       if (isMountedRef.current) {
         setSimulating(false);

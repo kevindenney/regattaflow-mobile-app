@@ -5,11 +5,11 @@ import {
   TextInput,
   ScrollView,
   TouchableOpacity,
-  Alert,
   FlatList,
   ActivityIndicator,
 } from 'react-native';
 import { ChevronRight, Plus, User, Users } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useRouter } from 'expo-router';
 import { useSailorOnboardingState, type SailorCrewData, type SailorCrewMember } from '@/hooks/useSailorOnboardingState';
 
@@ -64,7 +64,7 @@ export default function CrewScreen() {
       setIsAddingMember(true);
 
       if (!newMember.name.trim() || !newMember.role.trim()) {
-        Alert.alert('Missing info', 'Please enter both name and role');
+        showAlert('Missing info', 'Please enter both name and role');
         return;
       }
 
@@ -83,7 +83,7 @@ export default function CrewScreen() {
       setShowRoleSuggestions(false);
     } catch (error) {
       console.error('Error adding crew member:', error);
-      Alert.alert('Error', 'Failed to add crew member. Please try again.');
+      showAlert('Error', 'Failed to add crew member. Please try again.');
     } finally {
       setIsAddingMember(false);
     }
@@ -121,7 +121,7 @@ export default function CrewScreen() {
       router.push('/review');
     } catch (error: any) {
       console.error('Error continuing to review:', error);
-      Alert.alert('Unable to continue', 'Please try again in a moment.');
+      showAlert('Unable to continue', 'Please try again in a moment.');
     } finally {
       setIsSaving(false);
     }

@@ -50,6 +50,14 @@ const TAB_SWEEP_META: Record<(typeof TAB_SWEEP_REQUIRED_TABS)[number], { label: 
   learn: { label: 'Learn', icon: 'school-outline' },
   reflect: { label: 'Reflect', icon: 'stats-chart-outline' },
 };
+const ROUTES_WITH_CUSTOM_TOOLBAR = [
+  '/connect',
+  '/learn',
+  '/race-browser',
+  '/races',
+  '/reflect',
+  '/search',
+] as const;
 const TAB_SWEEP_CONTEXT_COPY: Record<
   (typeof TAB_SWEEP_REQUIRED_TABS)[number],
   { description: string; emptyHint: string }
@@ -86,6 +94,9 @@ function TabLayoutInner() {
   const isWeb = Platform.OS === 'web';
   const useWebSidebar = isWeb && FEATURE_FLAGS.USE_WEB_SIDEBAR_LAYOUT;
   const isWideWeb = isWeb && windowWidth >= WEB_SIDEBAR_MIN_WIDTH;
+  const hideGlobalNavigationHeader = !isWeb && ROUTES_WITH_CUSTOM_TOOLBAR.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
   const insets = useSafeAreaInsets();
   const {
     isTourActive,
@@ -918,7 +929,11 @@ function TabLayoutInner() {
   return (
     <View style={styles.container}>
       {/* Navigation header: hidden on web (interest switcher + sidebar toggle live in TabScreenToolbar) */}
-      <NavigationHeader backgroundColor="#F8FAFC" showDrawer={true} hidden={Platform.OS === 'web'} />
+      <NavigationHeader
+        backgroundColor="#F8FAFC"
+        showDrawer={true}
+        hidden={Platform.OS === 'web' || hideGlobalNavigationHeader}
+      />
 
       <View style={useWebSidebar ? styles.webShelfRow : styles.nativeRow}>
         {/* Shelf panel — persistent on web, pushes content right */}

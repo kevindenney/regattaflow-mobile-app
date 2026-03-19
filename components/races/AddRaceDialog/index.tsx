@@ -18,11 +18,11 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  Alert,
-  
+
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft, X } from 'lucide-react-native';
 import { RaceType, RACE_TYPE_COLORS } from '../RaceTypeSelector';
@@ -126,7 +126,7 @@ function LegacyAddRaceDialog({ visible, onClose, onSave }: AddRaceDialogProps) {
         (error as any)?.message && typeof (error as any).message === 'string'
           ? (error as any).message
           : 'Unable to save race right now. Please try again.';
-      Alert.alert('Save failed', message);
+      showAlert('Save failed', message);
     } finally {
       setIsSaving(false);
     }

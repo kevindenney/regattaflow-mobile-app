@@ -136,7 +136,7 @@ export function useRacePreparation({
   const [intentions, setIntentions] = useState<RaceIntentions>(DEFAULT_INTENTIONS);
 
   // Refs for debouncing and tracking load state
-  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const pendingChangesRef = useRef<Partial<SailorRacePreparation>>({});
   /** Tracks if we've completed initial load - used to prevent loading flicker on subsequent refreshes */
   const hasLoadedOnceRef = useRef(false);

@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '@/lib/utils/logger';
+import { CircuitOpenError, getAICircuitBreaker, resetAICircuitBreaker } from '@/lib/utils/aiCircuitBreaker';
 
 const logger = createLogger('AIFallback');
 
@@ -97,6 +98,7 @@ export function activateFallbackMode(reason: string): void {
 
 /**
  * Deactivate fallback mode (e.g., after credits are refilled)
+ * Also resets the circuit breaker so requests can flow again.
  */
 export function deactivateFallbackMode(): void {
   if (isInFallbackMode) {
@@ -104,6 +106,7 @@ export function deactivateFallbackMode(): void {
     isInFallbackMode = false;
     fallbackReason = null;
     fallbackActivatedAt = null;
+    resetAICircuitBreaker();
   }
 }
 
@@ -115,17 +118,23 @@ export function isAIInFallbackMode(): boolean {
 }
 
 /**
- * Get fallback status for UI display
+ * Get fallback status for UI display.
+ * Includes circuit breaker state so the UI can show retry countdowns.
  */
 export function getFallbackStatus(): {
   active: boolean;
   reason: string | null;
   since: Date | null;
+  circuitState: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+  retryInMs: number;
 } {
+  const breakerStatus = getAICircuitBreaker().getStatus();
   return {
-    active: isInFallbackMode,
+    active: isInFallbackMode || breakerStatus.state === 'OPEN',
     reason: fallbackReason,
     since: fallbackActivatedAt,
+    circuitState: breakerStatus.state,
+    retryInMs: breakerStatus.msUntilHalfOpen,
   };
 }
 
@@ -150,8 +159,20 @@ export async function withAIFallback<T>(
 
   try {
     const result = await aiCall();
+    // Successful call — deactivate fallback mode if it was on (API recovered)
+    if (isInFallbackMode) {
+      deactivateFallbackMode();
+    }
     return { result, usedFallback: false };
   } catch (error) {
+    // Circuit breaker is open — use fallback without activating sticky mode
+    // (the breaker will probe automatically)
+    if (error instanceof CircuitOpenError) {
+      logger.debug('Using fallback (circuit breaker open)');
+      options?.onFallback?.();
+      return { result: fallbackValue, usedFallback: true };
+    }
+
     if (shouldTriggerFallback(error)) {
       const reason = isAPIOverloadError(error)
         ? 'Anthropic API overloaded'

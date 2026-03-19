@@ -16,7 +16,7 @@ export { useAIChatSession } from './ai/useAIChatSession';
 export { useRaceCommsDraft } from './ai/useRaceCommsDraft';
 
 // Practice Hooks
-export { usePracticeSessions, usePastPracticeSessions } from './usePracticeSessions';
+export { usePracticeSessions } from './usePracticeSessions';
 export { usePracticeSession } from './usePracticeSession';
 export { usePracticeChecklist } from './usePracticeChecklist';
 export type { PracticeChecklistItemWithState, CarryoverItem } from './usePracticeChecklist';

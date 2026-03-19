@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { ArrowLeft, PenLine } from 'lucide-react-native';
 import { Typography, Spacing, colors } from '@/constants/designSystem';
 import { RaceType, RaceTypeBadge } from '../RaceTypeSelector';
@@ -215,7 +216,7 @@ export function AIExtractionStep({
       logger.error('Extraction error', error);
       setIsLoading(false);
       setState('input');
-      Alert.alert(
+      showAlertWithButtons(
         'Extraction Failed',
         'Unable to extract race details. Please try again or enter manually.',
         [

@@ -10,12 +10,12 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Alert,
   ActivityIndicator,
   Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import EventService, { ClubEvent, EventRegistrationStats } from '@/services/eventService';
@@ -49,34 +49,28 @@ export default function EventDetailScreen() {
       setStats(statsData);
     } catch (error) {
       console.error('Error loading event:', error);
-      Alert.alert('Error', 'Failed to load event');
+      showAlert('Error', 'Failed to load event');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert(
+    showConfirm(
       'Delete Event',
       'Are you sure you want to delete this event? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await EventService.deleteEvent(eventId);
-              Alert.alert('Success', 'Event deleted', [
-                { text: 'OK', onPress: () => router.replace('/(tabs)/events') },
-              ]);
-            } catch (error) {
-              console.error('Error deleting event:', error);
-              Alert.alert('Error', 'Failed to delete event');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await EventService.deleteEvent(eventId);
+          showAlertWithButtons('Success', 'Event deleted', [
+            { text: 'OK', onPress: () => router.replace('/(tabs)/events') },
+          ]);
+        } catch (error) {
+          console.error('Error deleting event:', error);
+          showAlert('Error', 'Failed to delete event');
+        }
+      },
+      { destructive: true }
     );
   };
 
@@ -84,34 +78,28 @@ export default function EventDetailScreen() {
     try {
       await EventService.publishEvent(eventId);
       await loadEvent();
-      Alert.alert('Success', 'Event published');
+      showAlert('Success', 'Event published');
     } catch (error) {
       console.error('Error publishing event:', error);
-      Alert.alert('Error', 'Failed to publish event');
+      showAlert('Error', 'Failed to publish event');
     }
   };
 
   const handleCancel = async () => {
-    Alert.alert(
+    showConfirm(
       'Cancel Event',
       'Are you sure you want to cancel this event?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel Event',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await EventService.cancelEvent(eventId);
-              await loadEvent();
-              Alert.alert('Success', 'Event cancelled');
-            } catch (error) {
-              console.error('Error cancelling event:', error);
-              Alert.alert('Error', 'Failed to cancel event');
-            }
-          },
-        },
-      ]
+      async () => {
+        try {
+          await EventService.cancelEvent(eventId);
+          await loadEvent();
+          showAlert('Success', 'Event cancelled');
+        } catch (error) {
+          console.error('Error cancelling event:', error);
+          showAlert('Error', 'Failed to cancel event');
+        }
+      },
+      { destructive: true }
     );
   };
 
@@ -126,7 +114,7 @@ export default function EventDetailScreen() {
           await nav.share({ title: event.title, text: message });
         } else if (nav?.clipboard?.writeText) {
           await nav.clipboard.writeText(message);
-          Alert.alert('Copied', 'Event details copied to clipboard');
+          showAlert('Copied', 'Event details copied to clipboard');
         }
       } else {
         await Share.share({

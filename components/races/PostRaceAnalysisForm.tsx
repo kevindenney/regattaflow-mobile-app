@@ -330,12 +330,12 @@ const ANALYSIS_STEPS: AnalysisStep[] = [
         ],
       },
       {
-        id: 'protest_filed',
+        id: 'protests_filed',
         type: 'boolean',
         label: 'Did you file a protest?',
       },
       {
-        id: 'protest_received',
+        id: 'protests_received',
         type: 'boolean',
         label: 'Was a protest filed against you?',
       },
@@ -477,7 +477,8 @@ export function PostRaceAnalysisForm({
     setFormData({ ...formData, [key]: value });
     // Clear error for this field
     if (errors[key]) {
-      setErrors({ ...errors, [key]: undefined });
+      const { [key]: _, ...rest } = errors;
+      setErrors(rest);
     }
   };
 
@@ -525,8 +526,8 @@ export function PostRaceAnalysisForm({
       // Rules & Protests
       rules_incidents: false,
       rules_incident_types: [],
-      protest_filed: false,
-      protest_received: false,
+      protests_filed: false,
+      protests_received: false,
       penalty_taken: false,
       rules_questions: '',
       rules_notes: 'Clean race, no incidents.',
@@ -586,7 +587,10 @@ export function PostRaceAnalysisForm({
               nudges={currentStepNudges}
               title="From Your Past Races"
               channel="checklist"
-              onRecordDelivery={recordDelivery}
+              onRecordDelivery={async (learnableEventId, channel) => {
+                const result = await recordDelivery(learnableEventId, channel);
+                return result?.id ?? '';
+              }}
               maxVisible={2}
               compact={false}
               showMatchReasons

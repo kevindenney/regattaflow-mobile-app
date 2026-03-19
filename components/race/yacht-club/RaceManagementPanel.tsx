@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { showAlert, showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -88,7 +89,7 @@ export function RaceManagementPanel({ course }: RaceManagementPanelProps) {
           : protest
       )
     );
-    Alert.alert('Hearing Scheduled', 'The protest hearing has been scheduled.');
+    showAlert('Hearing Scheduled', 'The protest hearing has been scheduled.');
   };
 
   const handleDismissProtest = (protestId: string) => {
@@ -103,7 +104,7 @@ export function RaceManagementPanel({ course }: RaceManagementPanelProps) {
           : protest
       )
     );
-    Alert.alert('Protest Dismissed', 'The protest has been marked as dismissed.');
+    showAlert('Protest Dismissed', 'The protest has been marked as dismissed.');
   };
 
   const handleImportResults = () => {
@@ -125,10 +126,9 @@ export function RaceManagementPanel({ course }: RaceManagementPanelProps) {
         : race
     ));
 
-    Alert.alert(
+    showAlert(
       'Race Starting',
-      'Start sequence initiated. All boats have been notified.',
-      [{ text: 'OK' }]
+      'Start sequence initiated. All boats have been notified.'
     );
   };
 
@@ -139,31 +139,24 @@ export function RaceManagementPanel({ course }: RaceManagementPanelProps) {
         : race
     ));
 
-    Alert.alert(
+    showAlert(
       'Race Postponed',
-      'Race has been postponed. Participants will be notified.',
-      [{ text: 'OK' }]
+      'Race has been postponed. Participants will be notified.'
     );
   };
 
   const handleAbandonRace = (raceId: string) => {
-    Alert.alert(
+    showConfirm(
       'Abandon Race?',
       'This action cannot be undone. All participants will be notified.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Abandon',
-          style: 'destructive',
-          onPress: () => {
-            setActiveRaces(races => races.map(race =>
-              race.id === raceId
-                ? { ...race, status: 'abandoned' as const }
-                : race
-            ));
-          }
-        }
-      ]
+      () => {
+        setActiveRaces(races => races.map(race =>
+          race.id === raceId
+            ? { ...race, status: 'abandoned' as const }
+            : race
+        ));
+      },
+      { destructive: true }
     );
   };
 

@@ -6,7 +6,8 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Share, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Share } from 'react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SHADOWS } from '@/lib/design-tokens-ios';
 import type { WeeklySummary } from '@/hooks/useReflectProfile';
@@ -67,7 +68,7 @@ ${summary.highlightRace ? `\nHighlight: ${getOrdinal(summary.highlightRace.posit
         message: shareText,
       });
     } catch (error) {
-      Alert.alert('Error', 'Could not share summary');
+      showAlert('Error', 'Could not share summary');
     }
   };
 

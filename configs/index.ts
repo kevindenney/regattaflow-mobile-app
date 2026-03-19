@@ -25,6 +25,7 @@ export const INTEREST_EVENT_CONFIGS: Record<string, InterestEventConfig> = {
   nursing: NURSING_EVENT_CONFIG,
   drawing: DRAWING_EVENT_CONFIG,
   fitness: FITNESS_EVENT_CONFIG,
+  'health-and-fitness': FITNESS_EVENT_CONFIG,
 }
 
 /**

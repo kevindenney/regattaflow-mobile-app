@@ -14,12 +14,12 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
 } from 'react-native';
 import { X, Flag, Mail, User, MessageSquare, CheckCircle } from 'lucide-react-native';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { ClubDiscoveryService, GlobalClubResult } from '@/services/ClubDiscoveryService';
@@ -72,33 +72,28 @@ export function ClaimClubModal({
     },
     onSuccess: (result) => {
       if (result.success && result.platformClubId) {
-        Alert.alert(
+        showAlert(
           'Club Claimed!',
-          `You are now the administrator of ${club?.name}. You can start creating races and managing your club.`,
-          [
-            {
-              text: 'Get Started',
-              onPress: () => onSuccess(result.platformClubId!),
-            },
-          ]
+          `You are now the administrator of ${club?.name}. You can start creating races and managing your club.`
         );
+        onSuccess(result.platformClubId!);
       } else {
-        Alert.alert('Error', result.error || 'Failed to claim club');
+        showAlert('Error', result.error || 'Failed to claim club');
       }
     },
     onError: (error: Error) => {
-      Alert.alert('Error', error.message || 'An unexpected error occurred');
+      showAlert('Error', error.message || 'An unexpected error occurred');
     },
   });
 
   const handleSubmit = useCallback(() => {
     // Validate
     if (!email.trim()) {
-      Alert.alert('Email Required', 'Please enter a club email address.');
+      showAlert('Email Required', 'Please enter a club email address.');
       return;
     }
     if (!selectedRole) {
-      Alert.alert('Role Required', 'Please select your role at the club.');
+      showAlert('Role Required', 'Please select your role at the club.');
       return;
     }
 
