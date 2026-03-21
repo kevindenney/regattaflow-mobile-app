@@ -63,6 +63,8 @@ import {
   ComparisonCard,
   WeeklySummaryCard,
   GearManagementSection,
+  // User-defined skill goals
+  MySkillsSection,
   // Phase 6: Training, Heatmap, Recap, Records, Photos, Journal
   TrainingPlansSection,
   VenueHeatmap,
@@ -256,6 +258,9 @@ function ProgressView({ toolbarHeight, onScroll, isDesktop }: ProgressViewProps)
 
         {/* AI Coaching Insight - Pattern-based recommendations */}
         <CoachingInsightCard sailorId={userProfile?.id} />
+
+        {/* My Skills — user-defined skill goals (non-nursing) */}
+        {!isNursing && <MySkillsSection />}
 
         {/* Competency Dashboard - Nursing interests only */}
         {isNursing && competencies && competencies.length > 0 && (

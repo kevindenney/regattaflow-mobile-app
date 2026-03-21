@@ -648,7 +648,7 @@ export function RacesFloatingHeader({
                         <View style={styles.menuOptionContent}>
                           <Text style={styles.menuOptionTitle}>Add Step</Text>
                           <Text style={styles.menuOptionSubtitle}>
-                            Blank step — define what, why, who, and how
+                            Dump ideas, links, and notes — AI structures your plan
                           </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />

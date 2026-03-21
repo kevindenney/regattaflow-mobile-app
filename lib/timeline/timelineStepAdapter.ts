@@ -17,6 +17,8 @@ export function timelineStepToCardRaceData(step: TimelineStepRecord): CardRaceDa
     date: step.starts_at || step.created_at,
     status: STATUS_MAP[step.status] ?? 'scheduled',
     created_by: step.user_id,
+    user_id: step.user_id,
+    collaborator_user_ids: step.collaborator_user_ids ?? [],
     isTimelineStep: true,
     stepStatus: step.status,
     sort_order: step.sort_order,

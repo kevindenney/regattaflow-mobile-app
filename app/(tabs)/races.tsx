@@ -3574,6 +3574,10 @@ export default function RacesScreen() {
                   setHasManuallySelected(true);
                   setIsGridView(false); // zoom back in
                 }}
+                userId={user?.id}
+                onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
+                onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
+                onHideRace={isViewingOtherTimeline ? undefined : handleHideRace}
                 onBulkUpdateStatus={isViewingOtherTimeline ? undefined : handleTimelineGridBulkStatusUpdate}
                 onBulkDeleteRaces={isViewingOtherTimeline ? undefined : handleTimelineGridBulkDelete}
                 onReorderRaces={isViewingOtherTimeline ? undefined : handleTimelineGridReorder}

@@ -32,6 +32,9 @@ export type TimelineStepRecord = {
   sort_order: number;
   metadata: Record<string, unknown>;
   collaborator_user_ids: string[];
+  share_token?: string | null;
+  share_enabled?: boolean;
+  public_shared_at?: string | null;
   created_at: string;
   updated_at: string;
 };

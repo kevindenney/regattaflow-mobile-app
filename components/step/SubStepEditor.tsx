@@ -114,9 +114,10 @@ function SubStepRow({
 interface SubStepEditorProps {
   subSteps: SubStep[];
   onChange: (subSteps: SubStep[]) => void;
+  readOnly?: boolean;
 }
 
-export function SubStepEditor({ subSteps, onChange }: SubStepEditorProps) {
+export function SubStepEditor({ subSteps, onChange, readOnly }: SubStepEditorProps) {
   const subStepsRef = useRef(subSteps);
   subStepsRef.current = subSteps;
 
@@ -161,22 +162,31 @@ export function SubStepEditor({ subSteps, onChange }: SubStepEditorProps) {
   return (
     <View style={styles.container}>
       {subSteps.map((step, index) => (
-        <SubStepRow
-          key={step.id}
-          step={step}
-          index={index}
-          total={subSteps.length}
-          onTextChange={updateText}
-          onRemove={removeSubStep}
-          onMoveUp={moveUp}
-          onMoveDown={moveDown}
-        />
+        readOnly ? (
+          <View key={step.id} style={styles.row}>
+            <Text style={{ fontSize: 13, color: STEP_COLORS.secondaryLabel, width: 18 }}>{index + 1}.</Text>
+            <Text style={{ flex: 1, fontSize: 14, color: STEP_COLORS.label }}>{step.text}</Text>
+          </View>
+        ) : (
+          <SubStepRow
+            key={step.id}
+            step={step}
+            index={index}
+            total={subSteps.length}
+            onTextChange={updateText}
+            onRemove={removeSubStep}
+            onMoveUp={moveUp}
+            onMoveDown={moveDown}
+          />
+        )
       ))}
 
-      <Pressable style={styles.addButton} onPress={addSubStep}>
-        <Ionicons name="add-circle-outline" size={20} color={STEP_COLORS.accent} />
-        <Text style={styles.addText}>Add sub-step</Text>
-      </Pressable>
+      {!readOnly && (
+        <Pressable style={styles.addButton} onPress={addSubStep}>
+          <Ionicons name="add-circle-outline" size={20} color={STEP_COLORS.accent} />
+          <Text style={styles.addText}>Add sub-step</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

@@ -31,6 +31,7 @@ import { useInterest } from '@/providers/InterestProvider';
 import { createStep } from '@/services/TimelineStepService';
 import { generateCritiqueInsight, gatherEnrichedContext } from '@/services/ai/StepPlanAIService';
 import { markLessonCompleted } from '@/services/LibraryService';
+import { syncStepReviewRatings } from '@/services/SkillGoalService';
 import { useQueryClient } from '@tanstack/react-query';
 import type { StepReviewData, StepActData, StepPlanData, StepMetadata, BrainDumpData } from '@/types/step-detail';
 import { ShareStepSheet } from '@/components/step/ShareStepSheet';
@@ -144,12 +145,15 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 interface StepCritiqueContentProps {
   stepId: string;
   onNextStepCreated?: (newStepId: string) => void;
+  readOnly?: boolean;
 }
 
-export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueContentProps) {
+export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: StepCritiqueContentProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
+  const { user } = useAuth();
+  const { currentInterest } = useInterest();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
 
@@ -247,10 +251,15 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
           if (courseCtx?.resource_id && courseCtx?.lesson_id) {
             markLessonCompleted(courseCtx.resource_id, courseCtx.lesson_id).catch(() => {});
           }
+          // Sync capability ratings to user skill goals
+          const resolvedInterestId = step?.interest_id || currentInterest?.id;
+          if (user?.id && resolvedInterestId && Object.keys(localCapabilityRatings).length > 0) {
+            syncStepReviewRatings(user.id, resolvedInterestId, localCapabilityRatings).catch(() => {});
+          }
         },
       },
     );
-  }, [stepId, updateStep, step]);
+  }, [stepId, updateStep, step, user?.id, currentInterest?.id, localCapabilityRatings]);
 
   const isCompleted = step?.status === 'completed';
 
@@ -263,8 +272,6 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
   const capabilityGoals = planData.capability_goals ?? [];
 
   // --- AI Insight ---
-  const { user } = useAuth();
-  const { currentInterest } = useInterest();
   const [aiInsight, setAiInsight] = useState('');
   const [aiSuggestion, setAiSuggestion] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
@@ -389,7 +396,7 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
         <SectionLabel>OVERALL RATING</SectionLabel>
         <View style={s.overallCard}>
           <Text style={s.overallQuestion}>How did this session go?</Text>
-          <StarRating value={overallRating} onChange={handleOverallRating} />
+          <StarRating value={overallRating} onChange={readOnly ? () => {} : handleOverallRating} />
           <Text style={s.overallLabel}>
             {RATING_LABELS[overallRating] || 'Tap a star to rate'}
           </Text>
@@ -416,7 +423,7 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
                   <DotRating
                     value={rating}
                     color={color}
-                    onChange={(v) => handleCapabilityRating(goal, v)}
+                    onChange={readOnly ? () => {} : (v) => handleCapabilityRating(goal, v)}
                   />
                 </View>
                 <ProgressBar value={rating} max={5} color={color} />
@@ -454,11 +461,12 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
         <TextInput
           style={s.inputBox}
           value={localWentWell}
-          onChangeText={handleWentWellChange}
-          placeholder="My line weight was much more consistent today..."
+          onChangeText={readOnly ? undefined : handleWentWellChange}
+          placeholder={readOnly ? '' : "My line weight was much more consistent today..."}
           placeholderTextColor={C.labelLight}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
       </View>
 
@@ -471,11 +479,12 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
         <TextInput
           style={s.inputBox}
           value={localToImprove}
-          onChangeText={handleToImproveChange}
-          placeholder="Need to slow down on contour edges..."
+          onChangeText={readOnly ? undefined : handleToImproveChange}
+          placeholder={readOnly ? '' : "Need to slow down on contour edges..."}
           placeholderTextColor={C.labelLight}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
       </View>
 
@@ -520,16 +529,17 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
         <TextInput
           style={s.inputBox}
           value={localNextNotes}
-          onChangeText={handleNextNotesChange}
-          placeholder="What do you want to focus on next time?"
+          onChangeText={readOnly ? undefined : handleNextNotesChange}
+          placeholder={readOnly ? '' : "What do you want to focus on next time?"}
           placeholderTextColor={C.labelLight}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
       </View>
 
-      {/* ── BUTTONS ── */}
-      {!isCompleted ? (
+      {/* ── BUTTONS ── (hidden for collaborators) */}
+      {readOnly ? null : !isCompleted ? (
         <View style={s.buttonGroup}>
           <Pressable style={s.saveButton} onPress={handleSaveReview}>
             <Ionicons name="save-outline" size={18} color="#FFFFFF" />
@@ -577,6 +587,7 @@ export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueC
       <ShareStepSheet
         isOpen={shareSheetOpen}
         onClose={() => setShareSheetOpen(false)}
+        stepId={stepId}
         stepTitle={step.title}
         planData={planData}
         actData={actData}

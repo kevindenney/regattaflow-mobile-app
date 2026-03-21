@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, Pressable, TextInput, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
@@ -25,6 +25,7 @@ export function CrossInterestSuggestions({
   onCreateStep,
 }: CrossInterestSuggestionsProps) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [applied, setApplied] = useState<Set<string>>(new Set());
   const [focusText, setFocusText] = useState('');
   const [showFocusInput, setShowFocusInput] = useState(false);
   const { suggestions, isLoading, refetch } = useCrossInterestSuggestions(stepId, interestId, focusText);
@@ -32,6 +33,11 @@ export function CrossInterestSuggestions({
   const handleDismiss = useCallback((id: string) => {
     setDismissed((prev) => new Set(prev).add(id));
   }, []);
+
+  const handleApply = useCallback((suggestion: CrossInterestSuggestion) => {
+    onApplyToStep(suggestion.suggestion);
+    setApplied((prev) => new Set(prev).add(suggestion.id));
+  }, [onApplyToStep]);
 
   const handleRefresh = useCallback(() => {
     setDismissed(new Set());
@@ -118,22 +124,31 @@ export function CrossInterestSuggestions({
             <Text style={styles.suggestionText}>{suggestion.suggestion}</Text>
             <Text style={styles.relevanceText}>{suggestion.relevance}</Text>
             <View style={styles.actions}>
-              <Pressable
-                style={styles.applyButton}
-                onPress={() => onApplyToStep(suggestion.suggestion)}
-              >
-                <Ionicons name="arrow-down-outline" size={14} color={STEP_COLORS.accent} />
-                <Text style={styles.applyButtonText}>Apply here</Text>
-              </Pressable>
-              <Pressable
+              {applied.has(suggestion.id) ? (
+                <View style={[styles.applyButton, { backgroundColor: 'rgba(52,199,89,0.12)' }]}>
+                  <Ionicons name="checkmark-outline" size={14} color={IOS_COLORS.systemGreen} />
+                  <Text style={[styles.applyButtonText, { color: IOS_COLORS.systemGreen }]}>Added as sub-step</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.applyButton}
+                  onPress={() => handleApply(suggestion)}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="add-circle-outline" size={14} color={STEP_COLORS.accent} />
+                  <Text style={styles.applyButtonText}>Add to this step</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
                 style={styles.createButton}
                 onPress={() => onCreateStep(suggestion)}
+                activeOpacity={0.6}
               >
                 <Ionicons name="add-outline" size={14} color={IOS_COLORS.systemGreen} />
                 <Text style={styles.createButtonText}>
                   Create in {suggestion.sourceInterestName}
                 </Text>
-              </Pressable>
+              </TouchableOpacity>
             </View>
           </View>
         </View>

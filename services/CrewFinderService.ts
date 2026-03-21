@@ -93,10 +93,12 @@ class CrewFinderServiceClass {
     logger.info('[CrewFinderService] searchUsers called with query:', query);
 
     // Query profiles first (no FK join with sailor_profiles)
+    // Search by name OR email so users can find collaborators either way
+    const trimmed = query.trim();
     const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, full_name, email')
-      .ilike('full_name', `%${query.trim()}%`)
+      .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
       .limit(limit);
 
     if (error) {

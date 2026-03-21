@@ -26,6 +26,7 @@ import { getResourcesByIds } from '@/services/LibraryService';
 import { NotificationService } from '@/services/NotificationService';
 import { gatherEnrichedContext, generatePlanFromResource } from '@/services/ai/StepPlanAIService';
 import { getCompetencies } from '@/services/competencyService';
+import { getSkillGoalTitles } from '@/services/SkillGoalService';
 import type { StepPlanData, StepMetadata, SubStep, StepCollaborator } from '@/types/step-detail';
 // WhatChatPanel removed — brain dump entry replaces inline AI chat
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
@@ -35,9 +36,10 @@ import type { LibraryResourceRecord } from '@/types/library';
 interface StepPlanQuestionsProps {
   stepId: string;
   interestId: string | undefined;
+  readOnly?: boolean;
 }
 
-export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps) {
+export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQuestionsProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const { user } = useAuth();
@@ -49,6 +51,8 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
   const [localGoals, setLocalGoals] = useState<string[]>([]);
   const [newGoalText, setNewGoalText] = useState('');
   const [suggestedCompetencies, setSuggestedCompetencies] = useState<string[]>([]);
+  const [suggestedUserSkills, setSuggestedUserSkills] = useState<string[]>([]);
+  const autoMatchedRef = useRef(false);
 
   // ---------------------------------------------------------------------------
   // Local state for text inputs — prevents cursor jumps from query refetches
@@ -90,14 +94,35 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
     }
   }, [step]);
 
-  // Load org competencies as suggestions for capability goals
+  // Load org competencies + user skill goals as suggestions for capability goals
   useEffect(() => {
     const resolvedId = interestId || currentInterest?.id;
     if (!resolvedId) return;
-    getCompetencies(resolvedId)
-      .then((comps) => setSuggestedCompetencies(comps.map((c) => c.title).filter(Boolean)))
-      .catch(() => {});
-  }, [interestId, currentInterest?.id]);
+
+    const loadSuggestions = async () => {
+      const orgTitles: string[] = [];
+      const userTitles: string[] = [];
+
+      // Org competencies
+      try {
+        const comps = await getCompetencies(resolvedId);
+        comps.forEach((c) => c.title && orgTitles.push(c.title));
+      } catch {}
+
+      // User skill goals
+      if (user?.id) {
+        try {
+          const goals = await getSkillGoalTitles(user.id, resolvedId);
+          goals.forEach((t) => userTitles.push(t));
+        } catch {}
+      }
+
+      setSuggestedCompetencies(orgTitles);
+      setSuggestedUserSkills(userTitles);
+    };
+
+    loadSuggestions();
+  }, [interestId, currentInterest?.id, user?.id]);
 
   // Use a ref for the latest planData so debounced saves always merge with current server state
   const planDataRef = useRef(planData);
@@ -105,11 +130,55 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
 
   // Debounced save — reads planDataRef.current at fire time, not at schedule time
   const debouncedSave = useCallback((partial: Partial<StepPlanData>) => {
+    if (readOnly) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       updateMetadata.mutate({ plan: { ...planDataRef.current, ...partial } });
     }, 800);
-  }, [updateMetadata]);
+  }, [updateMetadata, readOnly]);
+
+  // Auto-attach relevant Reflect skills when step has a description but no goals yet
+  useEffect(() => {
+    if (autoMatchedRef.current) return;
+    if (suggestedUserSkills.length === 0) return;
+    if (localGoals.length > 0) {
+      autoMatchedRef.current = true;
+      return;
+    }
+    // Need a description to match against
+    const description = (localWhat || step?.title || '').toLowerCase();
+    if (!description.trim()) return;
+
+    // Tokenize: extract meaningful words (3+ chars) from the step description
+    const descWords = description
+      .split(/[\s,.\-—/()]+/)
+      .filter((w) => w.length >= 3)
+      .map((w) => w.replace(/s$/, '')); // rough singularize
+
+    // Score each skill by keyword overlap
+    const scored = suggestedUserSkills
+      .map((skill) => {
+        const skillWords = skill
+          .toLowerCase()
+          .split(/[\s,.\-—/()]+/)
+          .filter((w) => w.length >= 3)
+          .map((w) => w.replace(/s$/, ''));
+        const matches = skillWords.filter((sw) =>
+          descWords.some((dw) => sw.includes(dw) || dw.includes(sw)),
+        );
+        return { skill, score: matches.length };
+      })
+      .filter((s) => s.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    if (scored.length > 0) {
+      const matched = scored.map((s) => s.skill);
+      setLocalGoals(matched);
+      debouncedSave({ capability_goals: matched });
+    }
+
+    autoMatchedRef.current = true;
+  }, [suggestedUserSkills, localWhat, step?.title, localGoals.length, debouncedSave]);
 
   // Load linked resources
   const linkedIds = planData.linked_resource_ids ?? [];
@@ -197,6 +266,7 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
           resource: firstNew,
           interestName: currentInterest?.name || 'this interest',
           stepHistory: enriched.stepHistory,
+          existingSkillGoals: suggestedUserSkills,
         });
 
         // Populate the plan fields
@@ -277,8 +347,9 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
     return ids;
   }, [localCollaborators]);
 
-  // Filter suggested competencies to only show ones not already added
-  const availableSuggestions = suggestedCompetencies.filter((s) => !localGoals.includes(s));
+  // Filter suggestions to only show ones not already added
+  const availableOrgSuggestions = suggestedCompetencies.filter((s) => !localGoals.includes(s));
+  const availableSkillSuggestions = suggestedUserSkills.filter((s) => !localGoals.includes(s) && !suggestedCompetencies.includes(s));
 
   if (!step) return null;
 
@@ -328,13 +399,14 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
         defaultExpanded={!q1Complete}
       >
         <TextInput
-          style={styles.textArea}
+          style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={localWhat}
-          onChangeText={handleWhatChange}
-          placeholder="Describe what you'll focus on..."
+          onChangeText={readOnly ? undefined : handleWhatChange}
+          placeholder={readOnly ? '' : "Describe what you'll focus on..."}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
 
         {linkedResources.length > 0 && (
@@ -347,21 +419,25 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
               >
                 <ResourceTypeIcon type={resource.resource_type} size={14} />
                 <Text style={styles.chipText} numberOfLines={1}>{resource.title}</Text>
-                <Pressable onPress={() => handleRemoveResource(resource.id)} hitSlop={6}>
-                  <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
-                </Pressable>
+                {!readOnly && (
+                  <Pressable onPress={() => handleRemoveResource(resource.id)} hitSlop={6}>
+                    <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                  </Pressable>
+                )}
               </Pressable>
             ))}
           </View>
         )}
 
-        <Pressable
-          style={styles.addLibraryButton}
-          onPress={() => setShowResourcePicker(true)}
-        >
-          <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
-          <Text style={styles.addLibraryText}>Add from Library</Text>
-        </Pressable>
+        {!readOnly && (
+          <Pressable
+            style={styles.addLibraryButton}
+            onPress={() => setShowResourcePicker(true)}
+          >
+            <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.addLibraryText}>Add from Library</Text>
+          </Pressable>
+        )}
       </PlanQuestionCard>
 
       {/* Q2: How will you do it? */}
@@ -373,7 +449,8 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
       >
         <SubStepEditor
           subSteps={planData.how_sub_steps ?? []}
-          onChange={handleSubStepsChange}
+          onChange={readOnly ? () => {} : handleSubStepsChange}
+          readOnly={readOnly}
         />
       </PlanQuestionCard>
 
@@ -384,13 +461,14 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
         isComplete={q3Complete}
       >
         <TextInput
-          style={styles.textArea}
+          style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={localWhy}
-          onChangeText={handleWhyChange}
-          placeholder="What makes this the right next step?"
+          onChangeText={readOnly ? undefined : handleWhyChange}
+          placeholder={readOnly ? '' : "What makes this the right next step?"}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
       </PlanQuestionCard>
 
@@ -429,40 +507,47 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
                 >
                   {collab.display_name}
                 </Text>
-                <Pressable onPress={() => handleRemoveCollaborator(collab.id)} hitSlop={6}>
-                  <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
-                </Pressable>
+                {!readOnly && (
+                  <Pressable onPress={() => handleRemoveCollaborator(collab.id)} hitSlop={6}>
+                    <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                  </Pressable>
+                )}
               </View>
             ))}
           </View>
         )}
 
         {/* Add people button */}
-        <Pressable
-          style={styles.addPeopleButton}
-          onPress={() => setShowCollaboratorPicker(true)}
-        >
-          <Ionicons name="person-add-outline" size={18} color={STEP_COLORS.accent} />
-          <Text style={styles.addPeopleText}>Add people</Text>
-        </Pressable>
+        {!readOnly && (
+          <Pressable
+            style={styles.addPeopleButton}
+            onPress={() => setShowCollaboratorPicker(true)}
+          >
+            <Ionicons name="person-add-outline" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.addPeopleText}>Add people</Text>
+          </Pressable>
+        )}
 
         {/* Connection space */}
         <TextInput
-          style={styles.connectionSpaceInput}
+          style={[styles.connectionSpaceInput, readOnly && styles.readOnlyInput]}
           value={localConnectionSpace}
-          onChangeText={handleConnectionSpaceChange}
-          placeholder="Where will you connect? (Discord, Zoom, in person...)"
+          onChangeText={readOnly ? undefined : handleConnectionSpaceChange}
+          placeholder={readOnly ? '' : "Where will you connect? (Discord, Zoom, in person...)"}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
+          editable={!readOnly}
         />
       </PlanQuestionCard>
 
       {/* Collaborator picker modal */}
-      <CollaboratorPicker
-        visible={showCollaboratorPicker}
-        onClose={() => setShowCollaboratorPicker(false)}
-        onAdd={handleAddCollaborator}
-        existingIds={collaboratorExistingIds}
-      />
+      {!readOnly && (
+        <CollaboratorPicker
+          visible={showCollaboratorPicker}
+          onClose={() => setShowCollaboratorPicker(false)}
+          onAdd={handleAddCollaborator}
+          existingIds={collaboratorExistingIds}
+        />
+      )}
 
       {/* Q5: What skills are you developing? */}
       <PlanQuestionCard
@@ -470,75 +555,106 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
         title="What skills are you developing?"
         isComplete={q5Complete}
       >
-        {/* Current goals as removable chips */}
+        {/* Current goals as chips */}
         {localGoals.length > 0 && (
           <View style={styles.goalChipContainer}>
             {localGoals.map((goal) => (
               <View key={goal} style={styles.goalChip}>
                 <Text style={styles.goalChipText} numberOfLines={1}>{goal}</Text>
-                <Pressable onPress={() => handleRemoveGoal(goal)} hitSlop={6}>
-                  <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
-                </Pressable>
+                {!readOnly && (
+                  <Pressable onPress={() => handleRemoveGoal(goal)} hitSlop={6}>
+                    <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                  </Pressable>
+                )}
               </View>
             ))}
           </View>
         )}
 
-        {/* Add custom goal */}
-        <View style={styles.addGoalRow}>
-          <TextInput
-            style={styles.addGoalInput}
-            value={newGoalText}
-            onChangeText={setNewGoalText}
-            onSubmitEditing={() => handleAddGoal(newGoalText)}
-            placeholder="Type a skill to track..."
-            placeholderTextColor={IOS_COLORS.tertiaryLabel}
-            returnKeyType="done"
-          />
-          <Pressable
-            style={[styles.addGoalButton, !newGoalText.trim() && styles.addGoalButtonDisabled]}
-            onPress={() => handleAddGoal(newGoalText)}
-            disabled={!newGoalText.trim()}
-          >
-            <Ionicons name="add" size={20} color={newGoalText.trim() ? '#FFFFFF' : IOS_COLORS.systemGray3} />
-          </Pressable>
-        </View>
-
-        {/* Suggestions from org competencies */}
-        {availableSuggestions.length > 0 && (
-          <View style={styles.suggestionsSection}>
-            <Text style={styles.suggestionsLabel}>Suggested from your organization:</Text>
-            <View style={styles.suggestionsWrap}>
-              {availableSuggestions.slice(0, 8).map((comp) => (
-                <Pressable
-                  key={comp}
-                  style={styles.suggestionChip}
-                  onPress={() => handleAddGoal(comp)}
-                >
-                  <Ionicons name="add-circle-outline" size={14} color={STEP_COLORS.accent} />
-                  <Text style={styles.suggestionChipText} numberOfLines={1}>{comp}</Text>
-                </Pressable>
-              ))}
+        {!readOnly && (
+          <>
+            {/* Add custom goal */}
+            <View style={styles.addGoalRow}>
+              <TextInput
+                style={styles.addGoalInput}
+                value={newGoalText}
+                onChangeText={setNewGoalText}
+                onSubmitEditing={() => handleAddGoal(newGoalText)}
+                placeholder="Type a skill to track..."
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                returnKeyType="done"
+              />
+              <Pressable
+                style={[styles.addGoalButton, !newGoalText.trim() && styles.addGoalButtonDisabled]}
+                onPress={() => handleAddGoal(newGoalText)}
+                disabled={!newGoalText.trim()}
+              >
+                <Ionicons name="add" size={20} color={newGoalText.trim() ? '#FFFFFF' : IOS_COLORS.systemGray3} />
+              </Pressable>
             </View>
-          </View>
-        )}
 
-        {localGoals.length === 0 && availableSuggestions.length === 0 && (
-          <Text style={styles.goalHint}>
-            Add skills you want to improve. You'll rate your progress during review.
-          </Text>
+            {/* Suggestions from user's Reflect skills */}
+            {availableSkillSuggestions.length > 0 && (
+              <View style={styles.suggestionsSection}>
+                <Text style={styles.suggestionsLabel}>From your skills:</Text>
+                <View style={styles.suggestionsWrap}>
+                  {availableSkillSuggestions.slice(0, 8).map((skill) => (
+                    <Pressable
+                      key={skill}
+                      style={styles.suggestionChip}
+                      onPress={() => handleAddGoal(skill)}
+                    >
+                      <Ionicons name="add-circle-outline" size={14} color={STEP_COLORS.accent} />
+                      <Text style={styles.suggestionChipText} numberOfLines={1}>{skill}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Suggestions from org competencies */}
+            {availableOrgSuggestions.length > 0 && (
+              <View style={styles.suggestionsSection}>
+                <Text style={styles.suggestionsLabel}>From your organization:</Text>
+                <View style={styles.suggestionsWrap}>
+                  {availableOrgSuggestions.slice(0, 8).map((comp) => (
+                    <Pressable
+                      key={comp}
+                      style={styles.suggestionChip}
+                      onPress={() => handleAddGoal(comp)}
+                    >
+                      <Ionicons name="add-circle-outline" size={14} color={STEP_COLORS.accent} />
+                      <Text style={styles.suggestionChipText} numberOfLines={1}>{comp}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {localGoals.length === 0 && availableSkillSuggestions.length === 0 && availableOrgSuggestions.length === 0 && (
+              <Text style={styles.goalHint}>
+                Add skills you want to improve. You'll rate your progress during review.
+              </Text>
+            )}
+          </>
         )}
       </PlanQuestionCard>
 
       {/* Cross-interest suggestions */}
-      <CrossInterestSuggestions
+      {!readOnly && <CrossInterestSuggestions
         stepId={stepId}
         interestId={interestId}
         onApplyToStep={(text) => {
-          const current = localWhat.trim();
-          const newText = current ? `${current}\n\n${text}` : text;
-          setLocalWhat(newText);
-          debouncedSave({ what_will_you_do: newText });
+          // Add the suggestion as a sub-step so it's visible in "How will you do it?"
+          const existing = planDataRef.current.how_sub_steps ?? [];
+          const newSubStep: SubStep = {
+            id: `cross_${Date.now()}`,
+            text,
+            sort_order: existing.length,
+            completed: false,
+          };
+          const updated = [...existing, newSubStep];
+          debouncedSave({ how_sub_steps: updated });
         }}
         onCreateStep={async (suggestion) => {
           if (!user?.id) return;
@@ -556,16 +672,18 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
             router.push(`/step/${created.id}` as any);
           } catch {}
         }}
-      />
+      />}
 
       {/* Resource picker modal */}
-      <ResourcePicker
-        visible={showResourcePicker}
-        interestId={interestId}
-        onSelect={handleSelectResources}
-        onClose={() => setShowResourcePicker(false)}
-        excludeIds={linkedIds}
-      />
+      {!readOnly && (
+        <ResourcePicker
+          visible={showResourcePicker}
+          interestId={interestId}
+          onSelect={handleSelectResources}
+          onClose={() => setShowResourcePicker(false)}
+          excludeIds={linkedIds}
+        />
+      )}
     </View>
   );
 }
@@ -803,5 +921,10 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { outlineStyle: 'none' } as any,
     }),
+  },
+  readOnlyInput: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    color: IOS_COLORS.secondaryLabel,
   },
 });

@@ -12,9 +12,10 @@ import { StepDrawContent } from './StepDrawContent';
 interface ActTabProps {
   stepId: string;
   onNextTab?: () => void;
+  readOnly?: boolean;
 }
 
-export function ActTab({ stepId, onNextTab }: ActTabProps) {
+export function ActTab({ stepId, onNextTab, readOnly }: ActTabProps) {
   return (
     <ScrollView
       style={styles.container}
@@ -22,10 +23,10 @@ export function ActTab({ stepId, onNextTab }: ActTabProps) {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <StepDrawContent stepId={stepId} />
+      <StepDrawContent stepId={stepId} readOnly={readOnly} />
 
       {/* Next tab CTA */}
-      {onNextTab && (
+      {onNextTab && !readOnly && (
         <View style={styles.nextCtaContainer}>
           <Pressable style={styles.nextCtaPrimary} onPress={onNextTab}>
             <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />

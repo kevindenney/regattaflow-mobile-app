@@ -926,8 +926,9 @@ export async function generatePlanFromResource(params: {
   resource: LibraryResourceRecord;
   interestName: string;
   stepHistory?: StepHistoryEntry[];
+  existingSkillGoals?: string[];
 }): Promise<ResourcePlanSuggestion> {
-  const { resource, interestName, stepHistory = [] } = params;
+  const { resource, interestName, stepHistory = [], existingSkillGoals = [] } = params;
 
   const resourceInfo = [
     `Title: ${resource.title}`,
@@ -961,16 +962,20 @@ Guidelines:
 - what_will_you_do: Be specific about the activity, referencing the resource
 - how_sub_steps: 3-6 concrete, actionable steps. Include time estimates where helpful
 - why_reasoning: Connect to their learning journey and the specific skills this develops
-- capability_goals: 2-4 specific skills this session develops (e.g., "Line confidence", "Perspective accuracy")
+- capability_goals: 2-4 specific skills this session develops. IMPORTANT: If the user already has skill goals that are relevant to this session, use those EXACT names instead of inventing new ones. Only create new skill names for capabilities not covered by existing goals.
 
 Respond with ONLY the JSON object, no markdown or other text.`;
+
+  const skillsBlock = existingSkillGoals.length
+    ? `\nUser's existing skill goals (prefer these names when relevant):\n${existingSkillGoals.map((s) => `- ${s}`).join('\n')}\n`
+    : '';
 
   const userMessage = `Resource:
 ${resourceInfo}
 
 User's recent ${interestName} history:
 ${historyBlock}
-
+${skillsBlock}
 Generate a practice plan for a session using this resource.`;
 
   try {
@@ -1058,8 +1063,9 @@ export async function structureBrainDump(params: {
   interestName: string;
   interestId?: string;
   userId: string;
+  existingSkillGoals?: string[];
 }): Promise<BrainDumpPlanResult> {
-  const { brainDump, interestName, interestId, userId } = params;
+  const { brainDump, interestName, interestId, userId, existingSkillGoals = [] } = params;
 
   // Gather enriched context in parallel
   let enrichedContext = '';
@@ -1110,9 +1116,13 @@ Guidelines:
 - how_sub_steps: 3-7 concrete, ordered steps. If URLs/videos were shared, include "Watch/review [title]" steps. Include practice drills, discussion points, or exercises as appropriate. Add time estimates where helpful (e.g., "15 min")
 - why_reasoning: Connect to their learning journey. Reference their step history or capability gaps if available. Explain why this session matters
 - who_collaborators: Extract names of people they'll practice with (from the brain dump text)
-- capability_goals: 2-5 specific skills this session develops. Use the detected topics as a starting point but refine them into clear skill names
+- capability_goals: 2-5 specific skills this session develops. IMPORTANT: If the user already has skill goals that are relevant, use those EXACT names instead of inventing new ones. Only create new skill names for capabilities not covered by existing goals. Use the detected topics as a starting point but refine them into clear skill names
 
 Respond with ONLY the JSON object, no markdown fences or other text.`;
+
+  const existingSkillsBlock = existingSkillGoals.length
+    ? `EXISTING SKILL GOALS (prefer these names when relevant):\n${existingSkillGoals.map((s) => `- ${s}`).join('\n')}`
+    : '';
 
   const userMessage = `RAW BRAIN DUMP:
 ${brainDump.raw_text}
@@ -1121,6 +1131,7 @@ ${urlBlock}
 ${peopleBlock}
 ${topicsBlock}
 ${seedBlock}
+${existingSkillsBlock}
 
 ${enrichedContext ? `USER CONTEXT:\n${enrichedContext}` : ''}
 

@@ -105,9 +105,10 @@ const PLATFORM_INFO: Record<MediaLinkPlatform, { icon: string; label: string; co
 
 interface StepDrawContentProps {
   stepId: string;
+  readOnly?: boolean;
 }
 
-export function StepDrawContent({ stepId }: StepDrawContentProps) {
+export function StepDrawContent({ stepId, readOnly }: StepDrawContentProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
@@ -141,10 +142,10 @@ export function StepDrawContent({ stepId }: StepDrawContentProps) {
     }
   }, [step]);
 
-  // Auto-transition to in_progress when Draw tab is first viewed
+  // Auto-transition to in_progress when Draw tab is first viewed (owner only)
   const autoStartedRef = useRef(false);
   useEffect(() => {
-    if (!step || autoStartedRef.current) return;
+    if (!step || autoStartedRef.current || readOnly) return;
     if (step.status === 'pending' || (!actData.started_at && step.status !== 'completed')) {
       autoStartedRef.current = true;
       updateMetadata.mutate({
@@ -392,7 +393,8 @@ export function StepDrawContent({ stepId }: StepDrawContentProps) {
               <Pressable
                 key={s.id}
                 style={styles.checklistRow}
-                onPress={() => handleToggleSubStep(s.id)}
+                onPress={readOnly ? undefined : () => handleToggleSubStep(s.id)}
+                disabled={readOnly}
               >
                 <Ionicons
                   name={isDone ? 'checkmark-circle' : 'ellipse-outline'}
@@ -434,7 +436,9 @@ export function StepDrawContent({ stepId }: StepDrawContentProps) {
       {/* Evidence */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>EVIDENCE</Text>
-        <Text style={styles.sectionHint}>Add photos, videos, or links to show what you made</Text>
+        {!readOnly && (
+          <Text style={styles.sectionHint}>Add photos, videos, or links to show what you made</Text>
+        )}
 
         {/* Uploaded photos/videos */}
         {mediaUploads.length > 0 && (
@@ -453,23 +457,29 @@ export function StepDrawContent({ stepId }: StepDrawContentProps) {
                       color="#FFFFFF"
                     />
                   </View>
-                  <Pressable
-                    style={styles.thumbnailRemove}
-                    onPress={() => handleRemoveUpload(upload.id)}
-                    hitSlop={6}
-                  >
-                    <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.9)" />
-                  </Pressable>
+                  {!readOnly && (
+                    <Pressable
+                      style={styles.thumbnailRemove}
+                      onPress={() => handleRemoveUpload(upload.id)}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.9)" />
+                    </Pressable>
+                  )}
                 </Pressable>
-                <TextInput
-                  style={styles.captionInput}
-                  defaultValue={upload.caption ?? ''}
-                  onChangeText={(text) => handleUpdateUploadCaption(upload.id, text)}
-                  placeholder="Add caption..."
-                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
-                  numberOfLines={1}
-                  multiline={false}
-                />
+                {!readOnly ? (
+                  <TextInput
+                    style={styles.captionInput}
+                    defaultValue={upload.caption ?? ''}
+                    onChangeText={(text) => handleUpdateUploadCaption(upload.id, text)}
+                    placeholder="Add caption..."
+                    placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                    numberOfLines={1}
+                    multiline={false}
+                  />
+                ) : upload.caption ? (
+                  <Text style={styles.captionInput}>{upload.caption}</Text>
+                ) : null}
               </View>
             ))}
           </View>
@@ -621,7 +631,7 @@ export function StepDrawContent({ stepId }: StepDrawContentProps) {
           );
         })}
 
-        {showAddMedia ? (
+        {readOnly ? null : showAddMedia ? (
           <View style={styles.addMediaForm}>
             <TextInput
               style={styles.mediaInput}
@@ -735,11 +745,12 @@ export function StepDrawContent({ stepId }: StepDrawContentProps) {
         <TextInput
           style={styles.textArea}
           value={localNotes}
-          onChangeText={handleNotesChange}
-          placeholder="Capture thoughts as you work..."
+          onChangeText={readOnly ? undefined : handleNotesChange}
+          placeholder={readOnly ? '' : "Capture thoughts as you work..."}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
       </View>
 

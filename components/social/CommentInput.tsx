@@ -113,11 +113,11 @@ export function CommentInput({
             disabled={!canSubmit}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color={IOS_COLORS.white} />
+              <ActivityIndicator size="small" color={'#FFFFFF'} />
             ) : (
               <Send
                 size={18}
-                color={canSubmit ? IOS_COLORS.white : IOS_COLORS.tertiaryLabel}
+                color={canSubmit ? '#FFFFFF' : IOS_COLORS.tertiaryLabel}
               />
             )}
           </Pressable>

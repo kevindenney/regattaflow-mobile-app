@@ -56,7 +56,8 @@ export async function getUserTimeline(
   interestId?: string | null,
 ): Promise<TimelineStepRecord[]> {
   try {
-    let query = supabase
+    // Fetch own steps
+    let ownQuery = supabase
       .from('timeline_steps')
       .select('*')
       .eq('user_id', userId)
@@ -64,12 +65,31 @@ export async function getUserTimeline(
       .order('created_at', { ascending: true });
 
     if (interestId) {
-      query = query.eq('interest_id', interestId);
+      ownQuery = ownQuery.eq('interest_id', interestId);
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
-    return (data ?? []) as TimelineStepRecord[];
+    // Fetch steps where user is a collaborator (shared with them)
+    let collabQuery = supabase
+      .from('timeline_steps')
+      .select('*')
+      .contains('collaborator_user_ids', [userId])
+      .neq('user_id', userId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (interestId) {
+      collabQuery = collabQuery.eq('interest_id', interestId);
+    }
+
+    const [ownResult, collabResult] = await Promise.all([ownQuery, collabQuery]);
+
+    if (ownResult.error) throw ownResult.error;
+    if (collabResult.error) throw collabResult.error;
+
+    // Merge: own steps first (sorted), then collaborated steps appended
+    const ownSteps = (ownResult.data ?? []) as TimelineStepRecord[];
+    const collabSteps = (collabResult.data ?? []) as TimelineStepRecord[];
+    return [...ownSteps, ...collabSteps];
   } catch (err) {
     logger.error('Failed to fetch user timeline', err);
     throw err;
@@ -635,6 +655,116 @@ export async function adoptOrgCourse(
     };
   } catch (err) {
     logger.error('Failed to adopt org course', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 10. Get steps where the user is a collaborator (not the owner)
+// ---------------------------------------------------------------------------
+
+export async function getCollaboratedSteps(
+  userId: string,
+  interestId?: string | null,
+): Promise<TimelineStepRecord[]> {
+  try {
+    let query = supabase
+      .from('timeline_steps')
+      .select('*')
+      .contains('collaborator_user_ids', [userId])
+      .neq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(50);
+
+    if (interestId) {
+      query = query.eq('interest_id', interestId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as TimelineStepRecord[];
+  } catch (err) {
+    logger.error('Failed to fetch collaborated steps', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 11. Public sharing — generate/retrieve share tokens
+// ---------------------------------------------------------------------------
+
+function generateShareToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let token = '';
+  for (let i = 0; i < 12; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+}
+
+function getShareUrl(token: string): string {
+  const base =
+    typeof window !== 'undefined' ? window.location.origin : 'https://regattaflow.com';
+  return `${base}/p/step/${token}`;
+}
+
+export async function enableStepSharing(
+  stepId: string,
+): Promise<{ token: string; url: string }> {
+  try {
+    // Check if step already has a share token
+    const { data: existing, error: fetchErr } = await supabase
+      .from('timeline_steps')
+      .select('share_token, share_enabled')
+      .eq('id', stepId)
+      .single();
+
+    if (fetchErr) throw fetchErr;
+
+    if (existing?.share_token && existing?.share_enabled) {
+      return { token: existing.share_token, url: getShareUrl(existing.share_token) };
+    }
+
+    const token = existing?.share_token || generateShareToken();
+
+    const { error } = await supabase
+      .from('timeline_steps')
+      .update({
+        share_token: token,
+        share_enabled: true,
+        public_shared_at: new Date().toISOString(),
+      })
+      .eq('id', stepId);
+
+    if (error) throw error;
+
+    return { token, url: getShareUrl(token) };
+  } catch (err) {
+    logger.error('Failed to enable step sharing', err);
+    throw err;
+  }
+}
+
+export async function getStepShareInfo(
+  stepId: string,
+): Promise<{ share_enabled: boolean; share_token: string | null; url: string | null } | null> {
+  try {
+    const { data, error } = await supabase
+      .from('timeline_steps')
+      .select('share_enabled, share_token')
+      .eq('id', stepId)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    return {
+      share_enabled: data.share_enabled ?? false,
+      share_token: data.share_token ?? null,
+      url: data.share_token ? getShareUrl(data.share_token) : null,
+    };
+  } catch (err) {
+    logger.error('Failed to get step share info', err);
     throw err;
   }
 }

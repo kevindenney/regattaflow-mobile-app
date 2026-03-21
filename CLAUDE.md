@@ -227,6 +227,36 @@ Demo/test accounts require `DEMO_PASSWORD` env var (not committed to source).
 - `tailwind.config.js` - Tailwind/NativeWind config
 - `metro.config.js` - Metro bundler config
 
+## Working Standards
+
+### Plan Before Building
+- For any non-trivial task (3+ steps or architectural decisions), use plan mode first
+- If something goes sideways, STOP and re-plan immediately — don't keep pushing
+- Write detailed specs upfront to reduce ambiguity
+
+### Verify Before Done
+- Never consider a task complete without proving it works
+- Run `npm run typecheck` and `npm run lint` before finishing any code change
+- Diff behavior between main and your changes when relevant
+- Ask yourself: "Would a staff engineer approve this?"
+
+### Demand Elegance (Balanced)
+- For non-trivial changes: pause and ask "is there a more elegant way?"
+- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
+- Skip this for simple, obvious fixes — don't over-engineer
+- Challenge your own work before presenting it
+
+### Learn From Corrections
+- After ANY user correction, save a `feedback` memory so the same mistake is never repeated
+- Include **why** the correction was given and **how to apply** it in future work
+- Review saved feedback memories when starting tasks in areas where past corrections were made
+
+### Autonomous Bug Fixing
+- When given a bug report: just fix it — don't ask for hand-holding
+- Point at logs, errors, failing tests — then resolve them
+- Zero context switching required from the user
+- Go fix failing CI tests without being told how
+
 ## Notes
 
 - Memory limit: Node runs with `--max-old-space-size=12288` for large builds

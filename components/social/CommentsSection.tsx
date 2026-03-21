@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
     borderBottomColor: IOS_COLORS.separator,
   },
   headerTitle: {
-    ...IOS_TYPOGRAPHY.subheadline,
+    ...IOS_TYPOGRAPHY.footnote,
     color: IOS_COLORS.secondaryLabel,
     fontWeight: '600',
   },
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    ...IOS_TYPOGRAPHY.subheadline,
+    ...IOS_TYPOGRAPHY.footnote,
     color: IOS_COLORS.secondaryLabel,
     fontWeight: '500',
   },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     marginLeft: IOS_SPACING.sm,
   },
   userName: {
-    ...IOS_TYPOGRAPHY.subheadline,
+    ...IOS_TYPOGRAPHY.footnote,
     color: IOS_COLORS.label,
     fontWeight: '600',
   },

@@ -7,6 +7,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import {
   getUserTimeline,
   getFollowedUsersTimelines,
+  getCollaboratedSteps,
   getStepById,
   createStep,
   updateStep,
@@ -32,6 +33,8 @@ const KEYS = {
     ['timeline-steps', userId, interestId ?? 'all'] as const,
   followedTimelines: (interestId?: string | null) =>
     ['timeline-steps', 'following', interestId ?? 'all'] as const,
+  collaborated: (interestId?: string | null) =>
+    ['timeline-steps', 'collaborated', interestId ?? 'all'] as const,
   stepDetail: (stepId: string) =>
     ['timeline-steps', 'detail', stepId] as const,
 };
@@ -79,7 +82,22 @@ export function useFollowedTimelines(interestId?: string | null) {
 }
 
 // ---------------------------------------------------------------------------
-// 3b. Single step by ID
+// 3b. Steps where the current user is a collaborator
+// ---------------------------------------------------------------------------
+
+export function useCollaboratedSteps(interestId?: string | null) {
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  return useQuery<TimelineStepRecord[], Error>({
+    queryKey: KEYS.collaborated(interestId),
+    queryFn: () => getCollaboratedSteps(userId!, interestId),
+    enabled: Boolean(userId),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 3c. Single step by ID
 // ---------------------------------------------------------------------------
 
 export function useStepById(stepId: string | undefined) {

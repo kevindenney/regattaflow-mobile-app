@@ -46,6 +46,8 @@ interface TimelineGridViewProps {
   onEditRace?: (raceId: string) => void;
   /** Callback when delete is requested for a race */
   onDeleteRace?: (raceId: string, raceName: string) => void;
+  /** Callback when hide is requested for a non-owned race */
+  onHideRace?: (raceId: string, raceName?: string) => void;
   /** Top inset to clear the toolbar */
   topInset?: number;
   /** Bulk update status for selected steps */
@@ -146,6 +148,7 @@ const MiniCard = React.memo(function MiniCard({
   canManage,
   onEdit,
   onDelete,
+  onHide,
   onOpenDetail,
   isMenuOpen,
   onOpenMenu,
@@ -164,6 +167,7 @@ const MiniCard = React.memo(function MiniCard({
   canManage: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
+  onHide?: () => void;
   onOpenDetail?: () => void;
   isMenuOpen: boolean;
   onOpenMenu: () => void;
@@ -279,7 +283,7 @@ const MiniCard = React.memo(function MiniCard({
         <View style={[miniStyles.statusBadge, { backgroundColor: statusColor }]}>
           <Text style={miniStyles.statusText}>{statusLabel}</Text>
         </View>
-        {!isReorderMode && (onOpenDetail || (canManage && (onEdit || onDelete))) ? (
+        {!isReorderMode && (onOpenDetail || onHide || (canManage && (onEdit || onDelete))) ? (
           <Pressable
             style={miniStyles.menuButton}
             onPress={(event) => {
@@ -335,6 +339,18 @@ const MiniCard = React.memo(function MiniCard({
               }}
             >
               <Text style={[miniStyles.menuItemText, miniStyles.menuItemDestructive]}>Delete</Text>
+            </Pressable>
+          ) : null}
+          {onHide ? (
+            <Pressable
+              style={miniStyles.menuItem}
+              onPress={(event) => {
+                (event as any)?.stopPropagation?.();
+                onCloseMenu();
+                onHide();
+              }}
+            >
+              <Text style={miniStyles.menuItemText}>Hide</Text>
             </Pressable>
           ) : null}
         </View>
@@ -452,6 +468,7 @@ export function TimelineGridView({
   userId,
   onEditRace,
   onDeleteRace,
+  onHideRace,
   topInset = 0,
   onBulkUpdateStatus,
   onBulkDeleteRaces,
@@ -713,6 +730,7 @@ export function TimelineGridView({
                     const canManage = !!userId && race.created_by === userId && !race.isDemo;
                     const handleEdit = canManage && onEditRace ? () => onEditRace(race.id) : undefined;
                     const handleDelete = canManage && onDeleteRace ? () => onDeleteRace(race.id, race.name) : undefined;
+                    const handleHide = !canManage && onHideRace ? () => onHideRace(race.id, race.name) : undefined;
                     const isStep = !!(race as any).isTimelineStep;
                     const handleOpenDetail = isStep ? () => router.push(`/step/${race.id}`) : undefined;
                     return (
@@ -723,6 +741,7 @@ export function TimelineGridView({
                     canManage={canManage}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
+                    onHide={handleHide}
                     onOpenDetail={handleOpenDetail}
                     isMenuOpen={openMenuRaceId === race.id}
                     onOpenMenu={() => setOpenMenuRaceId(race.id)}

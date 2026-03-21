@@ -31,6 +31,7 @@ export {
   normalizeDocumentType,
   ADD_RACE_CARD_DISMISSED_KEY,
   SAMPLE_RACE_DISMISSED_KEY,
+  HIDDEN_RACES_KEY,
   MOCK_GPS_TRACK,
   MOCK_SPLIT_TIMES,
 } from './constants';

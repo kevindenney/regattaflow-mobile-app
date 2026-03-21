@@ -44,6 +44,11 @@ export {
 } from './ShareActivityButton';
 export type { RaceShareData, ActivityShareData } from './ShareActivityButton';
 
+// User-defined skill goals
+export { MySkillsSection } from './MySkillsSection';
+export { ImportSkillsSheet } from './ImportSkillsSheet';
+export { SkillReviewList } from './SkillReviewList';
+
 // Phase 6 - Training, Heatmap, Recap, Records, Photos, Journal
 export { TrainingPlansSection } from './TrainingPlansSection';
 export { VenueHeatmap } from './VenueHeatmap';

@@ -84,6 +84,12 @@ export const ADD_RACE_CARD_DISMISSED_KEY = '@regattaflow/add_race_card_dismissed
  */
 export const SAMPLE_RACE_DISMISSED_KEY = '@regattaflow/sample_race_dismissed';
 
+/**
+ * AsyncStorage key for races hidden from the user's timeline
+ * Stores a JSON array of race IDs
+ */
+export const HIDDEN_RACES_KEY = '@regattaflow/hidden_races';
+
 // =============================================================================
 // UI INTERFACES
 // =============================================================================

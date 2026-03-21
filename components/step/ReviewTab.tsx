@@ -9,9 +9,10 @@ import { StepCritiqueContent } from './StepCritiqueContent';
 
 interface ReviewTabProps {
   stepId: string;
+  readOnly?: boolean;
 }
 
-export function ReviewTab({ stepId }: ReviewTabProps) {
+export function ReviewTab({ stepId, readOnly }: ReviewTabProps) {
   return (
     <ScrollView
       style={styles.container}
@@ -19,7 +20,7 @@ export function ReviewTab({ stepId }: ReviewTabProps) {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      <StepCritiqueContent stepId={stepId} />
+      <StepCritiqueContent stepId={stepId} readOnly={readOnly} />
     </ScrollView>
   );
 }

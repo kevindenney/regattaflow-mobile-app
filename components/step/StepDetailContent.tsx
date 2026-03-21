@@ -21,8 +21,11 @@ import type { StepPlanData, StepActData, StepReviewData, StepMetadata, BrainDump
 import type { TimelineStepStatus } from '@/types/timeline-steps';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
+import { CommentsSection } from '@/components/social/CommentsSection';
+import { useStepComments, useAddStepComment, useDeleteStepComment } from '@/hooks/useStepComments';
 import { structureBrainDump } from '@/services/ai/StepPlanAIService';
 import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
+import { getSkillGoalTitles } from '@/services/SkillGoalService';
 
 type TabValue = 'plan' | 'act' | 'review';
 
@@ -46,6 +49,12 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
 
+  // Ownership detection
+  const isOwner = !step || user?.id === step.user_id;
+  const isCollaborator = !isOwner && Boolean(
+    step?.collaborator_user_ids?.includes(user?.id ?? '')
+  );
+
   // Debounce timer ref for auto-save
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,6 +69,15 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
       pendingTitleRef.current = null;
       updateStep.mutate({ stepId, input: { title: text } });
     }, 800);
+  }, [stepId, updateStep]);
+
+  const handleTitleBlur = useCallback(() => {
+    if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
+    if (pendingTitleRef.current !== null) {
+      const text = pendingTitleRef.current;
+      pendingTitleRef.current = null;
+      updateStep.mutate({ stepId, input: { title: text } });
+    }
   }, [stepId, updateStep]);
 
   // Flush any pending title save on unmount
@@ -77,7 +95,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const [activeTab, setActiveTab] = usePillTabs<TabValue>(defaultTab);
 
   const metadata = (step?.metadata ?? {}) as StepMetadata;
-  const serverPlanData: StepPlanData = metadata.plan ?? {};
+  const serverPlanData: StepPlanData = useMemo(() => metadata.plan ?? {}, [metadata.plan]);
   const actData = metadata.act ?? {};
   const reviewData = metadata.review ?? {};
   const brainDumpData = metadata.brain_dump;
@@ -94,9 +112,10 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const savedLibraryIdsRef = useRef<string[]>([]);
 
   // Determine initial phase from metadata
+  // Only show brain dump entry if there's dump data but no plan content yet
   useEffect(() => {
     if (step && brainDumpPhase === null) {
-      if (brainDumpData && (!hasPlanContent || !brainDumpData.ai_structured_at)) {
+      if (brainDumpData && !hasPlanContent) {
         setBrainDumpPhase('dump');
       }
     }
@@ -145,11 +164,20 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
     }
 
     try {
+      // Fetch existing skill goals to pass to AI for name reuse
+      let existingSkills: string[] = [];
+      if (user?.id && currentInterest?.id) {
+        try {
+          existingSkills = await getSkillGoalTitles(user.id, currentInterest.id);
+        } catch {}
+      }
+
       const result = await structureBrainDump({
         brainDump: dump,
         interestName: currentInterest?.name ?? 'learning',
         interestId: currentInterest?.id,
         userId: user?.id ?? '',
+        existingSkillGoals: existingSkills,
       });
 
       const plan: StepPlanData = {
@@ -299,6 +327,36 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
     setActiveTab(next);
   }, [setActiveTab]);
 
+  // Step comments (discussion thread)
+  const showComments = isOwner || isCollaborator;
+  const { data: commentsData, isLoading: commentsLoading } = useStepComments(showComments ? stepId : undefined);
+  const addComment = useAddStepComment(stepId);
+  const deleteComment = useDeleteStepComment(stepId);
+
+  const handleAddComment = useCallback(async (text: string, parentId?: string | null) => {
+    await addComment.mutateAsync({ content: text, parentId });
+  }, [addComment]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    await deleteComment.mutateAsync(commentId);
+  }, [deleteComment]);
+
+  // Map step comments to CommentsSection format
+  const mappedComments = useMemo(() =>
+    (commentsData ?? []).map((c) => ({
+      id: c.id,
+      userId: c.userId,
+      userName: c.userName,
+      userAvatarEmoji: c.userAvatarEmoji,
+      userAvatarColor: c.userAvatarColor,
+      userAvatarUrl: c.userAvatarUrl,
+      content: c.content,
+      createdAt: c.createdAt,
+      parentId: c.parentId,
+    })),
+    [commentsData],
+  );
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -324,7 +382,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
           <View style={styles.sessionBadge}>
             <Text style={styles.sessionBadgeText}>SESSION</Text>
           </View>
-          {lastSaved && (
+          {isOwner && lastSaved && (
             <View style={styles.autoSaveIndicator}>
               <Ionicons name="cloud-done-outline" size={12} color={STEP_COLORS.tertiaryLabel} />
               <Text style={styles.autoSaveText}>Saved</Text>
@@ -337,17 +395,38 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
             <Ionicons name="ellipsis-vertical" size={18} color={STEP_COLORS.secondaryLabel} />
           </Pressable>
         </View>
-        <TextInput
-          style={styles.titleInput}
-          value={editingTitle ?? step.title}
-          onChangeText={handleTitleChange}
-          placeholder={`${vocab('Learning Event')} title...`}
-          placeholderTextColor={STEP_COLORS.tertiaryLabel}
-          selectTextOnFocus
-        />
+        {isOwner ? (
+          <TextInput
+            style={styles.titleInput}
+            value={editingTitle ?? step.title}
+            onChangeText={handleTitleChange}
+            onBlur={handleTitleBlur}
+            onSubmitEditing={handleTitleBlur}
+            placeholder={`${vocab('Learning Event')} title...`}
+            placeholderTextColor={STEP_COLORS.tertiaryLabel}
+            selectTextOnFocus
+          />
+        ) : (
+          <Text style={styles.titleInput}>{step.title || `${vocab('Learning Event')}`}</Text>
+        )}
         {step.description && (
           <Text style={styles.description} numberOfLines={2}>{step.description}</Text>
         )}
+        {isCollaborator && (() => {
+          const planCollabs = serverPlanData.collaborators ?? [];
+          const ownerCollab = planCollabs.find(
+            (c) => c.type === 'platform' && c.user_id === step.user_id,
+          );
+          const ownerName = ownerCollab?.display_name;
+          return (
+            <View style={styles.collaboratorBanner}>
+              <Ionicons name="people-outline" size={16} color={STEP_COLORS.accent} />
+              <Text style={styles.collaboratorBannerText}>
+                {ownerName ? `Shared by ${ownerName}` : 'Shared with you'}
+              </Text>
+            </View>
+          );
+        })()}
       </View>
 
       {/* Tabs */}
@@ -365,8 +444,8 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
 
       {/* Tab content */}
       <View style={styles.tabContent}>
-        {/* Brain dump phase intercepts the plan tab */}
-        {activeTab === 'plan' && brainDumpPhase === 'dump' && (
+        {/* Brain dump phase intercepts the plan tab — only for owner */}
+        {activeTab === 'plan' && isOwner && brainDumpPhase === 'dump' && (
           <BrainDumpEntry
             initialData={brainDumpData}
             onSkipToPlan={handleSkipToPlan}
@@ -375,7 +454,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
             isStructuring={aiStructuring}
           />
         )}
-        {activeTab === 'plan' && brainDumpPhase === 'review' && aiReviewPlan && (
+        {activeTab === 'plan' && isOwner && brainDumpPhase === 'review' && aiReviewPlan && (
           <AIStructureReview
             planData={aiReviewPlan}
             suggestedTitle={aiSuggestedTitle}
@@ -383,20 +462,34 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
             onBack={handleBackToDump}
           />
         )}
-        {activeTab === 'plan' && !brainDumpPhase && (
+        {activeTab === 'plan' && (!isOwner || !brainDumpPhase) && (
           <PlanTab
             stepId={stepId}
             planData={planData}
             interestId={step.interest_id}
             onUpdate={handlePlanUpdate}
             onNextTab={() => handleNextTab('act')}
+            readOnly={!isOwner}
           />
         )}
         {activeTab === 'act' && (
-          <ActTab stepId={stepId} onNextTab={() => handleNextTab('review')} />
+          <ActTab stepId={stepId} onNextTab={() => handleNextTab('review')} readOnly={!isOwner} />
         )}
-        {activeTab === 'review' && <ReviewTab stepId={stepId} />}
+        {activeTab === 'review' && <ReviewTab stepId={stepId} readOnly={!isOwner} />}
       </View>
+
+      {/* Discussion thread — visible to owner and collaborators */}
+      {showComments && (
+        <View style={styles.discussionSection}>
+          <CommentsSection
+            comments={mappedComments}
+            isLoading={commentsLoading}
+            onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment}
+            totalCount={mappedComments.length}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -487,5 +580,25 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: STEP_COLORS.tertiaryLabel,
     fontWeight: '400',
+  },
+  discussionSection: {
+    paddingHorizontal: IOS_SPACING.md,
+    paddingTop: IOS_SPACING.md,
+    paddingBottom: IOS_SPACING.lg,
+  },
+  collaboratorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(61,138,90,0.08)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: IOS_SPACING.sm,
+  },
+  collaboratorBannerText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: STEP_COLORS.accent,
   },
 });

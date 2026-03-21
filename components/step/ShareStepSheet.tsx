@@ -20,6 +20,8 @@ import {
   Image,
   Share,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { enableStepSharing } from '@/services/TimelineStepService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_TYPOGRAPHY, IOS_SPACING, IOS_RADIUS } from '@/lib/design-tokens-ios';
@@ -35,6 +37,7 @@ import type { StepPlanData, StepActData, StepReviewData, MediaUpload } from '@/t
 interface ShareStepSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  stepId: string;
   stepTitle: string;
   planData: StepPlanData;
   actData: StepActData;
@@ -48,6 +51,7 @@ interface ShareStepSheetProps {
 export function ShareStepSheet({
   isOpen,
   onClose,
+  stepId,
   stepTitle,
   planData,
   actData,
@@ -58,6 +62,8 @@ export function ShareStepSheet({
 
   const [note, setNote] = useState('');
   const [isSharing, setIsSharing] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [copyingLink, setCopyingLink] = useState(false);
 
   const capabilityGoals = planData.capability_goals ?? [];
   const capabilityRatings = reviewData.capability_progress ?? {};
@@ -128,6 +134,55 @@ export function ShareStepSheet({
     }
   }, [isSharing, buildPostContent, createPost, mediaUploads, onClose]);
 
+  // Cached share URL so we don't re-fetch every time
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  // Copy text to clipboard with fallback for web
+  const copyToClipboard = useCallback(async (text: string) => {
+    if (Platform.OS === 'web') {
+      // Try modern API first, then fallback to execCommand
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch {
+        // navigator.clipboard can fail if user-gesture context was lost
+      }
+      // Fallback: create a temporary textarea
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    } else {
+      await Clipboard.setStringAsync(text);
+    }
+  }, []);
+
+  // Copy a public share link to clipboard
+  const handleCopyLink = useCallback(async () => {
+    if (copyingLink) return;
+    setCopyingLink(true);
+    try {
+      let url = shareUrl;
+      if (!url) {
+        const result = await enableStepSharing(stepId);
+        url = result.url;
+        setShareUrl(url);
+      }
+      await copyToClipboard(url);
+      triggerHaptic('notificationSuccess');
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 3000);
+    } catch (err) {
+      console.error('Failed to copy link:', err);
+    } finally {
+      setCopyingLink(false);
+    }
+  }, [stepId, copyingLink, shareUrl, copyToClipboard]);
+
   // Share via native share sheet as fallback / additional option
   const handleNativeShare = useCallback(async () => {
     try {
@@ -141,11 +196,26 @@ export function ShareStepSheet({
         message += `\n\nWhat I did: ${whatTheyDid}`;
       }
 
+      // Include public link if sharing is enabled
+      let url = shareUrl;
+      if (!url) {
+        try {
+          const result = await enableStepSharing(stepId);
+          url = result.url;
+          setShareUrl(url);
+        } catch {
+          // If sharing fails, send without link
+        }
+      }
+      if (url) {
+        message += `\n\n${url}`;
+      }
+
       await Share.share({ message });
     } catch {
       // User cancelled or share failed — no action needed
     }
-  }, [stepTitle, whatLearned, whatTheyDid]);
+  }, [stepId, stepTitle, whatLearned, whatTheyDid, shareUrl]);
 
   const handleClose = useCallback(() => {
     setNote('');
@@ -284,6 +354,26 @@ export function ShareStepSheet({
                 </View>
               )}
             </View>
+
+            {/* Copy public link */}
+            <Pressable
+              style={[styles.nativeShareButton, linkCopied && styles.linkCopiedButton]}
+              onPress={handleCopyLink}
+              disabled={copyingLink}
+            >
+              {copyingLink ? (
+                <ActivityIndicator size="small" color={STEP_COLORS.accent} />
+              ) : (
+                <Ionicons
+                  name={linkCopied ? 'checkmark-circle' : 'link-outline'}
+                  size={18}
+                  color={linkCopied ? IOS_COLORS.systemGreen : STEP_COLORS.accent}
+                />
+              )}
+              <Text style={[styles.nativeShareText, linkCopied && { color: IOS_COLORS.systemGreen }]}>
+                {linkCopied ? 'Link copied!' : 'Copy Link'}
+              </Text>
+            </Pressable>
 
             {/* Native share option */}
             <Pressable
@@ -464,6 +554,10 @@ const styles = StyleSheet.create({
   starRow: {
     flexDirection: 'row',
     gap: 1,
+  },
+  linkCopiedButton: {
+    borderColor: IOS_COLORS.systemGreen,
+    borderWidth: 1,
   },
   nativeShareButton: {
     flexDirection: 'row',

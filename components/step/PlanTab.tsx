@@ -27,9 +27,10 @@ interface PlanTabProps {
   interestId: string | undefined;
   onUpdate: (data: Partial<StepPlanData>) => void;
   onNextTab?: () => void;
+  readOnly?: boolean;
 }
 
-export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: PlanTabProps) {
+export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, readOnly }: PlanTabProps) {
   const { user } = useAuth();
   const { userInterests } = useInterest();
   const [showResourcePicker, setShowResourcePicker] = useState(false);
@@ -82,13 +83,14 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: P
         defaultExpanded={!q1Complete}
       >
         <TextInput
-          style={styles.textArea}
+          style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={planData.what_will_you_do ?? ''}
-          onChangeText={(text) => onUpdate({ what_will_you_do: text })}
-          placeholder="Describe what you'll focus on..."
+          onChangeText={readOnly ? undefined : (text) => onUpdate({ what_will_you_do: text })}
+          placeholder={readOnly ? '' : "Describe what you'll focus on..."}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
 
         {/* Linked resources chips */}
@@ -104,24 +106,28 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: P
               >
                 <ResourceTypeIcon type={resource.resource_type} size={14} />
                 <Text style={styles.chipText} numberOfLines={1}>{resource.title}</Text>
-                <Pressable
-                  onPress={() => handleRemoveResource(resource.id)}
-                  hitSlop={6}
-                >
-                  <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
-                </Pressable>
+                {!readOnly && (
+                  <Pressable
+                    onPress={() => handleRemoveResource(resource.id)}
+                    hitSlop={6}
+                  >
+                    <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                  </Pressable>
+                )}
               </Pressable>
             ))}
           </View>
         )}
 
-        <Pressable
-          style={styles.addLibraryButton}
-          onPress={() => setShowResourcePicker(true)}
-        >
-          <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
-          <Text style={styles.addLibraryText}>Add from Library</Text>
-        </Pressable>
+        {!readOnly && (
+          <Pressable
+            style={styles.addLibraryButton}
+            onPress={() => setShowResourcePicker(true)}
+          >
+            <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.addLibraryText}>Add from Library</Text>
+          </Pressable>
+        )}
       </PlanQuestionCard>
 
       {/* Q2: How will you do it? */}
@@ -133,7 +139,8 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: P
       >
         <SubStepEditor
           subSteps={planData.how_sub_steps ?? []}
-          onChange={handleSubStepsChange}
+          onChange={readOnly ? () => {} : handleSubStepsChange}
+          readOnly={readOnly}
         />
       </PlanQuestionCard>
 
@@ -144,13 +151,14 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: P
         isComplete={q3Complete}
       >
         <TextInput
-          style={styles.textArea}
+          style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={planData.why_reasoning ?? ''}
-          onChangeText={(text) => onUpdate({ why_reasoning: text })}
-          placeholder="What makes this the right next step?"
+          onChangeText={readOnly ? undefined : (text) => onUpdate({ why_reasoning: text })}
+          placeholder={readOnly ? '' : "What makes this the right next step?"}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
       </PlanQuestionCard>
 
@@ -161,27 +169,35 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: P
         isComplete={q4Complete}
       >
         <TextInput
-          style={styles.textArea}
+          style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={(planData.who_collaborators ?? []).join('\n')}
-          onChangeText={(text) => {
+          onChangeText={readOnly ? undefined : (text) => {
             const names = text.split('\n');
             onUpdate({ who_collaborators: names });
           }}
-          placeholder="List people (one per line)..."
+          placeholder={readOnly ? '' : "List people (one per line)..."}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
+          editable={!readOnly}
         />
       </PlanQuestionCard>
 
       {/* Cross-interest suggestions */}
-      {stepId && (
+      {stepId && !readOnly && (
         <CrossInterestSuggestions
           stepId={stepId}
           interestId={interestId}
           onApplyToStep={(text) => {
-            const current = planData.what_will_you_do?.trim();
-            onUpdate({ what_will_you_do: current ? `${current}\n\n${text}` : text });
+            // Add the suggestion as a sub-step so it's visible in "How will you do it?"
+            const existing = planData.how_sub_steps ?? [];
+            const newSubStep: SubStep = {
+              id: `cross_${Date.now()}`,
+              text,
+              sort_order: existing.length,
+              completed: false,
+            };
+            onUpdate({ how_sub_steps: [...existing, newSubStep] });
           }}
           onCreateStep={async (suggestion) => {
             if (!user?.id) return;
@@ -203,7 +219,7 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: P
       )}
 
       {/* Next tab CTA */}
-      {onNextTab && (
+      {onNextTab && !readOnly && (
         <View style={styles.nextCtaContainer}>
           <Pressable style={styles.nextCtaButton} onPress={onNextTab}>
             <Text style={styles.nextCtaText}>Next: Start Doing</Text>
@@ -213,13 +229,15 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab }: P
       )}
 
       {/* Resource picker modal */}
-      <ResourcePicker
-        visible={showResourcePicker}
-        interestId={interestId}
-        onSelect={handleSelectResources}
-        onClose={() => setShowResourcePicker(false)}
-        excludeIds={linkedIds}
-      />
+      {!readOnly && (
+        <ResourcePicker
+          visible={showResourcePicker}
+          interestId={interestId}
+          onSelect={handleSelectResources}
+          onClose={() => setShowResourcePicker(false)}
+          excludeIds={linkedIds}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -309,5 +327,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  readOnlyInput: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    color: STEP_COLORS.secondaryLabel,
   },
 });
