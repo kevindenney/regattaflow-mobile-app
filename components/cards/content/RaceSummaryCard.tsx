@@ -729,23 +729,39 @@ export function RaceSummaryCard({
   // Inline title editing for timeline steps
   const updateStepMutation = useUpdateStep();
   const queryClient = useQueryClient();
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
+  const [editTitle, setEditTitle] = useState(race.name || '');
   const titleInputRef = useRef<TextInput>(null);
+  // Track the last title we saved locally so we don't revert on prop re-sync
+  const lastSavedTitle = useRef<string | null>(null);
 
-  const handleTitleTap = useCallback(() => {
-    if (!isTimelineStep) return;
+  // Sync editTitle from race.name prop — but skip if we just saved locally
+  useEffect(() => {
+    if (lastSavedTitle.current !== null && race.name === lastSavedTitle.current) {
+      // Prop caught up to our local save — clear the guard
+      lastSavedTitle.current = null;
+      return;
+    }
+    if (lastSavedTitle.current !== null) {
+      // Prop changed but hasn't caught up to our save yet — keep local value
+      return;
+    }
     setEditTitle(race.name || '');
-    setIsEditingTitle(true);
-    setTimeout(() => titleInputRef.current?.focus(), 50);
-  }, [isTimelineStep, race.name]);
+  }, [race.name]);
 
   const handleTitleSubmit = useCallback(() => {
     const trimmed = editTitle.trim();
-    setIsEditingTitle(false);
-    if (!trimmed || trimmed === race.name) return;
+    if (!trimmed) {
+      // Revert to current name if blank
+      setEditTitle(race.name || '');
+      return;
+    }
+    if (trimmed === race.name) return;
 
-    // Optimistically update all timeline-steps caches so the title sticks immediately
+    // Update local state immediately — this is what prevents the revert
+    setEditTitle(trimmed);
+    lastSavedTitle.current = trimmed;
+
+    // Optimistically update all timeline-steps caches
     queryClient.setQueriesData<any[]>(
       { queryKey: ['timeline-steps'] },
       (old) => {
@@ -1253,8 +1269,9 @@ export function RaceSummaryCard({
     () => buildNormalizedRaceDateTime(race.date, race.startTime),
     [race.date, race.startTime]
   );
+  const effectiveRaceName = race.name;
   const displayRaceName = (() => {
-    const raw = String(race.name || 'Step').replace(/^Activity/i, 'Step');
+    const raw = String(effectiveRaceName || 'Step').replace(/^Activity/i, 'Step');
 
     if (isBlankActivitySubtype) {
       const isGenerated = /^Step\s*[-—]\s*\d{4}-\d{2}-\d{2}$/i.test(raw);
@@ -1890,8 +1907,8 @@ export function RaceSummaryCard({
           </View>
         )}
 
-        {/* Full race/step name — tappable to edit for timeline steps */}
-        {isTimelineStep && isEditingTitle ? (
+        {/* Full race/step name — always editable TextInput for timeline steps */}
+        {isTimelineStep ? (
           <TextInput
             ref={titleInputRef}
             style={[styles.raceNameLarge, styles.raceNameInput]}
@@ -1900,17 +1917,14 @@ export function RaceSummaryCard({
             onBlur={handleTitleSubmit}
             onSubmitEditing={handleTitleSubmit}
             returnKeyType="done"
-            autoFocus
             selectTextOnFocus
           />
         ) : (
-          <Pressable onPress={isTimelineStep ? handleTitleTap : undefined} disabled={!isTimelineStep}>
-            <Text
-              style={styles.raceNameLarge}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >{displayRaceName || '[No Step Name]'}</Text>
-          </Pressable>
+          <Text
+            style={styles.raceNameLarge}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >{displayRaceName || '[No Step Name]'}</Text>
         )}
         {isNursingInterest && visibleTemplateSuggestedTitles.length > 0 ? (
           <View style={styles.templateSuggestedRow}>
@@ -3619,8 +3633,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   raceNameInput: {
-    borderBottomWidth: 1,
-    borderBottomColor: IOS_COLORS.blue,
+    borderBottomWidth: 0,
     paddingVertical: 2,
     marginBottom: 8,
     ...Platform.select({

@@ -6,6 +6,7 @@ import React, { useMemo, useCallback, useRef, useState, useEffect } from 'react'
 import { View, Text, TextInput, Pressable, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { IOSPillTabs, usePillTabs } from '@/components/ui/ios/IOSPillTabs';
@@ -46,6 +47,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const { user } = useAuth();
   const { currentInterest } = useInterest();
   const { data: step, isLoading, error } = useStepDetail(stepId);
+  const queryClient = useQueryClient();
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
 
@@ -61,24 +63,48 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
 
+  // Reset editingTitle when switching steps
+  useEffect(() => {
+    setEditingTitle(null);
+    pendingTitleRef.current = null;
+  }, [stepId]);
+
+  // Helper to save title with optimistic cache update
+  const saveTitle = useCallback((text: string) => {
+    // Optimistically update the step detail cache so the header shows immediately
+    queryClient.setQueryData(
+      ['timeline-steps', 'detail', stepId],
+      (old: any) => old ? { ...old, title: text } : old,
+    );
+    updateStep.mutate(
+      { stepId, input: { title: text } },
+      {
+        onSuccess: () => {
+          // Clear local editing state — server is now the source of truth
+          setEditingTitle(null);
+        },
+      },
+    );
+  }, [stepId, updateStep, queryClient]);
+
   const handleTitleChange = useCallback((text: string) => {
     setEditingTitle(text);
     pendingTitleRef.current = text;
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
     titleTimerRef.current = setTimeout(() => {
       pendingTitleRef.current = null;
-      updateStep.mutate({ stepId, input: { title: text } });
+      saveTitle(text);
     }, 800);
-  }, [stepId, updateStep]);
+  }, [saveTitle]);
 
   const handleTitleBlur = useCallback(() => {
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
     if (pendingTitleRef.current !== null) {
       const text = pendingTitleRef.current;
       pendingTitleRef.current = null;
-      updateStep.mutate({ stepId, input: { title: text } });
+      saveTitle(text);
     }
-  }, [stepId, updateStep]);
+  }, [saveTitle]);
 
   // Flush any pending title save on unmount
   useEffect(() => {
