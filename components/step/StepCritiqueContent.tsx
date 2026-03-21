@@ -32,7 +32,7 @@ import { createStep } from '@/services/TimelineStepService';
 import { generateCritiqueInsight, gatherEnrichedContext } from '@/services/ai/StepPlanAIService';
 import { markLessonCompleted } from '@/services/LibraryService';
 import { useQueryClient } from '@tanstack/react-query';
-import type { StepReviewData, StepActData, StepPlanData, StepMetadata } from '@/types/step-detail';
+import type { StepReviewData, StepActData, StepPlanData, StepMetadata, BrainDumpData } from '@/types/step-detail';
 import { ShareStepSheet } from '@/components/step/ShareStepSheet';
 
 // ---------------------------------------------------------------------------
@@ -143,9 +143,10 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 
 interface StepCritiqueContentProps {
   stepId: string;
+  onNextStepCreated?: (newStepId: string) => void;
 }
 
-export function StepCritiqueContent({ stepId }: StepCritiqueContentProps) {
+export function StepCritiqueContent({ stepId, onNextStepCreated }: StepCritiqueContentProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
@@ -343,20 +344,30 @@ export function StepCritiqueContent({ stepId }: StepCritiqueContentProps) {
         linked_resource_ids: planData.linked_resource_ids ?? [],
         capability_goals: planData.capability_goals ?? [],
       };
+      const brainDump: BrainDumpData = {
+        raw_text: reviewData.next_step_notes ?? '',
+        extracted_urls: [],
+        extracted_people: planData.who_collaborators ?? [],
+        extracted_topics: planData.capability_goals ?? [],
+        source_step_id: step.id,
+        source_review_notes: reviewData.next_step_notes ?? '',
+        created_at: new Date().toISOString(),
+      };
       const created = await createStep({
         user_id: user.id,
         interest_id: step.interest_id,
         title,
         status: 'pending',
         source_type: 'manual',
-        metadata: { plan: nextPlan },
+        metadata: { plan: nextPlan, brain_dump: brainDump },
       });
       setCreatedNextId(created.id);
       queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+      onNextStepCreated?.(created.id);
     } catch {
       setCreatingNext(false);
     }
-  }, [user?.id, step, createdNextId, creatingNext, planData, subStepProgress, reviewData, queryClient]);
+  }, [user?.id, step, createdNextId, creatingNext, planData, subStepProgress, reviewData, queryClient, onNextStepCreated]);
 
   // Media from act phase
   const actMedia: string[] = (actData as any).media_urls ?? [];
@@ -501,6 +512,20 @@ export function StepCritiqueContent({ stepId }: StepCritiqueContentProps) {
             </Text>
           </Pressable>
         )}
+      </View>
+
+      {/* ── NEXT SESSION NOTES ── */}
+      <View style={s.sectionWrap}>
+        <SectionLabel>NEXT SESSION</SectionLabel>
+        <TextInput
+          style={s.inputBox}
+          value={localNextNotes}
+          onChangeText={handleNextNotesChange}
+          placeholder="What do you want to focus on next time?"
+          placeholderTextColor={C.labelLight}
+          multiline
+          textAlignVertical="top"
+        />
       </View>
 
       {/* ── BUTTONS ── */}

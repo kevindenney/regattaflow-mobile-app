@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Platform, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Platform, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
@@ -24,10 +24,10 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
 import { getResourcesByIds } from '@/services/LibraryService';
 import { NotificationService } from '@/services/NotificationService';
-import { generateChatPlanSuggestion, gatherEnrichedContext, generatePlanFromResource } from '@/services/ai/StepPlanAIService';
+import { gatherEnrichedContext, generatePlanFromResource } from '@/services/ai/StepPlanAIService';
 import { getCompetencies } from '@/services/competencyService';
-import type { StepPlanData, StepMetadata, SubStep, StepCollaborator, ChatMessage } from '@/types/step-detail';
-import { WhatChatPanel } from './WhatChatPanel';
+import type { StepPlanData, StepMetadata, SubStep, StepCollaborator } from '@/types/step-detail';
+// WhatChatPanel removed — brain dump entry replaces inline AI chat
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
 import { createStep } from '@/services/TimelineStepService';
 import type { LibraryResourceRecord } from '@/types/library';
@@ -45,8 +45,6 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showResourcePicker, setShowResourcePicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [chatOpen, setChatOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [localGoals, setLocalGoals] = useState<string[]>([]);
   const [newGoalText, setNewGoalText] = useState('');
@@ -88,11 +86,6 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
         );
       }
       setLocalGoals(plan.capability_goals ?? []);
-      const savedChat = plan.what_chat_history ?? [];
-      if (savedChat.length > 0) {
-        setChatHistory(savedChat);
-        setChatOpen(true);
-      }
       initializedRef.current = true;
     }
   }, [step]);
@@ -268,74 +261,6 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
     });
   }, [debouncedSave]);
 
-  const handleChatSend = useCallback(async (userMessage: string) => {
-    if (aiLoading || !user?.id || !step) return;
-
-    const userMsg: ChatMessage = { role: 'user', content: userMessage, timestamp: new Date().toISOString() };
-    const updatedHistory = [...chatHistory, userMsg];
-    setChatHistory(updatedHistory);
-    setAiLoading(true);
-
-    try {
-      const resolvedInterestId = interestId || currentInterest?.id;
-      const enrichedContext = resolvedInterestId
-        ? await gatherEnrichedContext(user.id, resolvedInterestId)
-        : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [] };
-
-      const text = await generateChatPlanSuggestion(
-        {
-          interestName: currentInterest?.name || 'this interest',
-          interestId: resolvedInterestId,
-          stepTitle: step.title,
-          currentWhat: localWhat.trim() || undefined,
-          linkedResources,
-          capabilityGoals: planDataRef.current.capability_goals ?? [],
-          ...enrichedContext,
-        },
-        updatedHistory,
-      );
-
-      const assistantMsg: ChatMessage = { role: 'assistant', content: text, timestamp: new Date().toISOString() };
-      const withResponse = [...updatedHistory, assistantMsg];
-      setChatHistory(withResponse);
-      debouncedSave({ what_chat_history: withResponse });
-    } catch (err) {
-      console.error('AI chat failed:', err);
-      const errorMsg: ChatMessage = {
-        role: 'assistant',
-        content: 'Could not generate a suggestion right now. Please try again.',
-        timestamp: new Date().toISOString(),
-      };
-      const withError = [...updatedHistory, errorMsg];
-      setChatHistory(withError);
-    } finally {
-      setAiLoading(false);
-    }
-  }, [aiLoading, user?.id, step, interestId, currentInterest, localWhat, linkedResources, chatHistory, debouncedSave]);
-
-  const handleAiSuggest = useCallback(() => {
-    if (aiLoading || !user?.id || !step) return;
-    setChatOpen(true);
-    if (chatHistory.length === 0) {
-      // Auto-send first message to kick off the conversation
-      handleChatSend('What should I focus on in this session?');
-    }
-  }, [aiLoading, user?.id, step, chatHistory.length, handleChatSend]);
-
-  const handleChatApply = useCallback((text: string) => {
-    const newText = localWhat.trim()
-      ? `${localWhat.trim()}\n\n${text}`
-      : text;
-    setLocalWhat(newText);
-    debouncedSave({ what_will_you_do: newText });
-  }, [localWhat, debouncedSave]);
-
-  const handleChatClear = useCallback(() => {
-    setChatHistory([]);
-    setChatOpen(false);
-    debouncedSave({ what_chat_history: [] });
-  }, [debouncedSave]);
-
   const q1Complete = Boolean(localWhat.trim() || linkedIds.length > 0);
   const q2Complete = Boolean(planData.how_sub_steps?.length && planData.how_sub_steps.some((s) => s.text.trim()));
   const q3Complete = Boolean(localWhy.trim());
@@ -430,40 +355,13 @@ export function StepPlanQuestions({ stepId, interestId }: StepPlanQuestionsProps
           </View>
         )}
 
-        <View style={styles.actionRow}>
-          <Pressable
-            style={styles.addLibraryButton}
-            onPress={() => setShowResourcePicker(true)}
-          >
-            <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
-            <Text style={styles.addLibraryText}>Add from Library</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.aiSuggestButton, aiLoading && styles.aiSuggestButtonLoading]}
-            onPress={handleAiSuggest}
-            disabled={aiLoading}
-          >
-            {aiLoading ? (
-              <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
-            ) : (
-              <Ionicons name="sparkles" size={16} color={IOS_COLORS.systemPurple} />
-            )}
-            <Text style={styles.aiSuggestText}>
-              {aiLoading ? 'Thinking...' : 'AI Suggest'}
-            </Text>
-          </Pressable>
-        </View>
-
-        {chatOpen && (
-          <WhatChatPanel
-            chatHistory={chatHistory}
-            onSend={handleChatSend}
-            onApply={handleChatApply}
-            onClear={handleChatClear}
-            isLoading={aiLoading}
-          />
-        )}
+        <Pressable
+          style={styles.addLibraryButton}
+          onPress={() => setShowResourcePicker(true)}
+        >
+          <Ionicons name="library-outline" size={18} color={STEP_COLORS.accent} />
+          <Text style={styles.addLibraryText}>Add from Library</Text>
+        </Pressable>
       </PlanQuestionCard>
 
       {/* Q2: How will you do it? */}
@@ -745,12 +643,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flexShrink: 1,
   },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: IOS_SPACING.sm,
-  },
   addLibraryButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -761,23 +653,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: STEP_COLORS.accent,
-  },
-  aiSuggestButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(175,82,222,0.08)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  aiSuggestButtonLoading: {
-    opacity: 0.7,
-  },
-  aiSuggestText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: IOS_COLORS.systemPurple,
   },
   goalChipContainer: {
     flexDirection: 'row',

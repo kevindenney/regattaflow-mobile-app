@@ -69,6 +69,7 @@ const DEMO_VENUE_BY_INTEREST: Record<string, string> = {
   'sail-racing': 'Your Local Yacht Club',
   nursing: 'Your Local Hospital',
   drawing: 'Your Studio',
+  design: 'Your Design Studio',
   fitness: 'Your Local Gym',
 };
 

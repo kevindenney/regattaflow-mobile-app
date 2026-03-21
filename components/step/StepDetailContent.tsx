@@ -15,8 +15,14 @@ import { useUpdateStep } from '@/hooks/useTimelineSteps';
 import { PlanTab } from './PlanTab';
 import { ActTab } from './ActTab';
 import { ReviewTab } from './ReviewTab';
-import type { StepPlanData, StepActData, StepReviewData, StepMetadata } from '@/types/step-detail';
+import { BrainDumpEntry } from './BrainDumpEntry';
+import { AIStructureReview } from './AIStructureReview';
+import type { StepPlanData, StepActData, StepReviewData, StepMetadata, BrainDumpData, StepCollaborator } from '@/types/step-detail';
 import type { TimelineStepStatus } from '@/types/timeline-steps';
+import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
+import { structureBrainDump } from '@/services/ai/StepPlanAIService';
+import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
 
 type TabValue = 'plan' | 'act' | 'review';
 
@@ -34,6 +40,8 @@ interface StepDetailContentProps {
 
 export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const { vocab } = useVocabulary();
+  const { user } = useAuth();
+  const { currentInterest } = useInterest();
   const { data: step, isLoading, error } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
@@ -72,6 +80,153 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const serverPlanData: StepPlanData = metadata.plan ?? {};
   const actData = metadata.act ?? {};
   const reviewData = metadata.review ?? {};
+  const brainDumpData = metadata.brain_dump;
+
+  // Brain dump phase: show dump entry when brain_dump exists but plan is empty
+  const hasPlanContent = Boolean(
+    serverPlanData.what_will_you_do?.trim() ||
+    (serverPlanData.how_sub_steps?.length && serverPlanData.how_sub_steps.some((s) => s.text.trim()))
+  );
+  const [brainDumpPhase, setBrainDumpPhase] = useState<'dump' | 'review' | null>(null);
+  const [aiReviewPlan, setAiReviewPlan] = useState<StepPlanData | null>(null);
+  const [aiSuggestedTitle, setAiSuggestedTitle] = useState<string | undefined>();
+  const [aiStructuring, setAiStructuring] = useState(false);
+  const savedLibraryIdsRef = useRef<string[]>([]);
+
+  // Determine initial phase from metadata
+  useEffect(() => {
+    if (step && brainDumpPhase === null) {
+      if (brainDumpData && (!hasPlanContent || !brainDumpData.ai_structured_at)) {
+        setBrainDumpPhase('dump');
+      }
+    }
+  }, [step, brainDumpData, hasPlanContent, brainDumpPhase]);
+
+  const handleSkipToPlan = useCallback((currentDump: BrainDumpData) => {
+    if (currentDump.raw_text?.trim()) {
+      const collaborators: StepCollaborator[] = (currentDump.extracted_people ?? [])
+        .filter((name: string) => name.trim())
+        .map((name: string, i: number) => ({
+          id: `external_${i}_${Date.now()}`,
+          type: 'external' as const,
+          display_name: name.trim(),
+        }));
+      updateMetadata.mutate(
+        {
+          brain_dump: currentDump,
+          plan: {
+            ...(metadata.plan ?? {}),
+            what_will_you_do: metadata.plan?.what_will_you_do || currentDump.raw_text,
+            who_collaborators: currentDump.extracted_people,
+            collaborators: collaborators.length > 0 ? collaborators : undefined,
+            capability_goals: currentDump.extracted_topics.length > 0
+              ? currentDump.extracted_topics : undefined,
+          },
+        },
+        { onSuccess: () => setBrainDumpPhase(null) },
+      );
+    } else {
+      setBrainDumpPhase(null);
+    }
+  }, [metadata.plan, updateMetadata]);
+
+  const handleStructureWithAI = useCallback(async (dump: BrainDumpData) => {
+    updateMetadata.mutate({ brain_dump: dump });
+    setAiStructuring(true);
+
+    // Save extracted URLs to library in the background
+    if (dump.extracted_urls.length > 0 && user?.id && currentInterest?.id) {
+      saveUrlsToLibrary(dump.extracted_urls, user.id, currentInterest.id)
+        .then((savedIds) => {
+          console.log('[BrainDump] Library save returned IDs:', savedIds);
+          savedLibraryIdsRef.current = savedIds;
+        })
+        .catch((err) => console.error('[BrainDump] Library save failed:', err));
+    }
+
+    try {
+      const result = await structureBrainDump({
+        brainDump: dump,
+        interestName: currentInterest?.name ?? 'learning',
+        interestId: currentInterest?.id,
+        userId: user?.id ?? '',
+      });
+
+      const plan: StepPlanData = {
+        what_will_you_do: result.what_will_you_do,
+        how_sub_steps: result.how_sub_steps.map((text, i) => ({
+          id: `ai_${i}_${Date.now()}`,
+          text,
+          sort_order: i,
+          completed: false,
+        })),
+        who_collaborators: result.who_collaborators,
+        why_reasoning: result.why_reasoning,
+        capability_goals: result.capability_goals.length > 0 ? result.capability_goals : undefined,
+      };
+
+      setAiReviewPlan(plan);
+      setAiSuggestedTitle(result.suggested_title || undefined);
+      setBrainDumpPhase('review');
+    } catch (err) {
+      console.error('AI structuring failed:', err);
+      const plan: StepPlanData = {
+        what_will_you_do: dump.raw_text,
+        who_collaborators: dump.extracted_people,
+        capability_goals: dump.extracted_topics.length > 0 ? dump.extracted_topics : undefined,
+      };
+      setAiReviewPlan(plan);
+      setBrainDumpPhase('review');
+    } finally {
+      setAiStructuring(false);
+    }
+  }, [updateMetadata, currentInterest, user]);
+
+  const handleConfirmAIPlan = useCallback((confirmedPlan: StepPlanData, title?: string) => {
+    // Merge any saved library resource IDs into the plan
+    let enrichedPlan: StepPlanData = savedLibraryIdsRef.current.length > 0
+      ? { ...confirmedPlan, linked_resource_ids: [
+          ...new Set([...(confirmedPlan.linked_resource_ids ?? []), ...savedLibraryIdsRef.current]),
+        ]}
+      : { ...confirmedPlan };
+
+    // Convert who_collaborators strings to structured StepCollaborator entries
+    if (enrichedPlan.who_collaborators?.length && !enrichedPlan.collaborators?.length) {
+      enrichedPlan.collaborators = enrichedPlan.who_collaborators
+        .filter((name) => name.trim())
+        .map((name, i) => ({
+          id: `external_${i}_${Date.now()}`,
+          type: 'external' as const,
+          display_name: name.trim(),
+        }));
+    }
+
+    updateMetadata.mutate(
+      {
+        plan: enrichedPlan,
+        brain_dump: { ...(brainDumpData ?? {} as BrainDumpData), ai_structured_at: new Date().toISOString() },
+      },
+      {
+        onSuccess: () => {
+          setAiReviewPlan(null);
+          setBrainDumpPhase(null);
+          savedLibraryIdsRef.current = [];
+        },
+      },
+    );
+    if (title) {
+      updateStep.mutate({ stepId, input: { title } });
+    }
+  }, [stepId, brainDumpData, updateMetadata, updateStep]);
+
+  const handleBackToDump = useCallback(() => {
+    setBrainDumpPhase('dump');
+    setAiReviewPlan(null);
+  }, []);
+
+  const handleDraftChange = useCallback((dump: BrainDumpData) => {
+    updateMetadata.mutate({ brain_dump: dump });
+  }, [updateMetadata]);
 
   // Optimistic local plan state so TextInputs are responsive while saving
   const [localPlanOverrides, setLocalPlanOverrides] = useState<Partial<StepPlanData>>({});
@@ -210,7 +365,25 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
 
       {/* Tab content */}
       <View style={styles.tabContent}>
-        {activeTab === 'plan' && (
+        {/* Brain dump phase intercepts the plan tab */}
+        {activeTab === 'plan' && brainDumpPhase === 'dump' && (
+          <BrainDumpEntry
+            initialData={brainDumpData}
+            onSkipToPlan={handleSkipToPlan}
+            onStructureWithAI={handleStructureWithAI}
+            onDraftChange={handleDraftChange}
+            isStructuring={aiStructuring}
+          />
+        )}
+        {activeTab === 'plan' && brainDumpPhase === 'review' && aiReviewPlan && (
+          <AIStructureReview
+            planData={aiReviewPlan}
+            suggestedTitle={aiSuggestedTitle}
+            onConfirm={handleConfirmAIPlan}
+            onBack={handleBackToDump}
+          />
+        )}
+        {activeTab === 'plan' && !brainDumpPhase && (
           <PlanTab
             stepId={stepId}
             planData={planData}

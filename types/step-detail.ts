@@ -88,9 +88,32 @@ export interface CrossInterestSuggestion {
   relevance: string;
 }
 
+// ---------------------------------------------------------------------------
+// Brain dump types — unstructured entry that AI structures into a plan
+// ---------------------------------------------------------------------------
+
+export interface ExtractedUrl {
+  url: string;
+  platform: MediaLinkPlatform | 'pdf' | 'article' | 'unknown';
+  title?: string;
+  thumbnail_url?: string;
+}
+
+export interface BrainDumpData {
+  raw_text: string;
+  extracted_urls: ExtractedUrl[];
+  extracted_people: string[];
+  extracted_topics: string[];
+  source_step_id?: string;
+  source_review_notes?: string;
+  created_at: string;
+  ai_structured_at?: string;
+}
+
 export interface StepMetadata {
   plan?: StepPlanData;
   act?: StepActData;
   review?: StepReviewData;
+  brain_dump?: BrainDumpData;
   [key: string]: unknown;
 }

@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, runOnJS } from 'react-native-reanimated';
 import { IOSSegmentedControl } from '@/components/ui/ios';
+import { STEP_COLORS } from '@/lib/step-theme';
 import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
 import { triggerHaptic } from '@/lib/haptics';
 import { useRouter } from 'expo-router';
@@ -80,7 +81,14 @@ import {
 import { StepPlanQuestions } from '@/components/step/StepPlanQuestions';
 import { StepDrawContent } from '@/components/step/StepDrawContent';
 import { StepCritiqueContent } from '@/components/step/StepCritiqueContent';
+import { BrainDumpEntry } from '@/components/step/BrainDumpEntry';
+import { AIStructureReview } from '@/components/step/AIStructureReview';
+import type { BrainDumpData, StepMetadata, StepPlanData, StepCollaborator, SubStep } from '@/types/step-detail';
+import { useUpdateStepMetadata } from '@/hooks/useStepDetail';
 import { useUpdateStep } from '@/hooks/useTimelineSteps';
+import { useAuth } from '@/providers/AuthProvider';
+import { structureBrainDump } from '@/services/ai/StepPlanAIService';
+import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)
@@ -682,8 +690,10 @@ export function RaceSummaryCard({
   onMoveStepLater,
   onMoveStepToPlannedNext,
   onMoveStepToCompletedMostRecent,
+  onNextStepCreated,
 }: CardContentProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const { currentInterest } = useInterest();
   const eventConfig = useInterestEventConfig();
   const interestSlug = currentInterest?.slug || eventConfig.interestSlug || 'sail-racing';
@@ -746,6 +756,166 @@ export function RaceSummaryCard({
 
     updateStepMutation.mutate({ stepId: race.id, input: { title: trimmed } });
   }, [editTitle, race.name, race.id, updateStepMutation, queryClient]);
+
+  // Brain dump state for timeline steps
+  const metadata = (race as any)?.metadata as StepMetadata | undefined;
+  const serverBrainDump = metadata?.brain_dump;
+  // Local brain dump state tracks the latest data (server metadata may lag behind)
+  const [localBrainDump, setLocalBrainDump] = useState<BrainDumpData | undefined>(serverBrainDump);
+  const brainDumpData = localBrainDump ?? serverBrainDump;
+  const hasPlanContent = Boolean(
+    metadata?.plan?.what_will_you_do?.trim() ||
+    (metadata?.plan?.how_sub_steps?.length && metadata?.plan?.how_sub_steps.some((s) => s.text.trim()))
+  );
+  const [brainDumpPhase, setBrainDumpPhase] = useState<'dump' | 'review' | null>(
+    isTimelineStep && brainDumpData && (!hasPlanContent || !brainDumpData.ai_structured_at) ? 'dump' : null,
+  );
+  const [aiReviewPlan, setAiReviewPlan] = useState<StepPlanData | null>(null);
+  const [aiSuggestedTitle, setAiSuggestedTitle] = useState<string | undefined>();
+  const [aiStructuring, setAiStructuring] = useState(false);
+  const savedLibraryIdsRef = useRef<string[]>([]);
+  const updateStepMetadata = useUpdateStepMetadata(isTimelineStep ? race.id : '');
+
+  const handleSkipToPlan = useCallback((currentDump: BrainDumpData) => {
+    // Keep local state in sync so going back to brain dump preserves text
+    setLocalBrainDump(currentDump);
+    // Carry brain dump content into the plan so nothing is lost
+    if (currentDump.raw_text?.trim()) {
+      const collaborators: StepCollaborator[] = (currentDump.extracted_people ?? [])
+        .filter((name) => name.trim())
+        .map((name, i) => ({
+          id: `external_${i}_${Date.now()}`,
+          type: 'external' as const,
+          display_name: name.trim(),
+        }));
+      updateStepMetadata.mutate(
+        {
+          brain_dump: currentDump,
+          plan: {
+            ...(metadata?.plan ?? {}),
+            what_will_you_do: metadata?.plan?.what_will_you_do || currentDump.raw_text,
+            who_collaborators: currentDump.extracted_people,
+            collaborators: collaborators.length > 0 ? collaborators : undefined,
+            capability_goals: currentDump.extracted_topics.length > 0
+              ? currentDump.extracted_topics : undefined,
+          },
+        },
+        { onSuccess: () => setBrainDumpPhase(null) },
+      );
+    } else {
+      setBrainDumpPhase(null);
+    }
+  }, [metadata?.plan, updateStepMetadata]);
+
+  const handleStructureWithAI = useCallback(async (dump: BrainDumpData) => {
+    console.log('[BrainDump] handleStructureWithAI called:', {
+      urlCount: dump.extracted_urls.length,
+      urls: dump.extracted_urls.map((u) => ({ url: u.url.slice(0, 60), platform: u.platform, title: u.title })),
+      people: dump.extracted_people,
+      topics: dump.extracted_topics,
+    });
+    updateStepMetadata.mutate({ brain_dump: dump });
+    setAiStructuring(true);
+
+    // Save extracted URLs to library in the background
+    const resolvedInterestId = (race as any).interest_id ?? currentInterest?.id;
+    console.log('[BrainDump] Library save check:', { hasUrls: dump.extracted_urls.length > 0, userId: user?.id?.slice(0, 8), interestId: resolvedInterestId?.slice(0, 8) });
+    if (dump.extracted_urls.length > 0 && user?.id && resolvedInterestId) {
+      saveUrlsToLibrary(dump.extracted_urls, user.id, resolvedInterestId)
+        .then((savedIds) => {
+          console.log('[BrainDump] Library save returned IDs:', savedIds);
+          savedLibraryIdsRef.current = savedIds;
+        })
+        .catch((err) => console.error('[BrainDump] Library save promise rejected:', err));
+    }
+
+    try {
+      const result = await structureBrainDump({
+        brainDump: dump,
+        interestName: currentInterest?.name ?? 'sailing',
+        interestId: (race as any).interest_id ?? currentInterest?.id,
+        userId: user?.id ?? '',
+      });
+
+      const plan: StepPlanData = {
+        what_will_you_do: result.what_will_you_do,
+        how_sub_steps: result.how_sub_steps.map((text, i) => ({
+          id: `ai_${i}_${Date.now()}`,
+          text,
+          sort_order: i,
+          completed: false,
+        })),
+        who_collaborators: result.who_collaborators,
+        why_reasoning: result.why_reasoning,
+        capability_goals: result.capability_goals.length > 0 ? result.capability_goals : undefined,
+      };
+
+      setAiReviewPlan(plan);
+      setAiSuggestedTitle(result.suggested_title || undefined);
+      setBrainDumpPhase('review');
+    } catch (err) {
+      console.error('AI structuring failed:', err);
+      // Fallback: use client-side extraction
+      const plan: StepPlanData = {
+        what_will_you_do: dump.raw_text,
+        who_collaborators: dump.extracted_people,
+        capability_goals: dump.extracted_topics.length > 0 ? dump.extracted_topics : undefined,
+      };
+      setAiReviewPlan(plan);
+      setBrainDumpPhase('review');
+    } finally {
+      setAiStructuring(false);
+    }
+  }, [updateStepMetadata, currentInterest, race, user]);
+
+  const handleConfirmAIPlan = useCallback((confirmedPlan: StepPlanData, title?: string) => {
+    // Merge any saved library resource IDs into the plan
+    let enrichedPlan: StepPlanData = savedLibraryIdsRef.current.length > 0
+      ? { ...confirmedPlan, linked_resource_ids: [
+          ...new Set([...(confirmedPlan.linked_resource_ids ?? []), ...savedLibraryIdsRef.current]),
+        ]}
+      : { ...confirmedPlan };
+
+    // Convert who_collaborators strings to structured StepCollaborator entries
+    if (enrichedPlan.who_collaborators?.length && !enrichedPlan.collaborators?.length) {
+      enrichedPlan.collaborators = enrichedPlan.who_collaborators
+        .filter((name) => name.trim())
+        .map((name, i) => ({
+          id: `external_${i}_${Date.now()}`,
+          type: 'external' as const,
+          display_name: name.trim(),
+        }));
+    }
+
+    updateStepMetadata.mutate(
+      {
+        plan: enrichedPlan,
+        brain_dump: { ...(brainDumpData ?? {} as BrainDumpData), ai_structured_at: new Date().toISOString() },
+      },
+      {
+        onSuccess: () => {
+          // Only transition after DB write + cache update complete
+          // so StepPlanQuestions reads the confirmed plan from cache
+          setAiReviewPlan(null);
+          setBrainDumpPhase(null);
+          savedLibraryIdsRef.current = [];
+        },
+      },
+    );
+    if (title) {
+      updateStepMutation.mutate({ stepId: race.id, input: { title } });
+    }
+  }, [race.id, brainDumpData, updateStepMetadata, updateStepMutation]);
+
+  const handleBackToDump = useCallback(() => {
+    setBrainDumpPhase('dump');
+    setAiReviewPlan(null);
+  }, []);
+
+  const handleDraftChange = useCallback((dump: BrainDumpData) => {
+    setLocalBrainDump(dump);
+    updateStepMetadata.mutate({ brain_dump: dump });
+  }, [updateStepMetadata]);
 
   // Detail bottom sheet state
   const [activeDetailSheet, setActiveDetailSheet] = useState<DetailCardType | null>(null);
@@ -1400,28 +1570,73 @@ export function RaceSummaryCard({
 
   // Helper to render phase-specific content
   const renderPhaseContent = () => {
-    // Non-sailing interests use config-driven rendering;
-    // blank_activity events also use config-driven rendering even for sailing
-    const isBlankActivity = (race as any)?.metadata?.event_subtype === 'blank_activity';
-    if (!isSailing || isBlankActivity) {
-      // Timeline steps get dedicated step content per phase
-      if (isTimelineStep && isActive) {
-        if (selectedPhase === 'days_before') {
+    // Timeline steps get dedicated step content per phase (all interests)
+    if (isTimelineStep && isActive) {
+      if (selectedPhase === 'days_before') {
+        // Brain dump phase intercepts the plan view
+        if (brainDumpPhase === 'dump') {
           return (
+            <BrainDumpEntry
+              initialData={brainDumpData}
+              onSkipToPlan={handleSkipToPlan}
+              onStructureWithAI={handleStructureWithAI}
+              onDraftChange={handleDraftChange}
+              isStructuring={aiStructuring}
+            />
+          );
+        }
+        if (brainDumpPhase === 'review' && aiReviewPlan) {
+          return (
+            <AIStructureReview
+              planData={aiReviewPlan}
+              suggestedTitle={aiSuggestedTitle}
+              onConfirm={handleConfirmAIPlan}
+              onBack={handleBackToDump}
+            />
+          );
+        }
+        return (
+          <>
+            {brainDumpData && !brainDumpData.ai_structured_at && (
+              <Pressable
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  paddingVertical: 10,
+                  marginHorizontal: 16,
+                  marginTop: 8,
+                  backgroundColor: 'rgba(61,138,90,0.08)',
+                  borderRadius: 10,
+                }}
+                onPress={() => setBrainDumpPhase('dump')}
+              >
+                <Ionicons name="sparkles" size={14} color={STEP_COLORS.accent} />
+                <Text style={{ fontSize: 13, fontWeight: '600', color: STEP_COLORS.accent }}>
+                  Structure with AI instead
+                </Text>
+              </Pressable>
+            )}
             <StepPlanQuestions
               stepId={race.id}
               interestId={(race as any).interest_id ?? currentInterest?.id}
             />
-          );
-        }
-        if (selectedPhase === 'on_water') {
-          return <StepDrawContent stepId={race.id} />;
-        }
-        if (selectedPhase === 'after_race') {
-          return <StepCritiqueContent stepId={race.id} />;
-        }
+          </>
+        );
       }
+      if (selectedPhase === 'on_water') {
+        return <StepDrawContent stepId={race.id} />;
+      }
+      if (selectedPhase === 'after_race') {
+        return <StepCritiqueContent stepId={race.id} onNextStepCreated={onNextStepCreated} />;
+      }
+    }
 
+    // Non-sailing interests use config-driven rendering;
+    // blank_activity events also use config-driven rendering even for sailing
+    const isBlankActivity = (race as any)?.metadata?.event_subtype === 'blank_activity';
+    if (!isSailing || isBlankActivity) {
       // Non-timeline or inactive cards use config-driven rendering
       return (
         <ConfigDrivenPhaseContent

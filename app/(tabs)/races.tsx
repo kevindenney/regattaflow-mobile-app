@@ -1258,6 +1258,7 @@ export default function RacesScreen() {
           refetchTrigger={refetchTrigger}
           onMoveStepToPlannedNext={canManage ? () => handleMoveStepToPlannedNext(race.id) : undefined}
           onMoveStepToCompletedMostRecent={canManage ? () => handleMoveStepToCompletedMostRecent(race.id) : undefined}
+          onNextStepCreated={(newStepId) => { pendingNewStepIdRef.current = newStepId; }}
         />
       );
     },
@@ -1502,15 +1503,25 @@ export default function RacesScreen() {
     if (!user?.id || !currentInterest?.id) return;
 
     try {
-      const eventNoun = vocab('Learning Event');
       const newStep = await createTimelineStep({
         user_id: user.id,
         interest_id: currentInterest.id,
-        title: `New ${eventNoun}`,
+        title: 'New Step',
         category: 'general',
         status: 'pending',
         starts_at: new Date().toISOString(),
-        metadata: { plan: {}, act: {}, review: {} },
+        metadata: {
+          plan: {},
+          act: {},
+          review: {},
+          brain_dump: {
+            raw_text: '',
+            extracted_urls: [],
+            extracted_people: [],
+            extracted_topics: [],
+            created_at: new Date().toISOString(),
+          },
+        },
       });
 
       // Set step data directly so StepDetailContent renders immediately
@@ -1528,6 +1539,9 @@ export default function RacesScreen() {
       });
       setHasManuallySelected(true);
       setIsGridView(false);
+
+      // Track the new step ID so we scroll to it once it appears in the card list
+      pendingNewStepIdRef.current = newStep.id;
 
       // Refetch in background so the step appears in the card grid
       queryClient.refetchQueries({ queryKey: ['timeline-steps'] });
@@ -2136,10 +2150,18 @@ export default function RacesScreen() {
       }
 
       // If a handler (handleAddPractice/handleAddStep) already set step data
-      // for this ID, skip the fetch to avoid overwriting it
+      // for this ID, skip the fetch to avoid overwriting it.
+      // Don't clear the ref on the first skip — keep it until the timeline
+      // data has caught up (prevents race condition where intermediate
+      // re-renders overwrite isTimelineStep before the step is in the local data).
       if (skipFetchForStepRef.current === selectedRaceId) {
+        const stepInData = timelineStepCards.some((s) => s.id === selectedRaceId)
+          || myTimelineSteps?.some((s) => s.id === selectedRaceId);
+        if (stepInData) {
+          // Data has caught up — safe to clear the skip guard
+          skipFetchForStepRef.current = null;
+        }
         logger.debug('[races.tsx] ⏭️ Step data already set for', selectedRaceId, '— skipping fetch');
-        skipFetchForStepRef.current = null;
         return;
       }
 
@@ -3236,20 +3258,36 @@ export default function RacesScreen() {
     routerRef.current.push('/account');
   }, []);
 
-  // Select a newly created step once it appears in the card grid
+  // Select a newly created step once it appears in the card grid, then scroll to it
   useEffect(() => {
     const pendingId = pendingNewStepIdRef.current;
     if (!pendingId) return;
-    const found = cardGridRaces.some((r) => r.id === pendingId);
-    if (found) {
+
+    const foundIndex = safeRecentRaces.findIndex((r: any) => r.id === pendingId);
+    if (foundIndex !== -1) {
       setSelectedRaceId(pendingId);
       setHasManuallySelected(true);
       pendingNewStepIdRef.current = null;
+
+      // Scroll to the new step after a brief delay for layout
+      setTimeout(() => {
+        if (raceCardsScrollViewRef.current) {
+          const scrollX =
+            foundIndex * RACE_CARD_TOTAL_WIDTH - SCREEN_WIDTH / 2 + RACE_CARD_WIDTH / 2;
+          raceCardsScrollViewRef.current.scrollTo({
+            x: Math.max(0, scrollX),
+            y: 0,
+            animated: true,
+          });
+        }
+      }, 150);
     }
-  }, [cardGridRaces]);
+  }, [safeRecentRaces, SCREEN_WIDTH]);
 
   // Clear old details immediately on selection change to avoid showing stale details
+  // Skip clearing when we just created a new step (pendingNewStepIdRef is set)
   React.useEffect(() => {
+    if (pendingNewStepIdRef.current === selectedRaceId) return;
     logger.debug('[races.tsx] 🔄 Selection changed, clearing previous details for ID:', selectedRaceId);
     setSelectedRaceData(null);
     setSelectedRaceMarks([]);

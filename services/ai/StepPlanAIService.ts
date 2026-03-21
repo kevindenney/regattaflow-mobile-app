@@ -14,7 +14,7 @@
 
 import { supabase } from '@/services/supabase';
 import type { LibraryResourceRecord } from '@/types/library';
-import type { StepPlanData, StepReviewData, StepActData, CrossInterestSuggestion, ChatMessage } from '@/types/step-detail';
+import type { StepPlanData, StepReviewData, StepActData, CrossInterestSuggestion, ChatMessage, BrainDumpData, ExtractedUrl } from '@/types/step-detail';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -180,12 +180,11 @@ async function getOrgCompetencies(userId: string, interestId: string): Promise<O
 
     const orgMap = new Map((orgs ?? []).map((o: any) => [o.id, o.name]));
 
-    // Get competencies for this interest from these orgs
+    // Get competencies for this interest
     const { data: competencies } = await supabase
       .from('betterat_competencies')
-      .select('id, title, category, interest_id, organization_id')
+      .select('id, title, category, interest_id')
       .eq('interest_id', interestId)
-      .in('organization_id', orgIds)
       .order('sort_order', { ascending: true })
       .limit(50);
 
@@ -202,21 +201,15 @@ async function getOrgCompetencies(userId: string, interestId: string): Promise<O
     const progressMap = new Map((progressRows ?? []).map((p: any) => [p.competency_id, p.status]));
 
     // Group by org
-    const byOrg = new Map<string, { title: string; category: string; status: string }[]>();
-    for (const c of competencies as any[]) {
-      const orgName = orgMap.get(c.organization_id) || 'Unknown';
-      if (!byOrg.has(orgName)) byOrg.set(orgName, []);
-      byOrg.get(orgName)!.push({
-        title: c.title,
-        category: c.category ?? '',
-        status: progressMap.get(c.id) ?? 'not_started',
-      });
-    }
-
-    return Array.from(byOrg.entries()).map(([orgName, competencies]) => ({
-      orgName,
-      competencies,
+    // Group all competencies under the first org name (competencies are interest-scoped, not org-scoped)
+    const orgName = orgMap.values().next().value || 'Organization';
+    const items = (competencies as any[]).map((c) => ({
+      title: c.title,
+      category: c.category ?? '',
+      status: progressMap.get(c.id) ?? 'not_started',
     }));
+
+    return items.length > 0 ? [{ orgName, competencies: items }] : [];
   } catch {
     return [];
   }
@@ -1029,4 +1022,171 @@ Generate a practice plan for a session using this resource.`;
       capability_goals: [],
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Brain Dump → Structured Plan
+// ---------------------------------------------------------------------------
+
+export interface BrainDumpPlanResult {
+  suggested_title: string;
+  what_will_you_do: string;
+  how_sub_steps: string[];
+  why_reasoning: string;
+  who_collaborators: string[];
+  capability_goals: string[];
+}
+
+function formatUrlsForPrompt(urls: ExtractedUrl[]): string {
+  if (!urls.length) return '';
+  const lines = urls.map((u) => {
+    const label = u.title ? `"${u.title}"` : u.url;
+    return `- [${u.platform}] ${label} (${u.url})`;
+  });
+  return `LINKS PASTED BY USER:\n${lines.join('\n')}`;
+}
+
+/**
+ * Structure a brain dump into a full plan using AI.
+ *
+ * Takes the raw text + client-side extractions + enriched user context,
+ * sends to the step-plan-suggest edge function, and returns a structured
+ * plan that populates StepPlanData fields.
+ */
+export async function structureBrainDump(params: {
+  brainDump: BrainDumpData;
+  interestName: string;
+  interestId?: string;
+  userId: string;
+}): Promise<BrainDumpPlanResult> {
+  const { brainDump, interestName, interestId, userId } = params;
+
+  // Gather enriched context in parallel
+  let enrichedContext = '';
+  if (interestId) {
+    try {
+      const ctx = await gatherEnrichedContext(userId, interestId);
+      const fakeCtx: EnrichedPlanContext = {
+        interestName,
+        interestId,
+        stepTitle: '',
+        linkedResources: [],
+        capabilityGoals: [],
+        ...ctx,
+      };
+      enrichedContext = buildEnrichedPrompt(fakeCtx);
+    } catch {
+      // Continue without enriched context
+    }
+  }
+
+  const urlBlock = formatUrlsForPrompt(brainDump.extracted_urls);
+  const peopleBlock = brainDump.extracted_people.length
+    ? `PEOPLE MENTIONED: ${brainDump.extracted_people.join(', ')}`
+    : '';
+  const topicsBlock = brainDump.extracted_topics.length
+    ? `TOPICS DETECTED: ${brainDump.extracted_topics.join(', ')}`
+    : '';
+  const seedBlock = brainDump.source_review_notes
+    ? `NOTES FROM PREVIOUS SESSION:\n${brainDump.source_review_notes}`
+    : '';
+
+  const systemPrompt = `You are an expert learning coach on BetterAt. The user has dumped raw, unstructured notes about an upcoming ${interestName} session. Your job is to organize this into a clear, structured practice plan.
+
+Your response must be ONLY valid JSON with this exact shape:
+
+{
+  "suggested_title": "Short title for this session (3-8 words)",
+  "what_will_you_do": "1-3 sentence summary of the session objective",
+  "how_sub_steps": ["Step 1...", "Step 2...", "Step 3..."],
+  "why_reasoning": "1-2 sentence explanation of why this is valuable for their development",
+  "who_collaborators": ["Name1", "Name2"],
+  "capability_goals": ["Skill 1", "Skill 2"]
+}
+
+Guidelines:
+- suggested_title: Capture the essence of the session in a short, descriptive title
+- what_will_you_do: Synthesize the raw notes into a clear objective — don't just repeat the raw text. Focus on what they'll actually practice/achieve
+- how_sub_steps: 3-7 concrete, ordered steps. If URLs/videos were shared, include "Watch/review [title]" steps. Include practice drills, discussion points, or exercises as appropriate. Add time estimates where helpful (e.g., "15 min")
+- why_reasoning: Connect to their learning journey. Reference their step history or capability gaps if available. Explain why this session matters
+- who_collaborators: Extract names of people they'll practice with (from the brain dump text)
+- capability_goals: 2-5 specific skills this session develops. Use the detected topics as a starting point but refine them into clear skill names
+
+Respond with ONLY the JSON object, no markdown fences or other text.`;
+
+  const userMessage = `RAW BRAIN DUMP:
+${brainDump.raw_text}
+
+${urlBlock}
+${peopleBlock}
+${topicsBlock}
+${seedBlock}
+
+${enrichedContext ? `USER CONTEXT:\n${enrichedContext}` : ''}
+
+Organize this into a structured ${interestName} practice plan.`.trim();
+
+  try {
+    let responseText = '';
+
+    try {
+      const { data, error } = await supabase.functions.invoke('step-plan-suggest', {
+        body: { system: systemPrompt, prompt: userMessage, max_tokens: 1024 },
+      });
+      if (!error && data?.text) responseText = data.text;
+    } catch {
+      // Fall through to fallback
+    }
+
+    if (!responseText) {
+      const fallbackPrompt = `${systemPrompt}\n\n${userMessage}`;
+      const { data, error } = await supabase.functions.invoke('race-coaching-chat', {
+        body: { prompt: fallbackPrompt, max_tokens: 1024 },
+      });
+      if (error || !data?.text) throw new Error('AI generation failed');
+      responseText = data.text;
+    }
+
+    // Strip markdown fences if present
+    const cleaned = responseText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON in response');
+
+    const parsed = JSON.parse(jsonMatch[0]) as BrainDumpPlanResult;
+
+    return {
+      suggested_title: parsed.suggested_title || '',
+      what_will_you_do: parsed.what_will_you_do || '',
+      how_sub_steps: Array.isArray(parsed.how_sub_steps) ? parsed.how_sub_steps : [],
+      why_reasoning: parsed.why_reasoning || '',
+      who_collaborators: Array.isArray(parsed.who_collaborators) ? parsed.who_collaborators : brainDump.extracted_people,
+      capability_goals: Array.isArray(parsed.capability_goals) ? parsed.capability_goals : brainDump.extracted_topics,
+    };
+  } catch (err) {
+    console.error('structureBrainDump failed:', err);
+    // Return a client-side fallback using the extracted data
+    return buildFallbackPlan(brainDump, interestName);
+  }
+}
+
+/** Fallback when AI is unavailable — uses client-side extractions */
+function buildFallbackPlan(dump: BrainDumpData, interestName: string): BrainDumpPlanResult {
+  const urlSteps = dump.extracted_urls.map((u) => {
+    const label = u.title ?? u.url;
+    const prefix = u.platform === 'youtube' ? 'Watch' :
+      u.platform === 'pdf' ? 'Review' :
+      u.platform === 'article' ? 'Read' : 'Check out';
+    return `${prefix}: ${label}`;
+  });
+
+  return {
+    suggested_title: dump.extracted_topics.length
+      ? `${dump.extracted_topics[0]} practice`
+      : `${interestName} session`,
+    what_will_you_do: dump.raw_text,
+    how_sub_steps: urlSteps.length > 0 ? urlSteps : ['Practice the techniques discussed', 'Debrief with the group'],
+    why_reasoning: '',
+    who_collaborators: dump.extracted_people,
+    capability_goals: dump.extracted_topics,
+  };
 }

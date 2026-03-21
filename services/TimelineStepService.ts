@@ -86,9 +86,10 @@ export async function getStepById(stepId: string): Promise<TimelineStepRecord> {
       .from('timeline_steps')
       .select('*')
       .eq('id', stepId)
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error(`Step ${stepId} not found`);
     return data as TimelineStepRecord;
   } catch (err) {
     logger.error('Failed to fetch step by ID', err);

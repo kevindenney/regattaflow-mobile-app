@@ -436,6 +436,8 @@ export interface CardContentProps {
   onMoveStepToPlannedNext?: () => void;
   /** Callback to move step to completed-most-recent position */
   onMoveStepToCompletedMostRecent?: () => void;
+  /** Callback when a next step is created from the review phase */
+  onNextStepCreated?: (newStepId: string) => void;
 }
 
 // =============================================================================

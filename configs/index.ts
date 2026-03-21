@@ -8,12 +8,14 @@
 export { SAILING_EVENT_CONFIG } from './sailing'
 export { NURSING_EVENT_CONFIG } from './nursing'
 export { DRAWING_EVENT_CONFIG } from './drawing'
+export { DESIGN_EVENT_CONFIG } from './design'
 export { FITNESS_EVENT_CONFIG } from './fitness'
 
 import type { InterestEventConfig } from '@/types/interestEventConfig'
 import { SAILING_EVENT_CONFIG } from './sailing'
 import { NURSING_EVENT_CONFIG } from './nursing'
 import { DRAWING_EVENT_CONFIG } from './drawing'
+import { DESIGN_EVENT_CONFIG } from './design'
 import { FITNESS_EVENT_CONFIG } from './fitness'
 
 /**
@@ -24,6 +26,7 @@ export const INTEREST_EVENT_CONFIGS: Record<string, InterestEventConfig> = {
   'sail-racing': SAILING_EVENT_CONFIG,
   nursing: NURSING_EVENT_CONFIG,
   drawing: DRAWING_EVENT_CONFIG,
+  design: DESIGN_EVENT_CONFIG,
   fitness: FITNESS_EVENT_CONFIG,
   'health-and-fitness': FITNESS_EVENT_CONFIG,
 }

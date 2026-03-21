@@ -81,7 +81,7 @@ serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: Math.min(max_tokens, 2048),
+        max_tokens: Math.min(max_tokens, 4096),
         ...(system ? { system } : {}),
         messages,
       }),

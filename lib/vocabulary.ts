@@ -79,6 +79,22 @@ const DRAWING_VOCABULARY: VocabularyMap = {
   'Equipment': 'Medium & Tools',
 };
 
+const DESIGN_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Project',
+  'Plan Phase': 'Research',
+  'Do Phase': 'Creating',
+  'Review Phase': 'Critique',
+  'Practice': 'Study',
+  'Institution': 'Studio',
+  'Coach': 'Mentor',
+  'Passport': 'Portfolio',
+  'Period': 'Series',
+  'Milestone': 'Portfolio Piece',
+  'Skill': 'Technique',
+  'Community': 'Design Community',
+  'Equipment': 'Tools & Media',
+};
+
 const FITNESS_VOCABULARY: VocabularyMap = {
   'Learning Event': 'Workout',
   'Plan Phase': 'Pre-Workout',
@@ -100,6 +116,7 @@ export const INTEREST_FALLBACK_VOCABULARIES: Record<string, VocabularyMap> = {
   'sail-racing': FALLBACK_VOCABULARY,
   nursing: NURSING_VOCABULARY,
   drawing: DRAWING_VOCABULARY,
+  design: DESIGN_VOCABULARY,
   fitness: FITNESS_VOCABULARY,
   'health-and-fitness': FITNESS_VOCABULARY,
 };
