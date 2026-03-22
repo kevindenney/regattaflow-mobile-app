@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Platform, Linking } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Platform, Linking, Share } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
@@ -31,7 +31,7 @@ import type { StepPlanData, StepMetadata, SubStep, StepCollaborator } from '@/ty
 // WhatChatPanel removed — brain dump entry replaces inline AI chat
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
 import { DateEnrichmentCard } from './DateEnrichmentCard';
-import { createStep } from '@/services/TimelineStepService';
+import { createStep, enableStepSharing } from '@/services/TimelineStepService';
 import type { LibraryResourceRecord } from '@/types/library';
 
 interface StepPlanQuestionsProps {
@@ -236,6 +236,25 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
       return updated;
     });
   }, [debouncedSave]);
+
+  const handleShareWithCollaborator = useCallback(async (collaboratorName: string) => {
+    if (!step) return;
+    try {
+      const { url } = await enableStepSharing(step.id);
+      const message = `Hey ${collaboratorName}, here's our plan for "${step.title}": ${url}`;
+      if (Platform.OS === 'web') {
+        if (navigator.share) {
+          await navigator.share({ title: step.title, text: message, url });
+        } else {
+          await navigator.clipboard.writeText(url);
+        }
+      } else {
+        await Share.share({ message, url });
+      }
+    } catch (err) {
+      console.error('Failed to share with collaborator:', err);
+    }
+  }, [step]);
 
   const handleConnectionSpaceChange = useCallback((text: string) => {
     setLocalConnectionSpace(text);
@@ -508,6 +527,15 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
                 >
                   {collab.display_name}
                 </Text>
+                {collab.type === 'external' && !readOnly && (
+                  <Pressable
+                    onPress={() => handleShareWithCollaborator(collab.display_name)}
+                    hitSlop={6}
+                    style={styles.sendLinkButton}
+                  >
+                    <Ionicons name="send-outline" size={13} color={STEP_COLORS.accent} />
+                  </Pressable>
+                )}
                 {!readOnly && (
                   <Pressable onPress={() => handleRemoveCollaborator(collab.id)} hitSlop={6}>
                     <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
@@ -894,6 +922,10 @@ const styles = StyleSheet.create({
   },
   collaboratorChipExternal: {
     backgroundColor: IOS_COLORS.systemGray6,
+  },
+  sendLinkButton: {
+    marginLeft: 2,
+    padding: 2,
   },
   collaboratorChipEmoji: {
     fontSize: 14,

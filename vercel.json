@@ -57,6 +57,17 @@
   ],
   "rewrites": [
     {
+      "source": "/p/step/:token",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(WhatsApp|facebookexternalhit|Facebot|Twitterbot|Slackbot|LinkedInBot|Discordbot|TelegramBot|Googlebot|bingbot|iMessageLinkPreview|Applebot).*"
+        }
+      ],
+      "destination": "/api/public/steps/:token/og"
+    },
+    {
       "source": "/privacy",
       "destination": "/api/privacy"
     },
