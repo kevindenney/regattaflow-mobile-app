@@ -14,6 +14,7 @@ import { ResourcePicker } from '@/components/library/ResourcePicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
 import { getResourcesByIds } from '@/services/LibraryService';
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
+import { DateEnrichmentCard } from './DateEnrichmentCard';
 import { createStep } from '@/services/TimelineStepService';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
@@ -183,6 +184,17 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, rea
         />
       </PlanQuestionCard>
 
+      {/* Conditions card (wind, tide, rig/sail) */}
+      {planData.date_enrichment && (
+        <View style={styles.conditionsContainer}>
+          <DateEnrichmentCard
+            dateLabel={planData.date_enrichment.wind || planData.date_enrichment.tide ? 'this session' : 'session'}
+            dateIso=""
+            enrichment={planData.date_enrichment}
+          />
+        </View>
+      )}
+
       {/* Cross-interest suggestions */}
       {stepId && !readOnly && (
         <CrossInterestSuggestions
@@ -327,6 +339,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  conditionsContainer: {
+    marginTop: IOS_SPACING.sm,
   },
   readOnlyInput: {
     backgroundColor: 'transparent',

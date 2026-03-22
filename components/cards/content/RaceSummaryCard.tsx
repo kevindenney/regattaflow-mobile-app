@@ -80,6 +80,7 @@ import {
 } from './phases';
 import { StepPlanQuestions } from '@/components/step/StepPlanQuestions';
 import { StepDrawContent } from '@/components/step/StepDrawContent';
+import { DateEnrichmentCard } from '@/components/step/DateEnrichmentCard';
 import { StepCritiqueContent } from '@/components/step/StepCritiqueContent';
 import { BrainDumpEntry } from '@/components/step/BrainDumpEntry';
 import { AIStructureReview } from '@/components/step/AIStructureReview';
@@ -89,6 +90,11 @@ import { useUpdateStep } from '@/hooks/useTimelineSteps';
 import { useAuth } from '@/providers/AuthProvider';
 import { structureBrainDump } from '@/services/ai/StepPlanAIService';
 import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
+import { resolveEntities, buildEntityInput } from '@/services/ai/EntityResolutionService';
+import { enrichDateForSailing } from '@/services/ai/DateEnrichmentService';
+import { sailorBoatService } from '@/services/SailorBoatService';
+import { equipmentService } from '@/services/EquipmentService';
+import type { AnyExtractedEntity, DateEnrichment, ExtractedPersonEntity } from '@/types/step-detail';
 
 // =============================================================================
 // iOS SYSTEM COLORS (Apple HIG)
@@ -790,6 +796,11 @@ export function RaceSummaryCard({
   const [aiSuggestedTitle, setAiSuggestedTitle] = useState<string | undefined>();
   const [aiStructuring, setAiStructuring] = useState(false);
   const savedLibraryIdsRef = useRef<string[]>([]);
+  const [resolvedEntities, setResolvedEntities] = useState<AnyExtractedEntity[]>([]);
+  const [dateEnrichment, setDateEnrichment] = useState<DateEnrichment | undefined>();
+  const [isEnrichingDate, setIsEnrichingDate] = useState(false);
+  const [isResolvingEntities, setIsResolvingEntities] = useState(false);
+  const [entityResolutionError, setEntityResolutionError] = useState<string | null>(null);
   const updateStepMetadata = useUpdateStepMetadata(isTimelineStep ? race.id : '');
 
   const handleSkipToPlan = useCallback((currentDump: BrainDumpData) => {
@@ -824,25 +835,17 @@ export function RaceSummaryCard({
   }, [metadata?.plan, updateStepMetadata]);
 
   const handleStructureWithAI = useCallback(async (dump: BrainDumpData) => {
-    console.log('[BrainDump] handleStructureWithAI called:', {
-      urlCount: dump.extracted_urls.length,
-      urls: dump.extracted_urls.map((u) => ({ url: u.url.slice(0, 60), platform: u.platform, title: u.title })),
-      people: dump.extracted_people,
-      topics: dump.extracted_topics,
-    });
     updateStepMetadata.mutate({ brain_dump: dump });
     setAiStructuring(true);
 
     // Save extracted URLs to library in the background
     const resolvedInterestId = (race as any).interest_id ?? currentInterest?.id;
-    console.log('[BrainDump] Library save check:', { hasUrls: dump.extracted_urls.length > 0, userId: user?.id?.slice(0, 8), interestId: resolvedInterestId?.slice(0, 8) });
     if (dump.extracted_urls.length > 0 && user?.id && resolvedInterestId) {
       saveUrlsToLibrary(dump.extracted_urls, user.id, resolvedInterestId)
         .then((savedIds) => {
-          console.log('[BrainDump] Library save returned IDs:', savedIds);
           savedLibraryIdsRef.current = savedIds;
         })
-        .catch((err) => console.error('[BrainDump] Library save promise rejected:', err));
+        .catch(() => {});
     }
 
     try {
@@ -850,6 +853,7 @@ export function RaceSummaryCard({
         brainDump: dump,
         interestName: currentInterest?.name ?? 'sailing',
         interestId: (race as any).interest_id ?? currentInterest?.id,
+        interestSlug: currentInterest?.slug,
         userId: user?.id ?? '',
       });
 
@@ -868,10 +872,55 @@ export function RaceSummaryCard({
 
       setAiReviewPlan(plan);
       setAiSuggestedTitle(result.suggested_title || undefined);
+      setResolvedEntities([]);
+      setDateEnrichment(undefined);
+      setEntityResolutionError(null);
       setBrainDumpPhase('review');
+
+      // Fire entity resolution async (updates state as results arrive)
+      if (user?.id) {
+        const entityInput = buildEntityInput(dump, result.extracted_entities, result.who_collaborators);
+        setIsResolvingEntities(true);
+        resolveEntities(entityInput, user.id)
+          .then(async (resolution) => {
+            setResolvedEntities(resolution.entities);
+
+            // Date enrichment for sailing
+            const isSailing = currentInterest?.slug?.includes('sail') || currentInterest?.name?.toLowerCase().includes('sail');
+            if (isSailing && resolution.firstDateIso && resolution.resolvedLocationCoords) {
+              setIsEnrichingDate(true);
+              try {
+                let userBoats: any[] = [];
+                let userEquipment: any[] = [];
+                try {
+                  userBoats = await sailorBoatService.listBoatsForSailor(user.id);
+                  const primaryBoat = userBoats.find((b: any) => b.is_primary) || userBoats[0];
+                  if (primaryBoat) {
+                    userEquipment = await equipmentService.getEquipmentForBoat(primaryBoat.id);
+                  }
+                } catch {}
+
+                const enrichment = await enrichDateForSailing({
+                  dateIso: resolution.firstDateIso!,
+                  coordinates: resolution.resolvedLocationCoords!,
+                  venueId: resolution.resolvedVenueId,
+                  userBoats,
+                  userEquipment,
+                });
+                setDateEnrichment(enrichment);
+              } finally {
+                setIsEnrichingDate(false);
+              }
+            }
+          })
+          .catch((err) => {
+            console.error('[EntityResolution] failed:', err);
+            setEntityResolutionError(String(err));
+          })
+          .finally(() => setIsResolvingEntities(false));
+      }
     } catch (err) {
       console.error('AI structuring failed:', err);
-      // Fallback: use client-side extraction
       const plan: StepPlanData = {
         what_will_you_do: dump.raw_text,
         who_collaborators: dump.extracted_people,
@@ -893,7 +942,18 @@ export function RaceSummaryCard({
       : { ...confirmedPlan };
 
     // Convert who_collaborators strings to structured StepCollaborator entries
-    if (enrichedPlan.who_collaborators?.length && !enrichedPlan.collaborators?.length) {
+    // Use resolved person entities for platform user linking
+    const personEntities = resolvedEntities.filter(
+      (e): e is ExtractedPersonEntity => e.type === 'person',
+    );
+    if (personEntities.length > 0) {
+      enrichedPlan.collaborators = personEntities.map((p, i) => ({
+        id: p.matched_user_id || `external_${i}_${Date.now()}`,
+        type: (p.matched_user_id ? 'platform' : 'external') as 'platform' | 'external',
+        user_id: p.matched_user_id,
+        display_name: p.matched_display_name || p.raw_text,
+      }));
+    } else if (enrichedPlan.who_collaborators?.length && !enrichedPlan.collaborators?.length) {
       enrichedPlan.collaborators = enrichedPlan.who_collaborators
         .filter((name) => name.trim())
         .map((name, i) => ({
@@ -901,6 +961,14 @@ export function RaceSummaryCard({
           type: 'external' as const,
           display_name: name.trim(),
         }));
+    }
+
+    // Add entity context
+    if (resolvedEntities.length > 0) {
+      enrichedPlan.equipment_context = resolvedEntities;
+    }
+    if (dateEnrichment) {
+      enrichedPlan.date_enrichment = dateEnrichment;
     }
 
     updateStepMetadata.mutate(
@@ -915,17 +983,47 @@ export function RaceSummaryCard({
           setAiReviewPlan(null);
           setBrainDumpPhase(null);
           savedLibraryIdsRef.current = [];
+          setResolvedEntities([]);
+          // Keep dateEnrichment in local state so it persists across tab switches
+          // (race.metadata won't refresh until the list query re-fetches)
         },
       },
     );
-    if (title) {
-      updateStepMutation.mutate({ stepId: race.id, input: { title } });
+
+    // Update step title and optional starts_at from first date entity
+    const stepUpdate: Record<string, any> = {};
+    if (title) stepUpdate.title = title;
+    const firstDate = resolvedEntities.find(
+      (e): e is import('@/types/step-detail').ExtractedDateEntity => e.type === 'date',
+    );
+    if (firstDate?.parsed_iso) stepUpdate.starts_at = firstDate.parsed_iso;
+    if (Object.keys(stepUpdate).length > 0) {
+      updateStepMutation.mutate({ stepId: race.id, input: stepUpdate });
     }
-  }, [race.id, brainDumpData, updateStepMetadata, updateStepMutation]);
+  }, [race.id, brainDumpData, updateStepMetadata, updateStepMutation, resolvedEntities, dateEnrichment]);
+
+  const handleResolveAmbiguousPerson = useCallback((rawText: string, userId: string, displayName: string) => {
+    setResolvedEntities((prev) =>
+      prev.map((e) => {
+        if (e.type === 'person' && e.raw_text === rawText) {
+          return {
+            ...e,
+            matched_user_id: userId,
+            matched_display_name: displayName,
+            confidence: 'exact',
+            ambiguous_matches: undefined,
+          } as ExtractedPersonEntity;
+        }
+        return e;
+      }),
+    );
+  }, []);
 
   const handleBackToDump = useCallback(() => {
     setBrainDumpPhase('dump');
     setAiReviewPlan(null);
+    setResolvedEntities([]);
+    setDateEnrichment(undefined);
   }, []);
 
   const handleDraftChange = useCallback((dump: BrainDumpData) => {
@@ -1599,6 +1697,7 @@ export function RaceSummaryCard({
               onStructureWithAI={handleStructureWithAI}
               onDraftChange={handleDraftChange}
               isStructuring={aiStructuring}
+              interestSlug={currentInterest?.slug}
             />
           );
         }
@@ -1607,6 +1706,12 @@ export function RaceSummaryCard({
             <AIStructureReview
               planData={aiReviewPlan}
               suggestedTitle={aiSuggestedTitle}
+              resolvedEntities={resolvedEntities}
+              dateEnrichment={dateEnrichment}
+              isEnrichingDate={isEnrichingDate}
+              isResolvingEntities={isResolvingEntities}
+              entityResolutionError={entityResolutionError}
+              onResolveAmbiguousPerson={handleResolveAmbiguousPerson}
               onConfirm={handleConfirmAIPlan}
               onBack={handleBackToDump}
             />
@@ -1643,7 +1748,21 @@ export function RaceSummaryCard({
         );
       }
       if (selectedPhase === 'on_water') {
-        return <StepDrawContent stepId={race.id} />;
+        const activeEnrichment = dateEnrichment ?? metadata?.plan?.date_enrichment;
+        return (
+          <>
+            {activeEnrichment && (activeEnrichment.wind || activeEnrichment.tide) && (
+              <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
+                <DateEnrichmentCard
+                  dateLabel="today's session"
+                  dateIso=""
+                  enrichment={activeEnrichment}
+                />
+              </View>
+            )}
+            <StepDrawContent stepId={race.id} />
+          </>
+        );
       }
       if (selectedPhase === 'after_race') {
         return <StepCritiqueContent stepId={race.id} onNextStepCreated={onNextStepCreated} />;

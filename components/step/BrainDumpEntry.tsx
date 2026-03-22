@@ -39,6 +39,8 @@ interface BrainDumpEntryProps {
   onDraftChange?: (brainDump: BrainDumpData) => void;
   /** Whether AI structuring is in progress */
   isStructuring?: boolean;
+  /** Interest slug for interest-aware entity extraction */
+  interestSlug?: string;
 }
 
 export function BrainDumpEntry({
@@ -47,12 +49,16 @@ export function BrainDumpEntry({
   onStructureWithAI,
   onDraftChange,
   isStructuring = false,
+  interestSlug,
 }: BrainDumpEntryProps) {
   const [text, setText] = useState(initialData?.raw_text ?? '');
   const [parsed, setParsed] = useState<ParsedBrainDump>({
     extracted_urls: initialData?.extracted_urls ?? [],
     extracted_people: initialData?.extracted_people ?? [],
     extracted_topics: initialData?.extracted_topics ?? [],
+    extracted_dates: initialData?.extracted_dates ?? [],
+    extracted_equipment: initialData?.extracted_equipment ?? [],
+    extracted_locations: initialData?.extracted_locations ?? [],
   });
   const [enrichedUrls, setEnrichedUrls] = useState<ExtractedUrl[]>(
     initialData?.extracted_urls ?? [],
@@ -69,7 +75,7 @@ export function BrainDumpEntry({
 
     if (parseTimerRef.current) clearTimeout(parseTimerRef.current);
     parseTimerRef.current = setTimeout(() => {
-      const result = parseBrainDump(newText);
+      const result = parseBrainDump(newText, interestSlug);
       setParsed(result);
 
       // If new URLs detected, enrich them (debounced further)
@@ -95,19 +101,22 @@ export function BrainDumpEntry({
     if (onDraftChange) {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
       draftTimerRef.current = setTimeout(() => {
-        const result = parseBrainDump(newText);
+        const result = parseBrainDump(newText, interestSlug);
         onDraftChange({
           raw_text: newText,
           extracted_urls: result.extracted_urls,
           extracted_people: result.extracted_people,
           extracted_topics: result.extracted_topics,
+          extracted_dates: result.extracted_dates,
+          extracted_equipment: result.extracted_equipment,
+          extracted_locations: result.extracted_locations,
           source_step_id: initialData?.source_step_id,
           source_review_notes: initialData?.source_review_notes,
           created_at: initialData?.created_at ?? new Date().toISOString(),
         });
       }, 800);
     }
-  }, [initialData, onDraftChange]);
+  }, [initialData, onDraftChange, interestSlug]);
 
   // Cleanup timers
   useEffect(() => {
@@ -119,17 +128,20 @@ export function BrainDumpEntry({
   }, []);
 
   const buildBrainDumpData = useCallback((): BrainDumpData => {
-    const latest = parseBrainDump(text);
+    const latest = parseBrainDump(text, interestSlug);
     return {
       raw_text: text,
       extracted_urls: enrichedUrls.length > 0 ? enrichedUrls : latest.extracted_urls,
       extracted_people: latest.extracted_people,
       extracted_topics: latest.extracted_topics,
+      extracted_dates: latest.extracted_dates,
+      extracted_equipment: latest.extracted_equipment,
+      extracted_locations: latest.extracted_locations,
       source_step_id: initialData?.source_step_id,
       source_review_notes: initialData?.source_review_notes,
       created_at: initialData?.created_at ?? new Date().toISOString(),
     };
-  }, [text, enrichedUrls, initialData]);
+  }, [text, enrichedUrls, initialData, interestSlug]);
 
   const handleStructure = useCallback(() => {
     onStructureWithAI(buildBrainDumpData());
@@ -218,6 +230,60 @@ export function BrainDumpEntry({
             {parsed.extracted_topics.map((topic) => (
               <View key={topic} style={styles.topicPill}>
                 <Text style={styles.topicPillText}>{topic}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Detected dates */}
+      {parsed.extracted_dates.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="calendar-outline" size={14} color={STEP_COLORS.secondaryLabel} />
+            <Text style={styles.sectionLabel}>Dates Detected</Text>
+          </View>
+          <View style={styles.pillRow}>
+            {parsed.extracted_dates.map((d) => (
+              <View key={d.rough_iso} style={styles.datePill}>
+                <Ionicons name="calendar" size={12} color={IOS_COLORS.systemIndigo} />
+                <Text style={styles.datePillText}>{d.raw}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Detected equipment */}
+      {parsed.extracted_equipment.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="build-outline" size={14} color={STEP_COLORS.secondaryLabel} />
+            <Text style={styles.sectionLabel}>Equipment Detected</Text>
+          </View>
+          <View style={styles.pillRow}>
+            {parsed.extracted_equipment.map((eq) => (
+              <View key={eq} style={styles.equipmentPill}>
+                <Ionicons name="build" size={12} color={IOS_COLORS.systemOrange} />
+                <Text style={styles.equipmentPillText}>{eq}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Detected locations */}
+      {parsed.extracted_locations.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="location-outline" size={14} color={STEP_COLORS.secondaryLabel} />
+            <Text style={styles.sectionLabel}>Locations Detected</Text>
+          </View>
+          <View style={styles.pillRow}>
+            {parsed.extracted_locations.map((loc) => (
+              <View key={loc} style={styles.locationPill}>
+                <Ionicons name="location" size={12} color={IOS_COLORS.systemGreen} />
+                <Text style={styles.locationPillText}>{loc}</Text>
               </View>
             ))}
           </View>
@@ -367,6 +433,48 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: IOS_COLORS.systemPurple,
+  },
+  datePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(88,86,214,0.08)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  datePillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.systemIndigo,
+  },
+  equipmentPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,149,0,0.08)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  equipmentPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.systemOrange,
+  },
+  locationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(52,199,89,0.08)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  locationPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.systemGreen,
   },
   actions: {
     gap: IOS_SPACING.sm,

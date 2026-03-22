@@ -8,14 +8,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { StepDrawContent } from './StepDrawContent';
+import { DateEnrichmentCard } from './DateEnrichmentCard';
+import type { DateEnrichment } from '@/types/step-detail';
 
 interface ActTabProps {
   stepId: string;
+  dateEnrichment?: DateEnrichment;
   onNextTab?: () => void;
   readOnly?: boolean;
 }
 
-export function ActTab({ stepId, onNextTab, readOnly }: ActTabProps) {
+export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly }: ActTabProps) {
   return (
     <ScrollView
       style={styles.container}
@@ -23,6 +26,17 @@ export function ActTab({ stepId, onNextTab, readOnly }: ActTabProps) {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
+      {/* Conditions reference card */}
+      {dateEnrichment && (dateEnrichment.wind || dateEnrichment.tide) && (
+        <View style={styles.conditionsContainer}>
+          <DateEnrichmentCard
+            dateLabel="today's session"
+            dateIso=""
+            enrichment={dateEnrichment}
+          />
+        </View>
+      )}
+
       <StepDrawContent stepId={stepId} readOnly={readOnly} />
 
       {/* Next tab CTA */}
@@ -45,6 +59,10 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: IOS_SPACING.md,
     paddingBottom: 100,
+  },
+  conditionsContainer: {
+    paddingHorizontal: IOS_SPACING.md,
+    marginBottom: IOS_SPACING.md,
   },
   nextCtaContainer: {
     paddingHorizontal: IOS_SPACING.md,

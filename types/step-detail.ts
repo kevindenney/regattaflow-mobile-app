@@ -59,6 +59,8 @@ export interface StepPlanData {
   connection_space?: string;              // where they connect (Discord, Zoom, etc.)
   capability_goals?: string[];
   linked_resource_ids?: string[];
+  equipment_context?: AnyExtractedEntity[];
+  date_enrichment?: DateEnrichment;
 }
 
 export interface StepActData {
@@ -99,11 +101,73 @@ export interface ExtractedUrl {
   thumbnail_url?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Entity extraction types — recognized entities from brain dump text
+// ---------------------------------------------------------------------------
+
+export interface ExtractedEntity {
+  raw_text: string;
+  type: 'person' | 'equipment' | 'location' | 'date';
+}
+
+export interface ExtractedPersonEntity extends ExtractedEntity {
+  type: 'person';
+  matched_user_id?: string;
+  matched_display_name?: string;
+  confidence: 'exact' | 'likely' | 'ambiguous' | 'unmatched';
+  ambiguous_matches?: { user_id: string; display_name: string; avatar_emoji?: string }[];
+}
+
+export interface ExtractedEquipmentEntity extends ExtractedEntity {
+  type: 'equipment';
+  category: 'boat' | 'sail' | 'gear' | 'tool' | 'instrument' | 'other';
+  ownership: 'mine' | 'needed' | 'unknown';
+  matched_boat_id?: string;
+  matched_equipment_id?: string;
+  resolved_name?: string;
+}
+
+export interface ExtractedLocationEntity extends ExtractedEntity {
+  type: 'location';
+  coordinates?: { lat: number; lng: number };
+  venue_id?: string;
+  resolved_name?: string;
+}
+
+export interface DateEnrichment {
+  wind?: { speed_knots: number; direction: number; gusts?: number };
+  tide?: { state: string; height_m: number; next_high?: string; next_low?: string };
+  rig_suggestion?: string;
+  sail_suggestion?: string;
+}
+
+export interface ExtractedDateEntity extends ExtractedEntity {
+  type: 'date';
+  parsed_iso: string;
+  parsed_end_iso?: string;
+  has_time: boolean;
+  enrichment?: DateEnrichment;
+}
+
+export type AnyExtractedEntity =
+  | ExtractedPersonEntity
+  | ExtractedEquipmentEntity
+  | ExtractedLocationEntity
+  | ExtractedDateEntity;
+
+// ---------------------------------------------------------------------------
+// Brain dump data
+// ---------------------------------------------------------------------------
+
 export interface BrainDumpData {
   raw_text: string;
   extracted_urls: ExtractedUrl[];
   extracted_people: string[];
   extracted_topics: string[];
+  extracted_dates?: { raw: string; rough_iso: string }[];
+  extracted_equipment?: string[];
+  extracted_locations?: string[];
+  extracted_entities?: AnyExtractedEntity[];
   source_step_id?: string;
   source_review_notes?: string;
   created_at: string;

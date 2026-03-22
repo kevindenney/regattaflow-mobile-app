@@ -15,6 +15,8 @@
 import { supabase } from '@/services/supabase';
 import type { LibraryResourceRecord } from '@/types/library';
 import type { StepPlanData, StepReviewData, StepActData, CrossInterestSuggestion, ChatMessage, BrainDumpData, ExtractedUrl } from '@/types/step-detail';
+import { sailorBoatService, type SailorBoat } from '@/services/SailorBoatService';
+import { equipmentService, type BoatEquipment } from '@/services/EquipmentService';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1040,6 +1042,12 @@ export interface BrainDumpPlanResult {
   why_reasoning: string;
   who_collaborators: string[];
   capability_goals: string[];
+  extracted_entities?: {
+    people?: { name: string; context?: string }[];
+    equipment?: { text: string; category: string; ownership: string }[];
+    locations?: { text: string; context?: string }[];
+    dates?: { text: string; iso: string; has_time: boolean }[];
+  };
 }
 
 function formatUrlsForPrompt(urls: ExtractedUrl[]): string {
@@ -1062,28 +1070,53 @@ export async function structureBrainDump(params: {
   brainDump: BrainDumpData;
   interestName: string;
   interestId?: string;
+  interestSlug?: string;
   userId: string;
   existingSkillGoals?: string[];
 }): Promise<BrainDumpPlanResult> {
-  const { brainDump, interestName, interestId, userId, existingSkillGoals = [] } = params;
+  const { brainDump, interestName, interestId, interestSlug, userId, existingSkillGoals = [] } = params;
 
-  // Gather enriched context in parallel
+  // Gather enriched context and equipment context in parallel
   let enrichedContext = '';
-  if (interestId) {
-    try {
-      const ctx = await gatherEnrichedContext(userId, interestId);
-      const fakeCtx: EnrichedPlanContext = {
-        interestName,
-        interestId,
-        stepTitle: '',
-        linkedResources: [],
-        capabilityGoals: [],
-        ...ctx,
-      };
-      enrichedContext = buildEnrichedPrompt(fakeCtx);
-    } catch {
-      // Continue without enriched context
+  let userBoats: SailorBoat[] = [];
+  let userEquipment: BoatEquipment[] = [];
+
+  const isSailing = interestSlug?.includes('sail') || interestName.toLowerCase().includes('sail');
+
+  if (interestId || isSailing) {
+    const promises: Promise<void>[] = [];
+
+    if (interestId) {
+      promises.push(
+        gatherEnrichedContext(userId, interestId)
+          .then((ctx) => {
+            const fakeCtx: EnrichedPlanContext = {
+              interestName, interestId, stepTitle: '', linkedResources: [], capabilityGoals: [], ...ctx,
+            };
+            enrichedContext = buildEnrichedPrompt(fakeCtx);
+          })
+          .catch(() => {}),
+      );
     }
+
+    if (isSailing && userId) {
+      promises.push(
+        sailorBoatService.listBoatsForSailor(userId)
+          .then(async (boats) => {
+            userBoats = boats;
+            // Get equipment for primary boat
+            const primaryBoat = boats.find((b) => b.is_primary) || boats[0];
+            if (primaryBoat) {
+              try {
+                userEquipment = await equipmentService.getEquipmentForBoat(primaryBoat.id);
+              } catch {}
+            }
+          })
+          .catch(() => {}),
+      );
+    }
+
+    await Promise.all(promises);
   }
 
   const urlBlock = formatUrlsForPrompt(brainDump.extracted_urls);
@@ -1096,8 +1129,46 @@ export async function structureBrainDump(params: {
   const seedBlock = brainDump.source_review_notes
     ? `NOTES FROM PREVIOUS SESSION:\n${brainDump.source_review_notes}`
     : '';
+  const datesBlock = brainDump.extracted_dates?.length
+    ? `DATES DETECTED: ${brainDump.extracted_dates.map((d) => `${d.raw} (${d.rough_iso})`).join(', ')}`
+    : '';
+  const equipmentBlock = brainDump.extracted_equipment?.length
+    ? `EQUIPMENT MENTIONED: ${brainDump.extracted_equipment.join(', ')}`
+    : '';
+  const locationsBlock = brainDump.extracted_locations?.length
+    ? `LOCATIONS MENTIONED: ${brainDump.extracted_locations.join(', ')}`
+    : '';
+
+  // User equipment context for sailing
+  let userEquipmentBlock = '';
+  if (isSailing && userBoats.length > 0) {
+    const boatLines = userBoats.map((b) =>
+      `- ${b.boat_class?.name || 'Unknown class'} "${b.name || 'unnamed'}"${b.sail_number ? ` (sail #${b.sail_number})` : ''}${b.is_primary ? ' [PRIMARY]' : ''}`
+    );
+    userEquipmentBlock = `USER'S BOATS:\n${boatLines.join('\n')}`;
+
+    if (userEquipment.length > 0) {
+      const eqLines = userEquipment
+        .slice(0, 20) // limit to avoid token bloat
+        .map((e) => `- ${e.custom_name}${e.manufacturer ? ` (${e.manufacturer}${e.model ? ' ' + e.model : ''})` : ''} [${e.category}]`);
+      userEquipmentBlock += `\nUSER'S EQUIPMENT:\n${eqLines.join('\n')}`;
+    }
+  }
+
+  const currentDate = new Date().toISOString().split('T')[0];
+
+  const entityInstructions = isSailing
+    ? `
+- For sailing: recognize boats, sails, rigging equipment, instruments, and sailing gear
+- Classify equipment as "mine" (user owns it), "needed" (required for session but not confirmed owned), or "unknown"
+- Match boat references to the user's known boats when possible`
+    : `
+- Recognize any equipment, tools, or gear mentioned
+- Classify equipment as "mine", "needed", or "unknown"`;
 
   const systemPrompt = `You are an expert learning coach on BetterAt. The user has dumped raw, unstructured notes about an upcoming ${interestName} session. Your job is to organize this into a clear, structured practice plan.
+
+Today's date is ${currentDate}. Resolve relative dates (e.g., "next Saturday", "tomorrow") to absolute ISO dates.
 
 Your response must be ONLY valid JSON with this exact shape:
 
@@ -1107,7 +1178,13 @@ Your response must be ONLY valid JSON with this exact shape:
   "how_sub_steps": ["Step 1...", "Step 2...", "Step 3..."],
   "why_reasoning": "1-2 sentence explanation of why this is valuable for their development",
   "who_collaborators": ["Name1", "Name2"],
-  "capability_goals": ["Skill 1", "Skill 2"]
+  "capability_goals": ["Skill 1", "Skill 2"],
+  "extracted_entities": {
+    "people": [{ "name": "Name", "context": "practicing with" }],
+    "equipment": [{ "text": "equipment name", "category": "boat|sail|gear|tool|instrument|other", "ownership": "mine|needed|unknown" }],
+    "locations": [{ "text": "Place Name", "context": "sailing at" }],
+    "dates": [{ "text": "next Saturday", "iso": "2026-03-28", "has_time": false }]
+  }
 }
 
 Guidelines:
@@ -1117,6 +1194,7 @@ Guidelines:
 - why_reasoning: Connect to their learning journey. Reference their step history or capability gaps if available. Explain why this session matters
 - who_collaborators: Extract names of people they'll practice with (from the brain dump text)
 - capability_goals: 2-5 specific skills this session develops. IMPORTANT: If the user already has skill goals that are relevant, use those EXACT names instead of inventing new ones. Only create new skill names for capabilities not covered by existing goals. Use the detected topics as a starting point but refine them into clear skill names
+- extracted_entities: Identify ALL people, equipment, locations, and dates mentioned in the text${entityInstructions}
 
 Respond with ONLY the JSON object, no markdown fences or other text.`;
 
@@ -1130,8 +1208,12 @@ ${brainDump.raw_text}
 ${urlBlock}
 ${peopleBlock}
 ${topicsBlock}
+${datesBlock}
+${equipmentBlock}
+${locationsBlock}
 ${seedBlock}
 ${existingSkillsBlock}
+${userEquipmentBlock}
 
 ${enrichedContext ? `USER CONTEXT:\n${enrichedContext}` : ''}
 
@@ -1172,6 +1254,7 @@ Organize this into a structured ${interestName} practice plan.`.trim();
       why_reasoning: parsed.why_reasoning || '',
       who_collaborators: Array.isArray(parsed.who_collaborators) ? parsed.who_collaborators : brainDump.extracted_people,
       capability_goals: Array.isArray(parsed.capability_goals) ? parsed.capability_goals : brainDump.extracted_topics,
+      extracted_entities: parsed.extracted_entities,
     };
   } catch (err) {
     console.error('structureBrainDump failed:', err);

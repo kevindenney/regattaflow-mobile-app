@@ -12,17 +12,40 @@ import {
   ScrollView,
   StyleSheet,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
-import type { StepPlanData, SubStep } from '@/types/step-detail';
+import type {
+  StepPlanData,
+  SubStep,
+  AnyExtractedEntity,
+  ExtractedPersonEntity,
+  ExtractedEquipmentEntity,
+  ExtractedLocationEntity,
+  ExtractedDateEntity,
+  DateEnrichment,
+} from '@/types/step-detail';
+import { DateEnrichmentCard } from './DateEnrichmentCard';
 
 interface AIStructureReviewProps {
   /** AI-generated plan data to review */
   planData: StepPlanData;
   /** Suggested title from AI */
   suggestedTitle?: string;
+  /** Resolved entities from EntityResolutionService */
+  resolvedEntities?: AnyExtractedEntity[];
+  /** Date enrichment data (weather/tide/rig) */
+  dateEnrichment?: DateEnrichment;
+  /** Whether date enrichment is still loading */
+  isEnrichingDate?: boolean;
+  /** Whether entity resolution is in progress */
+  isResolvingEntities?: boolean;
+  /** Error from entity resolution */
+  entityResolutionError?: string | null;
+  /** Called when user resolves an ambiguous person */
+  onResolveAmbiguousPerson?: (rawText: string, userId: string, displayName: string) => void;
   /** Called when user confirms the plan */
   onConfirm: (planData: StepPlanData, title?: string) => void;
   /** Called when user wants to go back to brain dump */
@@ -58,6 +81,12 @@ function ReviewSection({ icon, label, children, isEditing, onToggleEdit }: Secti
 export function AIStructureReview({
   planData,
   suggestedTitle,
+  resolvedEntities,
+  dateEnrichment,
+  isEnrichingDate,
+  isResolvingEntities,
+  entityResolutionError,
+  onResolveAmbiguousPerson,
   onConfirm,
   onBack,
   onSkipToPlan,
@@ -294,6 +323,122 @@ export function AIStructureReview({
         </View>
       )}
 
+      {/* Entity resolution loading indicator */}
+      {isResolvingEntities && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+          <ActivityIndicator size="small" color={IOS_COLORS.systemIndigo} />
+          <Text style={{ fontSize: 13, color: STEP_COLORS.secondaryLabel, fontStyle: 'italic' }}>
+            Recognizing equipment, people, locations...
+          </Text>
+        </View>
+      )}
+
+      {/* Resolved entities */}
+      {resolvedEntities && resolvedEntities.length > 0 && (
+        <>
+          {/* Equipment entities */}
+          {resolvedEntities.filter((e): e is ExtractedEquipmentEntity => e.type === 'equipment').length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
+                <Ionicons name="build-outline" size={16} color={STEP_COLORS.label} />
+                <Text style={styles.sectionLabel}>Equipment</Text>
+              </View>
+              <View style={styles.peoplePills}>
+                {resolvedEntities
+                  .filter((e): e is ExtractedEquipmentEntity => e.type === 'equipment')
+                  .map((eq) => (
+                    <View key={eq.raw_text} style={styles.equipmentPill}>
+                      <Ionicons name="build" size={12} color={IOS_COLORS.systemOrange} />
+                      <Text style={styles.equipmentPillText}>
+                        {eq.resolved_name || eq.raw_text}
+                      </Text>
+                      {eq.ownership !== 'unknown' && (
+                        <View style={[
+                          styles.ownershipBadge,
+                          eq.ownership === 'mine' ? styles.ownershipMine : styles.ownershipNeeded,
+                        ]}>
+                          <Text style={styles.ownershipText}>{eq.ownership}</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+              </View>
+            </View>
+          )}
+
+          {/* Location entities */}
+          {resolvedEntities.filter((e): e is ExtractedLocationEntity => e.type === 'location').length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
+                <Ionicons name="location-outline" size={16} color={STEP_COLORS.label} />
+                <Text style={styles.sectionLabel}>Location</Text>
+              </View>
+              <View style={styles.peoplePills}>
+                {resolvedEntities
+                  .filter((e): e is ExtractedLocationEntity => e.type === 'location')
+                  .map((loc) => (
+                    <View key={loc.raw_text} style={styles.locationPill}>
+                      <Ionicons name="location" size={12} color={IOS_COLORS.systemGreen} />
+                      <Text style={styles.locationPillText}>
+                        {loc.resolved_name || loc.raw_text}
+                      </Text>
+                      {loc.venue_id && (
+                        <Ionicons name="checkmark-circle" size={12} color={IOS_COLORS.systemGreen} />
+                      )}
+                    </View>
+                  ))}
+              </View>
+            </View>
+          )}
+
+          {/* Ambiguous people resolution */}
+          {resolvedEntities
+            .filter((e): e is ExtractedPersonEntity => e.type === 'person' && e.confidence === 'ambiguous')
+            .map((person) => (
+              <View key={person.raw_text} style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="help-circle-outline" size={16} color={IOS_COLORS.systemOrange} />
+                  <Text style={styles.sectionLabel}>Did you mean "{person.raw_text}"?</Text>
+                </View>
+                <View style={styles.disambiguationOptions}>
+                  {person.ambiguous_matches?.map((match) => (
+                    <Pressable
+                      key={match.user_id}
+                      style={styles.disambiguationOption}
+                      onPress={() => onResolveAmbiguousPerson?.(person.raw_text, match.user_id, match.display_name)}
+                    >
+                      <Text style={styles.disambiguationEmoji}>{match.avatar_emoji || '👤'}</Text>
+                      <Text style={styles.disambiguationName}>{match.display_name}</Text>
+                    </Pressable>
+                  ))}
+                  <Pressable style={styles.disambiguationOption}>
+                    <Text style={styles.disambiguationName}>Not on BetterAt</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+        </>
+      )}
+
+      {/* Date enrichment card (weather/tide/rig) */}
+      {(() => {
+        const dateEntities = resolvedEntities?.filter(
+          (e): e is ExtractedDateEntity => e.type === 'date',
+        ) ?? [];
+        const firstDate = dateEntities[0];
+        if (!firstDate && !isEnrichingDate) return null;
+        return (
+          <DateEnrichmentCard
+            dateLabel={firstDate?.raw_text ?? ''}
+            dateIso={firstDate?.parsed_iso ?? ''}
+            enrichment={dateEnrichment}
+            isLoading={isEnrichingDate}
+          />
+        );
+      })()}
+
       {/* Confirm button */}
       <View style={styles.actions}>
         <Pressable style={styles.confirmButton} onPress={handleConfirm}>
@@ -511,6 +656,75 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: IOS_COLORS.systemOrange,
+  },
+  equipmentPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,149,0,0.08)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  equipmentPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.systemOrange,
+  },
+  ownershipBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  ownershipMine: {
+    backgroundColor: 'rgba(52,199,89,0.12)',
+  },
+  ownershipNeeded: {
+    backgroundColor: 'rgba(255,59,48,0.08)',
+  },
+  ownershipText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: STEP_COLORS.secondaryLabel,
+    textTransform: 'uppercase',
+  },
+  locationPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(52,199,89,0.08)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  locationPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.systemGreen,
+  },
+  disambiguationOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: IOS_SPACING.xs,
+  },
+  disambiguationOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: STEP_COLORS.pageBg,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: STEP_COLORS.border,
+  },
+  disambiguationEmoji: {
+    fontSize: 16,
+  },
+  disambiguationName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: STEP_COLORS.label,
   },
   actions: {
     marginTop: IOS_SPACING.sm,

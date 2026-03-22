@@ -18,7 +18,7 @@ import { ActTab } from './ActTab';
 import { ReviewTab } from './ReviewTab';
 import { BrainDumpEntry } from './BrainDumpEntry';
 import { AIStructureReview } from './AIStructureReview';
-import type { StepPlanData, StepActData, StepReviewData, StepMetadata, BrainDumpData, StepCollaborator } from '@/types/step-detail';
+import type { StepPlanData, StepActData, StepReviewData, StepMetadata, BrainDumpData, StepCollaborator, AnyExtractedEntity, DateEnrichment, ExtractedPersonEntity } from '@/types/step-detail';
 import type { TimelineStepStatus } from '@/types/timeline-steps';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
@@ -27,6 +27,10 @@ import { useStepComments, useAddStepComment, useDeleteStepComment } from '@/hook
 import { structureBrainDump } from '@/services/ai/StepPlanAIService';
 import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
 import { getSkillGoalTitles } from '@/services/SkillGoalService';
+import { resolveEntities, buildEntityInput } from '@/services/ai/EntityResolutionService';
+import { enrichDateForSailing } from '@/services/ai/DateEnrichmentService';
+import { sailorBoatService } from '@/services/SailorBoatService';
+import { equipmentService } from '@/services/EquipmentService';
 
 type TabValue = 'plan' | 'act' | 'review';
 
@@ -136,6 +140,11 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const [aiSuggestedTitle, setAiSuggestedTitle] = useState<string | undefined>();
   const [aiStructuring, setAiStructuring] = useState(false);
   const savedLibraryIdsRef = useRef<string[]>([]);
+  const [resolvedEntities, setResolvedEntities] = useState<AnyExtractedEntity[]>([]);
+  const [dateEnrichment, setDateEnrichment] = useState<DateEnrichment | undefined>();
+  const [isEnrichingDate, setIsEnrichingDate] = useState(false);
+  const [isResolvingEntities, setIsResolvingEntities] = useState(false);
+  const [entityResolutionError, setEntityResolutionError] = useState<string | null>(null);
 
   // Determine initial phase from metadata
   // Only show brain dump entry if there's dump data but no plan content yet
@@ -146,6 +155,57 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
       }
     }
   }, [step, brainDumpData, hasPlanContent, brainDumpPhase]);
+
+  // Standalone function for entity resolution — called directly from handleStructureWithAI
+  const runEntityResolution = useCallback(async (
+    dump: BrainDumpData,
+    aiEntities: any,
+    aiCollaborators: string[] | undefined,
+  ) => {
+    if (!user?.id) return;
+
+    const entityInput = buildEntityInput(dump, aiEntities, aiCollaborators);
+    setIsResolvingEntities(true);
+    setEntityResolutionError(null);
+
+    try {
+      const resolution = await resolveEntities(entityInput, user.id);
+      setResolvedEntities(resolution.entities);
+
+      // Date enrichment for sailing
+      const isSailing = currentInterest?.slug?.includes('sail') || currentInterest?.name?.toLowerCase().includes('sail');
+      if (isSailing && resolution.firstDateIso && resolution.resolvedLocationCoords) {
+        setIsEnrichingDate(true);
+        try {
+          let userBoats: any[] = [];
+          let userEquipment: any[] = [];
+          try {
+            userBoats = await sailorBoatService.listBoatsForSailor(user.id);
+            const primaryBoat = userBoats.find((b: any) => b.is_primary) || userBoats[0];
+            if (primaryBoat) {
+              userEquipment = await equipmentService.getEquipmentForBoat(primaryBoat.id);
+            }
+          } catch {}
+
+          const enrichment = await enrichDateForSailing({
+            dateIso: resolution.firstDateIso!,
+            coordinates: resolution.resolvedLocationCoords!,
+            venueId: resolution.resolvedVenueId,
+            userBoats,
+            userEquipment,
+          });
+          setDateEnrichment(enrichment);
+        } finally {
+          setIsEnrichingDate(false);
+        }
+      }
+    } catch (err) {
+      console.error('[EntityResolution] failed:', err);
+      setEntityResolutionError(String(err));
+    } finally {
+      setIsResolvingEntities(false);
+    }
+  }, [user?.id, currentInterest]);
 
   const handleSkipToPlan = useCallback((currentDump: BrainDumpData) => {
     if (currentDump.raw_text?.trim()) {
@@ -202,6 +262,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
         brainDump: dump,
         interestName: currentInterest?.name ?? 'learning',
         interestId: currentInterest?.id,
+        interestSlug: currentInterest?.slug,
         userId: user?.id ?? '',
         existingSkillGoals: existingSkills,
       });
@@ -221,7 +282,13 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
 
       setAiReviewPlan(plan);
       setAiSuggestedTitle(result.suggested_title || undefined);
+      setResolvedEntities([]);
+      setDateEnrichment(undefined);
+      setEntityResolutionError(null);
       setBrainDumpPhase('review');
+
+      // Fire entity resolution (runs async, updates state as results arrive)
+      runEntityResolution(dump, result.extracted_entities, result.who_collaborators).catch(() => {});
     } catch (err) {
       console.error('AI structuring failed:', err);
       const plan: StepPlanData = {
@@ -234,7 +301,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
     } finally {
       setAiStructuring(false);
     }
-  }, [updateMetadata, currentInterest, user]);
+  }, [updateMetadata, currentInterest, user, runEntityResolution]);
 
   const handleConfirmAIPlan = useCallback((confirmedPlan: StepPlanData, title?: string) => {
     // Merge any saved library resource IDs into the plan
@@ -245,15 +312,48 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
       : { ...confirmedPlan };
 
     // Convert who_collaborators strings to structured StepCollaborator entries
-    if (enrichedPlan.who_collaborators?.length && !enrichedPlan.collaborators?.length) {
+    // Use resolved person entities for platform matches when available
+    if (enrichedPlan.who_collaborators?.length) {
+      const personEntities = resolvedEntities.filter(
+        (e): e is ExtractedPersonEntity => e.type === 'person',
+      );
+
       enrichedPlan.collaborators = enrichedPlan.who_collaborators
         .filter((name) => name.trim())
-        .map((name, i) => ({
-          id: `external_${i}_${Date.now()}`,
-          type: 'external' as const,
-          display_name: name.trim(),
-        }));
+        .map((name, i) => {
+          // Try to find a resolved platform match
+          const matched = personEntities.find(
+            (p) => p.raw_text.toLowerCase() === name.toLowerCase() &&
+              p.confidence !== 'unmatched' && p.matched_user_id,
+          );
+          if (matched?.matched_user_id) {
+            return {
+              id: `platform_${matched.matched_user_id}`,
+              type: 'platform' as const,
+              user_id: matched.matched_user_id,
+              display_name: matched.matched_display_name || name.trim(),
+            };
+          }
+          return {
+            id: `external_${i}_${Date.now()}`,
+            type: 'external' as const,
+            display_name: name.trim(),
+          };
+        });
     }
+
+    // Attach resolved entity context + date enrichment
+    if (resolvedEntities.length > 0) {
+      enrichedPlan.equipment_context = resolvedEntities;
+    }
+    if (dateEnrichment) {
+      enrichedPlan.date_enrichment = dateEnrichment;
+    }
+
+    // Set starts_at from first detected date
+    const firstDate = resolvedEntities.find(
+      (e): e is import('@/types/step-detail').ExtractedDateEntity => e.type === 'date',
+    );
 
     updateMetadata.mutate(
       {
@@ -265,17 +365,43 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
           setAiReviewPlan(null);
           setBrainDumpPhase(null);
           savedLibraryIdsRef.current = [];
+          setResolvedEntities([]);
+          setDateEnrichment(undefined);
         },
       },
     );
-    if (title) {
-      updateStep.mutate({ stepId, input: { title } });
+
+    // Update step with title and optional starts_at
+    const stepUpdate: Record<string, any> = {};
+    if (title) stepUpdate.title = title;
+    if (firstDate?.parsed_iso) stepUpdate.starts_at = firstDate.parsed_iso;
+    if (Object.keys(stepUpdate).length > 0) {
+      updateStep.mutate({ stepId, input: stepUpdate });
     }
-  }, [stepId, brainDumpData, updateMetadata, updateStep]);
+  }, [stepId, brainDumpData, updateMetadata, updateStep, resolvedEntities, dateEnrichment]);
+
+  const handleResolveAmbiguousPerson = useCallback((rawText: string, userId: string, displayName: string) => {
+    setResolvedEntities((prev) =>
+      prev.map((e) => {
+        if (e.type === 'person' && e.raw_text === rawText) {
+          return {
+            ...e,
+            matched_user_id: userId,
+            matched_display_name: displayName,
+            confidence: 'exact',
+            ambiguous_matches: undefined,
+          } as ExtractedPersonEntity;
+        }
+        return e;
+      }),
+    );
+  }, []);
 
   const handleBackToDump = useCallback(() => {
     setBrainDumpPhase('dump');
     setAiReviewPlan(null);
+    setResolvedEntities([]);
+    setDateEnrichment(undefined);
   }, []);
 
   const handleDraftChange = useCallback((dump: BrainDumpData) => {
@@ -478,12 +604,19 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
             onStructureWithAI={handleStructureWithAI}
             onDraftChange={handleDraftChange}
             isStructuring={aiStructuring}
+            interestSlug={currentInterest?.slug}
           />
         )}
         {activeTab === 'plan' && isOwner && brainDumpPhase === 'review' && aiReviewPlan && (
           <AIStructureReview
             planData={aiReviewPlan}
             suggestedTitle={aiSuggestedTitle}
+            resolvedEntities={resolvedEntities}
+            dateEnrichment={dateEnrichment}
+            isEnrichingDate={isEnrichingDate}
+            isResolvingEntities={isResolvingEntities}
+            entityResolutionError={entityResolutionError}
+            onResolveAmbiguousPerson={handleResolveAmbiguousPerson}
             onConfirm={handleConfirmAIPlan}
             onBack={handleBackToDump}
           />
@@ -499,7 +632,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
           />
         )}
         {activeTab === 'act' && (
-          <ActTab stepId={stepId} onNextTab={() => handleNextTab('review')} readOnly={!isOwner} />
+          <ActTab stepId={stepId} dateEnrichment={planData.date_enrichment} onNextTab={() => handleNextTab('review')} readOnly={!isOwner} />
         )}
         {activeTab === 'review' && <ReviewTab stepId={stepId} readOnly={!isOwner} />}
       </View>

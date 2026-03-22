@@ -30,6 +30,7 @@ import { getSkillGoalTitles } from '@/services/SkillGoalService';
 import type { StepPlanData, StepMetadata, SubStep, StepCollaborator } from '@/types/step-detail';
 // WhatChatPanel removed — brain dump entry replaces inline AI chat
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
+import { DateEnrichmentCard } from './DateEnrichmentCard';
 import { createStep } from '@/services/TimelineStepService';
 import type { LibraryResourceRecord } from '@/types/library';
 
@@ -640,6 +641,17 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
         )}
       </PlanQuestionCard>
 
+      {/* Conditions card (wind, tide, rig/sail) */}
+      {planData.date_enrichment && (planData.date_enrichment.wind || planData.date_enrichment.tide || planData.date_enrichment.rig_suggestion || planData.date_enrichment.sail_suggestion) && (
+        <View style={styles.conditionsContainer}>
+          <DateEnrichmentCard
+            dateLabel="this session"
+            dateIso=""
+            enrichment={planData.date_enrichment}
+          />
+        </View>
+      )}
+
       {/* Cross-interest suggestions */}
       {!readOnly && <CrossInterestSuggestions
         stepId={stepId}
@@ -921,6 +933,10 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { outlineStyle: 'none' } as any,
     }),
+  },
+  conditionsContainer: {
+    marginTop: IOS_SPACING.sm,
+    marginBottom: IOS_SPACING.sm,
   },
   readOnlyInput: {
     backgroundColor: 'transparent',
