@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
   Platform,
@@ -13,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { BetterAtLogo } from '@/components/BetterAtLogo';
 import { InterestDropdown } from './InterestDropdown';
+import { SAMPLE_INTERESTS } from '@/lib/landing/sampleData';
 import { useAuth } from '@/providers/AuthProvider';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
 import { usePathname } from 'expo-router';
@@ -187,96 +189,24 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
               </View>
 
               {/* Menu items */}
-              <View style={styles.mobileMenuItems}>
-                <TouchableOpacity
-                  style={styles.mobileMenuItem}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/sail-racing' as any);
-                  }}
-                >
-                  <Ionicons
-                    name="boat-outline"
-                    size={22}
-                    color="#003DA5"
-                  />
-                  <Text style={styles.mobileMenuText}>Sail Racing</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.mobileMenuItem}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/nursing' as any);
-                  }}
-                >
-                  <Ionicons
-                    name="medkit-outline"
-                    size={22}
-                    color="#0097A7"
-                  />
-                  <Text style={styles.mobileMenuText}>Nursing</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.mobileMenuItem}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/drawing' as any);
-                  }}
-                >
-                  <Ionicons
-                    name="color-palette-outline"
-                    size={22}
-                    color="#E64A19"
-                  />
-                  <Text style={styles.mobileMenuText}>Drawing</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.mobileMenuItem}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/design' as any);
-                  }}
-                >
-                  <Ionicons
-                    name="brush-outline"
-                    size={22}
-                    color="#7B1FA2"
-                  />
-                  <Text style={styles.mobileMenuText}>Design</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.mobileMenuItem}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/golf' as any);
-                  }}
-                >
-                  <Ionicons
-                    name="golf-outline"
-                    size={22}
-                    color="#1B5E20"
-                  />
-                  <Text style={styles.mobileMenuText}>Golf</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.mobileMenuItem}
-                  onPress={() => {
-                    setMobileMenuOpen(false);
-                    router.push('/fitness' as any);
-                  }}
-                >
-                  <Ionicons
-                    name="barbell-outline"
-                    size={22}
-                    color="#2E7D32"
-                  />
-                  <Text style={styles.mobileMenuText}>Fitness</Text>
-                </TouchableOpacity>
+              <ScrollView style={styles.mobileMenuItems} showsVerticalScrollIndicator={false}>
+                {SAMPLE_INTERESTS.map((interest) => (
+                  <TouchableOpacity
+                    key={interest.slug}
+                    style={styles.mobileMenuItem}
+                    onPress={() => {
+                      setMobileMenuOpen(false);
+                      router.push(`/${interest.slug}` as any);
+                    }}
+                  >
+                    <Ionicons
+                      name={(interest.icon + '-outline') as any}
+                      size={22}
+                      color={interest.color}
+                    />
+                    <Text style={styles.mobileMenuText}>{interest.name}</Text>
+                  </TouchableOpacity>
+                ))}
 
                 <TouchableOpacity
                   style={styles.mobileMenuItem}
@@ -354,7 +284,7 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                     </TouchableOpacity>
                   </>
                 )}
-              </View>
+              </ScrollView>
             </Pressable>
           </Pressable>
         </Modal>
@@ -524,7 +454,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   mobileMenuItems: {
-    gap: 8,
+    flex: 1,
   },
   mobileMenuItem: {
     flexDirection: 'row',

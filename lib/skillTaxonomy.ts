@@ -26,7 +26,7 @@ export type UniversalSkillId =
   | 'adaptability'
   | 'spatial_awareness';
 
-export type InterestSlug = 'sail-racing' | 'nursing' | 'drawing' | 'fitness';
+export type InterestSlug = 'sail-racing' | 'nursing' | 'drawing' | 'fitness' | 'lifelong-learning' | 'regenerative-agriculture';
 
 export type SuggestionType =
   | 'skill_transfer'
@@ -50,7 +50,7 @@ export interface UniversalSkill {
   id: UniversalSkillId;
   label: string;
   description: string;
-  manifests: Record<InterestSlug, SkillManifest>;
+  manifests: Partial<Record<InterestSlug, SkillManifest>>;
 }
 
 export interface CrossReference {
@@ -98,6 +98,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         description: 'Sensing body position, muscle engagement, movement quality, and fatigue signals.',
         developedBy: ['form_practice', 'warmup', 'mobility_work'],
         indicators: ['proprioception', 'fatigue_recognition', 'movement_quality_self_assessment'],
+      },
+      'lifelong-learning': {
+        label: 'Contemplative Awareness',
+        description: 'Cultivating present-moment attention through meditation, body scanning, and mindful inquiry.',
+        developedBy: ['meditation_sit', 'body_scan', 'nature_immersion', 'council_practice'],
+        indicators: ['present_moment_attention', 'subtle_awareness', 'inner_state_recognition'],
+      },
+      'regenerative-agriculture': {
+        label: 'Ecological Observation',
+        description: 'Reading soil health, pest cycles, weather signs, and plant vitality in the field.',
+        developedBy: ['soil_assessment', 'pest_scouting', 'crop_monitoring', 'weather_reading'],
+        indicators: ['soil_health_reading', 'pest_cycle_detection', 'plant_vitality_assessment'],
       },
     },
   },
@@ -161,6 +173,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         developedBy: ['coached_session', 'partner_workout', 'competition_team'],
         indicators: ['cue_comprehension', 'spotting_communication', 'encouragement_quality'],
       },
+      'lifelong-learning': {
+        label: 'Facilitation & Council',
+        description: 'Holding space for group dialogue, deep listening, and co-creating shared understanding.',
+        developedBy: ['council_practice', 'facilitation', 'group_dialogue', 'teaching'],
+        indicators: ['deep_listening', 'space_holding', 'group_process_awareness'],
+      },
+      'regenerative-agriculture': {
+        label: 'Community Engagement',
+        description: 'Sharing farming knowledge, coordinating with co-ops, and teaching workshops.',
+        developedBy: ['farmer_workshop', 'market_engagement', 'coop_coordination', 'community_training'],
+        indicators: ['knowledge_sharing_clarity', 'community_rapport', 'workshop_effectiveness'],
+      },
     },
   },
   {
@@ -191,6 +215,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         description: 'Warmup routine, nutrition timing, workout plan review.',
         developedBy: ['warmup', 'nutrition_planning', 'program_review'],
         indicators: ['warmup_completeness', 'nutrition_timing', 'workout_plan_adherence'],
+      },
+      'lifelong-learning': {
+        label: 'Retreat Preparation',
+        description: 'Setting intentions, preparing materials, creating space for deep practice.',
+        developedBy: ['intention_setting', 'reading_preparation', 'space_creation', 'schedule_planning'],
+        indicators: ['intention_clarity', 'material_readiness', 'space_preparation'],
+      },
+      'regenerative-agriculture': {
+        label: 'Crop Planning',
+        description: 'Seasonal crop planning, seed ordering, soil amendment scheduling, and rotation mapping.',
+        developedBy: ['crop_calendar', 'seed_ordering', 'soil_testing', 'rotation_planning'],
+        indicators: ['plan_completeness', 'timing_accuracy', 'resource_readiness'],
       },
     },
   },
@@ -223,6 +259,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         developedBy: ['workout_log_review', 'coach_debrief', 'video_form_check'],
         indicators: ['plan_vs_actual_analysis', 'overload_tracking', 'recovery_assessment'],
       },
+      'lifelong-learning': {
+        label: 'Journaling & Integration',
+        description: 'Processing learning through journaling, group sharing, and contemplative review.',
+        developedBy: ['journaling', 'closing_circle', 'integration_practice', 'group_debrief'],
+        indicators: ['reflection_depth', 'insight_integration', 'growth_articulation'],
+      },
+      'regenerative-agriculture': {
+        label: 'Harvest Review',
+        description: 'End-of-season analysis — yields, soil health changes, what worked, and what to adjust.',
+        developedBy: ['harvest_records', 'soil_comparison', 'season_debrief', 'crop_journaling'],
+        indicators: ['yield_analysis', 'soil_trend_awareness', 'adjustment_planning'],
+      },
     },
   },
   {
@@ -254,6 +302,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         developedBy: ['practice_set', 'fitness_test', 'competition'],
         indicators: ['progressive_overload', 'test_improvement', 'competition_readiness'],
       },
+      'lifelong-learning': {
+        label: 'Practice Deepening',
+        description: 'Progressing from beginner workshops to sustained personal practice to teaching.',
+        developedBy: ['introductory_workshop', 'personal_practice', 'retreat_intensive', 'teacher_training'],
+        indicators: ['practice_consistency', 'depth_progression', 'teaching_readiness'],
+      },
+      'regenerative-agriculture': {
+        label: 'Apprentice to Grower',
+        description: 'Moving from observation to supervised tasks to independent farm management.',
+        developedBy: ['observation_days', 'supervised_planting', 'independent_plots', 'season_management'],
+        indicators: ['task_independence', 'crop_success_rate', 'decision_confidence'],
+      },
     },
   },
   {
@@ -284,6 +344,12 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         description: 'Managing training load, recognizing injury signals, and scaling appropriately.',
         developedBy: ['load_management', 'recovery_protocols', 'scaling_decisions'],
         indicators: ['load_progression_safety', 'pain_vs_soreness_distinction', 'deload_timing'],
+      },
+      'regenerative-agriculture': {
+        label: 'Crop & Weather Risk',
+        description: 'Assessing weather threats, pest outbreaks, and market risk to protect harvests.',
+        developedBy: ['weather_monitoring', 'pest_risk_assessment', 'market_analysis', 'crop_insurance'],
+        indicators: ['weather_risk_awareness', 'pest_threshold_judgment', 'diversification_planning'],
       },
     },
   },
@@ -347,6 +413,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         developedBy: ['endurance_training', 'long_workout', 'competition_day'],
         indicators: ['late_set_form', 'multi_event_performance', 'training_block_consistency'],
       },
+      'lifelong-learning': {
+        label: 'Sustained Practice',
+        description: 'Maintaining presence and engagement across multi-day retreats and long meditation sits.',
+        developedBy: ['multi_day_retreat', 'long_sit', 'extended_practice_period'],
+        indicators: ['retreat_endurance', 'late_session_presence', 'practice_consistency'],
+      },
+      'regenerative-agriculture': {
+        label: 'Season-Long Attention',
+        description: 'Maintaining careful stewardship across an entire growing season from planting to harvest.',
+        developedBy: ['season_management', 'daily_field_walks', 'record_keeping'],
+        indicators: ['season_consistency', 'late_season_care_quality', 'record_completeness'],
+      },
     },
   },
   {
@@ -377,6 +455,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         description: 'Recognizing overtraining signals, plateau patterns, and optimal progression rates.',
         developedBy: ['training_log_analysis', 'periodization_study', 'recovery_tracking'],
         indicators: ['plateau_detection', 'overtraining_recognition', 'optimal_load_identification'],
+      },
+      'lifelong-learning': {
+        label: 'Inner Pattern Awareness',
+        description: 'Recognizing recurring mental habits, emotional patterns, and growth edges in contemplative practice.',
+        developedBy: ['meditation_practice', 'journaling', 'therapeutic_work', 'council_practice'],
+        indicators: ['habit_recognition', 'emotional_pattern_tracking', 'growth_edge_identification'],
+      },
+      'regenerative-agriculture': {
+        label: 'Ecological Patterns',
+        description: 'Reading seasonal rhythms, soil biology cycles, pest-predator dynamics, and succession patterns.',
+        developedBy: ['season_tracking', 'soil_biology_observation', 'ecosystem_study', 'crop_rotation_analysis'],
+        indicators: ['seasonal_rhythm_reading', 'succession_understanding', 'pest_predator_balance'],
       },
     },
   },
@@ -409,6 +499,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         developedBy: ['scaling_decisions', 'injury_workarounds', 'equipment_substitution'],
         indicators: ['smart_scaling', 'injury_management', 'substitute_exercise_selection'],
       },
+      'lifelong-learning': {
+        label: 'Teaching Responsiveness',
+        description: 'Adapting facilitation style, pace, and content when group energy or needs shift.',
+        developedBy: ['facilitation', 'group_dynamics', 'responsive_teaching'],
+        indicators: ['group_read_accuracy', 'pace_adjustment', 'content_pivoting'],
+      },
+      'regenerative-agriculture': {
+        label: 'Season Adaptation',
+        description: 'Adjusting plans when weather shifts, pests arrive unexpectedly, or market conditions change.',
+        developedBy: ['weather_response', 'pest_outbreak_response', 'market_pivot', 'succession_planting'],
+        indicators: ['rapid_replanning', 'weather_adaptation', 'market_responsiveness'],
+      },
     },
   },
   {
@@ -439,6 +541,18 @@ export const UNIVERSAL_SKILLS: UniversalSkill[] = [
         description: 'Awareness of bar path, body position in space, and gym environment.',
         developedBy: ['olympic_lifting', 'gymnastics', 'group_class'],
         indicators: ['bar_path_awareness', 'wall_ball_distance', 'spatial_gym_awareness'],
+      },
+      'lifelong-learning': {
+        label: 'Space Holding',
+        description: 'Awareness of room arrangement, circle geometry, and energetic space for group practice.',
+        developedBy: ['circle_facilitation', 'space_setup', 'retreat_hosting'],
+        indicators: ['room_arrangement_awareness', 'circle_positioning', 'energetic_space_sensitivity'],
+      },
+      'regenerative-agriculture': {
+        label: 'Garden & Field Layout',
+        description: 'Understanding plot geometry, companion planting spacing, irrigation zones, and sun exposure.',
+        developedBy: ['garden_design', 'plot_mapping', 'irrigation_planning', 'sun_study'],
+        indicators: ['spacing_accuracy', 'sun_exposure_optimization', 'water_flow_awareness'],
       },
     },
   },
@@ -687,6 +801,93 @@ export const CROSS_REFERENCES: CrossReference[] = [
     transferDescription: 'Course positioning intuition maps to composition and perspective.',
     transferStrength: 0.6,
     exampleSuggestion: 'Your intuitive sense of position on the racecourse — distance to marks, angles, fleet geometry — is spatial intelligence that enhances your drawing composition. Apply the same "where am I relative to everything else" awareness to placing subjects in your picture plane. Composition is positioning.',
+  },
+
+  // ── Lifelong Learning ↔ Regenerative Agriculture (primary bridge) ──
+  {
+    sourceSkillId: 'observation',
+    sourceInterest: 'lifelong-learning',
+    targetInterest: 'regenerative-agriculture',
+    suggestionType: 'skill_transfer',
+    transferDescription: 'Contemplative attention cultivates the patience and subtlety needed for ecological observation.',
+    transferStrength: 0.8,
+    exampleSuggestion: 'Your meditation practice has trained you to notice subtle shifts — thoughts arising, sensations changing. That same quality of attention is exactly what ecological observation demands: noticing the first aphids, the soil drying unevenly, a plant leaning toward light. Bring your contemplative gaze to the field.',
+  },
+  {
+    sourceSkillId: 'reflection',
+    sourceInterest: 'regenerative-agriculture',
+    targetInterest: 'lifelong-learning',
+    suggestionType: 'practice_method',
+    transferDescription: 'Seasonal harvest review discipline strengthens contemplative journaling practice.',
+    transferStrength: 0.7,
+    exampleSuggestion: 'Your end-of-season harvest reviews — tracking what yielded well, what failed, what the soil told you — are a structured reflection practice. Apply that same disciplined review to your contemplative practice: What insights took root? What fell away? What needs different conditions to grow?',
+  },
+  {
+    sourceSkillId: 'communication',
+    sourceInterest: 'lifelong-learning',
+    targetInterest: 'regenerative-agriculture',
+    suggestionType: 'skill_transfer',
+    transferDescription: 'Council and facilitation skills directly improve farmer training and community engagement.',
+    transferStrength: 0.7,
+    exampleSuggestion: 'Your council practice — deep listening, speaking from the heart, holding space — transforms farmer workshops from lectures into shared learning. Use the same circle format when training other growers. People learn more when they feel heard.',
+  },
+  {
+    sourceSkillId: 'pattern_recognition',
+    sourceInterest: 'regenerative-agriculture',
+    targetInterest: 'lifelong-learning',
+    suggestionType: 'mental_model',
+    transferDescription: 'Ecological pattern reading enriches contemplative understanding of interconnection.',
+    transferStrength: 0.7,
+    exampleSuggestion: 'Your ability to read ecological patterns — how companion plants support each other, how pest-predator cycles self-regulate — is a living model of the interconnection that contemplative traditions teach. Bring your ecological intelligence to your practice: what are the companion patterns in your inner landscape?',
+  },
+
+  // ── Lifelong Learning ↔ existing interests ──
+  {
+    sourceSkillId: 'focus_endurance',
+    sourceInterest: 'lifelong-learning',
+    targetInterest: 'drawing',
+    suggestionType: 'skill_transfer',
+    transferDescription: 'Retreat-level sustained attention directly supports long drawing sessions.',
+    transferStrength: 0.7,
+    exampleSuggestion: 'Your ability to sustain attention through multi-day silent retreats is rare. Apply that same sustained presence to long-pose life drawing — while others fatigue after 30 minutes, you can maintain quality observation for hours. Your contemplative endurance is an artistic advantage.',
+  },
+  {
+    sourceSkillId: 'adaptability',
+    sourceInterest: 'nursing',
+    targetInterest: 'lifelong-learning',
+    suggestionType: 'mental_model',
+    transferDescription: 'Clinical flexibility under changing conditions informs responsive facilitation.',
+    transferStrength: 0.6,
+    exampleSuggestion: 'Your clinical skill in rapidly reprioritizing when a patient condition changes is the same adaptability needed in facilitation. When group energy shifts unexpectedly in a workshop, use your clinical "assess-decide-act" loop to read the room and pivot your approach.',
+  },
+
+  // ── Regenerative Agriculture ↔ existing interests ──
+  {
+    sourceSkillId: 'preparation',
+    sourceInterest: 'sail-racing',
+    targetInterest: 'regenerative-agriculture',
+    suggestionType: 'practice_method',
+    transferDescription: 'Race prep checklist discipline elevates seasonal crop planning thoroughness.',
+    transferStrength: 0.7,
+    exampleSuggestion: 'Your race prep routine — weather check, equipment inspection, strategy review — is a checklist discipline that elevates crop planning. Build a "pre-season checklist" the way you build a race prep list: soil test results, seed inventory, succession calendar, irrigation readiness.',
+  },
+  {
+    sourceSkillId: 'risk_assessment',
+    sourceInterest: 'regenerative-agriculture',
+    targetInterest: 'fitness',
+    suggestionType: 'mental_model',
+    transferDescription: 'Seasonal risk management thinking applies to long-term training periodization.',
+    transferStrength: 0.6,
+    exampleSuggestion: 'Your farming experience managing season-long risk — hedging against drought, diversifying crops, timing harvests — is a model for training periodization. Diversify your training the way you diversify crops. Do not put all your effort into one lift or one season — spread risk across the year.',
+  },
+  {
+    sourceSkillId: 'progressive_mastery',
+    sourceInterest: 'fitness',
+    targetInterest: 'regenerative-agriculture',
+    suggestionType: 'mental_model',
+    transferDescription: 'Progressive overload principles apply to expanding farm operations incrementally.',
+    transferStrength: 0.6,
+    exampleSuggestion: 'Your training philosophy of progressive overload — small, consistent increases in challenge — applies directly to scaling your farm. Add one new crop variety per season, not five. Expand one plot at a time. The same principle that prevents training injuries prevents farming burnout.',
   },
 ];
 

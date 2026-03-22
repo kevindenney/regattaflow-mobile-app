@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { SampleProgram, SampleOrganization } from '@/lib/landing/sampleData';
+import { getInterest } from '@/lib/landing/sampleData';
 import { PersonTimelineRow } from './PersonTimelineRow';
 
 const TYPE_LABELS: Record<SampleProgram['type'], string> = {
@@ -12,6 +13,7 @@ const TYPE_LABELS: Record<SampleProgram['type'], string> = {
   training: 'Training',
   residency: 'Residency',
   fellowship: 'Fellowship',
+  retreat: 'Retreat',
 };
 
 interface ProgramCardProps {
@@ -59,6 +61,33 @@ export function ProgramCard({ program, organizations, interestSlug, accentColor 
           );
         })}
       </View>
+
+      {/* Co-hosted with badge */}
+      {program.coHostedWith && program.coHostedWith.length > 0 && (
+        <View style={styles.coHostRow}>
+          {program.coHostedWith.map((partner) => {
+            const partnerInterest = getInterest(partner.interestSlug);
+            const partnerColor = partnerInterest?.color ?? '#6B7280';
+            const partnerOrg = partnerInterest?.organizations.find((o) => o.slug === partner.orgSlug);
+            return (
+              <TouchableOpacity
+                key={partner.orgSlug}
+                style={[styles.coHostChip, { backgroundColor: partnerColor + '12', borderColor: partnerColor + '30' }]}
+                onPress={() => router.push(`/${partner.interestSlug}/${partner.orgSlug}` as any)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="git-compare-outline" size={12} color={partnerColor} />
+                <Text style={[styles.coHostChipText, { color: partnerColor }]}>
+                  Co-hosted with {partnerOrg?.name ?? partner.orgSlug}
+                </Text>
+                <Text style={[styles.coHostChipRole, { color: partnerColor + '99' }]}>
+                  ({partner.role})
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       {/* Sample people with timelines */}
       {program.samplePeople.length > 0 && (
@@ -147,6 +176,30 @@ const styles = StyleSheet.create({
   orgChipName: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  coHostRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  coHostChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  coHostChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  coHostChipRole: {
+    fontSize: 11,
+    fontWeight: '500',
   },
   peopleSection: {
     borderTopWidth: 1,

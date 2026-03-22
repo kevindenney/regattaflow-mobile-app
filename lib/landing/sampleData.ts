@@ -36,6 +36,8 @@ export interface SampleCapabilityGoal {
 export interface SampleCohort {
   name: string;
   people: SamplePerson[];
+  isShared?: boolean;
+  partnerInterests?: Array<{ interestSlug: string; orgSlug?: string; orgName?: string }>;
 }
 
 export interface SampleOrganization {
@@ -50,9 +52,10 @@ export interface SampleOrganization {
 export interface SampleProgram {
   slug: string;
   name: string;
-  type: 'degree' | 'certification' | 'course' | 'training' | 'residency' | 'fellowship';
+  type: 'degree' | 'certification' | 'course' | 'training' | 'residency' | 'fellowship' | 'retreat';
   description?: string;
   offeredBy: Array<{ orgSlug: string; role: string }>;
+  coHostedWith?: Array<{ interestSlug: string; orgSlug: string; role: string }>;
   samplePeople: SamplePerson[];
 }
 
@@ -290,6 +293,97 @@ const SAILING_SKILLS_DETAILS = [
   'VMG angles, wave riding, gybe timing on runs',
   'Combining all skills under match-race pressure',
   'Multi-day championship regatta performance',
+];
+
+// ── Knitting detail sets ──────────────────────────────────────────────
+const KNITTING_BEGINNER_DETAILS = [
+  'Cast on methods — long tail, knitted, cable cast on',
+  'Knit stitch mastery — even tension, consistent gauge',
+  'Purl stitch and stockinette — recognizing right/wrong side',
+  'Ribbing patterns — 1x1, 2x2, broken rib',
+  'Binding off — standard, stretchy, three-needle',
+  'First project completion — dishcloth or simple scarf',
+];
+
+const KNITTING_COLORWORK_DETAILS = [
+  'Stranded knitting fundamentals — carrying two colors, float management',
+  'Fair isle chart reading — pattern repeats, color dominance',
+  'Tension management — consistent gauge across colorwork sections',
+  'Steeks — cutting knitting for cardigans and armholes',
+  'Blocking colorwork — wet blocking, pinning, achieving even fabric',
+];
+
+// ── Fiber Arts detail sets ────────────────────────────────────────────
+const SPINNING_FUNDAMENTALS_DETAILS = [
+  'Fiber preparation — carding, combing, flicking locks',
+  'Drafting techniques — short draw, long draw, worsted vs woolen',
+  'Wheel mechanics — drive ratios, tension systems, maintenance',
+  'Plying methods — two-ply, chain ply, Navajo ply',
+  'Finishing yarn — setting twist, washing, skeining',
+];
+
+const WEAVING_FLOOR_LOOM_DETAILS = [
+  'Warping the loom — measuring, winding, beaming, threading',
+  'Threading patterns — straight draw, point twill, overshot',
+  'Treadling sequences — tabby, twill, pattern treadling',
+  'Plain weave and variations — balanced, warp-faced, weft-faced',
+  'Twill structures — 2/2 twill, herringbone, diamond twill',
+  'Finishing woven cloth — wet finishing, pressing, hemming',
+];
+
+// ── Painting & Printing detail sets ───────────────────────────────────
+const OIL_PAINTING_DETAILS = [
+  'Color theory — color wheel, temperature, complementary mixing, limited palettes',
+  'Underpainting methods — grisaille, imprimatura, dead layer technique',
+  'Glazing and layering — fat over lean, transparent color building, optical mixing',
+  'Alla prima technique — direct painting, wet-into-wet, expressive brushwork',
+  'Composition strategies — golden ratio, dynamic symmetry, focal point placement',
+  'Plein air painting — portable setup, changing light, quick studies, value priority',
+];
+
+const PRINTMAKING_DETAILS = [
+  'Relief printing — linocut, woodcut, block preparation, carving tools',
+  'Intaglio methods — etching, drypoint, aquatint, plate preparation',
+  'Registration techniques — key block, pin registration, jig systems',
+  'Editioning — consistent inking, paper dampening, press pressure, numbering',
+  'Proofing stages — artist proof, state proof, bon à tirer, edition numbering',
+  'Exhibition preparation — matting, framing, portfolio presentation, edition documentation',
+];
+
+// ── Lifelong Learning detail sets ────────────────────────────────────
+const MINDFULNESS_RETREAT_DETAILS = [
+  'Arrival and orientation — setting intentions, getting settled on the island',
+  'Morning vipassana sits, walking meditation on forest trails',
+  'Guided body scan and yoga nidra — deepening somatic awareness',
+  'Council practice — deep listening, speaking from the heart',
+  'Integration practices — journaling, nature connection, garden work',
+  'Closing circle — sharing insights, commitments for home practice',
+];
+
+const CREATIVE_WRITING_NATURE_DETAILS = [
+  'Sensory awareness walks — observation exercises, field notes',
+  'Free writing practice — morning pages, stream of consciousness',
+  'Nature journaling — sketching and writing in the garden',
+  'Memoir and personal essay — finding your voice in landscape',
+  'Workshop circle — peer feedback, reading aloud, revision',
+];
+
+// ── Regenerative Agriculture detail sets ─────────────────────────────
+const ORGANIC_FARMING_DETAILS = [
+  'Soil preparation — bed building, composting, cover crop termination',
+  'Seed starting and nursery management — propagation techniques',
+  'Transplanting and direct seeding — spacing, companion planting',
+  'Integrated pest management — beneficial insects, organic sprays, crop rotation',
+  'Harvest techniques — timing, handling, post-harvest storage',
+  'Record keeping and organic certification documentation',
+];
+
+const TRIBAL_CUISINE_DETAILS = [
+  'Introduction to tribal ingredients — millets, tubers, forest produce',
+  'Traditional cooking methods — clay pot, wood fire, fermentation',
+  'Seasonal menus — eating with the harvest, preservation techniques',
+  'Hands-on cooking — tribal recipes with farm-fresh ingredients',
+  'Plating and presentation — farm-to-table dining experience',
 ];
 
 export const SAMPLE_INTERESTS: SampleInterest[] = [
@@ -2084,6 +2178,2074 @@ export const SAMPLE_INTERESTS: SampleInterest[] = [
           ],
         ),
       },
+    ],
+  },
+  // ── Knitting ────────────────────────────────────────────────────────
+  {
+    slug: 'knitting',
+    name: 'Knitting',
+    color: '#E91E63',
+    icon: 'cut',
+    organizations: [
+      {
+        slug: 'hk-knitting-guild',
+        name: 'Hong Kong Knitting Guild',
+        groupLabel: 'Circles',
+        groups: [
+          {
+            name: 'Beginner Circle',
+            people: [
+              {
+                name: 'Mei-Lin Chan',
+                role: 'Workshop Leader',
+                timeline: steps(
+                  ['Cast On', 'Knit Stitch', 'Purl Stitch', 'Ribbing', 'Binding Off', 'First Project'],
+                  5, KNITTING_BEGINNER_DETAILS,
+                ),
+              },
+              {
+                name: 'Jenny Wu',
+                role: 'Knitter',
+                timeline: steps(
+                  ['Cast On', 'Knit Stitch', 'Purl Stitch', 'Ribbing', 'Binding Off', 'First Project'],
+                  2, KNITTING_BEGINNER_DETAILS,
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Advanced Techniques',
+            people: [
+              {
+                name: 'Siu-Wai Leung',
+                role: 'Instructor',
+                timeline: steps(
+                  ['Stranded Knitting', 'Fair Isle Charts', 'Tension', 'Steeks', 'Blocking'],
+                  4, KNITTING_COLORWORK_DETAILS,
+                ),
+              },
+              {
+                name: 'Rachel Tam',
+                role: 'Knitter',
+                timeline: steps(
+                  ['Stranded Knitting', 'Fair Isle Charts', 'Tension', 'Steeks', 'Blocking'],
+                  2, KNITTING_COLORWORK_DETAILS,
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'uk-knitters-guild',
+        name: 'The Knitters Guild (UK)',
+        groupLabel: 'Chapters',
+        groups: [
+          {
+            name: 'London Chapter',
+            people: [
+              {
+                name: 'Emma Hartley',
+                role: 'Chapter Lead',
+                timeline: steps(['Beginner Knitting', 'Socks', 'Colorwork', 'Lace', 'Garment Construction'], 4),
+              },
+              {
+                name: 'Fatima Osei',
+                role: 'Knitter',
+                timeline: steps(['Beginner Knitting', 'Socks', 'Colorwork', 'Lace', 'Garment Construction'], 2),
+              },
+            ],
+          },
+          {
+            name: 'Scottish Chapter',
+            people: [
+              {
+                name: 'Isla MacGregor',
+                role: 'Chapter Lead',
+                timeline: steps(['Fair Isle Basics', 'Traditional Patterns', 'Steeks', 'Garment Design', 'Exhibition'], 3),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'tkga',
+        name: 'The Knitting Guild Association',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Master Knitter Program',
+            people: [
+              {
+                name: 'Carol Sullivan',
+                role: 'Program Director',
+                timeline: steps(['Level 1 Basics', 'Level 2 Intermediate', 'Level 3 Advanced', 'Master Portfolio'], 3),
+              },
+              {
+                name: 'Linda Park',
+                role: 'Candidate',
+                timeline: steps(['Level 1 Basics', 'Level 2 Intermediate', 'Level 3 Advanced', 'Master Portfolio'], 1),
+              },
+            ],
+          },
+          {
+            name: 'Correspondence Course',
+            people: [
+              {
+                name: 'Diane Mitchell',
+                role: 'Instructor',
+                timeline: steps(['Enrollment', 'Swatching', 'Technique Samples', 'Project Work', 'Assessment'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      // ── Material makers / suppliers ──
+      {
+        slug: 'drops-design',
+        name: 'DROPS Design',
+        groupLabel: 'Collections',
+        groups: [
+          {
+            name: 'Yarn Collections',
+            people: [
+              {
+                name: 'DROPS Design Team',
+                role: 'Pattern & Yarn Design',
+                timeline: steps(['Cotton Collection', 'Wool Blends', 'Alpaca Range', 'Free Patterns', 'Video Tutorials'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'lion-brand',
+        name: 'Lion Brand Yarn',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Studio Workshops',
+            people: [
+              {
+                name: 'Shira Blumenthal',
+                role: 'Studio Director',
+                timeline: steps(['Beginner Workshop', 'Color Workshop', 'Garment Workshop', 'Design Lab'], 3),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'addi-needles',
+        name: 'Addi (Germany)',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Circular Needles & Accessories',
+            people: [
+              {
+                name: 'Addi Product Team',
+                role: 'Design & Manufacturing',
+                timeline: steps(['Turbo Circulars', 'Click System', 'CraSyTrio', 'Accessories', 'Sustainability'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'chiaogoo',
+        name: 'ChiaoGoo',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Interchangeable Sets',
+            people: [
+              {
+                name: 'ChiaoGoo Team',
+                role: 'Product Development',
+                timeline: steps(['Red Lace Circulars', 'TWIST System', 'Bamboo Line', 'Cables & Connectors'], 3),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'knitpro',
+        name: 'KnitPro / KnitPicks',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Wooden & Metal Needles',
+            people: [
+              {
+                name: 'KnitPro Design Team',
+                role: 'Product Design',
+                timeline: steps(['Symfonie Wood', 'Nova Metal', 'Zing Aluminum', 'Interchangeable Sets'], 3),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    programs: [
+      {
+        slug: 'beginner-knitting',
+        name: 'Beginner Knitting',
+        type: 'course',
+        description: 'Foundation knitting — cast on through first completed project, building essential skills.',
+        offeredBy: [{ orgSlug: 'hk-knitting-guild', role: 'Guild' }],
+        samplePeople: [
+          {
+            name: 'Jenny Wu',
+            role: 'Knitter',
+            timeline: steps(
+              ['Cast On', 'Knit Stitch', 'Purl Stitch', 'Ribbing', 'Binding Off', 'First Project'],
+              2, KNITTING_BEGINNER_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'master-knitter',
+        name: 'Master Knitter Program',
+        type: 'certification',
+        description: 'TKGA Master Knitter certification — three progressive levels culminating in a master portfolio.',
+        offeredBy: [{ orgSlug: 'tkga', role: 'Association' }],
+        samplePeople: [
+          {
+            name: 'Linda Park',
+            role: 'Candidate',
+            timeline: steps(['Level 1 Basics', 'Level 2 Intermediate', 'Level 3 Advanced', 'Master Portfolio'], 1),
+          },
+        ],
+      },
+      {
+        slug: 'colorwork-intensive',
+        name: 'Colorwork Intensive',
+        type: 'course',
+        description: 'Stranded knitting deep dive — fair isle, intarsia, steeks, and blocking techniques.',
+        offeredBy: [{ orgSlug: 'hk-knitting-guild', role: 'Guild' }],
+        samplePeople: [
+          {
+            name: 'Rachel Tam',
+            role: 'Knitter',
+            timeline: steps(
+              ['Stranded Knitting', 'Fair Isle Charts', 'Tension', 'Steeks', 'Blocking'],
+              2, KNITTING_COLORWORK_DETAILS,
+            ),
+          },
+        ],
+      },
+    ],
+    independentPractitioners: [
+      {
+        name: 'Hannah Kowalski',
+        role: 'Sock Knitter — Self-directed Journey',
+        timeline: steps(
+          ['First Socks', 'Heel Variations', 'Toe-Up Construction', 'Colorwork Socks', 'Own Patterns'],
+          3,
+          [
+            'First pair of socks — cuff-down construction, heel flap and turn',
+            'Exploring heel types — short row, afterthought, Fish Lips Kiss heel',
+            'Toe-up socks with German short rows and Judy\'s magic cast on',
+            'Stranded colorwork socks — managing floats on small circumference',
+            'Designing and publishing original sock patterns on Ravelry',
+          ],
+        ),
+      },
+      {
+        name: 'Eloise Marchetti',
+        role: 'Knitwear Designer — Pattern Business',
+        timeline: steps(
+          ['Technical Skills', 'Grading & Sizing', 'Tech Editing', 'Pattern Publishing', 'Yarn Collaborations'],
+          3,
+          [
+            'Mastering construction techniques — seamless, top-down, modular',
+            'Learning grading across size ranges — ease, proportional shaping',
+            'Working with tech editors — standardized patterns, clear instructions',
+            'Publishing patterns independently on Ravelry and own website',
+            'Collaborating with indie dyers and yarn companies for pattern support',
+          ],
+        ),
+      },
+    ],
+  },
+  // ── Fiber Arts ──────────────────────────────────────────────────────
+  {
+    slug: 'fiber-arts',
+    name: 'Fiber Arts',
+    color: '#8E24AA',
+    icon: 'color-wand',
+    organizations: [
+      {
+        slug: 'hk-textile-society',
+        name: 'Hong Kong Textile Society',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Spinning Workshop',
+            people: [
+              {
+                name: 'Amy Cheung',
+                role: 'Workshop Leader',
+                timeline: steps(
+                  ['Fiber Prep', 'Drafting', 'Wheel Mechanics', 'Plying', 'Finishing'],
+                  4, SPINNING_FUNDAMENTALS_DETAILS,
+                ),
+              },
+              {
+                name: 'Vivian Lo',
+                role: 'Fiber Artist',
+                timeline: steps(
+                  ['Fiber Prep', 'Drafting', 'Wheel Mechanics', 'Plying', 'Finishing'],
+                  2, SPINNING_FUNDAMENTALS_DETAILS,
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Weaving Studio',
+            people: [
+              {
+                name: 'Margaret Fung',
+                role: 'Instructor',
+                timeline: steps(
+                  ['Warping', 'Threading', 'Treadling', 'Plain Weave', 'Twill', 'Finishing'],
+                  5, WEAVING_FLOOR_LOOM_DETAILS,
+                ),
+              },
+              {
+                name: 'Sarah Ip',
+                role: 'Fiber Artist',
+                timeline: steps(
+                  ['Warping', 'Threading', 'Treadling', 'Plain Weave', 'Twill', 'Finishing'],
+                  3, WEAVING_FLOOR_LOOM_DETAILS,
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'agwsd',
+        name: 'Association of Guilds of Weavers, Spinners and Dyers (UK)',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Certificate of Achievement — Spinning',
+            people: [
+              {
+                name: 'Helen Bristow',
+                role: 'Examiner',
+                timeline: steps(['Foundation Skills', 'Fiber Knowledge', 'Yarn Design', 'Advanced Techniques', 'Portfolio Assessment'], 4),
+              },
+              {
+                name: 'Niamh O\'Sullivan',
+                role: 'Candidate',
+                timeline: steps(['Foundation Skills', 'Fiber Knowledge', 'Yarn Design', 'Advanced Techniques', 'Portfolio Assessment'], 2),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'haslach',
+        name: 'Textile Zentrum Haslach',
+        groupLabel: 'Workshops',
+        groups: [
+          {
+            name: 'Summer Textile Symposium',
+            people: [
+              {
+                name: 'Michaela Eder',
+                role: 'Director',
+                timeline: steps(['Weaving Intensive', 'Natural Dyeing', 'Feltmaking', 'Tapestry', 'Exhibition'], 4),
+              },
+              {
+                name: 'Lukas Berger',
+                role: 'Participant',
+                timeline: steps(['Weaving Intensive', 'Natural Dyeing', 'Feltmaking', 'Tapestry', 'Exhibition'], 2),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'hga',
+        name: 'Handweavers Guild of America',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Certificate of Excellence — Weaving',
+            people: [
+              {
+                name: 'Patricia Williams',
+                role: 'Program Chair',
+                timeline: steps(['Technical Skills', 'Design Development', 'Documentation', 'Exhibition Piece', 'Peer Review'], 4),
+              },
+              {
+                name: 'Rebecca Torres',
+                role: 'Candidate',
+                timeline: steps(['Technical Skills', 'Design Development', 'Documentation', 'Exhibition Piece', 'Peer Review'], 2),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'penland',
+        name: 'Penland School of Craft',
+        groupLabel: 'Studios',
+        groups: [
+          {
+            name: 'Fiber Studio',
+            people: [
+              {
+                name: 'Stacey Lane',
+                role: 'Studio Coordinator',
+                timeline: steps(['One-Week Workshop', 'Two-Week Intensive', 'Work-Study', 'Resident Artist', 'Teaching'], 4),
+              },
+              {
+                name: 'Marcus Green',
+                role: 'Resident Artist',
+                timeline: steps(['One-Week Workshop', 'Two-Week Intensive', 'Work-Study', 'Resident Artist', 'Teaching'], 3),
+              },
+            ],
+          },
+        ],
+      },
+      // ── Equipment makers ──
+      {
+        slug: 'ashford-wheels',
+        name: 'Ashford (New Zealand)',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Spinning Wheels & Looms',
+            people: [
+              {
+                name: 'Ashford Design Team',
+                role: 'Product Development',
+                timeline: steps(['Traditional Wheels', 'Folding Wheels', 'Rigid Heddle Looms', 'Floor Looms', 'Accessories'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'schacht-looms',
+        name: 'Schacht Spindle Company',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Looms & Spinning Equipment',
+            people: [
+              {
+                name: 'Schacht Team',
+                role: 'Design & Manufacturing',
+                timeline: steps(['Rigid Heddle Looms', 'Floor Looms', 'Spindles', 'Accessories', 'Education'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'louet',
+        name: 'Louet (Netherlands)',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Wheels & Looms',
+            people: [
+              {
+                name: 'Louet Design Team',
+                role: 'Product Development',
+                timeline: steps(['Spinning Wheels', 'Table Looms', 'Floor Looms', 'Fibers & Yarns'], 3),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'kromski',
+        name: 'Kromski (Poland)',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Traditional Spinning Wheels',
+            people: [
+              {
+                name: 'Kromski Artisans',
+                role: 'Craftspeople',
+                timeline: steps(['Castle Wheels', 'Saxony Wheels', 'Folding Wheels', 'Accessories'], 3),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    programs: [
+      {
+        slug: 'spinning-fundamentals',
+        name: 'Spinning Fundamentals',
+        type: 'course',
+        description: 'Foundation spinning — fiber prep through finishing yarn, building consistency and understanding fiber behavior.',
+        offeredBy: [{ orgSlug: 'hk-textile-society', role: 'Society' }],
+        samplePeople: [
+          {
+            name: 'Vivian Lo',
+            role: 'Fiber Artist',
+            timeline: steps(
+              ['Fiber Prep', 'Drafting', 'Wheel Mechanics', 'Plying', 'Finishing'],
+              2, SPINNING_FUNDAMENTALS_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'floor-loom-weaving',
+        name: 'Floor Loom Weaving',
+        type: 'course',
+        description: 'Comprehensive loom weaving — warping through finishing, covering plain weave to twill structures.',
+        offeredBy: [{ orgSlug: 'hk-textile-society', role: 'Society' }],
+        samplePeople: [
+          {
+            name: 'Sarah Ip',
+            role: 'Fiber Artist',
+            timeline: steps(
+              ['Warping', 'Threading', 'Treadling', 'Plain Weave', 'Twill', 'Finishing'],
+              3, WEAVING_FLOOR_LOOM_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'certificate-of-excellence-weaving',
+        name: 'Certificate of Excellence — Weaving',
+        type: 'certification',
+        description: 'HGA Certificate of Excellence — rigorous peer-reviewed program demonstrating mastery of weaving.',
+        offeredBy: [{ orgSlug: 'hga', role: 'Guild' }],
+        samplePeople: [
+          {
+            name: 'Rebecca Torres',
+            role: 'Candidate',
+            timeline: steps(['Technical Skills', 'Design Development', 'Documentation', 'Exhibition Piece', 'Peer Review'], 2),
+          },
+        ],
+      },
+    ],
+    independentPractitioners: [
+      {
+        name: 'Fiona Stewart',
+        role: 'Art Yarn Spinner — Creative Fiber',
+        timeline: steps(
+          ['Basic Spinning', 'Core Spun', 'Coils & Beehives', 'Art Yarn Design', 'Selling & Teaching'],
+          3,
+          [
+            'Learning to spin consistent singles on a drop spindle and wheel',
+            'Core spinning techniques — wrapping fibers around a core thread',
+            'Textured yarn techniques — coils, beehives, lockspun, thick-and-thin',
+            'Designing intentional art yarns — color planning, fiber blending',
+            'Selling art yarns at fiber festivals and teaching workshops',
+          ],
+        ),
+      },
+      {
+        name: 'Keiko Tanaka',
+        role: 'Natural Dyer — Botanical Colors',
+        timeline: steps(
+          ['Basic Mordanting', 'Local Plants', 'Indigo Vat', 'Color Consistency', 'Eco Print'],
+          3,
+          [
+            'Mordanting protein and cellulose fibers — alum, iron, tannin',
+            'Extracting color from local plants — onion skins, marigold, avocado',
+            'Building and maintaining an indigo vat — fermentation, dipping, oxidation',
+            'Achieving color consistency — record keeping, water quality, pH management',
+            'Eco printing on silk and paper — leaf contact printing, bundle dyeing',
+          ],
+        ),
+      },
+    ],
+  },
+  // ── Painting & Printing ─────────────────────────────────────────────
+  {
+    slug: 'painting-printing',
+    name: 'Painting & Printing',
+    color: '#FF6F00',
+    icon: 'color-palette',
+    organizations: [
+      {
+        slug: 'hk-print-studio',
+        name: 'Hong Kong Print Studio',
+        groupLabel: 'Workshops',
+        groups: [
+          {
+            name: 'Printmaking Workshop',
+            people: [
+              {
+                name: 'David Leung',
+                role: 'Studio Director',
+                timeline: steps(
+                  ['Relief Printing', 'Intaglio', 'Registration', 'Editioning', 'Proofing', 'Exhibition'],
+                  5, PRINTMAKING_DETAILS,
+                ),
+              },
+              {
+                name: 'Wing-Sze Ho',
+                role: 'Artist',
+                timeline: steps(
+                  ['Relief Printing', 'Intaglio', 'Registration', 'Editioning', 'Proofing', 'Exhibition'],
+                  3, PRINTMAKING_DETAILS,
+                ),
+              },
+              {
+                name: 'Kevin Yau',
+                role: 'Printmaking Instructor',
+                timeline: steps(
+                  ['Relief Printing', 'Intaglio', 'Registration', 'Editioning', 'Proofing', 'Exhibition'],
+                  5, PRINTMAKING_DETAILS,
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'royal-academy',
+        name: 'Royal Academy Schools (UK)',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Postgraduate Programme',
+            people: [
+              {
+                name: 'Prof. Eileen Cooper',
+                role: 'Keeper of the RA',
+                timeline: steps(['Foundation', 'Studio Practice', 'Critical Studies', 'Exhibition', 'Graduation Show'], 4),
+              },
+              {
+                name: 'James Whitfield',
+                role: 'Watercolor Teacher',
+                timeline: steps(['Wet-on-Wet', 'Glazing', 'Dry Brush', 'Plein Air', 'Exhibition Prep'], 4),
+              },
+              {
+                name: 'Charlotte Moore',
+                role: 'Student',
+                timeline: steps(['Foundation', 'Studio Practice', 'Critical Studies', 'Exhibition', 'Graduation Show'], 2),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'edinburgh-printmakers',
+        name: 'Edinburgh Printmakers',
+        groupLabel: 'Studios',
+        groups: [
+          {
+            name: 'Open Access Studios',
+            people: [
+              {
+                name: 'Alistair MacKenzie',
+                role: 'Printmaking Instructor',
+                timeline: steps(['Relief', 'Intaglio', 'Lithography', 'Screen Print', 'Artist Editions'], 4),
+              },
+              {
+                name: 'Moira Campbell',
+                role: 'Member Artist',
+                timeline: steps(['Relief', 'Intaglio', 'Lithography', 'Screen Print', 'Artist Editions'], 3),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'tamarind-institute',
+        name: 'Tamarind Institute',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Master Printer Program',
+            people: [
+              {
+                name: 'Valpuri Remling',
+                role: 'Director',
+                timeline: steps(['Lithography Foundations', 'Stone & Plate', 'Color Lithography', 'Artist Collaboration', 'Master Printer Certification'], 4),
+              },
+              {
+                name: 'Alex Rivera',
+                role: 'Apprentice Printer',
+                timeline: steps(['Lithography Foundations', 'Stone & Plate', 'Color Lithography', 'Artist Collaboration', 'Master Printer Certification'], 2),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'anderson-ranch',
+        name: 'Anderson Ranch Arts Center',
+        groupLabel: 'Workshops',
+        groups: [
+          {
+            name: 'Painting & Drawing',
+            people: [
+              {
+                name: 'Michael Chen',
+                role: 'Plein Air Instructor',
+                timeline: steps(
+                  ['Color Theory', 'Underpainting', 'Glazing', 'Alla Prima', 'Composition', 'Plein Air'],
+                  5, OIL_PAINTING_DETAILS,
+                ),
+              },
+              {
+                name: 'Sofia Hernandez',
+                role: 'Workshop Participant',
+                timeline: steps(
+                  ['Color Theory', 'Underpainting', 'Glazing', 'Alla Prima', 'Composition', 'Plein Air'],
+                  3, OIL_PAINTING_DETAILS,
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'crown-point-press',
+        name: 'Crown Point Press',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Artist Residency',
+            people: [
+              {
+                name: 'Valerie Wade',
+                role: 'Master Printer',
+                timeline: steps(['Consultation', 'Proofing', 'Editioning', 'Artist Approval', 'Publication'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      // ── Material makers / suppliers ──
+      {
+        slug: 'winsor-newton',
+        name: 'Winsor & Newton (UK)',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Paints & Brushes',
+            people: [
+              {
+                name: 'W&N Product Team',
+                role: 'Color Chemistry',
+                timeline: steps(['Professional Watercolor', 'Oil Colour', 'Acrylic', 'Brushes', 'Mediums'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'gamblin-colors',
+        name: 'Gamblin (Portland, OR)',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Oil Colors & Mediums',
+            people: [
+              {
+                name: 'Robert Gamblin',
+                role: 'Founder & Color Maker',
+                timeline: steps(['Artist Oil Colors', 'Solvent-Free Mediums', 'Conservation Colors', 'FastMatte', 'Portland Greys'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'speedball',
+        name: 'Speedball Art Products',
+        groupLabel: 'Products',
+        groups: [
+          {
+            name: 'Printmaking Supplies',
+            people: [
+              {
+                name: 'Speedball Team',
+                role: 'Product Development',
+                timeline: steps(['Block Printing Ink', 'Carving Tools', 'Brayers', 'Screen Print Supplies', 'Presses'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'blick-art',
+        name: 'Blick Art Materials',
+        groupLabel: 'Departments',
+        groups: [
+          {
+            name: 'Painting & Printmaking',
+            people: [
+              {
+                name: 'Blick Education Team',
+                role: 'Art Education',
+                timeline: steps(['Oil Painting Kits', 'Watercolor Sets', 'Printmaking Starter', 'Plein Air Gear', 'Studio Essentials'], 4),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'jacksons-art',
+        name: "Jackson's Art Supplies (UK)",
+        groupLabel: 'Departments',
+        groups: [
+          {
+            name: 'Fine Art Materials',
+            people: [
+              {
+                name: "Jackson's Specialist Team",
+                role: 'Product Curation',
+                timeline: steps(['Own-Brand Oils', 'Watercolors', 'Printmaking', 'Surfaces', 'Brushes'], 4),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    programs: [
+      {
+        slug: 'printmaking-fundamentals',
+        name: 'Printmaking Fundamentals',
+        type: 'course',
+        description: 'Foundation printmaking — relief through intaglio, registration, editioning, and exhibition preparation.',
+        offeredBy: [{ orgSlug: 'hk-print-studio', role: 'Studio' }, { orgSlug: 'edinburgh-printmakers', role: 'Studio' }],
+        samplePeople: [
+          {
+            name: 'Wing-Sze Ho',
+            role: 'Artist',
+            timeline: steps(
+              ['Relief Printing', 'Intaglio', 'Registration', 'Editioning', 'Proofing', 'Exhibition'],
+              3, PRINTMAKING_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'oil-painting-intensive',
+        name: 'Oil Painting Intensive',
+        type: 'course',
+        description: 'Comprehensive oil painting — color theory through plein air, covering alla prima and layered techniques.',
+        offeredBy: [{ orgSlug: 'anderson-ranch', role: 'Arts Center' }],
+        samplePeople: [
+          {
+            name: 'Sofia Hernandez',
+            role: 'Workshop Participant',
+            timeline: steps(
+              ['Color Theory', 'Underpainting', 'Glazing', 'Alla Prima', 'Composition', 'Plein Air'],
+              3, OIL_PAINTING_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'master-printer-certificate',
+        name: 'Master Printer Certificate',
+        type: 'certification',
+        description: 'Tamarind Institute master printer program — lithography mastery through artist collaboration and certification.',
+        offeredBy: [{ orgSlug: 'tamarind-institute', role: 'Institute' }],
+        samplePeople: [
+          {
+            name: 'Alex Rivera',
+            role: 'Apprentice Printer',
+            timeline: steps(['Lithography Foundations', 'Stone & Plate', 'Color Lithography', 'Artist Collaboration', 'Master Printer Certification'], 2),
+          },
+        ],
+      },
+    ],
+    independentPractitioners: [
+      {
+        name: 'Robert Townsend',
+        role: 'Plein Air Painter — Oils & Watercolor',
+        timeline: steps(
+          ['Studio Fundamentals', 'Pochade Box Setup', 'Local Plein Air', 'Paint-Outs & Events', 'Gallery Representation'],
+          3,
+          [
+            'Studio color mixing, value studies, and composition exercises',
+            'Building a portable plein air kit — pochade box, limited palette, panels',
+            'Regular plein air sessions at local parks and coastal scenes',
+            'Participating in plein air paint-out events and competitions',
+            'Goal: gallery representation and juried plein air exhibition',
+          ],
+        ),
+      },
+      {
+        name: 'Nadia Petrova',
+        role: 'Linocut Printmaker — Edition-based Practice',
+        timeline: steps(
+          ['Basic Carving', 'Reduction Prints', 'Multi-Block Color', 'Artist Editions', 'Exhibition'],
+          3,
+          [
+            'Learning linocut carving tools, simple single-color prints',
+            'Reduction printing technique — progressive carving and overprinting',
+            'Multi-block color registration for complex compositions',
+            'Producing numbered artist editions — consistent quality, documentation',
+            'Solo exhibition of edition prints at community gallery',
+          ],
+        ),
+      },
+    ],
+  },
+  // ── Lifelong Learning ───────────────────────────────────────────────
+  {
+    slug: 'lifelong-learning',
+    name: 'Lifelong Learning',
+    color: '#5C6BC0',
+    icon: 'school',
+    organizations: [
+      {
+        slug: 'hollyhock',
+        name: 'Hollyhock',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Wisdom Teachings',
+            people: [
+              {
+                name: 'Dana Roshi',
+                role: 'Zen Teacher',
+                timeline: steps(
+                  ['Arrival & Settling', 'Morning Sits', 'Body Scan', 'Council', 'Integration', 'Closing Circle'],
+                  4, MINDFULNESS_RETREAT_DETAILS,
+                ),
+              },
+              {
+                name: 'Amara Singh',
+                role: 'Learner',
+                timeline: steps(
+                  ['Arrival & Settling', 'Morning Sits', 'Body Scan', 'Council', 'Integration', 'Closing Circle'],
+                  2, MINDFULNESS_RETREAT_DETAILS,
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'regenerative-agriculture',
+                    role: 'Community Gardener',
+                    timeline: steps(['Soil Basics', 'Composting', 'Growing Herbs', 'Harvest'], 2),
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'Creative Expressions',
+            people: [
+              {
+                name: 'Liora Chen',
+                role: 'Writing Facilitator',
+                timeline: steps(
+                  ['Sensory Walks', 'Free Writing', 'Nature Journal', 'Memoir', 'Workshop Circle'],
+                  4, CREATIVE_WRITING_NATURE_DETAILS,
+                ),
+              },
+              {
+                name: 'Fern Gallagher',
+                role: 'Learner',
+                timeline: steps(
+                  ['Sensory Walks', 'Free Writing', 'Nature Journal', 'Memoir', 'Workshop Circle'],
+                  2, CREATIVE_WRITING_NATURE_DETAILS,
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Health & Healing',
+            people: [
+              {
+                name: 'Tara Meadows',
+                role: 'Yoga Instructor',
+                timeline: steps(['Hatha Foundations', 'Pranayama', 'Restorative Yoga', 'Yoga Nidra', 'Teaching Practice'], 4),
+              },
+              {
+                name: 'Marcus Hale',
+                role: 'Learner',
+                timeline: steps(['Hatha Foundations', 'Pranayama', 'Restorative Yoga', 'Yoga Nidra', 'Teaching Practice'], 1),
+              },
+            ],
+          },
+          {
+            name: 'Social Innovation',
+            people: [
+              {
+                name: 'Kai Nakamura',
+                role: 'Facilitation Lead',
+                timeline: steps(['Systems Thinking', 'Design Thinking', 'Council Practice', 'Prototyping', 'Community Action'], 3),
+              },
+            ],
+          },
+        ],
+        cohorts: [
+          {
+            name: 'Farm, Food & Contemplation — July 2026',
+            isShared: true,
+            partnerInterests: [{ interestSlug: 'regenerative-agriculture', orgSlug: 'the-open-field', orgName: 'The Open Field' }],
+            people: [
+              {
+                name: 'Amara Singh',
+                role: 'Learner',
+                timeline: steps(
+                  ['Arrival & Intentions', 'Farm & Soil Workshop', 'Tribal Cuisine', 'Morning Practice', 'Nature Immersion', 'Integration Circle'],
+                  3,
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'regenerative-agriculture',
+                    role: 'Community Gardener',
+                    timeline: steps(['Soil Basics', 'Composting', 'Growing Herbs', 'Harvest'], 2),
+                  },
+                ],
+              },
+              {
+                name: 'Arjun Oraon',
+                role: 'Grower & Guest Teacher',
+                timeline: steps(
+                  ['Arrival & Intentions', 'Farm & Soil Workshop', 'Tribal Cuisine', 'Morning Practice', 'Nature Immersion', 'Integration Circle'],
+                  2,
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'lifelong-learning',
+                    role: 'Meditation Practitioner',
+                    timeline: steps(['Mindfulness Basics', 'Daily Practice', 'Retreat Experience'], 1),
+                  },
+                ],
+              },
+              {
+                name: 'Fern Gallagher',
+                role: 'Learner',
+                timeline: steps(
+                  ['Arrival & Intentions', 'Farm & Soil Workshop', 'Tribal Cuisine', 'Morning Practice', 'Nature Immersion', 'Integration Circle'],
+                  4,
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'esalen-institute',
+        name: 'Esalen Institute',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Contemplative Practice',
+            people: [
+              {
+                name: 'David Whyte',
+                role: 'Poet & Teacher',
+                timeline: steps(['Poetry & Presence', 'Conversational Leadership', 'Creative Courage', 'Integration'], 3),
+              },
+              {
+                name: 'Mira Desai',
+                role: 'Resident',
+                timeline: steps(['Gestalt Practice', 'Somatic Experiencing', 'Meditation', 'Integration'], 2),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'kripalu-center',
+        name: 'Kripalu Center',
+        groupLabel: 'Schools',
+        groups: [
+          {
+            name: 'Kripalu School of Yoga',
+            people: [
+              {
+                name: 'Anjali Rao',
+                role: 'Lead Trainer',
+                timeline: steps(['200-Hour YTT', 'Advanced Training', 'Specialization', 'Mentorship'], 3),
+              },
+              {
+                name: 'Sam Woodward',
+                role: 'Trainee',
+                timeline: steps(['200-Hour YTT', 'Advanced Training', 'Specialization', 'Mentorship'], 1),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    programs: [
+      {
+        slug: 'mindfulness-retreat-intensive',
+        name: 'Mindfulness Retreat Intensive',
+        type: 'course',
+        description: 'Multi-day silent retreat — vipassana, walking meditation, council practice, and nature connection on Cortes Island.',
+        offeredBy: [{ orgSlug: 'hollyhock', role: 'Center' }],
+        samplePeople: [
+          {
+            name: 'Amara Singh',
+            role: 'Learner',
+            timeline: steps(
+              ['Arrival & Settling', 'Morning Sits', 'Body Scan', 'Council', 'Integration', 'Closing Circle'],
+              2, MINDFULNESS_RETREAT_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'creative-writing-nature',
+        name: 'Creative Writing & Nature',
+        type: 'course',
+        description: 'Writing retreat combining nature walks, free writing, memoir, and peer workshop on the island.',
+        offeredBy: [{ orgSlug: 'hollyhock', role: 'Center' }],
+        samplePeople: [
+          {
+            name: 'Fern Gallagher',
+            role: 'Learner',
+            timeline: steps(
+              ['Sensory Walks', 'Free Writing', 'Nature Journal', 'Memoir', 'Workshop Circle'],
+              2, CREATIVE_WRITING_NATURE_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'farm-food-contemplation',
+        name: 'Farm, Food & Contemplation',
+        type: 'retreat',
+        description: 'A 5-day retreat bridging regenerative agriculture and contemplative practice — farm immersion, tribal cuisine, morning practice, and integration circles on Cortes Island.',
+        offeredBy: [{ orgSlug: 'hollyhock', role: 'Host Center' }],
+        coHostedWith: [{ interestSlug: 'regenerative-agriculture', orgSlug: 'the-open-field', role: 'Farm Partner' }],
+        samplePeople: [
+          {
+            name: 'Amara Singh',
+            role: 'Learner',
+            timeline: steps(
+              ['Arrival & Intentions', 'Farm & Soil Workshop', 'Tribal Cuisine', 'Morning Practice', 'Nature Immersion', 'Integration Circle'],
+              3,
+              [
+                'Settling into the retreat center, intention-setting circle, meeting the farm partner team',
+                'Hands-on soil health workshop led by The Open Field growers — composting, soil biology, cover crops',
+                'Cooking traditional tribal cuisine with Savitri Devi — indigenous ingredients, wood-fire methods',
+                'Silent morning meditation, yoga, and walking practice in the forest',
+                'Guided nature immersion combining contemplative awareness with ecological observation',
+                'Final integration circle — harvesting insights, setting commitments for home practice',
+              ],
+            ),
+            personalInterests: [
+              {
+                interestSlug: 'regenerative-agriculture',
+                role: 'Community Gardener',
+                timeline: steps(['Soil Basics', 'Composting', 'Growing Herbs', 'Harvest'], 2),
+              },
+            ],
+          },
+          {
+            name: 'Arjun Oraon',
+            role: 'Grower & Guest Teacher',
+            timeline: steps(
+              ['Arrival & Intentions', 'Farm & Soil Workshop', 'Tribal Cuisine', 'Morning Practice', 'Nature Immersion', 'Integration Circle'],
+              2,
+              [
+                'Meeting the Hollyhock community, sharing farming journey and intentions',
+                'Leading the soil health workshop — demonstrating composting and cover-crop techniques',
+                'Assisting with tribal cuisine — sharing knowledge of indigenous ingredients and farming practices',
+                'Experiencing silent morning practice for the first time — guided meditation and walking',
+                'Co-leading nature immersion from a grower\'s perspective — reading the land, seasonal rhythms',
+                'Sharing reflections on what contemplative practice adds to farming, exchanging practices',
+              ],
+            ),
+            personalInterests: [
+              {
+                interestSlug: 'lifelong-learning',
+                role: 'Meditation Practitioner',
+                timeline: steps(['Mindfulness Basics', 'Daily Practice', 'Retreat Experience'], 1),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    affiliations: [
+      { name: 'BC Retreat Centers', orgSlugs: ['hollyhock'] },
+      { name: 'North American Retreat Network', orgSlugs: ['hollyhock', 'esalen-institute', 'kripalu-center'] },
+    ],
+    independentPractitioners: [
+      {
+        name: 'Elena Vasquez',
+        role: 'Meditation Teacher — Daily Practice',
+        timeline: steps(
+          ['Personal Practice', 'Teacher Training', 'Leading Groups', 'Retreat Facilitation', 'Mentoring Teachers'],
+          3,
+          [
+            'Establishing a daily vipassana and loving-kindness practice',
+            'Completing 200-hour meditation teacher training at Spirit Rock',
+            'Leading weekly community meditation groups',
+            'Facilitating weekend and week-long silent retreats',
+            'Mentoring new meditation teachers in the lineage',
+          ],
+        ),
+        personalInterests: [
+          {
+            interestSlug: 'regenerative-agriculture',
+            role: 'Kitchen Gardener',
+            timeline: steps(['Herb Garden', 'Raised Beds', 'Composting', 'Seasonal Harvest'], 2),
+          },
+        ],
+      },
+      {
+        name: 'Rowan Birch',
+        role: 'Contemplative Arts — Writing & Movement',
+        timeline: steps(
+          ['Journaling Practice', 'Authentic Movement', 'InterPlay', 'Teaching Workshops', 'Book Project'],
+          2,
+          [
+            'Daily journaling and morning pages practice',
+            'Exploring authentic movement and embodied expression',
+            'InterPlay training — improvisational movement and storytelling',
+            'Teaching contemplative arts workshops at retreat centers',
+            'Writing a book on the intersection of movement and creativity',
+          ],
+        ),
+      },
+    ],
+  },
+  // ── Regenerative Agriculture ────────────────────────────────────────
+  {
+    slug: 'regenerative-agriculture',
+    name: 'Regenerative Agriculture',
+    color: '#2E7D32',
+    icon: 'leaf',
+    organizations: [
+      {
+        slug: 'the-open-field',
+        name: 'The Open Field',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Farm Operations',
+            people: [
+              {
+                name: 'Priya Munda',
+                role: 'Head Grower',
+                timeline: steps(
+                  ['Soil Prep', 'Seed Starting', 'Transplanting', 'Pest Management', 'Harvest', 'Records'],
+                  5, ORGANIC_FARMING_DETAILS,
+                ),
+              },
+              {
+                name: 'Arjun Oraon',
+                role: 'Grower',
+                timeline: steps(
+                  ['Soil Prep', 'Seed Starting', 'Transplanting', 'Pest Management', 'Harvest', 'Records'],
+                  3, ORGANIC_FARMING_DETAILS,
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'lifelong-learning',
+                    role: 'Meditation Practitioner',
+                    timeline: steps(['Mindfulness Basics', 'Daily Practice', 'Retreat Experience'], 1),
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'Tribal Cuisine',
+            people: [
+              {
+                name: 'Savitri Devi',
+                role: 'Head Chef',
+                timeline: steps(
+                  ['Tribal Ingredients', 'Traditional Methods', 'Seasonal Menus', 'Hands-on Cooking', 'Plating'],
+                  4, TRIBAL_CUISINE_DETAILS,
+                ),
+              },
+              {
+                name: 'Lakshmi Tirkey',
+                role: 'Apprentice Chef',
+                timeline: steps(
+                  ['Tribal Ingredients', 'Traditional Methods', 'Seasonal Menus', 'Hands-on Cooking', 'Plating'],
+                  2, TRIBAL_CUISINE_DETAILS,
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Workshops & Education',
+            people: [
+              {
+                name: 'Rajesh Kumar',
+                role: 'Workshop Coordinator',
+                timeline: steps(['Rainwater Harvesting', 'Organic Certification', 'Nursery Management', 'Seed Saving', 'Permaculture'], 3),
+              },
+            ],
+          },
+          {
+            name: 'Farmers Market',
+            people: [
+              {
+                name: 'Anita Bhagat',
+                role: 'Market Manager',
+                timeline: steps(['Setup & Planning', 'Vendor Relations', 'Customer Engagement', 'Sales Tracking', 'Community Events'], 4),
+              },
+            ],
+          },
+        ],
+        cohorts: [
+          {
+            name: 'Farm, Food & Contemplation — July 2026',
+            isShared: true,
+            partnerInterests: [{ interestSlug: 'lifelong-learning', orgSlug: 'hollyhock', orgName: 'Hollyhock' }],
+            people: [
+              {
+                name: 'Arjun Oraon',
+                role: 'Grower & Guest Teacher',
+                timeline: steps(
+                  ['Soil Assessment', 'Planting Demo', 'Cooking: Tribal Cuisine', 'Foraging Walk', 'Market Planning', 'Harvest Reflection'],
+                  3,
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'lifelong-learning',
+                    role: 'Meditation Practitioner',
+                    timeline: steps(['Mindfulness Basics', 'Daily Practice', 'Retreat Experience'], 1),
+                  },
+                ],
+              },
+              {
+                name: 'Amara Singh',
+                role: 'Learner',
+                timeline: steps(
+                  ['Soil Assessment', 'Planting Demo', 'Cooking: Tribal Cuisine', 'Foraging Walk', 'Market Planning', 'Harvest Reflection'],
+                  2,
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'regenerative-agriculture',
+                    role: 'Community Gardener',
+                    timeline: steps(['Soil Basics', 'Composting', 'Growing Herbs', 'Harvest'], 2),
+                  },
+                ],
+              },
+              {
+                name: 'Priya Munda',
+                role: 'Head Grower',
+                timeline: steps(
+                  ['Soil Assessment', 'Planting Demo', 'Cooking: Tribal Cuisine', 'Foraging Walk', 'Market Planning', 'Harvest Reflection'],
+                  5,
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'navdanya',
+        name: 'Navdanya',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Seed Saving & Biodiversity',
+            people: [
+              {
+                name: 'Dr. Vandana Shiva',
+                role: 'Founder & Director',
+                timeline: steps(['Seed Freedom', 'Biodiversity Conservation', 'Earth Democracy', 'Global Advocacy'], 3),
+              },
+              {
+                name: 'Meena Rawat',
+                role: 'Seed Keeper',
+                timeline: steps(['Seed Collection', 'Storage & Cataloguing', 'Community Distribution', 'Training Farmers'], 2),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'daylesford-farm',
+        name: 'Daylesford',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Organic Farm & Cookery School',
+            people: [
+              {
+                name: 'Carole Bamford',
+                role: 'Founder',
+                timeline: steps(['Organic Conversion', 'Farm Shop', 'Cookery School', 'Sustainability Standards'], 3),
+              },
+              {
+                name: 'James Henderson',
+                role: 'Head Farmer',
+                timeline: steps(['Crop Rotation', 'Livestock Integration', 'Soil Building', 'Market Garden'], 3),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    programs: [
+      {
+        slug: 'organic-farming-foundations',
+        name: 'Organic Farming Foundations',
+        type: 'course',
+        description: 'Comprehensive organic farming — soil preparation through harvest, including certification documentation.',
+        offeredBy: [{ orgSlug: 'the-open-field', role: 'Farm' }],
+        samplePeople: [
+          {
+            name: 'Arjun Oraon',
+            role: 'Grower',
+            timeline: steps(
+              ['Soil Prep', 'Seed Starting', 'Transplanting', 'Pest Management', 'Harvest', 'Records'],
+              3, ORGANIC_FARMING_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'tribal-cuisine-intensive',
+        name: 'Tribal Cuisine Intensive',
+        type: 'course',
+        description: 'Traditional tribal cooking — indigenous ingredients, wood-fire methods, fermentation, and farm-to-table dining.',
+        offeredBy: [{ orgSlug: 'the-open-field', role: 'Farm' }],
+        samplePeople: [
+          {
+            name: 'Lakshmi Tirkey',
+            role: 'Apprentice Chef',
+            timeline: steps(
+              ['Tribal Ingredients', 'Traditional Methods', 'Seasonal Menus', 'Hands-on Cooking', 'Plating'],
+              2, TRIBAL_CUISINE_DETAILS,
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'farm-food-contemplation',
+        name: 'Farm, Food & Contemplation',
+        type: 'retreat',
+        description: 'A 5-day retreat at Hollyhock — soil workshops, tribal cuisine, contemplative practice, and cross-interest collaboration with a BC retreat center.',
+        offeredBy: [{ orgSlug: 'the-open-field', role: 'Farm Partner' }],
+        coHostedWith: [{ interestSlug: 'lifelong-learning', orgSlug: 'hollyhock', role: 'Host Center' }],
+        samplePeople: [
+          {
+            name: 'Arjun Oraon',
+            role: 'Grower & Guest Teacher',
+            timeline: steps(
+              ['Soil Assessment', 'Planting Demo', 'Cooking: Tribal Cuisine', 'Foraging Walk', 'Market Planning', 'Harvest Reflection'],
+              3,
+              [
+                'Assessing Hollyhock garden soil health — comparing BC coastal soil with Jharkhand red soil',
+                'Demonstrating cover-crop and companion planting techniques for the retreat garden',
+                'Co-leading tribal cuisine workshop — Jharkhand ingredients, traditional wood-fire methods',
+                'Guided foraging walk identifying wild edibles and medicinal plants on Cortes Island',
+                'Planning how retreat-center gardens can supply local markets — farm-to-table economics',
+                'Season-end reflection circle — what transferred between farm practices and contemplative life',
+              ],
+            ),
+            personalInterests: [
+              {
+                interestSlug: 'lifelong-learning',
+                role: 'Meditation Practitioner',
+                timeline: steps(['Mindfulness Basics', 'Daily Practice', 'Retreat Experience'], 1),
+              },
+            ],
+          },
+          {
+            name: 'Amara Singh',
+            role: 'Learner',
+            timeline: steps(
+              ['Soil Assessment', 'Planting Demo', 'Cooking: Tribal Cuisine', 'Foraging Walk', 'Market Planning', 'Harvest Reflection'],
+              2,
+              [
+                'Learning to assess soil health — texture, color, organism activity',
+                'Participating in planting demo — learning companion planting and succession sowing',
+                'Hands-on tribal cuisine cooking — learning ingredient sourcing and preparation',
+                'Foraging walk with ecological observation — connecting contemplative awareness to plant identification',
+                'Understanding farm economics — how mindful consumption connects producer and community',
+                'Reflecting on how farm rhythms mirror contemplative practice rhythms',
+              ],
+            ),
+            personalInterests: [
+              {
+                interestSlug: 'regenerative-agriculture',
+                role: 'Community Gardener',
+                timeline: steps(['Soil Basics', 'Composting', 'Growing Herbs', 'Harvest'], 2),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    affiliations: [
+      { name: 'Jharkhand Agriculture Network', orgSlugs: ['the-open-field'] },
+      { name: 'Indian Organic Network', orgSlugs: ['the-open-field', 'navdanya'] },
+    ],
+    independentPractitioners: [
+      {
+        name: 'Deepak Mahato',
+        role: 'Organic Farmer — Smallholder Journey',
+        timeline: steps(
+          ['Kitchen Garden', 'Composting', 'Market Garden', 'Organic Certification', 'Farmer Training'],
+          3,
+          [
+            'Starting with a family kitchen garden — vegetables, herbs, traditional varieties',
+            'Building compost systems — vermicomposting, leaf mold, cow dung composting',
+            'Expanding to market garden scale — seasonal crops, crop rotation',
+            'Pursuing organic certification — documentation, soil tests, transition period',
+            'Training other smallholder farmers in the village — workshops, farm visits',
+          ],
+        ),
+        personalInterests: [
+          {
+            interestSlug: 'lifelong-learning',
+            role: 'Retreat Participant',
+            timeline: steps(['Nature Immersion', 'Contemplative Practice', 'Community Building'], 1),
+          },
+        ],
+      },
+      {
+        name: 'Sarah Greenfield',
+        role: 'Permaculture Designer — Urban Farm',
+        timeline: steps(
+          ['PDC Certificate', 'Guild Design', 'Water Systems', 'Food Forest', 'Teaching'],
+          3,
+          [
+            'Completing Permaculture Design Certificate — 72 hours, design practicum',
+            'Designing plant guilds — companion planting, nitrogen fixers, dynamic accumulators',
+            'Installing rainwater harvesting and greywater systems',
+            'Establishing a multi-layered food forest — canopy, understory, ground cover',
+            'Teaching permaculture workshops at community gardens and schools',
+          ],
+        ),
+      },
+    ],
+  },
+  // ── Global Health ───────────────────────────────────────────────────
+  {
+    slug: 'global-health',
+    name: 'Global Health',
+    color: '#00897B',
+    icon: 'globe',
+    organizations: [
+      {
+        slug: 'mayan-health-initiative',
+        name: 'Mayan Health Initiative',
+        groupLabel: 'Programs',
+        groups: [
+          {
+            name: 'Rehabilitation Program',
+            people: [
+              {
+                name: 'Elizabeth Barrios',
+                role: 'Director of Physical Therapy',
+                timeline: steps(
+                  ['Program Design', 'Therapist Recruitment', 'Center Build-Out', 'Training Local Therapists', 'Community Outreach', 'Surgical Care Coordination', 'Program Expansion'],
+                  6,
+                  [
+                    'Designed rehab program for children with disabilities in San Marcos highlands',
+                    'Recruited and interviewed candidates from local communities for therapist roles',
+                    'Established two rehabilitation centers with donated equipment and supplies',
+                    'Trained four local women as physical therapists — hands-on mentorship',
+                    'Organized community awareness campaigns about disability services',
+                    'Coordinated surgical referrals for children needing orthopedic procedures',
+                    'Expanding therapy services to speech and occupational therapy',
+                  ],
+                ),
+              },
+              {
+                name: 'Ana María López',
+                role: 'Physical Therapist',
+                timeline: steps(
+                  ['PT Training', 'Supervised Practice', 'Independent Caseload', 'Pediatric Specialization', 'Community Home Visits'],
+                  3,
+                  [
+                    'Completed MHI physical therapy training program — anatomy, exercises, assistive devices',
+                    'Supervised clinical practice with Elizabeth Barrios — 6 months hands-on',
+                    'Managing independent caseload of 20+ pediatric patients',
+                    'Specializing in cerebral palsy and developmental delay interventions',
+                    'Conducting home visits for patients unable to travel to rehabilitation center',
+                  ],
+                ),
+              },
+              {
+                name: 'Rosa Velásquez',
+                role: 'Physical Therapist',
+                timeline: steps(
+                  ['PT Training', 'Supervised Practice', 'Independent Caseload', 'Assistive Devices', 'Family Education'],
+                  2,
+                  [
+                    'Completed MHI physical therapy training — focused on pediatric rehabilitation',
+                    'Supervised practice under Elizabeth — learning assessment and treatment planning',
+                    'Building independent caseload with patient families in remote villages',
+                    'Learning to fabricate and fit assistive devices from locally available materials',
+                    'Teaching families therapeutic exercises to continue at home between visits',
+                  ],
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Nutrition Program',
+            people: [
+              {
+                name: 'Mario Diaz de Paz',
+                role: 'Lead, Nutrition Team',
+                timeline: steps(
+                  ['Community Assessment', 'Screening Protocols', 'Supplement Distribution', 'CHW Training', 'Data Tracking', 'Program Scaling', 'Research Partnerships'],
+                  5,
+                  [
+                    'Conducted baseline community health assessment across Altiplano villages — Mam-speaking',
+                    'Developed malnutrition screening protocols using MUAC and weight-for-height z-scores',
+                    'Established Nutributter and supplement distribution with support from This Bar Saves Lives',
+                    'Trained community health workers (CHWs) in 12 villages on screening and referral',
+                    'Implemented data tracking system for 0-5 year olds across all program communities',
+                    'Scaling nutrition program from 8 to 15 communities in San Marcos department',
+                    'Building research partnerships with UIC for longitudinal nutrition outcomes study',
+                  ],
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'nursing',
+                    role: 'Public Health Professional',
+                    timeline: steps(
+                      ['Nursing Degree', 'Public Health Certification', 'Community Health Leadership', 'Research Methods'],
+                      3,
+                      [
+                        'Registered Nurse degree with focus on community health',
+                        'Advanced public health certification — epidemiology and program evaluation',
+                        'Leading community health worker networks across San Marcos',
+                        'Studying research methods for nutrition outcomes measurement',
+                      ],
+                    ),
+                  },
+                ],
+              },
+              {
+                name: 'Lili Hernández',
+                role: 'Nutrition Field Worker',
+                timeline: steps(
+                  ['CHW Training', 'Village Screenings', 'Supplement Distribution', 'Family Counseling', 'Data Collection'],
+                  3,
+                  [
+                    'Community health worker training — nutrition assessment, Mam-language protocols',
+                    'Conducting monthly malnutrition screenings in 3 assigned villages',
+                    'Distributing Nutributter supplements and tracking inventory',
+                    'Providing nutritional counseling to families of malnourished children',
+                    'Collecting and reporting screening data for program tracking',
+                  ],
+                ),
+              },
+              {
+                name: 'Adolfo Pérez',
+                role: 'Nutrition Field Worker',
+                timeline: steps(
+                  ['CHW Training', 'Village Screenings', 'Growth Monitoring', 'Supply Chain', 'Community Education'],
+                  2,
+                  [
+                    'Completed community health worker training with Mario',
+                    'Conducting screenings in remote highland villages — reaching underserved families',
+                    'Growth monitoring and follow-up for identified malnourished children',
+                    'Managing supply chain — supplement inventory and transport logistics',
+                    'Leading community education sessions on nutrition and food preparation',
+                  ],
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Medical Relief',
+            people: [
+              {
+                name: 'Dr. Bill Ahrens',
+                role: 'Co-Founder & Executive Director',
+                timeline: steps(
+                  ['Volunteer Missions', 'Relocation to Guatemala', 'MHI Founding', 'Program Development', 'Team Building', 'Partnership Growth', 'Sustainability Planning'],
+                  6,
+                  [
+                    'Led volunteer medical missions to Guatemala\'s western highlands since 1999 — UIC Emergency Pediatrics',
+                    'Relocated from Chicago to San Marcos, Guatemala in 2011 after retiring from UIC',
+                    'Co-founded Mayan Health Initiative in 2013 with John Sweeney',
+                    'Developed four core programs: Rehabilitation, Nutrition, Medical Relief, Ultrasound',
+                    'Built team of Guatemalan medical professionals — nurses, therapists, community health workers',
+                    'Growing partnerships with UIC, Chicago medical community, and Maryknoll missionaries',
+                    'Planning for long-term sustainability through local capacity building and fundraising',
+                  ],
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'nursing',
+                    role: 'Medical Educator',
+                    timeline: steps(
+                      ['Residency', 'Emergency Pediatrics', 'Department Head', 'Global Health Educator'],
+                      3,
+                      [
+                        'Pediatrics residency and emergency medicine fellowship',
+                        'Emergency Pediatrics practice at UIC Medical Center — 15+ years',
+                        'Head of Emergency Pediatrics at University of Illinois Medical Center, Chicago',
+                        'Training Guatemalan health workers in pediatric assessment and emergency care',
+                      ],
+                    ),
+                  },
+                ],
+              },
+              {
+                name: 'Dr. Rosa Chávez',
+                role: 'Pediatric Clinician',
+                timeline: steps(
+                  ['Medical Training', 'Rural Clinic Rotation', 'MHI Partnership', 'Pediatric Clinics', 'Mentor to Students'],
+                  3,
+                  [
+                    'Medical degree from Universidad de San Carlos de Guatemala',
+                    'Rural clinic rotations in San Marcos and Huehuetenango departments',
+                    'Joined MHI as partner clinician for pediatric medical relief',
+                    'Running weekly pediatric clinics in San Jose Ojetenam and San Miguel Ixtahuacán',
+                    'Mentoring visiting medical students from US partner universities',
+                  ],
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Feto-Maternal Ultrasound',
+            people: [
+              {
+                name: 'Carmen Ixchel Ramírez',
+                role: 'Ultrasound Technician',
+                timeline: steps(
+                  ['Basic Training', 'OB Ultrasound Certification', 'Independent Practice', 'Community Prenatal Clinics', 'Training Others'],
+                  3,
+                  [
+                    'Selected from local community for ultrasound training — Mam and Spanish bilingual',
+                    'Completed OB ultrasound certification with Inteleos Foundation MedMissions support',
+                    'Performing independent feto-maternal scans at MHI clinic',
+                    'Running monthly prenatal clinics in remote highland communities',
+                    'Training additional indigenous health workers in basic ultrasound',
+                  ],
+                ),
+              },
+              {
+                name: 'María Tuy',
+                role: 'Ultrasound Trainee & Midwife',
+                timeline: steps(
+                  ['Midwifery Practice', 'Ultrasound Training', 'Supervised Scanning', 'High-Risk Identification'],
+                  2,
+                  [
+                    'Traditional midwife (comadrona) practicing in highland communities for 10+ years',
+                    'Enrolled in MHI ultrasound training program — learning prenatal assessment',
+                    'Supervised scanning practice — identifying gestational age and fetal position',
+                    'Learning to identify high-risk pregnancies for referral to hospital care',
+                  ],
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'uic-medical-center',
+        name: 'University of Illinois at Chicago — College of Medicine',
+        groupLabel: 'Departments',
+        groups: [
+          {
+            name: 'Emergency Pediatrics',
+            people: [
+              {
+                name: 'Dr. Patricia García',
+                role: 'Associate Professor, Emergency Pediatrics',
+                timeline: steps(
+                  ['Residency', 'Fellowship', 'Faculty Appointment', 'Global Health Committee', 'MHI Mission Lead'],
+                  4,
+                  [
+                    'Pediatrics residency at UIC — mentored by Dr. Ahrens',
+                    'Pediatric emergency medicine fellowship',
+                    'Faculty appointment at UIC College of Medicine',
+                    'Joined global health committee — coordinating Guatemala mission partnerships',
+                    'Leading annual UIC medical mission team to MHI sites in San Marcos',
+                  ],
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'global-health',
+                    role: 'Mission Volunteer',
+                    timeline: steps(
+                      ['First Mission Trip', 'Annual Volunteer', 'Mission Team Lead', 'Program Advisor'],
+                      2,
+                    ),
+                  },
+                ],
+              },
+              {
+                name: 'Dr. Michael Torres',
+                role: 'Resident, PGY-3',
+                timeline: steps(
+                  ['PGY-1 Intern Year', 'PGY-2 Rotations', 'PGY-3 Electives', 'Guatemala Elective', 'Chief Resident'],
+                  3,
+                  [
+                    'Intern year — pediatric ward, NICU, emergency department rotations',
+                    'Second year — subspecialty rotations, ICU, outpatient clinics',
+                    'Third year — choosing electives, developing global health interest',
+                    'Planning Guatemala elective rotation with MHI — 4 weeks in San Marcos',
+                    'Applying for chief resident position — global health track',
+                  ],
+                ),
+              },
+              {
+                name: 'Sarah Kim',
+                role: 'Medical Student, MS-4',
+                timeline: steps(
+                  ['Pre-Clinical', 'Clinical Clerkships', 'Sub-Internship', 'Guatemala Rotation', 'Match & Graduation'],
+                  3,
+                  [
+                    'Pre-clinical coursework — anatomy, physiology, pathology',
+                    'Core clinical clerkships — pediatrics, surgery, internal medicine, OB/GYN',
+                    'Pediatric emergency medicine sub-internship at UIC',
+                    'Completing 4-week global health rotation with MHI in Guatemala',
+                    'Applying for pediatric residency — global health focus',
+                  ],
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Global Health Programs',
+            people: [
+              {
+                name: 'Dr. Anita Bhandari',
+                role: 'Director, Global Health Initiatives',
+                timeline: steps(
+                  ['Program Design', 'Partner Site Development', 'Student Rotation Program', 'Research Collaborations', 'Funding & Sustainability'],
+                  4,
+                  [
+                    'Designed UIC global health curriculum and international rotation framework',
+                    'Established MHI as approved partner site for medical student and resident rotations',
+                    'Running student rotation program — 15+ students per year to Guatemala',
+                    'Developing research collaborations between UIC faculty and MHI programs',
+                    'Securing NIH and foundation funding for global health research',
+                  ],
+                ),
+              },
+              {
+                name: 'James O\'Brien',
+                role: 'Global Health Coordinator',
+                timeline: steps(
+                  ['Logistics Setup', 'Student Orientation', 'Site Coordination', 'Alumni Network'],
+                  2,
+                  [
+                    'Setting up travel logistics, housing, and insurance for Guatemala rotations',
+                    'Running pre-departure orientation — cultural competency, medical Spanish, safety',
+                    'On-site coordination between UIC students and MHI clinical staff',
+                    'Building alumni network of UIC-MHI rotation graduates for mentorship',
+                  ],
+                ),
+              },
+            ],
+          },
+        ],
+      },
+      {
+        slug: 'chicago-global-health-partners',
+        name: 'Chicago Global Health Partners',
+        groupLabel: 'Committees',
+        groups: [
+          {
+            name: 'Board of Directors',
+            people: [
+              {
+                name: 'Margaret Sullivan',
+                role: 'Board Chair',
+                timeline: steps(
+                  ['Initial Involvement', 'Board Appointment', 'Strategic Planning', 'Capital Campaign', 'Board Chair'],
+                  4,
+                  [
+                    'First donation to MHI after attending Chicago fundraiser in 2015',
+                    'Appointed to board of directors — governance and strategy',
+                    'Led strategic planning process — 5-year growth roadmap',
+                    'Co-chaired capital campaign for rehabilitation center expansion',
+                    'Elected board chair — overseeing organizational growth',
+                  ],
+                ),
+              },
+              {
+                name: 'Dr. Robert Chen',
+                role: 'Board Member, Medical Advisor',
+                timeline: steps(
+                  ['Volunteer Mission', 'Medical Advisory Role', 'Board Appointment', 'Protocol Development'],
+                  3,
+                  [
+                    'First volunteer medical mission to Guatemala with Dr. Ahrens in 2016',
+                    'Advising MHI on clinical protocols and quality improvement',
+                    'Appointed to board — representing medical community perspective',
+                    'Developing standardized clinical protocols for MHI mission teams',
+                  ],
+                ),
+                personalInterests: [
+                  {
+                    interestSlug: 'nursing',
+                    role: 'Clinical Educator',
+                    timeline: steps(['Attending Physician', 'Clinical Instructor', 'Protocol Author'], 2),
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'Medical Volunteers',
+            people: [
+              {
+                name: 'Dr. Jane Buellesbach',
+                role: 'Maryknoll Physician & Mentor',
+                timeline: steps(
+                  ['Missionary Work', 'Decades in Guatemala', 'MHI Mentor', 'Ongoing Support'],
+                  3,
+                  [
+                    'Maryknoll sister and physician — began mission work in Guatemala',
+                    'Decades of healthcare delivery in Guatemala\'s rural communities',
+                    'Mentored Dr. Ahrens in his transition to full-time Guatemala work',
+                    'Ongoing clinical support and community connections for MHI',
+                  ],
+                ),
+              },
+              {
+                name: 'Dr. Marylou Daoust',
+                role: 'Maryknoll Physician & Mentor',
+                timeline: steps(
+                  ['Medical Missions', 'Community Health Development', 'MHI Advisory', 'Ongoing Support'],
+                  3,
+                  [
+                    'Maryknoll sister and physician — medical missions throughout Central America',
+                    'Community health program development in indigenous communities',
+                    'Advisory role for MHI program design — decades of Guatemala expertise',
+                    'Ongoing mentorship and community introductions for MHI team',
+                  ],
+                ),
+              },
+              {
+                name: 'Dr. Lisa Ramirez',
+                role: 'Volunteer Pediatrician — Rush University',
+                timeline: steps(
+                  ['First Mission', 'Annual Volunteer', 'Specialty Clinics', 'Chicago Fundraising'],
+                  2,
+                  [
+                    'First MHI mission trip — pediatric care in San Marcos',
+                    'Committing to annual volunteer mission — 2 weeks per year',
+                    'Running developmental pediatrics specialty clinics during missions',
+                    'Organizing fundraising events in Chicago medical community',
+                  ],
+                ),
+              },
+            ],
+          },
+          {
+            name: 'Fundraising Committee',
+            people: [
+              {
+                name: 'Isabella Blair',
+                role: 'Fundraising Coordinator',
+                timeline: steps(
+                  ['GoFundMe Campaign', 'Donor Outreach', 'Annual Gala', 'Corporate Partnerships', 'Major Gifts Strategy'],
+                  3,
+                  [
+                    'Launched Plumpy\'Nut GoFundMe campaign for MHI nutrition program',
+                    'Building donor database and outreach strategy for Chicago supporters',
+                    'Organizing annual Chicago fundraising gala — 200+ attendees',
+                    'Developing corporate partnerships with medical device and pharma companies',
+                    'Working on major gifts strategy — foundation grants and individual donors',
+                  ],
+                ),
+              },
+              {
+                name: 'David Sweeney',
+                role: 'Board Member & Donor Liaison',
+                timeline: steps(
+                  ['Family Legacy', 'Board Appointment', 'Donor Relations', 'Chicago Events'],
+                  2,
+                  [
+                    'Continuing the legacy of co-founder John Sweeney — family commitment to MHI',
+                    'Appointed to board — focus on fundraising and donor relations',
+                    'Building relationships with Chicago philanthropic community',
+                    'Hosting Chicago networking events connecting MHI with potential donors',
+                  ],
+                ),
+              },
+              {
+                name: 'Patricia Moreno',
+                role: 'Events Manager',
+                timeline: steps(
+                  ['Event Planning', 'Venue Partnerships', 'Auction Coordination', 'Impact Storytelling'],
+                  1,
+                  [
+                    'Planning annual benefit gala and smaller quarterly fundraising events',
+                    'Building venue partnerships across Chicago for MHI events',
+                    'Coordinating silent and live auctions — donated items and experiences',
+                    'Creating impact storytelling content — patient stories, before/after photos',
+                  ],
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    programs: [
+      {
+        slug: 'medical-mission-volunteer-training',
+        name: 'Medical Mission Volunteer Training',
+        type: 'training',
+        description: 'Preparation program for medical professionals volunteering with MHI missions to Guatemala',
+        offeredBy: [
+          { orgSlug: 'mayan-health-initiative', role: 'Mission Host' },
+          { orgSlug: 'uic-medical-center', role: 'Academic Partner' },
+        ],
+        samplePeople: [
+          {
+            name: 'Dr. Emily Nguyen',
+            role: 'Volunteer in Training',
+            timeline: steps(
+              ['Orientation', 'Cultural Competency', 'Medical Spanish', 'Pre-Departure Briefing', 'First Mission'],
+              3,
+              [
+                'Volunteer orientation — MHI mission, programs, and community context',
+                'Cultural competency training — Mayan culture, traditions, health beliefs',
+                'Medical Spanish intensive — clinical terminology and patient communication',
+                'Pre-departure briefing — logistics, safety, clinical protocols, packing list',
+                'First medical mission — pediatric clinics in San Marcos highlands',
+              ],
+            ),
+          },
+        ],
+      },
+      {
+        slug: 'rehabilitation-therapist-training',
+        name: 'Rehabilitation Therapist Training',
+        type: 'training',
+        description: 'Training local Guatemalan women as physical therapists for pediatric rehabilitation',
+        offeredBy: [
+          { orgSlug: 'mayan-health-initiative', role: 'Training Provider' },
+        ],
+        samplePeople: [
+          {
+            name: 'Sofía Tuc',
+            role: 'Therapist Trainee',
+            timeline: steps(
+              ['Selection', 'Anatomy & Physiology', 'PT Techniques', 'Supervised Practice', 'Independent Practice'],
+              2,
+              [
+                'Selected from local community — bilingual Mam/Spanish, community trust',
+                'Foundational training in anatomy, physiology, and child development',
+                'Learning physical therapy techniques — exercises, stretching, assistive devices',
+                'Supervised clinical practice with Elizabeth Barrios as mentor',
+                'Transitioning to independent practice with own patient caseload',
+              ],
+            ),
+          },
+        ],
+      },
+    ],
+    affiliations: [
+      { name: 'Chicago Medical Mission Network', orgSlugs: ['mayan-health-initiative', 'uic-medical-center', 'chicago-global-health-partners'] },
     ],
   },
 ];

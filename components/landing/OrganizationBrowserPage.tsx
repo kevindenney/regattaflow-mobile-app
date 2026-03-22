@@ -7,7 +7,7 @@ import { ScrollFix } from './ScrollFix';
 import { GroupSection } from './GroupSection';
 import { PersonTimelineRow } from './PersonTimelineRow';
 import { SubscribeCTA } from './SubscribeCTA';
-import { getInterest, getOrganization } from '@/lib/landing/sampleData';
+import { getInterest, getOrganization, type SampleCohort } from '@/lib/landing/sampleData';
 import { useAuth } from '@/providers/AuthProvider';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
@@ -200,6 +200,27 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
                   </Text>
                 </View>
               </View>
+              {cohort.isShared && cohort.partnerInterests && cohort.partnerInterests.length > 0 && (
+                <View style={styles.sharedBadgeRow}>
+                  {cohort.partnerInterests.map((partner) => {
+                    const partnerInterest = getInterest(partner.interestSlug);
+                    const partnerColor = partnerInterest?.color ?? '#6B7280';
+                    return (
+                      <TouchableOpacity
+                        key={partner.interestSlug}
+                        style={[styles.sharedBadge, { backgroundColor: partnerColor + '12', borderColor: partnerColor + '30' }]}
+                        onPress={() => partner.orgSlug ? router.push(`/${partner.interestSlug}/${partner.orgSlug}` as any) : undefined}
+                        activeOpacity={partner.orgSlug ? 0.7 : 1}
+                      >
+                        <Ionicons name="git-compare-outline" size={12} color={partnerColor} />
+                        <Text style={[styles.sharedBadgeText, { color: partnerColor }]}>
+                          Shared with {partner.orgName ?? partner.orgSlug ?? partnerInterest?.name ?? partner.interestSlug}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
               {cohort.people.map((person, j) => (
                 <PersonTimelineRow key={j} person={person} accentColor={interest.color} interestSlug={interestSlug} />
               ))}
@@ -374,6 +395,28 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   cohortBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Shared cohort badges
+  sharedBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  sharedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  sharedBadgeText: {
     fontSize: 12,
     fontWeight: '600',
   },

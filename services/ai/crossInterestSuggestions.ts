@@ -397,6 +397,8 @@ function buildSuggestionTitle(
     nursing: 'Nursing',
     drawing: 'Drawing',
     fitness: 'Fitness',
+    'lifelong-learning': 'Lifelong Learning',
+    'regenerative-agriculture': 'Regenerative Agriculture',
   };
 
   return typeLabels[ref.suggestionType] + ': ' + skillLabel + ' from ' + interestLabels[ref.sourceInterest];
