@@ -28,6 +28,7 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
   const [mounted, setMounted] = React.useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [pricingMenuOpen, setPricingMenuOpen] = useState(false);
   const { user, userProfile, isGuest } = useAuth();
   const isLoggedIn = !!user && !isGuest;
   const pathname = usePathname();
@@ -66,11 +67,7 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
           {/* Logo */}
           <TouchableOpacity
             style={styles.logoRow}
-            onPress={() => {
-              if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
-            }}
+            onPress={() => router.push('/?view=landing')}
             accessibilityLabel="BetterAt home"
           >
             <BetterAtLogo size={32} variant="white" />
@@ -81,11 +78,46 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
           {isDesktop ? (
             <View style={styles.desktopLinks}>
               <InterestDropdown currentSlug={currentInterestSlug} />
-              <TouchableOpacity
-                onPress={() => router.push('/pricing')}
-              >
-                <Text style={styles.navLink}>Pricing</Text>
-              </TouchableOpacity>
+              <View style={styles.pricingContainer}>
+                <TouchableOpacity
+                  onPress={() => setPricingMenuOpen(!pricingMenuOpen)}
+                >
+                  <View style={styles.pricingTrigger}>
+                    <Text style={styles.navLink}>Pricing</Text>
+                    <Ionicons
+                      name={pricingMenuOpen ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color="rgba(255, 255, 255, 0.85)"
+                    />
+                  </View>
+                </TouchableOpacity>
+                {pricingMenuOpen && (
+                  <Pressable
+                    style={styles.pricingBackdrop}
+                    onPress={() => setPricingMenuOpen(false)}
+                  >
+                    <Pressable
+                      style={styles.pricingDropdown}
+                      onPress={(e) => e.stopPropagation?.()}
+                    >
+                      <TouchableOpacity
+                        style={styles.profileMenuItem}
+                        onPress={() => { setPricingMenuOpen(false); router.push('/pricing'); }}
+                      >
+                        <Ionicons name="person-outline" size={16} color="#374151" />
+                        <Text style={styles.profileMenuText}>Individual Pricing</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.profileMenuItem}
+                        onPress={() => { setPricingMenuOpen(false); router.push('/institutions/pricing' as any); }}
+                      >
+                        <Ionicons name="business-outline" size={16} color="#374151" />
+                        <Text style={styles.profileMenuText}>Institutional Plans</Text>
+                      </TouchableOpacity>
+                    </Pressable>
+                  </Pressable>
+                )}
+              </View>
 
               <View style={styles.divider} />
 
@@ -107,6 +139,13 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                         style={styles.profileDropdown}
                         onPress={(e) => e.stopPropagation?.()}
                       >
+                        <TouchableOpacity
+                          style={styles.profileMenuItem}
+                          onPress={() => { setProfileMenuOpen(false); router.push('/?view=landing'); }}
+                        >
+                          <Ionicons name="home-outline" size={16} color="#374151" />
+                          <Text style={styles.profileMenuText}>Home</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.profileMenuItem}
                           onPress={() => { setProfileMenuOpen(false); goToDashboard(); }}
@@ -141,7 +180,11 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.getStartedBtn}
-                    onPress={() => router.push('/(auth)/signup')}
+                    onPress={() => router.push(
+                      currentInterestSlug
+                        ? { pathname: '/(auth)/signup', params: { interest: currentInterestSlug } }
+                        : '/(auth)/signup' as any
+                    )}
                   >
                     <Text style={styles.getStartedText}>Get Started Free</Text>
                   </TouchableOpacity>
@@ -220,7 +263,21 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                     size={22}
                     color="rgba(255, 255, 255, 0.7)"
                   />
-                  <Text style={styles.mobileMenuText}>Pricing</Text>
+                  <Text style={styles.mobileMenuText}>Individual Pricing</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.mobileMenuItem}
+                  onPress={() => {
+                    setMobileMenuOpen(false);
+                    router.push('/institutions/pricing' as any);
+                  }}
+                >
+                  <Ionicons
+                    name="business-outline"
+                    size={22}
+                    color="rgba(255, 255, 255, 0.7)"
+                  />
+                  <Text style={styles.mobileMenuText}>Institutional Plans</Text>
                 </TouchableOpacity>
 
                 <View style={styles.mobileMenuDivider} />
@@ -275,7 +332,11 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                       style={styles.mobileGetStarted}
                       onPress={() => {
                         setMobileMenuOpen(false);
-                        router.push('/(auth)/signup');
+                        router.push(
+                          currentInterestSlug
+                            ? { pathname: '/(auth)/signup', params: { interest: currentInterestSlug } } as any
+                            : '/(auth)/signup'
+                        );
                       }}
                     >
                       <Text style={styles.mobileGetStartedText}>
@@ -366,6 +427,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  pricingContainer: {
+    position: 'relative',
+  },
+  pricingTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  pricingBackdrop: {
+    ...Platform.select({
+      web: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 999,
+      } as any,
+    }),
+  },
+  pricingDropdown: {
+    position: 'absolute',
+    top: 32,
+    left: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: 6,
+    minWidth: 200,
+    zIndex: 1000,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+      } as any,
+    }),
   },
 
   profileContainer: {

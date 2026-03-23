@@ -8,6 +8,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { normalizePersonaParam, type PersonaRole } from '@/lib/auth/signupPersona';
 import { getOnboardingContext } from '@/lib/onboarding/interestContext';
+import { SAMPLE_INTERESTS } from '@/lib/landing/sampleData';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Helper to get user-friendly error messages for signup
@@ -30,23 +31,25 @@ const getSignupErrorMessage = (error: any): string => {
   return error?.message || 'Unable to create your account. Please try again.';
 };
 
-const PERSONA_LABELS: Record<PersonaRole, string> = {
-  sailor: 'Sailor',
-  coach: 'Coach',
-  club: 'Club',
-};
-
-const PERSONA_SUBTITLES: Record<PersonaRole, string> = {
-  sailor: 'Start with 14 days of full Pro access — no card required',
-  coach: 'Set up your coaching profile and start managing clients',
-  club: 'Get your club set up with race management tools',
-};
+type SignupStep = 'interest' | 'persona';
 
 export default function SignUp() {
   const { signUp, signInWithGoogle, signInWithApple, loading: authLoading, enterGuestMode } = useAuth();
-  const params = useLocalSearchParams<{ persona?: string; interest?: string }>();
-  const interestSlug = params.interest || undefined;
-  const interestCtx = getOnboardingContext(interestSlug);
+  const params = useLocalSearchParams<{
+    persona?: string;
+    interest?: string;
+    inviteToken?: string;
+    plan?: string;
+  }>();
+
+  // If interest comes from URL, skip the interest picker step
+  const paramInterest = params.interest || undefined;
+  const inviteToken = params.inviteToken || undefined;
+
+  const [selectedInterest, setSelectedInterest] = useState<string | undefined>(paramInterest);
+  const [step, setStep] = useState<SignupStep>(paramInterest ? 'persona' : 'interest');
+
+  const interestCtx = getOnboardingContext(selectedInterest);
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -68,22 +71,19 @@ export default function SignUp() {
     setPersona(normalizePersonaParam(params.persona));
   }, [params.persona]);
 
-  // When an interest is provided, adapt club labels
-  const personaLabels: Record<PersonaRole, string> = {
-    ...PERSONA_LABELS,
-    ...(interestSlug ? { club: 'Organization' } : {}),
-  };
+  const personaLabels = interestCtx.personaLabels;
+  const personaSubtitles = interestCtx.personaSubtitles;
 
-  const getSubtitle = () => {
-    if (persona === 'club' && interestSlug) {
-      return interestCtx.signupSubtitle;
-    }
-    return PERSONA_SUBTITLES[persona];
-  };
+  const getSubtitle = () => personaSubtitles[persona];
 
   const getButtonText = () => {
     if (isLoading) return 'Creating account...';
     return 'Create Account';
+  };
+
+  const handleSelectInterest = (slug: string) => {
+    setSelectedInterest(slug);
+    setStep('persona');
   };
 
   const handleSignUp = async () => {
@@ -122,8 +122,15 @@ export default function SignUp() {
       const result = await signUp(trimmedEmail, trimmedUsername, password, persona);
 
       // Store interest context for onboarding steps to read
-      if (interestSlug) {
-        await AsyncStorage.setItem('onboarding_interest_slug', interestSlug);
+      if (selectedInterest) {
+        await AsyncStorage.setItem('onboarding_interest_slug', selectedInterest);
+      }
+
+      // Store invite token for post-signup acceptance
+      if (inviteToken) {
+        await AsyncStorage.setItem('pending_invite_token', inviteToken);
+        router.replace(`/invite/${inviteToken}` as any);
+        return;
       }
 
       if (persona === 'sailor') {
@@ -132,8 +139,8 @@ export default function SignUp() {
       } else if (persona === 'coach') {
         router.replace('/(auth)/coach-onboarding-welcome');
       } else if (persona === 'club') {
-        const chatRoute = interestSlug
-          ? `/(auth)/club-onboarding-chat?interest=${interestSlug}`
+        const chatRoute = selectedInterest
+          ? `/(auth)/club-onboarding-chat?interest=${selectedInterest}`
           : '/(auth)/club-onboarding-chat';
         router.replace(chatRoute as any);
       }
@@ -151,6 +158,9 @@ export default function SignUp() {
     setErrorMessage(null);
     try {
       await signInWithGoogle(persona);
+      if (inviteToken) {
+        await AsyncStorage.setItem('pending_invite_token', inviteToken);
+      }
     } catch (error: any) {
       console.error('[Signup] Google sign-up error:', error);
       const friendlyMessage = getSignupErrorMessage(error);
@@ -163,6 +173,9 @@ export default function SignUp() {
     setErrorMessage(null);
     try {
       await signInWithApple(persona);
+      if (inviteToken) {
+        await AsyncStorage.setItem('pending_invite_token', inviteToken);
+      }
     } catch (error: any) {
       console.error('[Signup] Apple sign-up error:', error);
       const friendlyMessage = getSignupErrorMessage(error);
@@ -171,6 +184,75 @@ export default function SignUp() {
     }
   };
 
+  // ---- Interest Picker Step ----
+  if (step === 'interest') {
+    return (
+      <View style={styles.container}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            <View style={styles.cardHeader}>
+              <View style={styles.headerSpacer} />
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Close sign up"
+                onPress={() => enterGuestMode()}
+                style={styles.closeButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={24} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text testID="signup-title" style={styles.title}>What are you working on?</Text>
+            <Text style={styles.subtitle}>
+              Pick an interest to get started. You can add more later.
+            </Text>
+
+            <View style={styles.interestGrid}>
+              {SAMPLE_INTERESTS.map((interest) => (
+                <TouchableOpacity
+                  key={interest.slug}
+                  style={styles.interestCard}
+                  onPress={() => handleSelectInterest(interest.slug)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${interest.name}`}
+                >
+                  <View style={[styles.interestIcon, { backgroundColor: interest.color + '18' }]}>
+                    <Ionicons
+                      name={(interest.icon + '-outline') as any}
+                      size={24}
+                      color={interest.color}
+                    />
+                  </View>
+                  <Text style={styles.interestName}>{interest.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.skipButton}
+              onPress={() => setStep('persona')}
+            >
+              <Text style={styles.skipButtonText}>Skip — I'll choose later</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              testID="signup-signin-link"
+              style={styles.linkButton}
+              onPress={() => router.push('/(auth)/login')}
+            >
+              <Text style={styles.linkText}>Already have an account? Sign in</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ---- Persona + Form Step ----
   return (
     <View style={styles.container}>
       <ScrollView
@@ -179,8 +261,19 @@ export default function SignUp() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.content}>
-          {/* Header with close button */}
+          {/* Header with close/back buttons */}
           <View style={styles.cardHeader}>
+            {!paramInterest && (
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Back to interest picker"
+                onPress={() => { setStep('interest'); setSelectedInterest(undefined); }}
+                style={styles.backButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="arrow-back" size={20} color="#64748B" />
+              </TouchableOpacity>
+            )}
             <View style={styles.headerSpacer} />
             <TouchableOpacity
               accessibilityRole="button"
@@ -192,6 +285,17 @@ export default function SignUp() {
               <Ionicons name="close" size={24} color="#64748B" />
             </TouchableOpacity>
           </View>
+
+          {/* Interest badge */}
+          {selectedInterest && (
+            <View style={styles.interestBadgeRow}>
+              <View style={[styles.interestBadge, { backgroundColor: interestCtx.color + '18', borderColor: interestCtx.color + '40' }]}>
+                <Text style={[styles.interestBadgeText, { color: interestCtx.color }]}>
+                  {interestCtx.interestName}
+                </Text>
+              </View>
+            </View>
+          )}
 
           <Text testID="signup-title" style={styles.title}>Create your account</Text>
           <Text style={styles.subtitle}>{getSubtitle()}</Text>
@@ -207,7 +311,7 @@ export default function SignUp() {
                 ]}
                 onPress={() => setPersona(p)}
                 accessibilityRole="button"
-                accessibilityLabel={`Sign up as ${PERSONA_LABELS[p]}`}
+                accessibilityLabel={`Sign up as ${personaLabels[p]}`}
               >
                 <Text
                   style={[
@@ -376,6 +480,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#F1F5F9',
   },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+  },
   title: {
     fontSize: 28,
     fontWeight: '700',
@@ -389,6 +498,63 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
     lineHeight: 22,
+  },
+
+  // Interest Picker
+  interestGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+  interestCard: {
+    width: '47%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  interestIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  interestName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0F172A',
+    flex: 1,
+  },
+  skipButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  skipButtonText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+
+  // Interest Badge (persona step)
+  interestBadgeRow: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  interestBadge: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  interestBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   // Persona Picker

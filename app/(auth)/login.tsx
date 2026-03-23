@@ -83,7 +83,7 @@ const getAuthErrorMessage = (error: any): string => {
 
 export default function Login() {
   const { signIn, signInWithGoogle, signInWithApple, loading, enterGuestMode, signedIn, ready, userProfile } = useAuth();
-  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { returnTo, inviteToken } = useLocalSearchParams<{ returnTo?: string; inviteToken?: string }>();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -101,6 +101,11 @@ export default function Login() {
   // Redirect after successful sign-in
   useEffect(() => {
     if (!ready || !signedIn) return;
+    // If an invite token was provided, redirect to invite acceptance page
+    if (inviteToken && typeof inviteToken === 'string') {
+      router.replace(`/invite/${inviteToken}` as any);
+      return;
+    }
     // If a returnTo path was provided (e.g. from a landing page), go back there
     if (returnTo && typeof returnTo === 'string' && returnTo.startsWith('/')) {
       router.replace(returnTo as any);

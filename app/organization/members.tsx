@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { showConfirm } from '@/lib/utils/crossPlatformAlert';
+import { InviteMemberSheet } from '@/components/organizations/InviteMemberSheet';
 
 type MemberRow = {
   id: string;
@@ -92,6 +93,7 @@ export default function OrganizationMembersScreen() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [sortOption, setSortOption] = useState<SortOption>('name_asc');
   const [orgInterestSlug, setOrgInterestSlug] = useState<string | null>(null);
+  const [inviteSheetVisible, setInviteSheetVisible] = useState(false);
 
   const resolvedActiveOrgId = useMemo(
     () => resolveActiveOrgId({ activeOrganizationId, memberships: memberships as any }),
@@ -529,6 +531,15 @@ export default function OrganizationMembersScreen() {
           <Text style={styles.subtitle}>Manage organization members and roles.</Text>
           <OrgContextPill interestSlug={orgInterestSlug} />
           <View style={styles.headerLinksRow}>
+            {canManage && (
+              <TouchableOpacity
+                style={styles.inviteButton}
+                onPress={() => setInviteSheetVisible(true)}
+              >
+                <Ionicons name="person-add-outline" size={14} color="#FFFFFF" />
+                <Text style={styles.inviteButtonText}>Invite Member</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => router.push('/organization/access-requests')}>
               <Text style={styles.headerLinkText}>Access requests</Text>
             </TouchableOpacity>
@@ -760,6 +771,15 @@ export default function OrganizationMembersScreen() {
           </View>
         </ScrollView>
       )}
+
+      {resolvedActiveOrgId && (
+        <InviteMemberSheet
+          visible={inviteSheetVisible}
+          onClose={() => setInviteSheetVisible(false)}
+          organizationId={resolvedActiveOrgId}
+          interestSlug={orgInterestSlug}
+        />
+      )}
     </View>
   );
 }
@@ -806,6 +826,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#2563EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  inviteButtonText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   headerLinkText: {
     fontSize: 12,

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SimpleLandingNav } from './SimpleLandingNav';
 import { ScrollFix } from './ScrollFix';
+import { SearchBar } from './SearchBar';
 import { SAMPLE_INTERESTS } from '@/lib/landing/sampleData';
 
 const HOW_IT_WORKS_STEPS = [
@@ -52,6 +53,11 @@ export function DataBrowserLandingPage() {
             structure — organizations, groups, people, and timelines — so you can track
             progress wherever you're working to improve.
           </Text>
+
+          {/* Search Bar */}
+          <View style={styles.searchBarWrap}>
+            <SearchBar />
+          </View>
         </View>
       </View>
 
@@ -181,6 +187,10 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     lineHeight: 30,
+  },
+  searchBarWrap: {
+    width: '100%',
+    marginTop: 28,
   },
 
   // How It Works
