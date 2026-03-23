@@ -85,6 +85,9 @@ class OrganizationInviteService {
     const resolvedRoleKey = input.role_key ?? roleKeyFromMetadata;
     const resolvedRoleLabel = input.role_label || roleLabelFromMetadata || 'Team Member';
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Authentication required to create invites.');
+
     const { data, error } = await supabase
       .from('organization_invites')
       .insert({
@@ -99,6 +102,7 @@ class OrganizationInviteService {
         role_label: resolvedRoleLabel,
         channel: input.channel ?? 'email',
         status: input.status ?? 'sent',
+        invited_by: user.id,
         sent_at: input.sent_at ?? new Date().toISOString(),
         notes: input.notes ?? null,
         metadata: {
