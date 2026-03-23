@@ -78,6 +78,10 @@ export interface RacesFloatingHeaderProps {
   onNewSeason?: () => void;
   /** Callback when browse catalog is pressed */
   onBrowseCatalog?: () => void;
+  /** Callback when publish as blueprint is pressed */
+  onPublishBlueprint?: () => void;
+  /** Label for blueprint button (changes when already published) */
+  blueprintLabel?: string;
   /** Optional org-published step templates for "Create New" menu */
   recommendedTemplates?: RecommendedStepTemplate[];
   /** Selects one recommended template */
@@ -133,6 +137,8 @@ export function RacesFloatingHeader({
   onAddPractice,
   onNewSeason,
   onBrowseCatalog,
+  onPublishBlueprint,
+  blueprintLabel,
   recommendedTemplates = [],
   onSelectRecommendedTemplate,
   scrollOffset: _scrollOffset = 0,
@@ -203,7 +209,7 @@ export function RacesFloatingHeader({
   // Handle add button press
   const handleAddPress = () => {
     triggerHaptic('impactLight');
-    if (!onAddStep && !onAddPractice && !onNewSeason) {
+    if (!onAddStep && !onAddPractice && !onNewSeason && !onPublishBlueprint) {
       onAddRace();
       return;
     }
@@ -584,6 +590,28 @@ export function RacesFloatingHeader({
                       </TouchableOpacity>
                     </>
                   ) : null}
+
+                  {onPublishBlueprint ? (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onPublishBlueprint)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: 'rgba(0,137,123,0.1)' }]}>
+                          <Ionicons name="layers-outline" size={24} color="#00897B" />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>{blueprintLabel ?? 'Publish as Blueprint'}</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            Make your timeline subscribable for others
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -718,6 +746,28 @@ export function RacesFloatingHeader({
                           <Text style={styles.menuOptionTitle}>Browse {config.eventNoun} Catalog</Text>
                           <Text style={styles.menuOptionSubtitle}>
                             {config.catalogSubtitle ?? `Find and follow ${config.eventNoun.toLowerCase()}s`}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
+                      </TouchableOpacity>
+                    </>
+                  )}
+
+                  {onPublishBlueprint && (
+                    <>
+                      <View style={styles.menuSeparator} />
+                      <TouchableOpacity
+                        style={styles.menuOption}
+                        onPress={() => handleMenuOption(onPublishBlueprint)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.menuOptionIcon, { backgroundColor: 'rgba(0,137,123,0.1)' }]}>
+                          <Ionicons name="layers-outline" size={24} color="#00897B" />
+                        </View>
+                        <View style={styles.menuOptionContent}>
+                          <Text style={styles.menuOptionTitle}>{blueprintLabel ?? 'Publish as Blueprint'}</Text>
+                          <Text style={styles.menuOptionSubtitle}>
+                            Make your timeline subscribable for others
                           </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />

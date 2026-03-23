@@ -87,6 +87,7 @@ import { AIStructureReview } from '@/components/step/AIStructureReview';
 import type { BrainDumpData, StepMetadata, StepPlanData, StepCollaborator, SubStep } from '@/types/step-detail';
 import { useUpdateStepMetadata } from '@/hooks/useStepDetail';
 import { useUpdateStep } from '@/hooks/useTimelineSteps';
+import type { TimelineStepVisibility } from '@/types/timeline-steps';
 import { useAuth } from '@/providers/AuthProvider';
 import { structureBrainDump } from '@/services/ai/StepPlanAIService';
 import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
@@ -661,6 +662,17 @@ function formatArrivalTimeDisplay(plannedArrival: string, minutesBefore?: number
 }
 
 // =============================================================================
+// VISIBILITY OPTIONS
+// =============================================================================
+
+const VISIBILITY_OPTIONS: { value: TimelineStepVisibility; label: string; icon: string }[] = [
+  { value: 'private', label: 'Private (only you)', icon: 'lock-closed-outline' },
+  { value: 'followers', label: 'Followers', icon: 'people-outline' },
+  { value: 'coaches', label: 'Coaches', icon: 'school-outline' },
+  { value: 'organization', label: 'Organization', icon: 'business-outline' },
+];
+
+// =============================================================================
 // COMPONENT
 // =============================================================================
 
@@ -778,6 +790,44 @@ export function RaceSummaryCard({
 
     updateStepMutation.mutate({ stepId: race.id, input: { title: trimmed } });
   }, [editTitle, race.name, race.id, updateStepMutation, queryClient]);
+
+  // Visibility change handler for timeline steps
+  const currentVisibility = ((race as any)?.visibility as TimelineStepVisibility) ?? 'followers';
+  const [showVisibilityPicker, setShowVisibilityPicker] = useState(false);
+
+  const handleChangeVisibility = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      const options = VISIBILITY_OPTIONS.map((o) =>
+        o.value === currentVisibility ? `${o.label} ✓` : o.label
+      );
+      options.push('Cancel');
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: 'Who can see this step?',
+          options,
+          cancelButtonIndex: options.length - 1,
+        },
+        (buttonIndex) => {
+          if (buttonIndex < VISIBILITY_OPTIONS.length) {
+            const selected = VISIBILITY_OPTIONS[buttonIndex].value;
+            if (selected !== currentVisibility) {
+              updateStepMutation.mutate({ stepId: race.id, input: { visibility: selected } });
+            }
+          }
+        },
+      );
+    } else {
+      // Android / web — show inline picker
+      setShowVisibilityPicker(true);
+    }
+  }, [currentVisibility, race.id, updateStepMutation]);
+
+  const handleSelectVisibility = useCallback((value: TimelineStepVisibility) => {
+    setShowVisibilityPicker(false);
+    if (value !== currentVisibility) {
+      updateStepMutation.mutate({ stepId: race.id, input: { visibility: value } });
+    }
+  }, [currentVisibility, race.id, updateStepMutation]);
 
   // Brain dump state for timeline steps
   const metadata = (race as any)?.metadata as StepMetadata | undefined;
@@ -1523,6 +1573,15 @@ export function RaceSummaryCard({
           onPress: onMoveStepToCompletedMostRecent,
         });
       }
+      // Visibility picker
+      if (isTimelineStep) {
+        const visLabel = currentVisibility === 'private' ? 'Private' : currentVisibility.charAt(0).toUpperCase() + currentVisibility.slice(1);
+        items.push({
+          label: `Visibility: ${visLabel}`,
+          icon: currentVisibility === 'private' ? 'lock-closed-outline' : 'eye-outline',
+          onPress: handleChangeVisibility,
+        });
+      }
       if (onEdit) {
         items.push({ label: `Edit ${noun}`, icon: 'create-outline', onPress: onEdit });
       }
@@ -1551,6 +1610,9 @@ export function RaceSummaryCard({
     onMoveStepLater,
     onMoveStepToPlannedNext,
     onMoveStepToCompletedMostRecent,
+    isTimelineStep,
+    currentVisibility,
+    handleChangeVisibility,
   ]);
 
   // Long-press handler to show context menu
@@ -2352,9 +2414,116 @@ export function RaceSummaryCard({
           }}
         />
       )}
+
+      {/* Visibility Picker (Android / Web) */}
+      {showVisibilityPicker && (
+        <Pressable
+          style={visPickerStyles.backdrop}
+          onPress={() => setShowVisibilityPicker(false)}
+        >
+          <Pressable style={visPickerStyles.sheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={visPickerStyles.title}>Who can see this step?</Text>
+            {VISIBILITY_OPTIONS.map((o) => (
+              <Pressable
+                key={o.value}
+                style={[
+                  visPickerStyles.option,
+                  o.value === currentVisibility && visPickerStyles.optionActive,
+                ]}
+                onPress={() => handleSelectVisibility(o.value)}
+              >
+                <Ionicons
+                  name={o.icon as any}
+                  size={18}
+                  color={o.value === currentVisibility ? IOS_COLORS.blue : IOS_COLORS.gray}
+                  style={{ marginRight: 10 }}
+                />
+                <Text
+                  style={[
+                    visPickerStyles.optionText,
+                    o.value === currentVisibility && visPickerStyles.optionTextActive,
+                  ]}
+                >
+                  {o.label}
+                </Text>
+                {o.value === currentVisibility && (
+                  <Ionicons name="checkmark" size={18} color={IOS_COLORS.blue} style={{ marginLeft: 'auto' }} />
+                )}
+              </Pressable>
+            ))}
+            <Pressable
+              style={visPickerStyles.cancelBtn}
+              onPress={() => setShowVisibilityPicker(false)}
+            >
+              <Text style={visPickerStyles.cancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      )}
     </>
   );
 }
+
+const visPickerStyles = StyleSheet.create({
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    width: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1c1c1e',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 2,
+  },
+  optionActive: {
+    backgroundColor: '#f0f5ff',
+  },
+  optionText: {
+    fontSize: 15,
+    color: '#1c1c1e',
+  },
+  optionTextActive: {
+    fontWeight: '600',
+    color: IOS_COLORS.blue,
+  },
+  cancelBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  cancelText: {
+    fontSize: 15,
+    color: IOS_COLORS.blue,
+    fontWeight: '500',
+  },
+});
 
 // =============================================================================
 // STYLES (Apple HIG Compliant)

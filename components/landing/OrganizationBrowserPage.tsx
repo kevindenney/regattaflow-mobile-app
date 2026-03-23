@@ -7,8 +7,10 @@ import { ScrollFix } from './ScrollFix';
 import { GroupSection } from './GroupSection';
 import { PersonTimelineRow } from './PersonTimelineRow';
 import { SubscribeCTA } from './SubscribeCTA';
+import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
 import { getInterest, getOrganization, type SampleCohort } from '@/lib/landing/sampleData';
 import { useAuth } from '@/providers/AuthProvider';
+import { useUserBlueprints } from '@/hooks/useBlueprint';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
 import { supabase } from '@/services/supabase';
@@ -28,6 +30,14 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
   const [joinState, setJoinState] = useState<'idle' | 'joined' | 'pending' | 'blocked'>('idle');
   const [joinMode, setJoinMode] = useState<OrganizationJoinMode | null>(null);
   const [dbOrgId, setDbOrgId] = useState<string | null>(null);
+  const [showBlueprintSheet, setShowBlueprintSheet] = useState(false);
+  const [interestDbId, setInterestDbId] = useState<string | null>(null);
+  const { data: userBlueprints } = useUserBlueprints();
+
+  // Find existing blueprint for this interest
+  const existingBlueprint = userBlueprints?.find(
+    (bp) => bp.interest_id === interestDbId,
+  ) ?? null;
 
   // Look up the real org from DB by matching name/slug
   useEffect(() => {
@@ -35,6 +45,14 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
 
     const lookupOrg = async () => {
       try {
+        // Look up interest_id for blueprint publishing
+        const { data: interestRow } = await supabase
+          .from('interests')
+          .select('id')
+          .eq('slug', interestSlug)
+          .maybeSingle();
+        if (interestRow) setInterestDbId(interestRow.id);
+
         const results = await organizationDiscoveryService.searchOrganizations({ query: org.name, limit: 5 });
         const match = results.find(
           (r) => r.slug === orgSlug || r.name.toLowerCase() === org.name.toLowerCase()
@@ -145,32 +163,59 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
             {org.cohorts ? ` · ${org.cohorts.length} Cohorts` : ''}
             {org.capabilityGoals ? ` · ${org.capabilityGoals.length} Capability Goals` : ''}
           </Text>
-          <TouchableOpacity
-            style={[
-              styles.followOrgBtn,
-              isJoinDisabled && styles.followOrgBtnActive,
-            ]}
-            onPress={handleJoinOrg}
-            activeOpacity={isJoinDisabled ? 1 : 0.7}
-            disabled={isJoinDisabled}
-          >
-            <Ionicons
-              name={
-                joinState === 'joined'
-                  ? 'checkmark-circle'
-                  : joinState === 'pending'
-                    ? 'time-outline'
-                    : joinMode === 'invite_only'
-                      ? 'lock-closed-outline'
-                      : 'add-circle-outline'
-              }
-              size={16}
-              color={isJoinDisabled ? interest.color : '#FFFFFF'}
-            />
-            <Text style={[styles.followOrgBtnText, isJoinDisabled && { color: interest.color }]}>
-              {getJoinButtonLabel()}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.heroActions}>
+            <TouchableOpacity
+              style={[
+                styles.followOrgBtn,
+                isJoinDisabled && styles.followOrgBtnActive,
+              ]}
+              onPress={handleJoinOrg}
+              activeOpacity={isJoinDisabled ? 1 : 0.7}
+              disabled={isJoinDisabled}
+            >
+              <Ionicons
+                name={
+                  joinState === 'joined'
+                    ? 'checkmark-circle'
+                    : joinState === 'pending'
+                      ? 'time-outline'
+                      : joinMode === 'invite_only'
+                        ? 'lock-closed-outline'
+                        : 'add-circle-outline'
+                }
+                size={16}
+                color={isJoinDisabled ? interest.color : '#FFFFFF'}
+              />
+              <Text style={[styles.followOrgBtnText, isJoinDisabled && { color: interest.color }]}>
+                {getJoinButtonLabel()}
+              </Text>
+            </TouchableOpacity>
+
+            {isLoggedIn && interestDbId && (
+              <TouchableOpacity
+                style={[
+                  styles.followOrgBtn,
+                  existingBlueprint?.is_published && styles.followOrgBtnActive,
+                ]}
+                onPress={() => setShowBlueprintSheet(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={existingBlueprint?.is_published ? 'layers' : 'layers-outline'}
+                  size={16}
+                  color={existingBlueprint?.is_published ? interest.color : '#FFFFFF'}
+                />
+                <Text
+                  style={[
+                    styles.followOrgBtnText,
+                    existingBlueprint?.is_published && { color: interest.color },
+                  ]}
+                >
+                  {existingBlueprint?.is_published ? 'Blueprint Published' : 'Publish as Blueprint'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -251,6 +296,16 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
       )}
 
       <SubscribeCTA accentColor={interest.color} interestSlug={interestSlug} />
+
+      {isLoggedIn && interestDbId && (
+        <PublishBlueprintSheet
+          visible={showBlueprintSheet}
+          onClose={() => setShowBlueprintSheet(false)}
+          interestId={interestDbId}
+          interestName={interest.name}
+          existingBlueprint={existingBlueprint}
+        />
+      )}
     </>
   );
 
@@ -319,12 +374,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: 'rgba(255,255,255,0.8)',
   },
+  heroActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 16,
+  },
   followOrgBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 8,
-    marginTop: 16,
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 8,

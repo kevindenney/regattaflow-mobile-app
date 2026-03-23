@@ -93,6 +93,9 @@ import { createStep as createTimelineStep, deleteStep as deleteTimelineStep } fr
 import { timelineStepsToCardRaceData } from '@/lib/timeline/timelineStepAdapter';
 import { StepFilterBar, type StepFilters } from '@/components/step/StepFilterBar';
 import { StepDetailContent } from '@/components/step/StepDetailContent';
+import { BlueprintUpdatesStrip } from '@/components/blueprint/BlueprintUpdatesStrip';
+import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
+import { useUserBlueprints } from '@/hooks/useBlueprint';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import {
@@ -158,6 +161,13 @@ export default function RacesScreen() {
   const { vocab } = useVocabulary();
   const queryClient = useQueryClient();
   const [recommendedOrgTemplates, setRecommendedOrgTemplates] = useState<RecommendedStepTemplate[]>([]);
+
+  // Blueprint publishing
+  const [showBlueprintSheet, setShowBlueprintSheet] = useState(false);
+  const { data: userBlueprints } = useUserBlueprints();
+  const existingBlueprint = userBlueprints?.find(
+    (bp) => bp.interest_id === currentInterest?.id,
+  ) ?? null;
 
   // Safe area insets for proper header spacing
   const insets = useSafeAreaInsets();
@@ -3558,6 +3568,7 @@ export default function RacesScreen() {
             <>
               {!isSailingInterest && hasTimelineSteps && (
                 <View style={{ paddingTop: totalHeaderHeight + 8 }}>
+                  <BlueprintUpdatesStrip interestId={currentInterest?.id} />
                   <StepFilterBar
                     filters={stepFilters}
                     onFiltersChange={setStepFilters}
@@ -4041,6 +4052,8 @@ export default function RacesScreen() {
           onAddPractice={isSailingInterest ? handleAddPractice : undefined}
           onNewSeason={isSailingInterest ? () => setShowSeasonSettings(true) : undefined}
           onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}
+          onPublishBlueprint={currentInterest?.id ? () => setShowBlueprintSheet(true) : undefined}
+          blueprintLabel={existingBlueprint?.is_published ? 'Manage Blueprint' : 'Publish as Blueprint'}
           recommendedTemplates={recommendedOrgTemplates}
           onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
           onAddButtonLayout={setAddButtonLayout}
@@ -4089,6 +4102,17 @@ export default function RacesScreen() {
       />
 
 
+
+      {/* Blueprint Publish Sheet */}
+      {currentInterest && (
+        <PublishBlueprintSheet
+          visible={showBlueprintSheet}
+          onClose={() => setShowBlueprintSheet(false)}
+          interestId={currentInterest.id}
+          interestName={currentInterest.name}
+          existingBlueprint={existingBlueprint}
+        />
+      )}
 
       {/* Season Picker Modal - Select which season to filter by */}
       <SeasonPickerModal
