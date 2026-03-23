@@ -6,7 +6,7 @@
  * entry point for new steps.
  */
 
-import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,11 +21,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { BrainDumpPreview } from './BrainDumpPreview';
+import { PersonPill } from './PersonPill';
 import {
   parseBrainDump,
   enrichUrls,
   type ParsedBrainDump,
 } from '@/services/ai/BrainDumpAIService';
+import { usePeopleResolver } from '@/hooks/usePeopleResolver';
 import type { ExtractedUrl, BrainDumpData } from '@/types/step-detail';
 
 interface BrainDumpEntryProps {
@@ -127,8 +129,23 @@ export function BrainDumpEntry({
     };
   }, []);
 
+  // Resolve extracted people names against platform users
+  const { resolvedPeople, selectMatch, dismissPerson } = usePeopleResolver(parsed.extracted_people);
+
   const buildBrainDumpData = useCallback((): BrainDumpData => {
     const latest = parseBrainDump(text, interestSlug);
+
+    // Build resolved person entities from profile-linked people
+    const personEntities = resolvedPeople
+      .filter((p) => p.status === 'exact' && p.match)
+      .map((p) => ({
+        raw_text: p.raw_name,
+        type: 'person' as const,
+        matched_user_id: p.match!.user_id,
+        matched_display_name: p.match!.display_name,
+        confidence: 'exact' as const,
+      }));
+
     return {
       raw_text: text,
       extracted_urls: enrichedUrls.length > 0 ? enrichedUrls : latest.extracted_urls,
@@ -137,11 +154,12 @@ export function BrainDumpEntry({
       extracted_dates: latest.extracted_dates,
       extracted_equipment: latest.extracted_equipment,
       extracted_locations: latest.extracted_locations,
+      extracted_entities: personEntities.length > 0 ? personEntities : undefined,
       source_step_id: initialData?.source_step_id,
       source_review_notes: initialData?.source_review_notes,
       created_at: initialData?.created_at ?? new Date().toISOString(),
     };
-  }, [text, enrichedUrls, initialData, interestSlug]);
+  }, [text, enrichedUrls, initialData, interestSlug, resolvedPeople]);
 
   const handleStructure = useCallback(() => {
     onStructureWithAI(buildBrainDumpData());
@@ -201,19 +219,21 @@ export function BrainDumpEntry({
         </View>
       )}
 
-      {/* Detected people */}
-      {parsed.extracted_people.length > 0 && (
+      {/* Detected people (profile-linked) */}
+      {resolvedPeople.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="people-outline" size={14} color={STEP_COLORS.secondaryLabel} />
             <Text style={styles.sectionLabel}>People Mentioned</Text>
           </View>
           <View style={styles.pillRow}>
-            {parsed.extracted_people.map((name) => (
-              <View key={name} style={styles.personPill}>
-                <Ionicons name="person" size={12} color={STEP_COLORS.accent} />
-                <Text style={styles.personPillText}>{name}</Text>
-              </View>
+            {resolvedPeople.map((person) => (
+              <PersonPill
+                key={person.raw_name}
+                person={person}
+                onSelect={selectMatch}
+                onDismiss={dismissPerson}
+              />
             ))}
           </View>
         </View>
@@ -408,20 +428,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: IOS_SPACING.xs,
-  },
-  personPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: STEP_COLORS.accentLight,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  personPillText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: STEP_COLORS.accent,
   },
   topicPill: {
     backgroundColor: 'rgba(175,82,222,0.08)',
