@@ -92,8 +92,23 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
 
   return (
     <View style={styles.container}>
-      {/* Apple HIG-style header with sidebar toggle */}
+      {/* Header with home link and sidebar toggle */}
       <View style={styles.headerRow}>
+        <Pressable
+          onPress={() => router.push('/?view=landing' as Parameters<typeof router.push>[0])}
+          style={({ pressed, hovered }) => [
+            styles.homeLink,
+            (hovered as boolean) && styles.homeLinkHover,
+            pressed && { opacity: 0.7 },
+          ]}
+          accessibilityLabel="Go to homepage"
+          accessibilityRole="link"
+        >
+          <View style={styles.homeLogo}>
+            <Text style={styles.homeLogoText}>B</Text>
+          </View>
+          <Text style={styles.homeTitle}>BetterAt</Text>
+        </Pressable>
         <Pressable
           onPress={handleToggleSidebar}
           style={({ pressed, hovered }) => [
@@ -191,14 +206,43 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: IOS_COLORS.separator,
   },
-  // Apple HIG-style header row with toggle
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     paddingTop: 8,
     paddingHorizontal: 12,
     paddingBottom: 4,
+  },
+  homeLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+    borderRadius: 6,
+  },
+  homeLinkHover: {
+    backgroundColor: IOS_COLORS.secondarySystemBackground,
+  },
+  homeLogo: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeLogoText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  homeTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: IOS_COLORS.label,
+    letterSpacing: -0.3,
   },
   // Apple-style sidebar toggle button (matches macOS window chrome)
   sidebarToggle: {
