@@ -1,5 +1,5 @@
 import * as React from 'react';
-import Svg, { Circle, Text } from 'react-native-svg';
+import Svg, { Circle, Text, Rect } from 'react-native-svg';
 
 interface BetterAtLogoProps {
   size?: number;
@@ -24,15 +24,16 @@ export const BetterAtLogo: React.FC<BetterAtLogoProps> = ({
       <Circle cx="50" cy="50" r="46" stroke={stroke} strokeWidth="2" fill="none" />
       <Text
         x="50"
-        y="60"
+        y="58"
         textAnchor="middle"
         fontFamily="Manrope_700Bold, System"
         fontSize="42"
         fontWeight="700"
         fill={text}
       >
-        B
+        b
       </Text>
+      <Rect x="30" y="66" width="40" height="3" rx="1.5" fill={text} />
     </Svg>
   );
 };

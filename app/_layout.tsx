@@ -421,8 +421,8 @@ export default function RootLayout() {
       `;
       document.head.appendChild(style);
 
-      // Set custom RegattaFlow R mark favicon (using data URI for reliable loading)
-      const regattaFlowSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="%230a1832"/><g transform="translate(16,16)"><circle r="11" stroke="white" stroke-width="1.5" fill="none"/><text x="0" y="3" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="white">R</text><path d="M-6 5 Q-3 3.5 0 5 Q3 6.5 6 5" stroke="white" stroke-width="1" fill="none" stroke-linecap="round"/></g></svg>`;
+      // Set custom BetterAt favicon (b with underline in circle)
+      const betterAtSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%25" stop-color="%23007AFF"/><stop offset="100%25" stop-color="%235856D6"/></linearGradient></defs><rect width="32" height="32" rx="7" fill="url(%23bg)"/><text x="16" y="21" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="white">b</text><rect x="9" y="23.5" width="14" height="2" rx="1" fill="white"/></svg>`;
       const existingFavicon = document.querySelector('link[rel="icon"]');
       if (existingFavicon) {
         existingFavicon.remove();
@@ -430,7 +430,7 @@ export default function RootLayout() {
       const favicon = document.createElement('link');
       favicon.rel = 'icon';
       favicon.type = 'image/svg+xml';
-      favicon.href = `data:image/svg+xml,${regattaFlowSvg}`;
+      favicon.href = `data:image/svg+xml,${betterAtSvg}`;
       document.head.appendChild(favicon);
 
       // Register Service Worker for offline bathymetry tile caching (prod only)
