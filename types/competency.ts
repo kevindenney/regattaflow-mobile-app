@@ -37,12 +37,8 @@ export type FacultyDecision =
   | 'needs_more_practice'
   | 'remediation_required';
 
-export type CompetencyCategory =
-  | 'Assessment Skills'
-  | 'Medication Administration'
-  | 'Clinical Procedures'
-  | 'Patient Care'
-  | 'Critical Thinking';
+/** Category is a free-form string — nursing defaults shown for reference. */
+export type CompetencyCategory = string;
 
 // ---------------------------------------------------------------------------
 // Core Entities
@@ -51,6 +47,7 @@ export type CompetencyCategory =
 export interface Competency {
   id: string;
   interest_id: string;
+  organization_id?: string | null;
   category: CompetencyCategory;
   competency_number: number;
   title: string;
@@ -58,6 +55,43 @@ export interface Competency {
   requires_supervision: boolean;
   sort_order: number;
   created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Admin CRUD Payloads
+// ---------------------------------------------------------------------------
+
+export interface CreateCompetencyPayload {
+  interest_id: string;
+  organization_id: string;
+  category: string;
+  competency_number: number;
+  title: string;
+  description?: string | null;
+  requires_supervision?: boolean;
+  sort_order?: number;
+}
+
+export interface UpdateCompetencyPayload {
+  title?: string;
+  description?: string | null;
+  category?: string;
+  requires_supervision?: boolean;
+  sort_order?: number;
+}
+
+export interface CreateSubCompetencyPayload {
+  competency_id: string;
+  organization_id: string;
+  title: string;
+  description?: string | null;
+  sort_order?: number;
+}
+
+export interface UpdateSubCompetencyPayload {
+  title?: string;
+  description?: string | null;
+  sort_order?: number;
 }
 
 export interface CompetencyProgress {

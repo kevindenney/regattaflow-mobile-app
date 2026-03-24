@@ -182,6 +182,25 @@ export default function OrganizationCohortsScreen() {
           <Text style={styles.title}>Cohorts{activeOrganization?.name ? ` · ${activeOrganization.name}` : ''}</Text>
           <Text style={styles.subtitle}>Organize members into cohorts and teams.</Text>
           <OrgContextPill interestSlug={orgInterestSlug} />
+          <View style={styles.headerLinksRow}>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/races' as any)}>
+              <Text style={styles.headerLinkText}>Dashboard</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/members')}>
+              <Text style={styles.headerLinkText}>Members</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/access-requests')}>
+              <Text style={styles.headerLinkText}>Access requests</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/competencies')}>
+              <Text style={styles.headerLinkText}>Competencies</Text>
+            </TouchableOpacity>
+            {orgInterestSlug && (
+              <TouchableOpacity onPress={() => router.push(`/${orgInterestSlug}` as any)}>
+                <Text style={styles.headerLinkText}>Browse catalog</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -304,6 +323,17 @@ const styles = StyleSheet.create({
   headerTextWrap: { flex: 1 },
   title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
   subtitle: { marginTop: 2, fontSize: 12, color: '#64748B' },
+  headerLinksRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerLinkText: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '600',
+  },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12 },
   card: {

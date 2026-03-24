@@ -41,6 +41,8 @@ export const FALLBACK_VOCABULARY: VocabularyMap = {
   'Skill': 'Tactical Skill',
   'Community': 'Venue / Class Forum',
   'Equipment': 'Boat / Sails',
+  'Competency': 'Skill',
+  'Supervision': 'Requires Coach',
 };
 
 // ---------------------------------------------------------------------------
@@ -61,6 +63,8 @@ const NURSING_VOCABULARY: VocabularyMap = {
   'Skill': 'Clinical Skill',
   'Community': 'Forum',
   'Equipment': 'Clinical Gear',
+  'Competency': 'Competency',
+  'Supervision': 'Requires Supervision',
 };
 
 const DRAWING_VOCABULARY: VocabularyMap = {
@@ -77,6 +81,8 @@ const DRAWING_VOCABULARY: VocabularyMap = {
   'Skill': 'Technique',
   'Community': 'Critique Group',
   'Equipment': 'Medium & Tools',
+  'Competency': 'Technique',
+  'Supervision': '',
 };
 
 const DESIGN_VOCABULARY: VocabularyMap = {
@@ -111,6 +117,102 @@ const FITNESS_VOCABULARY: VocabularyMap = {
   'Equipment': 'Gym Equipment',
 };
 
+const KNITTING_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Session',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'In Session',
+  'Review Phase': 'Review',
+  'Practice': 'Technique Practice',
+  'Institution': 'Knitting Circle',
+  'Coach': 'Instructor',
+  'Passport': 'Project Log',
+  'Period': 'Season',
+  'Milestone': 'Finished Object',
+  'Skill': 'Technique',
+  'Community': 'Knitting Group',
+  'Equipment': 'Yarn & Needles',
+};
+
+const FIBER_ARTS_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Session',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'Creating',
+  'Review Phase': 'Review',
+  'Practice': 'Technique Practice',
+  'Institution': 'Fiber Arts Studio',
+  'Coach': 'Instructor',
+  'Passport': 'Project Log',
+  'Period': 'Season',
+  'Milestone': 'Finished Piece',
+  'Skill': 'Technique',
+  'Community': 'Fiber Arts Group',
+  'Equipment': 'Fiber & Tools',
+};
+
+const GLOBAL_HEALTH_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Field Session',
+  'Plan Phase': 'Preparation',
+  'Do Phase': 'In Field',
+  'Review Phase': 'Debrief',
+  'Practice': 'Skills Practice',
+  'Institution': 'Organization',
+  'Coach': 'Supervisor',
+  'Passport': 'Field Portfolio',
+  'Period': 'Program Cycle',
+  'Milestone': 'Competency',
+  'Skill': 'Clinical Skill',
+  'Community': 'Program Forum',
+  'Equipment': 'Field Kit',
+};
+
+const PAINTING_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Session',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'Painting',
+  'Review Phase': 'Critique',
+  'Practice': 'Study',
+  'Institution': 'Studio',
+  'Coach': 'Instructor',
+  'Passport': 'Portfolio',
+  'Period': 'Series',
+  'Milestone': 'Exhibition Piece',
+  'Skill': 'Technique',
+  'Community': 'Art Community',
+  'Equipment': 'Paints & Tools',
+};
+
+const LIFELONG_LEARNING_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Session',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'Learning',
+  'Review Phase': 'Reflection',
+  'Practice': 'Practice',
+  'Institution': 'Learning Community',
+  'Coach': 'Mentor',
+  'Passport': 'Learning Journal',
+  'Period': 'Quarter',
+  'Milestone': 'Achievement',
+  'Skill': 'Skill',
+  'Community': 'Study Group',
+  'Equipment': 'Resources',
+};
+
+const REGEN_AG_VOCABULARY: VocabularyMap = {
+  'Learning Event': 'Field Session',
+  'Plan Phase': 'Planning',
+  'Do Phase': 'In Field',
+  'Review Phase': 'Review',
+  'Practice': 'Practice',
+  'Institution': 'Farm',
+  'Coach': 'Mentor',
+  'Passport': 'Field Journal',
+  'Period': 'Growing Season',
+  'Milestone': 'Harvest',
+  'Skill': 'Practice',
+  'Community': 'Farm Network',
+  'Equipment': 'Tools & Inputs',
+};
+
 /** Map of interest slug → client-side fallback vocabulary */
 export const INTEREST_FALLBACK_VOCABULARIES: Record<string, VocabularyMap> = {
   'sail-racing': FALLBACK_VOCABULARY,
@@ -119,6 +221,12 @@ export const INTEREST_FALLBACK_VOCABULARIES: Record<string, VocabularyMap> = {
   design: DESIGN_VOCABULARY,
   fitness: FITNESS_VOCABULARY,
   'health-and-fitness': FITNESS_VOCABULARY,
+  knitting: KNITTING_VOCABULARY,
+  'fiber-arts': FIBER_ARTS_VOCABULARY,
+  'global-health': GLOBAL_HEALTH_VOCABULARY,
+  'painting-printing': PAINTING_VOCABULARY,
+  'lifelong-learning': LIFELONG_LEARNING_VOCABULARY,
+  'regenerative-agriculture': REGEN_AG_VOCABULARY,
 };
 
 /**

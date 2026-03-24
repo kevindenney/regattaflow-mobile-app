@@ -306,12 +306,23 @@ export default function OrganizationAccessRequestsScreen() {
           <Text style={styles.subtitle}>Approve or reject pending organization membership requests.</Text>
           <OrgContextPill interestSlug={orgInterestSlug} />
           <View style={styles.headerLinksRow}>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/races' as any)} style={styles.headerLink}>
+              <Text style={styles.headerLinkText}>Dashboard</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/organization/members')} style={styles.headerLink}>
               <Text style={styles.headerLinkText}>Manage members</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/organization/cohorts')} style={styles.headerLink}>
               <Text style={styles.headerLinkText}>Cohorts</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/competencies')} style={styles.headerLink}>
+              <Text style={styles.headerLinkText}>Competencies</Text>
+            </TouchableOpacity>
+            {orgInterestSlug && (
+              <TouchableOpacity onPress={() => router.push(`/${orgInterestSlug}` as any)} style={styles.headerLink}>
+                <Text style={styles.headerLinkText}>Browse catalog</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>

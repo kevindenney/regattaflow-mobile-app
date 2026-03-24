@@ -29,7 +29,12 @@ import type {
   LogAttemptPayload,
   PreceptorValidationPayload,
   FacultyReviewPayload,
+  CreateCompetencyPayload,
+  UpdateCompetencyPayload,
+  CreateSubCompetencyPayload,
+  UpdateSubCompetencyPayload,
 } from '@/types/competency';
+import type { SubCompetency } from '@/types/sub-competency';
 
 const logger = createLogger('competencyService');
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -645,6 +650,109 @@ export async function getPendingFacultyReviews(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Sub-competencies & program-competency mapping
+// ---------------------------------------------------------------------------
+
+export async function getSubCompetencies(
+  competencyId: string,
+): Promise<{ id: string; competency_id: string; title: string; description: string | null; sort_order: number; created_at: string }[]> {
+  try {
+    const { data, error } = await supabase
+      .from('betterat_sub_competencies')
+      .select('*')
+      .eq('competency_id', competencyId)
+      .order('sort_order', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as any[];
+  } catch (err) {
+    logger.error('Failed to fetch sub-competencies', err);
+    throw err;
+  }
+}
+
+export async function getProgramCompetencies(
+  programId: string,
+): Promise<{ id: string; program_id: string; competency_id: string; is_required: boolean; sort_order: number }[]> {
+  try {
+    const { data, error } = await supabase
+      .from('program_competencies')
+      .select('*')
+      .eq('program_id', programId)
+      .order('sort_order', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as any[];
+  } catch (err) {
+    logger.error('Failed to fetch program competencies', err);
+    throw err;
+  }
+}
+
+export async function getProgramCompetenciesWithDetails(
+  programId: string,
+): Promise<(Competency & { is_required: boolean })[]> {
+  try {
+    const mappings = await getProgramCompetencies(programId);
+    if (mappings.length === 0) return [];
+
+    const competencyIds = mappings.map((m) => m.competency_id);
+    const { data, error } = await supabase
+      .from('betterat_competencies')
+      .select('*')
+      .in('id', competencyIds)
+      .order('sort_order', { ascending: true });
+
+    if (error) throw error;
+
+    const requiredMap = new Map(mappings.map((m) => [m.competency_id, m.is_required]));
+    return ((data ?? []) as Competency[]).map((c) => ({
+      ...c,
+      is_required: requiredMap.get(c.id) ?? true,
+    }));
+  } catch (err) {
+    logger.error('Failed to fetch program competencies with details', err);
+    throw err;
+  }
+}
+
+export async function getProgramSubCompetencies(
+  programId: string,
+): Promise<{ id: string; program_id: string; sub_competency_id: string; is_required: boolean; sort_order: number }[]> {
+  try {
+    const { data, error } = await supabase
+      .from('program_sub_competencies')
+      .select('*')
+      .eq('program_id', programId)
+      .order('sort_order', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as any[];
+  } catch (err) {
+    logger.error('Failed to fetch program sub-competencies', err);
+    throw err;
+  }
+}
+
+export async function getProgramCapabilityCount(
+  programId: string,
+): Promise<{ competencies: number; subCompetencies: number }> {
+  try {
+    const [compResult, subResult] = await Promise.all([
+      supabase.from('program_competencies').select('id', { count: 'exact', head: true }).eq('program_id', programId),
+      supabase.from('program_sub_competencies').select('id', { count: 'exact', head: true }).eq('program_id', programId),
+    ]);
+    return {
+      competencies: compResult.count ?? 0,
+      subCompetencies: subResult.count ?? 0,
+    };
+  } catch (err) {
+    logger.error('Failed to get program capability count', err);
+    return { competencies: 0, subCompetencies: 0 };
+  }
+}
+
 export async function logUnvalidatedArtifactAttempts(input: {
   userId: string;
   candidateCompetencyIds: string[];
@@ -685,6 +793,258 @@ export async function logUnvalidatedArtifactAttempts(input: {
 
   return inserted;
 }
+
+// ---------------------------------------------------------------------------
+// Org-Scoped Competency CRUD
+// ---------------------------------------------------------------------------
+
+export async function getOrgCompetencies(
+  interestId: string,
+  orgId: string,
+): Promise<Competency[]> {
+  try {
+    logger.debug('Fetching org + template competencies', { interestId, orgId });
+
+    const { data, error } = await supabase
+      .from('betterat_competencies')
+      .select('*')
+      .eq('interest_id', interestId)
+      .or(`organization_id.is.null,organization_id.eq.${orgId}`)
+      .order('sort_order', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as Competency[];
+  } catch (err) {
+    logger.error('Failed to fetch org competencies', err);
+    throw err;
+  }
+}
+
+export async function createCompetency(payload: CreateCompetencyPayload): Promise<Competency> {
+  try {
+    logger.debug('Creating org-scoped competency', payload);
+
+    const { data, error } = await supabase
+      .from('betterat_competencies')
+      .insert({
+        interest_id: payload.interest_id,
+        organization_id: payload.organization_id,
+        category: payload.category,
+        competency_number: payload.competency_number,
+        title: payload.title,
+        description: payload.description ?? null,
+        requires_supervision: payload.requires_supervision ?? false,
+        sort_order: payload.sort_order ?? 0,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data as Competency;
+  } catch (err) {
+    logger.error('Failed to create competency', err);
+    throw err;
+  }
+}
+
+export async function updateCompetency(
+  id: string,
+  payload: UpdateCompetencyPayload,
+): Promise<Competency> {
+  try {
+    logger.debug('Updating competency', { id, payload });
+
+    const { data, error } = await supabase
+      .from('betterat_competencies')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data as Competency;
+  } catch (err) {
+    logger.error('Failed to update competency', err);
+    throw err;
+  }
+}
+
+export async function deleteCompetency(id: string): Promise<void> {
+  try {
+    logger.debug('Deleting competency', { id });
+
+    const { error } = await supabase
+      .from('betterat_competencies')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to delete competency', err);
+    throw err;
+  }
+}
+
+export async function createSubCompetency(payload: CreateSubCompetencyPayload): Promise<SubCompetency> {
+  try {
+    logger.debug('Creating sub-competency', payload);
+
+    const { data, error } = await supabase
+      .from('betterat_sub_competencies')
+      .insert({
+        competency_id: payload.competency_id,
+        organization_id: payload.organization_id,
+        title: payload.title,
+        description: payload.description ?? null,
+        sort_order: payload.sort_order ?? 0,
+      })
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data as SubCompetency;
+  } catch (err) {
+    logger.error('Failed to create sub-competency', err);
+    throw err;
+  }
+}
+
+export async function updateSubCompetency(
+  id: string,
+  payload: UpdateSubCompetencyPayload,
+): Promise<SubCompetency> {
+  try {
+    logger.debug('Updating sub-competency', { id, payload });
+
+    const { data, error } = await supabase
+      .from('betterat_sub_competencies')
+      .update(payload)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data as SubCompetency;
+  } catch (err) {
+    logger.error('Failed to update sub-competency', err);
+    throw err;
+  }
+}
+
+export async function deleteSubCompetency(id: string): Promise<void> {
+  try {
+    logger.debug('Deleting sub-competency', { id });
+
+    const { error } = await supabase
+      .from('betterat_sub_competencies')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to delete sub-competency', err);
+    throw err;
+  }
+}
+
+export async function reorderCompetencies(ids: string[]): Promise<void> {
+  try {
+    logger.debug('Reordering competencies', { count: ids.length });
+
+    // Update sort_order for each competency in sequence
+    for (let i = 0; i < ids.length; i++) {
+      const { error } = await supabase
+        .from('betterat_competencies')
+        .update({ sort_order: i })
+        .eq('id', ids[i]);
+
+      if (error) throw error;
+    }
+  } catch (err) {
+    logger.error('Failed to reorder competencies', err);
+    throw err;
+  }
+}
+
+export async function adoptTemplateCompetency(
+  templateId: string,
+  orgId: string,
+): Promise<Competency> {
+  try {
+    logger.debug('Adopting template competency', { templateId, orgId });
+
+    // Fetch the template
+    const { data: template, error: fetchError } = await supabase
+      .from('betterat_competencies')
+      .select('*')
+      .eq('id', templateId)
+      .is('organization_id', null)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const t = template as Competency;
+
+    // Find the next competency_number for this org
+    const { data: existing } = await supabase
+      .from('betterat_competencies')
+      .select('competency_number')
+      .eq('interest_id', t.interest_id)
+      .eq('organization_id', orgId)
+      .order('competency_number', { ascending: false })
+      .limit(1);
+
+    const nextNumber = existing && existing.length > 0
+      ? (existing[0] as any).competency_number + 1
+      : t.competency_number;
+
+    // Clone into org scope
+    const { data: cloned, error: insertError } = await supabase
+      .from('betterat_competencies')
+      .insert({
+        interest_id: t.interest_id,
+        organization_id: orgId,
+        category: t.category,
+        competency_number: nextNumber,
+        title: t.title,
+        description: t.description,
+        requires_supervision: t.requires_supervision,
+        sort_order: t.sort_order,
+      })
+      .select('*')
+      .single();
+
+    if (insertError) throw insertError;
+
+    // Clone sub-competencies too
+    const { data: subComps } = await supabase
+      .from('betterat_sub_competencies')
+      .select('*')
+      .eq('competency_id', templateId);
+
+    if (subComps && subComps.length > 0) {
+      const clonedComp = cloned as Competency;
+      const subInserts = (subComps as SubCompetency[]).map((sc) => ({
+        competency_id: clonedComp.id,
+        organization_id: orgId,
+        title: sc.title,
+        description: sc.description,
+        sort_order: sc.sort_order,
+      }));
+
+      await supabase.from('betterat_sub_competencies').insert(subInserts);
+    }
+
+    return cloned as Competency;
+  } catch (err) {
+    logger.error('Failed to adopt template competency', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers (below)
+// ---------------------------------------------------------------------------
 
 async function getNextAttemptNumbers(userId: string, competencyIds: string[]): Promise<Map<string, number>> {
   const fallback = new Map(competencyIds.map((id) => [id,1]));

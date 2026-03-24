@@ -13,6 +13,14 @@ import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TextInput, T
 import { showConfirm } from '@/lib/utils/crossPlatformAlert';
 import { InviteMemberSheet } from '@/components/organizations/InviteMemberSheet';
 
+type MemberBlueprint = {
+  id: string;
+  title: string;
+  slug: string;
+  is_published: boolean;
+  subscriber_count: number;
+};
+
 type MemberRow = {
   id: string;
   user_id: string;
@@ -22,6 +30,7 @@ type MemberRow = {
   created_at: string | null;
   user_name: string;
   user_email: string | null;
+  blueprints: MemberBlueprint[];
 };
 
 type SaveState = {
@@ -218,6 +227,30 @@ export default function OrganizationMembersScreen() {
         );
       }
 
+      // Fetch published blueprints for all member user_ids
+      let blueprintsByUserId = new Map<string, MemberBlueprint[]>();
+      if (userIds.length > 0) {
+        const { data: bpData } = await supabase
+          .from('timeline_blueprints')
+          .select('id,user_id,title,slug,is_published,subscriber_count')
+          .in('user_id', userIds)
+          .eq('is_published', true);
+
+        if (bpData) {
+          for (const bp of bpData as any[]) {
+            const uid = String(bp.user_id);
+            if (!blueprintsByUserId.has(uid)) blueprintsByUserId.set(uid, []);
+            blueprintsByUserId.get(uid)!.push({
+              id: String(bp.id),
+              title: String(bp.title || ''),
+              slug: String(bp.slug || ''),
+              is_published: true,
+              subscriber_count: Number(bp.subscriber_count || 0),
+            });
+          }
+        }
+      }
+
       const normalized: MemberRow[] = (membershipRows || []).map((row: any) => {
         const user = usersById.get(String(row.user_id));
         const email = typeof user?.email === 'string' ? user.email : null;
@@ -232,6 +265,7 @@ export default function OrganizationMembersScreen() {
           created_at: row.created_at ? String(row.created_at) : null,
           user_name: fullName || email || 'Unknown user',
           user_email: email,
+          blueprints: blueprintsByUserId.get(String(row.user_id)) || [],
         };
       });
 
@@ -540,12 +574,23 @@ export default function OrganizationMembersScreen() {
                 <Text style={styles.inviteButtonText}>Invite Member</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity onPress={() => router.push('/(tabs)/races' as any)}>
+              <Text style={styles.headerLinkText}>Dashboard</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/organization/access-requests')}>
               <Text style={styles.headerLinkText}>Access requests</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/organization/cohorts')}>
               <Text style={styles.headerLinkText}>Cohorts</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/organization/competencies')}>
+              <Text style={styles.headerLinkText}>Competencies</Text>
+            </TouchableOpacity>
+            {orgInterestSlug && (
+              <TouchableOpacity onPress={() => router.push(`/${orgInterestSlug}` as any)}>
+                <Text style={styles.headerLinkText}>Browse catalog</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -718,6 +763,24 @@ export default function OrganizationMembersScreen() {
                       </View>
                     </View>
 
+                    {row.blueprints.length > 0 && (
+                      <View style={styles.blueprintsList}>
+                        {row.blueprints.map((bp) => (
+                          <TouchableOpacity
+                            key={bp.id}
+                            style={styles.blueprintChip}
+                            onPress={() => router.push(`/blueprint/${bp.slug}` as any)}
+                          >
+                            <Ionicons name="book-outline" size={12} color="#6D28D9" />
+                            <Text style={styles.blueprintChipText} numberOfLines={1}>{bp.title}</Text>
+                            {bp.subscriber_count > 0 && (
+                              <Text style={styles.blueprintSubCount}>{bp.subscriber_count} sub{bp.subscriber_count !== 1 ? 's' : ''}</Text>
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+
                     <View style={styles.roleOptionsWrap}>
                       {getDisplayRoleOptions(row.role).map((optionRole) => {
                         const selected = normalizeStatus(optionRole) === normalizeStatus(row.role);
@@ -777,6 +840,7 @@ export default function OrganizationMembersScreen() {
           visible={inviteSheetVisible}
           onClose={() => setInviteSheetVisible(false)}
           organizationId={resolvedActiveOrgId}
+          organizationName={activeOrganization?.name}
           interestSlug={orgInterestSlug}
         />
       )}
@@ -983,6 +1047,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#334155',
+  },
+  blueprintsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  blueprintChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  blueprintChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6D28D9',
+    maxWidth: 200,
+  },
+  blueprintSubCount: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#8B5CF6',
   },
   roleOptionsWrap: {
     flexDirection: 'row',
