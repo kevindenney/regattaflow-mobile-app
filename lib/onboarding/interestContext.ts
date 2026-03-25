@@ -46,6 +46,7 @@ const NURSING: OnboardingInterestContext = {
     { id: 'department-chair', label: 'Department Chair' },
     { id: 'faculty', label: 'Faculty' },
     { id: 'staff', label: 'Staff' },
+    { id: 'student', label: 'Student' },
   ],
   programLabel: 'Programs',
   programSuggestions: ['MSN', 'DNP', 'BSN', 'PhD', 'RN-to-BSN', 'Nurse Practitioner'],
@@ -468,6 +469,80 @@ const GENERIC: OnboardingInterestContext = {
 };
 
 // ---------------------------------------------------------------------------
+// Domain defaults — fallback config inherited by unknown interests in a domain
+// ---------------------------------------------------------------------------
+
+type DomainDefaults = Pick<
+  OnboardingInterestContext,
+  'color' | 'organizationLabel' | 'memberLabel' | 'programLabel' | 'personaLabels' | 'personaSubtitles'
+>;
+
+const DOMAIN_DEFAULTS: Record<string, DomainDefaults> = {
+  healthcare: {
+    color: '#6366F1',
+    organizationLabel: 'school',
+    memberLabel: 'student',
+    programLabel: 'Programs',
+    personaLabels: { sailor: 'Student', coach: 'Instructor', club: 'School' },
+    personaSubtitles: {
+      sailor: 'Start learning and tracking your progress',
+      coach: 'Set up your instructor profile and manage students',
+      club: 'Set up your school with programs and cohorts',
+    },
+  },
+  'creative-arts': {
+    color: '#F59E0B',
+    organizationLabel: 'studio',
+    memberLabel: 'artist',
+    programLabel: 'Courses',
+    personaLabels: { sailor: 'Artist', coach: 'Instructor', club: 'Studio' },
+    personaSubtitles: {
+      sailor: 'Start learning and tracking your creative progress',
+      coach: 'Set up your instructor profile and manage students',
+      club: 'Set up your studio with courses and portfolios',
+    },
+  },
+  'sports-outdoors': {
+    color: '#0EA5E9',
+    organizationLabel: 'club',
+    memberLabel: 'athlete',
+    programLabel: 'Programs',
+    personaLabels: { sailor: 'Athlete', coach: 'Coach', club: 'Club' },
+    personaSubtitles: {
+      sailor: 'Start tracking your progress and performance',
+      coach: 'Set up your coaching profile and manage athletes',
+      club: 'Set up your club with programs and member tracking',
+    },
+  },
+  'education-learning': {
+    color: '#5C6BC0',
+    organizationLabel: 'center',
+    memberLabel: 'learner',
+    programLabel: 'Programs',
+    personaLabels: { sailor: 'Learner', coach: 'Facilitator', club: 'Center' },
+    personaSubtitles: {
+      sailor: 'Start learning and tracking your growth',
+      coach: 'Set up your facilitator profile and lead programs',
+      club: 'Set up your center with programs and cohort tracking',
+    },
+  },
+  'agriculture-environment': {
+    color: '#2E7D32',
+    organizationLabel: 'farm',
+    memberLabel: 'grower',
+    programLabel: 'Programs',
+    personaLabels: { sailor: 'Grower', coach: 'Workshop Leader', club: 'Farm' },
+    personaSubtitles: {
+      sailor: 'Start tracking your growing practices and progress',
+      coach: 'Set up your workshop leader profile and programs',
+      club: 'Set up your farm with programs and crew management',
+    },
+  },
+};
+
+export { DOMAIN_DEFAULTS };
+
+// ---------------------------------------------------------------------------
 // Lookup
 // ---------------------------------------------------------------------------
 
@@ -490,8 +565,29 @@ const INTEREST_CONTEXTS: Record<string, OnboardingInterestContext> = {
 /**
  * Get onboarding context for an interest slug.
  * Returns a generic default when no slug is provided or the slug is unknown.
+ * When domainSlug is provided and the interest is unknown, inherits domain defaults.
  */
-export function getOnboardingContext(interestSlug?: string | null): OnboardingInterestContext {
+export function getOnboardingContext(
+  interestSlug?: string | null,
+  domainSlug?: string | null,
+): OnboardingInterestContext {
   if (!interestSlug) return GENERIC;
-  return INTEREST_CONTEXTS[interestSlug] ?? GENERIC;
+
+  const exact = INTEREST_CONTEXTS[interestSlug];
+  if (exact) return exact;
+
+  // Unknown interest — try to inherit domain defaults
+  if (domainSlug) {
+    const domainDef = DOMAIN_DEFAULTS[domainSlug];
+    if (domainDef) {
+      return {
+        ...GENERIC,
+        ...domainDef,
+        interestSlug,
+        interestName: interestSlug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+      };
+    }
+  }
+
+  return GENERIC;
 }

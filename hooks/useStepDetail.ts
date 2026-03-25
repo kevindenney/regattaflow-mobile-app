@@ -40,7 +40,7 @@ export function useUpdateStepMetadata(stepId: string | undefined) {
     Partial<StepMetadata>
   >({
     mutationFn: (partialMetadata) => {
-      if (!stepId) throw new Error('No step ID');
+      if (!stepId?.trim()) throw new Error('No step ID');
       return updateStepMetadata(stepId, partialMetadata);
     },
     onSuccess: (updatedStep) => {

@@ -19,6 +19,7 @@ export interface BlueprintRecord {
   is_published: boolean;
   subscriber_count: number;
   organization_id: string | null;
+  program_id: string | null;
   access_level: BlueprintAccessLevel;
   created_at: string;
   updated_at: string;
@@ -33,6 +34,7 @@ export interface CreateBlueprintInput {
   cover_image_url?: string | null;
   is_published?: boolean;
   organization_id?: string | null;
+  program_id?: string | null;
   access_level?: BlueprintAccessLevel;
 }
 
@@ -43,6 +45,8 @@ export interface UpdateBlueprintInput {
   is_published?: boolean;
   slug?: string;
   access_level?: BlueprintAccessLevel;
+  organization_id?: string | null;
+  program_id?: string | null;
 }
 
 export interface BlueprintSubscriptionRecord {
@@ -63,6 +67,15 @@ export interface BlueprintStepActionRecord {
   adopted_step_id: string | null;
 }
 
+/** Junction record linking a curated step to a blueprint */
+export interface BlueprintStepRecord {
+  id: string;
+  blueprint_id: string;
+  step_id: string;
+  sort_order: number;
+  added_at: string;
+}
+
 /** Blueprint with joined author profile info (for display) */
 export interface BlueprintWithAuthor extends BlueprintRecord {
   author_name?: string;
@@ -70,6 +83,7 @@ export interface BlueprintWithAuthor extends BlueprintRecord {
   author_avatar_color?: string;
   organization_name?: string;
   organization_slug?: string;
+  program_name?: string;
 }
 
 /** A new step from a subscribed blueprint that hasn't been acted on */
@@ -83,6 +97,79 @@ export interface BlueprintNewStep {
   blueprint_title: string;
   blueprint_slug: string;
   author_id: string;
+  interest_id: string;
   author_name?: string;
   subscription_id: string;
+}
+
+/** Per-step progress for a subscriber (returned from RPC) */
+export interface SubscriberStepProgress {
+  source_step_id: string;
+  adopted_step_id: string | null;
+  action: 'adopted' | 'dismissed' | 'seen';
+  status: string;
+  overall_rating: number | null;
+  has_evidence: boolean;
+  step_title: string;
+}
+
+/** Per-subscriber progress summary (returned from RPC) */
+export interface SubscriberProgress {
+  subscriber_id: string;
+  name: string;
+  avatar_url: string | null;
+  subscribed_at: string;
+  steps: SubscriberStepProgress[];
+  /** Computed client-side */
+  adopted_count: number;
+  completed_count: number;
+  dismissed_count: number;
+}
+
+/** Suggested next step from a subscribed blueprint (returned from RPC) */
+export interface BlueprintSuggestedNextStep {
+  subscription_id: string;
+  blueprint_id: string;
+  blueprint_title: string;
+  blueprint_slug: string;
+  author_id: string;
+  author_name: string | null;
+  next_step_id: string;
+  next_step_title: string;
+  next_step_description: string | null;
+  next_step_sort_order: number;
+  total_steps: number;
+  adopted_count: number;
+  dismissed_count: number;
+}
+
+/** Subscribed blueprint with joined info for display on timeline */
+export interface SubscribedBlueprintInfo {
+  subscription_id: string;
+  blueprint_id: string;
+  blueprint_title: string;
+  blueprint_slug: string;
+  author_name: string | null;
+  subscribed_at: string;
+}
+
+/** A single visible step from a peer subscriber's timeline */
+export interface PeerTimelineStep {
+  id: string;
+  title: string;
+  status: string;
+  completed_at: string | null;
+}
+
+/** A peer subscriber's timeline summary for a given blueprint */
+export interface PeerTimeline {
+  blueprint_id: string;
+  blueprint_title: string;
+  subscriber_id: string;
+  subscriber_name: string | null;
+  subscriber_avatar_emoji: string | null;
+  subscriber_avatar_color: string | null;
+  steps: PeerTimelineStep[];
+  completed_count: number;
+  total_count: number;
 }

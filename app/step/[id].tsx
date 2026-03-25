@@ -15,8 +15,9 @@ import { StepDetailContent } from '@/components/step/StepDetailContent';
 import { useVocabulary } from '@/hooks/useVocabulary';
 
 export default function StepDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, readOnly } = useLocalSearchParams<{ id: string; readOnly?: string }>();
   const actualId = Array.isArray(id) ? id[0] : id;
+  const isReadOnly = readOnly === 'true';
   const { vocab } = useVocabulary();
 
   if (!actualId) {
@@ -58,7 +59,7 @@ export default function StepDetailScreen() {
           }),
         }}
       />
-      <StepDetailContent stepId={actualId} />
+      <StepDetailContent stepId={actualId} readOnly={isReadOnly} />
     </SafeAreaView>
   );
 }

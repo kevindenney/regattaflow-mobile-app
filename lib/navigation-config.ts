@@ -34,6 +34,7 @@ export interface NavItem {
 type WorkspaceNavContext = {
   organizationType?: string | null;
   activeDomain?: string | null;
+  isOrgAdmin?: boolean;
 };
 
 const isProgramWorkspace = (
@@ -187,7 +188,7 @@ export const COMMON_FOOTER_ITEMS: NavItem[] = [
 export const LEARNER_FOOTER_ITEMS: NavItem[] = [];
 
 export const INSTITUTION_FOOTER_ITEMS: NavItem[] = [
-  { key: 'settings', label: 'Organization Access', route: '/settings/organization-access', icon: 'settings-outline' },
+  { key: 'settings', label: 'Org Admin', route: '/organization/members', icon: 'settings-outline' },
   { key: 'account', label: 'Organization', route: '/(tabs)/profile', icon: 'business-outline' },
 ];
 
@@ -209,9 +210,6 @@ export function getNavItemsForUserType(
   secondary: NavItem[];
 } {
   const normalizedDomain = String(workspaceContext?.activeDomain || '').toLowerCase().trim();
-  const hasExplicitDomain = normalizedDomain.length > 0;
-  const learnerPrimaryRoute =
-    hasExplicitDomain && normalizedDomain !== 'sailing' ? '/(tabs)/learn' : '/(tabs)/races';
 
   switch (userType) {
     case 'coach':
@@ -234,10 +232,19 @@ export function getNavItemsForUserType(
       const eventTitle = getEventTabTitle(vocabulary, workspaceContext?.activeDomain);
       const primary = SAILOR_NAV_ITEMS.map((item) =>
         item.key === 'races'
-          ? { ...item, label: eventTitle, route: learnerPrimaryRoute }
+          ? { ...item, label: eventTitle }
           : item
       );
-      return { primary, secondary: [...SAILOR_SECONDARY_ITEMS, ...LEARNER_FOOTER_ITEMS] };
+      const secondary = [...SAILOR_SECONDARY_ITEMS, ...LEARNER_FOOTER_ITEMS];
+      if (workspaceContext?.isOrgAdmin) {
+        secondary.push({
+          key: 'org-admin',
+          label: 'Org Admin',
+          route: '/organization/members',
+          icon: 'business-outline',
+        });
+      }
+      return { primary, secondary };
     }
   }
 }

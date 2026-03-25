@@ -24,6 +24,10 @@ export async function getUserLibrary(
   userId: string,
   interestId: string,
 ): Promise<LibraryRecord> {
+  if (!userId?.trim() || !interestId?.trim()) {
+    throw new Error('getUserLibrary requires valid userId and interestId');
+  }
+
   try {
     // Try to find existing library
     const { data: existing, error: fetchErr } = await supabase
@@ -33,7 +37,14 @@ export async function getUserLibrary(
       .eq('interest_id', interestId)
       .maybeSingle();
 
-    if (fetchErr) throw fetchErr;
+    if (fetchErr) {
+      // Table may not exist yet — surface a clear message instead of cryptic 400
+      if (fetchErr.code === '42P01' || fetchErr.message?.includes('relation')) {
+        logger.warn('user_libraries table not found — migration may not be applied');
+        throw new Error('Library system not yet available');
+      }
+      throw fetchErr;
+    }
     if (existing) return existing as LibraryRecord;
 
     // Auto-create

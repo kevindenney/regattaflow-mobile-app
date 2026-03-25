@@ -16,7 +16,7 @@ import { useUpdateStep } from '@/hooks/useTimelineSteps';
 import { PlanTab } from './PlanTab';
 import { ActTab } from './ActTab';
 import { ReviewTab } from './ReviewTab';
-import { BrainDumpEntry } from './BrainDumpEntry';
+// BrainDumpEntry now embedded in PlanTab
 import { AIStructureReview } from './AIStructureReview';
 import type { StepPlanData, StepActData, StepReviewData, StepMetadata, BrainDumpData, StepCollaborator, AnyExtractedEntity, DateEnrichment, ExtractedPersonEntity } from '@/types/step-detail';
 import type { TimelineStepStatus } from '@/types/timeline-steps';
@@ -44,9 +44,10 @@ function getDefaultTab(status?: TimelineStepStatus): TabValue {
 
 interface StepDetailContentProps {
   stepId: string;
+  readOnly?: boolean;
 }
 
-export function StepDetailContent({ stepId }: StepDetailContentProps) {
+export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetailContentProps) {
   const { vocab } = useVocabulary();
   const { user } = useAuth();
   const { currentInterest } = useInterest();
@@ -55,9 +56,9 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
 
-  // Ownership detection
-  const isOwner = !step || user?.id === step.user_id;
-  const isCollaborator = !isOwner && Boolean(
+  // Ownership detection — readOnlyProp forces read-only mode (e.g. blueprint author viewing subscriber step)
+  const isOwner = readOnlyProp ? false : (!step || user?.id === step.user_id);
+  const isCollaborator = !isOwner && !readOnlyProp && Boolean(
     step?.collaborator_user_ids?.includes(user?.id ?? '')
   );
 
@@ -130,12 +131,15 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const reviewData = metadata.review ?? {};
   const brainDumpData = metadata.brain_dump;
 
-  // Brain dump phase: show dump entry when brain_dump exists but plan is empty
+  // Brain dump state — unified with plan view (no separate phases)
   const hasPlanContent = Boolean(
     serverPlanData.what_will_you_do?.trim() ||
-    (serverPlanData.how_sub_steps?.length && serverPlanData.how_sub_steps.some((s) => s.text.trim()))
+    (serverPlanData.how_sub_steps?.length && serverPlanData.how_sub_steps.some((s) => s.text.trim())) ||
+    serverPlanData.collaborators?.length ||
+    serverPlanData.where_location?.name?.trim() ||
+    serverPlanData.competency_ids?.length ||
+    serverPlanData.linked_resource_ids?.length
   );
-  const [brainDumpPhase, setBrainDumpPhase] = useState<'dump' | 'review' | null>(null);
   const [aiReviewPlan, setAiReviewPlan] = useState<StepPlanData | null>(null);
   const [aiSuggestedTitle, setAiSuggestedTitle] = useState<string | undefined>();
   const [aiStructuring, setAiStructuring] = useState(false);
@@ -145,16 +149,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   const [isEnrichingDate, setIsEnrichingDate] = useState(false);
   const [isResolvingEntities, setIsResolvingEntities] = useState(false);
   const [entityResolutionError, setEntityResolutionError] = useState<string | null>(null);
-
-  // Determine initial phase from metadata
-  // Only show brain dump entry if there's dump data but no plan content yet
-  useEffect(() => {
-    if (step && brainDumpPhase === null) {
-      if (brainDumpData && !hasPlanContent) {
-        setBrainDumpPhase('dump');
-      }
-    }
-  }, [step, brainDumpData, hasPlanContent, brainDumpPhase]);
+  const [showAiReview, setShowAiReview] = useState(false);
 
   // Standalone function for entity resolution — called directly from handleStructureWithAI
   const runEntityResolution = useCallback(async (
@@ -216,22 +211,17 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
           type: 'external' as const,
           display_name: name.trim(),
         }));
-      updateMetadata.mutate(
-        {
-          brain_dump: currentDump,
-          plan: {
-            ...(metadata.plan ?? {}),
-            what_will_you_do: metadata.plan?.what_will_you_do || currentDump.raw_text,
-            who_collaborators: currentDump.extracted_people,
-            collaborators: collaborators.length > 0 ? collaborators : undefined,
-            capability_goals: currentDump.extracted_topics.length > 0
-              ? currentDump.extracted_topics : undefined,
-          },
+      updateMetadata.mutate({
+        brain_dump: currentDump,
+        plan: {
+          ...(metadata.plan ?? {}),
+          what_will_you_do: metadata.plan?.what_will_you_do || currentDump.raw_text,
+          who_collaborators: currentDump.extracted_people,
+          collaborators: collaborators.length > 0 ? collaborators : undefined,
+          capability_goals: currentDump.extracted_topics.length > 0
+            ? currentDump.extracted_topics : undefined,
         },
-        { onSuccess: () => setBrainDumpPhase(null) },
-      );
-    } else {
-      setBrainDumpPhase(null);
+      });
     }
   }, [metadata.plan, updateMetadata]);
 
@@ -285,7 +275,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
       setResolvedEntities([]);
       setDateEnrichment(undefined);
       setEntityResolutionError(null);
-      setBrainDumpPhase('review');
+      setShowAiReview(true);
 
       // Fire entity resolution (runs async, updates state as results arrive)
       runEntityResolution(dump, result.extracted_entities, result.who_collaborators).catch(() => {});
@@ -297,7 +287,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
         capability_goals: dump.extracted_topics.length > 0 ? dump.extracted_topics : undefined,
       };
       setAiReviewPlan(plan);
-      setBrainDumpPhase('review');
+      setShowAiReview(true);
     } finally {
       setAiStructuring(false);
     }
@@ -363,7 +353,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
       {
         onSuccess: () => {
           setAiReviewPlan(null);
-          setBrainDumpPhase(null);
+          setShowAiReview(false);
           savedLibraryIdsRef.current = [];
           setResolvedEntities([]);
           setDateEnrichment(undefined);
@@ -398,7 +388,7 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
   }, []);
 
   const handleBackToDump = useCallback(() => {
-    setBrainDumpPhase('dump');
+    setShowAiReview(false);
     setAiReviewPlan(null);
     setResolvedEntities([]);
     setDateEnrichment(undefined);
@@ -444,6 +434,45 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
 
   // Auto-save status tracking
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // Due date management
+  const isOverdue = Boolean(
+    step?.due_at && step.status !== 'completed' && new Date(step.due_at) < new Date()
+  );
+
+  const handleSetDueDate = useCallback((dateStr: string) => {
+    if (!step || !isOwner) return;
+    const dueAt = dateStr ? new Date(dateStr + 'T23:59:59').toISOString() : null;
+    queryClient.setQueryData(
+      ['timeline-steps', 'detail', stepId],
+      (old: any) => old ? { ...old, due_at: dueAt } : old,
+    );
+    updateStep.mutate({ stepId, input: { due_at: dueAt } });
+  }, [step, stepId, isOwner, updateStep, queryClient]);
+
+  const handlePromptDueDate = useCallback(() => {
+    if (!step || !isOwner) return;
+    const existing = step.due_at ? new Date(step.due_at).toISOString().slice(0, 10) : '';
+    const input = window.prompt('Set due date (YYYY-MM-DD):', existing);
+    if (input === null) return;
+    handleSetDueDate(input.trim());
+  }, [step, isOwner, handleSetDueDate]);
+
+  const handleClearDueDate = useCallback(() => {
+    handleSetDueDate('');
+  }, [handleSetDueDate]);
+
+  // Done toggle — toggle between completed and pending
+  const handleToggleDone = useCallback(() => {
+    if (!step || !isOwner) return;
+    const nextStatus: TimelineStepStatus = step.status === 'completed' ? 'pending' : 'completed';
+    // Optimistic update
+    queryClient.setQueryData(
+      ['timeline-steps', 'detail', stepId],
+      (old: any) => old ? { ...old, status: nextStatus, completed_at: nextStatus === 'completed' ? new Date().toISOString() : null } : old,
+    );
+    updateStep.mutate({ stepId, input: { status: nextStatus } });
+  }, [step, stepId, isOwner, updateStep, queryClient]);
   const prevSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounced auto-save for plan data — update local state immediately, persist after debounce
@@ -479,8 +508,8 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
     setActiveTab(next);
   }, [setActiveTab]);
 
-  // Step comments (discussion thread)
-  const showComments = isOwner || isCollaborator;
+  // Step comments (discussion thread) — visible to owner, collaborators, and blueprint authors (readOnly)
+  const showComments = isOwner || isCollaborator || readOnlyProp;
   const { data: commentsData, isLoading: commentsLoading } = useStepComments(showComments ? stepId : undefined);
   const addComment = useAddStepComment(stepId);
   const deleteComment = useDeleteStepComment(stepId);
@@ -508,6 +537,21 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
     })),
     [commentsData],
   );
+
+  const commentsFooter = useMemo(() => {
+    if (!showComments) return null;
+    return (
+      <View style={styles.discussionSection}>
+        <CommentsSection
+          comments={mappedComments}
+          isLoading={commentsLoading}
+          onAddComment={handleAddComment}
+          onDeleteComment={handleDeleteComment}
+          totalCount={mappedComments.length}
+        />
+      </View>
+    );
+  }, [showComments, mappedComments, commentsLoading, handleAddComment, handleDeleteComment]);
 
   if (isLoading) {
     return (
@@ -540,6 +584,27 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
               <Text style={styles.autoSaveText}>Saved</Text>
             </View>
           )}
+          {isOwner && (
+            <Pressable
+              style={[
+                styles.doneToggle,
+                step.status === 'completed' && styles.doneToggleActive,
+              ]}
+              onPress={handleToggleDone}
+            >
+              <Ionicons
+                name={step.status === 'completed' ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                size={16}
+                color={step.status === 'completed' ? '#34C759' : STEP_COLORS.tertiaryLabel}
+              />
+              <Text style={[
+                styles.doneToggleText,
+                step.status === 'completed' && styles.doneToggleTextActive,
+              ]}>
+                {step.status === 'completed' ? 'Done' : 'Mark Done'}
+              </Text>
+            </Pressable>
+          )}
           <Pressable
             style={styles.menuButton}
             onPress={() => router.push('/library')}
@@ -563,6 +628,40 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
         )}
         {step.description && (
           <Text style={styles.description} numberOfLines={2}>{step.description}</Text>
+        )}
+        {/* Due date chip */}
+        {(step.due_at || isOwner) && (
+          <View style={styles.dueDateRow}>
+            {step.due_at ? (
+              <Pressable
+                style={[styles.dueDateChip, isOverdue && styles.dueDateChipOverdue]}
+                onPress={isOwner ? handlePromptDueDate : undefined}
+              >
+                <Ionicons
+                  name={isOverdue ? 'alert-circle' : 'calendar-outline'}
+                  size={13}
+                  color={isOverdue ? '#FF3B30' : STEP_COLORS.secondaryLabel}
+                />
+                <Text style={[styles.dueDateText, isOverdue && styles.dueDateTextOverdue]}>
+                  {isOverdue ? 'Overdue · ' : 'Due '}
+                  {new Date(step.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </Text>
+                {isOwner && (
+                  <Pressable onPress={handleClearDueDate} hitSlop={8}>
+                    <Ionicons name="close-circle" size={14} color={STEP_COLORS.tertiaryLabel} />
+                  </Pressable>
+                )}
+              </Pressable>
+            ) : isOwner ? (
+              <Pressable
+                style={styles.addDueDateButton}
+                onPress={handlePromptDueDate}
+              >
+                <Ionicons name="calendar-outline" size={13} color={STEP_COLORS.tertiaryLabel} />
+                <Text style={styles.addDueDateText}>Add due date</Text>
+              </Pressable>
+            ) : null}
+          </View>
         )}
         {isCollaborator && (() => {
           const planCollabs = serverPlanData.collaborators ?? [];
@@ -596,18 +695,8 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
 
       {/* Tab content */}
       <View style={styles.tabContent}>
-        {/* Brain dump phase intercepts the plan tab — only for owner */}
-        {activeTab === 'plan' && isOwner && brainDumpPhase === 'dump' && (
-          <BrainDumpEntry
-            initialData={brainDumpData}
-            onSkipToPlan={handleSkipToPlan}
-            onStructureWithAI={handleStructureWithAI}
-            onDraftChange={handleDraftChange}
-            isStructuring={aiStructuring}
-            interestSlug={currentInterest?.slug}
-          />
-        )}
-        {activeTab === 'plan' && isOwner && brainDumpPhase === 'review' && aiReviewPlan && (
+        {/* AI review overlay — shown when AI structures brain dump */}
+        {activeTab === 'plan' && isOwner && showAiReview && aiReviewPlan && (
           <AIStructureReview
             planData={aiReviewPlan}
             suggestedTitle={aiSuggestedTitle}
@@ -621,7 +710,8 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
             onBack={handleBackToDump}
           />
         )}
-        {activeTab === 'plan' && (!isOwner || !brainDumpPhase) && (
+        {/* Unified plan view — brain dump at top + plan fields below */}
+        {activeTab === 'plan' && !(isOwner && showAiReview && aiReviewPlan) && (
           <PlanTab
             stepId={stepId}
             planData={planData}
@@ -629,26 +719,21 @@ export function StepDetailContent({ stepId }: StepDetailContentProps) {
             onUpdate={handlePlanUpdate}
             onNextTab={() => handleNextTab('act')}
             readOnly={!isOwner}
+            footer={commentsFooter}
+            brainDumpData={isOwner ? brainDumpData : undefined}
+            onBrainDumpChange={isOwner ? handleDraftChange : undefined}
+            onStructureWithAI={isOwner ? handleStructureWithAI : undefined}
+            onSkipToPlan={isOwner ? handleSkipToPlan : undefined}
+            isStructuring={aiStructuring}
+            hasPlanContent={hasPlanContent}
+            interestSlug={currentInterest?.slug}
           />
         )}
         {activeTab === 'act' && (
-          <ActTab stepId={stepId} dateEnrichment={planData.date_enrichment} onNextTab={() => handleNextTab('review')} readOnly={!isOwner} />
+          <ActTab stepId={stepId} dateEnrichment={planData.date_enrichment} onNextTab={() => handleNextTab('review')} readOnly={!isOwner} footer={commentsFooter} />
         )}
-        {activeTab === 'review' && <ReviewTab stepId={stepId} readOnly={!isOwner} />}
+        {activeTab === 'review' && <ReviewTab stepId={stepId} readOnly={!isOwner} footer={commentsFooter} />}
       </View>
-
-      {/* Discussion thread — visible to owner and collaborators */}
-      {showComments && (
-        <View style={styles.discussionSection}>
-          <CommentsSection
-            comments={mappedComments}
-            isLoading={commentsLoading}
-            onAddComment={handleAddComment}
-            onDeleteComment={handleDeleteComment}
-            totalCount={mappedComments.length}
-          />
-        </View>
-      )}
     </View>
   );
 }
@@ -693,6 +778,68 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: STEP_COLORS.badgeText,
     letterSpacing: 1,
+  },
+  dueDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  dueDateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    backgroundColor: STEP_COLORS.headerBg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: STEP_COLORS.border,
+  },
+  dueDateChipOverdue: {
+    backgroundColor: 'rgba(255, 59, 48, 0.08)',
+    borderColor: 'rgba(255, 59, 48, 0.2)',
+  },
+  dueDateText: {
+    fontSize: 12,
+    color: STEP_COLORS.secondaryLabel,
+    fontWeight: '500',
+  },
+  dueDateTextOverdue: {
+    color: '#FF3B30',
+  },
+  addDueDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  addDueDateText: {
+    fontSize: 12,
+    color: STEP_COLORS.tertiaryLabel,
+    fontWeight: '400',
+  },
+  doneToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: STEP_COLORS.border,
+    marginRight: 4,
+  },
+  doneToggleActive: {
+    backgroundColor: 'rgba(52, 199, 89, 0.1)',
+    borderColor: 'rgba(52, 199, 89, 0.3)',
+  },
+  doneToggleText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: STEP_COLORS.tertiaryLabel,
+  },
+  doneToggleTextActive: {
+    color: '#34C759',
   },
   menuButton: {
     width: 32,

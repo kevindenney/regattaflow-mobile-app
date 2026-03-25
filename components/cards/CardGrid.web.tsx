@@ -106,7 +106,30 @@ function CardGridComponent({
     calculateCardDimensions(containerWidth, typeof window !== 'undefined' ? window.innerHeight : 667)
   );
   const [currentRaceIndex, setCurrentRaceIndex] = useState(initialRaceIndex);
+  const currentRaceIdRef = useRef<string | null>(races[initialRaceIndex]?.id ?? null);
   const [isHovering, setIsHovering] = useState(false);
+
+  // Keep currentRaceIdRef in sync with index changes
+  useEffect(() => {
+    currentRaceIdRef.current = races[currentRaceIndex]?.id ?? null;
+  }, [currentRaceIndex, races]);
+
+  // When races array changes, keep selection on the same race ID (it may have
+  // shifted to a different index due to upstream data changes / refetch).
+  const prevRacesRef = useRef(races);
+  useEffect(() => {
+    if (prevRacesRef.current === races) return;
+    prevRacesRef.current = races;
+    const trackedId = currentRaceIdRef.current;
+    if (!trackedId || races.length === 0) return;
+    const newIdx = races.findIndex((r) => r.id === trackedId);
+    if (newIdx >= 0 && newIdx !== currentRaceIndex) {
+      // Same race is now at a different index — re-center without calling onRaceChange
+      setCurrentRaceIndex(newIdx);
+      const offset = (dimensions.cardWidth + HORIZONTAL_CARD_GAP) * newIdx;
+      horizontalScrollRef.current?.scrollTo({ x: offset, animated: false });
+    }
+  }, [races, currentRaceIndex, dimensions.cardWidth]);
 
   // Calculate arrow visibility
   const showLeftArrow = currentRaceIndex > 0;
@@ -251,8 +274,9 @@ function CardGridComponent({
   const hasInitialScrolled = useRef(false);
   useEffect(() => {
     if (hasInitialScrolled.current) return;
-    if (initialRaceIndex > 0 && initialRaceIndex < races.length && snapOffsets.length > 0) {
+    if (initialRaceIndex >= 0 && initialRaceIndex < races.length && snapOffsets.length > 0) {
       hasInitialScrolled.current = true;
+      if (initialRaceIndex === 0) return; // Already at 0, no scroll needed
       // Use requestAnimationFrame to ensure ScrollView is laid out before scrolling
       requestAnimationFrame(() => {
         horizontalScrollRef.current?.scrollTo({
@@ -263,7 +287,8 @@ function CardGridComponent({
     }
   }, [initialRaceIndex, races.length, snapOffsets]);
 
-  // Respond to initialRaceIndex changes from parent (e.g., "upcoming" button)
+  // Respond to initialRaceIndex changes from parent (e.g., "upcoming" button,
+  // or data loading that shifts the target race to its real index)
   useEffect(() => {
     if (!hasInitialScrolled.current) return;
     if (initialRaceIndex !== currentRaceIndex && initialRaceIndex >= 0 && initialRaceIndex < races.length) {

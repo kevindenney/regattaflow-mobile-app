@@ -3,7 +3,8 @@ import { SAILING_CORE_V1_SKILLS } from '@/configs/competencies/sailing-core-v1';
 import { NURSING_EVENT_CONFIG } from '@/configs/nursing';
 import { SAILING_EVENT_CONFIG } from '@/configs/sailing';
 import { orgInterestLabel } from '@/lib/organizations/orgInterest';
-import { fetchOrganizationInterestSlug, OrgContextPill } from '@/components/organizations/OrgContextPill';
+import { fetchOrganizationInterestSlug } from '@/components/organizations/OrgContextPill';
+import { OrgAdminHeader } from '@/components/organizations/OrgAdminHeader';
 import { useAuth } from '@/providers/AuthProvider';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { supabase } from '@/services/supabase';
@@ -366,31 +367,13 @@ export default function OrganizationTemplatesScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={20} color="#0F172A" />
-        </TouchableOpacity>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>Organization Templates</Text>
-          <Text style={styles.subtitle}>
-            {isSailing
-              ? 'Publish optional sail racing step recommendations for learners.'
-              : 'Publish optional nursing step recommendations for learners.'}
-          </Text>
-          <OrgContextPill interestSlug={orgInterestSlug} />
-          <View style={styles.headerLinksRow}>
-            <TouchableOpacity onPress={() => router.push('/organization/access-requests')} style={styles.accessRequestsLink}>
-              <Text style={styles.accessRequestsLinkText}>Access requests</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/organization/members')} style={styles.accessRequestsLink}>
-              <Text style={styles.accessRequestsLinkText}>Manage members</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/organization/cohorts')} style={styles.accessRequestsLink}>
-              <Text style={styles.accessRequestsLinkText}>Cohorts</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+      <OrgAdminHeader
+        title="Organization Templates"
+        subtitle={isSailing
+          ? 'Publish optional sail racing step recommendations for learners.'
+          : 'Publish optional nursing step recommendations for learners.'}
+        interestSlug={orgInterestSlug}
+      />
 
       {!activeOrganization?.id ? (
         <View style={styles.centerState}>
@@ -564,52 +547,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EEF2FF',
-  },
-  headerTextWrap: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  subtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    color: '#64748B',
-  },
-  accessRequestsLink: {
-    marginTop: 6,
-    alignSelf: 'flex-start',
-  },
-  headerLinksRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-  },
-  accessRequestsLinkText: {
-    fontSize: 12,
-    color: '#2563EB',
-    fontWeight: '600',
   },
   scroll: {
     flex: 1,

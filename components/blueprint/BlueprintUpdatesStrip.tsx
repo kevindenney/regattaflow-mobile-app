@@ -46,7 +46,7 @@ export function BlueprintUpdatesStrip({
     (step: BlueprintNewStep) => {
       adoptStep.mutate({
         sourceStepId: step.step_id,
-        interestId: step.blueprint_id, // Will be resolved from the blueprint
+        interestId: step.interest_id,
         subscriptionId: step.subscription_id,
       });
     },

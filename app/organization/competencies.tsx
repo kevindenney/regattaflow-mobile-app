@@ -1,5 +1,6 @@
 import { getActiveMembership, isActiveMembership, isOrgAdminRole, resolveActiveOrgId } from '@/lib/organizations/adminGate';
-import { fetchOrganizationInterestSlug, OrgContextPill } from '@/components/organizations/OrgContextPill';
+import { fetchOrganizationInterestSlug } from '@/components/organizations/OrgContextPill';
+import { OrgAdminHeader } from '@/components/organizations/OrgAdminHeader';
 import { useOrganization } from '@/providers/OrganizationProvider';
 import { isUuid } from '@/utils/uuid';
 import { Ionicons } from '@expo/vector-icons';
@@ -417,37 +418,11 @@ export default function OrganizationCompetenciesScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={20} color="#0F172A" />
-        </TouchableOpacity>
-        <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>
-            Manage {competencyLabelPlural.toLowerCase()} for your organization.
-          </Text>
-          <OrgContextPill interestSlug={orgInterestSlug} />
-          <View style={styles.headerLinksRow}>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/races' as any)}>
-              <Text style={styles.headerLinkText}>Dashboard</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/organization/members')}>
-              <Text style={styles.headerLinkText}>Members</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/organization/access-requests')}>
-              <Text style={styles.headerLinkText}>Access requests</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/organization/cohorts')}>
-              <Text style={styles.headerLinkText}>Cohorts</Text>
-            </TouchableOpacity>
-            {orgInterestSlug && (
-              <TouchableOpacity onPress={() => router.push(`/${orgInterestSlug}` as any)}>
-                <Text style={styles.headerLinkText}>Browse catalog</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </View>
+      <OrgAdminHeader
+        title={title}
+        subtitle={`Manage ${competencyLabelPlural.toLowerCase()} for your organization.`}
+        interestSlug={orgInterestSlug}
+      />
 
       {!orgReady || orgLoading ? (
         <View style={styles.centerState}>
@@ -790,35 +765,6 @@ export default function OrganizationCompetenciesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#EEF2FF',
-  },
-  headerTextWrap: { flex: 1 },
-  title: { fontSize: 20, fontWeight: '700', color: '#0F172A' },
-  subtitle: { marginTop: 2, fontSize: 12, color: '#64748B' },
-  headerLinksRow: {
-    marginTop: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerLinkText: { fontSize: 12, color: '#2563EB', fontWeight: '600' },
   scroll: { flex: 1 },
   content: { padding: 16, gap: 12 },
   card: {

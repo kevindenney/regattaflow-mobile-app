@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '@/lib/contexts/SubscriptionContext';
 import { router } from 'expo-router';
 
+import type { TierSource } from '@/hooks/useFeatureGate';
+
 interface PaywallModalProps {
   visible: boolean;
   onClose: () => void;
@@ -27,6 +29,8 @@ interface PaywallModalProps {
   title?: string;
   description?: string;
   benefits?: string[];
+  tierSource?: TierSource;
+  orgName?: string;
 }
 
 export default function PaywallModal({
@@ -36,9 +40,48 @@ export default function PaywallModal({
   title,
   description,
   benefits,
+  tierSource,
+  orgName,
 }: PaywallModalProps) {
   const [purchasing, setPurchasing] = useState(false);
   const { popularProduct, purchaseProduct } = useSubscription();
+
+  // Org-sponsored users see attribution instead of paywall
+  if (tierSource === 'organization') {
+    return (
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={onClose}
+      >
+        <LinearGradient
+          colors={['#0f172a', '#1e293b', '#334155']}
+          style={styles.container}
+        >
+          <View style={styles.scrollContent}>
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Ionicons name="close" size={24} color="#f8fafc" />
+              </TouchableOpacity>
+              <View style={styles.titleContainer}>
+                <ThemedText style={styles.title}>Included with Your Membership</ThemedText>
+                <ThemedText style={styles.description}>
+                  Your premium access is provided by {orgName || 'your organization'}. No additional payment needed.
+                </ThemedText>
+              </View>
+            </View>
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={styles.primaryButton} onPress={onClose}>
+                <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
+                <ThemedText style={styles.primaryButtonText}>Got It</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+      </Modal>
+    );
+  }
 
   // Default content based on feature
   const getFeatureContent = () => {

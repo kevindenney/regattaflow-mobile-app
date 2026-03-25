@@ -2,13 +2,17 @@ import React, { useMemo } from 'react';
 import {
   View,
   ScrollView,
+  Pressable,
   TouchableOpacity,
   StyleSheet,
   Animated,
 } from 'react-native';
 import { Text } from '@/components/ui/text';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Line, Circle } from 'react-native-svg';
+import { router } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/services/supabase';
+import { useAuth } from '@/providers/AuthProvider';
 import type {
   CompetencyDetail as CompetencyDetailType,
   CompetencyAttempt,
@@ -82,9 +86,16 @@ const FACULTY_DECISION_CONFIG: Record<
 };
 
 const NODE_RADIUS = 16;
-const NODE_SPACING = 56;
-const PIPELINE_WIDTH = (STATUS_ORDER.length - 1) * NODE_SPACING + NODE_RADIUS * 2;
-const PIPELINE_HEIGHT = 72;
+
+/** Short labels that fit under pipeline nodes without overlap. */
+const PIPELINE_SHORT_LABELS: Record<CompetencyStatus, string> = {
+  not_started: 'Not\nStarted',
+  learning: 'Learning',
+  practicing: 'Practicing',
+  checkoff_ready: 'Checkoff\nReady',
+  validated: 'Validated',
+  competent: 'Competent',
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -168,7 +179,7 @@ function PulseRing({ color }: { color: string }) {
   );
 }
 
-/** Horizontal sign-off chain pipeline. */
+/** Horizontal sign-off chain pipeline — pure flexbox columns. */
 function SignOffPipeline({
   currentStatus,
   accentColor,
@@ -180,130 +191,86 @@ function SignOffPipeline({
 
   return (
     <View style={styles.pipelineContainer}>
-      {/* SVG connecting lines */}
-      <View style={styles.pipelineSvgRow}>
-        <Svg width={PIPELINE_WIDTH} height={PIPELINE_HEIGHT}>
-          {STATUS_ORDER.map((_, idx) => {
-            if (idx === STATUS_ORDER.length - 1) return null;
-            const x1 = NODE_RADIUS + idx * NODE_SPACING + NODE_RADIUS;
-            const x2 = NODE_RADIUS + (idx + 1) * NODE_SPACING - NODE_RADIUS;
-            const y = PIPELINE_HEIGHT / 2;
-            const filled = idx < currentOrdinal;
-            return (
-              <Line
-                key={`line-${idx}`}
-                x1={x1}
-                y1={y}
-                x2={x2}
-                y2={y}
-                stroke={filled ? '#15803D' : '#D1D5DB'}
-                strokeWidth={3}
-                strokeLinecap="round"
-              />
-            );
-          })}
-          {STATUS_ORDER.map((status, idx) => {
-            const cx = NODE_RADIUS + idx * NODE_SPACING;
-            const cy = PIPELINE_HEIGHT / 2;
-            const ordinal = statusOrdinal(status);
-            const isComplete = ordinal < currentOrdinal;
-            const isCurrent = ordinal === currentOrdinal;
-            return (
-              <Circle
-                key={`node-${status}`}
-                cx={cx}
-                cy={cy}
-                r={NODE_RADIUS - 1}
-                fill={
-                  isComplete
-                    ? '#15803D'
-                    : isCurrent
-                      ? accentColor
-                      : '#FFFFFF'
-                }
-                stroke={
-                  isComplete
-                    ? '#15803D'
-                    : isCurrent
-                      ? accentColor
-                      : '#D1D5DB'
-                }
-                strokeWidth={2}
-              />
-            );
-          })}
-        </Svg>
-
-        {/* Overlay: icons + pulse ring on current node */}
+      {/* Main row: columns (node+label) with flex lines between them */}
+      <View style={styles.pipelineRow}>
         {STATUS_ORDER.map((status, idx) => {
           const ordinal = statusOrdinal(status);
           const isComplete = ordinal < currentOrdinal;
           const isCurrent = ordinal === currentOrdinal;
           const cfg = COMPETENCY_STATUS_CONFIG[status];
-          const left = idx * NODE_SPACING;
+
+          const nodeColor = isComplete
+            ? '#15803D'
+            : isCurrent
+              ? accentColor
+              : '#FFFFFF';
+          const borderColor = isComplete
+            ? '#15803D'
+            : isCurrent
+              ? accentColor
+              : '#D1D5DB';
 
           return (
-            <View
-              key={`overlay-${status}`}
-              style={[
-                styles.nodeOverlay,
-                { left, width: NODE_RADIUS * 2 },
-              ]}
-            >
-              {isCurrent && <PulseRing color={accentColor} />}
-              <Ionicons
-                name={
-                  isComplete
-                    ? 'checkmark'
-                    : (cfg.icon as any)
-                }
-                size={isComplete || isCurrent ? 16 : 12}
-                color={
-                  isComplete || isCurrent ? '#FFFFFF' : '#9CA3AF'
-                }
-              />
-            </View>
-          );
-        })}
-      </View>
-
-      {/* Status labels under each node */}
-      <View style={[styles.pipelineLabels, { width: PIPELINE_WIDTH }]}>
-        {STATUS_ORDER.map((status, idx) => {
-          const isCurrent = statusOrdinal(status) === currentOrdinal;
-          return (
-            <Text
-              key={`label-${status}`}
-              style={[
-                styles.pipelineLabel,
-                {
-                  left: idx * NODE_SPACING - 20,
-                  width: NODE_RADIUS * 2 + 40,
-                  fontWeight: isCurrent ? '700' : '400',
-                  color: isCurrent ? accentColor : '#6B7280',
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {COMPETENCY_STATUS_CONFIG[status].label}
-            </Text>
+            <React.Fragment key={status}>
+              {/* Connecting line (except before first node) */}
+              {idx > 0 && (
+                <View style={styles.pipelineLineWrap}>
+                  <View
+                    style={[
+                      styles.pipelineLine,
+                      { backgroundColor: idx <= currentOrdinal ? '#15803D' : '#D1D5DB' },
+                    ]}
+                  />
+                </View>
+              )}
+              {/* Column: node on top, label below */}
+              <View style={styles.pipelineColumn}>
+                <View style={styles.pipelineNodeWrap}>
+                  {isCurrent && <PulseRing color={accentColor} />}
+                  <View
+                    style={[
+                      styles.pipelineNode,
+                      { backgroundColor: nodeColor, borderColor },
+                    ]}
+                  >
+                    <Ionicons
+                      name={isComplete ? 'checkmark' : (cfg.icon as any)}
+                      size={isComplete || isCurrent ? 16 : 12}
+                      color={isComplete || isCurrent ? '#FFFFFF' : '#9CA3AF'}
+                    />
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.pipelineLabel,
+                    {
+                      fontWeight: isCurrent ? '700' : '400',
+                      color: isCurrent ? accentColor : '#6B7280',
+                    },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {PIPELINE_SHORT_LABELS[status]}
+                </Text>
+              </View>
+            </React.Fragment>
           );
         })}
       </View>
 
       {/* Responsibility row */}
-      <View style={styles.responsibilityRow}>
-        {Object.entries(RESPONSIBILITY_LABELS).map(([role, statuses]) => {
-          const startIdx = STATUS_ORDER.indexOf(statuses[0]);
-          const endIdx = STATUS_ORDER.indexOf(statuses[statuses.length - 1]);
-          const left = startIdx * NODE_SPACING;
-          const width = (endIdx - startIdx) * NODE_SPACING + NODE_RADIUS * 2;
-          return (
-            <View key={role} style={[styles.responsibilityBadge, { left, width }]}>
-              <Text style={styles.responsibilityText}>{role}</Text>
-            </View>
-          );
-        })}
+      <View style={styles.responsibilityFlexRow}>
+        <View style={[styles.responsibilityBadge, { flex: 3 }]}>
+          <Text style={styles.responsibilityText}>Student</Text>
+        </View>
+        <View style={{ width: 4 }} />
+        <View style={[styles.responsibilityBadge, { flex: 3 }]}>
+          <Text style={styles.responsibilityText}>Preceptor</Text>
+        </View>
+        <View style={{ width: 4 }} />
+        <View style={[styles.responsibilityBadge, { flex: 2 }]}>
+          <Text style={styles.responsibilityText}>Faculty</Text>
+        </View>
       </View>
     </View>
   );
@@ -434,8 +401,26 @@ export function CompetencyDetail({
   onReview,
   accentColor = '#0097A7',
 }: CompetencyDetailProps) {
+  const { user } = useAuth();
   const { competency, progress, attempts, reviews } = detail;
   const currentStatus: CompetencyStatus = progress?.status ?? 'not_started';
+
+  // Fetch steps that reference this competency
+  const { data: relatedSteps } = useQuery({
+    queryKey: ['competency-steps', competency.id, user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data } = await supabase
+        .from('timeline_steps')
+        .select('id, title, status, created_at')
+        .eq('user_id', user.id)
+        .contains('metadata', { plan: { competency_ids: [competency.id] } })
+        .order('created_at', { ascending: false })
+        .limit(10);
+      return data ?? [];
+    },
+    enabled: !!user?.id,
+  });
   const statusCfg = COMPETENCY_STATUS_CONFIG[currentStatus];
 
   const sortedAttempts = useMemo(
@@ -681,31 +666,47 @@ export function CompetencyDetail({
       )}
 
       {/* ----------------------------------------------------------------- */}
-      {/* 6. Related Lesson Link                                            */}
+      {/* 6. Related Steps                                                  */}
       {/* ----------------------------------------------------------------- */}
-      <View style={[styles.card, styles.lessonLinkCard]}>
-        <View style={styles.lessonLinkRow}>
-          <View
-            style={[
-              styles.lessonLinkIcon,
-              { backgroundColor: accentColor + '18' },
-            ]}
-          >
-            <Ionicons
-              name="book-outline"
-              size={22}
-              color={accentColor}
-            />
+      {(relatedSteps ?? []).length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Related Steps</Text>
+          <View style={{ gap: 2 }}>
+            {(relatedSteps ?? []).map((step: any) => (
+              <Pressable
+                key={step.id}
+                style={styles.relatedStepRow}
+                onPress={() => router.push(`/step/${step.id}` as any)}
+              >
+                <Ionicons
+                  name={
+                    step.status === 'completed'
+                      ? 'checkmark-circle'
+                      : step.status === 'in_progress'
+                        ? 'time-outline'
+                        : 'ellipse-outline'
+                  }
+                  size={18}
+                  color={
+                    step.status === 'completed'
+                      ? '#15803D'
+                      : step.status === 'in_progress'
+                        ? accentColor
+                        : '#9CA3AF'
+                  }
+                />
+                <Text style={styles.relatedStepTitle} numberOfLines={1}>
+                  {step.title || 'Untitled step'}
+                </Text>
+                <Text style={styles.relatedStepStatus}>
+                  {step.status === 'completed' ? 'Done' : step.status === 'in_progress' ? 'Active' : 'Planned'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+              </Pressable>
+            ))}
           </View>
-          <View style={styles.lessonLinkText}>
-            <Text style={styles.lessonLinkTitle}>Study this skill</Text>
-            <Text style={styles.lessonLinkSubtitle}>
-              Review the lesson for Competency #{competency.competency_number}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
         </View>
-      </View>
+      )}
 
       {/* Bottom spacer */}
       <View style={{ height: 40 }} />
@@ -810,21 +811,42 @@ const styles = StyleSheet.create({
 
   // 2. Pipeline
   pipelineContainer: {
-    alignItems: 'flex-start',
+    gap: 8,
   },
   pipelineScrollContent: {
     paddingVertical: 4,
     paddingRight: 20,
   },
-  pipelineSvgRow: {
-    width: PIPELINE_WIDTH,
-    height: PIPELINE_HEIGHT,
-    position: 'relative',
+  pipelineRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
-  nodeOverlay: {
-    position: 'absolute',
-    top: 0,
-    height: PIPELINE_HEIGHT,
+  pipelineColumn: {
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 52,
+  },
+  pipelineLineWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    height: NODE_RADIUS * 2,
+    paddingHorizontal: 2,
+  },
+  pipelineLine: {
+    height: 3,
+    borderRadius: 1.5,
+  },
+  pipelineNodeWrap: {
+    width: NODE_RADIUS * 2,
+    height: NODE_RADIUS * 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pipelineNode: {
+    width: NODE_RADIUS * 2 - 2,
+    height: NODE_RADIUS * 2 - 2,
+    borderRadius: NODE_RADIUS,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -835,26 +857,15 @@ const styles = StyleSheet.create({
     borderRadius: NODE_RADIUS + 4,
     borderWidth: 2,
   },
-  pipelineLabels: {
-    position: 'relative',
-    height: 18,
-    marginTop: 4,
-  },
   pipelineLabel: {
-    position: 'absolute',
     fontSize: 9,
+    lineHeight: 12,
     textAlign: 'center',
-    top: 0,
   },
-  responsibilityRow: {
-    position: 'relative',
-    width: PIPELINE_WIDTH,
-    height: 24,
-    marginTop: 8,
+  responsibilityFlexRow: {
+    flexDirection: 'row',
   },
   responsibilityBadge: {
-    position: 'absolute',
-    top: 0,
     height: 22,
     borderRadius: 6,
     backgroundColor: '#F3F4F6',
@@ -1089,32 +1100,22 @@ const styles = StyleSheet.create({
   },
 
   // 6. Lesson Link Card
-  lessonLinkCard: {
-    marginTop: 6,
-  },
-  lessonLinkRow: {
+  relatedStepRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F3F4F6',
   },
-  lessonLinkIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  lessonLinkText: {
+  relatedStepTitle: {
     flex: 1,
-  },
-  lessonLinkTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '500',
     color: '#1F2937',
   },
-  lessonLinkSubtitle: {
+  relatedStepStatus: {
     fontSize: 12,
     color: '#9CA3AF',
-    marginTop: 2,
   },
 });

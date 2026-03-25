@@ -25,6 +25,9 @@ import {
   Bell,
   Trash2,
   CheckCircle2,
+  Building2,
+  MailPlus,
+  Send,
 } from 'lucide-react-native';
 import { type SocialNotification } from '@/services/NotificationService';
 import { getInitials } from '@/components/account/accountStyles';
@@ -72,6 +75,15 @@ function getNotificationIcon(type: SocialNotification['type']) {
       return <Flag {...iconProps} color="#FFFFFF" />;
     case 'followed_user_step_completed':
       return <CheckCircle2 {...iconProps} color="#FFFFFF" />;
+    case 'org_membership_approved':
+    case 'org_invite_accepted':
+      return <Building2 {...iconProps} color="#FFFFFF" />;
+    case 'org_invite_received':
+      return <MailPlus {...iconProps} color="#FFFFFF" />;
+    case 'blueprint_subscribed':
+      return <UserPlus {...iconProps} color="#FFFFFF" />;
+    case 'step_suggested':
+      return <Send {...iconProps} color="#FFFFFF" />;
     default:
       return <Bell {...iconProps} color="#FFFFFF" />;
   }
@@ -93,6 +105,14 @@ function getIconBgColor(type: SocialNotification['type']): string {
       return IOS_COLORS.systemOrange;
     case 'followed_user_step_completed':
       return IOS_COLORS.systemGreen;
+    case 'org_membership_approved':
+    case 'org_invite_accepted':
+    case 'org_invite_received':
+      return IOS_COLORS.systemIndigo;
+    case 'blueprint_subscribed':
+      return '#6D28D9';
+    case 'step_suggested':
+      return IOS_COLORS.systemBlue;
     default:
       return IOS_COLORS.systemGray;
   }
@@ -107,6 +127,10 @@ function getActionText(notification: SocialNotification, hasActor: boolean): str
   switch (notification.type) {
     case 'new_follower':
       return 'started following you';
+    case 'blueprint_subscribed': {
+      const bpTitle = notification.data?.blueprint_title;
+      return bpTitle ? `subscribed to "${bpTitle}"` : 'subscribed to your blueprint';
+    }
     case 'race_like':
       return notification.regattaName
         ? `liked "${notification.regattaName}"`
@@ -125,6 +149,18 @@ function getActionText(notification: SocialNotification, hasActor: boolean): str
       return notification.body
         ? `completed "${notification.body}"`
         : 'completed a learning step';
+    case 'org_membership_approved':
+      return notification.data?.organization_name
+        ? `Your access to ${notification.data.organization_name} is now active`
+        : 'Your organization access is now active';
+    case 'org_invite_accepted':
+      return notification.body || 'accepted your invite';
+    case 'org_invite_received':
+      return notification.body || 'invited you to join an organization';
+    case 'step_suggested': {
+      const stepTitle = notification.data?.step_title;
+      return stepTitle ? `suggested "${stepTitle}"` : 'suggested a step for you';
+    }
     default:
       return notification.body || notification.title;
   }

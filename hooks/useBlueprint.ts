@@ -15,12 +15,21 @@ import {
   getUserBlueprints,
   getBlueprintSteps,
   getOrganizationBlueprints,
+  getProgramBlueprints,
   subscribe,
   unsubscribe,
   getSubscription,
   getMySubscriptions,
+  getSubscribedBlueprints,
   getNewStepsForSubscriber,
+  getSuggestedNextSteps,
   markStepAction,
+  getBlueprintSubscribers,
+  getBlueprintSubscriberProgress,
+  addStepToBlueprint,
+  removeStepFromBlueprint,
+  reorderBlueprintSteps,
+  setBlueprintSteps,
 } from '@/services/BlueprintService';
 import { adoptStep } from '@/services/TimelineStepService';
 import type {
@@ -30,6 +39,10 @@ import type {
   BlueprintWithAuthor,
   BlueprintSubscriptionRecord,
   BlueprintNewStep,
+  BlueprintSuggestedNextStep,
+  SubscribedBlueprintInfo,
+  SubscriberProgress,
+  BlueprintStepRecord,
 } from '@/types/blueprint';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
 
@@ -48,7 +61,15 @@ const keys = {
     ['blueprint-subscriptions', userId, blueprintId] as const,
   newSteps: (userId: string, interestId?: string | null) =>
     ['blueprint-new-steps', userId, interestId] as const,
+  subscribedBlueprints: (userId: string, interestId?: string | null) =>
+    ['blueprint-subscribed', userId, interestId] as const,
   orgBlueprints: (orgId: string) => ['blueprints', 'org', orgId] as const,
+  programBlueprints: (programId: string) => ['blueprints', 'program', programId] as const,
+  subscribers: (blueprintId: string) => ['blueprint-subscribers', blueprintId] as const,
+  subscriberProgress: (blueprintId: string) =>
+    ['blueprint-subscriber-progress', blueprintId] as const,
+  suggestedNextSteps: (userId: string, interestId?: string | null) =>
+    ['blueprint-suggested-next', userId, interestId] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -96,6 +117,14 @@ export function useOrganizationBlueprints(orgId?: string | null) {
   });
 }
 
+export function useProgramBlueprints(programId?: string | null) {
+  return useQuery<BlueprintRecord[]>({
+    queryKey: keys.programBlueprints(programId ?? ''),
+    queryFn: () => getProgramBlueprints(programId!),
+    enabled: !!programId,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Subscription queries
 // ---------------------------------------------------------------------------
@@ -124,6 +153,40 @@ export function useNewBlueprintSteps(interestId?: string | null) {
     queryKey: keys.newSteps(user?.id ?? '', interestId),
     queryFn: () => getNewStepsForSubscriber(user!.id, interestId),
     enabled: !!user?.id,
+  });
+}
+
+export function useSubscribedBlueprints(interestId?: string | null) {
+  const { user } = useAuth();
+  return useQuery<SubscribedBlueprintInfo[]>({
+    queryKey: keys.subscribedBlueprints(user?.id ?? '', interestId),
+    queryFn: () => getSubscribedBlueprints(user!.id, interestId),
+    enabled: !!user?.id,
+  });
+}
+
+export function useSuggestedNextSteps(interestId?: string | null) {
+  const { user } = useAuth();
+  return useQuery<BlueprintSuggestedNextStep[]>({
+    queryKey: keys.suggestedNextSteps(user?.id ?? '', interestId),
+    queryFn: () => getSuggestedNextSteps(user!.id, interestId),
+    enabled: !!user?.id,
+  });
+}
+
+export function useBlueprintSubscribers(blueprintId?: string | null) {
+  return useQuery({
+    queryKey: keys.subscribers(blueprintId ?? ''),
+    queryFn: () => getBlueprintSubscribers(blueprintId!),
+    enabled: !!blueprintId,
+  });
+}
+
+export function useBlueprintSubscriberProgress(blueprintId?: string | null) {
+  return useQuery<SubscriberProgress[]>({
+    queryKey: keys.subscriberProgress(blueprintId ?? ''),
+    queryFn: () => getBlueprintSubscriberProgress(blueprintId!),
+    enabled: !!blueprintId,
   });
 }
 
@@ -161,6 +224,54 @@ export function useDeleteBlueprint() {
     mutationFn: deleteBlueprint,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.all });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Blueprint step curation mutations
+// ---------------------------------------------------------------------------
+
+export function useAddStepToBlueprint() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { blueprintId: string; stepId: string; sortOrder?: number }>({
+    mutationFn: ({ blueprintId, stepId, sortOrder }) =>
+      addStepToBlueprint(blueprintId, stepId, sortOrder),
+    onSuccess: (_data, { blueprintId }) => {
+      queryClient.invalidateQueries({ queryKey: keys.steps(blueprintId) });
+    },
+  });
+}
+
+export function useRemoveStepFromBlueprint() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { blueprintId: string; stepId: string }>({
+    mutationFn: ({ blueprintId, stepId }) =>
+      removeStepFromBlueprint(blueprintId, stepId),
+    onSuccess: (_data, { blueprintId }) => {
+      queryClient.invalidateQueries({ queryKey: keys.steps(blueprintId) });
+    },
+  });
+}
+
+export function useReorderBlueprintSteps() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { blueprintId: string; stepIds: string[] }>({
+    mutationFn: ({ blueprintId, stepIds }) =>
+      reorderBlueprintSteps(blueprintId, stepIds),
+    onSuccess: (_data, { blueprintId }) => {
+      queryClient.invalidateQueries({ queryKey: keys.steps(blueprintId) });
+    },
+  });
+}
+
+export function useSetBlueprintSteps() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { blueprintId: string; stepIds: string[] }>({
+    mutationFn: ({ blueprintId, stepIds }) =>
+      setBlueprintSteps(blueprintId, stepIds),
+    onSuccess: (_data, { blueprintId }) => {
+      queryClient.invalidateQueries({ queryKey: keys.steps(blueprintId) });
     },
   });
 }
@@ -212,13 +323,13 @@ export function useAdoptBlueprintStep() {
   return useMutation<
     TimelineStepRecord,
     Error,
-    { sourceStepId: string; interestId: string; subscriptionId: string }
+    { sourceStepId: string; interestId: string; subscriptionId: string; blueprintId?: string }
   >({
-    mutationFn: async ({ sourceStepId, interestId, subscriptionId }) => {
+    mutationFn: async ({ sourceStepId, interestId, subscriptionId, blueprintId }) => {
       if (!user?.id) throw new Error('Must be logged in');
 
       // Adopt the step (creates copy in user's timeline)
-      const adopted = await adoptStep(user.id, sourceStepId, interestId);
+      const adopted = await adoptStep(user.id, sourceStepId, interestId, blueprintId);
 
       // Mark as adopted in blueprint tracking
       await markStepAction(subscriptionId, sourceStepId, 'adopted', adopted.id);
@@ -228,6 +339,7 @@ export function useAdoptBlueprintStep() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
       queryClient.invalidateQueries({ queryKey: ['blueprint-new-steps'] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-suggested-next'] });
     },
   });
 }
@@ -241,6 +353,7 @@ export function useDismissBlueprintStep() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['blueprint-new-steps'] });
+      queryClient.invalidateQueries({ queryKey: ['blueprint-suggested-next'] });
     },
   });
 }

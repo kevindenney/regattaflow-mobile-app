@@ -388,8 +388,17 @@ export default function SocialNotificationsScreen() {
                 }
               }
               // Navigate based on type
+              console.log('[social-notifications] Tap:', { type: latest.type, data: latest.data, id: latest.id });
               if (latest.type === 'new_follower' && latest.actorId) {
                 router.push(`/sailor/${latest.actorId}`);
+              } else if (latest.type === 'org_invite_received' && latest.data?.invite_token) {
+                console.log('[social-notifications] Navigating to invite:', latest.data.invite_token);
+                router.push(`/invite/${latest.data.invite_token}` as any);
+              } else if (latest.type === 'org_membership_approved') {
+                // User got approved — go to races tab where they can see org blueprints
+                router.push('/(tabs)/races' as any);
+              } else if (latest.type === 'org_invite_accepted' && latest.data?.organization_id) {
+                router.push('/organization/members' as any);
               } else if (latest.regattaId) {
                 router.push(`/race/${latest.regattaId}`);
               }
@@ -431,6 +440,13 @@ export default function SocialNotificationsScreen() {
               if (!item.isRead) markAsRead(item.id);
               if (item.type === 'new_follower' && item.actorId) {
                 router.push(`/sailor/${item.actorId}`);
+              } else if (item.type === 'org_invite_received' && item.data?.invite_token) {
+                router.push(`/invite/${item.data.invite_token}` as any);
+              } else if (item.type === 'org_membership_approved') {
+                // User got approved — go to races tab where they can see org blueprints
+                router.push('/(tabs)/races' as any);
+              } else if (item.type === 'org_invite_accepted' && item.data?.organization_id) {
+                router.push('/organization/members' as any);
               } else if (item.regattaId) {
                 router.push(`/race/${item.regattaId}`);
               }

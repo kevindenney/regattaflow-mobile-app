@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "betterat-local": {
+      "type": "http",
+      "url": "http://localhost:3001/api/mcp",
+      "headers": {
+        "Authorization": "Bearer mcp-local-dev-token"
+      }
+    }
+  }
+}

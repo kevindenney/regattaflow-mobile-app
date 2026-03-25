@@ -21,6 +21,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { organizationInviteService } from '@/services/OrganizationInviteService';
 import { getOnboardingContext } from '@/lib/onboarding/interestContext';
+import { NotificationService } from '@/services/NotificationService';
+import { useOrgPrograms } from '@/hooks/usePrograms';
+import { supabase } from '@/services/supabase';
 import * as Clipboard from 'expo-clipboard';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 
@@ -28,6 +31,7 @@ interface InviteMemberSheetProps {
   visible: boolean;
   onClose: () => void;
   organizationId: string;
+  organizationName?: string | null;
   interestSlug?: string | null;
 }
 
@@ -44,14 +48,18 @@ export function InviteMemberSheet({
   visible,
   onClose,
   organizationId,
+  organizationName,
   interestSlug,
 }: InviteMemberSheetProps) {
   const ctx = getOnboardingContext(interestSlug || undefined);
   const roles = ctx.leaderRoles;
 
+  const { data: orgPrograms } = useOrgPrograms(organizationId);
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState(roles[roles.length - 1]?.id || 'member');
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -70,6 +78,7 @@ export function InviteMemberSheet({
       const token = generateToken();
       await organizationInviteService.createInvite({
         organization_id: organizationId,
+        program_id: selectedProgramId,
         invitee_name: name.trim() || null,
         invitee_email: email.trim() || null,
         invite_token: token,
@@ -83,6 +92,41 @@ export function InviteMemberSheet({
         ? window.location.origin
         : 'https://better.at';
       setInviteLink(`${baseUrl}/invite/${token}`);
+
+      // Send in-app notification to invitee if they have an account (non-blocking)
+      if (email.trim()) {
+        try {
+          const lookupEmail = email.trim().toLowerCase();
+          console.log('[InviteMemberSheet] Looking up invitee by email:', lookupEmail);
+          const { data: inviteeUser, error: lookupErr } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', lookupEmail)
+            .single();
+          console.log('[InviteMemberSheet] Invitee lookup result:', { inviteeUser, lookupErr });
+          if (inviteeUser?.id) {
+            const { data: { user: currentUser } } = await supabase.auth.getUser();
+            const { data: inviterProfile } = await supabase
+              .from('users')
+              .select('full_name')
+              .eq('id', currentUser?.id || '')
+              .single();
+            console.log('[InviteMemberSheet] Sending notification to', inviteeUser.id, 'from', currentUser?.id);
+            await NotificationService.notifyOrgInviteReceived({
+              targetUserId: inviteeUser.id,
+              inviterName: inviterProfile?.full_name || 'Someone',
+              inviterId: currentUser?.id || '',
+              organizationId,
+              organizationName: organizationName || 'an organization',
+              roleLabel: selectedRoleLabel,
+              inviteToken: token,
+            });
+            console.log('[InviteMemberSheet] Notification sent successfully');
+          }
+        } catch (notifErr) {
+          console.error('[InviteMemberSheet] Notification error:', notifErr);
+        }
+      }
     } catch (err: any) {
       showAlert('Error', err?.message || 'Failed to create invite');
     } finally {
@@ -104,6 +148,7 @@ export function InviteMemberSheet({
     setInviteLink(null);
     setCopied(false);
     setSelectedRole(roles[roles.length - 1]?.id || 'member');
+    setSelectedProgramId(null);
     onClose();
   };
 
@@ -189,6 +234,33 @@ export function InviteMemberSheet({
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {orgPrograms && orgPrograms.length > 0 && (
+                  <>
+                    <Text style={styles.label}>Program (optional)</Text>
+                    <View style={styles.rolesRow}>
+                      <TouchableOpacity
+                        style={[styles.rolePill, selectedProgramId === null && styles.rolePillActive]}
+                        onPress={() => setSelectedProgramId(null)}
+                      >
+                        <Text style={[styles.rolePillText, selectedProgramId === null && styles.rolePillTextActive]}>
+                          None
+                        </Text>
+                      </TouchableOpacity>
+                      {orgPrograms.map((prog) => (
+                        <TouchableOpacity
+                          key={prog.id}
+                          style={[styles.rolePill, selectedProgramId === prog.id && styles.rolePillActive]}
+                          onPress={() => setSelectedProgramId(prog.id)}
+                        >
+                          <Text style={[styles.rolePillText, selectedProgramId === prog.id && styles.rolePillTextActive]}>
+                            {prog.title}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </>
+                )}
 
                 <Text style={styles.label}>Message (optional)</Text>
                 <TextInput

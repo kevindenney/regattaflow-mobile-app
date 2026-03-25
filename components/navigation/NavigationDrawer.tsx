@@ -35,6 +35,7 @@ import {
   isRouteActive,
 } from '@/lib/navigation-config';
 import { useVocabulary, type VocabularyMap } from '@/hooks/useVocabulary';
+import { useOrganization } from '@/providers/OrganizationProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH * 0.85, 320);
@@ -76,6 +77,7 @@ export function NavigationDrawerContent({
   const { userType, userProfile, user, signOut, isGuest } = useAuth();
   const { isFree } = useFeatureGate();
   const { vocabulary } = useVocabulary();
+  const { memberships, activeDomain } = useOrganization();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -176,7 +178,18 @@ export function NavigationDrawerContent({
     }
   };
 
-  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary);
+  const isOrgAdmin = React.useMemo(() => {
+    const ADMIN_ROLES = new Set(['admin', 'manager', 'owner']);
+    return memberships.some(
+      (m) => ADMIN_ROLES.has(String(m.role || '').toLowerCase())
+        && ['active', 'verified'].includes(String(m.membership_status || m.status || '').toLowerCase())
+    );
+  }, [memberships]);
+
+  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary, {
+    activeDomain: activeDomain ?? undefined,
+    isOrgAdmin,
+  });
 
   const isActive = (route: string) => {
     const normalizedRoute = route.replace('/(tabs)/', '/').replace('/index', '');
@@ -442,6 +455,7 @@ export function NavigationDrawer({
   const { userType, userProfile, user, signOut, isGuest } = useAuth();
   const { isFree, tierName } = useFeatureGate();
   const { vocabulary } = useVocabulary();
+  const { memberships: drawerMemberships, activeDomain: drawerActiveDomain } = useOrganization();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const slideAnim = React.useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -523,7 +537,18 @@ export function NavigationDrawer({
   };
 
   // Get navigation items based on persona
-  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary);
+  const drawerIsOrgAdmin = React.useMemo(() => {
+    const ADMIN_ROLES = new Set(['admin', 'manager', 'owner']);
+    return drawerMemberships.some(
+      (m) => ADMIN_ROLES.has(String(m.role || '').toLowerCase())
+        && ['active', 'verified'].includes(String(m.membership_status || m.status || '').toLowerCase())
+    );
+  }, [drawerMemberships]);
+
+  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary, {
+    activeDomain: drawerActiveDomain ?? undefined,
+    isOrgAdmin: drawerIsOrgAdmin,
+  });
 
   // Check if route is active
   const isActive = (route: string) => {

@@ -16,6 +16,7 @@ import {
 } from '@/components/race-detail';
 import type { RaceDocument as RaceDocumentsCardDocument } from '@/components/race-detail/RaceDocumentsCard';
 import {
+  AddStepSheet,
   AIVenueInsightsCard,
   BoatSetupSection,
   ClassExpertsSection,
@@ -93,9 +94,9 @@ import { createStep as createTimelineStep, deleteStep as deleteTimelineStep } fr
 import { timelineStepsToCardRaceData } from '@/lib/timeline/timelineStepAdapter';
 import { StepFilterBar, type StepFilters } from '@/components/step/StepFilterBar';
 import { StepDetailContent } from '@/components/step/StepDetailContent';
-import { BlueprintUpdatesStrip } from '@/components/blueprint/BlueprintUpdatesStrip';
+import { PeerTimelinesFooter } from '@/components/blueprint/PeerTimelinesFooter';
 import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
-import { useUserBlueprints } from '@/hooks/useBlueprint';
+import { useUserBlueprints, useSubscribedBlueprints, useSuggestedNextSteps, useAdoptBlueprintStep, useDismissBlueprintStep } from '@/hooks/useBlueprint';
 import { useScrollToolbarHide } from '@/hooks/useScrollToolbarHide';
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import {
@@ -153,11 +154,13 @@ const EMPTY_RACES: any[] = [];
 
 export default function RacesScreen() {
   const auth = useAuth();
-  const { user, userProfile, signedIn, ready, isDemoSession, userType, isGuest, enterGuestMode } = auth;
+  const { user, userProfile, signedIn, ready, isDemoSession, userType, isGuest, enterGuestMode, wasAuthenticated } = auth;
   const { isTourActive, currentStep, triggerPricingPrompt } = useFeatureTourContext();
   const eventConfig = useInterestEventConfig();
-  const { currentInterest } = useInterest();
-  const { activeOrganization } = useOrganization();
+  const { currentInterest, effectiveInterestIds, viewMode, toggleDomainView, domainInterestIds, getDomainForInterest } = useInterest();
+  const currentDomain = currentInterest ? getDomainForInterest(currentInterest.id) : null;
+  const hasSiblingInterests = domainInterestIds.length > 1;
+  const { activeOrganization, activeMembership } = useOrganization();
   const { vocab } = useVocabulary();
   const queryClient = useQueryClient();
   const [recommendedOrgTemplates, setRecommendedOrgTemplates] = useState<RecommendedStepTemplate[]>([]);
@@ -165,9 +168,76 @@ export default function RacesScreen() {
   // Blueprint publishing
   const [showBlueprintSheet, setShowBlueprintSheet] = useState(false);
   const { data: userBlueprints } = useUserBlueprints();
-  const existingBlueprint = userBlueprints?.find(
+  const existingBlueprintsForInterest = userBlueprints?.filter(
     (bp) => bp.interest_id === currentInterest?.id,
-  ) ?? null;
+  ) ?? [];
+  const existingBlueprint = existingBlueprintsForInterest[0] ?? null;
+
+  // Subscribed blueprints (for timeline grid label)
+  const { data: subscribedBlueprints } = useSubscribedBlueprints(viewMode === 'domain' ? null : currentInterest?.id);
+  const activeSubscribedBlueprint = subscribedBlueprints?.[0] ?? null;
+
+  // Smart Add Step Sheet: suggested next steps from subscribed blueprints
+  const [showAddStepSheet, setShowAddStepSheet] = useState(false);
+  const { data: suggestedNextSteps } = useSuggestedNextSteps(viewMode === 'domain' ? null : currentInterest?.id);
+  const adoptBlueprintStep = useAdoptBlueprintStep();
+  const dismissBlueprintStep = useDismissBlueprintStep();
+
+  // Resolve blueprint title/slug: own published blueprint takes priority, then subscribed
+  const timelineBlueprintTitle = existingBlueprint?.is_published
+    ? existingBlueprint.title
+    : activeSubscribedBlueprint?.blueprint_title ?? null;
+  const timelineBlueprintSlug = existingBlueprint?.is_published
+    ? existingBlueprint.slug
+    : activeSubscribedBlueprint?.blueprint_slug ?? null;
+
+  // Faculty blueprint guidance banner
+  const FACULTY_ROLES = useMemo(() => new Set([
+    'faculty', 'instructor', 'lead-instructor', 'clinical-instructor',
+    'preceptor', 'evaluator', 'workshop-leader', 'master-printer',
+    'head-grower', 'head-chef', 'lead-facilitator', 'pattern-designer',
+    'teaching-professional', 'head-professional', 'head-trainer',
+    'personal-trainer', 'studio-director', 'guild-master',
+  ]), []);
+  const isFacultyMember = activeMembership?.role
+    ? FACULTY_ROLES.has(activeMembership.role.toLowerCase())
+    : false;
+  const hasPublishedBlueprint = existingBlueprintsForInterest.some((bp) => bp.is_published);
+  const [facultyBannerDismissed, setFacultyBannerDismissed] = useState(false);
+  const showFacultyBanner = isFacultyMember && !hasPublishedBlueprint && !facultyBannerDismissed;
+
+  // Program-aware faculty banner: look up the program from the faculty's accepted invite
+  const [facultyProgramName, setFacultyProgramName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!showFacultyBanner || !user?.id || !activeOrganization?.id) {
+      setFacultyProgramName(null);
+      return;
+    }
+    // Query the most recent accepted invite for this user+org that has a program_id
+    (async () => {
+      try {
+        const { data: invite } = await supabase
+          .from('organization_invites')
+          .select('program_id')
+          .eq('organization_id', activeOrganization.id)
+          .eq('status', 'accepted')
+          .not('program_id', 'is', null)
+          .order('responded_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (invite?.program_id) {
+          const { data: prog } = await supabase
+            .from('programs')
+            .select('title')
+            .eq('id', invite.program_id)
+            .single();
+          setFacultyProgramName(prog?.title ?? null);
+        }
+      } catch {
+        // Non-critical
+      }
+    })();
+  }, [showFacultyBanner, user?.id, activeOrganization?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Safe area insets for proper header spacing
   const insets = useSafeAreaInsets();
@@ -188,7 +258,7 @@ export default function RacesScreen() {
   });
   const [stepFilters, setStepFilters] = useState<StepFilters>({ status: null, capabilityGoal: null });
   const [timelineStatusOverrides, setTimelineStatusOverrides] = useState<Record<string, {
-    status: 'completed' | 'planned';
+    status: 'completed' | 'pending';
     startDateIso: string;
     startTimeLabel: string;
   }>>({});
@@ -472,14 +542,20 @@ export default function RacesScreen() {
 
   // Filter races by interest: show sailing regattas for sailing interest,
   // and events matching the active interest's slug for all others.
-  const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
-  const interestSlug = eventConfig.interestSlug;
+  // Use currentInterest?.slug directly to avoid the 'sail-racing' fallback in
+  // eventConfig when interest hasn't loaded yet, which would show sailing data
+  // for non-sailing interests during the loading window.
+  const interestSlug = currentInterest?.slug ?? eventConfig.interestSlug;
+  const isSailingInterest = interestSlug === 'sail-racing';
+
   const timelineOrderStorageKey = useMemo(
     () => `timeline_custom_order:${user?.id || 'guest'}:${interestSlug}`,
     [interestSlug, user?.id],
   );
   // Fetch user's timeline steps for the current interest
-  const { data: myTimelineSteps } = useMyTimeline(currentInterest?.id);
+  const { data: myTimelineSteps } = useMyTimeline(
+    viewMode === 'domain' && effectiveInterestIds.length > 1 ? effectiveInterestIds : currentInterest?.id
+  );
   const timelineStepCards = useMemo(
     () => (myTimelineSteps?.length ? timelineStepsToCardRaceData(myTimelineSteps) : EMPTY_RACES),
     [myTimelineSteps],
@@ -488,7 +564,11 @@ export default function RacesScreen() {
   const interestFilteredRaces = useMemo(() => {
     let regattas: any[];
     if (isSailingInterest) {
-      regattas = liveRaces ?? EMPTY_RACES;
+      // For sailing, show races that either have no interest_slug (legacy) or match sailing
+      regattas = (liveRaces ?? EMPTY_RACES).filter((race: any) => {
+        const slugTag = race.metadata?.interest_slug;
+        return !slugTag || slugTag === 'sail-racing';
+      });
     } else {
       // For non-sailing interests, show events whose metadata.interest_slug matches
       if (!liveRaces) {
@@ -655,7 +735,10 @@ export default function RacesScreen() {
 
       // First-time/signed-out visitors should enter guest mode instead of being forced to login.
       // This keeps refreshes on /races in the guest experience.
-      if (!signedIn && !isGuest && ready) {
+      // BUT if the user was previously authenticated (token expired), don't enter guest mode —
+      // the AuthProvider already redirects to landing/login, and entering guest mode would
+      // wipe React Query cache (RLS-blocked refetches overwrite cached data with nulls).
+      if (!signedIn && !isGuest && ready && !wasAuthenticated) {
         logger.debug('User not authenticated on /races, entering guest mode');
         enterGuestMode();
         return;
@@ -1013,6 +1096,8 @@ export default function RacesScreen() {
         stepStatus: race.stepStatus,
         sort_order: race.sort_order,
         description: race.description,
+        due_at: race.due_at,
+        completed_at: race.completed_at,
       } : null),
     }));
   }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline, timelineStatusOverrides]);
@@ -1076,27 +1161,15 @@ export default function RacesScreen() {
 
   const applyTimelineStepStatus = useCallback(async (
     raceId: string,
-    status: 'completed' | 'planned',
+    status: 'completed' | 'pending',
     opts?: {indexHint?: number}
   ) => {
     const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId) as any;
-    const nowMs = Date.now();
-    const idx = opts?.indexHint ?? 0;
-    const rawDate = race?.start_date || race?.date || race?.startTime;
-    const parsed = rawDate ? new Date(rawDate) : null;
-    const existingMs = parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : null;
-    const nextMs =
-      status === 'completed'
-        ? Math.min(existingMs ?? Number.MAX_SAFE_INTEGER, nowMs - (idx + 1) * 60 * 1000)
-        : Math.max(existingMs ?? 0, nowMs + (idx + 1) * 2 * 60 * 60 * 1000);
-    const nextStart = new Date(nextMs).toISOString();
-    const eventDate = nextStart.slice(0, 10);
-    const startTime = new Date(nextMs).toTimeString().slice(0, 5);
+    const nowIso = new Date().toISOString();
     if (race?.isTimelineStep) {
       const stepPayload: Record<string, unknown> = {
         status,
-        starts_at: nextStart,
-        ends_at: nextStart,
+        completed_at: status === 'completed' ? nowIso : null,
       };
       const { error } = await supabase
         .from('timeline_steps')
@@ -1108,6 +1181,19 @@ export default function RacesScreen() {
         throw new Error('Failed to update step timeline status');
       }
     } else {
+      // Legacy race_events / regattas path — keep date manipulation for non-step items
+      const idx = opts?.indexHint ?? 0;
+      const nowMs = Date.now();
+      const rawDate = race?.start_date || race?.date || race?.startTime;
+      const parsed = rawDate ? new Date(rawDate) : null;
+      const existingMs = parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : null;
+      const nextMs =
+        status === 'completed'
+          ? Math.min(existingMs ?? Number.MAX_SAFE_INTEGER, nowMs - (idx + 1) * 60 * 1000)
+          : Math.max(existingMs ?? 0, nowMs + (idx + 1) * 2 * 60 * 60 * 1000);
+      const nextStart = new Date(nextMs).toISOString();
+      const eventDate = nextStart.slice(0, 10);
+
       const sourceRaw = String(race?._source || race?.source || race?.source_table || '').toLowerCase();
       const primaryTable: 'race_events' | 'regattas' = sourceRaw.includes('race_event') ? 'race_events' : 'regattas';
       const fallbackTable: 'race_events' | 'regattas' = primaryTable === 'race_events' ? 'regattas' : 'race_events';
@@ -1150,12 +1236,14 @@ export default function RacesScreen() {
         }
       }
     }
+
+    const displayStatus = status === 'pending' ? 'pending' : status;
     setTimelineStatusOverrides((prev) => ({
       ...prev,
       [raceId]: {
-        status,
-        startDateIso: nextStart,
-        startTimeLabel: startTime,
+        status: displayStatus,
+        startDateIso: race?.start_date || race?.date || nowIso,
+        startTimeLabel: race?.startTime || race?.start_time || '',
       },
     }));
 
@@ -1163,15 +1251,11 @@ export default function RacesScreen() {
       if (!prev || prev.id !== raceId) return prev;
       return {
         ...prev,
-        status,
-        start_date: nextStart,
-        date: nextStart,
-        start_time: startTime,
-        startTime: startTime,
-        completed_at: status === 'completed' ? new Date().toISOString() : null,
+        status: displayStatus,
+        completed_at: status === 'completed' ? nowIso : null,
         metadata: {
           ...(prev.metadata && typeof prev.metadata === 'object' ? prev.metadata : {}),
-          status,
+          status: displayStatus,
         },
       };
     });
@@ -1181,10 +1265,10 @@ export default function RacesScreen() {
     if (!raceId) return;
     void (async () => {
       try {
-        await applyTimelineStepStatus(raceId, 'planned');
+        await applyTimelineStepStatus(raceId, 'pending');
         await refetchRacesRef.current?.();
       } catch (error: any) {
-        showAlert('Update failed', error?.message || 'Could not move this step to planned.');
+        showAlert('Update failed', error?.message || 'Could not mark this step not done.');
       }
     })();
   }, [applyTimelineStepStatus, user?.id]);
@@ -1203,7 +1287,7 @@ export default function RacesScreen() {
 
   const handleTimelineGridBulkStatusUpdate = useCallback(async (
     raceIds: string[],
-    status: 'completed' | 'planned'
+    status: 'completed' | 'pending'
   ) => {
     if (raceIds.length === 0) return;
     try {
@@ -1215,6 +1299,22 @@ export default function RacesScreen() {
       showAlert('Bulk update failed', error?.message || 'Could not update selected steps.');
     }
   }, [applyTimelineStepStatus, user?.id]);
+
+  const handleSetDueDate = useCallback(async (raceId: string, dateIso: string | null) => {
+    const race = orderedBaseCardGridRaces.find((entry) => entry.id === raceId) as any;
+    if (!race?.isTimelineStep) return;
+    try {
+      await supabase
+        .from('timeline_steps')
+        .update({ due_at: dateIso })
+        .eq('id', raceId)
+        .select('id')
+        .single();
+      await refetchRacesRef.current?.();
+    } catch (error: any) {
+      showAlert('Update failed', error?.message || 'Could not set due date.');
+    }
+  }, [orderedBaseCardGridRaces]);
 
   // Render card content for CardGrid
   const renderCardGridContent = useCallback(
@@ -1268,11 +1368,12 @@ export default function RacesScreen() {
           refetchTrigger={refetchTrigger}
           onMoveStepToPlannedNext={canManage ? () => handleMoveStepToPlannedNext(race.id) : undefined}
           onMoveStepToCompletedMostRecent={canManage ? () => handleMoveStepToCompletedMostRecent(race.id) : undefined}
+          onSetDueDate={canManage ? (dateIso: string | null) => handleSetDueDate(race.id, dateIso) : undefined}
           onNextStepCreated={(newStepId) => { pendingNewStepIdRef.current = newStepId; }}
         />
       );
     },
-    [cardGridDimensions, currentSeasonWeek, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext]
+    [cardGridDimensions, currentSeasonWeek, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleSetDueDate]
   );
 
   // Handle race change from CardGrid
@@ -2509,6 +2610,45 @@ export default function RacesScreen() {
     });
   }, [handleShowAddRaceSheet]);
 
+  // Smart Add Step: adopt suggestion from blueprint
+  const handleAdoptSuggestion = useCallback(async (suggestion: import('@/types/blueprint').BlueprintSuggestedNextStep) => {
+    if (!currentInterest?.id) return;
+    try {
+      const adopted = await adoptBlueprintStep.mutateAsync({
+        sourceStepId: suggestion.next_step_id,
+        interestId: currentInterest.id,
+        subscriptionId: suggestion.subscription_id,
+        blueprintId: suggestion.blueprint_id,
+      });
+      // Navigate to the newly adopted step
+      skipFetchForStepRef.current = adopted.id;
+      setSelectedRaceId(adopted.id);
+      setSelectedRaceData({
+        id: adopted.id,
+        name: adopted.title,
+        date: adopted.starts_at,
+        isTimelineStep: true,
+        stepStatus: 'pending',
+        status: 'pending',
+        metadata: adopted.metadata,
+      });
+      setHasManuallySelected(true);
+      setIsGridView(false);
+      queryClient.refetchQueries({ queryKey: ['timeline-steps'] });
+    } catch (err) {
+      console.error('Failed to adopt suggested step:', err);
+      showAlert('Error', 'Failed to add step to timeline. Please try again.');
+    }
+  }, [currentInterest?.id, adoptBlueprintStep, queryClient]);
+
+  // Smart Add Step: dismiss/skip suggestion
+  const handleDismissSuggestion = useCallback((suggestion: import('@/types/blueprint').BlueprintSuggestedNextStep) => {
+    dismissBlueprintStep.mutate({
+      subscriptionId: suggestion.subscription_id,
+      sourceStepId: suggestion.next_step_id,
+    });
+  }, [dismissBlueprintStep]);
+
   // NowBar weather: fetch live weather for the next upcoming race's venue,
   // falling back to browser/device geolocation when no venue coordinates exist.
   const nextRaceVenueCoords = useMemo(() => {
@@ -3260,6 +3400,15 @@ export default function RacesScreen() {
     });
   }, [cardGridRaces, stepFilters, hasTimelineSteps, isSailingInterest]);
 
+  // Stable initial card index — only changes when the target race actually moves
+  // in the array, NOT on every data refetch that produces a new array reference.
+  const initialCardIndex = useMemo(() => {
+    const targetId = selectedRaceId || safeNextRace?.id;
+    if (!targetId || cardGridRaces.length === 0) return 0;
+    const idx = cardGridRaces.findIndex(r => r.id === targetId);
+    return idx >= 0 ? idx : 0;
+  }, [selectedRaceId, safeNextRace?.id, cardGridRaces]);
+
   const profileOnboardingStep = (profile as { onboarding_step?: string } | null | undefined)?.onboarding_step;
 
   const isDemoProfile = (profileOnboardingStep ?? '').toString().startsWith('demo');
@@ -3568,7 +3717,45 @@ export default function RacesScreen() {
             <>
               {!isSailingInterest && hasTimelineSteps && (
                 <View style={{ paddingTop: totalHeaderHeight + 8 }}>
-                  <BlueprintUpdatesStrip interestId={currentInterest?.id} />
+                  {/* Faculty banner: nudge to publish blueprint */}
+                  {showFacultyBanner && (
+                    <View style={{
+                      marginHorizontal: 16,
+                      marginBottom: 12,
+                      backgroundColor: '#EFF6FF',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: '#BFDBFE',
+                      padding: 14,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}>
+                      <View style={{
+                        width: 36, height: 36, borderRadius: 18,
+                        backgroundColor: '#DBEAFE',
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Ionicons name="megaphone-outline" size={18} color="#2563EB" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: '#1E40AF', marginBottom: 2 }}>
+                          {facultyProgramName
+                            ? `Ready to share your ${facultyProgramName} timeline?`
+                            : 'Ready to share your timeline?'}
+                        </Text>
+                        <Text style={{ fontSize: 13, color: '#3B82F6', lineHeight: 18 }}>
+                          Tap <Text style={{ fontWeight: '600' }}>+</Text> → <Text style={{ fontWeight: '600' }}>Publish as Blueprint</Text> to let students subscribe.
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => setFacultyBannerDismissed(true)}
+                        hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                      >
+                        <Ionicons name="close" size={18} color="#93C5FD" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   <StepFilterBar
                     filters={stepFilters}
                     onFiltersChange={setStepFilters}
@@ -3593,6 +3780,17 @@ export default function RacesScreen() {
                 onBulkDeleteRaces={isViewingOtherTimeline ? undefined : handleTimelineGridBulkDelete}
                 onReorderRaces={isViewingOtherTimeline ? undefined : handleTimelineGridReorder}
                 topInset={!isSailingInterest && hasTimelineSteps ? 0 : totalHeaderHeight}
+                blueprintTitle={timelineBlueprintTitle}
+                blueprintSlug={timelineBlueprintSlug}
+                renderFooter={!isViewingOtherTimeline ? () => (
+                  <PeerTimelinesFooter
+                    interestId={currentInterest?.id}
+                    interestSlug={currentInterest?.slug}
+                    orgId={activeOrganization?.id}
+                    orgName={activeOrganization?.name}
+                    hasOrg={!!activeOrganization?.id}
+                  />
+                ) : undefined}
               />
             </>
           ) : (
@@ -3601,7 +3799,7 @@ export default function RacesScreen() {
               renderCardContent={renderCardGridContent}
               onRaceChange={handleCardGridRaceChange}
               onCardChange={handleCardGridCardChange}
-              initialRaceIndex={Math.max(0, cardGridRaces.findIndex(r => r.id === (selectedRaceId || safeNextRace?.id)))}
+              initialRaceIndex={initialCardIndex}
               nextRaceIndex={!isViewingOtherTimeline && safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
               enableHaptics={FEATURE_FLAGS.ENABLE_CARD_HAPTICS}
               persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
@@ -4047,13 +4245,15 @@ export default function RacesScreen() {
           isOnline={isOnline}
           isGridView={isGridView}
           onToggleGridView={() => setIsGridView(v => !v)}
+          onAddPress={() => setShowAddStepSheet(true)}
           onAddRace={isSailingInterest ? handleShowAddRaceSheet : handleAddStep}
           onAddStep={isSailingInterest ? handleAddStep : undefined}
           onAddPractice={isSailingInterest ? handleAddPractice : undefined}
           onNewSeason={isSailingInterest ? () => setShowSeasonSettings(true) : undefined}
           onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}
           onPublishBlueprint={currentInterest?.id ? () => setShowBlueprintSheet(true) : undefined}
-          blueprintLabel={existingBlueprint?.is_published ? 'Manage Blueprint' : 'Publish as Blueprint'}
+          blueprintLabel={hasPublishedBlueprint ? 'Manage Blueprints' : existingBlueprintsForInterest.length > 0 ? 'Manage Blueprints' : 'Publish as Blueprint'}
+          isBlueprintPublished={hasPublishedBlueprint}
           recommendedTemplates={recommendedOrgTemplates}
           onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
           onAddButtonLayout={setAddButtonLayout}
@@ -4066,6 +4266,9 @@ export default function RacesScreen() {
           onStepPickerPress={sortedTimelineSteps.length > 0 ? () => setShowStepPicker(true) : undefined}
           onMeasuredHeight={setToolbarHeight}
           hidden={toolbarHidden}
+          isDomainView={viewMode === 'domain'}
+          onToggleDomainView={hasSiblingInterests ? toggleDomainView : undefined}
+          domainLabel={currentDomain ? `All ${currentDomain.name}` : undefined}
         />
       </View>
 
@@ -4110,9 +4313,28 @@ export default function RacesScreen() {
           onClose={() => setShowBlueprintSheet(false)}
           interestId={currentInterest.id}
           interestName={currentInterest.name}
-          existingBlueprint={existingBlueprint}
+          existingBlueprints={existingBlueprintsForInterest}
+          existingBlueprint={null}
         />
       )}
+
+      {/* Smart Add Step Sheet */}
+      <AddStepSheet
+        visible={showAddStepSheet}
+        onClose={() => setShowAddStepSheet(false)}
+        suggestedNextSteps={suggestedNextSteps ?? []}
+        onAdoptSuggestion={handleAdoptSuggestion}
+        onDismissSuggestion={handleDismissSuggestion}
+        recommendedTemplates={recommendedOrgTemplates}
+        onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
+        onAddStep={isSailingInterest ? handleAddStep : handleAddStep}
+        onAddRace={isSailingInterest ? handleShowAddRaceSheet : undefined}
+        onAddPractice={isSailingInterest ? handleAddPractice : undefined}
+        onNewSeason={isSailingInterest ? () => setShowSeasonSettings(true) : undefined}
+        onBrowseCatalog={() => router.push(eventConfig.catalogRoute ?? '/(tabs)/learn')}
+        onPublishBlueprint={currentInterest?.id ? () => setShowBlueprintSheet(true) : undefined}
+        blueprintLabel={hasPublishedBlueprint ? 'Manage Blueprints' : existingBlueprintsForInterest.length > 0 ? 'Manage Blueprints' : 'Publish as Blueprint'}
+      />
 
       {/* Season Picker Modal - Select which season to filter by */}
       <SeasonPickerModal

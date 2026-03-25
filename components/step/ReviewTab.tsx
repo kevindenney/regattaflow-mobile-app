@@ -10,9 +10,10 @@ import { StepCritiqueContent } from './StepCritiqueContent';
 interface ReviewTabProps {
   stepId: string;
   readOnly?: boolean;
+  footer?: React.ReactNode;
 }
 
-export function ReviewTab({ stepId, readOnly }: ReviewTabProps) {
+export function ReviewTab({ stepId, readOnly, footer }: ReviewTabProps) {
   return (
     <ScrollView
       style={styles.container}
@@ -21,6 +22,7 @@ export function ReviewTab({ stepId, readOnly }: ReviewTabProps) {
       keyboardShouldPersistTaps="handled"
     >
       <StepCritiqueContent stepId={stepId} readOnly={readOnly} />
+      {footer}
     </ScrollView>
   );
 }

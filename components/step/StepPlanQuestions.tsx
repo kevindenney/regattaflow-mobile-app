@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, Platform, Linking, Share } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Platform, Linking, Share, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
@@ -24,23 +24,36 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
 import { getResourcesByIds } from '@/services/LibraryService';
 import { NotificationService } from '@/services/NotificationService';
-import { gatherEnrichedContext, generatePlanFromResource } from '@/services/ai/StepPlanAIService';
+import { gatherEnrichedContext, generatePlanFromResource, generateEnrichedPlanSuggestion } from '@/services/ai/StepPlanAIService';
 import { getCompetencies } from '@/services/competencyService';
 import { getSkillGoalTitles } from '@/services/SkillGoalService';
-import type { StepPlanData, StepMetadata, SubStep, StepCollaborator } from '@/types/step-detail';
-// WhatChatPanel removed — brain dump entry replaces inline AI chat
+import type { StepPlanData, StepMetadata, SubStep, StepCollaborator, StepLocation, BrainDumpData } from '@/types/step-detail';
+import { BrainDumpEntry } from './BrainDumpEntry';
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
 import { DateEnrichmentCard } from './DateEnrichmentCard';
 import { createStep, enableStepSharing } from '@/services/TimelineStepService';
+import { LocationMapPicker as LocationMapPickerModal } from '@/components/races/LocationMapPicker';
+import { supabase } from '@/services/supabase';
 import type { LibraryResourceRecord } from '@/types/library';
 
 interface StepPlanQuestionsProps {
   stepId: string;
   interestId: string | undefined;
   readOnly?: boolean;
+  /** Brain dump integration — shown as collapsible section at top */
+  brainDumpData?: BrainDumpData;
+  onBrainDumpChange?: (dump: BrainDumpData) => void;
+  onStructureWithAI?: (dump: BrainDumpData) => void;
+  onSkipToPlan?: (dump: BrainDumpData) => void;
+  isStructuring?: boolean;
+  interestSlug?: string;
 }
 
-export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQuestionsProps) {
+export function StepPlanQuestions({
+  stepId, interestId, readOnly,
+  brainDumpData: brainDumpProp, onBrainDumpChange, onStructureWithAI, onSkipToPlan,
+  isStructuring, interestSlug,
+}: StepPlanQuestionsProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const { user } = useAuth();
@@ -49,10 +62,12 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
   const [showResourcePicker, setShowResourcePicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState('');
   const [localGoals, setLocalGoals] = useState<string[]>([]);
   const [newGoalText, setNewGoalText] = useState('');
   const [suggestedCompetencies, setSuggestedCompetencies] = useState<string[]>([]);
   const [suggestedUserSkills, setSuggestedUserSkills] = useState<string[]>([]);
+  const competencyMapRef = useRef<Map<string, string>>(new Map()); // title → id
   const autoMatchedRef = useRef(false);
 
   // ---------------------------------------------------------------------------
@@ -63,7 +78,10 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
   const [localCollaborators, setLocalCollaborators] = useState<StepCollaborator[]>([]);
   const [localConnectionSpace, setLocalConnectionSpace] = useState('');
   const [showCollaboratorPicker, setShowCollaboratorPicker] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [localWhereLocation, setLocalWhereLocation] = useState<StepLocation | undefined>(undefined);
   const [showCourseContext, setShowCourseContext] = useState(false);
+  const [orgLocations, setOrgLocations] = useState<{ id: string; name: string; description?: string; lat?: number; lng?: number }[]>([]);
   const initializedRef = useRef(false);
 
   const metadata = (step?.metadata ?? {}) as StepMetadata;
@@ -91,9 +109,25 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
         );
       }
       setLocalGoals(plan.capability_goals ?? []);
+      setLocalWhereLocation(plan.where_location);
       initializedRef.current = true;
     }
   }, [step]);
+
+  // Load org-defined locations for quick pick
+  useEffect(() => {
+    if (!user?.id) return;
+    const loadOrgLocations = async () => {
+      try {
+        const { data } = await supabase
+          .from('organization_locations')
+          .select('id, name, description, lat, lng')
+          .order('sort_order', { ascending: true });
+        if (data?.length) setOrgLocations(data);
+      } catch {}
+    };
+    loadOrgLocations();
+  }, [user?.id]);
 
   // Load org competencies + user skill goals as suggestions for capability goals
   useEffect(() => {
@@ -107,7 +141,14 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
       // Org competencies
       try {
         const comps = await getCompetencies(resolvedId);
-        comps.forEach((c) => c.title && orgTitles.push(c.title));
+        const titleIdMap = new Map<string, string>();
+        comps.forEach((c) => {
+          if (c.title) {
+            orgTitles.push(c.title);
+            titleIdMap.set(c.title, c.id);
+          }
+        });
+        competencyMapRef.current = titleIdMap;
       } catch {}
 
       // User skill goals
@@ -261,6 +302,11 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
     debouncedSave({ connection_space: text });
   }, [debouncedSave]);
 
+  const handleLocationChange = useCallback((location: StepLocation | undefined) => {
+    setLocalWhereLocation(location);
+    debouncedSave({ where_location: location });
+  }, [debouncedSave]);
+
   const handleSelectResources = useCallback(async (resources: LibraryResourceRecord[]) => {
     const newIds = resources.map((r) => r.id);
     const existingIds = planDataRef.current.linked_resource_ids ?? [];
@@ -280,7 +326,7 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
         const resolvedInterestId = interestId || currentInterest?.id;
         const enriched = resolvedInterestId && user?.id
           ? await gatherEnrichedContext(user.id, resolvedInterestId)
-          : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [] };
+          : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [], libraryResources: [] };
 
         const plan = await generatePlanFromResource({
           resource: firstNew,
@@ -337,6 +383,15 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
     setLocalGoals((prev) => {
       if (prev.includes(trimmed)) return prev;
       const updated = [...prev, trimmed];
+      // Also track structured competency_id if this matches an org competency
+      const compId = competencyMapRef.current.get(trimmed);
+      if (compId) {
+        const existingIds = planDataRef.current.competency_ids ?? [];
+        if (!existingIds.includes(compId)) {
+          debouncedSave({ capability_goals: updated, competency_ids: [...existingIds, compId] });
+          return updated;
+        }
+      }
       debouncedSave({ capability_goals: updated });
       return updated;
     });
@@ -346,15 +401,52 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
   const handleRemoveGoal = useCallback((goal: string) => {
     setLocalGoals((prev) => {
       const updated = prev.filter((g) => g !== goal);
+      // Also remove structured competency_id if this matches an org competency
+      const compId = competencyMapRef.current.get(goal);
+      if (compId) {
+        const existingIds = planDataRef.current.competency_ids ?? [];
+        const updatedIds = existingIds.filter((id) => id !== compId);
+        debouncedSave({ capability_goals: updated, competency_ids: updatedIds });
+        return updated;
+      }
       debouncedSave({ capability_goals: updated });
       return updated;
     });
   }, [debouncedSave]);
 
+  const handleAISuggest = useCallback(async () => {
+    if (aiLoading || !user?.id || !step) return;
+    setAiLoading(true);
+    setAiSuggestion('');
+    try {
+      const resolvedInterestId = interestId || currentInterest?.id;
+      const enriched = resolvedInterestId
+        ? await gatherEnrichedContext(user.id, resolvedInterestId)
+        : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [], libraryResources: [] };
+
+      const text = await generateEnrichedPlanSuggestion({
+        interestName: currentInterest?.name || 'this interest',
+        interestId: resolvedInterestId,
+        stepTitle: step.title,
+        currentWhat: localWhat || undefined,
+        linkedResources,
+        capabilityGoals: localGoals,
+        ...enriched,
+      });
+      setAiSuggestion(text);
+    } catch (err) {
+      console.error('AI suggestion failed:', err);
+      setAiSuggestion('Unable to generate suggestion. Please try again.');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [aiLoading, user?.id, step, interestId, currentInterest, localWhat, linkedResources, localGoals]);
+
   const q1Complete = Boolean(localWhat.trim() || linkedIds.length > 0);
   const q2Complete = Boolean(planData.how_sub_steps?.length && planData.how_sub_steps.some((s) => s.text.trim()));
   const q3Complete = Boolean(localWhy.trim());
   const q4Complete = localCollaborators.length > 0;
+  const qWhereComplete = Boolean(localWhereLocation?.name?.trim());
   const q5Complete = localGoals.length > 0;
 
   // Build a set of already-added collaborator identifiers for the picker
@@ -370,6 +462,12 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
   // Filter suggestions to only show ones not already added
   const availableOrgSuggestions = suggestedCompetencies.filter((s) => !localGoals.includes(s));
   const availableSkillSuggestions = suggestedUserSkills.filter((s) => !localGoals.includes(s) && !suggestedCompetencies.includes(s));
+
+  // Brain dump section — use prop data or fall back to step metadata
+  const brainDumpData = brainDumpProp ?? (metadata?.brain_dump as BrainDumpData | undefined);
+  const showBrainDump = Boolean(brainDumpData !== undefined && onStructureWithAI && !readOnly);
+  const localHasPlanContent = q1Complete || q2Complete || q4Complete || qWhereComplete || q5Complete;
+  const [brainDumpExpanded, setBrainDumpExpanded] = useState(!localHasPlanContent);
 
   if (!step) return null;
 
@@ -411,6 +509,41 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
         />
       )}
 
+      {/* Brain dump section — collapsible at top */}
+      {showBrainDump && (
+        <View style={styles.brainDumpSection}>
+          <Pressable
+            style={styles.brainDumpHeader}
+            onPress={() => setBrainDumpExpanded((prev) => !prev)}
+          >
+            <Ionicons name="bulb" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.brainDumpHeaderText}>Quick Capture</Text>
+            {brainDumpData?.raw_text?.trim() && (
+              <View style={styles.brainDumpBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={STEP_COLORS.accent} />
+              </View>
+            )}
+            <Ionicons
+              name={brainDumpExpanded ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={STEP_COLORS.secondaryLabel}
+              style={{ marginLeft: 'auto' }}
+            />
+          </Pressable>
+          {brainDumpExpanded && (
+            <BrainDumpEntry
+              initialData={brainDumpData}
+              onSkipToPlan={onSkipToPlan!}
+              onStructureWithAI={onStructureWithAI!}
+              onDraftChange={onBrainDumpChange}
+              isStructuring={isStructuring}
+              interestSlug={interestSlug}
+              embedded
+            />
+          )}
+        </View>
+      )}
+
       {/* Q1: What will you do? */}
       <PlanQuestionCard
         icon="bulb-outline"
@@ -428,6 +561,36 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
           textAlignVertical="top"
           editable={!readOnly}
         />
+
+        {/* AI suggestion */}
+        {!readOnly && (
+          <Pressable
+            style={styles.aiSuggestButton}
+            onPress={handleAISuggest}
+            disabled={aiLoading}
+          >
+            {aiLoading ? (
+              <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+            ) : (
+              <>
+                <Ionicons name="sparkles" size={16} color={IOS_COLORS.systemPurple} />
+                <Text style={styles.aiSuggestText}>
+                  {aiSuggestion ? 'Regenerate suggestion' : 'Suggest what to focus on'}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        )}
+
+        {aiSuggestion ? (
+          <View style={styles.aiSuggestionBox}>
+            <View style={styles.aiSuggestionHeader}>
+              <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
+              <Text style={styles.aiSuggestionLabel}>AI Coach</Text>
+            </View>
+            <Text style={styles.aiSuggestionText}>{aiSuggestion}</Text>
+          </View>
+        ) : null}
 
         {linkedResources.length > 0 && (
           <View style={styles.chipContainer}>
@@ -575,6 +738,115 @@ export function StepPlanQuestions({ stepId, interestId, readOnly }: StepPlanQues
           onClose={() => setShowCollaboratorPicker(false)}
           onAdd={handleAddCollaborator}
           existingIds={collaboratorExistingIds}
+        />
+      )}
+
+      {/* Where will you do this? */}
+      <PlanQuestionCard
+        icon="location-outline"
+        title="Where will you do this?"
+        isComplete={qWhereComplete}
+      >
+        <TextInput
+          style={[styles.textArea, { minHeight: 44 }, readOnly && styles.readOnlyInput]}
+          value={localWhereLocation?.name ?? ''}
+          onChangeText={readOnly ? undefined : (text) => {
+            if (!text.trim()) {
+              handleLocationChange(undefined);
+            } else {
+              handleLocationChange({
+                ...(localWhereLocation ?? { name: '' }),
+                name: text,
+              });
+            }
+          }}
+          placeholder={readOnly ? '' : "Location, venue, or address..."}
+          placeholderTextColor={IOS_COLORS.tertiaryLabel}
+          editable={!readOnly}
+        />
+
+        {/* Org-defined location quick picks */}
+        {!readOnly && orgLocations.length > 0 && (
+          <View style={styles.orgLocationChips}>
+            {orgLocations.map((loc) => {
+              const isSelected = localWhereLocation?.name === loc.name;
+              return (
+                <Pressable
+                  key={loc.id}
+                  style={[styles.orgLocationChip, isSelected && styles.orgLocationChipSelected]}
+                  onPress={() => handleLocationChange({
+                    name: loc.name,
+                    lat: loc.lat ?? undefined,
+                    lng: loc.lng ?? undefined,
+                  })}
+                >
+                  <Ionicons
+                    name="location"
+                    size={13}
+                    color={isSelected ? STEP_COLORS.accent : IOS_COLORS.secondaryLabel}
+                  />
+                  <Text
+                    style={[styles.orgLocationChipText, isSelected && styles.orgLocationChipTextSelected]}
+                    numberOfLines={1}
+                  >
+                    {loc.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Map preview when coordinates are set */}
+        {localWhereLocation?.lat != null && localWhereLocation?.lng != null && (
+          <View style={styles.mapPreview}>
+            <View style={styles.mapPreviewPin}>
+              <Ionicons name="location" size={20} color={STEP_COLORS.accent} />
+              <Text style={styles.mapPreviewCoords}>
+                {localWhereLocation.lat.toFixed(4)}, {localWhereLocation.lng.toFixed(4)}
+              </Text>
+            </View>
+            {!readOnly && (
+              <Pressable
+                onPress={() => handleLocationChange({
+                  ...localWhereLocation!,
+                  lat: undefined,
+                  lng: undefined,
+                })}
+                hitSlop={6}
+              >
+                <Ionicons name="close-circle" size={18} color={IOS_COLORS.systemGray3} />
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {!readOnly && (
+          <Pressable
+            style={styles.addPeopleButton}
+            onPress={() => setShowLocationPicker(true)}
+          >
+            <Ionicons name="map-outline" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.addPeopleText}>Pick on map</Text>
+          </Pressable>
+        )}
+      </PlanQuestionCard>
+
+      {/* Location map picker modal */}
+      {!readOnly && showLocationPicker && (
+        <LocationMapPickerModal
+          visible={showLocationPicker}
+          onClose={() => setShowLocationPicker(false)}
+          onSelectLocation={(loc: { name: string; lat: number; lng: number }) => {
+            handleLocationChange({ name: loc.name, lat: loc.lat, lng: loc.lng });
+            setShowLocationPicker(false);
+          }}
+          initialLocation={
+            localWhereLocation?.lat != null && localWhereLocation?.lng != null
+              ? { lat: localWhereLocation.lat, lng: localWhereLocation.lng }
+              : null
+          }
+          initialName={localWhereLocation?.name}
         />
       )}
 
@@ -733,6 +1005,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: IOS_SPACING.md,
     paddingBottom: IOS_SPACING.md,
   },
+  brainDumpSection: {
+    backgroundColor: STEP_COLORS.headerBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: STEP_COLORS.border,
+    marginBottom: IOS_SPACING.md,
+    overflow: 'hidden',
+  },
+  brainDumpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingVertical: IOS_SPACING.sm,
+  },
+  brainDumpHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: STEP_COLORS.label,
+  },
+  brainDumpBadge: {
+    marginLeft: 4,
+  },
   sectionHeader: {
     marginBottom: IOS_SPACING.sm,
   },
@@ -800,6 +1095,48 @@ const styles = StyleSheet.create({
     color: IOS_COLORS.label,
     fontWeight: '500',
     flexShrink: 1,
+  },
+  aiSuggestButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(175,82,222,0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: IOS_SPACING.xs,
+  },
+  aiSuggestText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: IOS_COLORS.systemPurple,
+  },
+  aiSuggestionBox: {
+    backgroundColor: 'rgba(175,82,222,0.06)',
+    borderRadius: 10,
+    padding: IOS_SPACING.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(175,82,222,0.15)',
+    marginTop: IOS_SPACING.xs,
+  },
+  aiSuggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  aiSuggestionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: IOS_COLORS.systemPurple,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  aiSuggestionText: {
+    fontSize: 14,
+    color: IOS_COLORS.label,
+    lineHeight: 20,
   },
   addLibraryButton: {
     flexDirection: 'row',
@@ -965,6 +1302,57 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: { outlineStyle: 'none' } as any,
     }),
+  },
+  orgLocationChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: IOS_SPACING.xs,
+  },
+  orgLocationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: IOS_COLORS.systemGray6,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  orgLocationChipSelected: {
+    backgroundColor: STEP_COLORS.accentLight,
+    borderColor: STEP_COLORS.accent,
+  },
+  orgLocationChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    maxWidth: 180,
+  },
+  orgLocationChipTextSelected: {
+    color: STEP_COLORS.accent,
+    fontWeight: '600',
+  },
+  mapPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: STEP_COLORS.accentLight,
+    borderRadius: 8,
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingVertical: 8,
+    marginTop: IOS_SPACING.xs,
+  },
+  mapPreviewPin: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mapPreviewCoords: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
   conditionsContainer: {
     marginTop: IOS_SPACING.sm,

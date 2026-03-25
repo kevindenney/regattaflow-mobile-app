@@ -20,14 +20,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
 import {
   useBlueprint,
   useBlueprintSteps,
   useBlueprintSubscription,
   useSubscribe,
   useUnsubscribe,
+  useAdoptBlueprintStep,
 } from '@/hooks/useBlueprint';
 import { getBlueprintAccessInfo } from '@/services/BlueprintService';
+import { NotificationService } from '@/services/NotificationService';
+import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
+import { StudentProgressSection } from '@/components/blueprint/StudentProgressSection';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
 
 const C = {
@@ -60,8 +65,10 @@ export default function BlueprintPage() {
   const { data: blueprint, isLoading: blueprintLoading } = useBlueprint(slug);
   const { data: steps, isLoading: stepsLoading } = useBlueprintSteps(blueprint?.id);
   const { data: subscription } = useBlueprintSubscription(blueprint?.id);
+  const { allInterests, switchInterest } = useInterest();
   const subscribeMutation = useSubscribe();
   const unsubscribeMutation = useUnsubscribe();
+  const adoptStepMutation = useAdoptBlueprintStep();
 
   // Access info for restricted blueprints (fetched when blueprint is null but might exist)
   const [accessInfo, setAccessInfo] = useState<{
@@ -71,6 +78,10 @@ export default function BlueprintPage() {
     org_slug?: string;
     title?: string;
   } | null>(null);
+  const [justSubscribed, setJustSubscribed] = useState(false);
+  const [adoptingAll, setAdoptingAll] = useState(false);
+  const [adoptedCount, setAdoptedCount] = useState(0);
+  const [showEditSheet, setShowEditSheet] = useState(false);
 
   useEffect(() => {
     if (!blueprintLoading && !blueprint && slug) {
@@ -90,10 +101,56 @@ export default function BlueprintPage() {
 
     if (isSubscribed) {
       await unsubscribeMutation.mutateAsync(blueprint.id);
+      setJustSubscribed(false);
     } else {
       await subscribeMutation.mutateAsync(blueprint.id);
+      setJustSubscribed(true);
+
+      // Notify the blueprint owner (best-effort, don't block)
+      if (blueprint.user_id !== user.id) {
+        NotificationService
+          .notifyBlueprintSubscribed({
+            blueprintOwnerId: blueprint.user_id,
+            subscriberId: user.id,
+            subscriberName: user.user_metadata?.full_name || user.email || 'Someone',
+            blueprintId: blueprint.id,
+            blueprintTitle: blueprint.title,
+          })
+          .catch(() => {}); // non-blocking
+      }
     }
   }, [user, blueprint, isSubscribed, subscribeMutation, unsubscribeMutation, router]);
+
+  const navigateToTimeline = useCallback(async () => {
+    // Switch to the blueprint's interest before navigating to timeline
+    if (blueprint?.interest_id) {
+      const interest = allInterests.find((i) => i.id === blueprint.interest_id);
+      if (interest) {
+        await switchInterest(interest.slug);
+      }
+    }
+    router.push('/(tabs)/races' as any);
+  }, [blueprint?.interest_id, allInterests, switchInterest, router]);
+
+  const handleAdoptAll = useCallback(async () => {
+    if (!subscription || !blueprint || !steps?.length) return;
+    setAdoptingAll(true);
+    let count = 0;
+    for (const step of steps) {
+      try {
+        await adoptStepMutation.mutateAsync({
+          sourceStepId: step.id,
+          interestId: blueprint.interest_id,
+          subscriptionId: subscription.id,
+        });
+        count++;
+      } catch {
+        // Step may already be adopted — continue
+      }
+    }
+    setAdoptedCount(count);
+    setAdoptingAll(false);
+  }, [subscription, blueprint, steps, adoptStepMutation]);
 
   const Container = Platform.OS === 'web' ? View : SafeAreaView;
   const containerStyle: ViewStyle[] =
@@ -152,6 +209,17 @@ export default function BlueprintPage() {
 
   return (
     <Container style={containerStyle}>
+      {/* Navigation header */}
+      <View style={styles.navHeader}>
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/races' as any)}
+        >
+          <Ionicons name="arrow-back" size={20} color={C.accent} />
+          <Text style={styles.backBtnText}>Back</Text>
+        </Pressable>
+      </View>
+
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -214,30 +282,134 @@ export default function BlueprintPage() {
             </View>
           </View>
 
-          {/* Subscribe CTA */}
-          {!isOwner && (
+          {/* Subscribe / Post-subscribe CTA */}
+          {!isOwner && !isSubscribed && (
             <Pressable
-              style={[styles.subscribeBtn, isSubscribed && styles.subscribedBtn]}
+              style={styles.subscribeBtn}
               onPress={handleSubscribe}
-              disabled={subscribeMutation.isPending || unsubscribeMutation.isPending}
+              disabled={subscribeMutation.isPending}
             >
-              <Ionicons
-                name={isSubscribed ? 'checkmark-circle' : 'add-circle-outline'}
-                size={18}
-                color={isSubscribed ? C.accent : '#FFFFFF'}
-              />
-              <Text
-                style={[styles.subscribeBtnText, isSubscribed && styles.subscribedBtnText]}
-              >
-                {isSubscribed ? 'Subscribed' : 'Subscribe to Blueprint'}
-              </Text>
+              {subscribeMutation.isPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.subscribeBtnText}>Subscribe to Blueprint</Text>
+                </>
+              )}
             </Pressable>
           )}
 
+          {!isOwner && isSubscribed && (
+            <View style={styles.subscribedSection}>
+              {justSubscribed && adoptedCount === 0 && (
+                <>
+                  <View style={styles.successBanner}>
+                    <Ionicons name="checkmark-circle" size={20} color={C.green} />
+                    <Text style={styles.successText}>Subscribed! You'll get updates when new steps are added.</Text>
+                  </View>
+
+                  <Text style={styles.nextStepLabel}>What's next?</Text>
+
+                  <Pressable
+                    style={styles.adoptBtn}
+                    onPress={handleAdoptAll}
+                    disabled={adoptingAll}
+                  >
+                    {adoptingAll ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="download-outline" size={16} color="#FFFFFF" />
+                        <Text style={styles.adoptBtnText}>
+                          Add {steps?.length ?? 0} steps to my timeline
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.viewTimelineBtn}
+                    onPress={() => navigateToTimeline()}
+                  >
+                    <Ionicons name="arrow-forward" size={16} color={C.accent} />
+                    <Text style={styles.viewTimelineBtnText}>Go to my timeline</Text>
+                  </Pressable>
+                </>
+              )}
+
+              {adoptedCount > 0 && (
+                <>
+                  <View style={styles.successBanner}>
+                    <Ionicons name="checkmark-circle" size={20} color={C.green} />
+                    <Text style={styles.successText}>
+                      {adoptedCount} step{adoptedCount !== 1 ? 's' : ''} added to your timeline!
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    style={styles.adoptBtn}
+                    onPress={() => navigateToTimeline()}
+                  >
+                    <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                    <Text style={styles.adoptBtnText}>View in my timeline</Text>
+                  </Pressable>
+                </>
+              )}
+
+              {!justSubscribed && adoptedCount === 0 && (
+                <View style={styles.subscribedRow}>
+                  <View style={styles.subscribedBadge}>
+                    <Ionicons name="checkmark-circle" size={14} color={C.accent} />
+                    <Text style={styles.subscribedBadgeText}>Subscribed</Text>
+                  </View>
+
+                  <Pressable
+                    style={styles.viewTimelineBtn}
+                    onPress={() => navigateToTimeline()}
+                  >
+                    <Ionicons name="arrow-forward" size={14} color={C.accent} />
+                    <Text style={styles.viewTimelineBtnText}>My timeline</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.unsubscribeBtn}
+                    onPress={handleSubscribe}
+                    disabled={unsubscribeMutation.isPending}
+                  >
+                    <Text style={styles.unsubscribeBtnText}>
+                      {unsubscribeMutation.isPending ? 'Unsubscribing...' : 'Unsubscribe'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+
           {isOwner && (
-            <View style={styles.ownerBadge}>
-              <Ionicons name="person-circle-outline" size={12} color={C.accent} />
-              <Text style={styles.ownerBadgeText}>Your Blueprint</Text>
+            <View style={styles.ownerSection}>
+              <View style={styles.ownerBadgeRow}>
+                <View style={styles.ownerBadge}>
+                  <Ionicons name="person-circle-outline" size={12} color={C.accent} />
+                  <Text style={styles.ownerBadgeText}>Your Blueprint</Text>
+                </View>
+                <Pressable
+                  style={styles.manageBtn}
+                  onPress={() => setShowEditSheet(true)}
+                >
+                  <Ionicons name="create-outline" size={14} color={C.accent} />
+                  <Text style={styles.manageBtnText}>Edit</Text>
+                </Pressable>
+              </View>
+
+              {/* Student progress */}
+              {blueprint && steps && (
+                <StudentProgressSection
+                  blueprintId={blueprint.id}
+                  blueprintSteps={steps}
+                  interestId={blueprint.interest_id}
+                />
+              )}
             </View>
           )}
         </View>
@@ -257,60 +429,117 @@ export default function BlueprintPage() {
           </Text>
         </View>
 
-        {/* Steps timeline */}
+        {/* Steps horizontal timeline */}
         <View style={styles.stepsSection}>
           <Text style={styles.sectionTitle}>Timeline Steps</Text>
           {stepsLoading ? (
             <ActivityIndicator size="small" color={C.accent} style={{ marginTop: 20 }} />
+          ) : totalCount === 0 ? (
+            <Text style={styles.emptyStepsText}>No steps published yet.</Text>
           ) : (
-            steps?.map((step, index) => (
-              <StepRow
-                key={step.id}
-                step={step}
-                isLast={index === (steps.length ?? 0) - 1}
-              />
-            ))
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stepsHScroll}
+            >
+              {steps?.map((step, index) => (
+                <StepCard
+                  key={step.id}
+                  step={step}
+                  index={index}
+                  total={totalCount}
+                  onPress={() => router.push(`/step/${step.id}` as any)}
+                />
+              ))}
+            </ScrollView>
           )}
         </View>
       </ScrollView>
+
+      {isOwner && blueprint && (
+        <PublishBlueprintSheet
+          visible={showEditSheet}
+          onClose={() => setShowEditSheet(false)}
+          interestId={blueprint.interest_id}
+          interestName=""
+          existingBlueprint={blueprint}
+        />
+      )}
     </Container>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Step row component
+// Step card component (horizontal timeline)
 // ---------------------------------------------------------------------------
 
-function StepRow({ step, isLast }: { step: TimelineStepRecord; isLast: boolean }) {
+function StepCard({
+  step,
+  index,
+  total,
+  onPress,
+}: {
+  step: TimelineStepRecord;
+  index: number;
+  total: number;
+  onPress: () => void;
+}) {
   const cfg = STATUS_CONFIG[step.status] ?? STATUS_CONFIG.pending;
+  const metadata = step.metadata as Record<string, any> | undefined;
+  const howSubSteps: any[] = metadata?.plan?.how_sub_steps || [];
+  const subStepProgress: Record<string, boolean> = metadata?.act?.sub_step_progress || {};
+  const completedSubs = Object.values(subStepProgress).filter(Boolean).length;
 
   return (
-    <View style={styles.stepRow}>
-      {/* Timeline line */}
-      <View style={styles.stepTimeline}>
-        <Ionicons name={cfg.icon as any} size={16} color={cfg.color} />
-        {!isLast && <View style={styles.stepLine} />}
-      </View>
+    <View style={styles.stepCardWrapper}>
+      {/* Connector line */}
+      {index < total - 1 && <View style={styles.stepConnector} />}
 
-      {/* Content */}
-      <View style={[styles.stepContent, isLast && { paddingBottom: 0 }]}>
-        <Text style={styles.stepTitle}>{step.title}</Text>
-        {step.description && (
-          <Text style={styles.stepDescription} numberOfLines={2}>
-            {step.description}
-          </Text>
-        )}
-        <View style={styles.stepMeta}>
-          <View style={[styles.stepStatusPill, { backgroundColor: `${cfg.color}15` }]}>
-            <Text style={[styles.stepStatusText, { color: cfg.color }]}>
-              {cfg.label}
+      <Pressable
+        style={({ pressed }) => [
+          styles.stepCard,
+          pressed && styles.stepCardPressed,
+        ]}
+        onPress={onPress}
+      >
+        {/* Status badge */}
+        <View style={[styles.stepCardStatusBadge, { backgroundColor: cfg.color }]}>
+          <Text style={styles.stepCardStatusText}>{cfg.label.toUpperCase()}</Text>
+        </View>
+
+        {/* Phase icon */}
+        <View style={styles.stepCardPhaseRow}>
+          <View style={[styles.stepCardPhaseBadge, { backgroundColor: `${cfg.color}18` }]}>
+            <Ionicons name={cfg.icon as any} size={12} color={cfg.color} />
+            <Text style={[styles.stepCardPhaseText, { color: cfg.color }]}>
+              {step.status === 'completed' ? 'Done' : step.status === 'in_progress' ? 'Do' : 'Plan'}
             </Text>
           </View>
-          {step.category !== 'general' && (
-            <Text style={styles.stepCategory}>{step.category}</Text>
-          )}
         </View>
-      </View>
+
+        {/* Title */}
+        <Text style={styles.stepCardTitle} numberOfLines={2}>{step.title}</Text>
+
+        {/* Description snippet */}
+        {step.description && (
+          <Text style={styles.stepCardDesc} numberOfLines={2}>{step.description}</Text>
+        )}
+
+        {/* Sub-step progress */}
+        {howSubSteps.length > 0 && (
+          <View style={styles.stepCardProgressRow}>
+            <Ionicons name="checkmark-circle-outline" size={12} color={C.labelMid} />
+            <Text style={styles.stepCardProgressText}>
+              {completedSubs}/{howSubSteps.length}
+            </Text>
+          </View>
+        )}
+
+        {/* Category */}
+        {step.category && step.category !== 'general' && (
+          <Text style={styles.stepCardCategory} numberOfLines={1}>{step.category}</Text>
+        )}
+      </Pressable>
     </View>
   );
 }
@@ -332,6 +561,29 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  navHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.cardBg,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  backBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.accent,
   },
   emptyContainer: {
     flex: 1,
@@ -473,18 +725,118 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 300,
   },
-  subscribedBtn: {
-    backgroundColor: C.accentLight,
-    borderWidth: 1,
-    borderColor: C.accent,
-  },
   subscribeBtnText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  subscribedBtnText: {
+  subscribedSection: {
+    width: '100%',
+    maxWidth: 340,
+    gap: 10,
+    alignItems: 'center',
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ECFDF3',
+    borderWidth: 1,
+    borderColor: '#ABEFC6',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: '100%',
+  },
+  successText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#067647',
+    flex: 1,
+  },
+  nextStepLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.labelMid,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  adoptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: C.accent,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    width: '100%',
+  },
+  adoptBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  viewTimelineBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: C.accentBg,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  viewTimelineBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: C.accent,
+  },
+  subscribedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  subscribedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: C.accentLight,
+    borderWidth: 1,
+    borderColor: C.accent,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  subscribedBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.accent,
+  },
+  unsubscribeBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  unsubscribeBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: C.labelLight,
+    textDecorationLine: 'underline',
+  },
+  ownerSection: {
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    gap: 12,
+  },
+  ownerBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   ownerBadge: {
     flexDirection: 'row',
@@ -495,10 +847,64 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 6,
   },
+  manageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: C.accent,
+    ...Platform.select({ web: { cursor: 'pointer' as any } }),
+  },
+  manageBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.accent,
+  },
   ownerBadgeText: {
     fontSize: 11,
     fontWeight: '600',
     color: C.accent,
+  },
+  subscriberList: {
+    width: '100%',
+    backgroundColor: C.accentBg,
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  subscriberListTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.labelDark,
+    marginBottom: 2,
+  },
+  subscriberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  subscriberAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: C.accentLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subscriberInfo: {
+    flex: 1,
+  },
+  subscriberName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.labelDark,
+  },
+  subscriberDate: {
+    fontSize: 10,
+    color: C.labelMid,
   },
 
   // Progress
@@ -527,7 +933,6 @@ const styles = StyleSheet.create({
 
   // Steps
   stepsSection: {
-    paddingHorizontal: 20,
     paddingTop: 20,
   },
   sectionTitle: {
@@ -537,53 +942,124 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 16,
+    paddingHorizontal: 20,
   },
-  stepRow: {
+  emptyStepsText: {
+    fontSize: 13,
+    color: C.labelMid,
+    paddingHorizontal: 20,
+  },
+  stepsHScroll: {
+    paddingHorizontal: 20,
+    gap: 0,
+    paddingBottom: 8,
+  },
+  stepCardWrapper: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  stepTimeline: {
     alignItems: 'center',
-    width: 16,
   },
-  stepLine: {
-    width: 1.5,
-    flex: 1,
+  stepConnector: {
+    position: 'absolute',
+    top: '50%',
+    right: -1,
+    left: 0,
+    height: 2,
     backgroundColor: C.border,
-    marginTop: 4,
+    zIndex: -1,
   },
-  stepContent: {
-    flex: 1,
-    paddingBottom: 20,
+  stepCard: {
+    width: 150,
+    backgroundColor: C.cardBg,
+    borderRadius: 12,
+    padding: 10,
+    marginRight: 12,
+    minHeight: 140,
+    borderWidth: 1,
+    borderColor: C.border,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        cursor: 'pointer',
+        transition: 'box-shadow 0.15s ease, transform 0.15s ease',
+      } as any,
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+        elevation: 2,
+      },
+    }),
   },
-  stepTitle: {
-    fontSize: 14,
+  stepCardPressed: {
+    opacity: 0.85,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+      } as any,
+    }),
+  },
+  stepCardStatusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  stepCardStatusText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  stepCardPhaseRow: {
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  stepCardPhaseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  stepCardPhaseText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  stepCardTitle: {
+    fontSize: 12,
     fontWeight: '600',
     color: C.labelDark,
+    lineHeight: 16,
+    marginBottom: 2,
+    textAlign: 'center',
   },
-  stepDescription: {
-    fontSize: 12,
+  stepCardDesc: {
+    fontSize: 10,
     color: C.labelMid,
-    marginTop: 2,
-    lineHeight: 17,
+    lineHeight: 14,
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  stepMeta: {
+  stepCardProgressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
+    justifyContent: 'center',
+    gap: 2,
+    marginTop: 'auto' as any,
   },
-  stepStatusPill: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  stepStatusText: {
-    fontSize: 9,
+  stepCardProgressText: {
+    fontSize: 10,
     fontWeight: '600',
+    color: C.labelMid,
   },
-  stepCategory: {
+  stepCardCategory: {
     fontSize: 9,
     color: C.labelLight,
+    textAlign: 'center',
+    marginTop: 2,
   },
 });

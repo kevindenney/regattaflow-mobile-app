@@ -7,14 +7,15 @@
  */
 
 import { useInterest } from '@/providers/InterestProvider'
-import type { Interest } from '@/providers/InterestProvider'
+import type { Interest, DomainWithInterests } from '@/providers/InterestProvider'
 import { router } from 'expo-router'
 import { showConfirm } from '@/lib/utils/crossPlatformAlert'
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -22,9 +23,50 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 
+/** Group a list of interests by their parent domain, preserving domain order. */
+function groupByDomain(
+  interests: Interest[],
+  groupedInterests: DomainWithInterests[],
+): { domain: Interest | null; interests: Interest[] }[] {
+  const slugSet = new Set(interests.map((i) => i.slug))
+  const groups: { domain: Interest | null; interests: Interest[] }[] = []
+
+  for (const group of groupedInterests) {
+    const matching = group.interests.filter((i) => slugSet.has(i.slug))
+    if (matching.length > 0) {
+      groups.push({ domain: group.domain, interests: matching })
+    }
+  }
+
+  // Any interests not matched to a domain group
+  const grouped = new Set(groups.flatMap((g) => g.interests.map((i) => i.slug)))
+  const ungrouped = interests.filter((i) => !grouped.has(i.slug))
+  if (ungrouped.length > 0) {
+    groups.push({ domain: null, interests: ungrouped })
+  }
+
+  return groups
+}
+
 export function InterestSwitcher() {
-  const { currentInterest, userInterests, allInterests, switchInterest, removeInterest, loading } = useInterest()
+  const { currentInterest, userInterests, allInterests, groupedInterests, switchInterest, removeInterest, loading } = useInterest()
   const [open, setOpen] = useState(false)
+
+  // Group user interests by domain
+  const userGroups = useMemo(
+    () => groupByDomain(userInterests, groupedInterests),
+    [userInterests, groupedInterests],
+  )
+
+  // Interests the user hasn't added yet, grouped by domain
+  const otherInterests = useMemo(
+    () => allInterests.filter((ai) => !userInterests.some((ui) => ui.slug === ai.slug)),
+    [allInterests, userInterests],
+  )
+  const otherGroups = useMemo(
+    () => groupByDomain(otherInterests, groupedInterests),
+    [otherInterests, groupedInterests],
+  )
 
   if (loading || userInterests.length === 0) return null
 
@@ -55,10 +97,60 @@ export function InterestSwitcher() {
     router.push('/interests' as any)
   }
 
-  // Interests the user hasn't added yet
-  const otherInterests = allInterests.filter(
-    (ai) => !userInterests.some((ui) => ui.slug === ai.slug)
-  )
+  const renderInterestRow = (interest: Interest, isUserSection: boolean) => {
+    const isActive = interest.slug === currentInterest?.slug
+    if (isUserSection) {
+      return (
+        <View key={interest.id} style={[styles.row, isActive && styles.rowActive]}>
+          <TouchableOpacity
+            style={styles.rowMain}
+            onPress={() => handleSelect(interest)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.rowDot, { backgroundColor: interest.accent_color }]} />
+            <Text style={[styles.rowLabel, isActive && styles.rowLabelActive]} numberOfLines={1}>
+              {interest.name}
+            </Text>
+            {isActive && <Ionicons name="checkmark" size={18} color="#1F2937" />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.browseBtn}
+            onPress={() => handleBrowse(interest)}
+            activeOpacity={0.7}
+            accessibilityLabel={`Browse ${interest.name} organizations`}
+          >
+            <Ionicons name="compass-outline" size={18} color="#6B7280" />
+          </TouchableOpacity>
+          {!isActive && userInterests.length > 1 && (
+            <TouchableOpacity
+              style={styles.removeBtn}
+              onPress={() => handleRemove(interest)}
+              activeOpacity={0.7}
+              accessibilityLabel={`Remove ${interest.name} from interests`}
+            >
+              <Ionicons name="close-circle-outline" size={16} color="#D1D5DB" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )
+    }
+
+    return (
+      <TouchableOpacity
+        key={interest.id}
+        style={styles.exploreRow}
+        onPress={() => handleBrowse(interest)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.rowDot, { backgroundColor: interest.accent_color, opacity: 0.6 }]} />
+        <Text style={styles.exploreLabel} numberOfLines={1}>{interest.name}</Text>
+        <Ionicons name="arrow-forward" size={14} color="#9CA3AF" />
+      </TouchableOpacity>
+    )
+  }
+
+  // Only show domain headers when there are multiple domains
+  const showDomainHeaders = userGroups.length > 1
 
   return (
     <>
@@ -71,12 +163,7 @@ export function InterestSwitcher() {
         accessibilityLabel={`Current interest: ${currentInterest?.name ?? 'None'}. Tap to switch.`}
       >
         {currentInterest && (
-          <View
-            style={[
-              styles.dot,
-              { backgroundColor: currentInterest.accent_color },
-            ]}
-          />
+          <View style={[styles.dot, { backgroundColor: currentInterest.accent_color }]} />
         )}
         <Text style={styles.pillText} numberOfLines={1}>
           {currentInterest?.name ?? 'Interest'}
@@ -93,95 +180,48 @@ export function InterestSwitcher() {
       >
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.sheetTitle}>Your Interests</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.sheetTitle}>Your Interests</Text>
 
-            {userInterests.map((interest) => {
-              const isActive = interest.slug === currentInterest?.slug
-              return (
-                <View key={interest.id} style={[styles.row, isActive && styles.rowActive]}>
-                  <TouchableOpacity
-                    style={styles.rowMain}
-                    onPress={() => handleSelect(interest)}
-                    activeOpacity={0.7}
-                  >
-                    <View
-                      style={[
-                        styles.rowDot,
-                        { backgroundColor: interest.accent_color },
-                      ]}
-                    />
-                    <Text
-                      style={[styles.rowLabel, isActive && styles.rowLabelActive]}
-                      numberOfLines={1}
-                    >
-                      {interest.name}
-                    </Text>
-                    {isActive && (
-                      <Ionicons name="checkmark" size={18} color="#1F2937" />
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.browseBtn}
-                    onPress={() => handleBrowse(interest)}
-                    activeOpacity={0.7}
-                    accessibilityLabel={`Browse ${interest.name} organizations`}
-                  >
-                    <Ionicons name="compass-outline" size={18} color="#6B7280" />
-                  </TouchableOpacity>
-                  {!isActive && userInterests.length > 1 && (
-                    <TouchableOpacity
-                      style={styles.removeBtn}
-                      onPress={() => handleRemove(interest)}
-                      activeOpacity={0.7}
-                      accessibilityLabel={`Remove ${interest.name} from interests`}
-                    >
-                      <Ionicons name="close-circle-outline" size={16} color="#D1D5DB" />
-                    </TouchableOpacity>
+              {userGroups.map((group) => (
+                <View key={group.domain?.slug ?? 'ungrouped'}>
+                  {showDomainHeaders && group.domain && (
+                    <Text style={styles.domainHeader}>{group.domain.name}</Text>
                   )}
+                  {group.interests.map((interest) => renderInterestRow(interest, true))}
                 </View>
-              )
-            })}
+              ))}
 
-            {/* Explore more interests */}
-            <View style={styles.divider} />
+              {/* Explore more interests */}
+              <View style={styles.divider} />
 
-            {otherInterests.length > 0 && (
-              <Text style={styles.sectionLabel}>Explore More</Text>
-            )}
-            {otherInterests.slice(0, 3).map((interest) => (
+              {otherGroups.length > 0 && (
+                <Text style={styles.sectionLabel}>Explore More</Text>
+              )}
+              {otherGroups.map((group) => (
+                <View key={group.domain?.slug ?? 'ungrouped-explore'}>
+                  {otherGroups.length > 1 && group.domain && (
+                    <Text style={styles.domainHeader}>{group.domain.name}</Text>
+                  )}
+                  {group.interests.slice(0, 3).map((interest) => renderInterestRow(interest, false))}
+                </View>
+              ))}
+
               <TouchableOpacity
-                key={interest.id}
-                style={styles.exploreRow}
-                onPress={() => handleBrowse(interest)}
-                activeOpacity={0.7}
+                style={styles.exploreAllBtn}
+                onPress={handleExploreMore}
               >
-                <View
-                  style={[
-                    styles.rowDot,
-                    { backgroundColor: interest.accent_color, opacity: 0.6 },
-                  ]}
-                />
-                <Text style={styles.exploreLabel} numberOfLines={1}>
-                  {interest.name}
-                </Text>
-                <Ionicons name="arrow-forward" size={14} color="#9CA3AF" />
+                <Ionicons name="add-circle-outline" size={18} color="#4338CA" />
+                <Text style={styles.exploreAllText}>Explore All Interests</Text>
               </TouchableOpacity>
-            ))}
 
-            <TouchableOpacity
-              style={styles.exploreAllBtn}
-              onPress={handleExploreMore}
-            >
-              <Ionicons name="add-circle-outline" size={18} color="#4338CA" />
-              <Text style={styles.exploreAllText}>Explore All Interests</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={() => setOpen(false)}
-            >
-              <Text style={styles.closeBtnText}>Done</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={() => setOpen(false)}
+              >
+                <Text style={styles.closeBtnText}>Done</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -282,6 +322,18 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#E5E7EB',
     marginVertical: 12,
+  },
+
+  // Domain header
+  domainHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 12,
   },
 
   // Explore section

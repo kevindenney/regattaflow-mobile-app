@@ -9,9 +9,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SAILOR_TIERS } from '@/lib/subscriptions/sailorTiers';
+import { CLUB_SUBSCRIPTION_PLANS } from '@/services/ClubSubscriptionService';
+import { ORG_PLAN_LIST } from '@/lib/subscriptions/orgTiers';
 
 interface PricingSectionProps {
-  variant?: 'sailor' | 'coach' | 'club';
+  variant?: 'sailor' | 'coach' | 'club' | 'institution';
 }
 
 export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
@@ -52,34 +54,63 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
     );
   }
 
+  if (variant === 'institution') {
+    return (
+      <View id="pricing-section" style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Institutional Plans</Text>
+            <Text style={styles.headerSubtitle}>
+              Centralized billing for your students and faculty. Members get access included.
+            </Text>
+          </View>
+
+          <View style={[styles.cardsRow, isDesktop && styles.cardsRowDesktop]}>
+            {ORG_PLAN_LIST.map((plan) => (
+              <PricingCard
+                key={plan.id}
+                title={plan.name}
+                price={plan.price}
+                sublabel={plan.priceDetail}
+                features={plan.features.slice(0, 6)}
+                cta={plan.cta}
+                featured={plan.isPopular}
+                outlined={!plan.isPopular}
+                persona="club"
+                onPress={() => router.push('/institutions/pricing')}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   if (variant === 'club') {
     return (
       <View id="pricing-section" style={styles.container}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Clubs Pricing</Text>
+            <Text style={styles.headerTitle}>Club Plans</Text>
             <Text style={styles.headerSubtitle}>
-              One straightforward plan for race management.
+              Race management tools for clubs of every size.
             </Text>
           </View>
 
-          <View style={styles.offerCard}>
-            <Ionicons name="business-outline" size={28} color="#10B981" />
-            <Text style={styles.offerTitle}>$99/month per club</Text>
-            <Text style={styles.offerBody}>
-              Includes race entry management, scoring tools, and member operations in one plan.
-            </Text>
-            <View style={styles.offerList}>
-              <Text style={styles.offerItem}>• Unlimited races and members</Text>
-              <Text style={styles.offerItem}>• Committee + volunteer tools included</Text>
-              <Text style={styles.offerItem}>• $79/month when billed annually</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => router.push({ pathname: '/(auth)/signup', params: { persona: 'club' } })}
-            >
-              <Text style={styles.primaryButtonText}>Start Managing Free</Text>
-            </TouchableOpacity>
+          <View style={[styles.cardsRow, isDesktop && styles.cardsRowDesktop]}>
+            {CLUB_SUBSCRIPTION_PLANS.map((plan) => (
+              <PricingCard
+                key={plan.id}
+                title={plan.name}
+                price={`${plan.monthlyPriceFormatted}/mo`}
+                sublabel={`or ${plan.annualPriceFormatted}/year · ${plan.annualSavings}`}
+                features={plan.features}
+                cta={`Choose ${plan.name}`}
+                featured={plan.popular}
+                outlined={!plan.popular}
+                persona="club"
+              />
+            ))}
           </View>
         </View>
       </View>
@@ -146,6 +177,7 @@ function PricingCard({
   featured,
   outlined,
   persona = 'sailor',
+  onPress,
 }: {
   title: string;
   price: string;
@@ -154,7 +186,8 @@ function PricingCard({
   cta: string;
   featured?: boolean;
   outlined?: boolean;
-  persona?: 'sailor' | 'coach' | 'club';
+  persona?: 'sailor' | 'coach' | 'club' | 'institution';
+  onPress?: () => void;
 }) {
   return (
     <View style={[styles.card, featured && styles.cardFeatured]}>
@@ -179,7 +212,7 @@ function PricingCard({
 
       <TouchableOpacity
         style={[styles.ctaButton, outlined && styles.ctaButtonOutline, featured && styles.ctaButtonFeatured]}
-        onPress={() => router.push({ pathname: '/(auth)/signup', params: { persona } })}
+        onPress={onPress || (() => router.push({ pathname: '/(auth)/signup', params: { persona } }))}
       >
         <Text style={[styles.ctaText, outlined && styles.ctaTextOutline]}>{cta}</Text>
       </TouchableOpacity>

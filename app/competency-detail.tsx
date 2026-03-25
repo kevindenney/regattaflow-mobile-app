@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, Pressable } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, Pressable, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -68,7 +68,20 @@ export default function CompetencyDetailScreen() {
         <Stack.Screen
           options={{
             title: 'Competency',
+            headerShown: true,
             headerBackTitle: 'Back',
+            ...Platform.select({
+              web: {
+                headerLeft: () => (
+                  <Text
+                    style={styles.webBackButton}
+                    onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/reflect')}
+                  >
+                    ← Back
+                  </Text>
+                ),
+              },
+            }),
           }}
         />
         <ActivityIndicator size="large" color={accentColor} />
@@ -86,7 +99,20 @@ export default function CompetencyDetailScreen() {
         <Stack.Screen
           options={{
             title: 'Competency',
+            headerShown: true,
             headerBackTitle: 'Back',
+            ...Platform.select({
+              web: {
+                headerLeft: () => (
+                  <Text
+                    style={styles.webBackButton}
+                    onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/reflect')}
+                  >
+                    ← Back
+                  </Text>
+                ),
+              },
+            }),
           }}
         />
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
@@ -114,7 +140,20 @@ export default function CompetencyDetailScreen() {
       <Stack.Screen
         options={{
           title: detail.competency.title,
+          headerShown: true,
           headerBackTitle: 'Back',
+          ...Platform.select({
+            web: {
+              headerLeft: () => (
+                <Text
+                  style={styles.webBackButton}
+                  onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/reflect')}
+                >
+                  ← Back
+                </Text>
+              ),
+            },
+          }),
         }}
       />
 
@@ -183,5 +222,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  webBackButton: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#007AFF',
+    paddingHorizontal: 8,
   },
 });

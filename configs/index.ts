@@ -10,6 +10,12 @@ export { NURSING_EVENT_CONFIG } from './nursing'
 export { DRAWING_EVENT_CONFIG } from './drawing'
 export { DESIGN_EVENT_CONFIG } from './design'
 export { FITNESS_EVENT_CONFIG } from './fitness'
+export { KNITTING_EVENT_CONFIG } from './knitting'
+export { FIBER_ARTS_EVENT_CONFIG } from './fiber-arts'
+export { PAINTING_PRINTING_EVENT_CONFIG } from './painting-printing'
+export { LIFELONG_LEARNING_EVENT_CONFIG } from './lifelong-learning'
+export { REGENERATIVE_AGRICULTURE_EVENT_CONFIG } from './regenerative-agriculture'
+export { GLOBAL_HEALTH_EVENT_CONFIG } from './global-health'
 
 import type { InterestEventConfig } from '@/types/interestEventConfig'
 import { SAILING_EVENT_CONFIG } from './sailing'
@@ -17,6 +23,12 @@ import { NURSING_EVENT_CONFIG } from './nursing'
 import { DRAWING_EVENT_CONFIG } from './drawing'
 import { DESIGN_EVENT_CONFIG } from './design'
 import { FITNESS_EVENT_CONFIG } from './fitness'
+import { KNITTING_EVENT_CONFIG } from './knitting'
+import { FIBER_ARTS_EVENT_CONFIG } from './fiber-arts'
+import { PAINTING_PRINTING_EVENT_CONFIG } from './painting-printing'
+import { LIFELONG_LEARNING_EVENT_CONFIG } from './lifelong-learning'
+import { REGENERATIVE_AGRICULTURE_EVENT_CONFIG } from './regenerative-agriculture'
+import { GLOBAL_HEALTH_EVENT_CONFIG } from './global-health'
 
 /**
  * Lookup map: interest slug → event config.
@@ -29,6 +41,12 @@ export const INTEREST_EVENT_CONFIGS: Record<string, InterestEventConfig> = {
   design: DESIGN_EVENT_CONFIG,
   fitness: FITNESS_EVENT_CONFIG,
   'health-and-fitness': FITNESS_EVENT_CONFIG,
+  knitting: KNITTING_EVENT_CONFIG,
+  'fiber-arts': FIBER_ARTS_EVENT_CONFIG,
+  'painting-printing': PAINTING_PRINTING_EVENT_CONFIG,
+  'lifelong-learning': LIFELONG_LEARNING_EVENT_CONFIG,
+  'regenerative-agriculture': REGENERATIVE_AGRICULTURE_EVENT_CONFIG,
+  'global-health': GLOBAL_HEALTH_EVENT_CONFIG,
 }
 
 /**

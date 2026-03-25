@@ -177,11 +177,18 @@ class OrganizationDiscoveryService {
 
     let orgRow: any = null;
     {
-      let baseQuery: any = supabase.from('organizations').eq('id', input.orgId).eq('is_active', true);
-      let orgResult = await baseQuery.select('id,join_mode,allowed_email_domains').maybeSingle();
+      let orgResult = await supabase
+        .from('organizations')
+        .select('id,join_mode,allowed_email_domains')
+        .eq('id', input.orgId)
+        .eq('is_active', true)
+        .maybeSingle();
       if (orgResult.error && isMissingSupabaseColumn(orgResult.error, 'organizations.is_active')) {
-        baseQuery = supabase.from('organizations').eq('id', input.orgId);
-        orgResult = await baseQuery.select('id,join_mode,allowed_email_domains').maybeSingle();
+        orgResult = await supabase
+          .from('organizations')
+          .select('id,join_mode,allowed_email_domains')
+          .eq('id', input.orgId)
+          .maybeSingle();
       }
       if (
         orgResult.error
@@ -190,10 +197,18 @@ class OrganizationDiscoveryService {
           || isMissingSupabaseColumn(orgResult.error, 'organizations.allowed_email_domains')
         )
       ) {
-        orgResult = await baseQuery.select('id,join_mode').maybeSingle();
+        orgResult = await supabase
+          .from('organizations')
+          .select('id,join_mode')
+          .eq('id', input.orgId)
+          .maybeSingle();
       }
       if (orgResult.error && isMissingSupabaseColumn(orgResult.error, 'organizations.join_mode')) {
-        orgResult = await baseQuery.select('id').maybeSingle();
+        orgResult = await supabase
+          .from('organizations')
+          .select('id')
+          .eq('id', input.orgId)
+          .maybeSingle();
       }
       if (orgResult.error) {
         throw orgResult.error;

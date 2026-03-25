@@ -27,8 +27,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 const KEYS = {
-  myTimeline: (interestId?: string | null) =>
-    ['timeline-steps', 'mine', interestId ?? 'all'] as const,
+  myTimeline: (interestId?: string | string[] | null) =>
+    ['timeline-steps', 'mine', interestId ? (Array.isArray(interestId) ? [...interestId].sort().join(',') : interestId) : 'all'] as const,
   userTimeline: (userId: string, interestId?: string | null) =>
     ['timeline-steps', userId, interestId ?? 'all'] as const,
   followedTimelines: (interestId?: string | null) =>
@@ -43,7 +43,7 @@ const KEYS = {
 // 1. Current user's timeline
 // ---------------------------------------------------------------------------
 
-export function useMyTimeline(interestId?: string | null) {
+export function useMyTimeline(interestId?: string | string[] | null) {
   const { user } = useAuth();
   const userId = user?.id;
 
@@ -51,6 +51,12 @@ export function useMyTimeline(interestId?: string | null) {
     queryKey: KEYS.myTimeline(interestId),
     queryFn: () => getUserTimeline(userId!, interestId),
     enabled: Boolean(userId),
+    // Prevent refetch when window regains focus (e.g. returning from share dialog / mail app).
+    // Without this, the refetch creates new array references that cascade through
+    // interestFilteredRaces → cardGridRaces → initialRaceIndex, causing the card
+    // carousel to briefly jump to index 0.
+    refetchOnWindowFocus: false,
+    staleTime: 30_000, // 30s — manual pull-to-refresh still works
   });
 }
 

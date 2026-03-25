@@ -30,6 +30,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring, runOnJS } from 
 import { IOSSegmentedControl } from '@/components/ui/ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
+import { AddToBlueprintSheet } from '@/components/blueprint/AddToBlueprintSheet';
 import { triggerHaptic } from '@/lib/haptics';
 import { useRouter } from 'expo-router';
 
@@ -82,10 +83,13 @@ import { StepPlanQuestions } from '@/components/step/StepPlanQuestions';
 import { StepDrawContent } from '@/components/step/StepDrawContent';
 import { DateEnrichmentCard } from '@/components/step/DateEnrichmentCard';
 import { StepCritiqueContent } from '@/components/step/StepCritiqueContent';
-import { BrainDumpEntry } from '@/components/step/BrainDumpEntry';
+// BrainDumpEntry now embedded in StepPlanQuestions/PlanTab
 import { AIStructureReview } from '@/components/step/AIStructureReview';
+import { CollaboratorPicker } from '@/components/step/CollaboratorPicker';
+import { SuggestStepSheet } from '@/components/step/SuggestStepSheet';
 import type { BrainDumpData, StepMetadata, StepPlanData, StepCollaborator, SubStep } from '@/types/step-detail';
 import { useUpdateStepMetadata } from '@/hooks/useStepDetail';
+import { useUserBlueprints } from '@/hooks/useBlueprint';
 import { useUpdateStep } from '@/hooks/useTimelineSteps';
 import type { TimelineStepVisibility } from '@/types/timeline-steps';
 import { useAuth } from '@/providers/AuthProvider';
@@ -93,6 +97,8 @@ import { structureBrainDump } from '@/services/ai/StepPlanAIService';
 import { saveUrlsToLibrary } from '@/services/ai/BrainDumpAIService';
 import { resolveEntities, buildEntityInput } from '@/services/ai/EntityResolutionService';
 import { enrichDateForSailing } from '@/services/ai/DateEnrichmentService';
+import { NotificationService } from '@/services/NotificationService';
+import { enableStepSharing } from '@/services/TimelineStepService';
 import { sailorBoatService } from '@/services/SailorBoatService';
 import { equipmentService } from '@/services/EquipmentService';
 import type { AnyExtractedEntity, DateEnrichment, ExtractedPersonEntity } from '@/types/step-detail';
@@ -708,6 +714,7 @@ export function RaceSummaryCard({
   onMoveStepLater,
   onMoveStepToPlannedNext,
   onMoveStepToCompletedMostRecent,
+  onSetDueDate,
   onNextStepCreated,
 }: CardContentProps) {
   const router = useRouter();
@@ -837,10 +844,24 @@ export function RaceSummaryCard({
   const brainDumpData = localBrainDump ?? serverBrainDump;
   const hasPlanContent = Boolean(
     metadata?.plan?.what_will_you_do?.trim() ||
-    (metadata?.plan?.how_sub_steps?.length && metadata?.plan?.how_sub_steps.some((s) => s.text.trim()))
+    (metadata?.plan?.how_sub_steps?.length && metadata?.plan?.how_sub_steps.some((s) => s.text.trim())) ||
+    metadata?.plan?.collaborators?.length ||
+    metadata?.plan?.where_location?.name?.trim() ||
+    metadata?.plan?.competency_ids?.length ||
+    metadata?.plan?.linked_resource_ids?.length
   );
-  const [brainDumpPhase, setBrainDumpPhase] = useState<'dump' | 'review' | null>(
-    isTimelineStep && brainDumpData && (!hasPlanContent || !brainDumpData.ai_structured_at) ? 'dump' : null,
+  const [showAiReview, setShowAiReview] = useState(false);
+
+  // Step collaborators (from metadata.plan.collaborators)
+  const stepCollaborators: StepCollaborator[] = useMemo(
+    () => metadata?.plan?.collaborators ?? [],
+    [metadata?.plan?.collaborators],
+  );
+  const [showStepCollabPicker, setShowStepCollabPicker] = useState(false);
+  const [showSuggestSheet, setShowSuggestSheet] = useState(false);
+  const stepCollabExistingIds = useMemo(
+    () => new Set(stepCollaborators.map((c) => c.user_id || c.id)),
+    [stepCollaborators],
   );
   const [aiReviewPlan, setAiReviewPlan] = useState<StepPlanData | null>(null);
   const [aiSuggestedTitle, setAiSuggestedTitle] = useState<string | undefined>();
@@ -852,6 +873,7 @@ export function RaceSummaryCard({
   const [isResolvingEntities, setIsResolvingEntities] = useState(false);
   const [entityResolutionError, setEntityResolutionError] = useState<string | null>(null);
   const updateStepMetadata = useUpdateStepMetadata(isTimelineStep ? race.id : '');
+  const { data: userBlueprints } = useUserBlueprints();
 
   const handleSkipToPlan = useCallback((currentDump: BrainDumpData) => {
     // Keep local state in sync so going back to brain dump preserves text
@@ -877,10 +899,10 @@ export function RaceSummaryCard({
               ? currentDump.extracted_topics : undefined,
           },
         },
-        { onSuccess: () => setBrainDumpPhase(null) },
+        { onSuccess: () => setShowAiReview(false) },
       );
     } else {
-      setBrainDumpPhase(null);
+      setShowAiReview(false);
     }
   }, [metadata?.plan, updateStepMetadata]);
 
@@ -925,7 +947,7 @@ export function RaceSummaryCard({
       setResolvedEntities([]);
       setDateEnrichment(undefined);
       setEntityResolutionError(null);
-      setBrainDumpPhase('review');
+      setShowAiReview(true);
 
       // Fire entity resolution async (updates state as results arrive)
       if (user?.id) {
@@ -977,7 +999,7 @@ export function RaceSummaryCard({
         capability_goals: dump.extracted_topics.length > 0 ? dump.extracted_topics : undefined,
       };
       setAiReviewPlan(plan);
-      setBrainDumpPhase('review');
+      setShowAiReview(true);
     } finally {
       setAiStructuring(false);
     }
@@ -1031,7 +1053,7 @@ export function RaceSummaryCard({
           // Only transition after DB write + cache update complete
           // so StepPlanQuestions reads the confirmed plan from cache
           setAiReviewPlan(null);
-          setBrainDumpPhase(null);
+          setShowAiReview(false);
           savedLibraryIdsRef.current = [];
           setResolvedEntities([]);
           // Keep dateEnrichment in local state so it persists across tab switches
@@ -1070,7 +1092,7 @@ export function RaceSummaryCard({
   }, []);
 
   const handleBackToDump = useCallback(() => {
-    setBrainDumpPhase('dump');
+    setShowAiReview(false);
     setAiReviewPlan(null);
     setResolvedEntities([]);
     setDateEnrichment(undefined);
@@ -1208,24 +1230,35 @@ export function RaceSummaryCard({
   // Share handler
   const handleShare = useCallback(async () => {
     try {
-      const dateStr = new Date(race.date).toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
-      const activityLabel = eventConfig.eventNoun || (isSailing ? 'Race' : 'Activity');
-      const locationLabel = isSailing ? 'Venue' : 'Location';
-      const sourceLabel = isSailing ? 'Shared from RegattaFlow' : 'Shared from BetterAt Clinical';
-      const locationValue = race.venue || 'TBD';
+      if (isTimelineStep) {
+        // Timeline steps: share with a link to the step
+        const { url } = await enableStepSharing(race.id);
+        const planWhat = (metadata?.plan?.what_will_you_do || '').trim();
+        const parts = [race.name || 'Untitled step'];
+        if (planWhat) parts.push(planWhat);
+        parts.push(url);
+        parts.push('Shared from BetterAt');
+        await Share.share({ message: parts.join('\n'), title: race.name, url });
+      } else {
+        const dateStr = new Date(race.date).toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        });
+        const activityLabel = eventConfig.eventNoun || (isSailing ? 'Race' : 'Activity');
+        const locationLabel = isSailing ? 'Venue' : 'Location';
+        const sourceLabel = isSailing ? 'Shared from RegattaFlow' : 'Shared from BetterAt Clinical';
+        const locationValue = race.venue || 'TBD';
 
-      const parts = [`${activityLabel}: ${race.name}`, `${activityLabel} date: ${dateStr}`];
-      parts.push(`${locationLabel}: ${locationValue}`);
-      parts.push(sourceLabel);
-      await Share.share({ message: parts.join('\n'), title: race.name });
+        const parts = [`${activityLabel}: ${race.name}`, `${activityLabel} date: ${dateStr}`];
+        parts.push(`${locationLabel}: ${locationValue}`);
+        parts.push(sourceLabel);
+        await Share.share({ message: parts.join('\n'), title: race.name });
+      }
     } catch {
       // User cancelled — no-op
     }
-  }, [eventConfig.eventNoun, isSailing, race.name, race.date, race.venue]);
+  }, [eventConfig.eventNoun, isSailing, isTimelineStep, race.id, race.name, race.date, race.venue, metadata?.plan?.what_will_you_do]);
 
   // Extract collaboration flags from race
   const isOwner = (race as any).isOwner ?? true; // Default true for backward compatibility
@@ -1524,6 +1557,38 @@ export function RaceSummaryCard({
     setShowCrewHub(true);
   }, []);
 
+  // "Add to Blueprint" sheet state
+  const [showBlueprintSheet, setShowBlueprintSheet] = useState(false);
+  const handleAddToBlueprint = useCallback(() => {
+    setShowBlueprintSheet(true);
+  }, []);
+
+  // Handle adding a step collaborator from the card-level picker
+  const handleAddStepCollaborator = useCallback((collaborator: StepCollaborator) => {
+    const existing = stepCollaborators;
+    if (existing.some((c) => c.id === collaborator.id)) return;
+    if (collaborator.user_id && existing.some((c) => c.user_id === collaborator.user_id)) return;
+    const updated = [...existing, collaborator];
+    updateStepMetadata.mutate({
+      plan: {
+        ...(metadata?.plan ?? {}),
+        collaborators: updated,
+        who_collaborators: updated.map((c) => c.display_name),
+      },
+    });
+    // Notify the collaborator
+    if (collaborator.type === 'platform' && collaborator.user_id && userId) {
+      const userName = (user as any)?.user_metadata?.full_name || (user as any)?.email || 'Someone';
+      NotificationService.notifyStepCollaboratorAdded({
+        targetUserId: collaborator.user_id,
+        actorId: userId,
+        actorName: userName,
+        stepId: race.id,
+        stepTitle: race.name || 'Untitled step',
+      }).catch(() => {});
+    }
+  }, [stepCollaborators, metadata?.plan, updateStepMetadata, userId, user, race.id, race.name]);
+
   // Build menu items for card management - permission-aware
   const noun = eventConfig.eventNoun;
   const teamNoun = eventConfig.teamNoun ?? 'Team';
@@ -1539,16 +1604,28 @@ export function RaceSummaryCard({
   const hiddenTemplateSuggestedCount = Math.max(templateSuggestedCompetencyTitles.length - visibleTemplateSuggestedTitles.length, 0);
   const menuItems = useMemo((): CardMenuItem[] => {
     const items: CardMenuItem[] = [];
-    // Team/Crew Chat — fallback entry point when no avatar row is visible
-    if (FEATURE_FLAGS.ENABLE_RACE_CREW_CHAT) {
+    // Team/Crew Chat — only for races (timeline steps have comments inline on the card)
+    if (!isTimelineStep && FEATURE_FLAGS.ENABLE_RACE_CREW_CHAT) {
       items.push({ label: `${teamNoun} Chat`, icon: 'chatbubbles-outline', onPress: () => setShowChat(true) });
     }
-    // Explicit collaborator entry point for shared/group workflows.
-    items.push({ label: 'Add Collaborators', icon: 'people-outline', onPress: () => openCrewHub('roster') });
+    // Explicit collaborator entry point — step collaborator picker for timeline steps, crew hub for races
+    items.push({
+      label: 'Add Collaborators',
+      icon: 'people-outline',
+      onPress: isTimelineStep ? () => setShowStepCollabPicker(true) : () => openCrewHub('roster'),
+    });
     // Share is always available
     items.push({ label: `Share ${noun}`, icon: 'share-outline', onPress: handleShare });
-    // Detail (scrollable view) is not part of the nursing experience menu.
-    if (!isNursingInterest) {
+    // Suggest to another user — available for all timeline steps
+    if (isTimelineStep) {
+      items.push({ label: 'Suggest to...', icon: 'paper-plane-outline', onPress: () => setShowSuggestSheet(true) });
+    }
+    // Add to Blueprint — only for owners with published blueprints
+    if (isOwner && isTimelineStep && (userBlueprints ?? []).some((b) => b.is_published)) {
+      items.push({ label: 'Add to Blueprint', icon: 'book-outline', onPress: handleAddToBlueprint });
+    }
+    // Detail (scrollable view) — for races only; timeline steps use /step/:id
+    if (!isNursingInterest && !isTimelineStep) {
       items.push({ label: `${noun} Detail`, icon: 'flag-outline', onPress: () => router.push(`/race/${race.id}` as any) });
     }
     // Only show edit/delete for owners
@@ -1561,8 +1638,8 @@ export function RaceSummaryCard({
       }
       if (onMoveStepToPlannedNext) {
         items.push({
-          label: 'Move to Planned',
-          icon: 'bookmark-outline',
+          label: 'Mark Not Done',
+          icon: 'arrow-undo-outline',
           onPress: onMoveStepToPlannedNext,
         });
       }
@@ -1573,6 +1650,38 @@ export function RaceSummaryCard({
           onPress: onMoveStepToCompletedMostRecent,
         });
       }
+      // Due date
+      if (onSetDueDate && isTimelineStep) {
+        const currentDueAt = (race as any).due_at;
+        const promptForDate = () => {
+          const existing = currentDueAt ? new Date(currentDueAt).toISOString().slice(0, 10) : '';
+          const input = window.prompt('Set due date (YYYY-MM-DD):', existing);
+          if (input === null) return; // cancelled
+          if (!input.trim()) { onSetDueDate(null); return; }
+          const parsed = new Date(input.trim() + 'T23:59:59');
+          if (Number.isNaN(parsed.getTime())) { return; }
+          onSetDueDate(parsed.toISOString());
+        };
+        if (currentDueAt) {
+          const dueLabel = new Date(currentDueAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          items.push({
+            label: `Due: ${dueLabel}`,
+            icon: 'calendar-outline',
+            onPress: promptForDate,
+          });
+          items.push({
+            label: 'Clear Due Date',
+            icon: 'close-circle-outline',
+            onPress: () => onSetDueDate(null),
+          });
+        } else {
+          items.push({
+            label: 'Set Due Date',
+            icon: 'calendar-outline',
+            onPress: promptForDate,
+          });
+        }
+      }
       // Visibility picker
       if (isTimelineStep) {
         const visLabel = currentVisibility === 'private' ? 'Private' : currentVisibility.charAt(0).toUpperCase() + currentVisibility.slice(1);
@@ -1582,7 +1691,7 @@ export function RaceSummaryCard({
           onPress: handleChangeVisibility,
         });
       }
-      if (onEdit) {
+      if (onEdit && !isTimelineStep) {
         items.push({ label: `Edit ${noun}`, icon: 'create-outline', onPress: onEdit });
       }
       if (onDelete) {
@@ -1610,9 +1719,12 @@ export function RaceSummaryCard({
     onMoveStepLater,
     onMoveStepToPlannedNext,
     onMoveStepToCompletedMostRecent,
+    onSetDueDate,
     isTimelineStep,
     currentVisibility,
     handleChangeVisibility,
+    userBlueprints,
+    handleAddToBlueprint,
   ]);
 
   // Long-press handler to show context menu
@@ -1661,7 +1773,7 @@ export function RaceSummaryCard({
       actions.push({ text: 'Mark Done', onPress: onMoveStepToCompletedMostRecent });
     }
     if (onMoveStepToPlannedNext) {
-      actions.push({ text: 'Move to Planned', onPress: onMoveStepToPlannedNext });
+      actions.push({ text: 'Mark Not Done', onPress: onMoveStepToPlannedNext });
     }
     if (onOpenPostRaceInterview) {
       actions.push({ text: 'Reflect + AI', onPress: onOpenPostRaceInterview });
@@ -1750,20 +1862,8 @@ export function RaceSummaryCard({
     // Timeline steps get dedicated step content per phase (all interests)
     if (isTimelineStep && isActive) {
       if (selectedPhase === 'days_before') {
-        // Brain dump phase intercepts the plan view
-        if (brainDumpPhase === 'dump') {
-          return (
-            <BrainDumpEntry
-              initialData={brainDumpData}
-              onSkipToPlan={handleSkipToPlan}
-              onStructureWithAI={handleStructureWithAI}
-              onDraftChange={handleDraftChange}
-              isStructuring={aiStructuring}
-              interestSlug={currentInterest?.slug}
-            />
-          );
-        }
-        if (brainDumpPhase === 'review' && aiReviewPlan) {
+        // AI review overlay — shown after "Structure with AI"
+        if (showAiReview && aiReviewPlan) {
           return (
             <AIStructureReview
               planData={aiReviewPlan}
@@ -1779,32 +1879,18 @@ export function RaceSummaryCard({
             />
           );
         }
+        // Unified view — plan questions always shown, brain dump collapsible at top
         return (
           <>
-            {brainDumpData && !brainDumpData.ai_structured_at && (
-              <Pressable
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 6,
-                  paddingVertical: 10,
-                  marginHorizontal: 16,
-                  marginTop: 8,
-                  backgroundColor: 'rgba(61,138,90,0.08)',
-                  borderRadius: 10,
-                }}
-                onPress={() => setBrainDumpPhase('dump')}
-              >
-                <Ionicons name="sparkles" size={14} color={STEP_COLORS.accent} />
-                <Text style={{ fontSize: 13, fontWeight: '600', color: STEP_COLORS.accent }}>
-                  Structure with AI instead
-                </Text>
-              </Pressable>
-            )}
             <StepPlanQuestions
               stepId={race.id}
               interestId={(race as any).interest_id ?? currentInterest?.id}
+              brainDumpData={brainDumpData}
+              onBrainDumpChange={handleDraftChange}
+              onStructureWithAI={handleStructureWithAI}
+              onSkipToPlan={handleSkipToPlan}
+              isStructuring={aiStructuring}
+              interestSlug={currentInterest?.slug}
             />
           </>
         );
@@ -2107,6 +2193,40 @@ export function RaceSummaryCard({
             ellipsizeMode="tail"
           >{displayRaceName || '[No Step Name]'}</Text>
         )}
+        {/* Due date chip on card */}
+        {isTimelineStep && ((race as any).due_at || onSetDueDate) && (() => {
+          const dueAt = (race as any).due_at as string | null;
+          const isDueOverdue = Boolean(dueAt && stepStatus !== 'completed' && new Date(dueAt) < new Date());
+          if (dueAt) {
+            const dueLabel = new Date(dueAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            return (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 }}>
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 4,
+                  paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+                  backgroundColor: isDueOverdue ? 'rgba(255,59,48,0.08)' : '#f5f5f5',
+                  borderWidth: StyleSheet.hairlineWidth,
+                  borderColor: isDueOverdue ? 'rgba(255,59,48,0.2)' : '#e0e0e0',
+                }}>
+                  <Ionicons
+                    name={isDueOverdue ? 'alert-circle' : 'calendar-outline'}
+                    size={13}
+                    color={isDueOverdue ? '#FF3B30' : '#8E8E93'}
+                  />
+                  <Text style={{ fontSize: 12, fontWeight: '500', color: isDueOverdue ? '#FF3B30' : '#8E8E93' }}>
+                    {isDueOverdue ? 'Overdue · ' : 'Due '}{dueLabel}
+                  </Text>
+                </View>
+                {onSetDueDate && (
+                  <Pressable onPress={() => onSetDueDate(null)} hitSlop={8}>
+                    <Ionicons name="close-circle" size={14} color="#C7C7CC" />
+                  </Pressable>
+                )}
+              </View>
+            );
+          }
+          return null;
+        })()}
         {isNursingInterest && visibleTemplateSuggestedTitles.length > 0 ? (
           <View style={styles.templateSuggestedRow}>
             <Text style={styles.templateSuggestedLabel}>Suggested:</Text>
@@ -2158,8 +2278,42 @@ export function RaceSummaryCard({
           </View>
         )}
 
-        {/* Collaborator avatar row */}
-        {FEATURE_FLAGS.ENABLE_CREW_AVATARS_HEADER && collaborators.length > 0 && (
+        {/* Collaborator avatar row — step collaborators for timeline steps, race crew for races */}
+        {isTimelineStep && stepCollaborators.length > 0 && (
+          <Pressable
+            style={styles.stepCollabRow}
+            onPress={() => setShowStepCollabPicker(true)}
+          >
+            <View style={styles.stepCollabAvatars}>
+              {stepCollaborators.slice(0, 4).map((c) => (
+                <View key={c.id} style={styles.stepCollabAvatar}>
+                  {c.avatar_emoji ? (
+                    <Text style={styles.stepCollabAvatarEmoji}>{c.avatar_emoji}</Text>
+                  ) : (
+                    <Text style={styles.stepCollabAvatarInitial}>
+                      {(c.display_name || '?').charAt(0).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+              ))}
+              {stepCollaborators.length > 4 && (
+                <View style={[styles.stepCollabAvatar, styles.stepCollabOverflow]}>
+                  <Text style={styles.stepCollabOverflowText}>+{stepCollaborators.length - 4}</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.stepCollabLabel}>
+              {stepCollaborators.length} collaborator{stepCollaborators.length !== 1 ? 's' : ''}
+            </Text>
+          </Pressable>
+        )}
+        {isTimelineStep && stepCollaborators.length === 0 && isOwner && (
+          <Pressable style={styles.addCollaboratorsChip} onPress={() => setShowStepCollabPicker(true)}>
+            <Ionicons name="people-outline" size={14} color={IOS_COLORS.blue} />
+            <Text style={styles.addCollaboratorsChipText}>Add collaborators</Text>
+          </Pressable>
+        )}
+        {!isTimelineStep && FEATURE_FLAGS.ENABLE_CREW_AVATARS_HEADER && collaborators.length > 0 && (
           <View style={styles.crewAvatarRow}>
             <CrewAvatarStack
               collaborators={collaborators}
@@ -2170,7 +2324,7 @@ export function RaceSummaryCard({
             />
           </View>
         )}
-        {Boolean((race as any)?.metadata?.group_editable) && collaborators.length === 0 && (
+        {!isTimelineStep && Boolean((race as any)?.metadata?.group_editable) && collaborators.length === 0 && (
           <Pressable style={styles.addCollaboratorsChip} onPress={() => openCrewHub('roster')}>
             <Ionicons name="people-outline" size={14} color={IOS_COLORS.blue} />
             <Text style={styles.addCollaboratorsChipText}>Add collaborators</Text>
@@ -2412,6 +2566,38 @@ export function RaceSummaryCard({
             setShowCollabPopover(false);
             openCrewHub('roster');
           }}
+        />
+      )}
+
+      {/* Add to Blueprint Sheet */}
+      {isOwner && isTimelineStep && (
+        <AddToBlueprintSheet
+          visible={showBlueprintSheet}
+          stepId={race.id}
+          stepTitle={race.name || 'Untitled step'}
+          onClose={() => setShowBlueprintSheet(false)}
+        />
+      )}
+
+      {/* Step Collaborator Picker — for timeline steps */}
+      {isTimelineStep && (
+        <CollaboratorPicker
+          visible={showStepCollabPicker}
+          onClose={() => setShowStepCollabPicker(false)}
+          onAdd={handleAddStepCollaborator}
+          existingIds={stepCollabExistingIds}
+        />
+      )}
+
+      {/* Suggest Step Sheet — for timeline steps */}
+      {isTimelineStep && (
+        <SuggestStepSheet
+          visible={showSuggestSheet}
+          onClose={() => setShowSuggestSheet(false)}
+          stepId={race.id}
+          stepTitle={race.name || 'Untitled step'}
+          stepDescription={metadata?.plan?.what_will_you_do}
+          interestId={currentInterest?.id}
         />
       )}
 
@@ -4024,6 +4210,51 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: IOS_COLORS.blue,
+  },
+  stepCollabRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    marginBottom: 4,
+    alignSelf: 'flex-start',
+  },
+  stepCollabAvatars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepCollabAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E8FAE9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -6,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  stepCollabAvatarEmoji: {
+    fontSize: 12,
+  },
+  stepCollabAvatarInitial: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#34C759',
+  },
+  stepCollabOverflow: {
+    backgroundColor: IOS_COLORS.gray5,
+  },
+  stepCollabOverflowText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: IOS_COLORS.gray,
+  },
+  stepCollabLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginLeft: 6,
   },
 
 });

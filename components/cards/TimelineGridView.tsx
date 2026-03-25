@@ -51,11 +51,17 @@ interface TimelineGridViewProps {
   /** Top inset to clear the toolbar */
   topInset?: number;
   /** Bulk update status for selected steps */
-  onBulkUpdateStatus?: (raceIds: string[], status: 'completed' | 'planned') => Promise<void> | void;
+  onBulkUpdateStatus?: (raceIds: string[], status: 'completed' | 'pending') => Promise<void> | void;
   /** Bulk delete selected steps */
   onBulkDeleteRaces?: (raceIds: string[]) => Promise<void> | void;
   /** Persist reordered timeline race IDs */
   onReorderRaces?: (orderedRaceIds: string[]) => Promise<void> | void;
+  /** Published blueprint title to show as a group header */
+  blueprintTitle?: string | null;
+  /** Blueprint slug for navigation when tapping the title */
+  blueprintSlug?: string | null;
+  /** Content rendered below the grid, inside the ScrollView */
+  renderFooter?: () => React.ReactNode;
 }
 
 interface MonthGroup {
@@ -473,6 +479,9 @@ export function TimelineGridView({
   onBulkUpdateStatus,
   onBulkDeleteRaces,
   onReorderRaces,
+  blueprintTitle,
+  blueprintSlug,
+  renderFooter,
 }: TimelineGridViewProps) {
   const { width: screenWidth } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
@@ -686,9 +695,9 @@ export function TimelineGridView({
               {onBulkUpdateStatus ? (
                 <Pressable
                   style={gridStyles.bulkActionChip}
-                  onPress={() => void onBulkUpdateStatus(selectedIdsArray, 'planned')}
+                  onPress={() => void onBulkUpdateStatus(selectedIdsArray, 'pending')}
                 >
-                  <Text style={gridStyles.bulkActionText}>Planned</Text>
+                  <Text style={gridStyles.bulkActionText}>Not Done</Text>
                 </Pressable>
               ) : null}
               {onBulkUpdateStatus ? (
@@ -721,6 +730,15 @@ export function TimelineGridView({
           <View key={group.key} style={gridStyles.monthSection}>
             {/* Month header */}
             <Text style={gridStyles.monthHeader}>{group.label}</Text>
+            {blueprintTitle && group.races.some(({ race }) => (race as any).isTimelineStep) && (
+              <Pressable
+                style={gridStyles.blueprintRow}
+                onPress={blueprintSlug ? () => router.push(`/blueprint/${blueprintSlug}` as any) : undefined}
+              >
+                <Ionicons name="book-outline" size={12} color={IOS_COLORS.secondaryLabel} />
+                <Text style={gridStyles.blueprintTitle} numberOfLines={1}>{blueprintTitle}</Text>
+              </Pressable>
+            )}
 
             {/* Card grid */}
             <View style={[gridStyles.grid, { gap }]}>
@@ -785,6 +803,15 @@ export function TimelineGridView({
         {doneGroups.map((group) => (
           <View key={`done-${group.key}`} style={gridStyles.monthSection}>
             <Text style={gridStyles.monthHeaderDone}>{group.label}</Text>
+            {blueprintTitle && group.races.some(({ race }) => (race as any).isTimelineStep) && (
+              <Pressable
+                style={gridStyles.blueprintRow}
+                onPress={blueprintSlug ? () => router.push(`/blueprint/${blueprintSlug}` as any) : undefined}
+              >
+                <Ionicons name="book-outline" size={12} color={IOS_COLORS.tertiaryLabel} />
+                <Text style={[gridStyles.blueprintTitle, { color: IOS_COLORS.tertiaryLabel }]} numberOfLines={1}>{blueprintTitle}</Text>
+              </Pressable>
+            )}
             <View style={[gridStyles.grid, { gap }]}>
               {group.races.map(({ race, index }) => (
                 <View key={race.id} style={{ width: cardWidth }}>
@@ -831,6 +858,8 @@ export function TimelineGridView({
             </View>
           </View>
         ))}
+
+        {renderFooter?.()}
 
         {/* Bottom spacer for tab bar */}
         <View style={{ height: 100 }} />
@@ -1147,6 +1176,21 @@ const gridStyles = StyleSheet.create({
     color: IOS_COLORS.label,
     marginBottom: 10,
     paddingHorizontal: 4,
+  },
+  blueprintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 4,
+    marginTop: -4,
+    marginBottom: 8,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  blueprintTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    flex: 1,
   },
   monthHeaderDone: {
     fontSize: 20,

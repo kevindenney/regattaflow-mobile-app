@@ -5,7 +5,7 @@
  * Pricing:
  * - Free: Limited races, basic features, 5 AI queries/month
  * - Individual: $10/mo or $100/yr — 50,000 AI tokens/month
- * - Pro: $100/mo or $800/yr — 500,000 AI tokens/month
+ * - Pro: $30/mo or $250/yr — 500,000 AI tokens/month
  */
 
 export type SailorTier = 'free' | 'individual' | 'pro';
@@ -63,6 +63,7 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       'Manual weather lookup',
       '5 AI queries per month',
       'Document upload',
+      'MCP / AI assistant integration (read-only)',
     ],
   },
   individual: {
@@ -92,6 +93,7 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       'Offline mode',
       'Advanced analytics',
       'Cloud backup & sync',
+      'MCP / AI assistant integration (read-only)',
     ],
     isPopular: true,
   },
@@ -99,9 +101,9 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
     id: 'pro',
     name: 'Pro',
     description: 'Maximum AI power for serious racers',
-    price: '$100/month',
-    priceMonthly: '$100',
-    priceYearly: '$800',
+    price: '$30/month',
+    priceMonthly: '$30',
+    priceYearly: '$250',
     limits: {
       maxRaces: Infinity,
       aiQueriesPerMonth: Infinity,
@@ -120,6 +122,7 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       'Team sharing & collaboration',
       'Team analytics dashboard',
       'Priority support',
+      'MCP / AI assistant integration (read & write)',
     ],
   },
 };
@@ -158,7 +161,9 @@ export type GatedFeature =
   | 'weather_automation'
   | 'historical_data'
   | 'offline_mode'
-  | 'advanced_analytics';
+  | 'advanced_analytics'
+  | 'mcp_access'
+  | 'mcp_write';
 
 export const FEATURE_REQUIREMENTS: Record<GatedFeature, SailorTier[]> = {
   unlimited_races: ['individual', 'pro'],
@@ -168,6 +173,8 @@ export const FEATURE_REQUIREMENTS: Record<GatedFeature, SailorTier[]> = {
   historical_data: ['individual', 'pro'],
   offline_mode: ['individual', 'pro'],
   advanced_analytics: ['individual', 'pro'],
+  mcp_access: ['free', 'individual', 'pro'],
+  mcp_write: ['pro'],
 };
 
 /**

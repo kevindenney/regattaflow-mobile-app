@@ -56,7 +56,14 @@ export async function getCompetencies(interestId: string): Promise<Competency[]>
 
     if (error) throw error;
 
-    return (data ?? []) as Competency[];
+    // Deduplicate: when an org-specific version exists, hide the template version
+    const all = (data ?? []) as Competency[];
+    const orgTitles = new Set(
+      all.filter((c) => c.organization_id).map((c) => c.title.toLowerCase())
+    );
+    return all.filter(
+      (c) => c.organization_id || !orgTitles.has(c.title.toLowerCase())
+    );
   } catch (err) {
     logger.error('Failed to fetch competencies', err);
     throw err;

@@ -92,49 +92,70 @@ class CrewFinderServiceClass {
 
     logger.info('[CrewFinderService] searchUsers called with query:', query);
 
-    // Query profiles first (no FK join with sailor_profiles)
-    // Search by name OR email so users can find collaborators either way
     const trimmed = query.trim();
-    const { data: profiles, error } = await supabase
-      .from('profiles')
-      .select('id, full_name, email')
-      .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
-      .limit(limit);
 
-    if (error) {
-      logger.error('Failed to search users:', error);
-      throw error;
+    // Search both `profiles` and `users` tables — names can be in either
+    const [profilesResult, usersResult] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
+        .limit(limit),
+      supabase
+        .from('users')
+        .select('id, full_name, email')
+        .or(`full_name.ilike.%${trimmed}%,email.ilike.%${trimmed}%`)
+        .limit(limit),
+    ]);
+
+    if (profilesResult.error) {
+      logger.error('Failed to search profiles:', profilesResult.error);
     }
 
-    if (!profiles || profiles.length === 0) {
-      return [];
+    // Merge results from both tables, preferring users.full_name (app-editable name)
+    const userMap = new Map<string, { id: string; full_name: string | null; email: string | null }>();
+    // Add profiles first
+    for (const p of profilesResult.data ?? []) {
+      userMap.set(p.id, { id: p.id, full_name: p.full_name, email: p.email });
     }
-
-    // Fetch sailor_profiles separately (no FK relationship)
-    const userIds = profiles.map((p) => p.id);
-    const { data: sailorProfiles } = await supabase
-      .from('sailor_profiles')
-      .select('user_id, avatar_emoji, avatar_color, experience_level')
-      .in('user_id', userIds);
-
-    const sailorProfilesMap: Record<string, any> = {};
-    if (sailorProfiles) {
-      sailorProfiles.forEach((sp: any) => {
-        sailorProfilesMap[sp.user_id] = sp;
+    // Overlay with users table (which has the editable display name)
+    for (const u of usersResult.data ?? []) {
+      const existing = userMap.get(u.id);
+      userMap.set(u.id, {
+        id: u.id,
+        full_name: u.full_name || existing?.full_name || null,
+        email: u.email || existing?.email || null,
       });
     }
 
-    logger.info('[CrewFinderService] searchUsers found', profiles.length, 'profiles');
+    const allUserIds = Array.from(userMap.keys());
+    if (allUserIds.length === 0) return [];
 
-    return profiles.map((profile: any) => {
-      const sailorProfile = sailorProfilesMap[profile.id];
+    // Fetch sailor_profiles for avatars
+    const { data: sailorProfiles } = await supabase
+      .from('sailor_profiles')
+      .select('user_id, avatar_emoji, avatar_color, experience_level')
+      .in('user_id', allUserIds);
+
+    const sailorProfilesMap: Record<string, any> = {};
+    if (sailorProfiles) {
+      for (const sp of sailorProfiles) {
+        sailorProfilesMap[sp.user_id] = sp;
+      }
+    }
+
+    logger.info('[CrewFinderService] searchUsers found', allUserIds.length, 'users');
+
+    return allUserIds.slice(0, limit).map((uid) => {
+      const u = userMap.get(uid)!;
+      const sp = sailorProfilesMap[uid];
       return {
-        userId: profile.id,
-        fullName: profile.full_name || 'Unknown',
-        avatarEmoji: sailorProfile?.avatar_emoji,
-        avatarColor: sailorProfile?.avatar_color,
-        sailingExperience: sailorProfile?.experience_level,
-        email: profile.email,
+        userId: uid,
+        fullName: u.full_name || 'Unknown',
+        avatarEmoji: sp?.avatar_emoji,
+        avatarColor: sp?.avatar_color,
+        sailingExperience: sp?.experience_level,
+        email: u.email || undefined,
       };
     });
   }
@@ -145,11 +166,10 @@ class CrewFinderServiceClass {
   async getAllUsers(limit: number = 50, offset: number = 0): Promise<SailorProfileSummary[]> {
     logger.info('[CrewFinderService] getAllUsers called with limit:', limit, 'offset:', offset);
 
-    // Query profiles first (no FK join with sailor_profiles)
-    const { data: profiles, error } = await supabase
-      .from('profiles')
+    // Use `users` table as the primary source (has the editable full_name)
+    const { data: users, error } = await supabase
+      .from('users')
       .select('id, full_name, email')
-      .not('full_name', 'is', null)
       .order('full_name', { ascending: true })
       .range(offset, offset + limit - 1);
 
@@ -158,12 +178,10 @@ class CrewFinderServiceClass {
       throw error;
     }
 
-    if (!profiles || profiles.length === 0) {
-      return [];
-    }
+    if (!users || users.length === 0) return [];
 
-    // Fetch sailor_profiles separately (no FK relationship)
-    const userIds = profiles.map((p) => p.id);
+    // Fetch sailor_profiles for avatars
+    const userIds = users.map((u) => u.id);
     const { data: sailorProfiles } = await supabase
       .from('sailor_profiles')
       .select('user_id, avatar_emoji, avatar_color, experience_level')
@@ -171,22 +189,22 @@ class CrewFinderServiceClass {
 
     const sailorProfilesMap: Record<string, any> = {};
     if (sailorProfiles) {
-      sailorProfiles.forEach((sp: any) => {
+      for (const sp of sailorProfiles) {
         sailorProfilesMap[sp.user_id] = sp;
-      });
+      }
     }
 
-    logger.info('[CrewFinderService] getAllUsers found', profiles.length, 'profiles');
+    logger.info('[CrewFinderService] getAllUsers found', users.length, 'users');
 
-    return profiles.map((profile: any) => {
-      const sailorProfile = sailorProfilesMap[profile.id];
+    return users.map((u: any) => {
+      const sp = sailorProfilesMap[u.id];
       return {
-        userId: profile.id,
-        fullName: profile.full_name || 'Unknown',
-        avatarEmoji: sailorProfile?.avatar_emoji,
-        avatarColor: sailorProfile?.avatar_color,
-        sailingExperience: sailorProfile?.experience_level,
-        email: profile.email,
+        userId: u.id,
+        fullName: u.full_name || 'Unknown',
+        avatarEmoji: sp?.avatar_emoji,
+        avatarColor: sp?.avatar_color,
+        sailingExperience: sp?.experience_level,
+        email: u.email,
       };
     });
   }

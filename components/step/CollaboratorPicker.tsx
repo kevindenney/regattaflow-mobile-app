@@ -20,8 +20,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { useAuth } from '@/providers/AuthProvider';
+import { useOrganization } from '@/providers/OrganizationProvider';
 import { SailorProfileService } from '@/services/SailorProfileService';
 import { CrewFinderService } from '@/services/CrewFinderService';
+import { supabase } from '@/services/supabase';
 import type { StepCollaborator } from '@/types/step-detail';
 
 interface CollaboratorPickerProps {
@@ -41,7 +43,9 @@ interface UserRow {
 
 export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: CollaboratorPickerProps) {
   const { user } = useAuth();
+  const { activeOrganizationId } = useOrganization();
   const [query, setQuery] = useState('');
+  const [orgMembers, setOrgMembers] = useState<UserRow[]>([]);
   const [following, setFollowing] = useState<UserRow[]>([]);
   const [allUsers, setAllUsers] = useState<UserRow[]>([]);
   const [searchResults, setSearchResults] = useState<UserRow[]>([]);
@@ -50,13 +54,62 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
   const [showExternalInput, setShowExternalInput] = useState(false);
   const [externalName, setExternalName] = useState('');
   const [hasFollows, setHasFollows] = useState(false);
+  const [hasOrgMembers, setHasOrgMembers] = useState(false);
 
-  // Load following list on mount, fall back to all users if empty
+  // Load org members + following/all users on mount
   useEffect(() => {
     if (!visible || !user?.id) return;
     setLoadingPeople(true);
-    SailorProfileService.getFollowing(user.id, user.id, { limit: 50, offset: 0 })
-      .then(({ users }) => {
+
+    const loadOrgMembers = async (): Promise<UserRow[]> => {
+      if (!activeOrganizationId) return [];
+      try {
+        const { data: memberships } = await supabase
+          .from('organization_memberships')
+          .select('user_id, role')
+          .eq('organization_id', activeOrganizationId)
+          .in('status', ['active', 'verified'])
+          .neq('user_id', user.id)
+          .limit(100);
+        if (!memberships || memberships.length === 0) return [];
+        const memberIds = memberships.map((m) => m.user_id);
+        // Use `users` table for names (has the editable full_name)
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, full_name, email')
+          .in('id', memberIds);
+        const { data: sailorProfiles } = await supabase
+          .from('sailor_profiles')
+          .select('user_id, avatar_emoji, avatar_color')
+          .in('user_id', memberIds);
+        const spMap: Record<string, any> = {};
+        if (sailorProfiles) for (const sp of sailorProfiles) spMap[sp.user_id] = sp;
+        const usersMap: Record<string, any> = {};
+        if (usersData) for (const u of usersData) usersMap[u.id] = u;
+        return memberIds.map((uid) => ({
+          userId: uid,
+          displayName: usersMap[uid]?.full_name || usersMap[uid]?.email || 'Unknown',
+          avatarEmoji: spMap[uid]?.avatar_emoji,
+          avatarColor: spMap[uid]?.avatar_color,
+        }));
+      } catch {
+        return [];
+      }
+    };
+
+    const loadPeople = async () => {
+      // Load org members first (if in an org)
+      const orgResults = await loadOrgMembers();
+      if (orgResults.length > 0) {
+        setHasOrgMembers(true);
+        setOrgMembers(orgResults);
+      } else {
+        setHasOrgMembers(false);
+      }
+
+      // Then load following/all users
+      try {
+        const { users } = await SailorProfileService.getFollowing(user.id, user.id, { limit: 50, offset: 0 });
         if (users.length > 0) {
           setHasFollows(true);
           setFollowing(
@@ -68,32 +121,28 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
               avatarColor: u.avatarColor,
             }))
           );
-          setLoadingPeople(false);
         } else {
-          // No follows — load all discoverable users instead
           setHasFollows(false);
-          return CrewFinderService.getAllUsers(50, 0)
-            .then((results) => {
-              setAllUsers(
-                results
-                  .filter((r) => r.userId !== user?.id)
-                  .map((r) => ({
-                    userId: r.userId,
-                    displayName: r.fullName,
-                    avatarEmoji: r.avatarEmoji,
-                    avatarColor: r.avatarColor,
-                  }))
-              );
-            })
-            .catch(() => {})
-            .finally(() => setLoadingPeople(false));
+          const results = await CrewFinderService.getAllUsers(50, 0);
+          setAllUsers(
+            results
+              .filter((r) => r.userId !== user?.id)
+              .map((r) => ({
+                userId: r.userId,
+                displayName: r.fullName,
+                avatarEmoji: r.avatarEmoji,
+                avatarColor: r.avatarColor,
+              }))
+          );
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('[CollaboratorPicker] Failed to load people:', err);
-        setLoadingPeople(false);
-      });
-  }, [visible, user?.id]);
+      }
+      setLoadingPeople(false);
+    };
+
+    loadPeople();
+  }, [visible, user?.id, activeOrganizationId]);
 
   // Search users when query changes
   useEffect(() => {
@@ -157,8 +206,8 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
     onClose();
   }, [onClose]);
 
-  const defaultList = hasFollows ? following : allUsers;
-  const displayList = query.trim() ? searchResults : defaultList;
+  const otherPeopleList = hasFollows ? following : allUsers;
+  const displayList = query.trim() ? searchResults : otherPeopleList;
   const isSearching = query.trim().length > 0;
 
   const renderUserRow = ({ item }: { item: UserRow }) => {
@@ -221,29 +270,57 @@ export function CollaboratorPicker({ visible, onClose, onAdd, existingIds }: Col
         </View>
 
         {/* Section header */}
-        <Text style={styles.sectionLabel}>
-          {isSearching ? 'SEARCH RESULTS' : hasFollows ? 'PEOPLE YOU FOLLOW' : 'PEOPLE ON BETTERAT'}
-        </Text>
+        {!isSearching && hasOrgMembers && orgMembers.length > 0 && (
+          <Text style={styles.sectionLabel}>YOUR ORGANIZATION</Text>
+        )}
 
-        {/* List */}
+        {/* List — combined org members + other people, or search results */}
         {(loadingPeople && !isSearching) || (loadingSearch && isSearching) ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={STEP_COLORS.accent} />
           </View>
-        ) : displayList.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              {isSearching ? 'No results found' : 'No people found — try searching above'}
-            </Text>
-          </View>
+        ) : isSearching ? (
+          searchResults.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No results found</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.sectionLabel}>SEARCH RESULTS</Text>
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item.userId}
+                renderItem={renderUserRow}
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
+                keyboardShouldPersistTaps="handled"
+              />
+            </>
+          )
         ) : (
           <FlatList
-            data={displayList}
+            data={[
+              ...(hasOrgMembers ? orgMembers : []),
+              // Separator + other people (only if there are other people to show)
+              ...(displayList.length > 0
+                ? [{ userId: '__section__', displayName: hasFollows ? 'PEOPLE YOU FOLLOW' : 'PEOPLE ON BETTERAT' } as UserRow, ...displayList]
+                : []),
+            ]}
             keyExtractor={(item) => item.userId}
-            renderItem={renderUserRow}
+            renderItem={({ item }) => {
+              if (item.userId === '__section__') {
+                return <Text style={styles.sectionLabelInline}>{item.displayName}</Text>;
+              }
+              return renderUserRow({ item });
+            }}
             style={styles.list}
             contentContainerStyle={styles.listContent}
             keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No people found — try searching above</Text>
+              </View>
+            }
           />
         )}
 
@@ -341,6 +418,14 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: IOS_COLORS.tertiaryLabel,
+  },
+  sectionLabelInline: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: IOS_COLORS.tertiaryLabel,
+    letterSpacing: 0.5,
+    paddingTop: IOS_SPACING.md,
+    paddingBottom: IOS_SPACING.xs,
   },
   list: {
     flex: 1,

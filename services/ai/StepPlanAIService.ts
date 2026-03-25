@@ -14,9 +14,11 @@
 
 import { supabase } from '@/services/supabase';
 import type { LibraryResourceRecord } from '@/types/library';
+import { getCourseCompletionPercent } from '@/types/library';
 import type { StepPlanData, StepReviewData, StepActData, CrossInterestSuggestion, ChatMessage, BrainDumpData, ExtractedUrl } from '@/types/step-detail';
 import { sailorBoatService, type SailorBoat } from '@/services/SailorBoatService';
 import { equipmentService, type BoatEquipment } from '@/services/EquipmentService';
+import { getUserLibrary, getResources } from '@/services/LibraryService';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +37,8 @@ export interface EnrichedPlanContext {
   followedUsersActivity: FollowedUserActivity[];
   orgPrograms: OrgProgramSummary[];
   userCapabilityProgress: CapabilityProgressEntry[];
+  /** Full library resources for this interest (not just step-linked) */
+  libraryResources: LibraryResourceRecord[];
 }
 
 /** Legacy interface kept for backward compat */
@@ -106,17 +110,19 @@ export async function gatherEnrichedContext(
   followedUsersActivity: FollowedUserActivity[];
   orgPrograms: OrgProgramSummary[];
   userCapabilityProgress: CapabilityProgressEntry[];
+  libraryResources: LibraryResourceRecord[];
 }> {
-  const [stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress] =
+  const [stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress, libraryResources] =
     await Promise.all([
       getFullStepHistory(userId, interestId),
       getOrgCompetencies(userId, interestId),
       getFollowedUsersActivity(userId, interestId),
       getUserOrgPrograms(userId, interestId),
       getUserCapabilityProgress(userId, interestId),
+      getFullLibraryResources(userId, interestId),
     ]);
 
-  return { stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress };
+  return { stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress, libraryResources };
 }
 
 /**
@@ -371,6 +377,50 @@ async function getUserCapabilityProgress(
   }
 }
 
+/**
+ * Fetch the user's full library for this interest (up to 50 resources).
+ */
+async function getFullLibraryResources(
+  userId: string,
+  interestId: string,
+): Promise<LibraryResourceRecord[]> {
+  try {
+    const library = await getUserLibrary(userId, interestId);
+    return await getResources(library.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Format library resources into a concise text block for AI prompts.
+ */
+export function formatLibraryForPrompt(resources: LibraryResourceRecord[]): string {
+  if (resources.length === 0) return '';
+
+  const lines = resources.map((r) => {
+    let line = `- ${r.title}`;
+    if (r.author_or_creator) line += ` by ${r.author_or_creator}`;
+    line += ` (${r.resource_type})`;
+    if (r.url) line += ` — ${r.url}`;
+
+    // Show course progress if applicable
+    if (r.resource_type === 'online_course') {
+      const pct = getCourseCompletionPercent(r);
+      if (pct !== null) line += ` [${pct}% complete]`;
+    }
+
+    // Show capability goals
+    if (r.capability_goals?.length) {
+      line += `\n  Skills: ${r.capability_goals.join(', ')}`;
+    }
+
+    return line;
+  });
+
+  return lines.join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Prompt Building
 // ---------------------------------------------------------------------------
@@ -446,12 +496,23 @@ function buildEnrichedPrompt(ctx: EnrichedPlanContext): string {
     sections.push(`PROGRAMS YOU'RE ENROLLED IN:\n${progLines.join('\n')}`);
   }
 
-  // Linked resources
+  // Full library (all resources the user has curated for this interest)
+  if (ctx.libraryResources?.length) {
+    const linkedIds = new Set(ctx.linkedResources.map((r) => r.id));
+    // Show unlinked library resources — the linked ones appear separately below
+    const unlinkedResources = ctx.libraryResources.filter((r) => !linkedIds.has(r.id));
+    if (unlinkedResources.length) {
+      const libraryBlock = formatLibraryForPrompt(unlinkedResources);
+      sections.push(`USER'S RESOURCE LIBRARY (available but not yet linked to this step):\n${libraryBlock}`);
+    }
+  }
+
+  // Linked resources (specifically chosen for this step)
   const resourceList = ctx.linkedResources
     .map((r) => `- ${r.title}${r.author_or_creator ? ` by ${r.author_or_creator}` : ''} (${r.resource_type})`)
     .join('\n');
   if (resourceList) {
-    sections.push(`LINKED LIBRARY RESOURCES:\n${resourceList}`);
+    sections.push(`LINKED LIBRARY RESOURCES (chosen for this step):\n${resourceList}`);
   }
 
   // Capability goals for this step
@@ -480,6 +541,7 @@ Your role is to suggest what the user should focus on in their next practice ses
 3. What people they follow are working on — for social learning and inspiration
 4. Programs they're enrolled in — to align with structured learning paths
 5. Their linked resources — to suggest specific exercises from materials they have
+6. Their resource library — suggest specific resources they already own that are relevant to this session. For courses, note their progress and suggest the next unfinished lesson.
 
 Be specific and practical. Suggest 2-3 concrete activities or exercises. Prioritize:
 - Competencies where they're still developing (not yet "competent")
@@ -487,6 +549,7 @@ Be specific and practical. Suggest 2-3 concrete activities or exercises. Priorit
 - Natural progressions from what they learned in recent steps
 - Alignment with any active program curriculum
 - Interesting approaches from people they follow
+- Specific resources from their library (by name) that would help with this session
 
 Keep it under 200 words. Write in second person ("You could..."). Do not use markdown formatting.`;
 
@@ -537,8 +600,9 @@ Your role is to have a conversation about what the user should focus on in their
 3. What people they follow are working on — for social learning and inspiration
 4. Programs they're enrolled in — to align with structured learning paths
 5. Their linked resources — to suggest specific exercises from materials they have
+6. Their resource library — reference specific resources they already own. For courses, note progress and suggest the next lesson.
 
-Be specific and practical. When suggesting activities, give 2-3 concrete exercises. Respond conversationally but concisely (under 200 words per response). Write in second person ("You could..."). Do not use markdown formatting.`;
+Be specific and practical. When suggesting activities, give 2-3 concrete exercises. Reference specific resources from their library by name when relevant. Respond conversationally but concisely (under 200 words per response). Write in second person ("You could..."). Do not use markdown formatting.`;
 
   // Build messages array: enriched context as first user message, then full chat history
   const contextMessage = `The user is planning a step titled "${ctx.stepTitle}".
@@ -1157,14 +1221,22 @@ export async function structureBrainDump(params: {
 
   const currentDate = new Date().toISOString().split('T')[0];
 
-  const entityInstructions = isSailing
-    ? `
-- For sailing: recognize boats, sails, rigging equipment, instruments, and sailing gear
-- Classify equipment as "mine" (user owns it), "needed" (required for session but not confirmed owned), or "unknown"
-- Match boat references to the user's known boats when possible`
-    : `
-- Recognize any equipment, tools, or gear mentioned
-- Classify equipment as "mine", "needed", or "unknown"`;
+  const interestEquipmentHint = (() => {
+    if (isSailing) return 'recognize boats, sails, rigging equipment, instruments, and sailing gear';
+    switch (interestSlug) {
+      case 'knitting': return 'recognize yarn (brands, weights, fibers), needles (circular, DPN, interchangeable), notions (stitch markers, tapestry needles, blocking tools), and knitting accessories';
+      case 'fiber-arts': return 'recognize yarn, fiber, needles, hooks, spinning wheels, looms, dye supplies, and fiber arts tools';
+      case 'global-health': return 'recognize medical equipment, diagnostic tools, clinical supplies, and field kit items';
+      case 'painting-printing': return 'recognize paints, brushes, canvases, easels, printmaking tools, inks, and art supplies';
+      case 'drawing': return 'recognize drawing media (pencils, charcoal, ink), paper types, erasers, blending tools, and digital art tools';
+      case 'fitness':
+      case 'health-and-fitness': return 'recognize gym equipment, weights, bands, machines, and fitness accessories';
+      default: return 'recognize any equipment, tools, or gear mentioned';
+    }
+  })();
+  const entityInstructions = `
+- For ${interestName}: ${interestEquipmentHint}
+- Classify equipment as "mine" (user owns it), "needed" (required for session but not confirmed owned), or "unknown"${isSailing ? '\n- Match boat references to the user\'s known boats when possible' : ''}`;
 
   const systemPrompt = `You are an expert learning coach on BetterAt. The user has dumped raw, unstructured notes about an upcoming ${interestName} session. Your job is to organize this into a clear, structured practice plan.
 
@@ -1181,8 +1253,8 @@ Your response must be ONLY valid JSON with this exact shape:
   "capability_goals": ["Skill 1", "Skill 2"],
   "extracted_entities": {
     "people": [{ "name": "Name", "context": "practicing with" }],
-    "equipment": [{ "text": "equipment name", "category": "boat|sail|gear|tool|instrument|other", "ownership": "mine|needed|unknown" }],
-    "locations": [{ "text": "Place Name", "context": "sailing at" }],
+    "equipment": [{ "text": "equipment name", "category": "gear|tool|instrument|material|other", "ownership": "mine|needed|unknown" }],
+    "locations": [{ "text": "Place Name", "context": "practicing at" }],
     "dates": [{ "text": "next Saturday", "iso": "2026-03-28", "has_time": false }]
   }
 }

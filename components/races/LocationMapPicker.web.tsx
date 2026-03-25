@@ -1,8 +1,8 @@
 /**
  * LocationMapPicker - Web Implementation
  *
- * Full-screen modal for selecting race location on a map.
- * Uses Leaflet for web platform.
+ * Full-screen modal for selecting a location on a map.
+ * Uses Leaflet for web platform + Nominatim geocoding for search.
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -18,7 +18,6 @@ import {
   Pressable,
 } from 'react-native';
 import { X, MapPin, Search, Navigation, Check } from 'lucide-react-native';
-import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
 import { IOS_COLORS } from '@/components/cards/constants';
 import type { RaceType } from './RaceTypeSelector';
@@ -48,16 +47,8 @@ interface VenueLocation {
 // CONSTANTS
 // =============================================================================
 
-const DEFAULT_CENTER = { lat: 22.3193, lng: 114.1694 }; // Hong Kong
-const RECENT_VENUES_KEY = 'regattaflow_recent_venues';
-
-const FALLBACK_VENUES: VenueLocation[] = [
-  { name: 'Victoria Harbour, Hong Kong', lat: 22.3193, lng: 114.1694 },
-  { name: 'Sydney Harbour, Australia', lat: -33.8688, lng: 151.2093 },
-  { name: 'San Francisco Bay, USA', lat: 37.7749, lng: -122.4194 },
-  { name: 'Solent, UK', lat: 50.7772, lng: -1.2924 },
-  { name: 'Mediterranean, France', lat: 43.2965, lng: 5.3698 },
-];
+const DEFAULT_CENTER = { lat: 39.2904, lng: -76.6122 }; // Baltimore (JHU area)
+const RECENT_LOCATIONS_KEY = 'betterat_recent_locations';
 
 // =============================================================================
 // LEAFLET MAP COMPONENT
@@ -210,19 +201,17 @@ export function LocationMapPicker({
   const [searching, setSearching] = useState(false);
   const [showSearchResults, setShowSearchResults] = useState(false);
 
-  // Load recent venues
+  // Load recent locations from localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        const stored = window.localStorage.getItem(RECENT_VENUES_KEY);
+        const stored = window.localStorage.getItem(RECENT_LOCATIONS_KEY);
         if (stored) {
-          const venues = JSON.parse(stored) as VenueLocation[];
-          setRecentVenues(venues.slice(0, 5));
-        } else {
-          setRecentVenues(FALLBACK_VENUES.slice(0, 3));
+          const locations = JSON.parse(stored) as VenueLocation[];
+          setRecentVenues(locations.slice(0, 5));
         }
       } catch (e) {
-        setRecentVenues(FALLBACK_VENUES.slice(0, 3));
+        // No recent locations — that's fine
       }
     }
   }, []);
@@ -242,7 +231,7 @@ export function LocationMapPicker({
   // SEARCH
   // =============================================================================
 
-  const searchVenues = useCallback(async (query: string) => {
+  const searchLocations = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSearchResults([]);
       setShowSearchResults(false);
@@ -253,36 +242,36 @@ export function LocationMapPicker({
     setShowSearchResults(true);
 
     try {
-      const { data, error } = await supabase
-        .from('sailing_venues')
-        .select('id, name, coordinates_lat, coordinates_lng')
-        .ilike('name', `%${query}%`)
-        .limit(8);
-
-      if (error) throw error;
-
-      const dbResults: VenueLocation[] = (data || [])
-        .filter((v: any) => v.coordinates_lat && v.coordinates_lng)
-        .map((v: any) => ({
-          name: v.name,
-          lat: v.coordinates_lat,
-          lng: v.coordinates_lng,
-        }));
-
-      const queryLower = query.toLowerCase();
-      const fallbackMatches = FALLBACK_VENUES.filter(
-        (v) =>
-          v.name.toLowerCase().includes(queryLower) &&
-          !dbResults.some((db) => db.name.toLowerCase() === v.name.toLowerCase())
+      // Use Nominatim (OpenStreetMap) geocoding — free, no API key needed
+      const encoded = encodeURIComponent(query);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=8&addressdetails=1&dedupe=1`,
+        { headers: { 'Accept-Language': 'en', 'User-Agent': 'BetterAt/1.0' } }
       );
+      const data = await res.json();
 
-      setSearchResults([...dbResults, ...fallbackMatches].slice(0, 8));
+      const results: VenueLocation[] = data.map((item: any) => {
+        // Build a meaningful short name: use the specific name + city/town
+        const parts = item.display_name.split(',').map((s: string) => s.trim());
+        // Take the first part (specific name) and add the city (usually 3rd-4th part)
+        const specificName = parts[0];
+        const city = parts.find((_: string, i: number) =>
+          i >= 1 && i <= 4 && !parts[i]?.match(/^\d/) && parts[i]?.length > 2
+        );
+        const name = city && city !== specificName
+          ? `${specificName}, ${city}`
+          : parts.slice(0, 2).join(', ');
+        return {
+          name,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+        };
+      });
+
+      setSearchResults(results);
     } catch (e) {
-      const queryLower = query.toLowerCase();
-      const matches = FALLBACK_VENUES.filter((v) =>
-        v.name.toLowerCase().includes(queryLower)
-      );
-      setSearchResults(matches);
+      logger.error('Geocoding search failed:', e);
+      setSearchResults([]);
     } finally {
       setSearching(false);
     }
@@ -292,29 +281,46 @@ export function LocationMapPicker({
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (searchText.length >= 2) {
-        searchVenues(searchText);
+        searchLocations(searchText);
       } else {
         setSearchResults([]);
         setShowSearchResults(false);
       }
-    }, 300);
+    }, 400);
 
     return () => clearTimeout(timeout);
-  }, [searchText, searchVenues]);
+  }, [searchText, searchLocations]);
 
   // =============================================================================
   // HANDLERS
   // =============================================================================
 
-  const handleMapClick = useCallback((lat: number, lng: number) => {
-    const newLocation: VenueLocation = {
-      name: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-      lat,
-      lng,
-    };
-    setSelectedLocation(newLocation);
+  const handleMapClick = useCallback(async (lat: number, lng: number) => {
+    // Set immediately with coordinates as name
+    const coordName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    setSelectedLocation({ name: coordName, lat, lng });
     setSearchText('');
     setShowSearchResults(false);
+
+    // Reverse geocode to get a real place name
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=17&addressdetails=1`,
+        { headers: { 'Accept-Language': 'en', 'User-Agent': 'BetterAt/1.0' } }
+      );
+      const data = await res.json();
+      if (data.display_name) {
+        // Build short name from address parts
+        const addr = data.address || {};
+        const specific = addr.amenity || addr.building || addr.road || '';
+        const area = addr.city || addr.town || addr.village || addr.suburb || '';
+        const shortName = specific && area ? `${specific}, ${area}` : data.display_name.split(',').slice(0, 2).join(',');
+        setSelectedLocation({ name: shortName, lat, lng });
+        setSearchText(shortName);
+      }
+    } catch {
+      // Keep coordinate name — that's fine
+    }
   }, []);
 
   const handleSelectVenue = useCallback((venue: VenueLocation) => {
@@ -333,7 +339,7 @@ export function LocationMapPicker({
       );
       const updated = [venue, ...filtered].slice(0, 5);
       setRecentVenues(updated);
-      window.localStorage.setItem(RECENT_VENUES_KEY, JSON.stringify(updated));
+      window.localStorage.setItem(RECENT_LOCATIONS_KEY, JSON.stringify(updated));
     } catch (e) {
       logger.warn('Failed to save recent venue:', e);
     }
@@ -386,7 +392,7 @@ export function LocationMapPicker({
               style={styles.searchInput}
               value={searchText}
               onChangeText={setSearchText}
-              placeholder="Search venues..."
+              placeholder="Search any place..."
               placeholderTextColor={IOS_COLORS.gray}
               onFocus={() => searchText.length >= 2 && setShowSearchResults(true)}
             />
@@ -434,10 +440,10 @@ export function LocationMapPicker({
           )}
         </View>
 
-        {/* Quick Select */}
-        {!showSearchResults && (
+        {/* Recent Locations */}
+        {!showSearchResults && recentVenues.length > 0 && (
           <View style={styles.quickSelectContainer}>
-            <Text style={styles.quickSelectTitle}>QUICK SELECT</Text>
+            <Text style={styles.quickSelectTitle}>RECENT LOCATIONS</Text>
             <View style={styles.quickSelectList}>
               {recentVenues.map((item, index) => (
                 <Pressable
@@ -470,7 +476,7 @@ export function LocationMapPicker({
         {/* Hint */}
         <View style={styles.hintContainer}>
           <Text style={styles.hintText}>
-            Click on the map to select a racing area center
+            Click on the map or search to select a location
           </Text>
         </View>
       </View>

@@ -329,6 +329,7 @@ export interface DemoRace {
   /** Demo class ID for tuning features */
   class_id: string;
   metadata: {
+    interest_slug?: string;
     venue_name: string;
     class_name: string;
     expected_fleet_size?: number;
@@ -426,6 +427,7 @@ export function createUpcomingDemoRace(): DemoRace {
     class_id: DEMO_BOAT_J70.class_id,
 
     metadata: {
+      interest_slug: 'sail-racing',
       venue_name: 'Royal Yacht Squadron, Cowes',
       class_name: 'J/70',
       expected_fleet_size: 24,
@@ -554,6 +556,7 @@ export function createPastDemoRace(): DemoRace {
     class_id: DEMO_BOAT_IRC3.class_id,
 
     metadata: {
+      interest_slug: 'sail-racing',
       venue_name: 'Royal Yacht Squadron, Cowes',
       class_name: 'IRC Class 3',
       total_distance_nm: 50,

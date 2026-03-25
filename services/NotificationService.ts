@@ -32,7 +32,11 @@ export type SocialNotificationType =
   | 'org_membership_approved'
   | 'org_membership_rejected'
   | 'followed_user_step_completed'
-  | 'step_collaborator_added';
+  | 'step_collaborator_added'
+  | 'org_invite_accepted'
+  | 'org_invite_received'
+  | 'blueprint_subscribed'
+  | 'step_suggested';
 
 export interface SocialNotification {
   id: string;
@@ -86,7 +90,11 @@ const CANONICAL_NOTIFICATION_TYPES: ReadonlySet<SocialNotificationType> = new Se
   'activity_comment',
   'org_membership_approved',
   'org_membership_rejected',
+  'org_invite_accepted',
+  'org_invite_received',
   'step_collaborator_added',
+  'blueprint_subscribed',
+  'step_suggested',
 ]);
 
 function normalizeMembershipDecisionType(
@@ -766,28 +774,23 @@ class NotificationServiceClass {
       data?: Record<string, any>;
     }
   ): Promise<string> {
-    const { data, error } = await supabase
-      .from('social_notifications')
-      .insert({
-        user_id: userId,
-        type: notification.type,
-        title: notification.title,
-        body: notification.body,
-        actor_id: notification.actorId,
-        regatta_id: notification.regattaId,
-        comment_id: notification.commentId,
-        achievement_id: notification.achievementId,
-        data: notification.data,
-      })
-      .select('id')
-      .single();
+    // Use SECURITY DEFINER RPC to bypass RLS — authenticated users
+    // need to create notifications for other users (e.g., invite notifications).
+    const { data, error } = await supabase.rpc('create_notification', {
+      p_user_id: userId,
+      p_type: notification.type,
+      p_title: notification.title,
+      p_body: notification.body || null,
+      p_actor_id: notification.actorId || null,
+      p_data: notification.data || null,
+    });
 
     if (error) {
       logger.error('Failed to create notification', { userId, error });
       throw error;
     }
 
-    return data.id;
+    return data as string;
   }
 
   /**
@@ -806,6 +809,25 @@ class NotificationServiceClass {
       body: `${input.actorName} added you as a collaborator on "${input.stepTitle}"`,
       actorId: input.actorId,
       data: { step_id: input.stepId },
+    });
+  }
+
+  /**
+   * Notify a blueprint owner that someone subscribed to their blueprint.
+   */
+  async notifyBlueprintSubscribed(input: {
+    blueprintOwnerId: string;
+    subscriberId: string;
+    subscriberName: string;
+    blueprintId: string;
+    blueprintTitle: string;
+  }): Promise<string> {
+    return this.createNotification(input.blueprintOwnerId, {
+      type: 'blueprint_subscribed',
+      title: 'New blueprint subscriber',
+      body: `${input.subscriberName} subscribed to "${input.blueprintTitle}"`,
+      actorId: input.subscriberId,
+      data: { blueprint_id: input.blueprintId, blueprint_title: input.blueprintTitle },
     });
   }
 
@@ -832,6 +854,83 @@ class NotificationServiceClass {
     }
 
     return String(data);
+  }
+
+  /**
+   * Notify the inviter that someone accepted their organization invite.
+   */
+  async notifyOrgInviteAccepted(input: {
+    inviterId: string;
+    accepterName: string;
+    accepterId: string;
+    organizationId: string;
+    organizationName: string;
+    roleLabel: string;
+  }): Promise<string> {
+    return this.createNotification(input.inviterId, {
+      type: 'org_invite_accepted',
+      title: 'Invite accepted',
+      body: `${input.accepterName} accepted your invite to ${input.organizationName} as ${input.roleLabel}`,
+      actorId: input.accepterId,
+      data: {
+        organization_id: input.organizationId,
+        organization_name: input.organizationName,
+        role_label: input.roleLabel,
+      },
+    });
+  }
+
+  /**
+   * Suggest a step to another user. Creates a notification with step details
+   * so the recipient can adopt it to their own timeline.
+   */
+  async notifyStepSuggested(input: {
+    targetUserId: string;
+    actorId: string;
+    actorName: string;
+    sourceStepId: string;
+    stepTitle: string;
+    stepDescription?: string;
+    interestId?: string;
+  }): Promise<string> {
+    return this.createNotification(input.targetUserId, {
+      type: 'step_suggested',
+      title: 'Step suggestion',
+      body: `${input.actorName} suggested "${input.stepTitle}"`,
+      actorId: input.actorId,
+      data: {
+        source_step_id: input.sourceStepId,
+        step_title: input.stepTitle,
+        step_description: input.stepDescription || null,
+        interest_id: input.interestId || null,
+      },
+    });
+  }
+
+  /**
+   * Notify a user that they've been invited to an organization (if they have an account).
+   */
+  async notifyOrgInviteReceived(input: {
+    targetUserId: string;
+    inviterName: string;
+    inviterId: string;
+    organizationId: string;
+    organizationName: string;
+    roleLabel: string;
+    inviteToken: string;
+  }): Promise<string> {
+    return this.createNotification(input.targetUserId, {
+      type: 'org_invite_received',
+      title: 'Organization invite',
+      body: `${input.inviterName} invited you to join ${input.organizationName} as ${input.roleLabel}`,
+      actorId: input.inviterId,
+      data: {
+        organization_id: input.organizationId,
+        organization_name: input.organizationName,
+        role_label: input.roleLabel,
+        invite_token: input.inviteToken,
+      },
+    });
   }
 }
 

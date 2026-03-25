@@ -1,0 +1,16 @@
+{
+  "betterat-local": {
+    "type": "streamable-http",
+    "url": "http://localhost:3001/api/mcp",
+    "headers": {
+      "Authorization": "Bearer mcp-local-dev-token"
+    }
+  },
+  "betterat": {
+    "type": "streamable-http",
+    "url": "https://regattaflow-app.vercel.app/api/mcp",
+    "headers": {
+      "Authorization": "Bearer ${BETTERAT_MCP_TOKEN}"
+    }
+  }
+}

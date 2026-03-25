@@ -24,6 +24,8 @@ export function timelineStepToCardRaceData(step: TimelineStepRecord): CardRaceDa
     sort_order: step.sort_order,
     category: step.category,
     description: step.description,
+    due_at: step.due_at,
+    completed_at: step.completed_at,
     metadata: {
       ...(step.metadata ?? {}),
       timeline_step_id: step.id,

@@ -69,6 +69,8 @@ function getNotificationIcon(type: SocialNotification['type']) {
   switch (type) {
     case 'new_follower':
       return <UserPlus {...iconProps} color={IOS_COLORS.systemBlue} />;
+    case 'blueprint_subscribed':
+      return <UserPlus {...iconProps} color="#6D28D9" />;
     case 'race_like':
       return <Heart {...iconProps} color={IOS_COLORS.systemPink} />;
     case 'race_comment':
@@ -87,6 +89,10 @@ function getNotificationText(notification: SocialNotification): { primary: strin
   switch (notification.type) {
     case 'new_follower':
       return { primary: actorName, secondary: 'started following you' };
+    case 'blueprint_subscribed': {
+      const bpTitle = notification.data?.blueprint_title;
+      return { primary: actorName, secondary: bpTitle ? `subscribed to "${bpTitle}"` : 'subscribed to your blueprint' };
+    }
     case 'race_like':
       return {
         primary: actorName,
@@ -337,6 +343,9 @@ export function NotificationsList({
           if (notification.actorId) {
             router.push(`/person/${notification.actorId}` as any);
           }
+          break;
+        case 'step_suggested':
+          router.push('/(tabs)/races' as any);
           break;
       }
     },

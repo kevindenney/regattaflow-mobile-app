@@ -43,6 +43,8 @@ interface BrainDumpEntryProps {
   isStructuring?: boolean;
   /** Interest slug for interest-aware entity extraction */
   interestSlug?: string;
+  /** When true, renders as a plain View instead of ScrollView (for embedding in parent scroll) */
+  embedded?: boolean;
 }
 
 export function BrainDumpEntry({
@@ -52,6 +54,7 @@ export function BrainDumpEntry({
   onDraftChange,
   isStructuring = false,
   interestSlug,
+  embedded = false,
 }: BrainDumpEntryProps) {
   const [text, setText] = useState(initialData?.raw_text ?? '');
   const [parsed, setParsed] = useState<ParsedBrainDump>({
@@ -174,13 +177,13 @@ export function BrainDumpEntry({
   const hasContent = text.trim().length > 0;
   const displayUrls = enrichedUrls.length > 0 ? enrichedUrls : parsed.extracted_urls;
 
+  const Wrapper = embedded ? View : ScrollView;
+  const wrapperProps = embedded
+    ? { style: [styles.content, { paddingBottom: IOS_SPACING.sm }] }
+    : { style: styles.container, contentContainerStyle: styles.content, showsVerticalScrollIndicator: false, keyboardShouldPersistTaps: 'handled' as const };
+
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
+    <Wrapper {...wrapperProps}>
       {/* Seed card from previous step */}
       {initialData?.source_review_notes && (
         <View style={styles.seedCard}>
@@ -247,7 +250,7 @@ export function BrainDumpEntry({
             <Text style={styles.sectionLabel}>Topics Detected</Text>
           </View>
           <View style={styles.pillRow}>
-            {parsed.extracted_topics.map((topic) => (
+            {[...new Set(parsed.extracted_topics)].map((topic) => (
               <View key={topic} style={styles.topicPill}>
                 <Text style={styles.topicPillText}>{topic}</Text>
               </View>
@@ -341,7 +344,7 @@ export function BrainDumpEntry({
           <Ionicons name="arrow-forward" size={16} color={STEP_COLORS.secondaryLabel} />
         </Pressable>
       </View>
-    </ScrollView>
+    </Wrapper>
   );
 }
 

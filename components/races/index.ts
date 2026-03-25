@@ -158,6 +158,7 @@ export { AddRaceFamilyButton } from './AddRaceFamilyButton';
 export type { AddRaceFamilyButtonProps } from './AddRaceFamilyButton';
 export { RacesFloatingHeader } from './RacesFloatingHeader';
 export type { RacesFloatingHeaderProps } from './RacesFloatingHeader';
+export { AddStepSheet } from './AddStepSheet';
 export { DemoNotice } from './DemoNotice';
 export type { DemoNoticeProps } from './DemoNotice';
 export { RaceDetailZone } from './RaceDetailZone';

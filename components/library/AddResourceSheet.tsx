@@ -25,6 +25,7 @@ import { CourseLessonEditor } from './CourseLessonEditor';
 import { decomposeCourse } from '@/services/ai/CourseDecompositionService';
 import { detectSourcePlatform, suggestResourceType } from '@/lib/utils/detectPlatform';
 import { fetchYouTubeMetadata } from '@/services/YouTubeMetadataService';
+import { fetchUrlMetadata } from '@/services/UrlMetadataService';
 import type { ResourceType, CreateLibraryResourceInput, CourseModule, CourseStructure } from '@/types/library';
 
 const RESOURCE_TYPES: ResourceType[] = [
@@ -65,7 +66,7 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
     }
   }, []);
 
-  // YouTube auto-fill state
+  // Auto-fill state
   const [isAutoFilling, setIsAutoFilling] = useState(false);
   const isYouTube = detectedPlatform === 'YouTube';
 
@@ -73,22 +74,60 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
     if (!url.trim()) return;
     setIsAutoFilling(true);
     try {
-      const meta = await fetchYouTubeMetadata(url.trim(), {
-        interestName: interestName || undefined,
-      });
-      if (meta) {
-        if (meta.title && !title.trim()) setTitle(meta.title);
-        if (meta.author) setAuthor(meta.author);
-        if (meta.description) setDescription(meta.description);
+      // Check if URL points to a PDF — extract title from filename instead of fetching
+      const urlLower = url.trim().toLowerCase();
+      const isPdf = urlLower.endsWith('.pdf') || urlLower.includes('.pdf?') || urlLower.includes('/pdf/');
+      if (isPdf) {
+        const urlObj = new URL(url.trim());
+        const pathParts = urlObj.pathname.split('/').filter(Boolean);
+        const lastPart = pathParts[pathParts.length - 1] || '';
+        // Clean up filename: remove extension, replace separators with spaces, title case
+        const cleaned = lastPart
+          .replace(/\.pdf$/i, '')
+          .replace(/[-_]+/g, ' ')
+          .replace(/(%20)+/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase())
+          .trim();
+        if (cleaned && !title.trim()) setTitle(cleaned);
+        // Try to extract site name as author
+        const hostname = urlObj.hostname.replace('www.', '');
+        const siteName = hostname.split('.')[0]?.replace(/\b\w/g, (c) => c.toUpperCase());
+        if (siteName && !author.trim()) setAuthor(siteName);
+        if (!resourceType || resourceType === 'website') setResourceType('other');
+        setIsAutoFilling(false);
+        return;
+      }
+
+      if (isYouTube) {
+        // YouTube: use oEmbed for richer data (title, author, thumbnail, AI notes)
+        const meta = await fetchYouTubeMetadata(url.trim(), {
+          interestName: interestName || undefined,
+        });
+        if (meta) {
+          if (meta.title && !title.trim()) setTitle(meta.title);
+          if (meta.author) setAuthor(meta.author);
+          if (meta.description) setDescription(meta.description);
+        } else {
+          showAlert('Could Not Extract', 'Unable to fetch video metadata. You can fill in the fields manually.');
+        }
       } else {
-        showAlert('Could Not Extract', 'Unable to fetch video metadata. You can fill in the fields manually.');
+        // Generic: extract Open Graph / meta tags from any URL
+        const meta = await fetchUrlMetadata(url.trim());
+        if (meta) {
+          if (meta.title && !title.trim()) setTitle(meta.title);
+          if (meta.author && !author.trim()) setAuthor(meta.author);
+          if (meta.description && !description.trim()) setDescription(meta.description);
+        } else {
+          showAlert('Could Not Extract', 'Unable to fetch page metadata. You can fill in the fields manually.');
+        }
       }
     } catch (err: any) {
       showAlert('Auto-fill Failed', err?.message || 'Something went wrong.');
     } finally {
       setIsAutoFilling(false);
     }
-  }, [url, title, interestName]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- isYouTube derives from detectedPlatform
+  }, [url, title, author, description, interestName, isYouTube, resourceType]);
 
   // Course-specific state
   const [courseModules, setCourseModules] = useState<CourseModule[]>([]);
@@ -216,25 +255,26 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {detectedPlatform && (
+            {(detectedPlatform || url.trim().startsWith('http')) && (
               <View style={styles.detectedRow}>
-                <Text style={styles.detectedPlatform}>Detected: {detectedPlatform}</Text>
-                {isYouTube && (
-                  <Pressable
-                    style={styles.autoFillButton}
-                    onPress={handleAutoFill}
-                    disabled={isAutoFilling}
-                  >
-                    {isAutoFilling ? (
-                      <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
-                    ) : (
-                      <>
-                        <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
-                        <Text style={styles.autoFillText}>Auto-fill</Text>
-                      </>
-                    )}
-                  </Pressable>
+                {detectedPlatform && (
+                  <Text style={styles.detectedPlatform}>Detected: {detectedPlatform}</Text>
                 )}
+                {!detectedPlatform && <View />}
+                <Pressable
+                  style={styles.autoFillButton}
+                  onPress={handleAutoFill}
+                  disabled={isAutoFilling}
+                >
+                  {isAutoFilling ? (
+                    <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+                  ) : (
+                    <>
+                      <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
+                      <Text style={styles.autoFillText}>Auto-fill</Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
             )}
           </View>

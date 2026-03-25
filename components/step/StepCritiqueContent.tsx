@@ -32,9 +32,13 @@ import { createStep } from '@/services/TimelineStepService';
 import { generateCritiqueInsight, gatherEnrichedContext } from '@/services/ai/StepPlanAIService';
 import { markLessonCompleted } from '@/services/LibraryService';
 import { syncStepReviewRatings } from '@/services/SkillGoalService';
+import * as competencyService from '@/services/competencyService';
+import { useCompetenciesForInterest } from '@/hooks/useCompetencies';
 import { useQueryClient } from '@tanstack/react-query';
 import type { StepReviewData, StepActData, StepPlanData, StepMetadata, BrainDumpData } from '@/types/step-detail';
+import type { Competency } from '@/types/competency';
 import { ShareStepSheet } from '@/components/step/ShareStepSheet';
+import { InstructorAssessmentSection } from '@/components/step/InstructorAssessmentSection';
 
 // ---------------------------------------------------------------------------
 // Design tokens from Pencil Critique Tab
@@ -134,6 +138,64 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
   return (
     <View style={s.progressBarTrack}>
       <View style={[s.progressBarFill, { width: `${pct * 100}%`, backgroundColor: color }]} />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Instructor "Suggest Next Step" sub-component
+// ---------------------------------------------------------------------------
+
+function InstructorSuggestNext({
+  stepId,
+  existingSuggestion,
+}: {
+  stepId: string;
+  existingSuggestion?: string;
+}) {
+  const updateMetadata = useUpdateStepMetadata(stepId);
+  const { data: step } = useStepDetail(stepId);
+  const [suggestion, setSuggestion] = useState(existingSuggestion ?? '');
+  const [saved, setSaved] = useState(Boolean(existingSuggestion));
+
+  const handleSave = useCallback(() => {
+    if (!suggestion.trim() || !step) return;
+    const metadata = (step.metadata ?? {}) as any;
+    updateMetadata.mutate(
+      {
+        review: {
+          ...(metadata.review ?? {}),
+          instructor_suggested_next: suggestion.trim(),
+        },
+      },
+      { onSuccess: () => setSaved(true) },
+    );
+  }, [suggestion, step, updateMetadata]);
+
+  return (
+    <View style={s.sectionWrap}>
+      <SectionLabel>SUGGEST NEXT STEP</SectionLabel>
+      <TextInput
+        style={s.inputBox}
+        value={suggestion}
+        onChangeText={(text) => { setSuggestion(text); setSaved(false); }}
+        placeholder="Suggest what the student should work on next..."
+        placeholderTextColor={C.labelLight}
+        multiline
+        textAlignVertical="top"
+      />
+      {suggestion.trim() && !saved && (
+        <Pressable style={s.suggestSaveButton} onPress={handleSave}>
+          <Ionicons name="paper-plane-outline" size={16} color="#FFFFFF" />
+          <Text style={s.suggestSaveText}>Save Suggestion</Text>
+        </Pressable>
+      )}
+      {saved && (
+        <View style={s.suggestSavedBadge}>
+          <Ionicons name="checkmark-circle" size={14} color={C.accent} />
+          <Text style={s.suggestSavedText}>Suggestion saved — student will see this</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -241,6 +303,27 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
     [debouncedSaveReview],
   );
 
+  // Sub-step summary
+  const subSteps = planData.how_sub_steps ?? [];
+  const subStepProgress = actData.sub_step_progress ?? {};
+  const completedCount = subSteps.filter((ss) => subStepProgress[ss.id]).length;
+
+  // Capability goals (free-text + structured competencies)
+  const competencyIds = planData.competency_ids ?? [];
+  const { data: allCompetencies } = useCompetenciesForInterest(step?.interest_id);
+  const mappedCompetencies = React.useMemo(() => {
+    if (!allCompetencies || competencyIds.length === 0) return [];
+    return competencyIds
+      .map((id) => allCompetencies.find((c: Competency) => c.id === id))
+      .filter((c): c is Competency => Boolean(c));
+  }, [allCompetencies, competencyIds]);
+  // Merge structured competency titles into capability goals for the rating UI
+  const structuredCompTitles = mappedCompetencies.map((c) => c.title);
+  const capabilityGoals = [
+    ...(planData.capability_goals ?? []),
+    ...structuredCompTitles.filter((t) => !(planData.capability_goals ?? []).includes(t)),
+  ];
+
   // Complete / save review
   const handleSaveReview = useCallback(() => {
     updateStep.mutate(
@@ -256,20 +339,25 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
           if (user?.id && resolvedInterestId && Object.keys(localCapabilityRatings).length > 0) {
             syncStepReviewRatings(user.id, resolvedInterestId, localCapabilityRatings).catch(() => {});
           }
+          // Auto-log competency attempts for each mapped competency
+          if (user?.id && mappedCompetencies.length > 0) {
+            for (const comp of mappedCompetencies) {
+              const dotRating = localCapabilityRatings[comp.title] ?? 0;
+              const selfRating = dotRating >= 4 ? 'confident' : dotRating >= 3 ? 'proficient' : dotRating >= 2 ? 'developing' : 'needs_practice';
+              competencyService.logAttempt(user.id, {
+                competency_id: comp.id,
+                self_rating: selfRating as any,
+                self_notes: localWentWell || undefined,
+                clinical_context: step?.title,
+              }).catch((err) => console.warn('[StepCritique] Failed to log competency attempt:', err));
+            }
+          }
         },
       },
     );
-  }, [stepId, updateStep, step, user?.id, currentInterest?.id, localCapabilityRatings]);
+  }, [stepId, updateStep, step, user?.id, currentInterest?.id, localCapabilityRatings, mappedCompetencies, localWentWell]);
 
   const isCompleted = step?.status === 'completed';
-
-  // Sub-step summary
-  const subSteps = planData.how_sub_steps ?? [];
-  const subStepProgress = actData.sub_step_progress ?? {};
-  const completedCount = subSteps.filter((ss) => subStepProgress[ss.id]).length;
-
-  // Capability goals
-  const capabilityGoals = planData.capability_goals ?? [];
 
   // --- AI Insight ---
   const [aiInsight, setAiInsight] = useState('');
@@ -285,7 +373,7 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
       const resolvedInterestId = step.interest_id || currentInterest?.id;
       const enriched = resolvedInterestId
         ? await gatherEnrichedContext(user.id, resolvedInterestId)
-        : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [] };
+        : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [], libraryResources: [] };
 
       const text = await generateCritiqueInsight({
         interestName: currentInterest?.name || 'this interest',
@@ -488,40 +576,85 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
         />
       </View>
 
-      {/* ── AI FEEDBACK ── */}
-      <View style={s.sectionWrap}>
-        <SectionLabel>AI FEEDBACK</SectionLabel>
-        {aiInsight ? (
-          <View style={s.aiCard}>
-            <View style={s.aiCardHeader}>
-              <Ionicons name="sparkles" size={18} color={C.accent} />
-              <Text style={s.aiCardTitle}>Session Analysis</Text>
-            </View>
-            <Text style={s.aiBody}>{aiInsight}</Text>
-            {aiSuggestion !== '' && (
-              <View style={s.aiSuggestionPill}>
-                <Ionicons name="bulb-outline" size={16} color={C.gold} />
-                <Text style={s.aiSuggestionText}>{aiSuggestion}</Text>
+      {/* ── AI FEEDBACK ── (hidden for read-only / non-owners) */}
+      {!readOnly && (
+        <View style={s.sectionWrap}>
+          <SectionLabel>AI FEEDBACK</SectionLabel>
+          {aiInsight ? (
+            <View style={s.aiCard}>
+              <View style={s.aiCardHeader}>
+                <Ionicons name="sparkles" size={18} color={C.accent} />
+                <Text style={s.aiCardTitle}>Session Analysis</Text>
               </View>
-            )}
+              <Text style={s.aiBody}>{aiInsight}</Text>
+              {aiSuggestion !== '' && (
+                <View style={s.aiSuggestionPill}>
+                  <Ionicons name="bulb-outline" size={16} color={C.gold} />
+                  <Text style={s.aiSuggestionText}>{aiSuggestion}</Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <Pressable
+              style={[s.aiTrigger, aiLoading && { opacity: 0.7 }]}
+              onPress={handleAiInsight}
+              disabled={aiLoading}
+            >
+              {aiLoading ? (
+                <ActivityIndicator size="small" color={C.accent} />
+              ) : (
+                <Ionicons name="sparkles" size={16} color={C.accent} />
+              )}
+              <Text style={s.aiTriggerText}>
+                {aiLoading ? 'Analyzing...' : 'Analyze My Progress'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* ── INSTRUCTOR REVIEW STATUS (shown to student) ── */}
+      {!readOnly && reviewData.instructor_review_status && (
+        <View style={s.sectionWrap}>
+          <SectionLabel>INSTRUCTOR REVIEW</SectionLabel>
+          <View style={[
+            s.instructorReviewBanner,
+            reviewData.instructor_review_status === 'approved'
+              ? s.approvedBanner
+              : s.revisionBanner,
+          ]}>
+            <Ionicons
+              name={reviewData.instructor_review_status === 'approved' ? 'shield-checkmark' : 'refresh-circle'}
+              size={20}
+              color={reviewData.instructor_review_status === 'approved' ? C.accent : C.coral}
+            />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={[
+                s.instructorReviewStatusText,
+                { color: reviewData.instructor_review_status === 'approved' ? C.accent : C.coral },
+              ]}>
+                {reviewData.instructor_review_status === 'approved' ? 'Approved by Instructor' : 'Revision Requested'}
+              </Text>
+              {reviewData.instructor_review_note && (
+                <Text style={s.instructorReviewNote}>{reviewData.instructor_review_note}</Text>
+              )}
+            </View>
           </View>
-        ) : (
-          <Pressable
-            style={[s.aiTrigger, aiLoading && { opacity: 0.7 }]}
-            onPress={handleAiInsight}
-            disabled={aiLoading}
-          >
-            {aiLoading ? (
-              <ActivityIndicator size="small" color={C.accent} />
-            ) : (
-              <Ionicons name="sparkles" size={16} color={C.accent} />
-            )}
-            <Text style={s.aiTriggerText}>
-              {aiLoading ? 'Analyzing...' : 'Analyze My Progress'}
+        </View>
+      )}
+
+      {/* ── INSTRUCTOR SUGGESTION (shown to student) ── */}
+      {!readOnly && reviewData.instructor_suggested_next && (
+        <View style={s.sectionWrap}>
+          <SectionLabel>INSTRUCTOR SUGGESTION</SectionLabel>
+          <View style={s.instructorSuggestionCard}>
+            <Ionicons name="school-outline" size={16} color={C.accent} />
+            <Text style={s.instructorSuggestionText}>
+              {reviewData.instructor_suggested_next}
             </Text>
-          </Pressable>
-        )}
-      </View>
+          </View>
+        </View>
+      )}
 
       {/* ── NEXT SESSION NOTES ── */}
       <View style={s.sectionWrap}>
@@ -537,6 +670,24 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
           editable={!readOnly}
         />
       </View>
+
+      {/* ── INSTRUCTOR ASSESSMENT ── (for blueprint authors viewing student steps with competencies) */}
+      {readOnly && mappedCompetencies.length > 0 && (
+        <InstructorAssessmentSection
+          stepId={stepId}
+          competencies={mappedCompetencies}
+          studentSelfRatings={localCapabilityRatings}
+          existingAssessment={reviewData.instructor_assessment}
+        />
+      )}
+
+      {/* ── INSTRUCTOR SUGGESTED NEXT STEP ── */}
+      {readOnly && (
+        <InstructorSuggestNext
+          stepId={stepId}
+          existingSuggestion={reviewData.instructor_suggested_next}
+        />
+      )}
 
       {/* ── BUTTONS ── (hidden for collaborators) */}
       {readOnly ? null : !isCompleted ? (
@@ -891,5 +1042,77 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: C.accent,
+  },
+
+  // Instructor suggestion (shown to student)
+  instructorReviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: C.radius,
+    padding: 14,
+    borderWidth: 1,
+  },
+  approvedBanner: {
+    backgroundColor: 'rgba(61,138,90,0.06)',
+    borderColor: 'rgba(61,138,90,0.2)',
+  },
+  revisionBanner: {
+    backgroundColor: 'rgba(216,149,117,0.06)',
+    borderColor: 'rgba(216,149,117,0.2)',
+  },
+  instructorReviewStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  instructorReviewNote: {
+    fontSize: 13,
+    color: C.labelMid,
+    lineHeight: 18,
+  },
+  instructorSuggestionCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: 'rgba(61,138,90,0.06)',
+    borderRadius: C.radius,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.accentGlow,
+  },
+  instructorSuggestionText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 20,
+    color: C.labelDark,
+    fontWeight: '500',
+  },
+
+  // Instructor "Suggest Next Step" (in readOnly mode)
+  suggestSaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: C.accent,
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  suggestSaveText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  suggestSavedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  suggestSavedText: {
+    fontSize: 12,
+    color: C.accent,
+    fontWeight: '500',
   },
 });

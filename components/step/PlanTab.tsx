@@ -3,13 +3,14 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { PlanQuestionCard } from './PlanQuestionCard';
 import { SubStepEditor } from './SubStepEditor';
+import { BrainDumpEntry } from './BrainDumpEntry';
 import { ResourcePicker } from '@/components/library/ResourcePicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
 import { getResourcesByIds } from '@/services/LibraryService';
@@ -18,8 +19,12 @@ import { DateEnrichmentCard } from './DateEnrichmentCard';
 import { createStep } from '@/services/TimelineStepService';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
-import type { StepPlanData, SubStep, CrossInterestSuggestion } from '@/types/step-detail';
+import type { StepPlanData, StepCollaborator, StepLocation, SubStep, CrossInterestSuggestion, BrainDumpData } from '@/types/step-detail';
 import type { LibraryResourceRecord } from '@/types/library';
+import type { Competency } from '@/types/competency';
+import { useCompetenciesForInterest } from '@/hooks/useCompetencies';
+import { CollaboratorPicker } from './CollaboratorPicker';
+import { LocationMapPicker as LocationMapPickerModal } from '@/components/races/LocationMapPicker';
 import { Linking } from 'react-native';
 
 interface PlanTabProps {
@@ -29,13 +34,30 @@ interface PlanTabProps {
   onUpdate: (data: Partial<StepPlanData>) => void;
   onNextTab?: () => void;
   readOnly?: boolean;
+  footer?: React.ReactNode;
+  /** Brain dump integration — shown as collapsible section at top */
+  brainDumpData?: BrainDumpData;
+  onBrainDumpChange?: (dump: BrainDumpData) => void;
+  onStructureWithAI?: (dump: BrainDumpData) => void;
+  onSkipToPlan?: (dump: BrainDumpData) => void;
+  isStructuring?: boolean;
+  hasPlanContent?: boolean;
+  interestSlug?: string;
 }
 
-export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, readOnly }: PlanTabProps) {
+export function PlanTab({
+  stepId, planData, interestId, onUpdate, onNextTab, readOnly, footer,
+  brainDumpData, onBrainDumpChange, onStructureWithAI, onSkipToPlan,
+  isStructuring, hasPlanContent, interestSlug,
+}: PlanTabProps) {
   const { user } = useAuth();
   const { userInterests } = useInterest();
   const [showResourcePicker, setShowResourcePicker] = useState(false);
+  const [showCollaboratorPicker, setShowCollaboratorPicker] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
+  const { data: availableCompetencies } = useCompetenciesForInterest(interestId);
+  const [competencySearch, setCompetencySearch] = useState('');
 
   // Load linked resources on mount and when IDs change
   const linkedIds = planData.linked_resource_ids ?? [];
@@ -64,10 +86,37 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, rea
     onUpdate({ how_sub_steps: subSteps });
   }, [onUpdate]);
 
+  const collaborators = planData.collaborators ?? [];
+  const existingCollaboratorIds = useMemo(
+    () => new Set(collaborators.map((c) => c.user_id ?? c.id)),
+    [collaborators]
+  );
+
+  const handleAddCollaborator = useCallback((collab: StepCollaborator) => {
+    const updated = [...(planData.collaborators ?? []), collab];
+    const legacyNames = updated.map((c) => c.display_name);
+    onUpdate({ collaborators: updated, who_collaborators: legacyNames });
+  }, [planData.collaborators, onUpdate]);
+
+  const handleRemoveCollaborator = useCallback((collabId: string) => {
+    const updated = (planData.collaborators ?? []).filter((c) => c.id !== collabId);
+    const legacyNames = updated.map((c) => c.display_name);
+    onUpdate({ collaborators: updated, who_collaborators: legacyNames });
+  }, [planData.collaborators, onUpdate]);
+
+  const handleLocationChange = useCallback((location: StepLocation | undefined) => {
+    onUpdate({ where_location: location });
+  }, [onUpdate]);
+
+  // Brain dump visibility — expanded by default when plan is empty, collapsed when has content
+  const showBrainDump = Boolean(brainDumpData !== undefined && onStructureWithAI);
+  const [brainDumpExpanded, setBrainDumpExpanded] = useState(!hasPlanContent);
+
   const q1Complete = Boolean(planData.what_will_you_do?.trim() || linkedIds.length > 0);
   const q2Complete = Boolean(planData.how_sub_steps?.length && planData.how_sub_steps.some((s) => s.text.trim()));
   const q3Complete = Boolean(planData.why_reasoning?.trim());
-  const q4Complete = Boolean(planData.who_collaborators?.length && planData.who_collaborators.some((c) => c.trim()));
+  const q4Complete = Boolean(collaborators.length > 0 || (planData.who_collaborators?.length && planData.who_collaborators.some((c) => c.trim())));
+  const q5Complete = Boolean(planData.where_location?.name?.trim());
 
   return (
     <ScrollView
@@ -76,6 +125,45 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, rea
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
+      {/* Brain dump section — collapsible at top */}
+      {showBrainDump && (
+        <View style={styles.brainDumpSection}>
+          <Pressable
+            style={styles.brainDumpHeader}
+            onPress={() => setBrainDumpExpanded((prev) => !prev)}
+          >
+            <Ionicons
+              name="bulb"
+              size={18}
+              color={STEP_COLORS.accent}
+            />
+            <Text style={styles.brainDumpHeaderText}>Quick Capture</Text>
+            {brainDumpData?.raw_text?.trim() && (
+              <View style={styles.brainDumpBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={STEP_COLORS.accent} />
+              </View>
+            )}
+            <Ionicons
+              name={brainDumpExpanded ? 'chevron-up' : 'chevron-down'}
+              size={16}
+              color={STEP_COLORS.secondaryLabel}
+              style={{ marginLeft: 'auto' }}
+            />
+          </Pressable>
+          {brainDumpExpanded && (
+            <BrainDumpEntry
+              initialData={brainDumpData}
+              onSkipToPlan={onSkipToPlan!}
+              onStructureWithAI={onStructureWithAI!}
+              onDraftChange={onBrainDumpChange}
+              isStructuring={isStructuring}
+              interestSlug={interestSlug}
+              embedded
+            />
+          )}
+        </View>
+      )}
+
       {/* Q1: What will you do? */}
       <PlanQuestionCard
         icon="bulb-outline"
@@ -169,20 +257,185 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, rea
         title="Who will you do this with?"
         isComplete={q4Complete}
       >
+        {/* Collaborator pills */}
+        {collaborators.length > 0 && (
+          <View style={styles.chipContainer}>
+            {collaborators.map((collab) => (
+              <View
+                key={collab.id}
+                style={[
+                  styles.collaboratorChip,
+                  collab.type === 'platform' ? styles.collaboratorChipLinked : styles.collaboratorChipExternal,
+                ]}
+              >
+                {collab.type === 'platform' ? (
+                  <View
+                    style={[
+                      styles.collabAvatar,
+                      { backgroundColor: collab.avatar_color || IOS_COLORS.systemGray5 },
+                    ]}
+                  >
+                    {collab.avatar_emoji ? (
+                      <Text style={styles.collabAvatarEmoji}>{collab.avatar_emoji}</Text>
+                    ) : (
+                      <Ionicons name="person" size={10} color="#FFFFFF" />
+                    )}
+                  </View>
+                ) : (
+                  <Ionicons name="person-outline" size={12} color={STEP_COLORS.accent} />
+                )}
+                <Text style={styles.chipText} numberOfLines={1}>{collab.display_name}</Text>
+                {collab.type === 'platform' && (
+                  <Ionicons name="checkmark-circle" size={12} color={STEP_COLORS.accent} />
+                )}
+                {!readOnly && (
+                  <Pressable onPress={() => handleRemoveCollaborator(collab.id)} hitSlop={6}>
+                    <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                  </Pressable>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+
+        {!readOnly && (
+          <Pressable
+            style={styles.addPeopleButton}
+            onPress={() => setShowCollaboratorPicker(true)}
+          >
+            <Ionicons name="person-add-outline" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.addLibraryText}>Add people</Text>
+          </Pressable>
+        )}
+      </PlanQuestionCard>
+
+      {/* Q5: Where will you do this? */}
+      <PlanQuestionCard
+        icon="location-outline"
+        title="Where will you do this?"
+        isComplete={q5Complete}
+      >
         <TextInput
-          style={[styles.textArea, readOnly && styles.readOnlyInput]}
-          value={(planData.who_collaborators ?? []).join('\n')}
+          style={[styles.textArea, { minHeight: 44 }, readOnly && styles.readOnlyInput]}
+          value={planData.where_location?.name ?? ''}
           onChangeText={readOnly ? undefined : (text) => {
-            const names = text.split('\n');
-            onUpdate({ who_collaborators: names });
+            if (!text.trim()) {
+              handleLocationChange(undefined);
+            } else {
+              handleLocationChange({
+                ...(planData.where_location ?? { name: '' }),
+                name: text,
+              });
+            }
           }}
-          placeholder={readOnly ? '' : "List people (one per line)..."}
+          placeholder={readOnly ? '' : "Location, venue, or address..."}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
-          multiline
-          textAlignVertical="top"
           editable={!readOnly}
         />
+
+        {/* Map preview when coordinates are set */}
+        {planData.where_location?.lat != null && planData.where_location?.lng != null && (
+          <View style={styles.mapPreview}>
+            <View style={styles.mapPreviewPin}>
+              <Ionicons name="location" size={20} color={STEP_COLORS.accent} />
+              <Text style={styles.mapPreviewCoords}>
+                {planData.where_location.lat.toFixed(4)}, {planData.where_location.lng.toFixed(4)}
+              </Text>
+            </View>
+            {!readOnly && (
+              <Pressable
+                onPress={() => handleLocationChange({
+                  ...planData.where_location!,
+                  lat: undefined,
+                  lng: undefined,
+                })}
+                hitSlop={6}
+              >
+                <Ionicons name="close-circle" size={18} color={IOS_COLORS.systemGray3} />
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {!readOnly && (
+          <Pressable
+            style={styles.addPeopleButton}
+            onPress={() => setShowLocationPicker(true)}
+          >
+            <Ionicons name="map-outline" size={18} color={STEP_COLORS.accent} />
+            <Text style={styles.addLibraryText}>Pick on map</Text>
+          </Pressable>
+        )}
       </PlanQuestionCard>
+
+      {/* Q5: Competencies */}
+      {(availableCompetencies ?? []).length > 0 && (
+        <PlanQuestionCard
+          icon="school-outline"
+          title="Competencies"
+          isComplete={Boolean(planData.competency_ids?.length)}
+        >
+          {/* Selected competency pills */}
+          {(planData.competency_ids ?? []).length > 0 && (
+            <View style={styles.chipContainer}>
+              {(planData.competency_ids ?? []).map((compId) => {
+                const comp = (availableCompetencies ?? []).find((c: Competency) => c.id === compId);
+                if (!comp) return null;
+                return (
+                  <View key={compId} style={styles.resourceChip}>
+                    <Text style={styles.chipText} numberOfLines={1}>{comp.title}</Text>
+                    {!readOnly && (
+                      <Pressable
+                        onPress={() => {
+                          const updated = (planData.competency_ids ?? []).filter((id) => id !== compId);
+                          onUpdate({ competency_ids: updated });
+                        }}
+                        hitSlop={6}
+                      >
+                        <Ionicons name="close-circle" size={16} color={IOS_COLORS.systemGray3} />
+                      </Pressable>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Searchable competency list — only when editing */}
+          {!readOnly && (
+            <View style={styles.competencyPickerWrap}>
+              <TextInput
+                style={styles.competencySearchInput}
+                value={competencySearch}
+                onChangeText={setCompetencySearch}
+                placeholder="Search competencies..."
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+              />
+              {(availableCompetencies ?? [])
+                .filter((c: Competency) =>
+                  !(planData.competency_ids ?? []).includes(c.id) &&
+                  (!competencySearch.trim() ||
+                    c.title.toLowerCase().includes(competencySearch.toLowerCase()))
+                )
+                .slice(0, 8)
+                .map((comp: Competency) => (
+                  <Pressable
+                    key={comp.id}
+                    style={styles.competencyOption}
+                    onPress={() => {
+                      const existing = planData.competency_ids ?? [];
+                      onUpdate({ competency_ids: [...existing, comp.id] });
+                      setCompetencySearch('');
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={16} color={STEP_COLORS.accent} />
+                    <Text style={styles.competencyOptionText} numberOfLines={1}>{comp.title}</Text>
+                  </Pressable>
+                ))}
+            </View>
+          )}
+        </PlanQuestionCard>
+      )}
 
       {/* Conditions card (wind, tide, rig/sail) */}
       {planData.date_enrichment && (
@@ -240,6 +493,8 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, rea
         </View>
       )}
 
+      {footer}
+
       {/* Resource picker modal */}
       {!readOnly && (
         <ResourcePicker
@@ -248,6 +503,36 @@ export function PlanTab({ stepId, planData, interestId, onUpdate, onNextTab, rea
           onSelect={handleSelectResources}
           onClose={() => setShowResourcePicker(false)}
           excludeIds={linkedIds}
+        />
+      )}
+
+      {/* Collaborator picker modal */}
+      {!readOnly && (
+        <CollaboratorPicker
+          visible={showCollaboratorPicker}
+          onClose={() => setShowCollaboratorPicker(false)}
+          onAdd={(collab) => {
+            handleAddCollaborator(collab);
+          }}
+          existingIds={existingCollaboratorIds}
+        />
+      )}
+
+      {/* Location map picker modal */}
+      {!readOnly && showLocationPicker && (
+        <LocationMapPickerModal
+          visible={showLocationPicker}
+          onClose={() => setShowLocationPicker(false)}
+          onSelectLocation={(loc) => {
+            handleLocationChange({ name: loc.name, lat: loc.lat, lng: loc.lng });
+            setShowLocationPicker(false);
+          }}
+          initialLocation={
+            planData.where_location?.lat != null && planData.where_location?.lng != null
+              ? { lat: planData.where_location.lat, lng: planData.where_location.lng }
+              : null
+          }
+          initialName={planData.where_location?.name}
         />
       )}
     </ScrollView>
@@ -261,6 +546,29 @@ const styles = StyleSheet.create({
   content: {
     padding: IOS_SPACING.md,
     paddingBottom: 100,
+  },
+  brainDumpSection: {
+    backgroundColor: STEP_COLORS.headerBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: STEP_COLORS.border,
+    marginBottom: IOS_SPACING.md,
+    overflow: 'hidden',
+  },
+  brainDumpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingVertical: IOS_SPACING.sm,
+  },
+  brainDumpHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: STEP_COLORS.label,
+  },
+  brainDumpBadge: {
+    marginLeft: 4,
   },
   textArea: {
     fontSize: 14,
@@ -347,5 +655,85 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderColor: 'transparent',
     color: STEP_COLORS.secondaryLabel,
+  },
+  competencyPickerWrap: {
+    gap: 4,
+    marginTop: IOS_SPACING.xs,
+  },
+  competencySearchInput: {
+    fontSize: 13,
+    color: STEP_COLORS.label,
+    backgroundColor: STEP_COLORS.pageBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: STEP_COLORS.border,
+    padding: IOS_SPACING.xs,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as any,
+    }),
+  },
+  collaboratorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    maxWidth: '100%',
+  },
+  collaboratorChipLinked: {
+    backgroundColor: STEP_COLORS.accentLight,
+  },
+  collaboratorChipExternal: {
+    backgroundColor: IOS_COLORS.systemGray6,
+  },
+  collabAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collabAvatarEmoji: {
+    fontSize: 10,
+  },
+  addPeopleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.xs,
+    marginTop: IOS_SPACING.sm,
+    paddingVertical: IOS_SPACING.xs,
+  },
+  mapPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: STEP_COLORS.accentLight,
+    borderRadius: 8,
+    paddingHorizontal: IOS_SPACING.sm,
+    paddingVertical: 8,
+    marginTop: IOS_SPACING.xs,
+  },
+  mapPreviewPin: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mapPreviewCoords: {
+    fontSize: 12,
+    color: STEP_COLORS.secondaryLabel,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  competencyOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  competencyOptionText: {
+    fontSize: 13,
+    color: STEP_COLORS.label,
+    flex: 1,
   },
 });

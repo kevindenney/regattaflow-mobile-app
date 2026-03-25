@@ -17,6 +17,7 @@ import {
   Modal,
   Platform,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
@@ -24,8 +25,13 @@ import { useOrganization } from '@/providers/OrganizationProvider';
 import {
   useCreateBlueprint,
   useUpdateBlueprint,
+  useBlueprintSteps,
+  useSetBlueprintSteps,
 } from '@/hooks/useBlueprint';
+import { useMyTimeline } from '@/hooks/useTimelineSteps';
 import { generateBlueprintSlug } from '@/services/BlueprintService';
+import { useOrgPrograms, useProgramCapabilityCount } from '@/hooks/usePrograms';
+import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import type { BlueprintRecord, BlueprintAccessLevel } from '@/types/blueprint';
 
 const C = {
@@ -49,7 +55,9 @@ interface PublishBlueprintSheetProps {
   onClose: () => void;
   interestId: string;
   interestName: string;
-  /** Existing blueprint for this interest (edit mode) */
+  /** Existing blueprints for this interest (edit mode when one is selected) */
+  existingBlueprints?: BlueprintRecord[];
+  /** Specific blueprint to edit (when selected from list) */
   existingBlueprint?: BlueprintRecord | null;
 }
 
@@ -58,6 +66,7 @@ export function PublishBlueprintSheet({
   onClose,
   interestId,
   interestName,
+  existingBlueprints = [],
   existingBlueprint,
 }: PublishBlueprintSheetProps) {
   const { user } = useAuth();
@@ -69,8 +78,54 @@ export function PublishBlueprintSheet({
   const [description, setDescription] = useState('');
   const [slug, setSlug] = useState('');
   const [publishAs, setPublishAs] = useState<'individual' | string>('individual');
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
   const [accessLevel, setAccessLevel] = useState<BlueprintAccessLevel>('public');
-  const isEditing = !!existingBlueprint;
+  const [justPublished, setJustPublished] = useState(false);
+  const [selectedBlueprint, setSelectedBlueprint] = useState<BlueprintRecord | null>(existingBlueprint ?? null);
+  const activeBlueprint = selectedBlueprint;
+  const isEditing = !!activeBlueprint;
+  const [showBlueprintPicker, setShowBlueprintPicker] = useState(false);
+  const [showStepCurator, setShowStepCurator] = useState(false);
+  const [curatingBlueprintId, setCuratingBlueprintId] = useState<string | null>(null);
+
+  // Step curation data
+  const { data: mySteps } = useMyTimeline(interestId);
+  const { data: curatedSteps } = useBlueprintSteps(curatingBlueprintId);
+  const setBlueprintSteps = useSetBlueprintSteps();
+  const [selectedStepIds, setSelectedStepIds] = useState<Set<string>>(new Set());
+
+  // Sync selected step IDs when curated steps load
+  useEffect(() => {
+    if (curatedSteps && curatedSteps.length > 0) {
+      setSelectedStepIds(new Set(curatedSteps.map((s) => s.id)));
+    } else if (mySteps && curatingBlueprintId) {
+      // Default: select all non-private steps
+      setSelectedStepIds(new Set(mySteps.filter((s) => s.visibility !== 'private').map((s) => s.id)));
+    }
+  }, [curatedSteps, mySteps, curatingBlueprintId]);
+
+  const toggleStepSelection = useCallback((stepId: string) => {
+    setSelectedStepIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
+      return next;
+    });
+  }, []);
+
+  const handleSaveStepCuration = useCallback(async () => {
+    if (!curatingBlueprintId) return;
+    try {
+      await setBlueprintSteps.mutateAsync({
+        blueprintId: curatingBlueprintId,
+        stepIds: Array.from(selectedStepIds),
+      });
+      setShowStepCurator(false);
+      setCuratingBlueprintId(null);
+    } catch (err: any) {
+      showAlert('Save Failed', err?.message || 'Could not save step selection.');
+    }
+  }, [curatingBlueprintId, selectedStepIds, setBlueprintSteps]);
 
   // Filter to orgs where user has a manager role
   const managerOrgs = memberships.filter(
@@ -80,28 +135,48 @@ export function PublishBlueprintSheet({
       m.organization,
   );
 
+  // Reset state when sheet visibility changes
   useEffect(() => {
-    if (existingBlueprint) {
-      setTitle(existingBlueprint.title);
-      setDescription(existingBlueprint.description ?? '');
-      setSlug(existingBlueprint.slug);
-      setPublishAs(existingBlueprint.organization_id ?? 'individual');
-      setAccessLevel(existingBlueprint.access_level ?? 'public');
+    if (visible) {
+      setJustPublished(false);
+      setShowStepCurator(false);
+      setCuratingBlueprintId(null);
+      setSelectedBlueprint(existingBlueprint ?? null);
+      // Show picker if user has existing blueprints and no specific one pre-selected
+      setShowBlueprintPicker(!existingBlueprint && existingBlueprints.length > 0);
+    }
+  }, [visible, existingBlueprint, existingBlueprints.length]);
+
+  useEffect(() => {
+    if (justPublished) return; // Don't overwrite success state
+    if (activeBlueprint) {
+      setTitle(activeBlueprint.title);
+      setDescription(activeBlueprint.description ?? '');
+      setSlug(activeBlueprint.slug);
+      setPublishAs(activeBlueprint.organization_id ?? 'individual');
+      setSelectedProgramId(activeBlueprint.program_id ?? null);
+      setAccessLevel(activeBlueprint.access_level ?? 'public');
     } else {
       const defaultTitle = `${interestName} Blueprint`;
       setTitle(defaultTitle);
       setDescription('');
       setPublishAs('individual');
+      setSelectedProgramId(null);
       setAccessLevel('public');
       setSlug(generateBlueprintSlug(user?.user_metadata?.display_name ?? 'user', interestName));
     }
-  }, [existingBlueprint, interestName, user, visible]);
+  }, [activeBlueprint, interestName, user, visible, justPublished]);
 
   const selectedOrgId = publishAs !== 'individual' ? publishAs : null;
 
-  // Update slug when publishAs changes
+  // Fetch programs for the selected org
+  const { data: orgPrograms } = useOrgPrograms(selectedOrgId);
+  const { data: capabilityCount } = useProgramCapabilityCount(selectedProgramId);
+
+  // Update slug and reset program when publishAs changes
   useEffect(() => {
     if (isEditing) return;
+    setSelectedProgramId(null);
     if (selectedOrgId) {
       const org = managerOrgs.find((m) => m.organization_id === selectedOrgId);
       const orgName = org?.organization?.name ?? 'org';
@@ -114,39 +189,51 @@ export function PublishBlueprintSheet({
   const handlePublish = useCallback(async () => {
     if (!user?.id || !title.trim()) return;
 
-    if (isEditing && existingBlueprint) {
-      await updateBlueprint.mutateAsync({
-        blueprintId: existingBlueprint.id,
-        updates: {
+    try {
+      let publishedId: string;
+      if (isEditing && activeBlueprint) {
+        await updateBlueprint.mutateAsync({
+          blueprintId: activeBlueprint.id,
+          updates: {
+            title: title.trim(),
+            description: description.trim() || null,
+            is_published: true,
+            organization_id: selectedOrgId || null,
+            program_id: selectedProgramId || null,
+            access_level: selectedOrgId ? accessLevel : 'public',
+          },
+        });
+        publishedId = activeBlueprint.id;
+      } else {
+        const created = await createBlueprint.mutateAsync({
+          user_id: user.id,
+          interest_id: interestId,
+          slug: slug.trim(),
           title: title.trim(),
           description: description.trim() || null,
           is_published: true,
+          organization_id: selectedOrgId,
+          program_id: selectedProgramId,
           access_level: selectedOrgId ? accessLevel : 'public',
-        },
-      });
-    } else {
-      await createBlueprint.mutateAsync({
-        user_id: user.id,
-        interest_id: interestId,
-        slug: slug.trim(),
-        title: title.trim(),
-        description: description.trim() || null,
-        is_published: true,
-        organization_id: selectedOrgId,
-        access_level: selectedOrgId ? accessLevel : 'public',
-      });
+        });
+        publishedId = created.id;
+      }
+      setCuratingBlueprintId(publishedId);
+      setJustPublished(true);
+    } catch (err: any) {
+      console.error('[PublishBlueprintSheet] Publish failed:', err);
+      showAlert('Publish Failed', err?.message || 'Something went wrong. Please try again.');
     }
-    onClose();
-  }, [user, title, description, slug, interestId, isEditing, existingBlueprint, createBlueprint, updateBlueprint, onClose, selectedOrgId, accessLevel]);
+  }, [user, title, description, slug, interestId, isEditing, activeBlueprint, createBlueprint, updateBlueprint, onClose, selectedOrgId, selectedProgramId, accessLevel]);
 
   const handleUnpublish = useCallback(async () => {
-    if (!existingBlueprint) return;
+    if (!activeBlueprint) return;
     await updateBlueprint.mutateAsync({
-      blueprintId: existingBlueprint.id,
+      blueprintId: activeBlueprint.id,
       updates: { is_published: false },
     });
     onClose();
-  }, [existingBlueprint, updateBlueprint, onClose]);
+  }, [activeBlueprint, updateBlueprint, onClose]);
 
   const handleShareLink = useCallback(async () => {
     const url = `${Platform.OS === 'web' ? window.location.origin : 'https://betterat.com'}/blueprint/${slug}`;
@@ -166,6 +253,178 @@ export function PublishBlueprintSheet({
         <View style={styles.handle} />
 
         <ScrollView showsVerticalScrollIndicator={false}>
+          {showStepCurator && curatingBlueprintId ? (
+            <View style={{ paddingVertical: 8 }}>
+              <View style={styles.header}>
+                <View style={styles.headerIcon}>
+                  <Ionicons name="checkmark-done" size={20} color={C.accent} />
+                </View>
+                <Text style={styles.headerTitle}>Curate Blueprint Steps</Text>
+                <Text style={styles.headerSubtitle}>
+                  Choose which steps subscribers will see in this blueprint
+                </Text>
+              </View>
+
+              {(mySteps ?? []).filter((s) => s.visibility !== 'private').map((step) => (
+                <Pressable
+                  key={step.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 12,
+                    borderWidth: 1,
+                    borderColor: selectedStepIds.has(step.id) ? C.accent : C.border,
+                    borderRadius: 10,
+                    marginBottom: 8,
+                    backgroundColor: selectedStepIds.has(step.id) ? C.accentBg : '#FFFFFF',
+                  }}
+                  onPress={() => toggleStepSelection(step.id)}
+                >
+                  <Ionicons
+                    name={selectedStepIds.has(step.id) ? 'checkbox' : 'square-outline'}
+                    size={20}
+                    color={selectedStepIds.has(step.id) ? C.accent : C.labelLight}
+                    style={{ marginRight: 10 }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '500', color: C.labelDark }}>{step.title}</Text>
+                    {step.description ? (
+                      <Text style={{ fontSize: 11, color: C.labelMid, marginTop: 2 }} numberOfLines={1}>
+                        {step.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={{
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 4,
+                    backgroundColor: step.status === 'completed' ? C.successBg : '#F5F5F4',
+                  }}>
+                    <Text style={{ fontSize: 10, color: step.status === 'completed' ? C.successText : C.labelMid, fontWeight: '500' }}>
+                      {step.status}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+
+              <Text style={{ fontSize: 11, color: C.labelMid, textAlign: 'center', marginBottom: 12 }}>
+                {selectedStepIds.size} of {(mySteps ?? []).filter((s) => s.visibility !== 'private').length} steps selected
+              </Text>
+
+              <Pressable
+                style={[styles.publishBtn, setBlueprintSteps.isPending && styles.publishBtnDisabled]}
+                onPress={handleSaveStepCuration}
+                disabled={setBlueprintSteps.isPending}
+              >
+                {setBlueprintSteps.isPending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                )}
+                <Text style={styles.publishBtnText}>
+                  {setBlueprintSteps.isPending ? 'Saving...' : 'Save Step Selection'}
+                </Text>
+              </Pressable>
+
+              <Pressable style={styles.cancelBtn} onPress={() => { setShowStepCurator(false); setCuratingBlueprintId(null); onClose(); }}>
+                <Text style={styles.cancelText}>Skip for now</Text>
+              </Pressable>
+            </View>
+          ) : justPublished ? (
+            <View style={styles.successState}>
+              <View style={styles.successIconWrap}>
+                <Ionicons name="checkmark-circle" size={48} color={C.successText} />
+              </View>
+              <Text style={styles.successTitle}>Blueprint Published!</Text>
+              <Text style={styles.successSubtitle}>
+                Your timeline is now subscribable{selectedOrgId ? ' under your organization' : ''}.
+              </Text>
+              <View style={styles.urlRow}>
+                <Text style={styles.urlPrefix}>betterat.com</Text>
+                <Text style={styles.urlSlug}>{blueprintUrl}</Text>
+                <Pressable style={styles.copyBtn} onPress={handleShareLink}>
+                  <Ionicons name="copy-outline" size={14} color={C.accent} />
+                </Pressable>
+              </View>
+
+              <Pressable
+                style={styles.publishBtn}
+                onPress={() => setShowStepCurator(true)}
+              >
+                <Ionicons name="checkmark-done-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.publishBtnText}>Curate Steps</Text>
+              </Pressable>
+              <Pressable style={styles.cancelBtn} onPress={onClose}>
+                <Text style={styles.cancelText}>Done</Text>
+              </Pressable>
+            </View>
+          ) : showBlueprintPicker ? (
+            <View style={{ paddingVertical: 8 }}>
+              <View style={styles.header}>
+                <View style={styles.headerIcon}>
+                  <Ionicons name="layers" size={20} color={C.accent} />
+                </View>
+                <Text style={styles.headerTitle}>Your {interestName} Blueprints</Text>
+                <Text style={styles.headerSubtitle}>
+                  Select a blueprint to edit, or create a new one
+                </Text>
+              </View>
+
+              {existingBlueprints.map((bp) => (
+                <Pressable
+                  key={bp.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 12,
+                    borderWidth: 1,
+                    borderColor: C.border,
+                    borderRadius: 10,
+                    marginBottom: 8,
+                    backgroundColor: bp.is_published ? C.successBg : '#FFFFFF',
+                  }}
+                  onPress={() => {
+                    setSelectedBlueprint(bp);
+                    setShowBlueprintPicker(false);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: C.labelDark }}>{bp.title}</Text>
+                    <Text style={{ fontSize: 11, color: C.labelMid, marginTop: 2 }}>
+                      {bp.is_published ? 'Published' : 'Draft'} · {bp.subscriber_count} subscriber{bp.subscriber_count !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={C.labelLight} />
+                </Pressable>
+              ))}
+
+              <Pressable
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderColor: C.accent,
+                  borderRadius: 10,
+                  borderStyle: 'dashed',
+                  marginTop: 4,
+                }}
+                onPress={() => setShowBlueprintPicker(false)}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={C.accent} />
+                <Text style={{ fontSize: 14, fontWeight: '600', color: C.accent }}>
+                  New Blueprint
+                </Text>
+              </Pressable>
+
+              <Pressable style={styles.cancelBtn} onPress={onClose}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : (
+          <>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerIcon}>
@@ -182,14 +441,14 @@ export function PublishBlueprintSheet({
           </View>
 
           {/* Published status */}
-          {isEditing && existingBlueprint?.is_published && (
+          {isEditing && activeBlueprint?.is_published && (
             <View style={styles.statusRow}>
               <View style={styles.statusBadge}>
                 <Ionicons name="checkmark-circle" size={12} color={C.successText} />
                 <Text style={styles.statusText}>Published</Text>
               </View>
               <Text style={styles.subscriberCount}>
-                {existingBlueprint.subscriber_count} subscriber{existingBlueprint.subscriber_count !== 1 ? 's' : ''}
+                {activeBlueprint!.subscriber_count} subscriber{activeBlueprint!.subscriber_count !== 1 ? 's' : ''}
               </Text>
             </View>
           )}
@@ -268,6 +527,50 @@ export function PublishBlueprintSheet({
             </View>
           )}
 
+          {/* Program Picker — shown when publishing under an org with programs */}
+          {selectedOrgId && orgPrograms && orgPrograms.length > 0 && (
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Program</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }} contentContainerStyle={{ paddingHorizontal: 4, gap: 6 }}>
+                <Pressable
+                  style={[styles.programChip, selectedProgramId === null && styles.programChipActive]}
+                  onPress={() => setSelectedProgramId(null)}
+                >
+                  <Text style={[styles.programChipText, selectedProgramId === null && styles.programChipTextActive]}>
+                    None
+                  </Text>
+                </Pressable>
+                {orgPrograms.map((prog) => (
+                  <Pressable
+                    key={prog.id}
+                    style={[styles.programChip, selectedProgramId === prog.id && styles.programChipActive]}
+                    onPress={() => {
+                      setSelectedProgramId(prog.id);
+                      if (!isEditing) setTitle(prog.title);
+                    }}
+                  >
+                    <Ionicons name="school-outline" size={12} color={selectedProgramId === prog.id ? C.accent : C.labelMid} />
+                    <Text
+                      style={[styles.programChipText, selectedProgramId === prog.id && styles.programChipTextActive]}
+                      numberOfLines={1}
+                    >
+                      {prog.title}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              {selectedProgramId && capabilityCount && (capabilityCount.competencies > 0 || capabilityCount.subCompetencies > 0) && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 }}>
+                  <Ionicons name="flash-outline" size={12} color={C.accent} />
+                  <Text style={{ fontSize: 11, color: C.accent }}>
+                    This program covers {capabilityCount.competencies} capabilities
+                    {capabilityCount.subCompetencies > 0 ? ` across ${capabilityCount.subCompetencies} sub-competencies` : ''}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Title */}
           <View style={styles.field}>
             <Text style={styles.fieldLabel}>Title</Text>
@@ -301,7 +604,7 @@ export function PublishBlueprintSheet({
             <View style={styles.urlRow}>
               <Text style={styles.urlPrefix}>betterat.com</Text>
               <Text style={styles.urlSlug}>{blueprintUrl}</Text>
-              {isEditing && existingBlueprint?.is_published && (
+              {isEditing && activeBlueprint?.is_published && (
                 <Pressable style={styles.copyBtn} onPress={handleShareLink}>
                   <Ionicons name="share-outline" size={14} color={C.accent} />
                 </Pressable>
@@ -313,34 +616,64 @@ export function PublishBlueprintSheet({
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={14} color={C.labelMid} />
             <Text style={styles.infoText}>
-              All your non-private steps for {interestName} will be visible to subscribers.
-              When you add new steps, subscribers will see them as suggestions they can adopt.
+              {isEditing
+                ? 'Subscribers see the steps you curate for this blueprint. You can manage which steps are included after publishing.'
+                : 'After publishing, you can curate which steps are included. By default, all your non-private steps for this interest will be visible.'}
             </Text>
           </View>
 
           {/* Actions */}
           <View style={styles.actions}>
             <Pressable
-              style={[styles.publishBtn, !title.trim() && styles.publishBtnDisabled]}
+              style={[styles.publishBtn, (!title.trim() || createBlueprint.isPending || updateBlueprint.isPending) && styles.publishBtnDisabled]}
               onPress={handlePublish}
               disabled={!title.trim() || createBlueprint.isPending || updateBlueprint.isPending}
             >
-              <Ionicons name="rocket-outline" size={16} color="#FFFFFF" />
+              {(createBlueprint.isPending || updateBlueprint.isPending) ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="rocket-outline" size={16} color="#FFFFFF" />
+              )}
               <Text style={styles.publishBtnText}>
-                {isEditing ? 'Save Changes' : 'Publish Blueprint'}
+                {(createBlueprint.isPending || updateBlueprint.isPending)
+                  ? 'Publishing...'
+                  : isEditing ? 'Save Changes' : 'Publish Blueprint'}
               </Text>
             </Pressable>
 
-            {isEditing && existingBlueprint?.is_published && (
-              <Pressable style={styles.unpublishBtn} onPress={handleUnpublish}>
-                <Text style={styles.unpublishText}>Unpublish</Text>
-              </Pressable>
+            {isEditing && activeBlueprint?.is_published && (
+              <>
+                <Pressable
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    borderWidth: 1,
+                    borderColor: C.accent,
+                    borderRadius: 10,
+                    paddingVertical: 11,
+                  }}
+                  onPress={() => {
+                    setCuratingBlueprintId(activeBlueprint.id);
+                    setShowStepCurator(true);
+                  }}
+                >
+                  <Ionicons name="checkmark-done-outline" size={16} color={C.accent} />
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: C.accent }}>Curate Steps</Text>
+                </Pressable>
+                <Pressable style={styles.unpublishBtn} onPress={handleUnpublish}>
+                  <Text style={styles.unpublishText}>Unpublish</Text>
+                </Pressable>
+              </>
             )}
 
             <Pressable style={styles.cancelBtn} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
           </View>
+          </>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -524,6 +857,30 @@ const styles = StyleSheet.create({
     gap: 6,
     flexWrap: 'wrap',
   },
+  programChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: '#FFFFFF',
+  },
+  programChipActive: {
+    borderColor: C.accent,
+    backgroundColor: C.accentBg,
+  },
+  programChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: C.labelMid,
+  },
+  programChipTextActive: {
+    color: C.accent,
+    fontWeight: '600',
+  },
   segmentBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -562,5 +919,24 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '600',
     color: C.labelLight,
+  },
+  successState: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 8,
+  },
+  successIconWrap: {
+    marginBottom: 4,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: C.labelDark,
+  },
+  successSubtitle: {
+    fontSize: 14,
+    color: C.labelMid,
+    textAlign: 'center',
+    marginBottom: 12,
   },
 });

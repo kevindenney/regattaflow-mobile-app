@@ -432,10 +432,12 @@ export interface CardContentProps {
   onMoveStepEarlier?: () => void;
   /** Callback to move a timeline step later */
   onMoveStepLater?: () => void;
-  /** Callback to move step to planned-next position */
+  /** Callback to mark step not done (back to pending) */
   onMoveStepToPlannedNext?: () => void;
-  /** Callback to move step to completed-most-recent position */
+  /** Callback to mark step done */
   onMoveStepToCompletedMostRecent?: () => void;
+  /** Callback to set or clear due date */
+  onSetDueDate?: (dateIso: string | null) => void;
   /** Callback when a next step is created from the review phase */
   onNextStepCreated?: (newStepId: string) => void;
 }

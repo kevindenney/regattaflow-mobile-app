@@ -16,9 +16,10 @@ interface ActTabProps {
   dateEnrichment?: DateEnrichment;
   onNextTab?: () => void;
   readOnly?: boolean;
+  footer?: React.ReactNode;
 }
 
-export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly }: ActTabProps) {
+export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer }: ActTabProps) {
   return (
     <ScrollView
       style={styles.container}
@@ -48,6 +49,7 @@ export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly }: ActTabPr
           </Pressable>
         </View>
       )}
+      {footer}
     </ScrollView>
   );
 }

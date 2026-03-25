@@ -596,6 +596,14 @@ export default function OrganizationAccessSettingsScreen() {
                   ? `${formatOrgType(activeOrganization?.organization_type)} • ${activeMembership.role} • ${activeMembership.is_verified ? 'Verified member' : 'Not verified'}`
                   : 'Select an organization workspace above.'}
               </Text>
+              {canManageActiveOrganization && (
+                <Pressable
+                  className="mt-3 py-2 px-4 bg-blue-600 rounded-lg self-start"
+                  onPress={() => router.push('/organization/members' as any)}
+                >
+                  <Text className="text-sm font-semibold text-white">Manage Members</Text>
+                </Pressable>
+              )}
             </View>
 
             <View className="mx-4 mt-4 bg-white rounded-2xl p-4 border border-gray-200">

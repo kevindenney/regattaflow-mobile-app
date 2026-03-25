@@ -49,6 +49,13 @@ export interface StepCollaborator {
   connection_space?: string;
 }
 
+export interface StepLocation {
+  name: string;
+  lat?: number;
+  lng?: number;
+  venue_id?: string;
+}
+
 export interface StepPlanData {
   what_will_you_do?: string;
   what_chat_history?: ChatMessage[];
@@ -58,6 +65,8 @@ export interface StepPlanData {
   collaborators?: StepCollaborator[];     // structured collaborators
   connection_space?: string;              // where they connect (Discord, Zoom, etc.)
   capability_goals?: string[];
+  where_location?: StepLocation;          // structured location with optional coordinates
+  competency_ids?: string[];              // structured competency references
   linked_resource_ids?: string[];
   equipment_context?: AnyExtractedEntity[];
   date_enrichment?: DateEnrichment;
@@ -71,6 +80,13 @@ export interface StepActData {
   sub_step_progress?: Record<string, boolean>;
 }
 
+export interface InstructorCompetencyAssessment {
+  rating: 'needs_improvement' | 'satisfactory' | 'excellent';
+  notes?: string;
+}
+
+export type InstructorReviewStatus = 'approved' | 'needs_revision';
+
 export interface StepReviewData {
   overall_rating?: number;
   worked_to_plan?: boolean;
@@ -78,6 +94,11 @@ export interface StepReviewData {
   what_learned?: string;
   capability_progress?: Record<string, number>;
   next_step_notes?: string;
+  instructor_assessment?: Record<string, InstructorCompetencyAssessment>;
+  instructor_suggested_next?: string;  // instructor's suggested follow-up step
+  instructor_review_status?: InstructorReviewStatus;
+  instructor_review_note?: string;     // reason for approval/revision request
+  instructor_review_at?: string;       // ISO timestamp
 }
 
 export interface CrossInterestSuggestion {

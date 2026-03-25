@@ -97,6 +97,7 @@
     "@googlemaps/react-wrapper": "^1.2.0",
     "@hookform/resolvers": "^5.2.2",
     "@legendapp/motion": "^2.5.3",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-native-community/datetimepicker": "^8.5.1",
     "@react-native-community/netinfo": "^11.4.1",
@@ -195,7 +196,7 @@
     "three": "^0.180.0",
     "victory": "^37.3.6",
     "victory-native": "^41.20.1",
-    "zod": "^4.1.12"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@expo/webpack-config": "^19.0.1",

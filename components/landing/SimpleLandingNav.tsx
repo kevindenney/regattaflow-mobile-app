@@ -231,25 +231,45 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                 </TouchableOpacity>
               </View>
 
-              {/* Menu items */}
+              {/* Menu items — grouped by domain */}
               <ScrollView style={styles.mobileMenuItems} showsVerticalScrollIndicator={false}>
-                {SAMPLE_INTERESTS.map((interest) => (
-                  <TouchableOpacity
-                    key={interest.slug}
-                    style={styles.mobileMenuItem}
-                    onPress={() => {
-                      setMobileMenuOpen(false);
-                      router.push(`/${interest.slug}` as any);
-                    }}
-                  >
-                    <Ionicons
-                      name={(interest.icon + '-outline') as any}
-                      size={22}
-                      color={interest.color}
-                    />
-                    <Text style={styles.mobileMenuText}>{interest.name}</Text>
-                  </TouchableOpacity>
-                ))}
+                {[
+                  { name: 'Healthcare', color: '#6366F1', slugs: ['nursing', 'global-health'] },
+                  { name: 'Creative Arts', color: '#F59E0B', slugs: ['drawing', 'design', 'knitting', 'fiber-arts', 'painting-printing'] },
+                  { name: 'Sports & Outdoors', color: '#0EA5E9', slugs: ['sail-racing', 'golf', 'health-and-fitness'] },
+                  { name: 'Education & Learning', color: '#5C6BC0', slugs: ['lifelong-learning'] },
+                  { name: 'Agriculture & Environment', color: '#2E7D32', slugs: ['regenerative-agriculture'] },
+                ].map((domain) => {
+                  const domainInterests = domain.slugs
+                    .map((slug) => SAMPLE_INTERESTS.find((i) => i.slug === slug))
+                    .filter(Boolean) as typeof SAMPLE_INTERESTS;
+                  if (domainInterests.length === 0) return null;
+                  return (
+                    <View key={domain.name}>
+                      <View style={styles.mobileDomainHeader}>
+                        <View style={[styles.mobileDomainAccent, { backgroundColor: domain.color }]} />
+                        <Text style={styles.mobileDomainLabel}>{domain.name}</Text>
+                      </View>
+                      {domainInterests.map((interest) => (
+                        <TouchableOpacity
+                          key={interest.slug}
+                          style={styles.mobileMenuItem}
+                          onPress={() => {
+                            setMobileMenuOpen(false);
+                            router.push(`/${interest.slug}` as any);
+                          }}
+                        >
+                          <Ionicons
+                            name={(interest.icon + '-outline') as any}
+                            size={22}
+                            color={interest.color}
+                          />
+                          <Text style={styles.mobileMenuText}>{interest.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  );
+                })}
 
                 <TouchableOpacity
                   style={styles.mobileMenuItem}
@@ -565,6 +585,26 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  mobileDomainHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  mobileDomainAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+  },
+  mobileDomainLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.4)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   mobileMenuDivider: {
     height: 1,

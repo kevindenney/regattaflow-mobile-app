@@ -26,6 +26,7 @@ import {
   isRouteActive,
 } from '@/lib/navigation-config';
 import { useVocabulary } from '@/hooks/useVocabulary';
+import { useOrganization } from '@/providers/OrganizationProvider';
 
 export const WEB_SIDEBAR_WIDTH = 280;
 
@@ -34,28 +35,31 @@ interface WebSidebarNavProps {
 }
 
 function WebSidebarNav({ onClose }: WebSidebarNavProps) {
-  const { userType, isGuest, user, signOut } = useAuth();
+  const { userType, isGuest } = useAuth();
   const { isPinned, togglePin, closeDrawer } = useWebDrawer();
   const { vocabulary } = useVocabulary();
+  const { memberships, activeDomain } = useOrganization();
   const pathname = usePathname();
   const router = useRouter();
 
-  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary);
+  const isOrgAdmin = React.useMemo(() => {
+    const ADMIN_ROLES = new Set(['admin', 'manager', 'owner']);
+    return memberships.some(
+      (m) => ADMIN_ROLES.has(String(m.role || '').toLowerCase())
+        && ['active', 'verified'].includes(String(m.membership_status || m.status || '').toLowerCase())
+    );
+  }, [memberships]);
+
+  const { primary, secondary } = getNavItemsForUserType(userType ?? null, vocabulary, {
+    activeDomain: activeDomain ?? undefined,
+    isOrgAdmin,
+  });
 
   const handleNavigation = (route: string) => {
     router.push(route as Parameters<typeof router.push>[0]);
     // Don't auto-close if pinned
     if (!isPinned) {
       onClose?.();
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      router.replace('/' as Parameters<typeof router.replace>[0]);
-    } catch (error) {
-      console.error('[WebSidebarNav] Failed to sign out:', error);
     }
   };
 
@@ -151,23 +155,7 @@ function WebSidebarNav({ onClose }: WebSidebarNavProps) {
         {/* Spacer */}
         <View style={styles.spacer} />
 
-        {/* Footer - Auth actions */}
-        {!isGuest && user && (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.navSection}>
-              <TouchableOpacity
-                style={styles.navItem}
-                onPress={handleSignOut}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="log-out-outline" size={20} color={IOS_COLORS.systemRed} />
-                <Text style={[styles.navItemText, styles.signOutText]}>Sign Out</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
+        {/* Footer - Auth actions (guests only; logged-in users sign out via Account modal) */}
         {isGuest && (
           <>
             <View style={styles.divider} />
@@ -334,9 +322,5 @@ const styles = StyleSheet.create({
   },
   signInText: {
     color: IOS_COLORS.systemBlue,
-  },
-  signOutText: {
-    color: IOS_COLORS.systemRed,
-    fontWeight: '600',
   },
 });

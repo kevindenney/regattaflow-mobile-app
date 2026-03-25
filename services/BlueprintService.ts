@@ -20,6 +20,10 @@ import type {
   BlueprintStepActionRecord,
   BlueprintWithAuthor,
   BlueprintNewStep,
+  BlueprintSuggestedNextStep,
+  SubscriberProgress,
+  PeerTimeline,
+  PeerTimelineStep,
 } from '@/types/blueprint';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
 
@@ -45,6 +49,7 @@ export async function createBlueprint(
         cover_image_url: input.cover_image_url ?? null,
         is_published: input.is_published ?? false,
         organization_id: input.organization_id ?? null,
+        program_id: input.program_id ?? null,
         access_level: input.access_level ?? 'public',
       })
       .select()
@@ -113,15 +118,15 @@ export async function getBlueprintBySlug(
     const blueprint = data as BlueprintRecord;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('display_name, avatar_emoji, avatar_color')
+      .select('full_name, avatar_url')
       .eq('id', blueprint.user_id)
       .maybeSingle();
 
     const result: BlueprintWithAuthor = {
       ...blueprint,
-      author_name: (profile as any)?.display_name ?? undefined,
-      author_avatar_emoji: (profile as any)?.avatar_emoji ?? undefined,
-      author_avatar_color: (profile as any)?.avatar_color ?? undefined,
+      author_name: (profile as any)?.full_name ?? undefined,
+      author_avatar_emoji: undefined,
+      author_avatar_color: undefined,
     };
 
     // Fetch org info if published under an organization
@@ -133,6 +138,16 @@ export async function getBlueprintBySlug(
         .maybeSingle();
       result.organization_name = (org as any)?.name ?? undefined;
       result.organization_slug = (org as any)?.slug ?? undefined;
+    }
+
+    // Fetch program name if linked to a program
+    if (blueprint.program_id) {
+      const { data: program } = await supabase
+        .from('programs')
+        .select('title')
+        .eq('id', blueprint.program_id)
+        .maybeSingle();
+      result.program_name = (program as any)?.title ?? undefined;
     }
 
     return result;
@@ -186,7 +201,33 @@ export async function getBlueprintSteps(
   blueprintId: string,
 ): Promise<TimelineStepRecord[]> {
   try {
-    // First get the blueprint to know user_id and interest_id
+    // First try curated blueprint_steps
+    const { data: curatedRows, error: curatedErr } = await supabase
+      .from('blueprint_steps')
+      .select('step_id, sort_order')
+      .eq('blueprint_id', blueprintId)
+      .order('sort_order', { ascending: true });
+
+    if (curatedErr) throw curatedErr;
+
+    if (curatedRows && curatedRows.length > 0) {
+      // Fetch the actual step records
+      const stepIds = curatedRows.map((r: any) => r.step_id);
+      const { data: steps, error: stepsErr } = await supabase
+        .from('timeline_steps')
+        .select('*')
+        .in('id', stepIds);
+
+      if (stepsErr) throw stepsErr;
+
+      // Sort by the blueprint_steps sort_order
+      const orderMap = new Map(curatedRows.map((r: any) => [r.step_id, r.sort_order]));
+      return ((steps ?? []) as TimelineStepRecord[]).sort(
+        (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
+      );
+    }
+
+    // Fallback: all non-private steps for author+interest (backward compat)
     const blueprint = await getBlueprintById(blueprintId);
     if (!blueprint) throw new Error('Blueprint not found');
 
@@ -202,6 +243,113 @@ export async function getBlueprintSteps(
     return (data as TimelineStepRecord[]) ?? [];
   } catch (err) {
     logger.error('Failed to get blueprint steps', err);
+    throw err;
+  }
+}
+
+export async function addStepToBlueprint(
+  blueprintId: string,
+  stepId: string,
+  sortOrder?: number,
+): Promise<void> {
+  try {
+    // If no sort_order provided, append at end
+    let order = sortOrder;
+    if (order === undefined) {
+      const { data: maxRow } = await supabase
+        .from('blueprint_steps')
+        .select('sort_order')
+        .eq('blueprint_id', blueprintId)
+        .order('sort_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      order = ((maxRow as any)?.sort_order ?? -1) + 1;
+    }
+
+    const { error } = await supabase
+      .from('blueprint_steps')
+      .upsert(
+        { blueprint_id: blueprintId, step_id: stepId, sort_order: order },
+        { onConflict: 'blueprint_id,step_id' },
+      );
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to add step to blueprint', err);
+    throw err;
+  }
+}
+
+export async function removeStepFromBlueprint(
+  blueprintId: string,
+  stepId: string,
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('blueprint_steps')
+      .delete()
+      .eq('blueprint_id', blueprintId)
+      .eq('step_id', stepId);
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to remove step from blueprint', err);
+    throw err;
+  }
+}
+
+export async function reorderBlueprintSteps(
+  blueprintId: string,
+  stepIds: string[],
+): Promise<void> {
+  try {
+    const updates = stepIds.map((stepId, index) => ({
+      blueprint_id: blueprintId,
+      step_id: stepId,
+      sort_order: index,
+    }));
+
+    // Upsert all with new sort_orders
+    const { error } = await supabase
+      .from('blueprint_steps')
+      .upsert(updates, { onConflict: 'blueprint_id,step_id' });
+
+    if (error) throw error;
+  } catch (err) {
+    logger.error('Failed to reorder blueprint steps', err);
+    throw err;
+  }
+}
+
+export async function setBlueprintSteps(
+  blueprintId: string,
+  stepIds: string[],
+): Promise<void> {
+  try {
+    // Delete all existing
+    const { error: delErr } = await supabase
+      .from('blueprint_steps')
+      .delete()
+      .eq('blueprint_id', blueprintId);
+
+    if (delErr) throw delErr;
+
+    if (stepIds.length === 0) return;
+
+    // Insert new
+    const rows = stepIds.map((stepId, index) => ({
+      blueprint_id: blueprintId,
+      step_id: stepId,
+      sort_order: index,
+    }));
+
+    const { error: insErr } = await supabase
+      .from('blueprint_steps')
+      .insert(rows);
+
+    if (insErr) throw insErr;
+  } catch (err) {
+    logger.error('Failed to set blueprint steps', err);
     throw err;
   }
 }
@@ -322,6 +470,58 @@ export async function getMySubscriptions(
   }
 }
 
+/**
+ * Get subscribed blueprints for a user, optionally filtered by interest.
+ * Returns joined blueprint + author info for display.
+ */
+export async function getSubscribedBlueprints(
+  subscriberId: string,
+  interestId?: string | null,
+): Promise<import('@/types/blueprint').SubscribedBlueprintInfo[]> {
+  try {
+    const { data: subs, error: subsErr } = await supabase
+      .from('blueprint_subscriptions')
+      .select('id, blueprint_id, subscribed_at')
+      .eq('subscriber_id', subscriberId);
+    if (subsErr) throw subsErr;
+    if (!subs || subs.length === 0) return [];
+
+    const blueprintIds = subs.map((s: any) => s.blueprint_id);
+    let query = supabase
+      .from('timeline_blueprints')
+      .select('id, title, slug, user_id, interest_id')
+      .in('id', blueprintIds)
+      .eq('is_published', true);
+    if (interestId) query = query.eq('interest_id', interestId);
+
+    const { data: blueprints, error: bpErr } = await query;
+    if (bpErr) throw bpErr;
+    if (!blueprints || blueprints.length === 0) return [];
+
+    // Fetch author names
+    const authorIds = [...new Set((blueprints as any[]).map((bp) => bp.user_id))];
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', authorIds);
+    const nameMap = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name]));
+
+    const subsMap = new Map(subs.map((s: any) => [s.blueprint_id, s]));
+
+    return (blueprints as any[]).map((bp) => ({
+      subscription_id: subsMap.get(bp.id)!.id,
+      blueprint_id: bp.id,
+      blueprint_title: bp.title,
+      blueprint_slug: bp.slug,
+      author_name: nameMap.get(bp.user_id) ?? null,
+      subscribed_at: subsMap.get(bp.id)!.subscribed_at,
+    }));
+  } catch (err) {
+    logger.error('Failed to get subscribed blueprints', err);
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 5. New steps for subscriber (living subscription feed)
 // ---------------------------------------------------------------------------
@@ -365,19 +565,39 @@ export async function getNewStepsForSubscriber(
 
       const excludeIds = (actedStepIds ?? []).map((a: any) => a.source_step_id);
 
-      let query = supabase
-        .from('timeline_steps')
-        .select('id, title, description, status, created_at, user_id')
-        .eq('user_id', blueprint.user_id)
-        .eq('interest_id', blueprint.interest_id)
-        .neq('visibility', 'private')
-        .order('sort_order', { ascending: true });
+      // Get steps: prefer curated blueprint_steps, fallback to all non-private
+      const { data: curatedRows } = await supabase
+        .from('blueprint_steps')
+        .select('step_id')
+        .eq('blueprint_id', blueprint.id);
 
-      if (excludeIds.length > 0) {
-        query = query.not('id', 'in', `(${excludeIds.join(',')})`);
+      let stepQuery;
+      if (curatedRows && curatedRows.length > 0) {
+        const curatedIds = curatedRows.map((r: any) => r.step_id);
+        // Filter out already-acted steps
+        const remainingIds = curatedIds.filter((id: string) => !excludeIds.includes(id));
+        if (remainingIds.length === 0) continue;
+
+        stepQuery = supabase
+          .from('timeline_steps')
+          .select('id, title, description, status, created_at, user_id')
+          .in('id', remainingIds)
+          .order('sort_order', { ascending: true });
+      } else {
+        stepQuery = supabase
+          .from('timeline_steps')
+          .select('id, title, description, status, created_at, user_id')
+          .eq('user_id', blueprint.user_id)
+          .eq('interest_id', blueprint.interest_id)
+          .neq('visibility', 'private')
+          .order('sort_order', { ascending: true });
+
+        if (excludeIds.length > 0) {
+          stepQuery = stepQuery.not('id', 'in', `(${excludeIds.join(',')})`);
+        }
       }
 
-      const { data: steps, error: stepsErr } = await query;
+      const { data: steps, error: stepsErr } = await stepQuery;
       if (stepsErr) {
         logger.warn('Failed to fetch blueprint steps', stepsErr);
         continue;
@@ -386,7 +606,7 @@ export async function getNewStepsForSubscriber(
       // Get author name
       const { data: profile } = await supabase
         .from('profiles')
-        .select('display_name')
+        .select('full_name')
         .eq('id', blueprint.user_id)
         .maybeSingle();
 
@@ -400,8 +620,9 @@ export async function getNewStepsForSubscriber(
           blueprint_id: blueprint.id,
           blueprint_title: blueprint.title,
           blueprint_slug: blueprint.slug,
+          interest_id: blueprint.interest_id,
           author_id: blueprint.user_id,
-          author_name: (profile as any)?.display_name ?? undefined,
+          author_name: (profile as any)?.full_name ?? undefined,
           subscription_id: (sub as any).id,
         });
       }
@@ -487,6 +708,25 @@ export async function getOrganizationBlueprints(
   }
 }
 
+export async function getProgramBlueprints(
+  programId: string,
+): Promise<BlueprintRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .from('timeline_blueprints')
+      .select('*')
+      .eq('program_id', programId)
+      .eq('is_published', true)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data as BlueprintRecord[]) ?? [];
+  } catch (err) {
+    logger.error('Failed to get program blueprints', err);
+    throw err;
+  }
+}
+
 export async function checkBlueprintAccess(
   userId: string,
   blueprint: BlueprintRecord,
@@ -533,7 +773,229 @@ export async function getBlueprintAccessInfo(
 }
 
 // ---------------------------------------------------------------------------
-// 8. Slug generation helper
+// 8. Blueprint subscribers
+// ---------------------------------------------------------------------------
+
+export async function getBlueprintSubscribers(
+  blueprintId: string,
+): Promise<
+  {
+    id: string;
+    subscriber_id: string;
+    subscriber_name: string | null;
+    subscriber_avatar_url: string | null;
+    subscribed_at: string;
+  }[]
+> {
+  try {
+    const { data: subs, error } = await supabase
+      .from('blueprint_subscriptions')
+      .select('id, subscriber_id, subscribed_at')
+      .eq('blueprint_id', blueprintId)
+      .order('subscribed_at', { ascending: false });
+
+    if (error) throw error;
+    if (!subs || subs.length === 0) return [];
+
+    const subscriberIds = (subs as any[]).map((s) => s.subscriber_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', subscriberIds);
+
+    const profileMap = new Map(
+      (profiles ?? []).map((p: any) => [p.id, p]),
+    );
+
+    return (subs as any[]).map((s) => {
+      const profile = profileMap.get(s.subscriber_id);
+      return {
+        id: s.id,
+        subscriber_id: s.subscriber_id,
+        subscriber_name: profile?.full_name ?? null,
+        subscriber_avatar_url: profile?.avatar_url ?? null,
+        subscribed_at: s.subscribed_at,
+      };
+    });
+  } catch (err) {
+    logger.error('Failed to get blueprint subscribers', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9. Subscriber progress (for blueprint authors)
+// ---------------------------------------------------------------------------
+
+export async function getBlueprintSubscriberProgress(
+  blueprintId: string,
+): Promise<SubscriberProgress[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_blueprint_subscriber_progress', {
+      p_blueprint_id: blueprintId,
+    });
+
+    if (error) throw error;
+
+    const rows = (data as any[]) ?? [];
+    return rows.map((row) => {
+      const steps = row.steps ?? [];
+      return {
+        subscriber_id: row.subscriber_id,
+        name: row.name,
+        avatar_url: row.avatar_url,
+        subscribed_at: row.subscribed_at,
+        steps,
+        adopted_count: steps.filter((s: any) => s.action === 'adopted').length,
+        completed_count: steps.filter((s: any) => s.status === 'completed').length,
+        dismissed_count: steps.filter((s: any) => s.action === 'dismissed').length,
+      };
+    });
+  } catch (err) {
+    logger.error('Failed to get blueprint subscriber progress', err);
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 10. Suggested next steps (for smart add sheet)
+// ---------------------------------------------------------------------------
+
+export async function getSuggestedNextSteps(
+  subscriberId: string,
+  interestId?: string | null,
+): Promise<BlueprintSuggestedNextStep[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_suggested_next_steps', {
+      p_subscriber_id: subscriberId,
+      p_interest_id: interestId ?? null,
+    });
+
+    if (error) throw error;
+    return (data as BlueprintSuggestedNextStep[]) ?? [];
+  } catch (err) {
+    logger.error('Failed to get suggested next steps', err);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 11. Peer subscriber timelines (for peer progress display)
+// ---------------------------------------------------------------------------
+
+export async function getPeerSubscriberTimelines(
+  blueprintId: string,
+  excludeUserId: string,
+  interestId: string,
+  blueprintTitle: string,
+): Promise<PeerTimeline[]> {
+  try {
+    // 1. Get subscribers for this blueprint
+    const subscribers = await getBlueprintSubscribers(blueprintId);
+    const peerIds = subscribers
+      .map((s) => s.subscriber_id)
+      .filter((id) => id !== excludeUserId);
+
+    console.log('[PeerTimelines] blueprint:', blueprintTitle);
+    console.log('[PeerTimelines] excludeUserId:', excludeUserId);
+    console.log('[PeerTimelines] all subscribers:', subscribers.map(s => ({ id: s.subscriber_id, name: s.subscriber_name })));
+    console.log('[PeerTimelines] peerIds (after excluding self):', peerIds);
+
+    if (peerIds.length === 0) {
+      console.log('[PeerTimelines] No peers found — returning empty');
+      return [];
+    }
+
+    // Limit to 10 peers
+    const limitedPeerIds = peerIds.slice(0, 10);
+
+    console.log('[PeerTimelines] interestId:', interestId);
+
+    // 2. Batch-fetch non-private timeline_steps for these peers
+    const { data: steps, error } = await supabase
+      .from('timeline_steps')
+      .select('id, title, status, completed_at, user_id, visibility, interest_id')
+      .in('user_id', limitedPeerIds)
+      .eq('interest_id', interestId)
+      .neq('visibility', 'private')
+      .order('sort_order', { ascending: true })
+      .limit(200); // 10 peers × 20 steps max
+
+    console.log('[PeerTimelines] step query error:', error);
+    console.log('[PeerTimelines] steps returned:', steps?.length ?? 0);
+    if (steps && steps.length > 0) {
+      console.log('[PeerTimelines] step sample:', (steps as any[]).slice(0, 3).map(s => ({
+        id: s.id, title: s.title, user_id: s.user_id, status: s.status,
+        visibility: s.visibility, interest_id: s.interest_id,
+      })));
+    } else {
+      console.log('[PeerTimelines] 0 steps — likely RLS blocking or no steps match interest_id + visibility');
+      // Debug: try counting ALL steps for these peers (ignoring interest filter)
+      const { data: allSteps } = await supabase
+        .from('timeline_steps')
+        .select('id, user_id, interest_id, visibility')
+        .in('user_id', limitedPeerIds)
+        .limit(20);
+      console.log('[PeerTimelines] DEBUG all steps for peers (no interest filter):', allSteps?.length ?? 0,
+        (allSteps ?? []).map((s: any) => ({ user_id: s.user_id, interest_id: s.interest_id, visibility: s.visibility })));
+    }
+
+    if (error) throw error;
+
+    // 4. Group by user, limit 20 steps per peer
+    const stepsByUser = new Map<string, PeerTimelineStep[]>();
+    for (const step of (steps ?? []) as any[]) {
+      const userId = step.user_id;
+      if (!stepsByUser.has(userId)) stepsByUser.set(userId, []);
+      const userSteps = stepsByUser.get(userId)!;
+      if (userSteps.length < 20) {
+        userSteps.push({
+          id: step.id,
+          title: step.title,
+          status: step.status,
+          completed_at: step.completed_at,
+        });
+      }
+    }
+
+    // 5. Build subscriber name/avatar map
+    const subMap = new Map(
+      subscribers.map((s) => [s.subscriber_id, s]),
+    );
+
+    // 6. Return only peers with ≥1 visible step
+    const results: PeerTimeline[] = [];
+    for (const peerId of limitedPeerIds) {
+      const peerSteps = stepsByUser.get(peerId);
+      console.log('[PeerTimelines] peer', peerId, 'visible steps:', peerSteps?.length ?? 0);
+      if (!peerSteps || peerSteps.length === 0) continue;
+
+      const sub = subMap.get(peerId);
+      const completedCount = peerSteps.filter((s) => s.status === 'completed').length;
+
+      results.push({
+        blueprint_id: blueprintId,
+        blueprint_title: blueprintTitle,
+        subscriber_id: peerId,
+        subscriber_name: sub?.subscriber_name ?? null,
+        subscriber_avatar_emoji: null,
+        subscriber_avatar_color: null,
+        steps: peerSteps,
+        completed_count: completedCount,
+        total_count: peerSteps.length,
+      });
+    }
+
+    console.log('[PeerTimelines] final results:', results.length, 'peers with visible steps');
+    return results;
+  } catch (err) {
+    logger.error('Failed to get peer subscriber timelines', err);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 12. Slug generation helper
 // ---------------------------------------------------------------------------
 
 export function generateBlueprintSlug(

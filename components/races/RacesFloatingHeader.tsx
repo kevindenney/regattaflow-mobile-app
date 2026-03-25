@@ -82,6 +82,8 @@ export interface RacesFloatingHeaderProps {
   onPublishBlueprint?: () => void;
   /** Label for blueprint button (changes when already published) */
   blueprintLabel?: string;
+  /** Whether a published blueprint exists for this interest */
+  isBlueprintPublished?: boolean;
   /** Optional org-published step templates for "Create New" menu */
   recommendedTemplates?: RecommendedStepTemplate[];
   /** Selects one recommended template */
@@ -110,6 +112,14 @@ export interface RacesFloatingHeaderProps {
   onMeasuredHeight?: (height: number) => void;
   /** When true the toolbar slides up off-screen */
   hidden?: boolean;
+  /** When provided, the "+" button calls this instead of opening the inline menu */
+  onAddPress?: () => void;
+  /** Whether domain view is active */
+  isDomainView?: boolean;
+  /** Toggle domain view */
+  onToggleDomainView?: () => void;
+  /** Label for domain view toggle (e.g., "All Healthcare") */
+  domainLabel?: string;
   /** Legacy drawer props - kept for compatibility but not rendered */
   drawerVisible?: boolean;
   onDrawerVisibleChange?: (visible: boolean) => void;
@@ -139,6 +149,7 @@ export function RacesFloatingHeader({
   onBrowseCatalog,
   onPublishBlueprint,
   blueprintLabel,
+  isBlueprintPublished,
   recommendedTemplates = [],
   onSelectRecommendedTemplate,
   scrollOffset: _scrollOffset = 0,
@@ -153,6 +164,10 @@ export function RacesFloatingHeader({
   onStepPickerPress,
   onMeasuredHeight,
   hidden,
+  onAddPress,
+  isDomainView,
+  onToggleDomainView,
+  domainLabel,
 }: RacesFloatingHeaderProps) {
   const collapsableProp = Platform.OS === 'web' ? undefined : false;
   const [menuVisible, setMenuVisible] = useState(false);
@@ -209,6 +224,10 @@ export function RacesFloatingHeader({
   // Handle add button press
   const handleAddPress = () => {
     triggerHaptic('impactLight');
+    if (onAddPress) {
+      onAddPress();
+      return;
+    }
     if (!onAddStep && !onAddPractice && !onNewSeason && !onPublishBlueprint) {
       onAddRace();
       return;
@@ -273,9 +292,42 @@ export function RacesFloatingHeader({
 
   // Build custom subtitle content with separately tappable parts:
   // "All Clinicals" → season selector | "2 of 3" → step picker | "1 upcoming" → next step
-  const hasMultipleActions = Boolean(onSeasonPress && (hasIndexCounter || hasUpcoming));
+  const hasMultipleActions = Boolean(onSeasonPress && (hasIndexCounter || hasUpcoming)) || Boolean(isBlueprintPublished && onPublishBlueprint) || Boolean(onToggleDomainView);
   const subtitleContent = hasMultipleActions ? (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {onToggleDomainView && domainLabel && (
+        <>
+          <Pressable
+            onPress={onToggleDomainView}
+            hitSlop={{ top: 8, bottom: 8, right: 4 }}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 3,
+              backgroundColor: isDomainView ? 'rgba(0,137,123,0.1)' : undefined,
+              paddingHorizontal: isDomainView ? 6 : 0,
+              paddingVertical: isDomainView ? 2 : 0,
+              borderRadius: 6,
+            }}
+          >
+            <Ionicons
+              name={isDomainView ? 'apps' : 'apps-outline'}
+              size={11}
+              color={isDomainView ? '#00897B' : IOS_COLORS.secondaryLabel}
+            />
+            <Text style={{
+              fontSize: 12,
+              color: isDomainView ? '#00897B' : IOS_COLORS.secondaryLabel,
+              fontWeight: isDomainView ? '600' : '400',
+            }}>
+              {domainLabel}
+            </Text>
+          </Pressable>
+          {(seasonLabel || hasIndexCounter || hasUpcoming || (isBlueprintPublished && onPublishBlueprint)) && (
+            <Text style={{ fontSize: 13, color: IOS_COLORS.secondaryLabel, marginHorizontal: 4 }}>|</Text>
+          )}
+        </>
+      )}
       {seasonLabel && (
         <Pressable onPress={onSeasonPress} hitSlop={{ top: 8, bottom: 8, right: 4 }}>
           <Text style={{ fontSize: 13, color: IOS_COLORS.systemBlue, fontWeight: '500' }}>
@@ -304,6 +356,19 @@ export function RacesFloatingHeader({
             {upcomingRaces} upcoming
           </Text>
         </Pressable>
+      )}
+      {isBlueprintPublished && onPublishBlueprint && (
+        <>
+          {(seasonLabel || hasIndexCounter || hasUpcoming) && (
+            <Text style={{ fontSize: 13, color: IOS_COLORS.secondaryLabel, marginHorizontal: 4 }}>|</Text>
+          )}
+          <Pressable onPress={onPublishBlueprint} hitSlop={{ top: 8, bottom: 8, left: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <Ionicons name="layers" size={11} color="#00897B" />
+              <Text style={{ fontSize: 12, color: '#00897B', fontWeight: '600' }}>Published</Text>
+            </View>
+          </Pressable>
+        </>
       )}
     </View>
   ) : undefined;

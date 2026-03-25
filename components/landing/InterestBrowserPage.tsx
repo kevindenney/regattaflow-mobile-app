@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -14,6 +14,7 @@ import { useInterest } from '@/providers/InterestProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { supabase } from '@/services/supabase';
+import type { BlueprintRecord } from '@/types/blueprint';
 
 interface InterestBrowserPageProps {
   slug: string;
@@ -23,12 +24,100 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
   const interest = getInterest(slug);
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
-  const { userInterests, allInterests, addInterest, switchInterest, currentInterest, refreshInterests } = useInterest();
+  const { userInterests, allInterests, addInterest, switchInterest, currentInterest, refreshInterests, getDomainForInterest } = useInterest();
   const { user, isGuest } = useAuth();
   const isLoggedIn = !!user && !isGuest;
   const isInUserInterests = userInterests.some((i) => i.slug === slug);
   const existsInDb = allInterests.some((i) => i.slug === slug);
   const isCurrent = currentInterest?.slug === slug;
+
+  // Resolve parent domain for breadcrumb
+  const dbInterest = allInterests.find((i) => i.slug === slug);
+  const parentDomain = dbInterest ? getDomainForInterest(dbInterest.id) : null;
+
+  // Fetch published blueprints for all orgs in this interest (single query, no per-card fetching)
+  const [orgBlueprintsMap, setOrgBlueprintsMap] = useState<Record<string, BlueprintRecord[]>>({});
+  useEffect(() => {
+    if (!interest) return;
+    let cancelled = false;
+
+    const loadOrgBlueprints = async () => {
+      try {
+        // Look up org IDs by matching sample data org names to DB orgs
+        const orgSlugs = interest.organizations.map((o) => o.slug);
+        const { data: dbOrgs } = await supabase
+          .from('organizations')
+          .select('id, slug')
+          .in('slug', orgSlugs)
+          .eq('is_active', true);
+
+        if (cancelled || !dbOrgs || dbOrgs.length === 0) return;
+
+        // Use the RPC to get counts (bypasses RLS for org_members blueprints)
+        // Then also fetch any public blueprints the user CAN see
+        const orgIds = dbOrgs.map((o: any) => o.id);
+        const { data: blueprints } = await supabase
+          .from('timeline_blueprints')
+          .select('*')
+          .in('organization_id', orgIds)
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
+
+        if (cancelled) return;
+
+        // Also get counts via RPC for blueprints hidden by RLS
+        const countPromises = dbOrgs.map(async (org: any) => {
+          const { data } = await supabase.rpc('get_org_blueprint_count', { org_uuid: org.id });
+          return { slug: org.slug, count: typeof data === 'number' ? data : 0 };
+        });
+        const counts = await Promise.all(countPromises);
+
+        if (cancelled) return;
+
+        // Group blueprints by org slug
+        const slugById = new Map(dbOrgs.map((o: any) => [o.id, o.slug]));
+        const map: Record<string, BlueprintRecord[]> = {};
+        for (const bp of (blueprints ?? []) as BlueprintRecord[]) {
+          const orgSlug = slugById.get(bp.organization_id ?? '');
+          if (orgSlug) {
+            if (!map[orgSlug]) map[orgSlug] = [];
+            map[orgSlug].push(bp);
+          }
+        }
+
+        // For orgs with counts but no visible blueprints, add a placeholder
+        for (const { slug: orgSlug, count } of counts) {
+          if (count > 0 && (!map[orgSlug] || map[orgSlug].length === 0)) {
+            // Store count as a fake blueprint record for the teaser
+            map[orgSlug] = Array.from({ length: count }, (_, i) => ({
+              id: `hidden-${orgSlug}-${i}`,
+              user_id: '',
+              interest_id: '',
+              slug: '',
+              title: '',
+              description: null,
+              cover_image_url: null,
+              is_published: true,
+              subscriber_count: 0,
+              organization_id: null,
+              program_id: null,
+              access_level: 'org_members' as const,
+              created_at: '',
+              updated_at: '',
+            }));
+          }
+        }
+
+        console.log('[InterestBrowserPage] Org blueprints map:', Object.entries(map).map(([k, v]) => `${k}: ${v.length}`));
+        setOrgBlueprintsMap(map);
+      } catch (err) {
+        console.error('[InterestBrowserPage] Error loading org blueprints:', err);
+      }
+    };
+
+    loadOrgBlueprints();
+    return () => { cancelled = true; };
+  }, [interest?.name]);
 
   const handleAddInterest = async () => {
     if (!isLoggedIn) {
@@ -105,6 +194,14 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
               <Text style={styles.breadcrumbLink}>BetterAt</Text>
             </TouchableOpacity>
             <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.5)" />
+            {parentDomain && (
+              <>
+                <TouchableOpacity onPress={() => router.push('/interests' as any)}>
+                  <Text style={styles.breadcrumbLink}>{parentDomain.name}</Text>
+                </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.5)" />
+              </>
+            )}
             <Text style={styles.breadcrumbCurrent}>{interest.name}</Text>
           </View>
 
@@ -186,6 +283,7 @@ export function InterestBrowserPage({ slug }: InterestBrowserPageProps) {
                         organization={org}
                         interestSlug={slug}
                         accentColor={interest.color}
+                        blueprints={orgBlueprintsMap[org.slug]}
                       />
                     ))}
                   </View>

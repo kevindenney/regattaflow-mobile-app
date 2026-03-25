@@ -36,15 +36,21 @@ export interface Interest {
   name: string
   description: string | null
   parent_id: string | null
-  type: 'official' | 'org' | 'user_proposed' | 'private'
+  type: 'official' | 'org' | 'user_proposed' | 'private' | 'domain'
   status: 'active' | 'pending' | 'archived'
   visibility: 'public' | 'org_only' | 'private'
   accent_color: string
   icon_name: string | null
+  organization_id: string | null
   hero_tagline: string | null
   pricing_text: string | null
   web_app_url: string | null
   created_at: string
+}
+
+export interface DomainWithInterests {
+  domain: Interest
+  interests: Interest[]
 }
 
 interface InterestContextValue {
@@ -62,8 +68,22 @@ interface InterestContextValue {
   addInterest: (slug: string) => Promise<void>
   /** Remove an interest from the user's quick list */
   removeInterest: (slug: string) => Promise<void>
+  /** Domain rows only (type='domain') */
+  domains: Interest[]
+  /** Interests grouped by their parent domain */
+  groupedInterests: DomainWithInterests[]
+  /** Get the parent domain for a given interest id */
+  getDomainForInterest: (interestId: string) => Interest | null
   /** Force re-fetch interests from Supabase */
   refreshInterests: () => Promise<void>
+  /** View mode: 'interest' shows only current interest, 'domain' shows all sibling interests */
+  viewMode: 'interest' | 'domain'
+  /** All interest IDs in the current interest's domain (includes current) */
+  domainInterestIds: string[]
+  /** Effective interest IDs based on viewMode: single in interest mode, all domain siblings in domain mode */
+  effectiveInterestIds: string[]
+  /** Toggle between interest and domain view modes */
+  toggleDomainView: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -109,11 +129,18 @@ const InterestContext = createContext<InterestContextValue>({
   currentInterest: null,
   allInterests: [],
   userInterests: [],
+  domains: [],
+  groupedInterests: [],
+  getDomainForInterest: () => null,
   loading: true,
   switchInterest: async () => {},
   addInterest: async () => {},
   removeInterest: async () => {},
   refreshInterests: async () => {},
+  viewMode: 'interest' as const,
+  domainInterestIds: [],
+  effectiveInterestIds: [],
+  toggleDomainView: async () => {},
 })
 
 // ---------------------------------------------------------------------------
@@ -149,7 +176,7 @@ export function InterestProvider({ children }: PropsWithChildren) {
       const { data, error } = await supabase
         .from('interests')
         .select(
-          'id, slug, name, description, parent_id, type, status, visibility, accent_color, icon_name, hero_tagline, pricing_text, web_app_url, created_at',
+          'id, slug, name, description, parent_id, type, status, visibility, accent_color, icon_name, organization_id, hero_tagline, pricing_text, web_app_url, created_at',
         )
         .eq('status', 'active')
         .in('visibility', ['public'])
@@ -165,7 +192,76 @@ export function InterestProvider({ children }: PropsWithChildren) {
   })
 
   // Stable reference: avoid creating a new [] on every render when data is undefined
-  const interests = rawInterests ?? EMPTY_INTERESTS
+  const allRows = rawInterests ?? EMPTY_INTERESTS
+
+  // Split into domains and selectable interests
+  const domains = useMemo(() => allRows.filter((i) => i.type === 'domain'), [allRows])
+  const interests = useMemo(() => allRows.filter((i) => i.type !== 'domain'), [allRows])
+
+  // Group interests by parent domain
+  // Handles two-level nesting: if an interest's parent_id points to another
+  // interest (not a domain), we walk up to find the domain ancestor.
+  const groupedInterests = useMemo<DomainWithInterests[]>(() => {
+    const domainIds = new Set(domains.map((d) => d.id))
+    const interestById = new Map(interests.map((i) => [i.id, i]))
+
+    // Resolve the domain id for a given interest
+    const resolveDomainId = (interest: Interest): string => {
+      if (!interest.parent_id) return '__ungrouped__'
+      if (domainIds.has(interest.parent_id)) return interest.parent_id
+      // Parent is another interest — walk up one level
+      const parent = interestById.get(interest.parent_id)
+      if (parent?.parent_id && domainIds.has(parent.parent_id)) return parent.parent_id
+      return '__ungrouped__'
+    }
+
+    const domainMap = new Map<string, Interest[]>()
+    for (const interest of interests) {
+      const key = resolveDomainId(interest)
+      const list = domainMap.get(key)
+      if (list) {
+        list.push(interest)
+      } else {
+        domainMap.set(key, [interest])
+      }
+    }
+
+    const groups: DomainWithInterests[] = []
+    for (const domain of domains) {
+      const children = domainMap.get(domain.id) ?? []
+      if (children.length > 0) {
+        groups.push({ domain, interests: children })
+      }
+    }
+
+    // Append ungrouped interests under a synthetic domain
+    const ungrouped = domainMap.get('__ungrouped__')
+    if (ungrouped && ungrouped.length > 0) {
+      groups.push({
+        domain: { ...ungrouped[0], id: '__ungrouped__', slug: 'other', name: 'Other', type: 'domain' as const, parent_id: null },
+        interests: ungrouped,
+      })
+    }
+
+    return groups
+  }, [interests, domains])
+
+  // Lookup: interest id → parent domain (walks up if parent is another interest)
+  const getDomainForInterest = useCallback(
+    (interestId: string): Interest | null => {
+      const interest = interests.find((i) => i.id === interestId)
+      if (!interest?.parent_id) return null
+      const directParent = domains.find((d) => d.id === interest.parent_id)
+      if (directParent) return directParent
+      // Walk up: parent might be another interest whose parent is a domain
+      const parentInterest = interests.find((i) => i.id === interest.parent_id)
+      if (parentInterest?.parent_id) {
+        return domains.find((d) => d.id === parentInterest.parent_id) ?? null
+      }
+      return null
+    },
+    [interests, domains],
+  )
 
   const hiddenStorageKey = useMemo(
     () => `${HIDDEN_INTERESTS_KEY_PREFIX}:${signedIn && user?.id ? user.id : 'guest'}`,
@@ -373,6 +469,31 @@ export function InterestProvider({ children }: PropsWithChildren) {
     return userInterests.find((i) => i.slug === activeSlug) ?? null
   }, [activeSlug, userInterests])
 
+  const [viewMode, setViewMode] = useState<'interest' | 'domain'>('interest')
+
+  // Derive domain interest IDs from groupedInterests
+  const domainInterestIds = useMemo(() => {
+    if (!currentInterest) return []
+    const group = groupedInterests.find((g) =>
+      g.interests.some((i) => i.id === currentInterest.id),
+    )
+    return group ? group.interests.map((i) => i.id) : [currentInterest.id]
+  }, [currentInterest, groupedInterests])
+
+  const effectiveInterestIds = useMemo(() => {
+    if (viewMode === 'domain' && domainInterestIds.length > 1) return domainInterestIds
+    return currentInterest ? [currentInterest.id] : []
+  }, [viewMode, domainInterestIds, currentInterest])
+
+  const toggleDomainView = useCallback(() => {
+    setViewMode((prev) => (prev === 'interest' ? 'domain' : 'interest'))
+  }, [])
+
+  // Reset to interest view when switching interests
+  useEffect(() => {
+    setViewMode('interest')
+  }, [activeSlug])
+
   useEffect(() => {
     if (!hiddenResolved) return
     if (userInterests.length === 0) {
@@ -465,13 +586,20 @@ export function InterestProvider({ children }: PropsWithChildren) {
       currentInterest,
       allInterests: interests,
       userInterests,
+      domains,
+      groupedInterests,
+      getDomainForInterest,
       loading,
       switchInterest,
       addInterest,
       removeInterest,
       refreshInterests,
+      viewMode,
+      domainInterestIds,
+      effectiveInterestIds,
+      toggleDomainView,
     }),
-    [currentInterest, interests, userInterests, loading, switchInterest, addInterest, removeInterest, refreshInterests],
+    [currentInterest, interests, userInterests, domains, groupedInterests, getDomainForInterest, loading, switchInterest, addInterest, removeInterest, refreshInterests, viewMode, domainInterestIds, effectiveInterestIds, toggleDomainView],
   )
 
   return (

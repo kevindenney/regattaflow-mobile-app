@@ -19,12 +19,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { GatedFeature, SAILOR_TIERS } from '@/lib/subscriptions/sailorTiers';
+import type { TierSource } from '@/hooks/useFeatureGate';
 
 interface UpgradePromptProps {
   visible: boolean;
   onClose: () => void;
   feature?: GatedFeature;
   context?: string;
+  tierSource?: TierSource;
+  orgName?: string;
 }
 
 interface FeatureContent {
@@ -130,19 +133,68 @@ export default function UpgradePrompt({
   onClose,
   feature,
   context,
+  tierSource,
+  orgName,
 }: UpgradePromptProps) {
   const content = FEATURE_CONTENT[feature || 'default'];
   const proTier = SAILOR_TIERS.pro;
 
+  // If org-sponsored, show attribution instead of upgrade CTA
+  const isOrgSponsored = tierSource === 'organization';
+
   const handleUpgrade = () => {
     onClose();
-    // Navigate to pricing page with upgrade intent
     router.push('/pricing?upgrade=pro');
   };
 
   const handleMaybeLater = () => {
     onClose();
   };
+
+  // Org-sponsored users see a simple attribution modal
+  if (isOrgSponsored) {
+    return (
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={onClose}
+      >
+        <LinearGradient
+          colors={['#0c4a6e', '#0369a1', '#0284c7']}
+          style={styles.container}
+        >
+          <View style={styles.scrollContent}>
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Ionicons name="close" size={24} color="#f8fafc" />
+              </TouchableOpacity>
+
+              <View style={styles.iconContainer}>
+                <View style={styles.iconCircle}>
+                  <Ionicons name="shield-checkmark" size={48} color="#22c55e" />
+                </View>
+              </View>
+
+              <View style={styles.titleContainer}>
+                <ThemedText style={styles.title}>Included with Your Membership</ThemedText>
+                <ThemedText style={styles.description}>
+                  Your access is provided by {orgName || 'your organization'}. You have full access to premium features at no additional cost.
+                </ThemedText>
+              </View>
+            </View>
+
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={styles.primaryButton} onPress={onClose}>
+                <Ionicons name="checkmark-circle" size={20} color="#0c4a6e" />
+                <ThemedText style={styles.primaryButtonText}>Got It</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+      </Modal>
+    );
+  }
 
   return (
     <Modal

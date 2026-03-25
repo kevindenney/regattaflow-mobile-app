@@ -53,7 +53,7 @@ export async function resolveInterestId(slug: string): Promise<string | null> {
 
 export async function getUserTimeline(
   userId: string,
-  interestId?: string | null,
+  interestId?: string | string[] | null,
 ): Promise<TimelineStepRecord[]> {
   try {
     // Fetch own steps
@@ -65,7 +65,11 @@ export async function getUserTimeline(
       .order('created_at', { ascending: true });
 
     if (interestId) {
-      ownQuery = ownQuery.eq('interest_id', interestId);
+      if (Array.isArray(interestId)) {
+        ownQuery = ownQuery.in('interest_id', interestId);
+      } else {
+        ownQuery = ownQuery.eq('interest_id', interestId);
+      }
     }
 
     // Fetch steps where user is a collaborator (shared with them)
@@ -78,7 +82,11 @@ export async function getUserTimeline(
       .order('created_at', { ascending: true });
 
     if (interestId) {
-      collabQuery = collabQuery.eq('interest_id', interestId);
+      if (Array.isArray(interestId)) {
+        collabQuery = collabQuery.in('interest_id', interestId);
+      } else {
+        collabQuery = collabQuery.eq('interest_id', interestId);
+      }
     }
 
     const [ownResult, collabResult] = await Promise.all([ownQuery, collabQuery]);
@@ -86,10 +94,16 @@ export async function getUserTimeline(
     if (ownResult.error) throw ownResult.error;
     if (collabResult.error) throw collabResult.error;
 
-    // Merge: own steps first (sorted), then collaborated steps appended
+    // Merge: own steps first (sorted), then collaborated steps appended — deduplicated
     const ownSteps = (ownResult.data ?? []) as TimelineStepRecord[];
     const collabSteps = (collabResult.data ?? []) as TimelineStepRecord[];
-    return [...ownSteps, ...collabSteps];
+    const seenIds = new Set(ownSteps.map((s) => s.id));
+    const uniqueCollabSteps = collabSteps.filter((s) => {
+      if (seenIds.has(s.id)) return false;
+      seenIds.add(s.id);
+      return true;
+    });
+    return [...ownSteps, ...uniqueCollabSteps];
   } catch (err) {
     logger.error('Failed to fetch user timeline', err);
     throw err;
@@ -131,9 +145,10 @@ export async function updateStepMetadata(
       .from('timeline_steps')
       .select('metadata')
       .eq('id', stepId)
-      .single();
+      .maybeSingle();
 
     if (fetchErr) throw fetchErr;
+    if (!current) throw new Error(`Step ${stepId} not found or not owned by current user`);
 
     const existingMetadata = (current?.metadata ?? {}) as StepMetadata;
 
@@ -172,9 +187,10 @@ export async function updateStepMetadata(
       })
       .eq('id', stepId)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error(`Step ${stepId} not found or not owned by current user`);
     return data as TimelineStepRecord;
   } catch (err) {
     logger.error('Failed to update step metadata', err);
@@ -278,14 +294,23 @@ export async function updateStep(
   try {
     logger.debug('Updating timeline step', { stepId });
 
+    // Auto-set completed_at when status changes
+    const payload: Record<string, unknown> = { ...input };
+    if (input.status === 'completed') {
+      payload.completed_at = new Date().toISOString();
+    } else if (input.status) {
+      payload.completed_at = null;
+    }
+
     const { data, error } = await supabase
       .from('timeline_steps')
-      .update(input)
+      .update(payload)
       .eq('id', stepId)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) throw error;
+    if (!data) throw new Error(`Step ${stepId} not found or not owned by current user`);
     return data as TimelineStepRecord;
   } catch (err) {
     logger.error('Failed to update timeline step', err);
@@ -320,6 +345,7 @@ export async function adoptStep(
   userId: string,
   sourceStepId: string,
   interestId: string,
+  blueprintId?: string | null,
 ): Promise<TimelineStepRecord> {
   try {
     logger.debug('Adopting step', { userId, sourceStepId });
@@ -346,9 +372,41 @@ export async function adoptStep(
 
     const nextSort = (maxRow?.sort_order ?? 0) + 1;
 
-    const { data, error } = await supabase
-      .from('timeline_steps')
-      .insert({
+    // Copy metadata but strip brain_dump (it's author-specific context, not relevant to adopter)
+    const sourceMetadata = { ...((source as any).metadata ?? {}) };
+    delete sourceMetadata.brain_dump;
+
+    // Copy linked library resources via SECURITY DEFINER RPC so the adopter
+    // can read the author's resources (RLS normally blocks cross-user reads).
+    const linkedIds: string[] = sourceMetadata.plan?.linked_resource_ids ?? [];
+    if (linkedIds.length > 0) {
+      try {
+        const { data: idMap, error: rpcErr } = await supabase.rpc(
+          'copy_library_resources_for_adoption',
+          {
+            p_source_resource_ids: linkedIds,
+            p_adopter_user_id: userId,
+            p_interest_id: interestId,
+          },
+        );
+
+        if (rpcErr) {
+          logger.warn('RPC copy_library_resources_for_adoption failed', rpcErr);
+        } else if (idMap && Object.keys(idMap).length > 0) {
+          // Rewrite linked_resource_ids to point to the adopter's copies
+          sourceMetadata.plan = {
+            ...(sourceMetadata.plan ?? {}),
+            linked_resource_ids: linkedIds.map((id) => idMap[id] ?? id),
+          };
+          logger.debug('Library resources copied for adoption', { count: Object.keys(idMap).length });
+        }
+      } catch (err) {
+        // Non-fatal — step adoption still works without library resources
+        logger.warn('Failed to copy library resources during adoption', err);
+      }
+    }
+
+    const insertPayload: Record<string, unknown> = {
         user_id: userId,
         interest_id: interestId,
         organization_id: (source as any).organization_id ?? null,
@@ -366,8 +424,16 @@ export async function adoptStep(
         visibility: 'followers',
         share_approximate_location: false,
         sort_order: nextSort,
-        metadata: (source as any).metadata ?? {},
-      })
+        metadata: sourceMetadata,
+    };
+
+    if (blueprintId) {
+      insertPayload.source_blueprint_id = blueprintId;
+    }
+
+    const { data, error } = await supabase
+      .from('timeline_steps')
+      .insert(insertPayload)
       .select()
       .single();
 

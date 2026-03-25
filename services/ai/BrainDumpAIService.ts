@@ -118,6 +118,8 @@ const STOP_WORDS = new Set([
   'september', 'october', 'november', 'december',
   'youtube', 'google', 'discord', 'zoom', 'whatsapp', 'slack',
   'dragon', 'laser', 'optimist', 'lightning', 'soling', 'star',
+  'merino', 'alpaca', 'cashmere', 'mohair', 'cotton', 'linen', 'silk', 'acrylic', 'nylon',
+  'stockinette', 'garter', 'ribbing', 'brioche', 'cables', 'intarsia', 'colorwork',
   'what', 'when', 'where', 'how', 'why', 'who',
   'north', 'south', 'east', 'west', 'pdf',
   'it', 'them', 'us', 'him', 'her', 'me', 'you', 'everyone', 'someone',
@@ -349,28 +351,93 @@ const SAILING_EQUIPMENT_TERMS = [
   'boat cover', 'trailer', 'launching trolley', 'dolly',
 ];
 
+// ---------------------------------------------------------------------------
+// Interest-specific equipment terms
+// ---------------------------------------------------------------------------
+
+const KNITTING_NEEDLE_TERMS = [
+  'circular needles', 'circulars', 'dpns', 'double pointed needles',
+  'straight needles', 'interchangeable needles', 'cable needle',
+  'stitch markers', 'stitch holder', 'row counter', 'point protectors',
+  'tapestry needle', 'darning needle', 'blocking pins', 'blocking mats',
+  'swift', 'ball winder', 'yarn bowl', 'notion bag',
+  'knitting gauge', 'needle gauge', 'blocking wires',
+];
+
+const KNITTING_YARN_TERMS = [
+  'fingering weight', 'sport weight', 'dk weight', 'worsted weight',
+  'aran weight', 'bulky weight', 'super bulky', 'lace weight',
+  'merino', 'superwash', 'alpaca', 'cashmere', 'mohair', 'silk',
+  'cotton', 'linen', 'bamboo', 'acrylic', 'nylon',
+  'hand-dyed', 'hand dyed', 'indie dyed', 'variegated', 'semi-solid',
+  'self-striping', 'gradient', 'tonal', 'speckled',
+  'skein', 'hank', 'cake', 'ball',
+];
+
+const KNITTING_BRAND_TERMS = [
+  'malabrigo', 'madelinetosh', 'madtosh', 'hedgehog fibres',
+  'spud & chloe', 'cascade', 'berroco', 'knit picks', 'knitpicks',
+  'chiaogoo', 'addi', 'hiya hiya', 'knitter\'s pride', 'lykke',
+  'clover', 'tulip', 'kollage',
+];
+
+const FIBER_ARTS_EQUIPMENT_TERMS = [
+  'drop spindle', 'spinning wheel', 'carder', 'hand cards', 'drum carder',
+  'rigid heddle loom', 'floor loom', 'table loom', 'weaving shuttle',
+  'warping board', 'reed', 'heddles', 'bobbin', 'lazy kate', 'niddy noddy',
+  'crochet hook', 'ergonomic hook', 'mordant', 'dye pot',
+];
+
+const GLOBAL_HEALTH_EQUIPMENT_TERMS = [
+  'blood pressure cuff', 'stethoscope', 'pulse oximeter', 'thermometer',
+  'glucometer', 'scale', 'muac tape', 'otoscope', 'ophthalmoscope',
+  'first aid kit', 'rapid test', 'community health kit',
+];
+
+const PAINTING_EQUIPMENT_TERMS = [
+  'easel', 'palette', 'palette knife', 'canvas', 'linen', 'panel',
+  'gesso', 'turpentine', 'linseed oil', 'medium', 'varnish',
+  'sable brush', 'hog brush', 'filbert', 'flat brush', 'round brush',
+  'fan brush', 'rigger', 'brayer', 'press', 'ink', 'squeegee',
+  'gouge', 'lino', 'carving tools', 'registration marks',
+];
+
+/** Get all equipment terms for the given interest */
+function getEquipmentTerms(interestSlug?: string): string[] {
+  if (!interestSlug || interestSlug.includes('sail')) {
+    return [...SAILING_BOAT_CLASSES, ...SAILING_SAIL_TERMS, ...SAILING_EQUIPMENT_TERMS];
+  }
+  switch (interestSlug) {
+    case 'knitting':
+      return [...KNITTING_NEEDLE_TERMS, ...KNITTING_YARN_TERMS, ...KNITTING_BRAND_TERMS];
+    case 'fiber-arts':
+      return [...KNITTING_NEEDLE_TERMS, ...KNITTING_YARN_TERMS, ...KNITTING_BRAND_TERMS, ...FIBER_ARTS_EQUIPMENT_TERMS];
+    case 'global-health':
+      return GLOBAL_HEALTH_EQUIPMENT_TERMS;
+    case 'painting-printing':
+    case 'drawing':
+      return PAINTING_EQUIPMENT_TERMS;
+    default:
+      return []; // Let the AI handle equipment for unknown interests
+  }
+}
+
 function extractEquipmentHints(text: string, interestSlug?: string): string[] {
   const equipment = new Set<string>();
 
-  // For sailing (or if no interest specified, try sailing terms anyway)
   const isSailing = !interestSlug || interestSlug.includes('sail');
 
-  if (isSailing) {
-    // Match known class names, sail terms, and equipment terms
-    const allTerms = [
-      ...SAILING_BOAT_CLASSES,
-      ...SAILING_SAIL_TERMS,
-      ...SAILING_EQUIPMENT_TERMS,
-    ];
-    for (const term of allTerms) {
-      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const pattern = new RegExp(`\\b${escaped}\\b`, 'i');
-      const match = text.match(pattern);
-      if (match) equipment.add(match[0]);
-    }
+  // Match known terms for this interest
+  const allTerms = getEquipmentTerms(interestSlug);
+  for (const term of allTerms) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b${escaped}\\b`, 'i');
+    const match = text.match(pattern);
+    if (match) equipment.add(match[0]);
+  }
 
+  if (isSailing) {
     // Also detect "boat [name]" or "our boat [name]" or "my boat [name]"
-    // This captures boat proper names like "Dragonfly", "Dorado"
     const boatNamePattern = /\b(?:my|our|the)\s+boat\s+([a-zA-Z][a-zA-Z0-9]+)/gi;
     let bm: RegExpExecArray | null;
     while ((bm = boatNamePattern.exec(text)) !== null) {
@@ -382,7 +449,6 @@ function extractEquipmentHints(text: string, interestSlug?: string): string[] {
     let obm: RegExpExecArray | null;
     while ((obm = onBoatPattern.exec(text)) !== null) {
       const name = obm[1];
-      // Skip common false positives after "on"
       const skipAfterOn = new Set([
         'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
         'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
@@ -451,41 +517,194 @@ function extractLocationHints(text: string): string[] {
 // Topic extraction (lightweight — just key phrases)
 // ---------------------------------------------------------------------------
 
-function extractTopics(text: string): string[] {
-  // Simple keyword extraction: find phrases that appear to be activities/skills
+const SAILING_TOPIC_PATTERNS: RegExp[] = [
+  // Multi-word phrases
+  /\b(roll tack(?:ing|s)?)\b/gi,
+  /\b(spinnaker\s+(?:flying|work|trim|sets?|handling))\b/gi,
+  /\b(downwind\s+(?:tips|sailing|technique|speed))\b/gi,
+  /\b(upwind\s+(?:tips|sailing|technique|trim|speed))\b/gi,
+  /\b(sail\s+trim(?:ming)?)\b/gi,
+  /\b(mast\s+ram)\b/gi,
+  /\b(shroud\s+tension)\b/gi,
+  /\b(rig\s+tuning)\b/gi,
+  /\b(boat\s+handling)\b/gi,
+  /\b(mark\s+roundings?)\b/gi,
+  /\b(starting\s+(?:technique|line|strategy))\b/gi,
+  /\b(race\s+tactics?)\b/gi,
+  /\b(light\s+wind\s+\w+)\b/gi,
+  /\b(heavy\s+wind\s+\w+)\b/gi,
+  /\b(balance\b.*?\bkeel)\b/gi,
+  /\b(shifting\s+gears)\b/gi,
+  /\b(running\s+backstays?)\b/gi,
+  /\b(jumper\s+stays?)\b/gi,
+  /\b(mast\s+(?:setup|bend|pre-?bend))\b/gi,
+  /\b(crew\s+(?:work|technique|coordination))\b/gi,
+  // Single-word sailing terms
+  /\b(tacking)\b/gi,
+  /\b(gybing|jibing)\b/gi,
+  /\b(spinnaker)\b/gi,
+  /\b(downwind)\b/gi,
+  /\b(upwind)\b/gi,
+];
+
+const KNITTING_TOPIC_PATTERNS: RegExp[] = [
+  // Multi-word knitting phrases
+  /\b(cable knitting)\b/gi,
+  /\b(fair isle)\b/gi,
+  /\b(color(?:work|ed knitting))\b/gi,
+  /\b(stranded\s+(?:knitting|colorwork))\b/gi,
+  /\b(intarsia\s+(?:knitting|technique|pattern))\b/gi,
+  /\b(lace\s+(?:knitting|pattern|work))\b/gi,
+  /\b(brioche\s+(?:knitting|stitch))\b/gi,
+  /\b(double\s+knitting)\b/gi,
+  /\b(short\s+rows?)\b/gi,
+  /\b(magic\s+loop)\b/gi,
+  /\b(two\s+at\s+a\s+time)\b/gi,
+  /\b(kitchener\s+stitch)\b/gi,
+  /\b(mattress\s+stitch)\b/gi,
+  /\b(three[\s-]needle\s+bind[\s-]?off)\b/gi,
+  /\b(provisional\s+cast[\s-]?on)\b/gi,
+  /\b(long[\s-]tail\s+cast[\s-]?on)\b/gi,
+  /\b(cable\s+cast[\s-]?on)\b/gi,
+  /\b(gauge\s+swatch(?:ing)?)\b/gi,
+  /\b(stitch\s+(?:count|marker|pattern)s?)\b/gi,
+  /\b(yarn\s+(?:weight|over|substitution))\b/gi,
+  /\b(needle\s+size)\b/gi,
+  /\b(tension\s+(?:control|consistency|evenness))\b/gi,
+  /\b(sock\s+(?:knitting|heel|toe))\b/gi,
+  /\b(afterthought\s+heel)\b/gi,
+  /\b(flap\s+and\s+gusset)\b/gi,
+  /\b(top[\s-]down\s+(?:raglan|sweater|construction))\b/gi,
+  /\b(bottom[\s-]up\s+(?:sweater|construction))\b/gi,
+  /\b(raglan\s+(?:shaping|increase|yoke))\b/gi,
+  /\b(set[\s-]in\s+sleeves?)\b/gi,
+  /\b(pattern\s+reading)\b/gi,
+  /\b(bind(?:ing)?\s+off)\b/gi,
+  /\b(cast(?:ing)?\s+on)\b/gi,
+  // Single-word knitting terms
+  /\b(colorwork)\b/gi,
+  /\b(intarsia)\b/gi,
+  /\b(brioche)\b/gi,
+  /\b(cables?)\b/gi,
+  /\b(blocking)\b/gi,
+  /\b(seaming)\b/gi,
+  /\b(frogging)\b/gi,
+  /\b(tinking)\b/gi,
+  /\b(purling)\b/gi,
+  /\b(stockinette)\b/gi,
+  /\b(garter\s+stitch)\b/gi,
+  /\b(ribbing)\b/gi,
+  /\b(seed\s+stitch)\b/gi,
+  /\b(moss\s+stitch)\b/gi,
+  /\b(knit[\s-]along|KAL)\b/gi,
+];
+
+const FIBER_ARTS_TOPIC_PATTERNS: RegExp[] = [
+  /\b(weaving)\b/gi,
+  /\b(crochet(?:ing)?)\b/gi,
+  /\b(spinning)\b/gi,
+  /\b(felting)\b/gi,
+  /\b(dyeing|natural\s+dyes?)\b/gi,
+  /\b(tapestry)\b/gi,
+  /\b(macram[eé])\b/gi,
+  /\b(warp(?:ing)?)\b/gi,
+  /\b(weft)\b/gi,
+  /\b(amigurumi)\b/gi,
+];
+
+const GLOBAL_HEALTH_TOPIC_PATTERNS: RegExp[] = [
+  /\b(community\s+health)\b/gi,
+  /\b(health\s+(?:worker|assessment|screening|education)s?)\b/gi,
+  /\b(clinical\s+(?:skills?|rotation|assessment))\b/gi,
+  /\b(patient\s+(?:assessment|care|education))\b/gi,
+  /\b(program\s+(?:design|management|evaluation))\b/gi,
+  /\b(data\s+(?:collection|analysis|quality))\b/gi,
+  /\b(field\s+(?:work|visit|deployment))\b/gi,
+  /\b(supervision)\b/gi,
+  /\b(maternal\s+health)\b/gi,
+  /\b(nutrition)\b/gi,
+  /\b(immunization)\b/gi,
+];
+
+const PAINTING_TOPIC_PATTERNS: RegExp[] = [
+  /\b(color\s+(?:mixing|theory|palette|temperature))\b/gi,
+  /\b(brush(?:work|strokes?))\b/gi,
+  /\b(composition)\b/gi,
+  /\b(plein\s+air)\b/gi,
+  /\b(still\s+life)\b/gi,
+  /\b(figure\s+(?:drawing|painting))\b/gi,
+  /\b(landscape\s+(?:painting)?)\b/gi,
+  /\b(portrait(?:ure)?)\b/gi,
+  /\b(watercolor)\b/gi,
+  /\b(oil\s+painting)\b/gi,
+  /\b(acrylic)\b/gi,
+  /\b(printmaking)\b/gi,
+  /\b(linocut)\b/gi,
+  /\b(screen\s+printing)\b/gi,
+  /\b(glazing)\b/gi,
+  /\b(underpainting)\b/gi,
+  /\b(impasto)\b/gi,
+  /\b(wet[\s-]on[\s-]wet)\b/gi,
+];
+
+const DRAWING_TOPIC_PATTERNS: RegExp[] = [
+  /\b(gesture\s+(?:drawing|practice))\b/gi,
+  /\b(figure\s+drawing)\b/gi,
+  /\b(perspective)\b/gi,
+  /\b(anatomy)\b/gi,
+  /\b(portraits?)\b/gi,
+  /\b(head\s+construction)\b/gi,
+  /\b(contour\s+(?:drawing|lines?))\b/gi,
+  /\b(cross[\s-]hatching)\b/gi,
+  /\b(shading)\b/gi,
+  /\b(rendering)\b/gi,
+  /\b(sketching)\b/gi,
+  /\b(charcoal)\b/gi,
+  /\b(graphite)\b/gi,
+];
+
+const FITNESS_TOPIC_PATTERNS: RegExp[] = [
+  /\b(strength\s+training)\b/gi,
+  /\b(dead\s*lift(?:ing|s)?)\b/gi,
+  /\b(squat(?:ting|s)?)\b/gi,
+  /\b(bench\s+press)\b/gi,
+  /\b(overhead\s+press)\b/gi,
+  /\b(pull[\s-]ups?)\b/gi,
+  /\b(cardio)\b/gi,
+  /\b(HIIT)\b/gi,
+  /\b(stretching)\b/gi,
+  /\b(mobility)\b/gi,
+  /\b(form\s+check)\b/gi,
+  /\b(progressive\s+overload)\b/gi,
+  /\b(muscle[\s-]up)\b/gi,
+  /\b(calisthenics)\b/gi,
+  /\b(yoga)\b/gi,
+];
+
+/** Get topic patterns for the given interest slug */
+function getTopicPatterns(interestSlug?: string): RegExp[] {
+  if (!interestSlug) return SAILING_TOPIC_PATTERNS;
+  if (interestSlug.includes('sail')) return SAILING_TOPIC_PATTERNS;
+  switch (interestSlug) {
+    case 'knitting': return KNITTING_TOPIC_PATTERNS;
+    case 'fiber-arts': return [...KNITTING_TOPIC_PATTERNS, ...FIBER_ARTS_TOPIC_PATTERNS];
+    case 'global-health': return GLOBAL_HEALTH_TOPIC_PATTERNS;
+    case 'painting-printing': return PAINTING_TOPIC_PATTERNS;
+    case 'drawing': return DRAWING_TOPIC_PATTERNS;
+    case 'fitness':
+    case 'health-and-fitness': return FITNESS_TOPIC_PATTERNS;
+    default: return []; // Let the AI handle topic extraction for unknown interests
+  }
+}
+
+function extractTopics(text: string, interestSlug?: string): string[] {
   const topics: string[] = [];
-  const activityPatterns = [
-    // Multi-word phrases (check these first for more specific matches)
-    /\b(roll tack(?:ing|s)?)\b/gi,
-    /\b(spinnaker\s+(?:flying|work|trim|sets?|handling))\b/gi,
-    /\b(downwind\s+(?:tips|sailing|technique|speed))\b/gi,
-    /\b(upwind\s+(?:tips|sailing|technique|trim|speed))\b/gi,
-    /\b(sail\s+trim(?:ming)?)\b/gi,
-    /\b(mast\s+ram)\b/gi,
-    /\b(shroud\s+tension)\b/gi,
-    /\b(rig\s+tuning)\b/gi,
-    /\b(boat\s+handling)\b/gi,
-    /\b(mark\s+roundings?)\b/gi,
-    /\b(starting\s+(?:technique|line|strategy))\b/gi,
-    /\b(race\s+tactics?)\b/gi,
-    /\b(light\s+wind\s+\w+)\b/gi,
-    /\b(heavy\s+wind\s+\w+)\b/gi,
-    /\b(balance\b.*?\bkeel)\b/gi,
-    /\b(shifting\s+gears)\b/gi,
-    /\b(running\s+backstays?)\b/gi,
-    /\b(jumper\s+stays?)\b/gi,
-    /\b(mast\s+(?:setup|bend|pre-?bend))\b/gi,
-    /\b(crew\s+(?:work|technique|coordination))\b/gi,
-    // Single-word sailing terms
-    /\b(tacking)\b/gi,
-    /\b(gybing|jibing)\b/gi,
-    /\b(spinnaker)\b/gi,
-    /\b(downwind)\b/gi,
-    /\b(upwind)\b/gi,
-  ];
+  const patterns = getTopicPatterns(interestSlug);
 
   const seen = new Set<string>();
-  for (const pattern of activityPatterns) {
+  for (const pattern of patterns) {
+    // Reset lastIndex for global patterns
+    pattern.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = pattern.exec(text)) !== null) {
       const topic = m[1].trim().toLowerCase();
@@ -516,7 +735,7 @@ export function parseBrainDump(text: string, interestSlug?: string): ParsedBrain
   return {
     extracted_urls: extractUrls(text),
     extracted_people: extractPeople(text),
-    extracted_topics: extractTopics(text),
+    extracted_topics: extractTopics(text, interestSlug),
     extracted_dates: extractDates(text),
     extracted_equipment: extractEquipmentHints(text, interestSlug),
     extracted_locations: extractLocationHints(text),

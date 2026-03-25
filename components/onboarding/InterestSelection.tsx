@@ -7,7 +7,7 @@
  * InterestProvider only when the user taps "Continue".
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -22,6 +22,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useInterest, type Interest } from '@/providers/InterestProvider';
+
+// A union type for flat list items: either a domain header or an interest card
+type GridItem =
+  | { type: 'domain-header'; id: string; name: string; accentColor: string }
+  | { type: 'interest'; id: string; interest: Interest };
 
 // ---------------------------------------------------------------------------
 // Props
@@ -39,7 +44,7 @@ export interface InterestSelectionProps {
 // ---------------------------------------------------------------------------
 
 export function InterestSelection({ visible, onComplete }: InterestSelectionProps) {
-  const { userInterests, switchInterest, loading: interestsLoading } = useInterest();
+  const { userInterests, groupedInterests, switchInterest, loading: interestsLoading } = useInterest();
   const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -49,6 +54,47 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
   // Responsive column count: 4 on wide screens (tablet/web), 2 on mobile
   const isWide = screenWidth >= 768;
   const numColumns = isWide ? 4 : 2;
+
+  // Build a flat list with domain header items interspersed.
+  // FlatList with numColumns can't use SectionList, so we insert
+  // full-width header items and pad with invisible spacers.
+  const gridItems = useMemo<GridItem[]>(() => {
+    // If only 1 domain group, skip headers
+    if (groupedInterests.length <= 1) {
+      return userInterests.map((i) => ({ type: 'interest' as const, id: i.id, interest: i }));
+    }
+
+    const items: GridItem[] = [];
+    for (const group of groupedInterests) {
+      const matching = group.interests.filter((gi) =>
+        userInterests.some((ui) => ui.slug === gi.slug),
+      );
+      if (matching.length === 0) continue;
+
+      // Domain header + (numColumns - 1) spacer slots to fill the row
+      items.push({
+        type: 'domain-header',
+        id: `header-${group.domain.slug}`,
+        name: group.domain.name,
+        accentColor: group.domain.accent_color,
+      });
+      // Pad remaining columns in header row with invisible spacers
+      for (let i = 1; i < numColumns; i++) {
+        items.push({
+          type: 'domain-header',
+          id: `header-${group.domain.slug}-spacer-${i}`,
+          name: '',
+          accentColor: 'transparent',
+        });
+      }
+
+      for (const interest of matching) {
+        items.push({ type: 'interest', id: interest.id, interest });
+      }
+    }
+
+    return items;
+  }, [userInterests, groupedInterests, numColumns]);
 
   // ------ Handlers ------
 
@@ -72,11 +118,23 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
 
   // ------ Render helpers ------
 
-  const renderCard = useCallback(
-    ({ item }: { item: Interest }) => {
-      const isSelected = selectedSlug === item.slug;
-      const accentColor = item.accent_color || '#2563EB';
-      const tagline = item.hero_tagline || item.description || '';
+  const renderItem = useCallback(
+    ({ item }: { item: GridItem }) => {
+      if (item.type === 'domain-header') {
+        // The first item in each header row shows the label; spacers are invisible
+        if (!item.name) return <View style={styles.card} />;
+        return (
+          <View style={styles.domainHeaderRow}>
+            <View style={[styles.domainAccent, { backgroundColor: item.accentColor }]} />
+            <Text style={styles.domainHeaderText}>{item.name}</Text>
+          </View>
+        );
+      }
+
+      const interest = item.interest;
+      const isSelected = selectedSlug === interest.slug;
+      const accentColor = interest.accent_color || '#2563EB';
+      const tagline = interest.hero_tagline || interest.description || '';
 
       return (
         <Pressable
@@ -87,10 +145,10 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
             isSelected && { borderColor: accentColor },
             pressed && styles.cardPressed,
           ]}
-          onPress={() => handleSelect(item.slug)}
+          onPress={() => handleSelect(interest.slug)}
           accessibilityRole="button"
           accessibilityState={{ selected: isSelected }}
-          accessibilityLabel={`${item.name}. ${tagline}`}
+          accessibilityLabel={`${interest.name}. ${tagline}`}
         >
           {/* Checkmark overlay */}
           {isSelected && (
@@ -100,7 +158,7 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
           )}
 
           <Text style={styles.cardName} numberOfLines={1}>
-            {item.name}
+            {interest.name}
           </Text>
 
           {tagline ? (
@@ -114,7 +172,7 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
     [selectedSlug, handleSelect],
   );
 
-  const keyExtractor = useCallback((item: Interest) => item.id, []);
+  const keyExtractor = useCallback((item: GridItem) => item.id, []);
 
   // ------ Main render ------
 
@@ -143,8 +201,8 @@ export function InterestSelection({ visible, onComplete }: InterestSelectionProp
         ) : (
           <FlatList
             key={`grid-${numColumns}`}
-            data={userInterests}
-            renderItem={renderCard}
+            data={gridItems}
+            renderItem={renderItem}
             keyExtractor={keyExtractor}
             numColumns={numColumns}
             contentContainerStyle={styles.gridContent}
@@ -223,6 +281,33 @@ const styles = StyleSheet.create({
       ios: { fontFamily: 'Manrope-Regular' },
       android: { fontFamily: 'Manrope-Regular' },
       web: { fontFamily: 'Manrope, system-ui, sans-serif' },
+    }),
+  },
+
+  // Domain header
+  domainHeaderRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  domainAccent: {
+    width: 3,
+    height: 16,
+    borderRadius: 2,
+  },
+  domainHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    ...Platform.select({
+      ios: { fontFamily: 'Manrope-Bold' },
+      android: { fontFamily: 'Manrope-Bold' },
+      web: { fontFamily: 'Manrope, system-ui, sans-serif', fontWeight: '700' as const },
     }),
   },
 

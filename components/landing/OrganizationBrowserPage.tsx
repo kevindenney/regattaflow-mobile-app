@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SimpleLandingNav } from './SimpleLandingNav';
@@ -7,12 +7,13 @@ import { ScrollFix } from './ScrollFix';
 import { GroupSection } from './GroupSection';
 import { PersonTimelineRow } from './PersonTimelineRow';
 import { SubscribeCTA } from './SubscribeCTA';
-import { PublishBlueprintSheet } from '@/components/blueprint/PublishBlueprintSheet';
 import { getInterest, getOrganization, type SampleCohort } from '@/lib/landing/sampleData';
 import { useAuth } from '@/providers/AuthProvider';
-import { useUserBlueprints } from '@/hooks/useBlueprint';
+import { useOrganizationBlueprints, useBlueprintSteps, useSubscribe, useBlueprintSubscription } from '@/hooks/useBlueprint';
 import { showAlert } from '@/lib/utils/crossPlatformAlert';
+import type { BlueprintRecord } from '@/types/blueprint';
 import { organizationDiscoveryService, type OrganizationJoinMode } from '@/services/OrganizationDiscoveryService';
+import { useOrgPrograms, useOrgMemberTimelines } from '@/hooks/usePrograms';
 import { supabase } from '@/services/supabase';
 
 interface OrganizationBrowserPageProps {
@@ -30,14 +31,23 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
   const [joinState, setJoinState] = useState<'idle' | 'joined' | 'pending' | 'blocked'>('idle');
   const [joinMode, setJoinMode] = useState<OrganizationJoinMode | null>(null);
   const [dbOrgId, setDbOrgId] = useState<string | null>(null);
-  const [showBlueprintSheet, setShowBlueprintSheet] = useState(false);
   const [interestDbId, setInterestDbId] = useState<string | null>(null);
-  const { data: userBlueprints } = useUserBlueprints();
+  const [blueprintCount, setBlueprintCount] = useState<number>(0);
+  const { data: orgBlueprints } = useOrganizationBlueprints(dbOrgId);
+  const publishedOrgBlueprints = orgBlueprints?.filter((bp) => bp.is_published) ?? [];
+  const { data: dbPrograms } = useOrgPrograms(dbOrgId);
+  const { data: realMemberTimelines } = useOrgMemberTimelines(dbOrgId, interestDbId);
 
-  // Find existing blueprint for this interest
-  const existingBlueprint = userBlueprints?.find(
-    (bp) => bp.interest_id === interestDbId,
-  ) ?? null;
+  // Group blueprints by program_id
+  const blueprintsByProgram = new Map<string | null, BlueprintRecord[]>();
+  for (const bp of publishedOrgBlueprints) {
+    const key = bp.program_id ?? null;
+    const list = blueprintsByProgram.get(key) ?? [];
+    list.push(bp);
+    blueprintsByProgram.set(key, list);
+  }
+  const ungroupedBlueprints = blueprintsByProgram.get(null) ?? [];
+
 
   // Look up the real org from DB by matching name/slug
   useEffect(() => {
@@ -57,9 +67,17 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
         const match = results.find(
           (r) => r.slug === orgSlug || r.name.toLowerCase() === org.name.toLowerCase()
         );
+        console.log('[OrgBrowserPage] Org match:', match ? { id: match.id, slug: match.slug, join_mode: match.join_mode } : 'NONE');
         if (match) {
           setDbOrgId(match.id);
           setJoinMode(match.join_mode);
+
+          // Fetch blueprint count (bypasses RLS for non-members)
+          const { data: countData, error: countErr } = await supabase.rpc('get_org_blueprint_count', {
+            org_uuid: match.id,
+          });
+          console.log('[OrgBrowserPage] Blueprint count RPC:', { countData, countErr });
+          if (typeof countData === 'number') setBlueprintCount(countData);
 
           // Check existing membership
           const { data: membership } = await supabase
@@ -70,14 +88,15 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
             .order('created_at', { ascending: false })
             .limit(1);
 
+          console.log('[OrgBrowserPage] Membership check:', membership);
           if (membership && membership.length > 0) {
             const status = membership[0].membership_status || membership[0].status;
             if (status === 'active') setJoinState('joined');
             else if (status === 'pending') setJoinState('pending');
           }
         }
-      } catch {
-        // Non-fatal — fall back to local-only UI
+      } catch (err) {
+        console.error('[OrgBrowserPage] Error in lookupOrg:', err);
       }
     };
     lookupOrg();
@@ -100,7 +119,9 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
     }
 
     try {
+      console.log('[OrgBrowserPage] requestJoin:', { orgId: dbOrgId, mode: joinMode });
       const result = await organizationDiscoveryService.requestJoin({ orgId: dbOrgId, mode: joinMode! });
+      console.log('[OrgBrowserPage] requestJoin result:', result);
       if (result.status === 'active' || result.status === 'existing') {
         setJoinState('joined');
         showAlert('Joined', `You've joined ${org!.name}. Welcome!`);
@@ -110,8 +131,14 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
       } else {
         showAlert('Unable to Join', result.message || 'Could not complete the request.');
       }
-    } catch {
-      showAlert('Error', 'Something went wrong. Please try again.');
+    } catch (err: any) {
+      console.error('[OrgBrowserPage] requestJoin error:', err);
+      const msg = err?.message || '';
+      if (msg.includes('restricted to approved email domains')) {
+        showAlert('Email Domain Restricted', `${org!.name} is restricted to approved email domains. Contact the organization for access.`);
+      } else {
+        showAlert('Error', msg || 'Something went wrong. Please try again.');
+      }
     }
   };
 
@@ -191,36 +218,112 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
               </Text>
             </TouchableOpacity>
 
-            {isLoggedIn && interestDbId && (
-              <TouchableOpacity
-                style={[
-                  styles.followOrgBtn,
-                  existingBlueprint?.is_published && styles.followOrgBtnActive,
-                ]}
-                onPress={() => setShowBlueprintSheet(true)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={existingBlueprint?.is_published ? 'layers' : 'layers-outline'}
-                  size={16}
-                  color={existingBlueprint?.is_published ? interest.color : '#FFFFFF'}
-                />
-                <Text
-                  style={[
-                    styles.followOrgBtnText,
-                    existingBlueprint?.is_published && { color: interest.color },
-                  ]}
-                >
-                  {existingBlueprint?.is_published ? 'Blueprint Published' : 'Publish as Blueprint'}
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       </View>
 
+      {/* DB Programs with associated blueprints and real member timelines */}
+      {dbPrograms && dbPrograms.length > 0 && dbPrograms.some((prog) => blueprintsByProgram.has(prog.id)) && (
+        <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
+          {dbPrograms
+            .filter((prog) => blueprintsByProgram.has(prog.id))
+            .map((prog) => {
+              const progBlueprints = blueprintsByProgram.get(prog.id) ?? [];
+              return (
+                <View key={prog.id} style={styles.dbProgramSection}>
+                  <View style={styles.dbProgramHeader}>
+                    <Ionicons name="school-outline" size={18} color={interest.color} />
+                    <Text style={styles.dbProgramTitle}>{prog.title}</Text>
+                  </View>
+                  {progBlueprints.length > 0 && (
+                    <View style={styles.pathwayGrid}>
+                      {progBlueprints.map((bp) => (
+                        <OrgBlueprintCard
+                          key={bp.id}
+                          blueprint={bp}
+                          accentColor={interest.color}
+                          isLoggedIn={isLoggedIn}
+                          isMember={joinState === 'joined'}
+                          userId={user?.id}
+                        />
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+        </View>
+      )}
+
+      {/* Ungrouped pathways (blueprints not associated with a program) */}
+      {ungroupedBlueprints.length > 0 && (
+        <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
+          <Text style={styles.sectionTitle}>Pathways</Text>
+          <Text style={styles.sectionSubtitle}>
+            Subscribe to a pathway to add its steps to your timeline
+          </Text>
+          <View style={styles.pathwayGrid}>
+            {ungroupedBlueprints.map((bp) => (
+              <OrgBlueprintCard
+                key={bp.id}
+                blueprint={bp}
+                accentColor={interest.color}
+                isLoggedIn={isLoggedIn}
+                isMember={joinState === 'joined'}
+                userId={user?.id}
+              />
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Teaser for non-members when blueprints exist but are hidden by RLS */}
+      {publishedOrgBlueprints.length === 0 && blueprintCount > 0 && (
+        <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
+          <Text style={styles.sectionTitle}>Pathways</Text>
+          <View style={styles.pathwayTeaser}>
+            <Ionicons name="layers-outline" size={24} color={interest.color} />
+            <Text style={styles.pathwayTeaserTitle}>
+              {blueprintCount} pathway{blueprintCount !== 1 ? 's' : ''} available for members
+            </Text>
+            <Text style={styles.pathwayTeaserSubtitle}>
+              Join {org.name} to browse and subscribe to curated learning pathways
+            </Text>
+            {joinState === 'idle' && (
+              <TouchableOpacity
+                style={[styles.pathwayTeaserBtn, { backgroundColor: interest.color }]}
+                onPress={handleJoinOrg}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pathwayTeaserBtnText}>{getJoinButtonLabel()}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* Real member timelines */}
+      {realMemberTimelines && realMemberTimelines.length > 0 && (
+        <View style={[styles.body, isDesktop && styles.bodyDesktop, (publishedOrgBlueprints.length > 0 || blueprintCount > 0) && styles.dividerSection]}>
+          <Text style={styles.sectionTitle}>Members</Text>
+          <Text style={styles.sectionSubtitle}>
+            Real timelines from active members
+          </Text>
+          {realMemberTimelines.map((member, i) => (
+            <PersonTimelineRow
+              key={member.person.userId || i}
+              person={member.person}
+              accentColor={interest.color}
+              interestSlug={interestSlug}
+              realStepIds={member.stepIds}
+              interestId={interestDbId ?? undefined}
+            />
+          ))}
+        </View>
+      )}
+
       {/* Groups */}
-      <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
+      <View style={[styles.body, isDesktop && styles.bodyDesktop, publishedOrgBlueprints.length > 0 && styles.dividerSection]}>
         <Text style={styles.sectionTitle}>{org.groupLabel}</Text>
         {org.groups.map((group, i) => (
           <GroupSection key={i} group={group} accentColor={interest.color} interestSlug={interestSlug} />
@@ -297,15 +400,6 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
 
       <SubscribeCTA accentColor={interest.color} interestSlug={interestSlug} />
 
-      {isLoggedIn && interestDbId && (
-        <PublishBlueprintSheet
-          visible={showBlueprintSheet}
-          onClose={() => setShowBlueprintSheet(false)}
-          interestId={interestDbId}
-          interestName={interest.name}
-          existingBlueprint={existingBlueprint}
-        />
-      )}
     </>
   );
 
@@ -326,6 +420,146 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
     </ScrollView>
   );
 }
+
+// ---------------------------------------------------------------------------
+// OrgBlueprintCard — subscribe card for org page
+// ---------------------------------------------------------------------------
+
+function OrgBlueprintCard({
+  blueprint,
+  accentColor,
+  isLoggedIn,
+  isMember,
+  userId,
+}: {
+  blueprint: BlueprintRecord;
+  accentColor: string;
+  isLoggedIn: boolean;
+  isMember: boolean;
+  userId?: string;
+}) {
+  const isOwner = !!userId && blueprint.user_id === userId;
+  const { data: subscription, isLoading: subLoading } = useBlueprintSubscription(
+    isLoggedIn ? blueprint.id : null,
+  );
+  const { data: steps } = useBlueprintSteps(blueprint.id);
+  const subscribeMutation = useSubscribe();
+  const isSubscribed = !!subscription;
+  const isLocked = blueprint.access_level === 'org_members' && !isMember;
+
+  const handleSubscribe = () => {
+    if (!isLoggedIn) {
+      router.push({ pathname: '/(auth)/signup' } as any);
+      return;
+    }
+    if (isLocked) {
+      showAlert('Members Only', 'Join the organization to access this pathway.');
+      return;
+    }
+    if (isSubscribed || subscribeMutation.isPending) return;
+    subscribeMutation.mutate(blueprint.id);
+  };
+
+  const handleCardPress = () => {
+    if (isLocked) {
+      showAlert('Members Only', 'Join the organization to access this pathway.');
+      return;
+    }
+    router.push(`/blueprint/${blueprint.slug}` as any);
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.pathwayCard, isSubscribed && { borderColor: accentColor + '60' }]}
+      onPress={handleCardPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.pathwayCardHeader}>
+        <View style={[styles.pathwayIcon, { backgroundColor: accentColor + '12' }]}>
+          <Ionicons
+            name={isLocked ? 'lock-closed-outline' : 'document-text-outline'}
+            size={24}
+            color={accentColor}
+          />
+        </View>
+        <View style={styles.pathwayCardHeaderText}>
+          <Text style={styles.pathwayTitle}>{blueprint.title}</Text>
+          {blueprint.description && (
+            <Text style={styles.pathwayDescription} numberOfLines={2}>
+              {blueprint.description}
+            </Text>
+          )}
+        </View>
+      </View>
+
+      {/* Mini step timeline */}
+      {steps && steps.length > 0 && (
+        <View style={styles.miniTimeline}>
+          {steps.map((step, idx) => {
+            const isCompleted = step.status === 'completed';
+            const isInProgress = step.status === 'in_progress';
+            const dotColor = isCompleted ? '#3D8A5A' : isInProgress ? '#D4A64A' : '#CBD5E1';
+            return (
+              <View key={step.id} style={styles.miniTimelineStep}>
+                <View style={styles.miniTimelineStepRow}>
+                  <View style={[styles.miniTimelineDot, { backgroundColor: dotColor }]} />
+                  {idx < steps.length - 1 && (
+                    <View style={[styles.miniTimelineLine, isCompleted ? { backgroundColor: '#3D8A5A' } : {}]} />
+                  )}
+                </View>
+                <Text style={styles.miniTimelineLabel} numberOfLines={1}>{step.title}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      <View style={styles.pathwayFooter}>
+        {blueprint.subscriber_count > 0 && (
+          <Text style={styles.pathwayMeta}>
+            {blueprint.subscriber_count} subscriber{blueprint.subscriber_count !== 1 ? 's' : ''}
+          </Text>
+        )}
+        {isOwner ? (
+          <View style={[styles.pathwayBadge, { backgroundColor: accentColor + '12', borderColor: accentColor }]}>
+            <Text style={[styles.pathwayBadgeText, { color: accentColor }]}>Your Pathway</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[
+              styles.pathwayBadge,
+              isSubscribed
+                ? { backgroundColor: accentColor, borderColor: accentColor }
+                : isLocked
+                  ? { borderColor: '#CBD5E1' }
+                  : { borderColor: accentColor },
+            ]}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              handleSubscribe();
+            }}
+            activeOpacity={0.7}
+          >
+            {subLoading || subscribeMutation.isPending ? (
+              <ActivityIndicator size="small" color={isSubscribed ? '#FFFFFF' : accentColor} />
+            ) : (
+              <Text style={[
+                styles.pathwayBadgeText,
+                { color: isSubscribed ? '#FFFFFF' : isLocked ? '#94A3B8' : accentColor },
+              ]}>
+                {isSubscribed ? 'Subscribed' : isLocked ? 'Join to Access' : 'Subscribe'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   container: {
@@ -501,6 +735,159 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#374151',
     flex: 1,
+  },
+
+  // DB Programs
+  dbProgramSection: {
+    marginBottom: 24,
+  },
+  dbProgramHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  dbProgramTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    flex: 1,
+  },
+
+  // Pathways
+  pathwayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  pathwayTeaser: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  pathwayTeaserTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    textAlign: 'center',
+  },
+  pathwayTeaserSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  pathwayTeaserBtn: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    marginTop: 4,
+  },
+  pathwayTeaserBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  pathwayCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 20,
+    width: 320,
+    ...Platform.select({ web: { cursor: 'pointer' as any } }),
+  },
+  pathwayCardHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
+  },
+  pathwayCardHeaderText: {
+    flex: 1,
+  },
+  pathwayIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pathwayTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  pathwayDescription: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  miniTimeline: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 0,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+    overflow: 'hidden',
+  },
+  miniTimelineStep: {
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  miniTimelineStepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  miniTimelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    zIndex: 1,
+  },
+  miniTimelineLine: {
+    position: 'absolute',
+    left: '50%',
+    right: '-50%',
+    height: 2,
+    backgroundColor: '#E5E7EB',
+    top: 4,
+  },
+  miniTimelineLabel: {
+    fontSize: 9,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 3,
+    lineHeight: 11,
+  },
+  pathwayFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 'auto' as any,
+  },
+  pathwayMeta: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  pathwayBadge: {
+    borderRadius: 999,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  pathwayBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   notFound: {

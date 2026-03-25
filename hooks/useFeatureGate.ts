@@ -53,6 +53,8 @@ export interface RaceLimitResult {
   promptUpgrade: () => void;
 }
 
+export type TierSource = 'self' | 'organization' | 'trial';
+
 export interface UseFeatureGateReturn {
   /** Check if a specific feature is available */
   checkFeature: (feature: GatedFeature) => FeatureGateResult;
@@ -60,6 +62,8 @@ export interface UseFeatureGateReturn {
   checkRaceLimit: (raceCount: number) => RaceLimitResult;
   /** User's current tier */
   tier: SailorTier;
+  /** Where the tier comes from: self-paid, organization, or trial */
+  tierSource: TierSource;
   /** Whether user is a guest */
   isGuest: boolean;
   /** Whether user is on free tier */
@@ -70,6 +74,8 @@ export interface UseFeatureGateReturn {
   isPro: boolean;
   /** Whether user is currently in a reverse trial */
   isTrialing: boolean;
+  /** Whether tier is provided by an organization */
+  isOrgSponsored: boolean;
   /** Tier display name */
   tierName: string;
   /** Trigger upgrade prompt */
@@ -124,16 +130,27 @@ export function useFeatureGate(): UseFeatureGateReturn {
     return new Date(profile.trial_ends_at) > new Date();
   }, [userProfile]);
 
+  // Determine tier source
+  const tierSource: TierSource = useMemo(() => {
+    if (isGuest) return 'self';
+    const profile = userProfile as any;
+    return profile?.tier_source || 'self';
+  }, [isGuest, userProfile]);
+
   const tierName = SAILOR_TIERS[tier].name;
   const isFree = tier === 'free';
   const isBasic = tier === 'basic';
   const isPro = tier === 'pro';
+  const isOrgSponsored = tierSource === 'organization';
 
   /**
    * Trigger upgrade prompt
    * Can be customized based on feature and context
    */
   const promptUpgrade = useCallback((feature?: GatedFeature, context?: string) => {
+    // No-op for org-sponsored users — their org provides the tier
+    if (tierSource === 'organization') return;
+
     // This will be connected to the UpgradePrompt modal
     // For now, we'll dispatch an event that components can listen to
     const event = new CustomEvent('regattaflow:upgrade-prompt', {
@@ -142,7 +159,7 @@ export function useFeatureGate(): UseFeatureGateReturn {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(event);
     }
-  }, [tier]);
+  }, [tier, tierSource]);
 
   /**
    * Trigger sign-up prompt for guests
@@ -196,11 +213,13 @@ export function useFeatureGate(): UseFeatureGateReturn {
     checkFeature,
     checkRaceLimit,
     tier,
+    tierSource,
     isGuest,
     isFree,
     isBasic,
     isPro,
     isTrialing,
+    isOrgSponsored,
     tierName,
     promptUpgrade,
     promptSignUp,

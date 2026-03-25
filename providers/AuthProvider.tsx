@@ -117,6 +117,8 @@ type AuthCtx = {
   signInWithGoogle: (persona?: PersonaRole) => Promise<void>
   signInWithApple: (persona?: PersonaRole) => Promise<void>
   enterGuestMode: () => void
+  /** True if user was authenticated at some point in this session (helps detect token expiry vs. fresh visit) */
+  wasAuthenticated: boolean
   biometricAvailable: boolean
   biometricEnabled: boolean
   userProfile?: any
@@ -147,6 +149,7 @@ const Ctx = createContext<AuthCtx>({
   signInWithGoogle: async () => {},
   signInWithApple: async () => {},
   enterGuestMode: () => {},
+  wasAuthenticated: false,
   biometricAvailable: false,
   biometricEnabled: false,
   clubProfile: null,
@@ -174,6 +177,11 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
   const [coachProfile, setCoachProfile] = useState<any | null>(null)
   const [capabilities, setCapabilities] = useState<UserCapabilities>(DEFAULT_CAPABILITIES)
   const [isDemoSession, setIsDemoSession] = useState(false)
+
+  // Track whether the user was ever authenticated in this session.
+  // Used to distinguish "fresh visitor" from "token expired" — prevents
+  // races.tsx from entering guest mode when the user should be re-authing.
+  const wasAuthenticatedRef = useRef(false)
 
   const setPostLogoutAuthFlag = useCallback(async () => {
     try {
@@ -815,6 +823,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       // Identify user in Sentry for error attribution
       setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
       if (session?.user) {
+        wasAuthenticatedRef.current = true
         setIsDemoSession(false)
         setIsGuest(false) // Clear guest mode when user signs in
       }
@@ -863,19 +872,19 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
 
         authDebugLog('🚪 [AUTH] State cleanup complete. Starting navigation...')
         
-        // Explicit sign-out should route to auth-first screen, not guest/demo.
-        authDebugLog('🚪 [AUTH] Navigating to auth login...')
+        // Explicit sign-out should route to landing page.
+        authDebugLog('🚪 [AUTH] Navigating to landing page...')
         try {
           if (typeof window !== 'undefined') {
-            authDebugLog('🚪 [AUTH] Replacing browser history state to login...')
-            window.history.replaceState(null, '', '/(auth)/login')
+            authDebugLog('🚪 [AUTH] Replacing browser history state to landing...')
+            window.history.replaceState(null, '', '/')
           }
-          router.replace('/(auth)/login')
+          router.replace('/')
         } catch (historyError) {
           console.warn('🚪 [AUTH] History replace error:', historyError)
-          // Fallback: force navigation to login
+          // Fallback: force navigation to landing
           try {
-            router.replace('/(auth)/login')
+            router.replace('/')
           } catch (navError) {
             console.warn('🚪 [AUTH] Navigation fallback failed:', navError)
           }
@@ -1005,13 +1014,13 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
     // Force auth-first behavior after explicit logout.
     await setPostLogoutAuthFlag()
 
-    // Navigate to login immediately before clearing auth state.
-    authDebugLog('🚪 [AUTH] Navigating to login immediately...')
+    // Navigate to landing page immediately before clearing auth state.
+    authDebugLog('🚪 [AUTH] Navigating to landing page immediately...')
     try {
       if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', '/(auth)/login')
+        window.history.replaceState(null, '', '/')
       }
-      router.replace('/(auth)/login')
+      router.replace('/')
     } catch (navError) {
       console.warn('🚪 [AUTH] Initial navigation error:', navError)
     }
@@ -1053,12 +1062,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
         setCapabilities(DEFAULT_CAPABILITIES)
         if (typeof window !== 'undefined') {
           try {
-            window.history.replaceState(null, '', '/(auth)/login')
+            window.history.replaceState(null, '', '/')
           } catch (historyError) {
             console.warn('🚪 [AUTH] History replace failed in fallback:', historyError)
           }
         }
-        router.replace('/(auth)/login')
+        router.replace('/')
       }
     }, 4000)
 
@@ -1102,12 +1111,12 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       setCapabilities(DEFAULT_CAPABILITIES)
       if (typeof window !== 'undefined') {
         try {
-          window.history.replaceState(null, '', '/(auth)/login')
+          window.history.replaceState(null, '', '/')
         } catch (historyError) {
           console.warn('🚪 [AUTH] History replace failed after error:', historyError)
         }
       }
-      router.replace('/(auth)/login')
+      router.replace('/')
       clearTimeout(fallbackTimer)
       throw error
     } finally {
@@ -1477,6 +1486,7 @@ export function AuthProvider({children}:{children: React.ReactNode}) {
       signInWithGoogle,
       signInWithApple,
       enterGuestMode,
+      wasAuthenticated: wasAuthenticatedRef.current,
       biometricAvailable: false,
       biometricEnabled: false,
       userProfile,

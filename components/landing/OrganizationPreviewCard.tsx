@@ -4,14 +4,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import type { SampleOrganization } from '@/lib/landing/sampleData';
 import { PersonTimelineRow } from './PersonTimelineRow';
+import type { BlueprintRecord } from '@/types/blueprint';
 
 interface OrganizationPreviewCardProps {
   organization: SampleOrganization;
   interestSlug: string;
   accentColor: string;
+  blueprints?: BlueprintRecord[];
 }
 
-export function OrganizationPreviewCard({ organization, interestSlug, accentColor }: OrganizationPreviewCardProps) {
+export function OrganizationPreviewCard({ organization, interestSlug, accentColor, blueprints = [] }: OrganizationPreviewCardProps) {
+
   // Show up to 3 people from the first group as preview
   const previewPeople = organization.groups
     .flatMap((g) => g.people)
@@ -37,6 +40,45 @@ export function OrganizationPreviewCard({ organization, interestSlug, accentColo
           </Text>
         </View>
       </View>
+
+      {/* Pathways (real blueprints or teaser for hidden ones) */}
+      {blueprints.length > 0 && (() => {
+        const visible = blueprints.filter((bp) => bp.title);
+        const hiddenCount = blueprints.length - visible.length;
+        return (
+          <View style={styles.pathwaySection}>
+            <View style={styles.pathwayHeader}>
+              <Ionicons name="layers-outline" size={13} color={accentColor} />
+              <Text style={[styles.pathwayLabel, { color: accentColor }]}>
+                {blueprints.length} Pathway{blueprints.length !== 1 ? 's' : ''}
+              </Text>
+            </View>
+            {visible.map((bp) => (
+              <TouchableOpacity
+                key={bp.id}
+                style={styles.pathwayRow}
+                onPress={() => router.push(`/blueprint/${bp.slug}` as any)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="layers" size={12} color={accentColor} />
+                <Text style={styles.pathwayTitle} numberOfLines={1}>{bp.title}</Text>
+                <Text style={styles.pathwaySubs}>
+                  {bp.subscriber_count} sub{bp.subscriber_count !== 1 ? 's' : ''}
+                </Text>
+                <Ionicons name="chevron-forward" size={12} color="#9CA3AF" />
+              </TouchableOpacity>
+            ))}
+            {hiddenCount > 0 && (
+              <View style={styles.pathwayRow}>
+                <Ionicons name="lock-closed-outline" size={12} color="#9CA3AF" />
+                <Text style={[styles.pathwayTitle, { color: '#9CA3AF' }]}>
+                  {hiddenCount} member-only pathway{hiddenCount !== 1 ? 's' : ''} — join to access
+                </Text>
+              </View>
+            )}
+          </View>
+        );
+      })()}
 
       <View style={styles.previewList}>
         {previewPeople.map((person, i) => (
@@ -90,6 +132,44 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  pathwaySection: {
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  pathwayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  pathwayLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  pathwayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  pathwayTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  pathwaySubs: {
+    fontSize: 11,
+    color: '#9CA3AF',
   },
   previewList: {
     marginBottom: 4,

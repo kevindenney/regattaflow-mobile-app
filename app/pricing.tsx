@@ -2,7 +2,7 @@
  * Pricing Page
  *
  * Updated: 2026-03-15
- * Pricing: Free / Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
+ * Pricing: Free / Individual $10/mo ($100/yr) / Pro $30/mo ($250/yr)
  * Design: Matches landing/catalog page aesthetic
  */
 
@@ -20,6 +20,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
+import { SimpleLandingNav } from '@/components/landing/SimpleLandingNav';
+import { ScrollFix } from '@/components/landing/ScrollFix';
 
 type BillingPeriod = 'monthly' | 'yearly';
 
@@ -79,8 +81,8 @@ const PLANS: PlanTier[] = [
   {
     id: 'pro',
     name: 'Pro',
-    monthlyPrice: 100,
-    yearlyPrice: 800,
+    monthlyPrice: 30,
+    yearlyPrice: 250,
     description: 'Maximum AI power for serious racers',
     features: [
       'Everything in Individual',
@@ -89,6 +91,7 @@ const PLANS: PlanTier[] = [
       'Team sharing & collaboration',
       'Team analytics dashboard',
       'Priority support',
+      'MCP / AI assistant integration',
     ],
     cta: 'Go Pro',
     accentColor: '#7C3AED',
@@ -153,16 +156,11 @@ export default function PricingScreen() {
 
   return (
     <View style={styles.container}>
+      {Platform.OS === 'web' && <ScrollFix />}
+      <SimpleLandingNav />
       {/* Dark header matching catalog page */}
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 80 }]}>
         <View style={styles.headerContent}>
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>Choose Your Plan</Text>
           <Text style={styles.headerSubtitle}>
             Race preparation tools for every sailor. AI-powered insights to help you win.
@@ -346,6 +344,21 @@ export default function PricingScreen() {
             Secure payment via Stripe.
           </Text>
         </View>
+
+        {/* Institutional pricing cross-link */}
+        <TouchableOpacity
+          style={styles.institutionalBanner}
+          onPress={() => router.push('/institutions/pricing' as any)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="business-outline" size={20} color="#2563EB" />
+          <Text style={styles.institutionalBannerText}>
+            Looking for institutional or team plans?{' '}
+            <Text style={styles.institutionalBannerLink}>
+              View Institutional Pricing →
+            </Text>
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -367,16 +380,6 @@ const styles = StyleSheet.create({
     maxWidth: 1200,
     alignSelf: 'center',
     width: '100%',
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    ...Platform.select({ web: { cursor: 'pointer' } as any }),
   },
   headerTitle: {
     fontSize: 32,
@@ -624,5 +627,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9CA3AF',
     textAlign: 'center',
+  },
+
+  // Institutional pricing cross-link
+  institutionalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginHorizontal: 24,
+    marginBottom: 40,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  institutionalBannerText: {
+    fontSize: 14,
+    color: '#374151',
+    flex: 1,
+  },
+  institutionalBannerLink: {
+    color: '#2563EB',
+    fontWeight: '600',
   },
 });
