@@ -31,7 +31,7 @@ import {
   IOS_RADIUS,
 } from '@/lib/design-tokens-ios';
 import { useAuth } from '@/providers/AuthProvider';
-import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useInterest } from '@/providers/InterestProvider';
 import { getConnectDemoData } from '@/configs/connectDemoData';
 import { DemoPeerCard, DemoPostCard } from './DemoCards';
 
@@ -60,9 +60,10 @@ export function FollowContent({
   onToggleFollow,
 }: FollowContentProps) {
   const { isGuest } = useAuth();
-  const eventConfig = useInterestEventConfig();
-  const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
-  const demoData = useMemo(() => getConnectDemoData(eventConfig.interestSlug), [eventConfig.interestSlug]);
+  const { currentInterest } = useInterest();
+  const rawSlug = currentInterest?.slug ?? 'sail-racing';
+  const isSailingInterest = rawSlug === 'sail-racing';
+  const demoData = useMemo(() => getConnectDemoData(rawSlug), [rawSlug]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);

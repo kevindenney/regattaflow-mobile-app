@@ -58,6 +58,7 @@ import type { Community } from '@/types/community';
 import type { FeedPost, FeedSortType, PostType } from '@/types/community-feed';
 import { POST_TYPE_CONFIG } from '@/types/community-feed';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
+import { useInterest } from '@/providers/InterestProvider';
 import { useVocabulary } from '@/hooks/useVocabulary';
 import { getConnectDemoData } from '@/configs/connectDemoData';
 import { DemoPostCard, DemoCommunityCard } from './DemoCards';
@@ -365,9 +366,11 @@ const ds = StyleSheet.create({
 export function DiscussContent({ toolbarOffset, onScroll, joinedIds, onToggleJoin }: DiscussContentProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { currentInterest } = useInterest();
+  const rawSlug = currentInterest?.slug ?? 'sail-racing';
+  const isSailingInterest = rawSlug === 'sail-racing';
   const eventConfig = useInterestEventConfig();
   const { vocab } = useVocabulary();
-  const isSailingInterest = eventConfig.interestSlug === 'sail-racing';
 
   // Segment state
   const [segment, setSegment] = useState<CommunitySegment>('feed');
@@ -528,7 +531,7 @@ export function DiscussContent({ toolbarOffset, onScroll, joinedIds, onToggleJoi
   // ---------------------------------------------------------------------------
 
   // Non-sailing interests: render demo communities and posts
-  const demoData = getConnectDemoData(eventConfig.interestSlug);
+  const demoData = getConnectDemoData(rawSlug);
   if (!isSailingInterest && demoData) {
     return (
       <DemoDiscussView
