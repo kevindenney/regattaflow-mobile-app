@@ -80,7 +80,17 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-function groupByMonthIndexed(indexedRaces: IndexedRace[]): MonthGroup[] {
+/**
+ * Group races by month, optionally sorting within each group.
+ * - 'planned': steps first (NEXT/actionable), then plan-phase items, by date asc
+ * - 'done': chronological (oldest left → most recent right)
+ * - undefined: preserve original array order
+ */
+function groupByMonthIndexed(
+  indexedRaces: IndexedRace[],
+  sortMode?: 'planned' | 'done',
+  nextRaceIdx?: number | null,
+): MonthGroup[] {
   const groups = new Map<string, MonthGroup>();
 
   indexedRaces.forEach(({ race, index }) => {
@@ -97,7 +107,53 @@ function groupByMonthIndexed(indexedRaces: IndexedRace[]): MonthGroup[] {
     groups.get(key)!.races.push({ race, index });
   });
 
-  return Array.from(groups.values());
+  const result = Array.from(groups.values());
+
+  if (sortMode === 'planned') {
+    // Within each month: steps/actionable items first, then plan-phase items
+    for (const group of result) {
+      group.races.sort((a, b) => {
+        const aIsStep = !!(a.race as any).isTimelineStep;
+        const bIsStep = !!(b.race as any).isTimelineStep;
+
+        // Priority: NEXT item always first
+        const aIsNext = a.index === nextRaceIdx;
+        const bIsNext = b.index === nextRaceIdx;
+        if (aIsNext && !bIsNext) return -1;
+        if (!aIsNext && bIsNext) return 1;
+
+        // Steps in "do" phase (in_progress) before plan phase
+        const aStatus = (a.race as any).status;
+        const bStatus = (b.race as any).status;
+        const aIsDoing = aIsStep && aStatus === 'in_progress';
+        const bIsDoing = bIsStep && bStatus === 'in_progress';
+        if (aIsDoing && !bIsDoing) return -1;
+        if (!aIsDoing && bIsDoing) return 1;
+
+        // Steps (non-plan-phase) before plan-phase items
+        const aIsPlanPhase = aIsStep && aStatus !== 'completed' && aStatus !== 'in_progress';
+        const bIsPlanPhase = bIsStep && bStatus !== 'completed' && bStatus !== 'in_progress';
+        if (!aIsPlanPhase && bIsPlanPhase) return -1;
+        if (aIsPlanPhase && !bIsPlanPhase) return 1;
+
+        // Within same category, sort by date ascending (soonest left)
+        const aDate = (a.race as any).start_date || a.race.date;
+        const bDate = (b.race as any).start_date || b.race.date;
+        return new Date(aDate).getTime() - new Date(bDate).getTime();
+      });
+    }
+  } else if (sortMode === 'done') {
+    // Within each month: chronological order (oldest left → most recent right)
+    for (const group of result) {
+      group.races.sort((a, b) => {
+        const aDate = (a.race as any).start_date || a.race.date;
+        const bDate = (b.race as any).start_date || b.race.date;
+        return new Date(aDate).getTime() - new Date(bDate).getTime();
+      });
+    }
+  }
+
+  return result;
 }
 
 function getRaceStatusColor(race: CardRaceData, isNext: boolean): string {
@@ -555,8 +611,8 @@ export function TimelineGridView({
       return !isRacePast(dateStr, race.startTime);
     });
   }, [indexedRaces, nextRaceIndex]);
-  const plannedGroups = useMemo(() => groupByMonthIndexed(plannedIndexedRaces), [plannedIndexedRaces]);
-  const doneGroups = useMemo(() => groupByMonthIndexed(doneIndexedRaces), [doneIndexedRaces]);
+  const plannedGroups = useMemo(() => groupByMonthIndexed(plannedIndexedRaces, 'planned', nextRaceIndex), [plannedIndexedRaces, nextRaceIndex]);
+  const doneGroups = useMemo(() => groupByMonthIndexed(doneIndexedRaces, 'done'), [doneIndexedRaces]);
 
   const handleSelectRace = useCallback(
     (index: number, race: CardRaceData) => {
