@@ -7,7 +7,7 @@
  * Inspired by the Apple Health "Records" screen pattern.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,6 @@ import {
   ActivityIndicator,
   StyleSheet,
   Platform,
-  Image,
   type LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
@@ -35,8 +34,8 @@ import {
 import { FEATURE_FLAGS } from '@/lib/featureFlags';
 import { triggerHaptic } from '@/lib/haptics';
 import { useWebDrawer } from '@/providers/WebDrawerProvider';
-import { useAuth } from '@/providers/AuthProvider';
 import { InterestSwitcher } from '@/components/InterestSwitcher';
+import { ProfileDropdown } from '@/components/ui/ProfileDropdown';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,71 +91,7 @@ export interface TabScreenToolbarProps {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-// ---------------------------------------------------------------------------
-// Internal: profile avatar button (Apple HIG trailing position)
-// ---------------------------------------------------------------------------
-
 const PROFILE_AVATAR_SIZE = 30;
-
-function getInitials(name?: string): string {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? '?';
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function ProfileAvatarButton() {
-  const { user, userProfile, isGuest } = useAuth();
-  const scale = useSharedValue(1);
-  const [imageFailed, setImageFailed] = useState(false);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const initials = isGuest ? '?' : getInitials(userProfile?.full_name || user?.email);
-  const avatarUrl = userProfile?.avatar_url;
-  const safeAvatarUrl = useMemo(() => {
-    const raw = String(avatarUrl || '').trim();
-    if (!raw) return null;
-    // Web cannot load app-local Android/iOS file paths. Fall back to initials.
-    if (Platform.OS === 'web' && /^(file:|content:|\/data\/|data\/user\/)/i.test(raw)) {
-      return null;
-    }
-    return raw;
-  }, [avatarUrl]);
-  const showAvatarImage = Boolean(!isGuest && safeAvatarUrl && !imageFailed);
-
-  return (
-    <AnimatedPressable
-      style={[styles.profileAvatar, showAvatarImage && styles.profileAvatarWithImage, animStyle]}
-      accessibilityLabel="Account"
-      accessibilityRole="button"
-      onPress={() => {
-        triggerHaptic('selection');
-        router.push('/account');
-      }}
-      onPressIn={() => {
-        scale.value = withSpring(0.9, IOS_ANIMATIONS.spring.stiff);
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
-      }}
-    >
-      {isGuest ? (
-        <Ionicons name="person-circle-outline" size={PROFILE_AVATAR_SIZE} color={IOS_COLORS.secondaryLabel} />
-      ) : showAvatarImage ? (
-        <Image
-          source={{ uri: safeAvatarUrl! }}
-          style={styles.profileAvatarImage}
-          onError={() => setImageFailed(true)}
-        />
-      ) : (
-        <Text style={styles.profileAvatarText}>{initials}</Text>
-      )}
-    </AnimatedPressable>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Internal: animated action button
@@ -356,7 +291,7 @@ export function TabScreenToolbar({
                   ))}
                 </View>
               )}
-          {showProfileAvatar && <ProfileAvatarButton />}
+          {showProfileAvatar && <ProfileDropdown size={PROFILE_AVATAR_SIZE} />}
         </View>
       </View>
 
@@ -471,31 +406,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-
-  // Profile avatar
-  profileAvatar: {
-    width: PROFILE_AVATAR_SIZE,
-    height: PROFILE_AVATAR_SIZE,
-    borderRadius: PROFILE_AVATAR_SIZE / 2,
-    backgroundColor: IOS_COLORS.systemBlue,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  profileAvatarWithImage: {
-    backgroundColor: 'transparent',
-  },
-  profileAvatarImage: {
-    width: PROFILE_AVATAR_SIZE,
-    height: PROFILE_AVATAR_SIZE,
-    borderRadius: PROFILE_AVATAR_SIZE / 2,
-  },
-  profileAvatarText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.2,
   },
 
   // Capsule pill

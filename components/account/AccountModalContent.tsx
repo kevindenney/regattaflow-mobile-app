@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   LayoutChangeEvent,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -63,7 +64,7 @@ export default function AccountModalContent() {
   const { vocab } = useVocabulary();
   const params = useLocalSearchParams<{ section?: string }>();
   // User settings (tips, learning links, units)
-  const { settings: userSettings } = useUserSettings();
+  const { settings: userSettings } = useUserSettings(currentInterest?.slug);
   const insets = useSafeAreaInsets();
 
   // State
@@ -74,12 +75,17 @@ export default function AccountModalContent() {
   const [boats, setBoats] = useState<UserBoat[]>([]);
   const [boatsLoading, setBoatsLoading] = useState(true);
 
+  // Username state
+  const [username, setUsername] = useState<string>('');
+  const [usernameEditing, setUsernameEditing] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState('');
+  const [usernameSaving, setUsernameSaving] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+
   // Settings-related state
   const [pricingVisible, setPricingVisible] = useState(false);
   const [teamManagerVisible, setTeamManagerVisible] = useState(false);
-  const [allowFollowerSharing, setAllowFollowerSharing] = useState(true);
-  const [sharingSettingLoading, setSharingSettingLoading] = useState(false);
-  const [interestSectionY, setInterestSectionY] = useState<number>(0);
+const [interestSectionY, setInterestSectionY] = useState<number>(0);
   const [didAutoScrollInterest, setDidAutoScrollInterest] = useState(false);
 
   // Derived state
@@ -140,28 +146,68 @@ export default function AccountModalContent() {
     setDidAutoScrollInterest(true);
   }, [didAutoScrollInterest, interestSectionY, scrollToInterestRequested, showInterestSettingsSection]);
 
-  // Load follower sharing setting on mount
+  // Load username from users table
   useEffect(() => {
-    async function loadFollowerSharingSetting() {
-      if (!user?.id) return;
+    if (!user?.id) return;
+    supabase
+      .from('users')
+      .select('username')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.username) setUsername(data.username);
+      });
+  }, [user?.id]);
 
-      try {
-        const { data } = await supabase
-          .from('sailor_profiles')
-          .select('allow_follower_sharing')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (data) {
-          setAllowFollowerSharing(data.allow_follower_sharing ?? true);
-        }
-      } catch (error) {
-        console.error('[Account] Error loading follower sharing setting:', error);
-      }
+  const handleUsernameSave = useCallback(async () => {
+    const draft = usernameDraft.trim().toLowerCase();
+    if (!draft || draft === username) {
+      setUsernameEditing(false);
+      setUsernameError(null);
+      return;
     }
 
-    loadFollowerSharingSetting();
-  }, [user?.id]);
+    // Validate format
+    if (!/^[a-z0-9_]{3,30}$/.test(draft)) {
+      setUsernameError('3-30 characters, letters, numbers, and underscores only');
+      return;
+    }
+
+    setUsernameSaving(true);
+    setUsernameError(null);
+
+    try {
+      // Check uniqueness
+      const { data: existing } = await supabase
+        .from('users')
+        .select('id')
+        .ilike('username', draft)
+        .neq('id', user!.id)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        setUsernameError('This username is already taken');
+        setUsernameSaving(false);
+        return;
+      }
+
+      // Save
+      const { error } = await supabase
+        .from('users')
+        .update({ username: draft })
+        .eq('id', user!.id);
+
+      if (error) throw error;
+
+      setUsername(draft);
+      setUsernameEditing(false);
+    } catch (err) {
+      console.error('[Account] Username save error:', err);
+      setUsernameError('Failed to save. Please try again.');
+    } finally {
+      setUsernameSaving(false);
+    }
+  }, [usernameDraft, username, user?.id]);
 
   // Inline profile save handler
   const handleProfileSave = useCallback(async (updates: ProfileUpdates) => {
@@ -240,30 +286,6 @@ export default function AccountModalContent() {
       router.replace('/(tabs)/races');
     }
   }, []);
-
-  // Save follower sharing setting
-  const handleFollowerSharingChange = useCallback(async (value: boolean) => {
-    setAllowFollowerSharing(value);
-    setSharingSettingLoading(true);
-
-    try {
-      const { error } = await supabase
-        .from('sailor_profiles')
-        .update({ allow_follower_sharing: value })
-        .eq('user_id', user?.id);
-
-      if (error) {
-        console.error('[Account] Error saving follower sharing setting:', error);
-        setAllowFollowerSharing(!value);
-        showAlert('Error', 'Failed to save privacy setting. Please try again.');
-      }
-    } catch (error) {
-      console.error('[Account] Exception saving follower sharing setting:', error);
-      setAllowFollowerSharing(!value);
-    } finally {
-      setSharingSettingLoading(false);
-    }
-  }, [user?.id]);
 
   const handleDeleteAccount = useCallback(() => {
     showConfirm(
@@ -456,6 +478,53 @@ export default function AccountModalContent() {
 
         {/* ── General ──────────────────────────────────────────── */}
         <IOSListSection header="General">
+          {usernameEditing ? (
+            <View style={styles.usernameEditRow}>
+              <View style={styles.usernameInputWrap}>
+                <Text style={styles.usernameAt}>@</Text>
+                <TextInput
+                  style={styles.usernameInput}
+                  value={usernameDraft}
+                  onChangeText={(t) => {
+                    setUsernameDraft(t.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                    setUsernameError(null);
+                  }}
+                  onSubmitEditing={handleUsernameSave}
+                  placeholder="username"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  maxLength={30}
+                  editable={!usernameSaving}
+                />
+              </View>
+              <TouchableOpacity onPress={handleUsernameSave} disabled={usernameSaving} style={styles.usernameSaveBtn}>
+                {usernameSaving ? (
+                  <ActivityIndicator size="small" color={IOS_COLORS.systemBlue} />
+                ) : (
+                  <Text style={styles.usernameSaveText}>Save</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setUsernameEditing(false); setUsernameError(null); }} style={styles.usernameCancelBtn}>
+                <Text style={styles.usernameCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <IOSListItem
+              title="Username"
+              leadingIcon="at-outline"
+              leadingIconBackgroundColor={ICON_BACKGROUNDS.purple}
+              trailingComponent={trailingValue(username ? `@${username}` : 'Set username')}
+              onPress={() => {
+                setUsernameDraft(username);
+                setUsernameEditing(true);
+              }}
+            />
+          )}
+          {usernameError && (
+            <Text style={styles.usernameErrorText}>{usernameError}</Text>
+          )}
           <IOSListItem
             title="Units"
             leadingIcon="speedometer-outline"
@@ -535,20 +604,16 @@ export default function AccountModalContent() {
           </IOSListSection>
         )}
 
-        {/* ── Privacy (sailors only) ─────────────────────────── */}
-        {userProfile?.user_type === 'sailor' && (
-          <IOSListSection header="Privacy">
-            <IOSListItem
-              title="Share race prep with followers"
-              leadingIcon="eye-outline"
-              leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
-              trailingAccessory="switch"
-              switchValue={allowFollowerSharing}
-              onSwitchChange={handleFollowerSharingChange}
-              disabled={sharingSettingLoading}
-            />
-          </IOSListSection>
-        )}
+        {/* ── Privacy ─────────────────────────────────────────── */}
+        <IOSListSection header="Privacy">
+          <IOSListItem
+            title="Privacy Settings"
+            leadingIcon="shield-outline"
+            leadingIconBackgroundColor={ICON_BACKGROUNDS.gray}
+            trailingAccessory="chevron"
+            onPress={() => router.push('/settings/privacy')}
+          />
+        </IOSListSection>
 
         {/* ── Security ─────────────────────────────────────────── */}
         <IOSListSection header="Security">
@@ -673,8 +738,8 @@ export default function AccountModalContent() {
 
         {/* ── App Info Footer ──────────────────────────────────── */}
         <View style={accountStyles.appInfo}>
-          <Text style={accountStyles.appInfoText}>RegattaFlow v1.0.0</Text>
-          <Text style={accountStyles.appInfoText}>2024 RegattaFlow Inc.</Text>
+          <Text style={accountStyles.appInfoText}>BetterAt v1.0.0</Text>
+          <Text style={accountStyles.appInfoText}>2024 BetterAt Inc.</Text>
         </View>
       </ScrollView>
 
@@ -828,5 +893,57 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginRight: 8,
+  },
+  usernameEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  usernameInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: IOS_COLORS.systemGray6,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  usernameAt: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: IOS_COLORS.secondaryLabel,
+    marginRight: 2,
+  },
+  usernameInput: {
+    flex: 1,
+    fontSize: 16,
+    color: IOS_COLORS.label,
+    padding: 0,
+    ...Platform.select({ web: { outlineStyle: 'none' } as any }),
+  },
+  usernameSaveBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  usernameSaveText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: IOS_COLORS.systemBlue,
+  },
+  usernameCancelBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  usernameCancelText: {
+    fontSize: 16,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  usernameErrorText: {
+    fontSize: 12,
+    color: IOS_COLORS.systemRed,
+    paddingHorizontal: 20,
+    paddingBottom: 6,
   },
 });

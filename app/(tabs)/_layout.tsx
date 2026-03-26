@@ -20,6 +20,7 @@ import { saveLastTab } from '@/lib/utils/lastTab';
 import { useAuth } from '@/providers/AuthProvider';
 import { CoachWorkspaceProvider } from '@/providers/CoachWorkspaceProvider';
 import { FeatureTourProvider, useFeatureTourContext } from '@/providers/FeatureTourProvider';
+import { useInterest } from '@/providers/InterestProvider';
 import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
@@ -78,6 +79,7 @@ const TAB_SWEEP_CONTEXT_COPY: Record<
 
 function TabLayoutInner() {
   const { userType, user, clubProfile, personaLoading, isGuest, capabilities } = useAuth();
+  const { currentInterest } = useInterest();
   const { vocabulary } = useVocabulary();
   const unreadMessageCount = useUnreadMessageCount(user?.id);
   const router = useRouter();
@@ -956,6 +958,7 @@ function TabLayoutInner() {
         onStartTour={advanceStep}
         onSkip={skipTour}
         onNavigate={(route) => router.push(route as any)}
+        interestSlug={currentInterest?.slug}
       />
       <TabSweepCard
         visible={isTourActive && shouldShowTour && currentStep === 'tab_sweep'}

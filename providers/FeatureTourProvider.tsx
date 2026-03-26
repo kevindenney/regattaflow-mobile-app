@@ -11,12 +11,14 @@ import {
   TOUR_STEPS,
   TOUR_STEP_CONFIGS,
   FULLSCREEN_STEPS,
+  getInterestAwareStepConfig,
   type TourStep,
   type TourStepConfig,
   type TourRenderMode,
 } from '@/services/onboarding/FeatureTourService';
 import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 import { useAuth } from '@/providers/AuthProvider';
+import { useInterest } from '@/providers/InterestProvider';
 
 export interface SpotlightBounds {
   x: number;
@@ -111,6 +113,8 @@ export function FeatureTourProvider({
   onSkip,
 }: FeatureTourProviderProps) {
   const { isGuest, signedIn, userProfile } = useAuth();
+  const { currentInterest } = useInterest();
+  const interestSlug = currentInterest?.slug ?? null;
   const [isLoading, setIsLoading] = useState(true);
   const [isTourComplete, setIsTourComplete] = useState(false);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
@@ -181,9 +185,13 @@ export function FeatureTourProvider({
 
   // Returning signed-in users should not re-enter the welcome/tour flow
   // due to missing local storage in fresh web/incognito sessions.
+  // But DON'T suppress if the user just completed onboarding (hasSeenOnboarding
+  // is true) — they're a new user who should see the tour for the first time.
   useEffect(() => {
     if (isLoading || !isServerReturningUser) return;
     if (currentStep === null && isTourComplete) return;
+    // If local onboarding flag is set, this is a fresh signup session — let tour run
+    if (hasSeenOnboarding) return;
 
     const suppressTourForReturningUser = async () => {
       await FeatureTourService.completeTour();
@@ -195,11 +203,12 @@ export function FeatureTourProvider({
     };
 
     void suppressTourForReturningUser();
-  }, [currentStep, isLoading, isServerReturningUser, isTourComplete]);
+  }, [currentStep, isLoading, isServerReturningUser, isTourComplete, hasSeenOnboarding]);
 
   // Auto-start tour if conditions are met (guests see welcome card instead)
   useEffect(() => {
-    if (isServerReturningUser) {
+    // Suppress for returning users who are NOT in an active onboarding session
+    if (isServerReturningUser && !hasSeenOnboarding) {
       return;
     }
     const canAutoStart = hasSeenOnboarding && !isGuest;
@@ -237,16 +246,16 @@ export function FeatureTourProvider({
   }, [isTourComplete, currentStep, isGuest]);
 
   const shouldShowTour = useMemo(() => {
-    // Guests see welcome card instead of tour
-    if (isServerReturningUser) return false;
+    // Suppress for returning users not in an active onboarding session
+    if (isServerReturningUser && !hasSeenOnboarding) return false;
     const canShow = hasSeenOnboarding && !isGuest;
     return canShow && !isTourComplete && !isLoading;
   }, [hasSeenOnboarding, isGuest, isTourComplete, isLoading, isServerReturningUser]);
 
   const currentStepConfig = useMemo(() => {
     if (!currentStep) return null;
-    return TOUR_STEP_CONFIGS[currentStep];
-  }, [currentStep]);
+    return getInterestAwareStepConfig(currentStep, interestSlug);
+  }, [currentStep, interestSlug]);
 
   const isFullscreenStep = useMemo(() => {
     if (!currentStep) return false;
@@ -441,8 +450,8 @@ export function FeatureTourProvider({
   }, [currentStep]);
 
   const getStepConfig = useCallback((step: TourStep) => {
-    return TOUR_STEP_CONFIGS[step];
-  }, []);
+    return getInterestAwareStepConfig(step, interestSlug);
+  }, [interestSlug]);
 
   const contextValue = useMemo<FeatureTourContextValue>(
     () => ({

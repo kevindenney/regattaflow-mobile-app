@@ -39,7 +39,6 @@ interface PlanTabProps {
   brainDumpData?: BrainDumpData;
   onBrainDumpChange?: (dump: BrainDumpData) => void;
   onStructureWithAI?: (dump: BrainDumpData) => void;
-  onSkipToPlan?: (dump: BrainDumpData) => void;
   isStructuring?: boolean;
   hasPlanContent?: boolean;
   interestSlug?: string;
@@ -47,7 +46,7 @@ interface PlanTabProps {
 
 export function PlanTab({
   stepId, planData, interestId, onUpdate, onNextTab, readOnly, footer,
-  brainDumpData, onBrainDumpChange, onStructureWithAI, onSkipToPlan,
+  brainDumpData, onBrainDumpChange, onStructureWithAI,
   isStructuring, hasPlanContent, interestSlug,
 }: PlanTabProps) {
   const { user } = useAuth();
@@ -153,7 +152,6 @@ export function PlanTab({
           {brainDumpExpanded && (
             <BrainDumpEntry
               initialData={brainDumpData}
-              onSkipToPlan={onSkipToPlan!}
               onStructureWithAI={onStructureWithAI!}
               onDraftChange={onBrainDumpChange}
               isStructuring={isStructuring}

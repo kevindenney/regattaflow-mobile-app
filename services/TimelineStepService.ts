@@ -17,6 +17,7 @@ import type {
   UpdateTimelineStepInput,
   TimelineStepListFilters,
 } from '@/types/timeline-steps';
+import { resolveDefaultVisibility } from '@/services/PrivacySettingsService';
 import type { StepMetadata } from '@/types/step-detail';
 import type {
   CourseLesson,
@@ -249,6 +250,11 @@ export async function createStep(
   try {
     logger.debug('Creating timeline step', { title: input.title, userId: input.user_id });
 
+    // Resolve visibility through the cascade: explicit → interest default → profile default → 'followers'
+    const visibility =
+      input.visibility ??
+      (await resolveDefaultVisibility(input.user_id, input.interest_id));
+
     const { data, error } = await supabase
       .from('timeline_steps')
       .insert({
@@ -268,7 +274,7 @@ export async function createStep(
         location_lat: input.location_lat ?? null,
         location_lng: input.location_lng ?? null,
         location_place_id: input.location_place_id ?? null,
-        visibility: input.visibility ?? 'followers',
+        visibility,
         share_approximate_location: input.share_approximate_location ?? false,
         metadata: input.metadata ?? {},
       })

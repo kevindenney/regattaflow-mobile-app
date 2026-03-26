@@ -44,14 +44,13 @@ interface StepPlanQuestionsProps {
   brainDumpData?: BrainDumpData;
   onBrainDumpChange?: (dump: BrainDumpData) => void;
   onStructureWithAI?: (dump: BrainDumpData) => void;
-  onSkipToPlan?: (dump: BrainDumpData) => void;
   isStructuring?: boolean;
   interestSlug?: string;
 }
 
 export function StepPlanQuestions({
   stepId, interestId, readOnly,
-  brainDumpData: brainDumpProp, onBrainDumpChange, onStructureWithAI, onSkipToPlan,
+  brainDumpData: brainDumpProp, onBrainDumpChange, onStructureWithAI,
   isStructuring, interestSlug,
 }: StepPlanQuestionsProps) {
   const { data: step } = useStepDetail(stepId);
@@ -533,7 +532,6 @@ export function StepPlanQuestions({
           {brainDumpExpanded && (
             <BrainDumpEntry
               initialData={brainDumpData}
-              onSkipToPlan={onSkipToPlan!}
               onStructureWithAI={onStructureWithAI!}
               onDraftChange={onBrainDumpChange}
               isStructuring={isStructuring}

@@ -33,8 +33,6 @@ import type { ExtractedUrl, BrainDumpData } from '@/types/step-detail';
 interface BrainDumpEntryProps {
   /** Existing brain dump data (if resuming a draft) */
   initialData?: BrainDumpData;
-  /** Called when the user wants to skip to the empty 4Q plan */
-  onSkipToPlan: (currentDump: BrainDumpData) => void;
   /** Called when the user taps "Structure with AI" */
   onStructureWithAI: (brainDump: BrainDumpData) => void;
   /** Called on every text change for auto-save */
@@ -49,7 +47,6 @@ interface BrainDumpEntryProps {
 
 export function BrainDumpEntry({
   initialData,
-  onSkipToPlan,
   onStructureWithAI,
   onDraftChange,
   isStructuring = false,
@@ -339,10 +336,6 @@ export function BrainDumpEntry({
           </Text>
         </Pressable>
 
-        <Pressable style={styles.skipButton} onPress={() => onSkipToPlan(buildBrainDumpData())} disabled={isStructuring}>
-          <Text style={styles.skipButtonText}>Skip to plan</Text>
-          <Ionicons name="arrow-forward" size={16} color={STEP_COLORS.secondaryLabel} />
-        </Pressable>
       </View>
     </Wrapper>
   );
@@ -525,17 +518,5 @@ const styles = StyleSheet.create({
   },
   structureButtonTextDisabled: {
     color: IOS_COLORS.systemGray3,
-  },
-  skipButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 10,
-  },
-  skipButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: STEP_COLORS.secondaryLabel,
   },
 });

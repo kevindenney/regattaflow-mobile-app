@@ -29,6 +29,7 @@ import { initializeBoatMutationHandlers } from '@/services/SailorBoatService';
 import { initializeMutationQueueHandlers } from '@/services/userManualClubsService';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/AppToast';
+import { WebAlertProvider } from '@/components/ui/WebAlertDialog';
 import { Stack, router } from 'expo-router';
 import {
   useFonts,
@@ -534,9 +535,11 @@ export default function RootLayout() {
                 <InterestProvider>
                 <ContextualHintProvider>
                 <ToastProvider>
+                  <WebAlertProvider>
                   <PushNotificationHandler>
                     <StackWithSplash />
                   </PushNotificationHandler>
+                  </WebAlertProvider>
                 </ToastProvider>
                 </ContextualHintProvider>
               </InterestProvider>

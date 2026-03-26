@@ -6,7 +6,7 @@
  * knows exactly what to expect.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,35 +19,65 @@ import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated'
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getOnboardingContext } from '@/lib/onboarding/interestContext';
 
-const PRO_FEATURES = [
+type ProFeature = {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  description: string;
+};
+
+const GENERIC_FEATURES: ProFeature[] = [
   {
-    icon: 'flash' as const,
-    title: 'AI Race Strategy',
-    description: 'Get personalized tactics based on wind, current, and fleet data',
+    icon: 'flash',
+    title: 'AI-Powered Guidance',
+    description: 'Get personalized suggestions to structure your practice and track progress',
   },
   {
-    icon: 'analytics' as const,
-    title: 'Performance Analytics',
-    description: 'Track trends, compare results, and spot patterns over time',
+    icon: 'analytics',
+    title: 'Progress Analytics',
+    description: 'Track trends, compare milestones, and spot patterns over time',
   },
   {
-    icon: 'cloud-download' as const,
-    title: 'Weather Automation',
-    description: 'Auto-fetch forecasts, tides, and conditions before every race',
+    icon: 'people',
+    title: 'Peer Timelines',
+    description: 'See how others in your organization are progressing alongside you',
   },
   {
-    icon: 'infinite' as const,
-    title: 'Unlimited Races',
-    description: 'Log as many races as you sail — no caps, no limits',
+    icon: 'infinite',
+    title: 'Unlimited Steps',
+    description: 'Add as many steps to your timeline as you need — no caps, no limits',
   },
 ];
 
+const INTEREST_FEATURES: Record<string, ProFeature[]> = {
+  'sail-racing': [
+    { icon: 'flash', title: 'AI Race Strategy', description: 'Get personalized tactics based on wind, current, and fleet data' },
+    { icon: 'analytics', title: 'Performance Analytics', description: 'Track trends, compare results, and spot patterns over time' },
+    { icon: 'cloud-download', title: 'Weather Automation', description: 'Auto-fetch forecasts, tides, and conditions before every race' },
+    { icon: 'infinite', title: 'Unlimited Races', description: 'Log as many races as you sail — no caps, no limits' },
+  ],
+};
+
 export default function TrialActivationScreen() {
   const router = useRouter();
+  const [interestSlug, setInterestSlug] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('onboarding_interest_slug').then((slug) => {
+      setInterestSlug(slug);
+      setReady(true);
+    });
+  }, []);
+
+  const ctx = getOnboardingContext(interestSlug || undefined);
+  const features = (interestSlug && INTEREST_FEATURES[interestSlug]) || GENERIC_FEATURES;
+  const accentColor = ctx.color !== '#1A1A1A' ? ctx.color : '#2563EB';
 
   const handleStart = useCallback(() => {
-    router.replace('/(tabs)/races');
+    router.replace('/onboarding/privacy-quick-set');
   }, [router]);
 
   return (
@@ -85,7 +115,7 @@ export default function TrialActivationScreen() {
             entering={FadeIn.delay(400).duration(400)}
             style={styles.featureList}
           >
-            {PRO_FEATURES.map((feature, index) => (
+            {features.map((feature, index) => (
               <Animated.View
                 key={feature.title}
                 entering={FadeInDown.delay(450 + index * 80)
@@ -93,8 +123,8 @@ export default function TrialActivationScreen() {
                   .springify()}
                 style={styles.featureRow}
               >
-                <View style={styles.featureIconContainer}>
-                  <Ionicons name={feature.icon} size={20} color="#2563EB" />
+                <View style={[styles.featureIconContainer, { backgroundColor: accentColor + '15' }]}>
+                  <Ionicons name={feature.icon} size={20} color={accentColor} />
                 </View>
                 <View style={styles.featureTextContainer}>
                   <Text style={styles.featureTitle}>{feature.title}</Text>
@@ -119,7 +149,7 @@ export default function TrialActivationScreen() {
           </Text>
 
           <TouchableOpacity
-            style={styles.startButton}
+            style={[styles.startButton, { backgroundColor: accentColor, shadowColor: accentColor }]}
             onPress={handleStart}
             activeOpacity={0.85}
           >
@@ -193,7 +223,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#EFF6FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,

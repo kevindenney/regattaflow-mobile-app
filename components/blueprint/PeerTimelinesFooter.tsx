@@ -3,14 +3,17 @@
  * Shows ForYouSection + mini timelines of peer blueprint subscribers.
  */
 
-import React from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet, Platform } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { ForYouSection } from '@/components/blueprint/ForYouSection';
 import { SubscribedBlueprintStrip } from '@/components/blueprint/SubscribedBlueprintStrip';
 import { usePeerTimelines, type PeerBlueprintGroup } from '@/hooks/usePeerTimelines';
-import type { PeerTimeline } from '@/types/blueprint';
+import { useAuth } from '@/providers/AuthProvider';
+import { adoptStep } from '@/services/TimelineStepService';
+import type { PeerTimeline, PeerTimelineStep } from '@/types/blueprint';
 
 // =============================================================================
 // COLORS
@@ -26,6 +29,7 @@ const C = {
   inProgress: '#0D9488',
   pending: '#D4D4D4',
   sectionAccent: '#6D28D9',
+  adopt: '#2563EB',
 } as const;
 
 // =============================================================================
@@ -66,7 +70,11 @@ export function PeerTimelinesFooter({
       />
 
       {groups.map((group) => (
-        <PeerBlueprintSection key={group.blueprintId} group={group} />
+        <PeerBlueprintSection
+          key={group.blueprintId}
+          group={group}
+          interestId={interestId}
+        />
       ))}
     </View>
   );
@@ -76,7 +84,13 @@ export function PeerTimelinesFooter({
 // PEER BLUEPRINT SECTION
 // =============================================================================
 
-function PeerBlueprintSection({ group }: { group: PeerBlueprintGroup }) {
+function PeerBlueprintSection({
+  group,
+  interestId,
+}: {
+  group: PeerBlueprintGroup;
+  interestId?: string | null;
+}) {
   const router = useRouter();
 
   if (group.peers.length === 0) return null;
@@ -94,7 +108,11 @@ function PeerBlueprintSection({ group }: { group: PeerBlueprintGroup }) {
         <Ionicons name="chevron-forward" size={12} color={C.labelLight} />
       </Pressable>
       {group.peers.map((peer) => (
-        <PeerMiniTimeline key={peer.subscriber_id} peer={peer} />
+        <PeerMiniTimeline
+          key={peer.subscriber_id}
+          peer={peer}
+          interestId={interestId}
+        />
       ))}
     </View>
   );
@@ -104,8 +122,30 @@ function PeerBlueprintSection({ group }: { group: PeerBlueprintGroup }) {
 // PEER MINI TIMELINE ROW
 // =============================================================================
 
-function PeerMiniTimeline({ peer }: { peer: PeerTimeline }) {
+function PeerMiniTimeline({
+  peer,
+  interestId,
+}: {
+  peer: PeerTimeline;
+  interestId?: string | null;
+}) {
   const router = useRouter();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [adoptingId, setAdoptingId] = useState<string | null>(null);
+  const [adoptedIds, setAdoptedIds] = useState<Set<string>>(new Set());
+
+  const handleAdopt = useCallback(async (step: PeerTimelineStep) => {
+    if (!user?.id || !interestId) return;
+    setAdoptingId(step.id);
+    try {
+      await adoptStep(user.id, step.id, interestId);
+      setAdoptedIds((prev) => new Set(prev).add(step.id));
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
+    } finally {
+      setAdoptingId(null);
+    }
+  }, [user?.id, interestId, queryClient]);
 
   const initials = peer.subscriber_name
     ? peer.subscriber_name
@@ -156,6 +196,8 @@ function PeerMiniTimeline({ peer }: { peer: PeerTimeline }) {
               : step.status === 'in_progress'
                 ? 'Active'
                 : 'Planned';
+          const isAdopted = adoptedIds.has(step.id);
+          const isAdopting = adoptingId === step.id;
 
           return (
             <View key={step.id} style={styles.stepCard}>
@@ -168,6 +210,30 @@ function PeerMiniTimeline({ peer }: { peer: PeerTimeline }) {
               <Text style={styles.stepTitle} numberOfLines={2}>
                 {step.title}
               </Text>
+              {/* Adopt action */}
+              <View style={styles.cardActionRow}>
+                {isAdopted ? (
+                  <View style={styles.adoptedLabel}>
+                    <Ionicons name="checkmark-circle" size={12} color={C.completed} />
+                    <Text style={[styles.actionText, { color: C.completed }]}>Added</Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={styles.adoptBtn}
+                    onPress={() => handleAdopt(step)}
+                    disabled={isAdopting}
+                  >
+                    {isAdopting ? (
+                      <ActivityIndicator size={10} color={C.adopt} />
+                    ) : (
+                      <>
+                        <Ionicons name="add-circle-outline" size={12} color={C.adopt} />
+                        <Text style={[styles.actionText, { color: C.adopt }]}>Adopt</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
+              </View>
             </View>
           );
         })}
@@ -252,14 +318,12 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   stepCard: {
-    width: 150,
+    width: 170,
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: C.border,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 4,
+    overflow: 'hidden',
   },
   stepBadge: {
     flexDirection: 'row',
@@ -269,6 +333,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
+    marginTop: 8,
+    marginLeft: 8,
   },
   stepBadgeText: {
     fontSize: 9,
@@ -286,5 +352,34 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: C.labelDark,
     lineHeight: 16,
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 4,
+  },
+  cardActionRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: C.border,
+    marginTop: 2,
+  },
+  adoptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 5,
+    ...Platform.select({
+      web: { cursor: 'pointer' as any },
+    }),
+  },
+  adoptedLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 5,
+  },
+  actionText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
 });

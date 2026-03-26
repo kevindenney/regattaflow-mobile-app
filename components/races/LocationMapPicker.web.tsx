@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
 } from 'react-native';
 import { X, MapPin, Search, Navigation, Check } from 'lucide-react-native';
 import { createLogger } from '@/lib/utils/logger';
@@ -403,21 +404,23 @@ export function LocationMapPicker({
         {/* Search Results */}
         {showSearchResults && searchResults.length > 0 && (
           <View style={styles.searchResultsContainer}>
-            {searchResults.map((item, index) => (
-              <Pressable
-                key={`${item.name}-${index}`}
-                style={styles.searchResultItem}
-                onPress={() => handleSelectVenue(item)}
-              >
-                <MapPin size={16} color={IOS_COLORS.blue} />
-                <View style={styles.searchResultText}>
-                  <Text style={styles.searchResultName}>{item.name}</Text>
-                  <Text style={styles.searchResultCoords}>
-                    {item.lat.toFixed(3)}°, {item.lng.toFixed(3)}°
-                  </Text>
-                </View>
-              </Pressable>
-            ))}
+            <ScrollView style={styles.searchResultsScroll} keyboardShouldPersistTaps="handled">
+              {searchResults.map((item, index) => (
+                <Pressable
+                  key={`${item.name}-${index}`}
+                  style={styles.searchResultItem}
+                  onPress={() => handleSelectVenue(item)}
+                >
+                  <MapPin size={16} color={IOS_COLORS.blue} />
+                  <View style={styles.searchResultText}>
+                    <Text style={styles.searchResultName}>{item.name}</Text>
+                    <Text style={styles.searchResultCoords}>
+                      {item.lat.toFixed(3)}°, {item.lng.toFixed(3)}°
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         )}
 
@@ -555,7 +558,7 @@ const styles = StyleSheet.create({
     top: 120,
     left: 16,
     right: 16,
-    maxHeight: 200,
+    maxHeight: 320,
     backgroundColor: IOS_COLORS.systemBackground,
     borderRadius: 12,
     shadowColor: '#000',
@@ -564,6 +567,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     zIndex: 100,
+    overflow: 'hidden',
+  },
+  searchResultsScroll: {
+    flex: 1,
   },
   searchResultItem: {
     flexDirection: 'row',

@@ -24,6 +24,16 @@ export default function OnboardingLayout() {
             {/* Phase 3b: Trial Activation (after profile, before main app) */}
             <Stack.Screen name="trial-activation" />
 
+            {/* Phase 3c: Privacy Quick-Set */}
+            <Stack.Screen name="privacy-quick-set" />
+
+            {/* Phase 3d: Org Welcome / Org Discovery (context-dependent) */}
+            <Stack.Screen name="org-welcome" />
+            <Stack.Screen name="org-discovery" />
+
+            {/* Phase 3e: Explore More Interests */}
+            <Stack.Screen name="explore-interests" />
+
             {/* Phase 4: Personalization */}
             <Stack.Screen name="personalize" />
 

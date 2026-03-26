@@ -48,10 +48,21 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
   }
   const ungroupedBlueprints = blueprintsByProgram.get(null) ?? [];
 
+  // Blueprints whose program_id doesn't match any loaded program (e.g. RLS blocks programs table)
+  const loadedProgramIds = new Set((dbPrograms ?? []).map((p) => p.id));
+  const orphanedBlueprints = publishedOrgBlueprints.filter(
+    (bp) => bp.program_id && !loadedProgramIds.has(bp.program_id),
+  );
+  const allUngrouped = [...ungroupedBlueprints, ...orphanedBlueprints];
+
+
+  // DB-only org fallback: when sample data has no entry, load directly from DB by slug
+  const [dbOrg, setDbOrg] = useState<{ name: string; slug: string } | null>(null);
+  const displayOrg = org || (dbOrg ? { ...dbOrg, programs: [], partners: [], teams: [], cohorts: [] } : null);
 
   // Look up the real org from DB by matching name/slug
   useEffect(() => {
-    if (!isLoggedIn || !org) return;
+    if (!isLoggedIn) return;
 
     const lookupOrg = async () => {
       try {
@@ -63,10 +74,27 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
           .maybeSingle();
         if (interestRow) setInterestDbId(interestRow.id);
 
-        const results = await organizationDiscoveryService.searchOrganizations({ query: org.name, limit: 5 });
-        const match = results.find(
-          (r) => r.slug === orgSlug || r.name.toLowerCase() === org.name.toLowerCase()
-        );
+        let match: any = null;
+
+        if (org) {
+          // Sample data exists — search by name
+          const results = await organizationDiscoveryService.searchOrganizations({ query: org.name, limit: 5 });
+          match = results.find(
+            (r) => r.slug === orgSlug || r.name.toLowerCase() === org.name.toLowerCase()
+          );
+        } else {
+          // No sample data — look up directly by slug
+          const { data: directMatch } = await supabase
+            .from('organizations')
+            .select('id,name,slug,join_mode,interest_slug')
+            .eq('slug', orgSlug)
+            .maybeSingle();
+          if (directMatch) {
+            match = directMatch;
+            setDbOrg({ name: directMatch.name, slug: directMatch.slug });
+          }
+        }
+
         console.log('[OrgBrowserPage] Org match:', match ? { id: match.id, slug: match.slug, join_mode: match.join_mode } : 'NONE');
         if (match) {
           setDbOrgId(match.id);
@@ -104,7 +132,7 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
 
   const handleJoinOrg = async () => {
     if (!isLoggedIn) {
-      router.push({ pathname: '/(auth)/signup', params: { persona: 'club', interest: interestSlug } } as any);
+      router.push({ pathname: '/(auth)/signup', params: { interest: interestSlug, org: orgSlug, orgName: displayOrg?.name } } as any);
       return;
     }
 
@@ -135,7 +163,7 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
       console.error('[OrgBrowserPage] requestJoin error:', err);
       const msg = err?.message || '';
       if (msg.includes('restricted to approved email domains')) {
-        showAlert('Email Domain Restricted', `${org!.name} is restricted to approved email domains. Contact the organization for access.`);
+        showAlert('Email Domain Restricted', `${displayOrg?.name ?? 'This organization'} is restricted to approved email domains. Contact the organization for access.`);
       } else {
         showAlert('Error', msg || 'Something went wrong. Please try again.');
       }
@@ -148,14 +176,14 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
     if (!isLoggedIn) return 'Sign Up to Join';
     if (joinMode === 'invite_only') return 'Invite Only';
     if (joinMode === 'request_to_join') return 'Request to Join';
-    if (joinMode === 'open_join') return `Join ${org!.name}`;
+    if (joinMode === 'open_join') return `Join ${displayOrg?.name ?? 'Organization'}`;
     // Default when join_mode not yet loaded
-    return `Follow ${org!.name}`;
+    return `Follow ${displayOrg?.name ?? 'Organization'}`;
   };
 
   const isJoinDisabled = joinState === 'joined' || joinState === 'pending';
 
-  if (!interest || !org) {
+  if (!interest || !displayOrg) {
     return (
       <View style={styles.container}>
         <SimpleLandingNav currentInterestSlug={interestSlug} />
@@ -181,14 +209,14 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
               <Text style={styles.breadcrumbLink}>{interest.name}</Text>
             </TouchableOpacity>
             <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.5)" />
-            <Text style={styles.breadcrumbCurrent}>{org.name}</Text>
+            <Text style={styles.breadcrumbCurrent}>{displayOrg.name}</Text>
           </View>
 
-          <Text style={styles.orgName}>{org.name}</Text>
+          <Text style={styles.orgName}>{displayOrg.name}</Text>
           <Text style={styles.orgMeta}>
-            {org.groups.length} {org.groupLabel}
-            {org.cohorts ? ` · ${org.cohorts.length} Cohorts` : ''}
-            {org.capabilityGoals ? ` · ${org.capabilityGoals.length} Capability Goals` : ''}
+            {org ? `${org.groups.length} ${org.groupLabel}` : ''}
+            {org?.cohorts ? ` · ${org.cohorts.length} Cohorts` : ''}
+            {org?.capabilityGoals ? ` · ${org.capabilityGoals.length} Capability Goals` : ''}
           </Text>
           <View style={styles.heroActions}>
             <TouchableOpacity
@@ -229,12 +257,15 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
             .filter((prog) => blueprintsByProgram.has(prog.id))
             .map((prog) => {
               const progBlueprints = blueprintsByProgram.get(prog.id) ?? [];
+              const singleMatchingTitle = progBlueprints.length === 1 && progBlueprints[0].title === prog.title;
               return (
                 <View key={prog.id} style={styles.dbProgramSection}>
-                  <View style={styles.dbProgramHeader}>
-                    <Ionicons name="school-outline" size={18} color={interest.color} />
-                    <Text style={styles.dbProgramTitle}>{prog.title}</Text>
-                  </View>
+                  {!singleMatchingTitle && (
+                    <View style={styles.dbProgramHeader}>
+                      <Ionicons name="school-outline" size={18} color={interest.color} />
+                      <Text style={styles.dbProgramTitle}>{prog.title}</Text>
+                    </View>
+                  )}
                   {progBlueprints.length > 0 && (
                     <View style={styles.pathwayGrid}>
                       {progBlueprints.map((bp) => (
@@ -255,15 +286,15 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
         </View>
       )}
 
-      {/* Ungrouped pathways (blueprints not associated with a program) */}
-      {ungroupedBlueprints.length > 0 && (
+      {/* Ungrouped / orphaned pathways (no program or program not visible due to RLS) */}
+      {allUngrouped.length > 0 && (
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
           <Text style={styles.sectionTitle}>Pathways</Text>
           <Text style={styles.sectionSubtitle}>
             Subscribe to a pathway to add its steps to your timeline
           </Text>
           <View style={styles.pathwayGrid}>
-            {ungroupedBlueprints.map((bp) => (
+            {allUngrouped.map((bp) => (
               <OrgBlueprintCard
                 key={bp.id}
                 blueprint={bp}
@@ -278,16 +309,16 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
       )}
 
       {/* Teaser for non-members when blueprints exist but are hidden by RLS */}
-      {publishedOrgBlueprints.length === 0 && blueprintCount > 0 && (
+      {publishedOrgBlueprints.length < blueprintCount && blueprintCount > 0 && (
         <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
           <Text style={styles.sectionTitle}>Pathways</Text>
           <View style={styles.pathwayTeaser}>
             <Ionicons name="layers-outline" size={24} color={interest.color} />
             <Text style={styles.pathwayTeaserTitle}>
-              {blueprintCount} pathway{blueprintCount !== 1 ? 's' : ''} available for members
+              {blueprintCount - publishedOrgBlueprints.length} more pathway{blueprintCount - publishedOrgBlueprints.length !== 1 ? 's' : ''} available for members
             </Text>
             <Text style={styles.pathwayTeaserSubtitle}>
-              Join {org.name} to browse and subscribe to curated learning pathways
+              Join {displayOrg.name} to browse and subscribe to curated learning pathways
             </Text>
             {joinState === 'idle' && (
               <TouchableOpacity
@@ -322,16 +353,18 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
         </View>
       )}
 
-      {/* Groups */}
+      {/* Groups (sample data only) */}
+      {org && org.groups.length > 0 && (
       <View style={[styles.body, isDesktop && styles.bodyDesktop, publishedOrgBlueprints.length > 0 && styles.dividerSection]}>
         <Text style={styles.sectionTitle}>{org.groupLabel}</Text>
         {org.groups.map((group, i) => (
           <GroupSection key={i} group={group} accentColor={interest.color} interestSlug={interestSlug} />
         ))}
       </View>
+      )}
 
       {/* Cohorts */}
-      {org.cohorts && org.cohorts.length > 0 && (
+      {org?.cohorts && org.cohorts.length > 0 && (
         <View style={[styles.body, isDesktop && styles.bodyDesktop, styles.dividerSection]}>
           <Text style={styles.sectionTitle}>Cohorts</Text>
           <Text style={styles.sectionSubtitle}>
@@ -378,7 +411,7 @@ export function OrganizationBrowserPage({ interestSlug, orgSlug }: OrganizationB
       )}
 
       {/* Capability Goals */}
-      {org.capabilityGoals && org.capabilityGoals.length > 0 && (
+      {org?.capabilityGoals && org.capabilityGoals.length > 0 && (
         <View style={[styles.body, isDesktop && styles.bodyDesktop, styles.dividerSection]}>
           <Text style={styles.sectionTitle}>Capability Goals</Text>
           <Text style={styles.sectionSubtitle}>
@@ -492,26 +525,52 @@ function OrgBlueprintCard({
         </View>
       </View>
 
-      {/* Mini step timeline */}
+      {/* Step timeline (horizontal cards) */}
       {steps && steps.length > 0 && (
-        <View style={styles.miniTimeline}>
-          {steps.map((step, idx) => {
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.stepTimeline}
+          contentContainerStyle={styles.stepTimelineContent}
+        >
+          {steps.map((step) => {
             const isCompleted = step.status === 'completed';
             const isInProgress = step.status === 'in_progress';
-            const dotColor = isCompleted ? '#3D8A5A' : isInProgress ? '#D4A64A' : '#CBD5E1';
             return (
-              <View key={step.id} style={styles.miniTimelineStep}>
-                <View style={styles.miniTimelineStepRow}>
-                  <View style={[styles.miniTimelineDot, { backgroundColor: dotColor }]} />
-                  {idx < steps.length - 1 && (
-                    <View style={[styles.miniTimelineLine, isCompleted ? { backgroundColor: '#3D8A5A' } : {}]} />
-                  )}
-                </View>
-                <Text style={styles.miniTimelineLabel} numberOfLines={1}>{step.title}</Text>
+              <View key={step.id} style={[
+                styles.stepTimelineCard,
+                {
+                  borderColor: isInProgress
+                    ? accentColor
+                    : isCompleted
+                      ? accentColor + '35'
+                      : '#E5E7EB',
+                  borderWidth: isInProgress ? 2 : 1,
+                  backgroundColor: isCompleted ? accentColor + '06' : '#FFFFFF',
+                },
+              ]}>
+                {(isCompleted || isInProgress) && (
+                  <View style={[styles.stepTimelineBadge, { backgroundColor: accentColor }]}>
+                    <Text style={styles.stepTimelineBadgeText}>
+                      {isCompleted ? 'DONE' : 'NOW'}
+                    </Text>
+                  </View>
+                )}
+                {!isCompleted && !isInProgress && (
+                  <View style={styles.stepTimelineBadgePlaceholder}>
+                    <View style={styles.stepTimelineBadgeLine} />
+                  </View>
+                )}
+                <Text style={[
+                  styles.stepTimelineLabel,
+                  { color: !isCompleted && !isInProgress ? '#9CA3AF' : '#374151' },
+                ]} numberOfLines={2}>
+                  {step.title}
+                </Text>
               </View>
             );
           })}
-        </View>
+        </ScrollView>
       )}
 
       <View style={styles.pathwayFooter}>
@@ -799,7 +858,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     padding: 20,
-    width: 320,
+    width: 380,
     ...Platform.select({ web: { cursor: 'pointer' as any } }),
   },
   pathwayCardHeader: {
@@ -809,6 +868,7 @@ const styles = StyleSheet.create({
   },
   pathwayCardHeaderText: {
     flex: 1,
+    overflow: 'hidden',
   },
   pathwayIcon: {
     width: 48,
@@ -828,46 +888,64 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 18,
     marginBottom: 4,
-  },
-  miniTimeline: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 0,
-    marginBottom: 12,
-    paddingHorizontal: 4,
     overflow: 'hidden',
+    maxHeight: 36, // 2 lines × 18px lineHeight
   },
-  miniTimelineStep: {
-    flex: 1,
-    alignItems: 'center',
-    minWidth: 0,
+  stepTimeline: {
+    marginBottom: 12,
+    marginHorizontal: -4,
   },
-  miniTimelineStepRow: {
+  stepTimelineContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  stepTimelineCard: {
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    alignItems: 'center',
     justifyContent: 'center',
+    width: 90,
+    height: 60,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      } as any,
+    }),
   },
-  miniTimelineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    zIndex: 1,
+  stepTimelineBadge: {
+    borderRadius: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginBottom: 4,
+    minWidth: 34,
+    alignItems: 'center',
   },
-  miniTimelineLine: {
-    position: 'absolute',
-    left: '50%',
-    right: '-50%',
+  stepTimelineBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    color: '#FFFFFF',
+  },
+  stepTimelineBadgePlaceholder: {
+    marginBottom: 4,
+    minWidth: 34,
+    alignItems: 'center',
+    paddingVertical: 2,
+  },
+  stepTimelineBadgeLine: {
+    width: 20,
     height: 2,
-    backgroundColor: '#E5E7EB',
-    top: 4,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 1,
   },
-  miniTimelineLabel: {
+  stepTimelineLabel: {
     fontSize: 9,
-    color: '#6B7280',
+    fontWeight: '500',
     textAlign: 'center',
-    marginTop: 3,
-    lineHeight: 11,
+    lineHeight: 12,
   },
   pathwayFooter: {
     flexDirection: 'row',

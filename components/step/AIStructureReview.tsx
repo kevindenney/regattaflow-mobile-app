@@ -50,8 +50,6 @@ interface AIStructureReviewProps {
   onConfirm: (planData: StepPlanData, title?: string) => void;
   /** Called when user wants to go back to brain dump */
   onBack: () => void;
-  /** Called when user wants to skip AI suggestions and edit plan manually */
-  onSkipToPlan?: () => void;
 }
 
 interface SectionProps {
@@ -89,7 +87,6 @@ export function AIStructureReview({
   onResolveAmbiguousPerson,
   onConfirm,
   onBack,
-  onSkipToPlan,
 }: AIStructureReviewProps) {
   const [what, setWhat] = useState(planData.what_will_you_do ?? '');
   const [why, setWhy] = useState(planData.why_reasoning ?? '');
@@ -174,18 +171,16 @@ export function AIStructureReview({
       </Text>
 
       {/* Suggested title */}
-      {suggestedTitle && (
-        <View style={styles.titleSection}>
-          <Text style={styles.titleLabel}>Suggested title</Text>
-          <TextInput
-            style={styles.titleInput}
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Step title..."
-            placeholderTextColor={STEP_COLORS.tertiaryLabel}
-          />
-        </View>
-      )}
+      <View style={styles.titleSection}>
+        <Text style={styles.titleLabel}>Suggested title</Text>
+        <TextInput
+          style={styles.titleInput}
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Step title..."
+          placeholderTextColor={STEP_COLORS.tertiaryLabel}
+        />
+      </View>
 
       {/* What */}
       <ReviewSection
@@ -445,11 +440,6 @@ export function AIStructureReview({
           <Ionicons name="checkmark" size={20} color="#FFFFFF" />
           <Text style={styles.confirmButtonText}>Looks good</Text>
         </Pressable>
-        {onSkipToPlan && (
-          <Pressable style={styles.skipLink} onPress={onSkipToPlan}>
-            <Text style={styles.skipLinkText}>Skip — edit manually</Text>
-          </Pressable>
-        )}
       </View>
     </ScrollView>
   );
@@ -752,14 +742,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
-  },
-  skipLink: {
-    alignSelf: 'center',
-    paddingVertical: 10,
-  },
-  skipLinkText: {
-    fontSize: 13,
-    color: STEP_COLORS.secondaryLabel,
-    fontWeight: '500',
   },
 });

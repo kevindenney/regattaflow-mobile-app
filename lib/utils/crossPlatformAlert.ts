@@ -24,6 +24,16 @@
 
 import { Alert, Platform } from 'react-native';
 
+// Lazy-import the emitter to avoid pulling React into native Alert paths
+let _emitDialog: typeof import('@/components/ui/WebAlertDialog').emitDialog | null = null;
+function getEmitDialog() {
+  if (!_emitDialog) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    _emitDialog = require('@/components/ui/WebAlertDialog').emitDialog;
+  }
+  return _emitDialog!;
+}
+
 export interface AlertButton {
   text: string;
   onPress?: () => void | Promise<void>;
@@ -45,11 +55,12 @@ export interface ConfirmOptions {
  */
 export function showAlert(title: string, message?: string): void {
   if (Platform.OS === 'web') {
-    // On web, use window.alert
-    const fullMessage = message ? `${title}\n\n${message}` : title;
-    window.alert(fullMessage);
+    getEmitDialog()({
+      title,
+      message,
+      buttons: [{ text: 'OK', style: 'default' }],
+    });
   } else {
-    // On native, use Alert.alert
     Alert.alert(title, message);
   }
 }
@@ -65,12 +76,21 @@ export function showConfirmAsync(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     if (Platform.OS === 'web') {
-      // On web, use window.confirm
-      const fullMessage = message ? `${title}\n\n${message}` : title;
-      const confirmed = window.confirm(fullMessage);
-      resolve(confirmed);
+      const cancelText = options?.cancelText || 'Cancel';
+      const confirmText = options?.confirmText || 'OK';
+      getEmitDialog()({
+        title,
+        message,
+        buttons: [
+          { text: cancelText, style: 'cancel', onPress: () => resolve(false) },
+          {
+            text: confirmText,
+            style: options?.destructive ? 'destructive' : 'default',
+            onPress: () => resolve(true),
+          },
+        ],
+      });
     } else {
-      // On native, use Alert.alert
       const cancelText = options?.cancelText || 'Cancel';
       const confirmText = options?.confirmText || 'OK';
 
@@ -101,14 +121,21 @@ export function showConfirm(
   options?: ConfirmOptions
 ): void {
   if (Platform.OS === 'web') {
-    // On web, use window.confirm
-    const fullMessage = message ? `${title}\n\n${message}` : title;
-    const confirmed = window.confirm(fullMessage);
-    if (confirmed) {
-      onConfirm();
-    }
+    const cancelText = options?.cancelText || 'Cancel';
+    const confirmText = options?.confirmText || 'OK';
+    getEmitDialog()({
+      title,
+      message,
+      buttons: [
+        { text: cancelText, style: 'cancel' },
+        {
+          text: confirmText,
+          style: options?.destructive ? 'destructive' : 'default',
+          onPress: () => { onConfirm(); },
+        },
+      ],
+    });
   } else {
-    // On native, use Alert.alert
     const cancelText = options?.cancelText || 'Cancel';
     const confirmText = options?.confirmText || 'OK';
 
@@ -128,8 +155,7 @@ export function showConfirm(
 
 /**
  * Show a custom alert with multiple button options
- * Note: On web, only the first two buttons are supported (cancel + confirm)
- * For more complex dialogs on web, use a modal component instead
+ * On web, renders all buttons in the custom dialog (no longer limited to 2)
  */
 export function showAlertWithButtons(
   title: string,
@@ -137,28 +163,16 @@ export function showAlertWithButtons(
   buttons: AlertButton[]
 ): void {
   if (Platform.OS === 'web') {
-    // On web, we can only support confirm/cancel pattern
-    // If there's only one button, use alert
-    if (buttons.length === 1) {
-      const fullMessage = message ? `${title}\n\n${message}` : title;
-      window.alert(fullMessage);
-      buttons[0].onPress?.();
-      return;
-    }
-
-    // If there are multiple buttons, use confirm for the first non-cancel button
-    const fullMessage = message ? `${title}\n\n${message}` : title;
-    const cancelButton = buttons.find((b) => b.style === 'cancel');
-    const confirmButton = buttons.find((b) => b.style !== 'cancel') || buttons[0];
-
-    const confirmed = window.confirm(fullMessage);
-    if (confirmed) {
-      confirmButton.onPress?.();
-    } else {
-      cancelButton?.onPress?.();
-    }
+    getEmitDialog()({
+      title,
+      message,
+      buttons: buttons.map((b) => ({
+        text: b.text,
+        style: b.style,
+        onPress: () => { b.onPress?.(); },
+      })),
+    });
   } else {
-    // On native, use Alert.alert with all buttons
     Alert.alert(
       title,
       message,
@@ -173,8 +187,7 @@ export function showAlertWithButtons(
 
 /**
  * Show a prompt dialog for text input
- * Note: On web, uses window.prompt. On native iOS, uses Alert.prompt
- * Android doesn't support Alert.prompt natively
+ * On web, uses custom styled dialog. On native iOS, uses Alert.prompt.
  */
 export function showPrompt(
   title: string,
@@ -183,11 +196,13 @@ export function showPrompt(
 ): Promise<string | null> {
   return new Promise((resolve) => {
     if (Platform.OS === 'web') {
-      const fullMessage = message ? `${title}\n\n${message}` : title;
-      const result = window.prompt(fullMessage, defaultValue);
-      resolve(result);
+      getEmitDialog()({
+        title,
+        message,
+        buttons: [],
+        prompt: { defaultValue, onSubmit: resolve },
+      });
     } else if (Platform.OS === 'ios') {
-      // iOS supports Alert.prompt
       Alert.prompt(
         title,
         message,
@@ -206,8 +221,6 @@ export function showPrompt(
         defaultValue
       );
     } else {
-      // Android doesn't support Alert.prompt
-      // Return null - caller should use a custom modal for Android
       console.warn('[crossPlatformAlert] Alert.prompt not supported on Android');
       resolve(null);
     }

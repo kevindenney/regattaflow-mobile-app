@@ -81,6 +81,14 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
       ['timeline-steps', 'detail', stepId],
       (old: any) => old ? { ...old, title: text } : old,
     );
+    // Also update all list caches so the grid view reflects the new title immediately
+    queryClient.setQueriesData<any[]>(
+      { queryKey: ['timeline-steps'] },
+      (old) => {
+        if (!Array.isArray(old)) return old;
+        return old.map((s) => (s.id === stepId ? { ...s, title: text } : s));
+      },
+    );
     updateStep.mutate(
       { stepId, input: { title: text } },
       {
@@ -111,15 +119,19 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
     }
   }, [saveTitle]);
 
+  // Keep a ref to the latest mutation so the unmount cleanup uses a stable reference
+  const updateStepRef = useRef(updateStep);
+  updateStepRef.current = updateStep;
+
   // Flush any pending title save on unmount
   useEffect(() => {
     return () => {
       if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
       if (pendingTitleRef.current !== null) {
-        updateStep.mutate({ stepId, input: { title: pendingTitleRef.current } });
+        updateStepRef.current.mutate({ stepId, input: { title: pendingTitleRef.current } });
       }
     };
-  }, [stepId, updateStep]);
+  }, [stepId]);
 
   // Default tab based on step status
   const defaultTab = useMemo(() => getDefaultTab(step?.status), [step?.status]);
@@ -202,29 +214,6 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
     }
   }, [user?.id, currentInterest]);
 
-  const handleSkipToPlan = useCallback((currentDump: BrainDumpData) => {
-    if (currentDump.raw_text?.trim()) {
-      const collaborators: StepCollaborator[] = (currentDump.extracted_people ?? [])
-        .filter((name: string) => name.trim())
-        .map((name: string, i: number) => ({
-          id: `external_${i}_${Date.now()}`,
-          type: 'external' as const,
-          display_name: name.trim(),
-        }));
-      updateMetadata.mutate({
-        brain_dump: currentDump,
-        plan: {
-          ...(metadata.plan ?? {}),
-          what_will_you_do: metadata.plan?.what_will_you_do || currentDump.raw_text,
-          who_collaborators: currentDump.extracted_people,
-          collaborators: collaborators.length > 0 ? collaborators : undefined,
-          capability_goals: currentDump.extracted_topics.length > 0
-            ? currentDump.extracted_topics : undefined,
-        },
-      });
-    }
-  }, [metadata.plan, updateMetadata]);
-
   const handleStructureWithAI = useCallback(async (dump: BrainDumpData) => {
     updateMetadata.mutate({ brain_dump: dump });
     setAiStructuring(true);
@@ -271,7 +260,15 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
       };
 
       setAiReviewPlan(plan);
-      setAiSuggestedTitle(result.suggested_title || undefined);
+      // Always provide a title: use AI suggestion, or derive from "what" content
+      const derivedTitle = result.suggested_title
+        || result.what_will_you_do.split(/[.\n]/).filter(Boolean)[0]?.trim().slice(0, 80)
+        || undefined;
+      setAiSuggestedTitle(derivedTitle);
+      // Apply title immediately — don't wait for review confirmation
+      if (derivedTitle) {
+        saveTitle(derivedTitle);
+      }
       setResolvedEntities([]);
       setDateEnrichment(undefined);
       setEntityResolutionError(null);
@@ -287,11 +284,19 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
         capability_goals: dump.extracted_topics.length > 0 ? dump.extracted_topics : undefined,
       };
       setAiReviewPlan(plan);
+      // Derive title from topics or raw text for fallback
+      const fallbackTitle = dump.extracted_topics[0]
+        || dump.raw_text.split(/[.\n]/).filter(Boolean)[0]?.trim().slice(0, 80)
+        || undefined;
+      setAiSuggestedTitle(fallbackTitle);
+      if (fallbackTitle) {
+        saveTitle(fallbackTitle);
+      }
       setShowAiReview(true);
     } finally {
       setAiStructuring(false);
     }
-  }, [updateMetadata, currentInterest, user, runEntityResolution]);
+  }, [updateMetadata, currentInterest, user, runEntityResolution, saveTitle]);
 
   const handleConfirmAIPlan = useCallback((confirmedPlan: StepPlanData, title?: string) => {
     // Merge any saved library resource IDs into the plan
@@ -361,14 +366,17 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
       },
     );
 
-    // Update step with title and optional starts_at
-    const stepUpdate: Record<string, any> = {};
-    if (title) stepUpdate.title = title;
-    if (firstDate?.parsed_iso) stepUpdate.starts_at = firstDate.parsed_iso;
-    if (Object.keys(stepUpdate).length > 0) {
-      updateStep.mutate({ stepId, input: stepUpdate });
+    // Update step title using saveTitle for optimistic cache update
+    const effectiveTitle = title
+      || enrichedPlan.what_will_you_do?.split(/[.\n]/).filter(Boolean)[0]?.trim().slice(0, 80);
+    if (effectiveTitle) {
+      saveTitle(effectiveTitle);
     }
-  }, [stepId, brainDumpData, updateMetadata, updateStep, resolvedEntities, dateEnrichment]);
+    // Update starts_at separately if needed
+    if (firstDate?.parsed_iso) {
+      updateStep.mutate({ stepId, input: { starts_at: firstDate.parsed_iso } });
+    }
+  }, [stepId, brainDumpData, updateMetadata, updateStep, saveTitle, resolvedEntities, dateEnrichment]);
 
   const handleResolveAmbiguousPerson = useCallback((rawText: string, userId: string, displayName: string) => {
     setResolvedEntities((prev) =>
@@ -723,7 +731,6 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
             brainDumpData={isOwner ? brainDumpData : undefined}
             onBrainDumpChange={isOwner ? handleDraftChange : undefined}
             onStructureWithAI={isOwner ? handleStructureWithAI : undefined}
-            onSkipToPlan={isOwner ? handleSkipToPlan : undefined}
             isStructuring={aiStructuring}
             hasPlanContent={hasPlanContent}
             interestSlug={currentInterest?.slug}

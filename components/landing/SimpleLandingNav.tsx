@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,13 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import { BetterAtLogo } from '@/components/BetterAtLogo';
 import { InterestDropdown } from './InterestDropdown';
 import { SAMPLE_INTERESTS } from '@/lib/landing/sampleData';
 import { useAuth } from '@/providers/AuthProvider';
 import { getDashboardRoute } from '@/lib/utils/userTypeRouting';
-import { usePathname } from 'expo-router';
+import { ProfileDropdown } from '@/components/ui/ProfileDropdown';
 
 interface SimpleLandingNavProps {
   currentInterestSlug?: string;
@@ -27,7 +27,6 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
   const { width } = useWindowDimensions();
   const [mounted, setMounted] = React.useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [pricingMenuOpen, setPricingMenuOpen] = useState(false);
   const { user, userProfile, isGuest } = useAuth();
   const isLoggedIn = !!user && !isGuest;
@@ -45,15 +44,6 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
     const dest = getDashboardRoute(userProfile?.user_type ?? null);
     router.push(dest as any);
   };
-
-  const initials = userProfile?.display_name
-    ? userProfile.display_name
-        .split(' ')
-        .map((n: string) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase()
-    : user?.email?.[0]?.toUpperCase() ?? '?';
 
   return (
     <>
@@ -92,10 +82,11 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                   </View>
                 </TouchableOpacity>
                 {pricingMenuOpen && (
-                  <Pressable
-                    style={styles.pricingBackdrop}
-                    onPress={() => setPricingMenuOpen(false)}
-                  >
+                  <>
+                    <Pressable
+                      style={styles.pricingBackdrop}
+                      onPress={() => setPricingMenuOpen(false)}
+                    />
                     <Pressable
                       style={styles.pricingDropdown}
                       onPress={(e) => e.stopPropagation?.()}
@@ -115,81 +106,17 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                         <Text style={styles.profileMenuText}>Institutional Plans</Text>
                       </TouchableOpacity>
                     </Pressable>
-                  </Pressable>
+                  </>
                 )}
               </View>
 
               <View style={styles.divider} />
 
-              {isLoggedIn ? (
-                <View style={styles.profileContainer}>
-                  <TouchableOpacity
-                    style={styles.avatarBtn}
-                    onPress={() => setProfileMenuOpen(!profileMenuOpen)}
-                    accessibilityLabel="Open profile menu"
-                  >
-                    <Text style={styles.avatarText}>{initials}</Text>
-                  </TouchableOpacity>
-                  {profileMenuOpen && (
-                    <Pressable
-                      style={styles.profileBackdrop}
-                      onPress={() => setProfileMenuOpen(false)}
-                    >
-                      <Pressable
-                        style={styles.profileDropdown}
-                        onPress={(e) => e.stopPropagation?.()}
-                      >
-                        <TouchableOpacity
-                          style={styles.profileMenuItem}
-                          onPress={() => { setProfileMenuOpen(false); router.push('/?view=landing'); }}
-                        >
-                          <Ionicons name="home-outline" size={16} color="#374151" />
-                          <Text style={styles.profileMenuText}>Home</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.profileMenuItem}
-                          onPress={() => { setProfileMenuOpen(false); goToDashboard(); }}
-                        >
-                          <Ionicons name="grid-outline" size={16} color="#374151" />
-                          <Text style={styles.profileMenuText}>Dashboard</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.profileMenuItem}
-                          onPress={() => { setProfileMenuOpen(false); router.push('/(tabs)/reflect' as any); }}
-                        >
-                          <Ionicons name="person-outline" size={16} color="#374151" />
-                          <Text style={styles.profileMenuText}>My Profile</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.profileMenuItem}
-                          onPress={() => { setProfileMenuOpen(false); router.push('/(tabs)/settings' as any); }}
-                        >
-                          <Ionicons name="settings-outline" size={16} color="#374151" />
-                          <Text style={styles.profileMenuText}>Settings</Text>
-                        </TouchableOpacity>
-                      </Pressable>
-                    </Pressable>
-                  )}
-                </View>
-              ) : (
-                <>
-                  <TouchableOpacity
-                    onPress={() => router.push({ pathname: '/(auth)/login', params: { returnTo: pathname } } as any)}
-                  >
-                    <Text style={styles.navLink}>Log In</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.getStartedBtn}
-                    onPress={() => router.push(
-                      currentInterestSlug
-                        ? { pathname: '/(auth)/signup', params: { interest: currentInterestSlug } }
-                        : '/(auth)/signup' as any
-                    )}
-                  >
-                    <Text style={styles.getStartedText}>Get Started Free</Text>
-                  </TouchableOpacity>
-                </>
-              )}
+              <ProfileDropdown
+                variant="dark"
+                size={36}
+                currentInterestSlug={currentInterestSlug}
+              />
             </View>
           ) : (
             /* Mobile hamburger */
@@ -320,7 +247,7 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                       style={styles.mobileMenuItem}
                       onPress={() => {
                         setMobileMenuOpen(false);
-                        router.push('/(tabs)/reflect' as any);
+                        router.push(`/person/${user?.id}` as any);
                       }}
                     >
                       <Ionicons
@@ -329,6 +256,21 @@ export function SimpleLandingNav({ currentInterestSlug }: SimpleLandingNavProps 
                         color="rgba(255, 255, 255, 0.7)"
                       />
                       <Text style={styles.mobileMenuText}>My Profile</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.mobileMenuItem}
+                      onPress={() => {
+                        setMobileMenuOpen(false);
+                        router.push('/account' as any);
+                      }}
+                    >
+                      <Ionicons
+                        name="settings-outline"
+                        size={22}
+                        color="rgba(255, 255, 255, 0.7)"
+                      />
+                      <Text style={styles.mobileMenuText}>Settings</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
@@ -473,42 +415,11 @@ const styles = StyleSheet.create({
   pricingDropdown: {
     position: 'absolute',
     top: 32,
-    left: 0,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingVertical: 6,
-    minWidth: 200,
-    zIndex: 1000,
-    ...Platform.select({
-      web: {
-        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-      } as any,
-    }),
-  },
-
-  profileContainer: {
-    position: 'relative',
-  },
-  profileBackdrop: {
-    ...Platform.select({
-      web: {
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 999,
-      } as any,
-    }),
-  },
-  profileDropdown: {
-    position: 'absolute',
-    top: 44,
     right: 0,
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     paddingVertical: 6,
-    minWidth: 180,
+    minWidth: 200,
     zIndex: 1000,
     ...Platform.select({
       web: {
@@ -528,24 +439,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#374151',
-  },
-  avatarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    ...Platform.select({
-      web: { cursor: 'pointer' },
-    }),
-  },
-  avatarText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
 
   hamburger: {

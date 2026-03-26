@@ -108,6 +108,7 @@ import {
 import { createLogger } from '@/lib/utils/logger';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { showAlert, showConfirm, showAlertWithButtons } from '@/lib/utils/crossPlatformAlert';
+import { useToast } from '@/components/ui/AppToast';
 import { getLastViewState, saveLastViewState } from '@/lib/utils/lastViewState';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
@@ -163,6 +164,7 @@ export default function RacesScreen() {
   const { activeOrganization, activeMembership } = useOrganization();
   const { vocab } = useVocabulary();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [recommendedOrgTemplates, setRecommendedOrgTemplates] = useState<RecommendedStepTemplate[]>([]);
 
   // Blueprint publishing
@@ -1799,13 +1801,12 @@ export default function RacesScreen() {
       }
 
       if (showSuccessAlert) {
-        showAlert('Race deleted', `"${friendlyName}" has been removed.`);
+        toast.show(`"${friendlyName}" deleted`, 'success');
       }
       return true;
     } catch (error: any) {
       logger.error('Error deleting race:', error);
-      const message = error?.message || 'Unable to delete race. Please try again.';
-      showAlert('Error', message);
+      toast.show(error?.message || 'Unable to delete race', 'error');
       return false;
     } finally {
       setDeletingRaceId(prev => (prev === raceId ? null : prev));
@@ -1839,9 +1840,9 @@ export default function RacesScreen() {
               }
               await queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
               await refetchRaces();
-              showAlert('Deleted', `"${friendlyName}" has been removed.`);
+              toast.show(`"${friendlyName}" deleted`, 'success');
             } catch (error: any) {
-              showAlert('Error', error?.message || 'Unable to delete step.');
+              toast.show(error?.message || 'Unable to delete step', 'error');
             } finally {
               setDeletingRaceId(prev => (prev === raceId ? null : prev));
             }
@@ -1876,9 +1877,9 @@ export default function RacesScreen() {
             }
             await queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
             await refetchRacesRef.current?.();
-            showAlert('Deleted', `${count} ${noun} deleted.`);
+            toast.show(`${count} ${noun} deleted`, 'success');
           } catch (error: any) {
-            showAlert('Bulk delete failed', error?.message || 'Could not delete selected steps.');
+            toast.show(error?.message || 'Could not delete selected steps', 'error');
           }
         })();
       },
@@ -3776,6 +3777,8 @@ export default function RacesScreen() {
                 onEditRace={isViewingOtherTimeline ? undefined : handleEditRace}
                 onDeleteRace={isViewingOtherTimeline ? undefined : handleDeleteRace}
                 onHideRace={isViewingOtherTimeline ? undefined : handleHideRace}
+                onMarkDone={isViewingOtherTimeline ? undefined : handleMoveStepToCompletedMostRecent}
+                onMarkNotDone={isViewingOtherTimeline ? undefined : handleMoveStepToPlannedNext}
                 onBulkUpdateStatus={isViewingOtherTimeline ? undefined : handleTimelineGridBulkStatusUpdate}
                 onBulkDeleteRaces={isViewingOtherTimeline ? undefined : handleTimelineGridBulkDelete}
                 onReorderRaces={isViewingOtherTimeline ? undefined : handleTimelineGridReorder}

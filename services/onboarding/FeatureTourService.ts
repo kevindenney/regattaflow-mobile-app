@@ -103,6 +103,59 @@ export const TOUR_STEP_CONFIGS: Record<TourStep, TourStepConfig> = {
   },
 };
 
+/**
+ * Interest-aware overrides for tour step copy.
+ * Falls back to TOUR_STEP_CONFIGS when no override exists.
+ */
+const INTEREST_TOUR_OVERRIDES: Record<string, Partial<Record<TourStep, { title?: string; description?: string }>>> = {
+  'sail-racing': {}, // Defaults are already sailing-oriented
+};
+
+const GENERIC_TOUR_OVERRIDES: Partial<Record<TourStep, { title?: string; description?: string }>> = {
+  welcome: {
+    title: 'Welcome to BetterAt',
+    description: 'BetterAt helps you track progress, learn from others, and stay on top of your goals.',
+  },
+  race_timeline: {
+    title: 'Browse your timeline',
+    description: 'Swipe through your steps and milestones. Each card shows your progress.',
+  },
+  prep_overview: {
+    title: 'Plan, Do, Review',
+    description: 'Every step has three phases. Plan your approach, do the work, then review and improve.',
+  },
+  tab_sweep: {
+    title: 'Explore every tab',
+    description: 'Four tabs to power your journey.',
+  },
+  add_your_race: {
+    title: 'Add your first step',
+    description: 'Tap + to create your first timeline step.',
+  },
+};
+
+/**
+ * Get tour step config with interest-aware copy.
+ * Sailing uses the original configs; other interests get generic overrides.
+ */
+export function getInterestAwareStepConfig(
+  step: TourStep,
+  interestSlug?: string | null,
+): TourStepConfig {
+  const base = TOUR_STEP_CONFIGS[step];
+  const overrides = interestSlug
+    ? (INTEREST_TOUR_OVERRIDES[interestSlug]?.[step] ?? GENERIC_TOUR_OVERRIDES[step])
+    : GENERIC_TOUR_OVERRIDES[step];
+
+  if (!overrides) return base;
+
+  return {
+    ...base,
+    ...(overrides.title ? { title: overrides.title } : {}),
+    ...(overrides.description ? { description: overrides.description } : {}),
+  };
+}
+
 interface TourState {
   completed: boolean;
   currentStep: TourStep | null;

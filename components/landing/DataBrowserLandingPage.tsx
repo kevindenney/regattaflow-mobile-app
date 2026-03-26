@@ -157,6 +157,7 @@ const styles = StyleSheet.create({
     paddingTop: 100,
     paddingBottom: 64,
     paddingHorizontal: 24,
+    zIndex: 10,
   },
   heroContent: {
     maxWidth: 700,

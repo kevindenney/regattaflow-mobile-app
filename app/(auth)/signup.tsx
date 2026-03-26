@@ -40,6 +40,8 @@ export default function SignUp() {
     interest?: string;
     inviteToken?: string;
     plan?: string;
+    org?: string;
+    orgName?: string;
   }>();
 
   // If interest comes from URL, skip the interest picker step
@@ -121,9 +123,12 @@ export default function SignUp() {
     try {
       const result = await signUp(trimmedEmail, trimmedUsername, password, persona);
 
-      // Store interest context for onboarding steps to read
+      // Store interest and org context for onboarding steps to read
       if (selectedInterest) {
         await AsyncStorage.setItem('onboarding_interest_slug', selectedInterest);
+      }
+      if (params.org) {
+        await AsyncStorage.setItem('onboarding_org_slug', params.org);
       }
 
       // Store invite token for post-signup acceptance
@@ -158,6 +163,12 @@ export default function SignUp() {
     setErrorMessage(null);
     try {
       await signInWithGoogle(persona);
+      if (selectedInterest) {
+        await AsyncStorage.setItem('onboarding_interest_slug', selectedInterest);
+      }
+      if (params.org) {
+        await AsyncStorage.setItem('onboarding_org_slug', params.org);
+      }
       if (inviteToken) {
         await AsyncStorage.setItem('pending_invite_token', inviteToken);
       }
@@ -173,6 +184,12 @@ export default function SignUp() {
     setErrorMessage(null);
     try {
       await signInWithApple(persona);
+      if (selectedInterest) {
+        await AsyncStorage.setItem('onboarding_interest_slug', selectedInterest);
+      }
+      if (params.org) {
+        await AsyncStorage.setItem('onboarding_org_slug', params.org);
+      }
       if (inviteToken) {
         await AsyncStorage.setItem('pending_invite_token', inviteToken);
       }
@@ -292,6 +309,18 @@ export default function SignUp() {
               <View style={[styles.interestBadge, { backgroundColor: interestCtx.color + '18', borderColor: interestCtx.color + '40' }]}>
                 <Text style={[styles.interestBadgeText, { color: interestCtx.color }]}>
                   {interestCtx.interestName}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Org context badge */}
+          {params.orgName && (
+            <View style={styles.orgContextRow}>
+              <View style={styles.orgContextBadge}>
+                <Ionicons name="business-outline" size={14} color={interestCtx.color} />
+                <Text style={[styles.orgContextText, { color: interestCtx.color }]}>
+                  Joining {params.orgName}
                 </Text>
               </View>
             </View>
@@ -553,6 +582,27 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   interestBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Org Context Badge
+  orgContextRow: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  orgContextBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  orgContextText: {
     fontSize: 13,
     fontWeight: '600',
   },

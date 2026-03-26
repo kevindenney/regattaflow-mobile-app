@@ -896,53 +896,24 @@ export async function getPeerSubscriberTimelines(
       .map((s) => s.subscriber_id)
       .filter((id) => id !== excludeUserId);
 
-    console.log('[PeerTimelines] blueprint:', blueprintTitle);
-    console.log('[PeerTimelines] excludeUserId:', excludeUserId);
-    console.log('[PeerTimelines] all subscribers:', subscribers.map(s => ({ id: s.subscriber_id, name: s.subscriber_name })));
-    console.log('[PeerTimelines] peerIds (after excluding self):', peerIds);
-
-    if (peerIds.length === 0) {
-      console.log('[PeerTimelines] No peers found — returning empty');
-      return [];
-    }
+    if (peerIds.length === 0) return [];
 
     // Limit to 10 peers
     const limitedPeerIds = peerIds.slice(0, 10);
 
-    console.log('[PeerTimelines] interestId:', interestId);
-
     // 2. Batch-fetch non-private timeline_steps for these peers
     const { data: steps, error } = await supabase
       .from('timeline_steps')
-      .select('id, title, status, completed_at, user_id, visibility, interest_id')
+      .select('id, title, status, completed_at, user_id')
       .in('user_id', limitedPeerIds)
       .eq('interest_id', interestId)
       .neq('visibility', 'private')
       .order('sort_order', { ascending: true })
       .limit(200); // 10 peers × 20 steps max
 
-    console.log('[PeerTimelines] step query error:', error);
-    console.log('[PeerTimelines] steps returned:', steps?.length ?? 0);
-    if (steps && steps.length > 0) {
-      console.log('[PeerTimelines] step sample:', (steps as any[]).slice(0, 3).map(s => ({
-        id: s.id, title: s.title, user_id: s.user_id, status: s.status,
-        visibility: s.visibility, interest_id: s.interest_id,
-      })));
-    } else {
-      console.log('[PeerTimelines] 0 steps — likely RLS blocking or no steps match interest_id + visibility');
-      // Debug: try counting ALL steps for these peers (ignoring interest filter)
-      const { data: allSteps } = await supabase
-        .from('timeline_steps')
-        .select('id, user_id, interest_id, visibility')
-        .in('user_id', limitedPeerIds)
-        .limit(20);
-      console.log('[PeerTimelines] DEBUG all steps for peers (no interest filter):', allSteps?.length ?? 0,
-        (allSteps ?? []).map((s: any) => ({ user_id: s.user_id, interest_id: s.interest_id, visibility: s.visibility })));
-    }
-
     if (error) throw error;
 
-    // 4. Group by user, limit 20 steps per peer
+    // 3. Group by user, limit 20 steps per peer
     const stepsByUser = new Map<string, PeerTimelineStep[]>();
     for (const step of (steps ?? []) as any[]) {
       const userId = step.user_id;
@@ -958,16 +929,15 @@ export async function getPeerSubscriberTimelines(
       }
     }
 
-    // 5. Build subscriber name/avatar map
+    // 4. Build subscriber name/avatar map
     const subMap = new Map(
       subscribers.map((s) => [s.subscriber_id, s]),
     );
 
-    // 6. Return only peers with ≥1 visible step
+    // 5. Return only peers with ≥1 visible step
     const results: PeerTimeline[] = [];
     for (const peerId of limitedPeerIds) {
       const peerSteps = stepsByUser.get(peerId);
-      console.log('[PeerTimelines] peer', peerId, 'visible steps:', peerSteps?.length ?? 0);
       if (!peerSteps || peerSteps.length === 0) continue;
 
       const sub = subMap.get(peerId);
@@ -986,7 +956,6 @@ export async function getPeerSubscriberTimelines(
       });
     }
 
-    console.log('[PeerTimelines] final results:', results.length, 'peers with visible steps');
     return results;
   } catch (err) {
     logger.error('Failed to get peer subscriber timelines', err);

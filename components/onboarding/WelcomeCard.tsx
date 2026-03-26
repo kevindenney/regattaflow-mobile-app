@@ -1,7 +1,7 @@
 /**
  * WelcomeCard — Centered modal card shown after signup.
  *
- * Simple welcome screen with quick links to important features.
+ * Interest-aware welcome screen with quick links to important features.
  */
 
 import React from 'react';
@@ -20,6 +20,7 @@ export interface WelcomeCardProps {
   onStartTour: () => void;
   onSkip: () => void;
   onNavigate?: (route: string) => void;
+  interestSlug?: string | null;
 }
 
 interface QuickLink {
@@ -30,7 +31,7 @@ interface QuickLink {
   color: string;
 }
 
-const QUICK_LINKS: QuickLink[] = [
+const SAILING_LINKS: QuickLink[] = [
   {
     icon: 'add-circle',
     title: 'Add a Race',
@@ -54,12 +55,61 @@ const QUICK_LINKS: QuickLink[] = [
   },
 ];
 
-export function WelcomeCard({ visible, onStartTour, onSkip, onNavigate }: WelcomeCardProps) {
+const GENERIC_LINKS: QuickLink[] = [
+  {
+    icon: 'add-circle',
+    title: 'Add a Step',
+    description: 'Create your first timeline step',
+    route: '/(tabs)/races',
+    color: '#2563EB',
+  },
+  {
+    icon: 'compass',
+    title: 'Browse Programs',
+    description: 'Discover pathways and blueprints',
+    route: '/(tabs)/learn',
+    color: '#059669',
+  },
+  {
+    icon: 'people',
+    title: 'Find People',
+    description: 'Connect with peers and mentors',
+    route: '/(tabs)/connect',
+    color: '#7C3AED',
+  },
+];
+
+const SAILING_SLUGS = new Set(['sail-racing', 'sailing']);
+
+function getLinks(interestSlug?: string | null): QuickLink[] {
+  if (interestSlug && SAILING_SLUGS.has(interestSlug)) return SAILING_LINKS;
+  return GENERIC_LINKS;
+}
+
+function getTitle(interestSlug?: string | null): string {
+  if (interestSlug && SAILING_SLUGS.has(interestSlug)) return 'Welcome to BetterAt Sailing!';
+  return 'Welcome to BetterAt!';
+}
+
+function getDescription(interestSlug?: string | null): string {
+  if (interestSlug && SAILING_SLUGS.has(interestSlug)) {
+    return 'Your sailing race companion. Here\'s how to get started:';
+  }
+  return 'Track your progress, learn from others, and reach your goals. Here\'s how to get started:';
+}
+
+function getIcon(interestSlug?: string | null): string {
+  if (interestSlug && SAILING_SLUGS.has(interestSlug)) return '⛵';
+  return '🚀';
+}
+
+export function WelcomeCard({ visible, onStartTour, onSkip, onNavigate, interestSlug }: WelcomeCardProps) {
   const { width } = useWindowDimensions();
 
   if (!visible) return null;
 
   const cardWidth = Math.min(380, width - 40);
+  const links = getLinks(interestSlug);
 
   const handleQuickLink = (route: string) => {
     onSkip(); // Dismiss the card
@@ -73,15 +123,15 @@ export function WelcomeCard({ visible, onStartTour, onSkip, onNavigate }: Welcom
       style={styles.backdrop}
     >
       <View style={[styles.card, { width: cardWidth }]}>
-        <Text style={styles.emoji}>⛵</Text>
-        <Text style={styles.title}>Welcome to RegattaFlow!</Text>
+        <Text style={styles.emoji}>{getIcon(interestSlug)}</Text>
+        <Text style={styles.title}>{getTitle(interestSlug)}</Text>
         <Text style={styles.description}>
-          Your sailing race companion. Here's how to get started:
+          {getDescription(interestSlug)}
         </Text>
 
         {/* Quick Links */}
         <View style={styles.linksContainer}>
-          {QUICK_LINKS.map((link, index) => (
+          {links.map((link, index) => (
             <TouchableOpacity
               key={index}
               style={styles.linkButton}

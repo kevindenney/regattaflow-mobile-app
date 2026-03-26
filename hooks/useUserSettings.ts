@@ -39,10 +39,18 @@ export interface UserSettings {
   units: UnitSystem;
 }
 
+/** Interest-aware default units — only sailing uses nautical */
+const NAUTICAL_INTERESTS = new Set(['sail-racing', 'sailing']);
+
+function getDefaultUnits(interestSlug?: string | null): UnitSystem {
+  if (interestSlug && NAUTICAL_INTERESTS.has(interestSlug)) return 'nautical';
+  return 'metric';
+}
+
 const DEFAULT_SETTINGS: UserSettings = {
   showQuickTips: true,
   showLearningLinks: true,
-  units: 'nautical',
+  units: 'metric',
 };
 
 export interface UseUserSettingsReturn {
@@ -54,11 +62,15 @@ export interface UseUserSettingsReturn {
 
 /**
  * Hook to manage global user settings
+ * @param interestSlug - Optional current interest slug used to set smart defaults
+ *                       (e.g., sailing → nautical units, everything else → metric)
  */
-export function useUserSettings(): UseUserSettingsReturn {
-  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+export function useUserSettings(interestSlug?: string | null): UseUserSettingsReturn {
+  const defaultUnits = getDefaultUnits(interestSlug);
+  const interestDefaults = { ...DEFAULT_SETTINGS, units: defaultUnits };
+  const [settings, setSettings] = useState<UserSettings>(interestDefaults);
   const [isLoading, setIsLoading] = useState(true);
-  const settingsRef = useRef<UserSettings>(DEFAULT_SETTINGS);
+  const settingsRef = useRef<UserSettings>(interestDefaults);
   const isMountedRef = useRef(true);
   const loadRunIdRef = useRef(0);
 

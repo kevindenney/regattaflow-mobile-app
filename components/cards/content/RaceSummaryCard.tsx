@@ -875,37 +875,6 @@ export function RaceSummaryCard({
   const updateStepMetadata = useUpdateStepMetadata(isTimelineStep ? race.id : '');
   const { data: userBlueprints } = useUserBlueprints();
 
-  const handleSkipToPlan = useCallback((currentDump: BrainDumpData) => {
-    // Keep local state in sync so going back to brain dump preserves text
-    setLocalBrainDump(currentDump);
-    // Carry brain dump content into the plan so nothing is lost
-    if (currentDump.raw_text?.trim()) {
-      const collaborators: StepCollaborator[] = (currentDump.extracted_people ?? [])
-        .filter((name) => name.trim())
-        .map((name, i) => ({
-          id: `external_${i}_${Date.now()}`,
-          type: 'external' as const,
-          display_name: name.trim(),
-        }));
-      updateStepMetadata.mutate(
-        {
-          brain_dump: currentDump,
-          plan: {
-            ...(metadata?.plan ?? {}),
-            what_will_you_do: metadata?.plan?.what_will_you_do || currentDump.raw_text,
-            who_collaborators: currentDump.extracted_people,
-            collaborators: collaborators.length > 0 ? collaborators : undefined,
-            capability_goals: currentDump.extracted_topics.length > 0
-              ? currentDump.extracted_topics : undefined,
-          },
-        },
-        { onSuccess: () => setShowAiReview(false) },
-      );
-    } else {
-      setShowAiReview(false);
-    }
-  }, [metadata?.plan, updateStepMetadata]);
-
   const handleStructureWithAI = useCallback(async (dump: BrainDumpData) => {
     updateStepMetadata.mutate({ brain_dump: dump });
     setAiStructuring(true);
@@ -1888,7 +1857,6 @@ export function RaceSummaryCard({
               brainDumpData={brainDumpData}
               onBrainDumpChange={handleDraftChange}
               onStructureWithAI={handleStructureWithAI}
-              onSkipToPlan={handleSkipToPlan}
               isStructuring={aiStructuring}
               interestSlug={currentInterest?.slug}
             />

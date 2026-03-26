@@ -82,11 +82,43 @@ export default function NamePhotoScreen() {
 
       // Mark onboarding as completed in DB
       if (user?.id) {
+        // Upload photo to Supabase storage if a local file was picked
+        let avatarUrl: string | undefined;
+        if (photoUri && !photoUri.startsWith('http')) {
+          try {
+            const ext = photoUri.split('.').pop()?.toLowerCase() || 'jpg';
+            const fileName = `${user.id}/avatar.${ext}`;
+            const response = await fetch(photoUri);
+            const blob = await response.blob();
+            const arrayBuffer = await new Response(blob).arrayBuffer();
+
+            const { error: uploadError } = await supabase.storage
+              .from('avatars')
+              .upload(fileName, arrayBuffer, {
+                contentType: blob.type || `image/${ext}`,
+                upsert: true,
+              });
+
+            if (!uploadError) {
+              const { data: { publicUrl } } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
+              avatarUrl = `${publicUrl}?t=${Date.now()}`;
+            }
+          } catch (uploadErr) {
+            console.warn('[NamePhoto] Photo upload failed, continuing without photo:', uploadErr);
+          }
+        } else if (photoUri?.startsWith('http')) {
+          // OAuth-provided avatar URL — use directly
+          avatarUrl = photoUri;
+        }
+
         await supabase
           .from('users')
           .update({
             onboarding_completed: true,
             full_name: name.trim(),
+            ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
           })
           .eq('id', user.id);
 
@@ -137,7 +169,7 @@ export default function NamePhotoScreen() {
             >
               <Text style={styles.title}>What should we call you?</Text>
               <Text style={styles.subtitle}>
-                Add your name and optionally a photo so your sailing crew can find you.
+                Add your name and optionally a photo so others can find you.
               </Text>
             </Animated.View>
 
