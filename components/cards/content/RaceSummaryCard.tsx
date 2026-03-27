@@ -70,6 +70,8 @@ import {
 } from '../types';
 import { useInterestEventConfig } from '@/hooks/useInterestEventConfig';
 import { useInterest } from '@/providers/InterestProvider';
+import { CoachNudgeBanner } from '@/components/interest/CoachNudgeBanner';
+import { useProactiveNudge } from '@/hooks/useProactiveNudge';
 import { supabase } from '@/services/supabase';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { isUuid } from '@/utils/uuid';
@@ -80,6 +82,7 @@ import {
   OnWaterContent,
 } from './phases';
 import { StepPlanQuestions } from '@/components/step/StepPlanQuestions';
+import { PlanQuestionCard } from '@/components/step/PlanQuestionCard';
 import { StepDrawContent } from '@/components/step/StepDrawContent';
 import { DateEnrichmentCard } from '@/components/step/DateEnrichmentCard';
 import { StepCritiqueContent } from '@/components/step/StepCritiqueContent';
@@ -751,6 +754,10 @@ export function RaceSummaryCard({
     }
   }, [selectedPhase, isTimelineStep, race.id]);
 
+  // Proactive AI coaching nudge
+  const stepInterestId = (race as any).interest_id ?? currentInterest?.id;
+  const { nudge: coachNudge, dismiss: dismissNudge } = useProactiveNudge(stepInterestId, selectedPhase);
+
   // Inline title editing for timeline steps
   const updateStepMutation = useUpdateStep();
   const queryClient = useQueryClient();
@@ -1071,6 +1078,16 @@ export function RaceSummaryCard({
     setLocalBrainDump(dump);
     updateStepMetadata.mutate({ brain_dump: dump });
   }, [updateStepMetadata]);
+
+  const handleConversationalCreate = useCallback((conversationalPlan: Partial<StepPlanData>, suggestedTitle?: string) => {
+    console.log('[RaceSummaryCard] handleConversationalCreate:', { suggestedTitle, planKeys: Object.keys(conversationalPlan) });
+    const currentPlan = (metadata?.plan ?? {}) as StepPlanData;
+    updateStepMetadata.mutate({ plan: { ...currentPlan, ...conversationalPlan } });
+    if (suggestedTitle) {
+      updateStepMutation.mutate({ stepId: race.id, input: { title: suggestedTitle } });
+      setEditTitle(suggestedTitle); // Immediately update local title state
+    }
+  }, [metadata, updateStepMetadata, updateStepMutation, race.id]);
 
   // Detail bottom sheet state
   const [activeDetailSheet, setActiveDetailSheet] = useState<DetailCardType | null>(null);
@@ -1828,8 +1845,133 @@ export function RaceSummaryCard({
 
   // Helper to render phase-specific content
   const renderPhaseContent = () => {
+    // Coach nudge banner — shown across all step types
+    const nudgeBanner = coachNudge ? <CoachNudgeBanner insight={coachNudge} onDismiss={dismissNudge} /> : null;
+
+    // Demo timeline steps: show phase-specific read-only content
+    if ((race as any).isDemo && isTimelineStep) {
+      const plan = metadata?.plan as any;
+      const demoMeta = metadata as any;
+
+      // Clinical tab (on_water)
+      if (selectedPhase === 'on_water') {
+        const notes = demoMeta?.clinical_notes;
+        if (!notes) {
+          return (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Ionicons name="document-text-outline" size={32} color="#D1D5DB" />
+              <Text style={{ fontSize: 15, color: '#9CA3AF', marginTop: 8, textAlign: 'center' }}>
+                Clinical notes will appear here during and after your session.
+              </Text>
+            </View>
+          );
+        }
+        return (
+          <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
+            <PlanQuestionCard icon="document-text-outline" title="Clinical Notes" isComplete>
+              <Text style={{ fontSize: 15, lineHeight: 22, color: '#374151', letterSpacing: -0.2 }}>
+                {notes}
+              </Text>
+            </PlanQuestionCard>
+          </View>
+        );
+      }
+
+      // Debrief tab (after_race)
+      if (selectedPhase === 'after_race') {
+        const reflection = demoMeta?.debrief_reflection;
+        if (!reflection) {
+          return (
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Ionicons name="chatbubble-ellipses-outline" size={32} color="#D1D5DB" />
+              <Text style={{ fontSize: 15, color: '#9CA3AF', marginTop: 8, textAlign: 'center' }}>
+                Reflect on what went well and what to improve next time.
+              </Text>
+            </View>
+          );
+        }
+        return (
+          <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
+            <PlanQuestionCard icon="chatbubble-ellipses-outline" title="Reflection" isComplete>
+              <Text style={{ fontSize: 15, lineHeight: 22, color: '#374151', letterSpacing: -0.2 }}>
+                {reflection}
+              </Text>
+            </PlanQuestionCard>
+          </View>
+        );
+      }
+
+      // Prep tab (days_before) — full plan questions
+      const whatText = plan?.what_will_you_do || '';
+      const subSteps = plan?.how_sub_steps || [];
+      const whyText = plan?.why_reasoning || '';
+      const whereText = plan?.where_location?.name || '';
+      const goals = plan?.capability_goals || [];
+      return (
+        <View style={{ paddingHorizontal: 12, paddingTop: 8 }}>
+          {nudgeBanner}
+          {/* What */}
+          <PlanQuestionCard icon="bulb-outline" title="What will you do?" isComplete={!!whatText}>
+            <Text style={{ fontSize: 15, lineHeight: 22, color: '#374151', letterSpacing: -0.2 }}>
+              {whatText}
+            </Text>
+          </PlanQuestionCard>
+
+          {/* How — sub-steps */}
+          {subSteps.length > 0 && (
+            <PlanQuestionCard icon="list-outline" title="How will you do it?" isComplete={subSteps.some((s: any) => s.completed)}>
+              {subSteps.map((s: any) => (
+                <View key={s.id} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                  <Ionicons
+                    name={s.completed ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={18}
+                    color={s.completed ? IOS_COLORS.green : '#9CA3AF'}
+                    style={{ marginTop: 1 }}
+                  />
+                  <Text style={{ fontSize: 15, lineHeight: 22, color: s.completed ? '#6B7280' : '#374151', flex: 1, textDecorationLine: s.completed ? 'line-through' : 'none' }}>
+                    {s.text}
+                  </Text>
+                </View>
+              ))}
+            </PlanQuestionCard>
+          )}
+
+          {/* Why */}
+          {!!whyText && (
+            <PlanQuestionCard icon="help-circle-outline" title="Why is this next?" isComplete>
+              <Text style={{ fontSize: 15, lineHeight: 22, color: '#374151', letterSpacing: -0.2 }}>
+                {whyText}
+              </Text>
+            </PlanQuestionCard>
+          )}
+
+          {/* Where */}
+          {!!whereText && (
+            <PlanQuestionCard icon="location-outline" title="Where will you do this?" isComplete>
+              <Text style={{ fontSize: 15, lineHeight: 22, color: '#374151', letterSpacing: -0.2 }}>
+                {whereText}
+              </Text>
+            </PlanQuestionCard>
+          )}
+
+          {/* Capability goals */}
+          {goals.length > 0 && (
+            <PlanQuestionCard icon="trophy-outline" title="Skills you're building" isComplete>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {goals.map((g: string) => (
+                  <View key={g} style={{ backgroundColor: '#EDE9FE', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                    <Text style={{ fontSize: 13, color: '#7C3AED', fontWeight: '500' }}>{g}</Text>
+                  </View>
+                ))}
+              </View>
+            </PlanQuestionCard>
+          )}
+        </View>
+      );
+    }
+
     // Timeline steps get dedicated step content per phase (all interests)
-    if (isTimelineStep && isActive) {
+    if (isTimelineStep) {
       if (selectedPhase === 'days_before') {
         // AI review overlay — shown after "Structure with AI"
         if (showAiReview && aiReviewPlan) {
@@ -1851,6 +1993,7 @@ export function RaceSummaryCard({
         // Unified view — plan questions always shown, brain dump collapsible at top
         return (
           <>
+            {nudgeBanner}
             <StepPlanQuestions
               stepId={race.id}
               interestId={(race as any).interest_id ?? currentInterest?.id}
@@ -1859,6 +2002,8 @@ export function RaceSummaryCard({
               onStructureWithAI={handleStructureWithAI}
               isStructuring={aiStructuring}
               interestSlug={currentInterest?.slug}
+              useConversationalCapture={isOwner}
+              onConversationalCreate={isOwner ? handleConversationalCreate : undefined}
             />
           </>
         );
@@ -1867,6 +2012,7 @@ export function RaceSummaryCard({
         const activeEnrichment = dateEnrichment ?? metadata?.plan?.date_enrichment;
         return (
           <>
+            {nudgeBanner}
             {activeEnrichment && (activeEnrichment.wind || activeEnrichment.tide) && (
               <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
                 <DateEnrichmentCard
@@ -1876,12 +2022,17 @@ export function RaceSummaryCard({
                 />
               </View>
             )}
-            <StepDrawContent stepId={race.id} />
+            <StepDrawContent stepId={race.id} interestId={(race as any).interest_id ?? currentInterest?.id} interestName={currentInterest?.name} interestSlug={currentInterest?.slug} />
           </>
         );
       }
       if (selectedPhase === 'after_race') {
-        return <StepCritiqueContent stepId={race.id} onNextStepCreated={onNextStepCreated} />;
+        return (
+          <>
+            {nudgeBanner}
+            <StepCritiqueContent stepId={race.id} onNextStepCreated={onNextStepCreated} />
+          </>
+        );
       }
     }
 
@@ -2037,8 +2188,13 @@ export function RaceSummaryCard({
 
   const nonSailingTypeLabel = useMemo(() => {
     if (isBlankActivitySubtype) return 'Step';
+    // Check event_subtype in metadata, then category on the step record
+    const subtypeId = (race as any)?.metadata?.event_subtype || (race as any)?.category;
+    const subtypeMatch = subtypeId
+      ? eventConfig.eventSubtypes.find((s) => s.id === subtypeId)
+      : undefined;
     return (
-      eventConfig.eventSubtypes.find((s) => s.id === (race as any)?.metadata?.event_subtype)?.label
+      subtypeMatch?.label
       ?? eventConfig.eventNoun
     );
   }, [eventConfig.eventNoun, eventConfig.eventSubtypes, isBlankActivitySubtype, race]);
@@ -2275,12 +2431,6 @@ export function RaceSummaryCard({
             </Text>
           </Pressable>
         )}
-        {isTimelineStep && stepCollaborators.length === 0 && isOwner && (
-          <Pressable style={styles.addCollaboratorsChip} onPress={() => setShowStepCollabPicker(true)}>
-            <Ionicons name="people-outline" size={14} color={IOS_COLORS.blue} />
-            <Text style={styles.addCollaboratorsChipText}>Add collaborators</Text>
-          </Pressable>
-        )}
         {!isTimelineStep && FEATURE_FLAGS.ENABLE_CREW_AVATARS_HEADER && collaborators.length > 0 && (
           <View style={styles.crewAvatarRow}>
             <CrewAvatarStack
@@ -2291,12 +2441,6 @@ export function RaceSummaryCard({
               showPendingBadge
             />
           </View>
-        )}
-        {!isTimelineStep && Boolean((race as any)?.metadata?.group_editable) && collaborators.length === 0 && (
-          <Pressable style={styles.addCollaboratorsChip} onPress={() => openCrewHub('roster')}>
-            <Ionicons name="people-outline" size={14} color={IOS_COLORS.blue} />
-            <Text style={styles.addCollaboratorsChipText}>Add collaborators</Text>
-          </Pressable>
         )}
 
         {/* Pill-style Phase Tabs (Prep/Race/Review) */}
@@ -4159,25 +4303,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
     marginBottom: 8,
-  },
-  addCollaboratorsChip: {
-    marginTop: 6,
-    marginBottom: 8,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#EAF2FF',
-    borderWidth: 1,
-    borderColor: '#D6E5FF',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  addCollaboratorsChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: IOS_COLORS.blue,
   },
   stepCollabRow: {
     flexDirection: 'row',

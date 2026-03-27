@@ -59,6 +59,7 @@ export function TrainChatPanel({
       let insightsBlock = '';
       let measurementBlock = '';
       let libraryBlock = '';
+      let loadedInsights: Awaited<ReturnType<typeof getActiveInsights>> = [];
 
       try {
         const [manifesto, insights, measurementHistory, libraryResources] = await Promise.all([
@@ -70,6 +71,7 @@ export function TrainChatPanel({
             .catch(() => [] as any[]),
         ]);
 
+        loadedInsights = insights;
         if (manifesto?.content?.trim()) {
           manifestoBlock = `\n\nUSER'S MANIFESTO:\n${manifesto.content}`;
         }
@@ -109,10 +111,24 @@ Guidelines:
 - Do not use markdown formatting`;
 
       setSystemPrompt(prompt);
+
+      // Pick the most relevant recent insight for a personalized opening
+      let insightOpener = '';
+      if (loadedInsights.length) {
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        const recent = loadedInsights
+          .filter((i: { created_at: string }) => new Date(i.created_at) > twoWeeksAgo)
+          .sort((a: { confidence: number }, b: { confidence: number }) => b.confidence - a.confidence);
+        if (recent.length) {
+          insightOpener = ` By the way — from our past sessions I noticed: ${recent[0].content}.`;
+        }
+      }
+
       setOpeningMessage(
         planWhat
-          ? `Your plan today is: ${planWhat.slice(0, 100)}${planWhat.length > 100 ? '...' : ''} How are you feeling about getting started?`
-          : `Ready to start "${stepTitle}"? How are you feeling?`,
+          ? `Your plan today is: ${planWhat.slice(0, 100)}${planWhat.length > 100 ? '...' : ''} How are you feeling about getting started?${insightOpener}`
+          : `Ready to start "${stepTitle}"? How are you feeling?${insightOpener}`,
       );
     })();
   }, [user?.id, interestId, interestName, stepTitle, planWhat]);
