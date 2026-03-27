@@ -6,7 +6,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17 6 * * *'
 
 concurrency:
   group: deployment-smoke-${{ github.ref }}
