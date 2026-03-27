@@ -18,6 +18,7 @@ import { supabase } from '@/services/supabase';
 import { getResourcesByIds } from '@/services/LibraryService';
 import type { StepPlanData, StepActData, StepMetadata, MediaLink, MediaLinkPlatform, MediaUpload } from '@/types/step-detail';
 import type { LibraryResourceRecord } from '@/types/library';
+import { TrainChatPanel } from '@/components/practice/phases/TrainChatPanel';
 
 const IS_NATIVE = Platform.OS === 'ios' || Platform.OS === 'android';
 const IS_WEB = Platform.OS === 'web';
@@ -106,9 +107,12 @@ const PLATFORM_INFO: Record<MediaLinkPlatform, { icon: string; label: string; co
 interface StepDrawContentProps {
   stepId: string;
   readOnly?: boolean;
+  interestId?: string;
+  interestName?: string;
+  interestSlug?: string;
 }
 
-export function StepDrawContent({ stepId, readOnly }: StepDrawContentProps) {
+export function StepDrawContent({ stepId, readOnly, interestId, interestName, interestSlug }: StepDrawContentProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const updateStep = useUpdateStep();
@@ -739,20 +743,34 @@ export function StepDrawContent({ stepId, readOnly }: StepDrawContentProps) {
         )}
       </View>
 
-      {/* Session notes */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>SESSION NOTES</Text>
-        <TextInput
-          style={styles.textArea}
-          value={localNotes}
-          onChangeText={readOnly ? undefined : handleNotesChange}
-          placeholder={readOnly ? '' : "Capture thoughts as you work..."}
-          placeholderTextColor={IOS_COLORS.tertiaryLabel}
-          multiline
-          textAlignVertical="top"
-          editable={!readOnly}
-        />
-      </View>
+      {/* Session notes — AI chat when context available, plain textarea fallback */}
+      {interestId && interestName && !readOnly ? (
+        <View style={styles.section}>
+          <TrainChatPanel
+            interestId={interestId}
+            interestName={interestName}
+            interestSlug={interestSlug}
+            stepId={stepId}
+            stepTitle={step?.title || planData.what_will_you_do || 'This step'}
+            planWhat={planData.what_will_you_do}
+            onUpdateNotes={handleNotesChange}
+          />
+        </View>
+      ) : (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>SESSION NOTES</Text>
+          <TextInput
+            style={styles.textArea}
+            value={localNotes}
+            onChangeText={readOnly ? undefined : handleNotesChange}
+            placeholder={readOnly ? '' : "Capture thoughts as you work..."}
+            placeholderTextColor={IOS_COLORS.tertiaryLabel}
+            multiline
+            textAlignVertical="top"
+            editable={!readOnly}
+          />
+        </View>
+      )}
 
       {/* Plan summary */}
       {planData.what_will_you_do && (

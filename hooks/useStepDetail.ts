@@ -43,6 +43,7 @@ export function useUpdateStepMetadata(stepId: string | undefined) {
       if (!stepId?.trim()) throw new Error('No step ID');
       return updateStepMetadata(stepId, partialMetadata);
     },
+    retry: false,
     onSuccess: (updatedStep) => {
       // Set the detail query data directly — no broad invalidation needed.
       // The list query doesn't display metadata, so invalidating it only

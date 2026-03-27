@@ -149,13 +149,18 @@ Guidelines:
   }, [messages.length, isLoading]);
 
   // Persist user messages as notes for backward compat
+  const prevNotesRef = useRef<string>('');
   useEffect(() => {
     if (!onUpdateNotes) return;
     const userMessages = messages
       .filter((m) => m.role === 'user')
       .map((m) => m.content);
     if (userMessages.length > 0) {
-      onUpdateNotes(userMessages.join('\n'));
+      const joined = userMessages.join('\n');
+      if (joined !== prevNotesRef.current) {
+        prevNotesRef.current = joined;
+        onUpdateNotes(joined);
+      }
     }
   }, [messages, onUpdateNotes]);
 
