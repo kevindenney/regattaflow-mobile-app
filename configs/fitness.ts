@@ -142,6 +142,28 @@ export const FITNESS_EVENT_CONFIG: InterestEventConfig = {
         { id: 'focus_area', type: 'text', label: 'Focus Area', placeholder: 'e.g. Footwork, Shooting, Defense' },
       ],
     },
+    {
+      id: 'nutrition',
+      label: 'Nutrition',
+      icon: 'nutrition',
+      description: 'Meal planning and nutrition tracking',
+      formFields: [
+        { id: 'date', type: 'date', label: 'Date', required: true },
+        {
+          id: 'meal_focus',
+          type: 'select',
+          label: 'Meal Focus',
+          options: [
+            { value: 'meal_prep', label: 'Meal Prep' },
+            { value: 'daily_tracking', label: 'Daily Tracking' },
+            { value: 'pre_workout', label: 'Pre-Workout Nutrition' },
+            { value: 'post_workout', label: 'Post-Workout Recovery' },
+          ],
+        },
+        { id: 'target_calories', type: 'number', label: 'Target Calories' },
+        { id: 'notes', type: 'text', label: 'Notes', placeholder: 'Focus for today...' },
+      ],
+    },
   ],
 
   defaultSubtype: 'strength',
@@ -365,6 +387,16 @@ export const FITNESS_EVENT_CONFIG: InterestEventConfig = {
       subtypeId: 'sport',
       labelOverrides: {
         workout_plan: 'Game Plan',
+      },
+    },
+    nutrition: {
+      subtypeId: 'nutrition',
+      excludedModules: ['workout_plan', 'warmup', 'timer', 'previous_session'],
+      labelOverrides: {
+        goals: 'Nutrition Goals',
+        body_status: 'How You Feel',
+        results_preview: 'Nutrition Log',
+        learning_notes: 'Nutrition Notes',
       },
     },
   },
@@ -840,6 +872,37 @@ export const FITNESS_EVENT_CONFIG: InterestEventConfig = {
         subtitle: 'Results, notes, and recovery',
         moduleIds: ['results_preview', 'learning_notes', 'recovery_status', 'post_nutrition'],
       },
+    ],
+  },
+
+  // ---------------------------------------------------------------------------
+  // AI measurement extraction
+  // ---------------------------------------------------------------------------
+  measurementConfig: {
+    enabled: true,
+    categories: ['exercise', 'health'],
+    prTrackingEnabled: true,
+    progressiveOverloadDetection: true,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Nutrition tracking
+  // ---------------------------------------------------------------------------
+  nutritionConfig: {
+    enabled: true,
+    targets: [
+      { label: 'Calories', key: 'calories_daily', unit: 'cal' },
+      { label: 'Protein', key: 'protein_daily_g', unit: 'g' },
+      { label: 'Carbs', key: 'carbs_daily_g', unit: 'g' },
+      { label: 'Fat', key: 'fat_daily_g', unit: 'g' },
+    ],
+    mealTypes: [
+      { value: 'breakfast', label: 'Breakfast' },
+      { value: 'lunch', label: 'Lunch' },
+      { value: 'dinner', label: 'Dinner' },
+      { value: 'snack', label: 'Snack' },
+      { value: 'pre_workout', label: 'Pre-Workout' },
+      { value: 'post_workout', label: 'Post-Workout' },
     ],
   },
 }

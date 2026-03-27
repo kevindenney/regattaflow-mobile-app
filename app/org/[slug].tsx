@@ -1,12 +1,35 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
-import { getTemplatesByOrg } from '@/services/activityCatalog';
-import type { ActivityTemplate } from '@/types/activities';
+import type { BlueprintRecord } from '@/types/blueprint';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
+
+// ── Design tokens (matching blueprint page) ──────────────────────────
+const C = {
+  bg: '#F8FAFC',
+  cardBg: '#FFFFFF',
+  accent: '#00897B',
+  accentBg: 'rgba(0,137,123,0.08)',
+  accentLight: '#E0F2F1',
+  border: '#E5E4E1',
+  labelDark: '#1A1918',
+  labelMid: '#6D6C6A',
+  labelLight: '#9C9B99',
+  green: '#3D8A5A',
+} as const;
+
+// ── Types ────────────────────────────────────────────────────────────
 
 type OrgRow = {
   id: string;
@@ -23,10 +46,12 @@ type MembershipRow = {
   membership_status: string | null;
 };
 
-type UserRow = {
+type PersonDisplay = {
   id: string;
-  full_name: string | null;
-  email: string | null;
+  name: string;
+  initials: string;
+  role: string | null;
+  isCoach: boolean;
 };
 
 function normalize(value: unknown): string {
@@ -50,14 +75,33 @@ function isCoachRole(role: string | null): boolean {
     || normalized === 'assessor';
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function formatRole(role: string | null): string {
+  if (!role) return 'Member';
+  return role
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// ── Palette for avatar backgrounds ───────────────────────────────────
+const AVATAR_COLORS = ['#E0F2F1', '#FFF3E0', '#E8EAF6', '#FCE4EC', '#E0F7FA', '#F3E5F5', '#FFF8E1', '#E8F5E9'];
+
 export default function PublicOrganizationPage() {
   const params = useLocalSearchParams<{ slug?: string }>();
   const slug = typeof params.slug === 'string' ? params.slug.trim() : '';
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [org, setOrg] = useState<OrgRow | null>(null);
-  const [templates, setTemplates] = useState<ActivityTemplate[]>([]);
-  const [people, setPeople] = useState<Array<{ id: string; name: string; email: string | null; role: string | null; isCoach: boolean }>>([]);
+  const [blueprints, setBlueprints] = useState<BlueprintRecord[]>([]);
+  const [people, setPeople] = useState<PersonDisplay[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +109,7 @@ export default function PublicOrganizationPage() {
       setLoading(true);
       setErrorText(null);
       try {
+        // Fetch org
         let orgQuery = await supabase
           .from('organizations')
           .select('id,name,slug,join_mode,interest_slug')
@@ -89,6 +134,7 @@ export default function PublicOrganizationPage() {
           interest_slug: (orgQuery.data as any).interest_slug ? String((orgQuery.data as any).interest_slug) : null,
         };
 
+        // Fetch memberships
         let membershipResult = await supabase
           .from('organization_memberships')
           .select('user_id,role,status,membership_status')
@@ -111,37 +157,64 @@ export default function PublicOrganizationPage() {
         }));
         const activeMembers = memberRows.filter(isActiveMembership);
         const userIds = Array.from(new Set(activeMembers.map((row) => row.user_id).filter(Boolean)));
-        let usersById = new Map<string, UserRow>();
+
+        // Fetch display names from profiles (proper names), fall back to users
+        let profilesById = new Map<string, string>();
         if (userIds.length > 0) {
-          const usersResult = await supabase
-            .from('users')
-            .select('id,full_name,email')
+          const profilesResult = await supabase
+            .from('profiles')
+            .select('id,full_name')
             .in('id', userIds)
             .limit(4000);
-          if (usersResult.error) throw usersResult.error;
-          usersById = new Map(
-            (usersResult.data || []).map((row: any) => [
-              String(row.id),
-              { id: String(row.id), full_name: row.full_name ? String(row.full_name) : null, email: row.email ? String(row.email) : null },
-            ]),
-          );
+          if (!profilesResult.error) {
+            profilesById = new Map(
+              (profilesResult.data || []).map((row: any) => [String(row.id), row.full_name ? String(row.full_name) : '']),
+            );
+          }
+
+          // Fall back to users table for anyone missing from profiles
+          const missingIds = userIds.filter((id) => !profilesById.get(id));
+          if (missingIds.length > 0) {
+            const usersResult = await supabase
+              .from('users')
+              .select('id,full_name,email')
+              .in('id', missingIds)
+              .limit(4000);
+            if (!usersResult.error) {
+              for (const row of usersResult.data || []) {
+                const id = String((row as any).id);
+                if (!profilesById.get(id)) {
+                  profilesById.set(id, String((row as any).full_name || (row as any).email || 'Member'));
+                }
+              }
+            }
+          }
         }
-        const nextPeople = activeMembers.map((row) => {
-          const user = usersById.get(row.user_id);
+
+        const nextPeople: PersonDisplay[] = activeMembers.map((row) => {
+          const displayName = profilesById.get(row.user_id) || 'Member';
           return {
             id: row.user_id,
-            name: user?.full_name || user?.email || row.user_id,
-            email: user?.email || null,
+            name: displayName,
+            initials: getInitials(displayName),
             role: row.role || null,
             isCoach: isCoachRole(row.role),
           };
         });
 
-        const templateRows = await getTemplatesByOrg(orgRow.id);
+        // Fetch published blueprints
+        const bpResult = await supabase
+          .from('timeline_blueprints')
+          .select('*')
+          .eq('organization_id', orgRow.id)
+          .eq('is_published', true)
+          .order('created_at', { ascending: false });
 
         if (!cancelled) {
           setOrg(orgRow);
-          setTemplates(templateRows);
+          if (!bpResult.error) {
+            setBlueprints((bpResult.data as any[]) ?? []);
+          }
           setPeople(nextPeople);
         }
       } catch (error: any) {
@@ -163,94 +236,432 @@ export default function PublicOrganizationPage() {
   }, [slug]);
 
   const coaches = useMemo(() => people.filter((p) => p.isCoach), [people]);
+  const members = useMemo(() => people.filter((p) => !p.isCoach), [people]);
+
+  const Container = Platform.OS === 'web' ? View : SafeAreaView;
+
+  if (loading) {
+    return (
+      <Container style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={C.accent} />
+        </View>
+      </Container>
+    );
+  }
+
+  if (!org || errorText) {
+    return (
+      <Container style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="business-outline" size={48} color={C.labelLight} />
+          <Text style={styles.emptyTitle}>Organization not found</Text>
+          <Text style={styles.emptySubtitle}>{errorText || 'This organization may not exist or the URL is incorrect.'}</Text>
+          <Pressable style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </Pressable>
+        </View>
+      </Container>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.iconBtn}>
-          <Ionicons name="chevron-back" size={20} color="#111827" />
+    <Container style={styles.container}>
+      {/* Header */}
+      <View style={styles.navHeader}>
+        <Pressable
+          style={styles.backBtn}
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/races' as any)}
+        >
+          <Ionicons name="arrow-back" size={20} color={C.accent} />
+          <Text style={styles.backBtnText}>Back</Text>
         </Pressable>
-        <Text style={styles.title}>Organization</Text>
-        <View style={styles.iconBtn} />
       </View>
-      {loading ? (
-        <View style={styles.centerState}>
-          <ActivityIndicator size="small" color="#2563EB" />
-          <Text style={styles.stateText}>Loading organization…</Text>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroIcon}>
+            <Ionicons name="business" size={28} color={C.accent} />
+          </View>
+          <Text style={styles.heroTitle}>{org.name}</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{blueprints.length}</Text>
+              <Text style={styles.statLabel}>Program{blueprints.length !== 1 ? 's' : ''}</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{coaches.length}</Text>
+              <Text style={styles.statLabel}>Coach{coaches.length !== 1 ? 'es' : ''}</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{people.length}</Text>
+              <Text style={styles.statLabel}>Member{people.length !== 1 ? 's' : ''}</Text>
+            </View>
+          </View>
         </View>
-      ) : null}
-      {!loading && errorText ? (
-        <View style={styles.centerState}>
-          <Text style={styles.errorText}>{errorText}</Text>
-        </View>
-      ) : null}
-      {!loading && !errorText && org ? (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>{org.name}</Text>
-            <Text style={styles.cardMeta}>{org.interest_slug || 'no-interest-tag'} · {org.join_mode || 'invite_only'}</Text>
-            <Text style={styles.cardMeta}>{people.length} people · {coaches.length} coaches · {templates.length} templates</Text>
+
+        {/* Programs & Blueprints */}
+        {blueprints.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Programs & Blueprints</Text>
+            <View style={styles.blueprintGrid}>
+              {blueprints.map((bp) => (
+                <Pressable
+                  key={bp.id}
+                  style={({ pressed }) => [styles.blueprintCard, pressed && styles.cardPressed]}
+                  onPress={() => router.push(`/blueprint/${bp.slug}`)}
+                >
+                  <View style={styles.blueprintCardIcon}>
+                    <Ionicons name="layers" size={22} color={C.accent} />
+                  </View>
+                  <Text style={styles.blueprintCardTitle}>{bp.title}</Text>
+                  {bp.description ? (
+                    <Text style={styles.blueprintCardDesc} numberOfLines={3}>{bp.description}</Text>
+                  ) : null}
+                  <View style={styles.blueprintCardFooter}>
+                    <Ionicons name="people-outline" size={12} color={C.labelMid} />
+                    <Text style={styles.blueprintCardMeta}>
+                      {bp.subscriber_count} subscriber{bp.subscriber_count !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.blueprintCardCta}>
+                    <Text style={styles.blueprintCardCtaText}>View Program</Text>
+                    <Ionicons name="arrow-forward" size={12} color={C.accent} />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
           </View>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Published Content</Text>
-            {templates.length === 0 ? <Text style={styles.cardMeta}>No published templates yet.</Text> : null}
-            {templates.map((template) => (
-              <View key={template.id} style={styles.row}>
-                <Text style={styles.rowTitle}>{template.title}</Text>
-                <Text style={styles.rowMeta}>{template.eventSubtype || template.eventType}</Text>
-              </View>
-            ))}
+        )}
+
+        {/* Coaches */}
+        {coaches.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Coaches & Instructors</Text>
+            <View style={styles.peopleList}>
+              {coaches.map((person, index) => (
+                <Pressable
+                  key={person.id}
+                  style={({ pressed }) => [styles.personRow, pressed && styles.personRowPressed]}
+                  onPress={() => router.push(`/person/${person.id}`)}
+                >
+                  <View style={[styles.personAvatar, { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] }]}>
+                    <Text style={styles.personInitials}>{person.initials}</Text>
+                  </View>
+                  <View style={styles.personInfo}>
+                    <Text style={styles.personName}>{person.name}</Text>
+                    <Text style={styles.personRole}>{formatRole(person.role)}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color={C.labelLight} />
+                </Pressable>
+              ))}
+            </View>
           </View>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Coaches</Text>
-            {coaches.length === 0 ? <Text style={styles.cardMeta}>No coaches found.</Text> : null}
-            {coaches.map((person) => (
-              <Pressable key={person.id} style={styles.row} onPress={() => router.push(`/person/${person.id}`)}>
-                <Text style={styles.rowTitle}>{person.name}</Text>
-                <Text style={styles.rowMeta}>{person.role || 'coach'}</Text>
-              </Pressable>
-            ))}
+        )}
+
+        {/* Members */}
+        {members.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Members</Text>
+            <View style={styles.peopleList}>
+              {members.map((person, index) => (
+                <Pressable
+                  key={person.id}
+                  style={({ pressed }) => [styles.personRow, pressed && styles.personRowPressed]}
+                  onPress={() => router.push(`/person/${person.id}`)}
+                >
+                  <View style={[styles.personAvatar, { backgroundColor: AVATAR_COLORS[(index + coaches.length) % AVATAR_COLORS.length] }]}>
+                    <Text style={styles.personInitials}>{person.initials}</Text>
+                  </View>
+                  <View style={styles.personInfo}>
+                    <Text style={styles.personName}>{person.name}</Text>
+                    <Text style={styles.personRole}>{formatRole(person.role)}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color={C.labelLight} />
+                </Pressable>
+              ))}
+            </View>
           </View>
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>People</Text>
-            {people.length === 0 ? <Text style={styles.cardMeta}>No active members found.</Text> : null}
-            {people.map((person) => (
-              <Pressable key={person.id} style={styles.row} onPress={() => router.push(`/person/${person.id}`)}>
-                <Text style={styles.rowTitle}>{person.name}</Text>
-                <Text style={styles.rowMeta}>{person.email || person.role || 'member'}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
-      ) : null}
-    </SafeAreaView>
+        )}
+      </ScrollView>
+    </Container>
   );
 }
 
+// ── Styles ─────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: {
+  container: {
+    flex: 1,
+    backgroundColor: C.bg,
+    ...Platform.select({ web: { minHeight: '100vh' as any } }),
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: C.labelDark,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: C.labelMid,
+    textAlign: 'center',
+  },
+  backButton: {
+    marginTop: 12,
+    backgroundColor: C.accentBg,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.accent,
+  },
+
+  // Nav
+  navHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    backgroundColor: C.cardBg,
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
   },
-  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 18, fontWeight: '800', color: '#111827' },
-  centerState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 24, gap: 10 },
-  stateText: { fontSize: 13, color: '#6B7280' },
-  errorText: { fontSize: 13, color: '#B91C1C', textAlign: 'center', paddingHorizontal: 16 },
-  content: { padding: 12, gap: 10, paddingBottom: 24 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', padding: 12, gap: 6 },
-  cardTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
-  cardMeta: { fontSize: 12, color: '#6B7280' },
-  sectionTitle: { fontSize: 13, fontWeight: '800', color: '#111827', marginBottom: 2 },
-  row: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E5E7EB' },
-  rowTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  rowMeta: { fontSize: 12, color: '#6B7280', marginTop: 1 },
-});
+  backBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  backBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.accent,
+  },
 
+  // Scroll
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    maxWidth: 640,
+    width: '100%',
+    alignSelf: 'center',
+    paddingBottom: 40,
+  },
+
+  // Hero
+  hero: {
+    backgroundColor: C.cardBg,
+    padding: 24,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  heroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: C.accentBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  heroTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: C.labelDark,
+    textAlign: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 0,
+  },
+  statItem: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.labelDark,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: C.labelMid,
+    marginTop: 1,
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: C.border,
+  },
+
+  // Sections
+  section: {
+    paddingTop: 20,
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.labelDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+    paddingHorizontal: 20,
+  },
+
+  // Blueprint cards
+  blueprintGrid: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  blueprintCard: {
+    backgroundColor: C.cardBg,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+        transition: 'box-shadow 0.15s ease, transform 0.15s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      } as any,
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
+        elevation: 2,
+      },
+    }),
+  },
+  cardPressed: {
+    opacity: 0.85,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.1)' } as any,
+    }),
+  },
+  blueprintCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.accentBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  blueprintCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.labelDark,
+    marginBottom: 4,
+  },
+  blueprintCardDesc: {
+    fontSize: 13,
+    color: C.labelMid,
+    lineHeight: 18,
+    marginBottom: 8,
+  },
+  blueprintCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 10,
+  },
+  blueprintCardMeta: {
+    fontSize: 11,
+    color: C.labelMid,
+  },
+  blueprintCardCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: C.accentBg,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    alignSelf: 'flex-start',
+  },
+  blueprintCardCtaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.accent,
+  },
+
+  // People
+  peopleList: {
+    backgroundColor: C.cardBg,
+    marginHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+  },
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    gap: 10,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  personRowPressed: {
+    backgroundColor: C.accentBg,
+  },
+  personAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  personInitials: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.labelDark,
+  },
+  personInfo: {
+    flex: 1,
+  },
+  personName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.labelDark,
+  },
+  personRole: {
+    fontSize: 11,
+    color: C.labelMid,
+    marginTop: 1,
+  },
+});

@@ -139,7 +139,8 @@ if (typeof window !== 'undefined' && Platform.OS === 'web') {
        args[0].includes('Expo AV has been deprecated') ||
        args[0].includes('Download the React DevTools') ||
        args[0].includes('useNativeDriver') ||
-       args[0].includes('[Intervention] Slow network is detected'))
+       args[0].includes('[Intervention] Slow network is detected') ||
+       args[0].includes('[Layout children]: No route named'))
     ) {
       return;
     }
@@ -371,6 +372,7 @@ function StackWithSplash() {
       <Stack screenOptions={{headerShown: false}}>
         <Stack.Screen name="account" options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
         <Stack.Screen name="venue/post/create" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="org-welcome-modal" options={{ presentation: 'transparentModal', headerShown: false, animation: 'fade' }} />
       </Stack>
     </>
   )

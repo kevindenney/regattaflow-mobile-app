@@ -15,6 +15,10 @@ const TYPE_CONFIG: Record<ResourceType, { icon: string; color: string }> = {
   book_physical: { icon: 'book-outline', color: '#A2845E' },
   social_media: { icon: 'share-social-outline', color: '#FF2D55' },
   cloud_folder: { icon: 'cloud-outline', color: '#5AC8FA' },
+  pdf: { icon: 'document-text-outline', color: '#E34234' },
+  image: { icon: 'image-outline', color: '#34C759' },
+  document: { icon: 'document-outline', color: '#5856D6' },
+  note: { icon: 'create-outline', color: '#FF9500' },
   other: { icon: 'link-outline', color: '#8E8E93' },
 };
 
@@ -40,6 +44,10 @@ export function getResourceTypeLabel(type: ResourceType): string {
     book_physical: 'Physical Book',
     social_media: 'Social Media',
     cloud_folder: 'Cloud Folder',
+    pdf: 'PDF',
+    image: 'Image',
+    document: 'Document',
+    note: 'Note',
     other: 'Other',
   };
   return labels[type] ?? 'Other';

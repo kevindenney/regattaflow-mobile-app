@@ -68,6 +68,8 @@ interface InterestContextValue {
   addInterest: (slug: string) => Promise<void>
   /** Remove an interest from the user's quick list */
   removeInterest: (slug: string) => Promise<void>
+  /** Batch-set interest visibility: provide the complete set of visible and hidden slugs */
+  setInterestVisibility: (visibleSlugs: string[], hiddenSlugs: string[]) => Promise<void>
   /** Domain rows only (type='domain') */
   domains: Interest[]
   /** Interests grouped by their parent domain */
@@ -136,6 +138,7 @@ const InterestContext = createContext<InterestContextValue>({
   switchInterest: async () => {},
   addInterest: async () => {},
   removeInterest: async () => {},
+  setInterestVisibility: async () => {},
   refreshInterests: async () => {},
   viewMode: 'interest' as const,
   domainInterestIds: [],
@@ -497,10 +500,12 @@ export function InterestProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!hiddenResolved) return
     if (userInterests.length === 0) {
+      console.log('[InterestProvider] auto-set: no userInterests, clearing activeSlug')
       setActiveSlug(null)
       return
     }
     if (!activeSlug || !userInterests.some((interest) => interest.slug === activeSlug)) {
+      console.log('[InterestProvider] auto-set: activeSlug was', JSON.stringify(activeSlug), '→ setting to', userInterests[0].slug, '(userInterests[0])')
       setActiveSlug(userInterests[0].slug)
     }
   }, [activeSlug, hiddenResolved, userInterests])
@@ -509,6 +514,7 @@ export function InterestProvider({ children }: PropsWithChildren) {
 
   const switchInterest = useCallback(
     async (slug: string) => {
+      console.log('[InterestProvider] switchInterest called with:', slug, '| current activeSlug:', activeSlug, '| userInterests count:', userInterests.length)
       const target = userInterests.find((i) => i.slug === slug)
       if (!target) {
         throw new Error(`Interest with slug "${slug}" not found`)
@@ -569,6 +575,18 @@ export function InterestProvider({ children }: PropsWithChildren) {
     [hiddenSlugs, interests, persistHiddenSlugs],
   )
 
+  const setInterestVisibility = useCallback(
+    async (visibleSlugs: string[], newHiddenSlugs: string[]) => {
+      // Guard: ensure at least one interest remains visible
+      if (visibleSlugs.length === 0) return
+      const normalizedHidden = newHiddenSlugs
+        .map((s) => normalizeSlug(s))
+        .filter((s): s is string => !!s)
+      await persistHiddenSlugs(Array.from(new Set(normalizedHidden)))
+    },
+    [persistHiddenSlugs],
+  )
+
   // ---------- refreshInterests ----------
 
   const refreshInterests = useCallback(async () => {
@@ -593,13 +611,14 @@ export function InterestProvider({ children }: PropsWithChildren) {
       switchInterest,
       addInterest,
       removeInterest,
+      setInterestVisibility,
       refreshInterests,
       viewMode,
       domainInterestIds,
       effectiveInterestIds,
       toggleDomainView,
     }),
-    [currentInterest, interests, userInterests, domains, groupedInterests, getDomainForInterest, loading, switchInterest, addInterest, removeInterest, refreshInterests, viewMode, domainInterestIds, effectiveInterestIds, toggleDomainView],
+    [currentInterest, interests, userInterests, domains, groupedInterests, getDomainForInterest, loading, switchInterest, addInterest, removeInterest, setInterestVisibility, refreshInterests, viewMode, domainInterestIds, effectiveInterestIds, toggleDomainView],
   )
 
   return (

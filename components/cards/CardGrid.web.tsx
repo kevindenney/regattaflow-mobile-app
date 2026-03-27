@@ -368,6 +368,7 @@ function CardGridComponent({
             isLastDone && styles.cardLastDone,
           ]}
         >
+          {isNextRace && <View style={styles.nowBar} />}
           {isNextRace ? (
             <View style={styles.badgeNext}>
               <View style={styles.badgeDotNext} />
@@ -545,6 +546,17 @@ const styles = StyleSheet.create({
   cardNext: {
     borderWidth: 2,
     borderColor: 'rgba(52, 199, 89, 0.65)',
+  },
+  nowBar: {
+    position: 'absolute',
+    left: 0,
+    top: 16,
+    bottom: 16,
+    width: 4,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: IOS_COLORS.green,
+    zIndex: 10,
   },
   cardLastDone: {
     borderWidth: 2,

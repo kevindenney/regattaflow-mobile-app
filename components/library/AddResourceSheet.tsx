@@ -26,17 +26,24 @@ import { decomposeCourse } from '@/services/ai/CourseDecompositionService';
 import { detectSourcePlatform, suggestResourceType } from '@/lib/utils/detectPlatform';
 import { fetchYouTubeMetadata } from '@/services/YouTubeMetadataService';
 import { fetchUrlMetadata } from '@/services/UrlMetadataService';
-import type { ResourceType, CreateLibraryResourceInput, CourseModule, CourseStructure } from '@/types/library';
+import { pickFile, uploadFile } from '@/services/LibraryUploadService';
+import { useAuth } from '@/providers/AuthProvider';
+import type { ResourceType, CreateLibraryResourceInput, CourseModule, CourseStructure, FileUploadMetadata } from '@/types/library';
+import { formatFileSize } from '@/types/library';
 
 const RESOURCE_TYPES: ResourceType[] = [
   'youtube_video',
   'youtube_channel',
   'online_course',
   'website',
+  'pdf',
+  'image',
+  'document',
   'book_digital',
   'book_physical',
   'social_media',
   'cloud_folder',
+  'note',
   'other',
 ];
 
@@ -49,12 +56,19 @@ interface AddResourceSheetProps {
 }
 
 export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, onClose }: AddResourceSheetProps) {
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
   const [resourceType, setResourceType] = useState<ResourceType>('website');
   const [author, setAuthor] = useState('');
   const [description, setDescription] = useState('');
   const [detectedPlatform, setDetectedPlatform] = useState<string | null>(null);
+
+  // File upload state
+  const [fileUploadMeta, setFileUploadMeta] = useState<FileUploadMetadata | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  // Note content state
+  const [noteContent, setNoteContent] = useState('');
 
   const handleUrlChange = useCallback((text: string) => {
     setUrl(text);
@@ -129,11 +143,39 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
   // eslint-disable-next-line react-hooks/exhaustive-deps -- isYouTube derives from detectedPlatform
   }, [url, title, author, description, interestName, isYouTube, resourceType]);
 
+  // File upload handler
+  const handlePickFile = useCallback(async () => {
+    if (!user?.id) return;
+    setIsUploading(true);
+    try {
+      const file = await pickFile();
+      if (!file) {
+        setIsUploading(false);
+        return;
+      }
+      const result = await uploadFile(user.id, file);
+      setFileUploadMeta(result.metadata);
+      if (!title.trim()) setTitle(result.suggestedTitle);
+      setResourceType(result.suggestedType);
+      setDetectedPlatform(null);
+      setUrl(''); // Clear URL since this is a file upload
+    } catch (err: any) {
+      showAlert('Upload Failed', err?.message || 'Could not upload file.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [user?.id, title]);
+
+  const handleRemoveFile = useCallback(() => {
+    setFileUploadMeta(null);
+  }, []);
+
   // Course-specific state
   const [courseModules, setCourseModules] = useState<CourseModule[]>([]);
   const [isDecomposing, setIsDecomposing] = useState(false);
 
   const isCourse = resourceType === 'online_course';
+  const isNote = resourceType === 'note';
 
   const handleSubmit = useCallback(() => {
     if (!title.trim()) return;
@@ -158,12 +200,22 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
       metadata.progress = { completed_lesson_ids: [] };
     }
 
+    // Include file upload metadata
+    if (fileUploadMeta) {
+      metadata.file_upload = fileUploadMeta;
+    }
+
+    // Include note content
+    if (isNote && noteContent.trim()) {
+      metadata.note_content = noteContent.trim();
+    }
+
     onSubmit({
       library_id: libraryId,
       title: title.trim(),
-      url: url.trim() || null,
+      url: fileUploadMeta?.public_url || url.trim() || null,
       resource_type: resourceType,
-      source_platform: detectedPlatform,
+      source_platform: fileUploadMeta ? 'Upload' : detectedPlatform,
       author_or_creator: author.trim() || null,
       description: description.trim() || null,
       metadata,
@@ -176,7 +228,9 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
     setDescription('');
     setDetectedPlatform(null);
     setCourseModules([]);
-  }, [title, url, resourceType, author, description, libraryId, onSubmit, isCourse, courseModules]);
+    setFileUploadMeta(null);
+    setNoteContent('');
+  }, [title, url, resourceType, author, description, libraryId, onSubmit, isCourse, courseModules, fileUploadMeta, isNote, noteContent]);
 
   const handleAIDecompose = useCallback(async () => {
     if (!title.trim()) return;
@@ -242,42 +296,87 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
             />
           </View>
 
-          {/* URL */}
-          <View style={styles.field}>
-            <Text style={styles.label}>URL</Text>
-            <TextInput
-              style={styles.input}
-              value={url}
-              onChangeText={handleUrlChange}
-              placeholder="https://..."
-              placeholderTextColor={IOS_COLORS.tertiaryLabel}
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {(detectedPlatform || url.trim().startsWith('http')) && (
-              <View style={styles.detectedRow}>
-                {detectedPlatform && (
-                  <Text style={styles.detectedPlatform}>Detected: {detectedPlatform}</Text>
-                )}
-                {!detectedPlatform && <View />}
-                <Pressable
-                  style={styles.autoFillButton}
-                  onPress={handleAutoFill}
-                  disabled={isAutoFilling}
-                >
-                  {isAutoFilling ? (
-                    <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
-                  ) : (
-                    <>
-                      <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
-                      <Text style={styles.autoFillText}>Auto-fill</Text>
-                    </>
-                  )}
+          {/* File Upload or URL — mutually exclusive */}
+          {fileUploadMeta ? (
+            <View style={styles.field}>
+              <Text style={styles.label}>Uploaded File</Text>
+              <View style={styles.uploadedFileRow}>
+                <ResourceTypeIcon type={resourceType} size={20} />
+                <View style={styles.uploadedFileInfo}>
+                  <Text style={styles.uploadedFileName} numberOfLines={1}>
+                    {fileUploadMeta.original_filename}
+                  </Text>
+                  <Text style={styles.uploadedFileSize}>
+                    {formatFileSize(fileUploadMeta.file_size)}
+                  </Text>
+                </View>
+                <Pressable onPress={handleRemoveFile} hitSlop={8}>
+                  <Ionicons name="close-circle" size={20} color={IOS_COLORS.systemGray3} />
                 </Pressable>
               </View>
-            )}
-          </View>
+            </View>
+          ) : !isNote ? (
+            <>
+              {/* Upload File Button */}
+              <View style={styles.field}>
+                <Text style={styles.label}>Upload or Link</Text>
+                <View style={styles.uploadOrLinkRow}>
+                  <Pressable
+                    style={styles.uploadButton}
+                    onPress={handlePickFile}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="cloud-upload-outline" size={18} color="#FFFFFF" />
+                        <Text style={styles.uploadButtonText}>Upload File</Text>
+                      </>
+                    )}
+                  </Pressable>
+                  <Text style={styles.orText}>or paste a URL below</Text>
+                </View>
+              </View>
+
+              {/* URL */}
+              <View style={styles.field}>
+                <Text style={styles.label}>URL</Text>
+                <TextInput
+                  style={styles.input}
+                  value={url}
+                  onChangeText={handleUrlChange}
+                  placeholder="https://..."
+                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {(detectedPlatform || url.trim().startsWith('http')) && (
+                  <View style={styles.detectedRow}>
+                    {detectedPlatform && (
+                      <Text style={styles.detectedPlatform}>Detected: {detectedPlatform}</Text>
+                    )}
+                    {!detectedPlatform && <View />}
+                    <Pressable
+                      style={styles.autoFillButton}
+                      onPress={handleAutoFill}
+                      disabled={isAutoFilling}
+                    >
+                      {isAutoFilling ? (
+                        <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+                      ) : (
+                        <>
+                          <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
+                          <Text style={styles.autoFillText}>Auto-fill</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            </>
+          ) : null}
 
           {/* Resource Type */}
           <View style={styles.field}>
@@ -335,6 +434,22 @@ export function AddResourceSheet({ visible, libraryId, interestName, onSubmit, o
               textAlignVertical="top"
             />
           </View>
+
+          {/* Note Content — only for note type */}
+          {isNote && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Note Content</Text>
+              <TextInput
+                style={[styles.input, styles.noteArea]}
+                value={noteContent}
+                onChangeText={setNoteContent}
+                placeholder="Write your note here..."
+                placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          )}
 
           {/* Course Lessons Section — only for online_course */}
           {isCourse && (
@@ -517,5 +632,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: IOS_COLORS.secondaryLabel,
     lineHeight: 18,
+  },
+  uploadOrLinkRow: {
+    gap: IOS_SPACING.xs,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: IOS_COLORS.systemBlue,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  uploadButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  orText: {
+    fontSize: 13,
+    color: IOS_COLORS.tertiaryLabel,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  uploadedFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: IOS_SPACING.sm,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: IOS_COLORS.systemGray4,
+    padding: IOS_SPACING.sm,
+  },
+  uploadedFileInfo: {
+    flex: 1,
+    gap: 1,
+  },
+  uploadedFileName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: IOS_COLORS.label,
+  },
+  uploadedFileSize: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+  },
+  noteArea: {
+    minHeight: 150,
   },
 });

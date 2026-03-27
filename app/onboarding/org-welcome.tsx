@@ -3,6 +3,8 @@
  *
  * Shown after trial-activation for users who signed up from an org page.
  * Auto-joins the org, shows join status, and offers blueprint subscription.
+ *
+ * For post-approval flows (notification tap), use /org-welcome-modal instead.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -15,6 +17,7 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
+  TextInput,
   Platform,
   Linking,
 } from 'react-native';
@@ -31,6 +34,8 @@ import { BlueprintPickerCard } from '@/components/onboarding/BlueprintPickerCard
 import { getOnboardingContext } from '@/lib/onboarding/interestContext';
 import { useInterest } from '@/providers/InterestProvider';
 import { useOrgPeers } from '@/hooks/useOrgPeers';
+import { useAuth } from '@/providers/AuthProvider';
+import { getOrCreateManifesto, updateManifesto, parseManifestoWithAI } from '@/services/ManifestoService';
 
 interface OrgOnboardingConfig {
   welcome_message?: string;
@@ -42,7 +47,8 @@ type JoinPhase = 'loading' | 'joined' | 'pending' | 'blocked' | 'error';
 
 export default function OrgWelcomeScreen() {
   const router = useRouter();
-  const { addInterest, switchInterest } = useInterest();
+  const { user } = useAuth();
+  const { addInterest, switchInterest, currentInterest } = useInterest();
 
   const [orgSlug, setOrgSlug] = useState<string | null>(null);
   const [interestSlug, setInterestSlug] = useState<string | null>(null);
@@ -51,6 +57,11 @@ export default function OrgWelcomeScreen() {
   const [onboardingConfig, setOnboardingConfig] = useState<OrgOnboardingConfig | null>(null);
   const [phase, setPhase] = useState<JoinPhase>('loading');
   const [message, setMessage] = useState('');
+
+  // Manifesto state
+  const [manifestoText, setManifestoText] = useState('');
+  const [manifestoId, setManifestoId] = useState<string | null>(null);
+  const manifestoParseTimer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const { data: orgBlueprints } = useOrganizationBlueprints(
     phase === 'joined' || phase === 'pending' ? orgId : null,
@@ -148,9 +159,49 @@ export default function OrgWelcomeScreen() {
     }
   };
 
-  const handleContinue = useCallback(() => {
+  // Initialize manifesto when join succeeds and interest is known
+  useEffect(() => {
+    if ((phase === 'joined' || phase === 'pending') && user?.id && currentInterest?.id) {
+      getOrCreateManifesto(user.id, currentInterest.id)
+        .then((m) => {
+          setManifestoId(m.id);
+          if (m.content?.trim()) setManifestoText(m.content);
+        })
+        .catch(() => {});
+    }
+  }, [phase, user?.id, currentInterest?.id]);
+
+  const handleManifestoChange = useCallback(
+    (text: string) => {
+      setManifestoText(text);
+      // Auto-save with debounce
+      if (manifestoParseTimer.current) clearTimeout(manifestoParseTimer.current);
+      manifestoParseTimer.current = setTimeout(async () => {
+        if (!manifestoId || !text.trim()) return;
+        try {
+          const extracted = await parseManifestoWithAI(text, currentInterest?.name || 'this interest');
+          await updateManifesto(manifestoId, {
+            content: text,
+            philosophies: extracted.philosophies,
+            role_models: extracted.role_models,
+            weekly_cadence: extracted.weekly_cadence,
+          });
+        } catch {
+          // Save content only
+          await updateManifesto(manifestoId, { content: text }).catch(() => {});
+        }
+      }, 2000);
+    },
+    [manifestoId, currentInterest?.name],
+  );
+
+  const handleContinue = useCallback(async () => {
+    // Save manifesto content before navigating (if entered)
+    if (manifestoId && manifestoText.trim()) {
+      await updateManifesto(manifestoId, { content: manifestoText }).catch(() => {});
+    }
     router.replace('/onboarding/explore-interests');
-  }, [router]);
+  }, [router, manifestoId, manifestoText]);
 
   if (phase === 'loading') {
     return (
@@ -267,6 +318,27 @@ export default function OrgWelcomeScreen() {
                 ))}
               </View>
             </>
+          )}
+
+          {/* Manifesto — "What's your vision?" */}
+          {(phase === 'joined' || phase === 'pending') && (
+            <View style={styles.manifestoSection}>
+              <Text style={styles.sectionLabel}>
+                What are you trying to achieve?
+              </Text>
+              <Text style={styles.manifestoHint}>
+                Tell your AI coach your goals for {currentInterest?.name || 'this program'}. You can always update this later.
+              </Text>
+              <TextInput
+                style={styles.manifestoInput}
+                value={manifestoText}
+                onChangeText={handleManifestoChange}
+                placeholder={`E.g., "I want to master clinical assessment skills and build confidence with patient interactions..."`}
+                placeholderTextColor="#94A3B8"
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
           )}
 
           {/* Next step guidance */}
@@ -433,6 +505,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#475569',
     textAlign: 'center',
+  },
+  manifestoSection: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  manifestoHint: {
+    fontSize: 13,
+    color: '#94A3B8',
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  manifestoInput: {
+    fontSize: 15,
+    color: '#0F172A',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    minHeight: 120,
+    lineHeight: 22,
+    ...Platform.select({
+      web: { outlineStyle: 'none', resize: 'vertical' } as any,
+    }),
   },
   guidanceCard: {
     width: '100%',

@@ -17,9 +17,12 @@ interface ActTabProps {
   onNextTab?: () => void;
   readOnly?: boolean;
   footer?: React.ReactNode;
+  interestId?: string;
+  interestName?: string;
+  interestSlug?: string;
 }
 
-export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer }: ActTabProps) {
+export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer, interestId, interestName, interestSlug }: ActTabProps) {
   return (
     <ScrollView
       style={styles.container}
@@ -38,7 +41,7 @@ export function ActTab({ stepId, dateEnrichment, onNextTab, readOnly, footer }: 
         </View>
       )}
 
-      <StepDrawContent stepId={stepId} readOnly={readOnly} />
+      <StepDrawContent stepId={stepId} readOnly={readOnly} interestId={interestId} interestName={interestName} interestSlug={interestSlug} />
 
       {/* Next tab CTA */}
       {onNextTab && !readOnly && (

@@ -132,8 +132,10 @@ export function CardShell({
     ]}
       testID={testID}
     >
-      {/* NEXT badge removed — RaceSummaryCard renders its own inline "Next"
-         ribbon that scrolls with content instead of floating over it. */}
+      {/* Green now bar on the left edge of the next step card */}
+      {isNextRace && (
+        <View style={styles.nowBar} />
+      )}
       {isLastDone && relativeX !== gridState.currentRaceIndex.value ? (
         <View style={styles.lastDoneBadge}>
           <Text style={styles.lastDoneBadgeText}>LAST DONE</Text>
@@ -189,6 +191,17 @@ const styles = StyleSheet.create({
   nextRaceCard: {
     borderWidth: 2,
     borderColor: 'rgba(52, 199, 89, 0.65)',
+  },
+  nowBar: {
+    position: 'absolute',
+    left: 0,
+    top: 16,
+    bottom: 16,
+    width: 4,
+    borderTopRightRadius: 3,
+    borderBottomRightRadius: 3,
+    backgroundColor: IOS_COLORS.green,
+    zIndex: 10,
   },
   lastDoneCard: {
     borderWidth: 2,

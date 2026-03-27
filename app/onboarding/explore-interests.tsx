@@ -24,11 +24,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useInterest, type Interest } from '@/providers/InterestProvider';
 import { getOnboardingContext } from '@/lib/onboarding/interestContext';
-import { OnboardingStateService } from '@/services/onboarding/OnboardingStateService';
 
 export default function ExploreInterestsScreen() {
   const router = useRouter();
-  const { allInterests, userInterests, addInterest, removeInterest } = useInterest();
+  const { allInterests, userInterests, setInterestVisibility, switchInterest } = useInterest();
 
   const [interestSlug, setInterestSlug] = useState<string | null>(null);
   const [addedSlugs, setAddedSlugs] = useState<Set<string>>(new Set());
@@ -36,6 +35,7 @@ export default function ExploreInterestsScreen() {
   // Initialize with only the primary onboarding interest as selected
   useEffect(() => {
     AsyncStorage.getItem('onboarding_interest_slug').then((slug) => {
+      console.log('[ExploreInterests] loaded onboarding_interest_slug from AsyncStorage:', JSON.stringify(slug));
       setInterestSlug(slug);
       if (slug) {
         setAddedSlugs(new Set([slug]));
@@ -77,25 +77,38 @@ export default function ExploreInterestsScreen() {
   );
 
   const handleContinue = useCallback(async () => {
-    // Hide interests the user didn't select, add ones they did
-    for (const interest of browsableInterests) {
-      if (addedSlugs.has(interest.slug)) {
-        await addInterest(interest.slug);
-      } else {
-        await removeInterest(interest.slug);
-      }
+    console.log('[ExploreInterests] handleContinue called', {
+      interestSlug,
+      addedSlugs: Array.from(addedSlugs),
+      browsableCount: browsableInterests.length,
+    });
+
+    // Set primary interest FIRST — before hiding others — so the InterestProvider's
+    // auto-set effect doesn't pick the first alphabetical interest (e.g. Drawing) when
+    // activeSlug is null for new users.
+    if (interestSlug) {
+      console.log('[ExploreInterests] calling switchInterest with:', interestSlug);
+      await switchInterest(interestSlug);
+      console.log('[ExploreInterests] switchInterest completed');
+    } else {
+      console.warn('[ExploreInterests] interestSlug is NULL — cannot set primary interest!');
     }
 
-    // Mark onboarding as seen so the feature tour can auto-start
-    await OnboardingStateService.markOnboardingSeen();
+    // Compute visible/hidden slug arrays up front — single batch call avoids stale closure issues
+    const visibleSlugs = browsableInterests.filter(i => addedSlugs.has(i.slug)).map(i => i.slug);
+    const hiddenSlugs = browsableInterests.filter(i => !addedSlugs.has(i.slug)).map(i => i.slug);
+    console.log('[ExploreInterests] visibility:', { visibleSlugs, hiddenSlugs: hiddenSlugs.length });
+    await setInterestVisibility(visibleSlugs, hiddenSlugs);
 
-    // Clean up onboarding AsyncStorage keys
-    await Promise.all([
-      AsyncStorage.removeItem('onboarding_org_slug'),
-      AsyncStorage.removeItem('onboarding_interest_slug'),
-    ]);
-    router.replace('/(tabs)/races');
-  }, [router, browsableInterests, addedSlugs, addInterest, removeInterest]);
+    // Store ordered interest slugs so manifesto screen can loop through them
+    // Primary interest first
+    const primaryFirst = [interestSlug, ...visibleSlugs.filter(s => s !== interestSlug)].filter(Boolean);
+    console.log('[ExploreInterests] writing onboarding_interest_order:', JSON.stringify(primaryFirst));
+    await AsyncStorage.setItem('onboarding_interest_order', JSON.stringify(primaryFirst));
+
+    // Continue to manifesto screen (skippable — handles its own nav to main app)
+    router.replace('/onboarding/manifesto');
+  }, [router, browsableInterests, addedSlugs, setInterestVisibility, switchInterest, interestSlug]);
 
   return (
     <View style={styles.container}>

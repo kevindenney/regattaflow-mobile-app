@@ -205,7 +205,7 @@ export function useRaceMessages({
 
   // Realtime subscription
   useEffect(() => {
-    if (!regattaId || !realtime || !isValidUUID(regattaId)) return;
+    if (!regattaId || !realtime || !isValidUUID(regattaId) || !user?.id) return;
     const runId = ++realtimeRunIdRef.current;
     const targetRegattaId = regattaId;
     const canCommit = () =>
@@ -248,7 +248,7 @@ export function useRaceMessages({
       )
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR') {
-          logger.error('Realtime channel error for race messages');
+          logger.warn('Realtime channel error for race messages');
         }
       });
 
@@ -258,7 +258,7 @@ export function useRaceMessages({
       }
       void supabase.removeChannel(channel);
     };
-  }, [regattaId, realtime]);
+  }, [regattaId, realtime, user?.id]);
 
   const sendMessage = useCallback(
     async (text: string) => {

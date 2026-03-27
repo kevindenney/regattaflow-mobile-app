@@ -14,6 +14,7 @@ import { Check, Clock, MessageSquare } from 'lucide-react-native';
 import { IOS_COLORS, TUFTE_BACKGROUND, TUFTE_TEXT } from '@/components/cards/constants';
 import { TufteDrillRow } from '../tufte/TufteDrillRow';
 import { unicodeBar } from '@/lib/tufte';
+import { TrainChatPanel } from './TrainChatPanel';
 import type { PracticeSession, PracticeSessionDrill } from '@/types/practice';
 
 interface TrainPhaseContentProps {
@@ -22,6 +23,13 @@ interface TrainPhaseContentProps {
   onSkipDrill?: (drillId: string, reason?: string) => void;
   onUpdateNotes?: (notes: string) => void;
   onCompleteSession: () => void;
+  /** AI coaching context */
+  interestId?: string;
+  interestName?: string;
+  interestSlug?: string;
+  stepId?: string;
+  stepTitle?: string;
+  planWhat?: string;
 }
 
 export function TrainPhaseContent({
@@ -30,6 +38,12 @@ export function TrainPhaseContent({
   onSkipDrill,
   onUpdateNotes,
   onCompleteSession,
+  interestId,
+  interestName,
+  interestSlug,
+  stepId,
+  stepTitle,
+  planWhat,
 }: TrainPhaseContentProps) {
   const [notes, setNotes] = useState(session.notes || '');
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -172,25 +186,40 @@ export function TrainPhaseContent({
         </View>
       )}
 
-      {/* Quick Notes */}
-      <View style={styles.notesSection}>
-        <View style={styles.notesHeader}>
-          <MessageSquare size={16} color={IOS_COLORS.gray} />
-          <Text style={styles.sectionLabel}>QUICK NOTES</Text>
+      {/* AI Coach Chat (replaces Quick Notes when context available) */}
+      {interestId && interestName && stepId && stepTitle ? (
+        <View style={styles.notesSection}>
+          <TrainChatPanel
+            interestId={interestId}
+            interestName={interestName}
+            interestSlug={interestSlug}
+            stepId={stepId}
+            stepTitle={stepTitle}
+            planWhat={planWhat}
+            onUpdateNotes={onUpdateNotes}
+          />
         </View>
-        <TextInput
-          style={styles.notesInput}
-          value={notes}
-          onChangeText={(text) => {
-            setNotes(text);
-            onUpdateNotes?.(text);
-          }}
-          placeholder="Jot down observations..."
-          placeholderTextColor={IOS_COLORS.gray3}
-          multiline
-          numberOfLines={3}
-        />
-      </View>
+      ) : (
+        /* Fallback: Quick Notes (when AI context is not available) */
+        <View style={styles.notesSection}>
+          <View style={styles.notesHeader}>
+            <MessageSquare size={16} color={IOS_COLORS.gray} />
+            <Text style={styles.sectionLabel}>QUICK NOTES</Text>
+          </View>
+          <TextInput
+            style={styles.notesInput}
+            value={notes}
+            onChangeText={(text) => {
+              setNotes(text);
+              onUpdateNotes?.(text);
+            }}
+            placeholder="Jot down observations..."
+            placeholderTextColor={IOS_COLORS.gray3}
+            multiline
+            numberOfLines={3}
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }

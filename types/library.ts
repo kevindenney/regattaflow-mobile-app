@@ -11,6 +11,10 @@ export type ResourceType =
   | 'book_physical'
   | 'social_media'
   | 'cloud_folder'
+  | 'pdf'
+  | 'image'
+  | 'document'
+  | 'note'
   | 'other';
 
 export interface LibraryRecord {
@@ -136,4 +140,36 @@ export function getCourseCompletionPercent(resource: LibraryResourceRecord): num
   if (!course_structure || course_structure.total_lessons === 0) return 0;
   const completed = progress?.completed_lesson_ids?.length ?? 0;
   return Math.round((completed / course_structure.total_lessons) * 100);
+}
+
+// ---------------------------------------------------------------------------
+// File upload metadata — stored in LibraryResourceRecord.metadata
+// ---------------------------------------------------------------------------
+
+export interface FileUploadMetadata {
+  /** Supabase Storage path */
+  storage_path: string;
+  /** Original filename */
+  original_filename: string;
+  /** MIME type */
+  mime_type: string;
+  /** File size in bytes */
+  file_size: number;
+  /** Public URL for the file */
+  public_url?: string;
+}
+
+export function getFileMetadata(resource: LibraryResourceRecord): FileUploadMetadata | null {
+  const meta = resource.metadata as { file_upload?: FileUploadMetadata };
+  return meta?.file_upload ?? null;
+}
+
+export function isUploadedFile(resource: LibraryResourceRecord): boolean {
+  return getFileMetadata(resource) !== null;
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

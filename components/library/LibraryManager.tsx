@@ -24,6 +24,8 @@ import { EditResourceSheet } from './EditResourceSheet';
 import { CourseToTimelineSheet } from './CourseToTimelineSheet';
 import { getResourceTypeLabel } from './ResourceTypeIcon';
 import { showConfirm, showAlert } from '@/lib/utils/crossPlatformAlert';
+import { ManifestoEditor } from '@/components/interest/ManifestoEditor';
+import { AIInsightsCard } from '@/components/interest/AIInsightsCard';
 import type { LibraryResourceRecord, ResourceType, CreateLibraryResourceInput } from '@/types/library';
 
 type GroupMode = 'type' | 'creator';
@@ -132,6 +134,19 @@ export function LibraryManager() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Manifesto — My Vision section */}
+        {interestId && currentInterest?.name && (
+          <ManifestoEditor
+            interestId={interestId}
+            interestName={currentInterest.name}
+          />
+        )}
+
+        {/* AI Insights */}
+        {interestId && (
+          <AIInsightsCard interestId={interestId} />
+        )}
+
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerInfo}>
@@ -192,7 +207,7 @@ export function LibraryManager() {
             <Ionicons name="library-outline" size={56} color={IOS_COLORS.systemGray3} />
             <Text style={styles.emptyTitle}>Build Your Library</Text>
             <Text style={styles.emptySubtitle}>
-              Add links to YouTube videos, online courses, books, and other resources you use for learning.
+              Add YouTube videos, courses, PDFs, notes, and other resources you use for learning.
             </Text>
             <Pressable
               style={styles.emptyAddButton}

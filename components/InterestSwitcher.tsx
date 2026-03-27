@@ -8,6 +8,7 @@
 
 import { useInterest } from '@/providers/InterestProvider'
 import type { Interest, DomainWithInterests } from '@/providers/InterestProvider'
+import { useAuth } from '@/providers/AuthProvider'
 import { router } from 'expo-router'
 import { showConfirm } from '@/lib/utils/crossPlatformAlert'
 import React, { useMemo, useState } from 'react'
@@ -50,6 +51,7 @@ function groupByDomain(
 
 export function InterestSwitcher() {
   const { currentInterest, userInterests, allInterests, groupedInterests, switchInterest, removeInterest, loading } = useInterest()
+  const { signedIn } = useAuth()
   const [open, setOpen] = useState(false)
 
   // Group user interests by domain
@@ -181,46 +183,105 @@ export function InterestSwitcher() {
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.sheetTitle}>Your Interests</Text>
+              {!signedIn ? (
+                <>
+                  <Text style={styles.sheetTitle}>Explore Interests</Text>
+                  <Text style={styles.guestDescription}>
+                    Sign up to customize your interests, track progress, and unlock personalized content.
+                  </Text>
 
-              {userGroups.map((group) => (
-                <View key={group.domain?.slug ?? 'ungrouped'}>
-                  {showDomainHeaders && group.domain && (
-                    <Text style={styles.domainHeader}>{group.domain.name}</Text>
+                  {/* Let guests browse and switch, but not remove */}
+                  {userGroups.map((group) => (
+                    <View key={group.domain?.slug ?? 'ungrouped'}>
+                      {showDomainHeaders && group.domain && (
+                        <Text style={styles.domainHeader}>{group.domain.name}</Text>
+                      )}
+                      {group.interests.map((interest) => {
+                        const isActive = interest.slug === currentInterest?.slug
+                        return (
+                          <TouchableOpacity
+                            key={interest.id}
+                            style={[styles.row, isActive && styles.rowActive]}
+                            onPress={() => handleSelect(interest)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={styles.rowMain}>
+                              <View style={[styles.rowDot, { backgroundColor: interest.accent_color }]} />
+                              <Text style={[styles.rowLabel, isActive && styles.rowLabelActive]} numberOfLines={1}>
+                                {interest.name}
+                              </Text>
+                              {isActive && <Ionicons name="checkmark" size={18} color="#1F2937" />}
+                            </View>
+                          </TouchableOpacity>
+                        )
+                      })}
+                    </View>
+                  ))}
+
+                  <View style={styles.divider} />
+
+                  <TouchableOpacity
+                    style={styles.signUpBtn}
+                    onPress={() => {
+                      setOpen(false)
+                      router.push('/(auth)/signup')
+                    }}
+                  >
+                    <Ionicons name="person-add-outline" size={18} color="#FFFFFF" />
+                    <Text style={styles.signUpBtnText}>Sign Up to Customize</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.closeBtn}
+                    onPress={() => setOpen(false)}
+                  >
+                    <Text style={styles.closeBtnText}>Done</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.sheetTitle}>Your Interests</Text>
+
+                  {userGroups.map((group) => (
+                    <View key={group.domain?.slug ?? 'ungrouped'}>
+                      {showDomainHeaders && group.domain && (
+                        <Text style={styles.domainHeader}>{group.domain.name}</Text>
+                      )}
+                      {group.interests.map((interest) => renderInterestRow(interest, true))}
+                    </View>
+                  ))}
+
+                  {/* Explore more interests */}
+                  <View style={styles.divider} />
+
+                  {otherGroups.length > 0 && (
+                    <Text style={styles.sectionLabel}>Explore More</Text>
                   )}
-                  {group.interests.map((interest) => renderInterestRow(interest, true))}
-                </View>
-              ))}
+                  {otherGroups.map((group) => (
+                    <View key={group.domain?.slug ?? 'ungrouped-explore'}>
+                      {otherGroups.length > 1 && group.domain && (
+                        <Text style={styles.domainHeader}>{group.domain.name}</Text>
+                      )}
+                      {group.interests.slice(0, 3).map((interest) => renderInterestRow(interest, false))}
+                    </View>
+                  ))}
 
-              {/* Explore more interests */}
-              <View style={styles.divider} />
+                  <TouchableOpacity
+                    style={styles.exploreAllBtn}
+                    onPress={handleExploreMore}
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color="#4338CA" />
+                    <Text style={styles.exploreAllText}>Explore All Interests</Text>
+                  </TouchableOpacity>
 
-              {otherGroups.length > 0 && (
-                <Text style={styles.sectionLabel}>Explore More</Text>
+                  <TouchableOpacity
+                    style={styles.closeBtn}
+                    onPress={() => setOpen(false)}
+                  >
+                    <Text style={styles.closeBtnText}>Done</Text>
+                  </TouchableOpacity>
+                </>
               )}
-              {otherGroups.map((group) => (
-                <View key={group.domain?.slug ?? 'ungrouped-explore'}>
-                  {otherGroups.length > 1 && group.domain && (
-                    <Text style={styles.domainHeader}>{group.domain.name}</Text>
-                  )}
-                  {group.interests.slice(0, 3).map((interest) => renderInterestRow(interest, false))}
-                </View>
-              ))}
-
-              <TouchableOpacity
-                style={styles.exploreAllBtn}
-                onPress={handleExploreMore}
-              >
-                <Ionicons name="add-circle-outline" size={18} color="#4338CA" />
-                <Text style={styles.exploreAllText}>Explore All Interests</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={() => setOpen(false)}
-              >
-                <Text style={styles.closeBtnText}>Done</Text>
-              </TouchableOpacity>
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -379,6 +440,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#4338CA',
+  },
+
+  // Guest state
+  guestDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  signUpBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#4338CA',
+    ...Platform.select({ web: { cursor: 'pointer' } }),
+  },
+  signUpBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   // Close

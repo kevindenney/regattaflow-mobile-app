@@ -9,7 +9,7 @@ import { View, Text, Pressable, StyleSheet, Platform, Linking } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { ResourceTypeIcon, getResourceTypeLabel } from './ResourceTypeIcon';
-import { getCourseMetadata, getCourseCompletionPercent } from '@/types/library';
+import { getCourseMetadata, getCourseCompletionPercent, getFileMetadata, formatFileSize } from '@/types/library';
 import type { LibraryResourceRecord } from '@/types/library';
 
 interface LibraryResourceCardProps {
@@ -26,12 +26,18 @@ export function LibraryResourceCard({ resource, onEdit, onDelete, onAddToTimelin
   const completionPercent = hasCourseStructure ? getCourseCompletionPercent(resource) : 0;
   const completedCount = progress?.completed_lesson_ids?.length ?? 0;
   const totalLessons = course_structure?.total_lessons ?? 0;
+  const fileMeta = getFileMetadata(resource);
+  const isNote = resource.resource_type === 'note';
 
   return (
     <Pressable
       style={styles.card}
       onPress={() => {
-        if (resource.url) Linking.openURL(resource.url);
+        if (fileMeta?.public_url) {
+          Linking.openURL(fileMeta.public_url);
+        } else if (resource.url) {
+          Linking.openURL(resource.url);
+        }
       }}
     >
       <View style={styles.iconWrapper}>
@@ -48,7 +54,15 @@ export function LibraryResourceCard({ resource, onEdit, onDelete, onAddToTimelin
           {resource.source_platform && (
             <Text style={styles.platform}>{resource.source_platform}</Text>
           )}
+          {fileMeta && (
+            <Text style={styles.platform}>{formatFileSize(fileMeta.file_size)}</Text>
+          )}
         </View>
+        {isNote && (resource.metadata as any)?.note_content && (
+          <Text style={styles.notePreview} numberOfLines={2}>
+            {(resource.metadata as any).note_content}
+          </Text>
+        )}
 
         {/* Course progress bar */}
         {hasCourseStructure && (
@@ -91,9 +105,11 @@ export function LibraryResourceCard({ resource, onEdit, onDelete, onAddToTimelin
             <Ionicons name="trash-outline" size={18} color={IOS_COLORS.systemRed} />
           </Pressable>
         )}
-        {resource.url && (
+        {fileMeta?.public_url ? (
+          <Ionicons name="download-outline" size={16} color={IOS_COLORS.tertiaryLabel} />
+        ) : resource.url ? (
           <Ionicons name="open-outline" size={16} color={IOS_COLORS.tertiaryLabel} />
-        )}
+        ) : null}
       </View>
     </Pressable>
   );
@@ -160,6 +176,12 @@ const styles = StyleSheet.create({
   platform: {
     fontSize: 11,
     color: IOS_COLORS.tertiaryLabel,
+  },
+  notePreview: {
+    fontSize: 12,
+    color: IOS_COLORS.secondaryLabel,
+    lineHeight: 16,
+    marginTop: 2,
   },
   progressSection: {
     marginTop: 4,

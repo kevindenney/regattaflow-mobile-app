@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
+import { getStepCategoryLabels } from '@/lib/step-category-config';
 import { IOSPillTabs, usePillTabs } from '@/components/ui/ios/IOSPillTabs';
 import { useVocabulary } from '@/hooks/useVocabulary';
 import { useStepDetail, useUpdateStepMetadata } from '@/hooks/useStepDetail';
@@ -51,6 +52,7 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
   const { vocab } = useVocabulary();
   const { user } = useAuth();
   const { currentInterest } = useInterest();
+
   const { data: step, isLoading, error } = useStepDetail(stepId);
   const queryClient = useQueryClient();
   const updateMetadata = useUpdateStepMetadata(stepId);
@@ -395,6 +397,14 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
     );
   }, []);
 
+  // Handle conversational capture creating a plan
+  const handleConversationalCreate = useCallback((conversationalPlan: Partial<StepPlanData>, suggestedTitle?: string) => {
+    updateMetadata.mutate({ plan: { ...serverPlanData, ...conversationalPlan } });
+    if (suggestedTitle) {
+      saveTitle(suggestedTitle);
+    }
+  }, [serverPlanData, updateMetadata, saveTitle]);
+
   const handleBackToDump = useCallback(() => {
     setShowAiReview(false);
     setAiReviewPlan(null);
@@ -434,11 +444,14 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
     (reviewData.capability_progress && Object.keys(reviewData.capability_progress).length > 0)
   );
 
+  // Category-aware labels (nutrition steps get different text than strength steps)
+  const categoryLabels = useMemo(() => getStepCategoryLabels(step?.category), [step?.category]);
+
   const tabs = useMemo(() => [
-    { value: 'plan' as const, label: vocab('Plan Phase'), completed: isPlanComplete },
-    { value: 'act' as const, label: vocab('Do Phase'), completed: isActComplete },
-    { value: 'review' as const, label: vocab('Review Phase'), completed: isReviewComplete },
-  ], [vocab, isPlanComplete, isActComplete, isReviewComplete]);
+    { value: 'plan' as const, label: categoryLabels.tabs.plan !== 'Prep' ? categoryLabels.tabs.plan : vocab('Plan Phase'), completed: isPlanComplete },
+    { value: 'act' as const, label: categoryLabels.tabs.act !== 'Train' ? categoryLabels.tabs.act : vocab('Do Phase'), completed: isActComplete },
+    { value: 'review' as const, label: categoryLabels.tabs.review !== 'Review' ? categoryLabels.tabs.review : vocab('Review Phase'), completed: isReviewComplete },
+  ], [vocab, isPlanComplete, isActComplete, isReviewComplete, categoryLabels]);
 
   // Auto-save status tracking
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -734,10 +747,14 @@ export function StepDetailContent({ stepId, readOnly: readOnlyProp }: StepDetail
             isStructuring={aiStructuring}
             hasPlanContent={hasPlanContent}
             interestSlug={currentInterest?.slug}
+            interestName={currentInterest?.name}
+            useConversationalCapture={isOwner}
+            onConversationalCreate={isOwner ? handleConversationalCreate : undefined}
+            stepCategory={step.category}
           />
         )}
         {activeTab === 'act' && (
-          <ActTab stepId={stepId} dateEnrichment={planData.date_enrichment} onNextTab={() => handleNextTab('review')} readOnly={!isOwner} footer={commentsFooter} />
+          <ActTab stepId={stepId} dateEnrichment={planData.date_enrichment} onNextTab={() => handleNextTab('review')} readOnly={!isOwner} footer={commentsFooter} interestId={step.interest_id} interestName={currentInterest?.name} interestSlug={currentInterest?.slug} />
         )}
         {activeTab === 'review' && <ReviewTab stepId={stepId} readOnly={!isOwner} footer={commentsFooter} />}
       </View>

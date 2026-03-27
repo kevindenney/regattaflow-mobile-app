@@ -34,6 +34,12 @@ export default function OnboardingLayout() {
             {/* Phase 3e: Explore More Interests */}
             <Stack.Screen name="explore-interests" />
 
+            {/* Phase 3f: Manifesto — "What's your vision?" */}
+            <Stack.Screen name="manifesto" />
+
+            {/* Phase 3g: Choose Starting Timeline */}
+            <Stack.Screen name="choose-start" />
+
             {/* Phase 4: Personalization */}
             <Stack.Screen name="personalize" />
 

@@ -22,7 +22,11 @@ export function GroupSection({ group, accentColor, level = 0, interestSlug }: Gr
 
   const handleFollow = useCallback(async () => {
     if (!isLoggedIn) {
-      router.push('/(auth)/signup');
+      router.push(
+        interestSlug
+          ? { pathname: '/(auth)/signup', params: { interest: interestSlug } } as any
+          : '/(auth)/signup'
+      );
       return;
     }
 

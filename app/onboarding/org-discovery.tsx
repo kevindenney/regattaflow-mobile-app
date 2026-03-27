@@ -114,7 +114,8 @@ export default function OrgDiscoveryScreen() {
   };
 
   const cleanup = async () => {
-    await AsyncStorage.multiRemove(['onboarding_org_slug', 'onboarding_interest_slug']);
+    // Only remove org slug — interest slug is needed by explore-interests and manifesto
+    await AsyncStorage.removeItem('onboarding_org_slug');
   };
 
   const handleContinue = useCallback(async () => {

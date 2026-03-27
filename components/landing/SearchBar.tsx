@@ -103,12 +103,12 @@ export function SearchBar() {
               supabase.from('users').select('id, full_name, username, email, user_type').ilike('username', pattern).limit(5),
             ];
 
-        const results = await Promise.all(searches.map((s) => s.then((r) => r).catch(() => ({ data: null }))));
-        const allUsers = results.flatMap((r) => r.data ?? []);
+        const results = await Promise.all(searches.map((s) => (s as unknown as Promise<any>).then((r: any) => r).catch(() => ({ data: null }))));
+        const allUsers = results.flatMap((r: any) => r.data ?? []);
 
         // Deduplicate by id
         const seen = new Set<string>();
-        const uniqueUsers = allUsers.filter((u) => {
+        const uniqueUsers = allUsers.filter((u: any) => {
           if (seen.has(u.id)) return false;
           seen.add(u.id);
           return u.id !== user?.id; // exclude self
@@ -116,7 +116,7 @@ export function SearchBar() {
 
         if (uniqueUsers.length > 0) {
           setDbPeople(
-            uniqueUsers.slice(0, 6).map((u) => ({
+            uniqueUsers.slice(0, 6).map((u: any) => ({
               type: 'person' as const,
               slug: u.id,
               name: u.full_name || u.username || 'Unknown',

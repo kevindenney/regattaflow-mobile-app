@@ -125,7 +125,10 @@ export default function SignUp() {
 
       // Store interest and org context for onboarding steps to read
       if (selectedInterest) {
+        console.log('[Signup] storing onboarding_interest_slug:', JSON.stringify(selectedInterest));
         await AsyncStorage.setItem('onboarding_interest_slug', selectedInterest);
+      } else {
+        console.warn('[Signup] selectedInterest is falsy — NOT storing onboarding_interest_slug');
       }
       if (params.org) {
         await AsyncStorage.setItem('onboarding_org_slug', params.org);
@@ -215,7 +218,7 @@ export default function SignUp() {
               <TouchableOpacity
                 accessibilityRole="button"
                 accessibilityLabel="Close sign up"
-                onPress={() => enterGuestMode()}
+                onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
                 style={styles.closeButton}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -295,7 +298,7 @@ export default function SignUp() {
             <TouchableOpacity
               accessibilityRole="button"
               accessibilityLabel="Close sign up"
-              onPress={() => enterGuestMode()}
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/')}
               style={styles.closeButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >

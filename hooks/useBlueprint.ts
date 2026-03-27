@@ -292,6 +292,7 @@ export function useSubscribe() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['blueprint-subscriptions'] });
       queryClient.invalidateQueries({ queryKey: keys.all });
+      queryClient.invalidateQueries({ queryKey: ['for-you-suggestions'] });
     },
   });
 }

@@ -234,7 +234,7 @@ export function TabScreenToolbar({
             </View>
           </Pressable>
         )}
-        {/* Left: title + optional subtitle */}
+        {/* Left: title */}
         <View style={styles.titleSection}>
           <Text
             style={styles.largeTitle}
@@ -252,29 +252,6 @@ export function TabScreenToolbar({
             />
           )}
         </View>
-
-        {subtitleContent ? (
-          <View style={styles.subtitleContainer}>
-            {subtitleContent}
-          </View>
-        ) : subtitle ? (
-          <Pressable
-            style={styles.subtitleContainer}
-            onPress={onSubtitlePress ? () => onSubtitlePress() : undefined}
-            disabled={!onSubtitlePress}
-            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-          >
-            <Text
-              style={[
-                styles.subtitleText,
-                onSubtitlePress && styles.subtitleLink,
-              ]}
-              numberOfLines={1}
-            >
-              {subtitle}
-            </Text>
-          </Pressable>
-        ) : null}
 
         {/* Right: interest switcher + custom content or default action capsule + profile avatar */}
         <View style={styles.rightSection}>
@@ -294,6 +271,30 @@ export function TabScreenToolbar({
           {showProfileAvatar && <ProfileDropdown size={PROFILE_AVATAR_SIZE} />}
         </View>
       </View>
+
+      {/* Subtitle row — below the nav row so it doesn't compete for horizontal space */}
+      {subtitleContent ? (
+        <View style={styles.subtitleRow}>
+          {subtitleContent}
+        </View>
+      ) : subtitle ? (
+        <Pressable
+          style={styles.subtitleRow}
+          onPress={onSubtitlePress ? () => onSubtitlePress() : undefined}
+          disabled={!onSubtitlePress}
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        >
+          <Text
+            style={[
+              styles.subtitleText,
+              onSubtitlePress && styles.subtitleLink,
+            ]}
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        </Pressable>
+      ) : null}
 
       {/* Children slot for tab-specific extras */}
       {children}
@@ -373,8 +374,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
     flexShrink: 1,
+    minWidth: 60,
   },
   largeTitle: {
     fontSize: 34,
@@ -386,10 +387,10 @@ const styles = StyleSheet.create({
     marginLeft: 0,
   },
 
-  // Subtitle (center area)
-  subtitleContainer: {
-    paddingHorizontal: 8,
-    flexShrink: 1,
+  // Subtitle row (below nav row)
+  subtitleRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
   },
   subtitleText: {
     fontSize: 13,
@@ -406,6 +407,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginLeft: 'auto',
   },
 
   // Capsule pill

@@ -611,8 +611,8 @@ export function TimelineGridView({
   // Keep ref in sync so native DnD event callbacks always read the latest value
   dragRaceIdRef.current = dragRaceId;
 
-  // Responsive columns
-  const columns = screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : 2;
+  // Responsive columns — single column below 380px for narrow windows
+  const columns = screenWidth > 900 ? 4 : screenWidth > 600 ? 3 : screenWidth > 380 ? 2 : 1;
   const horizontalPadding = 16;
   const gap = 10;
   const cardWidth = (screenWidth - horizontalPadding * 2 - gap * (columns - 1)) / columns;
@@ -827,7 +827,7 @@ export function TimelineGridView({
             {nextRaceIndex != null && nextRaceIndex >= 0 && (
               <View style={gridStyles.summaryNextBadge}>
                 <View style={gridStyles.summaryNextDot} />
-                <Text style={gridStyles.summaryNextText}>
+                <Text style={gridStyles.summaryNextText} numberOfLines={1}>
                   Next: {orderedRaces[nextRaceIndex]?.name || 'Upcoming'}
                 </Text>
               </View>
@@ -1317,6 +1317,7 @@ const gridStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
     marginBottom: 12,
     paddingHorizontal: 4,
     gap: 8,
@@ -1324,6 +1325,7 @@ const gridStyles = StyleSheet.create({
   summaryLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
     flexShrink: 1,
   },
@@ -1335,6 +1337,7 @@ const gridStyles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
+    flexShrink: 1,
   },
   summaryNextDot: {
     width: 6,

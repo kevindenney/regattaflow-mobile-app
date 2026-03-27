@@ -395,8 +395,13 @@ export default function SocialNotificationsScreen() {
                 console.log('[social-notifications] Navigating to invite:', latest.data.invite_token);
                 router.push(`/invite/${latest.data.invite_token}` as any);
               } else if (latest.type === 'org_membership_approved') {
-                // User got approved — go to races tab where they can see org blueprints
-                router.push('/(tabs)/races' as any);
+                router.push({
+                  pathname: '/org-welcome-modal',
+                  params: {
+                    orgId: latest.data?.organization_id,
+                    orgName: latest.data?.organization_name,
+                  },
+                } as any);
               } else if (latest.type === 'org_invite_accepted' && latest.data?.organization_id) {
                 router.push('/organization/members' as any);
               } else if (latest.regattaId) {
@@ -443,8 +448,13 @@ export default function SocialNotificationsScreen() {
               } else if (item.type === 'org_invite_received' && item.data?.invite_token) {
                 router.push(`/invite/${item.data.invite_token}` as any);
               } else if (item.type === 'org_membership_approved') {
-                // User got approved — go to races tab where they can see org blueprints
-                router.push('/(tabs)/races' as any);
+                router.push({
+                  pathname: '/onboarding/org-welcome',
+                  params: {
+                    orgId: item.data?.organization_id,
+                    orgName: item.data?.organization_name,
+                  },
+                } as any);
               } else if (item.type === 'org_invite_accepted' && item.data?.organization_id) {
                 router.push('/organization/members' as any);
               } else if (item.regattaId) {

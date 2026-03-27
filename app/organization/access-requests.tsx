@@ -19,6 +19,8 @@ type PendingRequestRow = {
   created_at: string;
   user_name: string;
   user_email: string | null;
+  metadata: Record<string, any> | null;
+  requested_blueprint_title: string | null;
 };
 
 function formatRequestedAt(iso: string): string {
@@ -98,7 +100,7 @@ export default function OrganizationAccessRequestsScreen() {
     try {
       let membershipQuery = await supabase
         .from('organization_memberships')
-        .select('id,user_id,role,membership_status,status,created_at')
+        .select('id,user_id,role,membership_status,status,created_at,metadata')
         .eq('organization_id', resolvedActiveOrgId)
         .eq('membership_status', 'pending')
         .order('created_at', { ascending: false });
@@ -154,6 +156,7 @@ export default function OrganizationAccessRequestsScreen() {
         const user = Array.isArray(row.users) ? row.users[0] : row.users;
         const email = typeof user?.email === 'string' ? user.email : null;
         const fullName = typeof user?.full_name === 'string' ? user.full_name.trim() : '';
+        const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : null;
         return {
           id: String(row.id),
           user_id: String(row.user_id),
@@ -163,8 +166,32 @@ export default function OrganizationAccessRequestsScreen() {
           created_at: String(row.created_at || ''),
           user_name: fullName || email || 'Unknown user',
           user_email: email,
+          metadata,
+          requested_blueprint_title: null,
         };
       });
+
+      // Fetch blueprint titles for requests that have a requested_blueprint_id
+      const blueprintIds = normalized
+        .map((r) => r.metadata?.requested_blueprint_id)
+        .filter((id): id is string => typeof id === 'string' && isUuid(id));
+
+      if (blueprintIds.length > 0) {
+        const uniqueIds = [...new Set(blueprintIds)];
+        const { data: blueprints } = await supabase
+          .from('blueprints')
+          .select('id,title')
+          .in('id', uniqueIds);
+        if (blueprints && blueprints.length > 0) {
+          const titleMap = new Map(blueprints.map((bp: any) => [bp.id, bp.title]));
+          for (const req of normalized) {
+            const bpId = req.metadata?.requested_blueprint_id;
+            if (bpId && titleMap.has(bpId)) {
+              req.requested_blueprint_title = titleMap.get(bpId) || null;
+            }
+          }
+        }
+      }
 
       setRequests(normalized);
     } catch (error: any) {
@@ -354,6 +381,11 @@ export default function OrganizationAccessRequestsScreen() {
                         Requested {formatRequestedAt(request.created_at)}
                         {request.role ? ` · ${request.role}` : ''}
                       </Text>
+                      {request.requested_blueprint_title && (
+                        <Text style={styles.requestBlueprintHint}>
+                          Interested in: {request.requested_blueprint_title}
+                        </Text>
+                      )}
                     </View>
                     <View style={styles.actionRow}>
                       <TouchableOpacity
@@ -442,6 +474,11 @@ const styles = StyleSheet.create({
   requestMeta: {
     fontSize: 11,
     color: '#64748B',
+  },
+  requestBlueprintHint: {
+    fontSize: 11,
+    color: '#2563EB',
+    fontWeight: '500',
   },
   actionRow: {
     flexDirection: 'row',

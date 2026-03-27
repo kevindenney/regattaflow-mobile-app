@@ -46,6 +46,8 @@ interface AddStepSheetProps {
   recommendedTemplates: RecommendedStepTemplate[];
   onSelectRecommendedTemplate: (t: RecommendedStepTemplate) => void;
   onAddStep: () => void;
+  /** Create a step with a specific event subtype (e.g. 'nutrition', 'strength') */
+  onAddStepWithSubtype?: (subtypeId: string, title: string) => void;
   onAddRace?: () => void;
   onAddPractice?: () => void;
   onNewSeason?: () => void;
@@ -63,6 +65,7 @@ export function AddStepSheet({
   recommendedTemplates,
   onSelectRecommendedTemplate,
   onAddStep,
+  onAddStepWithSubtype,
   onAddRace,
   onAddPractice,
   onNewSeason,
@@ -272,6 +275,30 @@ export function AddStepSheet({
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={IOS_COLORS.systemGray3} />
               </TouchableOpacity>
+
+              {/* Quick-create by subtype (e.g. Strength, Cardio, Nutrition) */}
+              {onAddStepWithSubtype && config.eventSubtypes?.length > 1 && (
+                <>
+                  <View style={styles.optionSeparator} />
+                  <View style={styles.subtypeRow}>
+                    {config.eventSubtypes.map((subtype) => (
+                      <TouchableOpacity
+                        key={subtype.id}
+                        style={styles.subtypeChip}
+                        onPress={() => handleOption(() => onAddStepWithSubtype(subtype.id, subtype.label))}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={(subtype.icon || 'add-circle-outline') as any}
+                          size={14}
+                          color={IOS_COLORS.systemTeal}
+                        />
+                        <Text style={styles.subtypeChipText}>{subtype.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
 
               {/* Add Race / Event */}
               {onAddRace && (
@@ -626,6 +653,29 @@ const styles = StyleSheet.create({
     backgroundColor: IOS_COLORS.separator,
     marginHorizontal: IOS_SPACING.lg,
     marginLeft: 76,
+  },
+  subtypeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: IOS_SPACING.lg,
+    paddingVertical: IOS_SPACING.sm,
+  },
+  subtypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: `${IOS_COLORS.systemTeal}10`,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: `${IOS_COLORS.systemTeal}25`,
+  },
+  subtypeChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: IOS_COLORS.systemTeal,
   },
 });
 

@@ -191,7 +191,7 @@ export default function BlueprintPage() {
           {isRestricted && accessInfo?.org_slug && (
             <Pressable
               style={styles.joinOrgBtn}
-              onPress={() => router.push(`/${accessInfo.org_slug}` as any)}
+              onPress={() => router.push(`/org/${accessInfo.org_slug}` as any)}
             >
               <Ionicons name="business-outline" size={16} color="#FFFFFF" />
               <Text style={styles.joinOrgBtnText}>
@@ -241,7 +241,7 @@ export default function BlueprintPage() {
               style={styles.orgBadgeRow}
               onPress={() => {
                 if (blueprint.organization_slug) {
-                  router.push(`/${blueprint.organization_slug}` as any);
+                  router.push(`/org/${blueprint.organization_slug}` as any);
                 }
               }}
             >
@@ -259,7 +259,10 @@ export default function BlueprintPage() {
           )}
 
           {/* Author */}
-          <View style={styles.authorRow}>
+          <Pressable
+            style={styles.authorRow}
+            onPress={() => router.push(`/person/${blueprint.user_id}` as any)}
+          >
             <View
               style={[
                 styles.authorAvatar,
@@ -280,7 +283,7 @@ export default function BlueprintPage() {
                 {totalCount !== 1 ? 's' : ''}
               </Text>
             </View>
-          </View>
+          </Pressable>
 
           {/* Subscribe / Post-subscribe CTA */}
           {!isOwner && !isSubscribed && (
@@ -693,6 +696,7 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 16,
     marginBottom: 16,
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
   },
   authorAvatar: {
     width: 36,

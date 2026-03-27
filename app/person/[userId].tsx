@@ -28,6 +28,7 @@ import { CrewFinderService } from '@/services/CrewFinderService';
 import { useUserTimeline, useAdoptStep, useUpdateStep } from '@/hooks/useTimelineSteps';
 import type { TimelineStepRecord } from '@/types/timeline-steps';
 import type { TimelineStepVisibility } from '@/types/timeline-steps';
+import type { BlueprintRecord } from '@/types/blueprint';
 
 // UUID v4 pattern check
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -95,6 +96,7 @@ function DbUserProfile({ userId }: { userId: string }) {
   const [memberships, setMemberships] = useState<MembershipRow[]>([]);
   const [organizations, setOrganizations] = useState<Map<string, OrganizationRow>>(new Map());
   const [activities, setActivities] = useState<Array<{ id: string; name: string; date: string | null; venue: string | null }>>([]);
+  const [blueprints, setBlueprints] = useState<BlueprintRecord[]>([]);
   const [activeTab, setActiveTab] = useState<ProfileTab>('timelines');
   const timelineQuery = useUserTimeline(userId);
   const { allInterests } = useInterest();
@@ -150,15 +152,29 @@ function DbUserProfile({ userId }: { userId: string }) {
       setLoading(true);
       setErrorText(null);
       try {
+        // Try profiles table first for proper display name
+        const profileResult = await supabase
+          .from('profiles')
+          .select('id,full_name,avatar_url')
+          .eq('id', userId)
+          .maybeSingle();
+
+        // Fall back to users table for email
         const userResult = await supabase
           .from('users')
           .select('id,full_name,email')
           .eq('id', userId)
           .maybeSingle();
-        if (userResult.error || !userResult.data) throw userResult.error || new Error('User not found');
+
+        if (!profileResult.data && !userResult.data) throw new Error('User not found');
         if (!cancelled) {
-          setName(String((userResult.data as any).full_name || (userResult.data as any).email || userId));
-          setEmail((userResult.data as any).email ? String((userResult.data as any).email) : null);
+          setName(String(
+            profileResult.data?.full_name ||
+            (userResult.data as any)?.full_name ||
+            (userResult.data as any)?.email ||
+            userId
+          ));
+          setEmail((userResult.data as any)?.email ? String((userResult.data as any).email) : null);
         }
 
         let membershipResult = await supabase
@@ -221,6 +237,19 @@ function DbUserProfile({ userId }: { userId: string }) {
             })),
           );
         }
+
+        // Fetch published blueprints
+        try {
+          const bpResult = await supabase
+            .from('timeline_blueprints')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_published', true)
+            .order('created_at', { ascending: false });
+          if (!bpResult.error && !cancelled) {
+            setBlueprints((bpResult.data as BlueprintRecord[]) ?? []);
+          }
+        } catch {}
       } catch (error: any) {
         if (!cancelled) setErrorText(String(error?.message || 'Failed to load profile'));
       } finally {
@@ -435,12 +464,54 @@ function DbUserProfile({ userId }: { userId: string }) {
             {/* Timelines Tab */}
             {activeTab === 'timelines' && (
               <>
+                {/* Published Blueprints */}
+                {blueprints.length > 0 && (
+                  <View style={dbStyles.blueprintsSection}>
+                    <Text style={dbStyles.sectionHeader}>Published Blueprints</Text>
+                    {blueprints.map((bp) => (
+                      <Pressable
+                        key={bp.id}
+                        style={dbStyles.blueprintCard}
+                        onPress={() => router.push(`/blueprint/${bp.slug}` as any)}
+                      >
+                        <View style={dbStyles.blueprintIcon}>
+                          <Ionicons name="layers" size={18} color="#2563EB" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={dbStyles.blueprintTitle}>{bp.title}</Text>
+                          {bp.description && (
+                            <Text style={dbStyles.blueprintDesc} numberOfLines={2}>{bp.description}</Text>
+                          )}
+                          <Text style={dbStyles.blueprintMeta}>
+                            {bp.subscriber_count} subscriber{bp.subscriber_count !== 1 ? 's' : ''}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
                 {(!timelineQuery.data || timelineQuery.data.length === 0) && (
                   <View style={dbStyles.emptyState}>
-                    <Ionicons name="git-branch-outline" size={32} color="#D1D5DB" />
-                    <Text style={dbStyles.emptyTitle}>No timelines yet</Text>
+                    <Ionicons
+                      name={isOwner ? 'git-branch-outline' : (!following ? 'people-outline' : 'git-branch-outline')}
+                      size={32}
+                      color="#D1D5DB"
+                    />
+                    <Text style={dbStyles.emptyTitle}>
+                      {isOwner
+                        ? 'No timelines yet'
+                        : !following
+                          ? 'Follow to see timelines'
+                          : 'No visible timelines'}
+                    </Text>
                     <Text style={dbStyles.emptyText}>
-                      {isOwner ? 'Start building your timeline by adding steps.' : 'This person hasn\'t created any timeline steps yet.'}
+                      {isOwner
+                        ? 'Start building your timeline by adding steps.'
+                        : !following
+                          ? `Follow ${name.split(' ')[0]} to see their timeline steps and progress.`
+                          : 'This person hasn\'t shared any timeline steps yet.'}
                     </Text>
                   </View>
                 )}
@@ -990,6 +1061,15 @@ const dbStyles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 1,
   },
+
+  // Blueprint cards
+  blueprintsSection: { marginBottom: 16 },
+  sectionHeader: { fontSize: 13, fontWeight: '700', color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, paddingHorizontal: 16 },
+  blueprintCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', padding: 12, marginHorizontal: 16, marginBottom: 8, gap: 10 },
+  blueprintIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' },
+  blueprintTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  blueprintDesc: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  blueprintMeta: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
 });
 
 // ── Sample data public profile ──────────────────────────────────────

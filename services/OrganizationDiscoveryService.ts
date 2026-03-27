@@ -20,6 +20,7 @@ type SearchOrganizationsInput = {
 type RequestJoinInput = {
   orgId: string;
   mode: OrganizationJoinMode;
+  requestedBlueprintId?: string;
 };
 
 export type RequestJoinResult = {
@@ -117,7 +118,7 @@ class OrganizationDiscoveryService {
         fallbackNameWithJoinModeQuery,
         fallbackSlugWithJoinModeQuery,
       ]);
-      data = [...(fallbackNameWithJoinModeResult.data || []), ...(fallbackSlugWithJoinModeResult.data || [])];
+      data = [...(fallbackNameWithJoinModeResult.data || []), ...(fallbackSlugWithJoinModeResult.data || [])] as any[];
       error = fallbackNameWithJoinModeResult.error || fallbackSlugWithJoinModeResult.error;
     }
 
@@ -129,7 +130,7 @@ class OrganizationDiscoveryService {
         supabase.from('organizations').select('id,name,slug').ilike('slug', `%${q}%`)
       );
       const [fallbackNameResult, fallbackSlugResult] = await Promise.all([fallbackNameQuery, fallbackSlugQuery]);
-      data = [...(fallbackNameResult.data || []), ...(fallbackSlugResult.data || [])];
+      data = [...(fallbackNameResult.data || []), ...(fallbackSlugResult.data || [])] as any[];
       error = fallbackNameResult.error || fallbackSlugResult.error;
     }
 
@@ -333,18 +334,23 @@ class OrganizationDiscoveryService {
     const nextMembershipStatus = resolvedMode === 'open_join' ? 'active' : 'pending';
     const verificationSource = resolvedMode === 'open_join' ? 'admin' : 'invite';
 
+    const insertPayload: Record<string, any> = {
+      organization_id: input.orgId,
+      user_id: userId,
+      role: 'member',
+      status: nextStatus,
+      membership_status: nextMembershipStatus,
+      is_verified: nextStatus === 'active',
+      verification_source: verificationSource,
+      joined_at: nextStatus === 'active' ? new Date().toISOString() : null,
+    };
+    if (input.requestedBlueprintId) {
+      insertPayload.metadata = { requested_blueprint_id: input.requestedBlueprintId };
+    }
+
     const { error: insertError } = await supabase
       .from('organization_memberships')
-      .insert({
-        organization_id: input.orgId,
-        user_id: userId,
-        role: 'member',
-        status: nextStatus,
-        membership_status: nextMembershipStatus,
-        is_verified: nextStatus === 'active',
-        verification_source: verificationSource,
-        joined_at: nextStatus === 'active' ? new Date().toISOString() : null,
-      });
+      .insert(insertPayload);
 
     if (insertError) throw insertError;
 

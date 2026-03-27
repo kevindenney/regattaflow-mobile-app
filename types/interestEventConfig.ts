@@ -280,4 +280,19 @@ export interface InterestEventConfig {
    * Optional — if omitted, falls back to rendering defaultModules in a single section.
    */
   tileSections?: Partial<Record<RacePhase, TileSectionConfig[]>>
+
+  /** Measurement extraction configuration — enables AI extraction of structured data from conversations */
+  measurementConfig?: {
+    enabled: boolean
+    categories: ('exercise' | 'health' | 'performance')[]
+    prTrackingEnabled?: boolean
+    progressiveOverloadDetection?: boolean
+  }
+
+  /** Nutrition tracking configuration — enables the nutrition dashboard card and chat */
+  nutritionConfig?: {
+    enabled: boolean
+    targets: { label: string; key: string; unit: string }[]
+    mealTypes: { value: string; label: string }[]
+  }
 }

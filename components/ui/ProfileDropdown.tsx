@@ -102,13 +102,13 @@ export function ProfileDropdown({
     <View style={s.container}>
       <AnimatedPressable
         style={[
-          s.avatar,
-          avatarDynamic,
-          isDark ? s.avatarDark : s.avatarLight,
+          !isLoggedIn ? s.signUpBtn : s.avatar,
+          !isLoggedIn ? (isDark ? s.signUpBtnDark : s.signUpBtnLight) : avatarDynamic,
+          isLoggedIn && (isDark ? s.avatarDark : s.avatarLight),
           showAvatarImage && s.avatarWithImage,
           animStyle,
         ]}
-        accessibilityLabel="Profile menu"
+        accessibilityLabel={!isLoggedIn ? 'Sign up' : 'Profile menu'}
         accessibilityRole="button"
         onPress={() => {
           triggerHaptic('selection');
@@ -121,12 +121,8 @@ export function ProfileDropdown({
           scale.value = withSpring(1, IOS_ANIMATIONS.spring.snappy);
         }}
       >
-        {isGuest ? (
-          <Ionicons
-            name="person-circle-outline"
-            size={size}
-            color={isDark ? 'rgba(255,255,255,0.7)' : IOS_COLORS.secondaryLabel}
-          />
+        {!isLoggedIn ? (
+          <Text style={[s.signUpText, isDark && s.signUpTextDark]}>Sign Up</Text>
         ) : showAvatarImage ? (
           <Image
             source={{ uri: safeAvatarUrl! }}
@@ -259,6 +255,30 @@ function DropdownItem({
 const s = StyleSheet.create({
   container: {
     position: 'relative',
+  },
+
+  // Sign Up button (guest state)
+  signUpBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({ web: { cursor: 'pointer' } as any }),
+  },
+  signUpBtnDark: {
+    backgroundColor: '#FFFFFF',
+  },
+  signUpBtnLight: {
+    backgroundColor: IOS_COLORS.systemBlue,
+  },
+  signUpText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  signUpTextDark: {
+    color: '#1A1A1A',
   },
 
   // Avatar variants
