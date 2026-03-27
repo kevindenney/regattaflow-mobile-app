@@ -16,6 +16,7 @@ export { PAINTING_PRINTING_EVENT_CONFIG } from './painting-printing'
 export { LIFELONG_LEARNING_EVENT_CONFIG } from './lifelong-learning'
 export { REGENERATIVE_AGRICULTURE_EVENT_CONFIG } from './regenerative-agriculture'
 export { GLOBAL_HEALTH_EVENT_CONFIG } from './global-health'
+export { SELF_MASTERY_EVENT_CONFIG } from './self-mastery'
 
 import type { InterestEventConfig } from '@/types/interestEventConfig'
 import { SAILING_EVENT_CONFIG } from './sailing'
@@ -29,6 +30,7 @@ import { PAINTING_PRINTING_EVENT_CONFIG } from './painting-printing'
 import { LIFELONG_LEARNING_EVENT_CONFIG } from './lifelong-learning'
 import { REGENERATIVE_AGRICULTURE_EVENT_CONFIG } from './regenerative-agriculture'
 import { GLOBAL_HEALTH_EVENT_CONFIG } from './global-health'
+import { SELF_MASTERY_EVENT_CONFIG } from './self-mastery'
 
 /**
  * Lookup map: interest slug → event config.
@@ -47,6 +49,7 @@ export const INTEREST_EVENT_CONFIGS: Record<string, InterestEventConfig> = {
   'lifelong-learning': LIFELONG_LEARNING_EVENT_CONFIG,
   'regenerative-agriculture': REGENERATIVE_AGRICULTURE_EVENT_CONFIG,
   'global-health': GLOBAL_HEALTH_EVENT_CONFIG,
+  'self-mastery': SELF_MASTERY_EVENT_CONFIG,
 }
 
 /**
