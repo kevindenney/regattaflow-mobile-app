@@ -4,13 +4,13 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, Platform, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
 import { PlanQuestionCard } from './PlanQuestionCard';
 import { SubStepEditor } from './SubStepEditor';
 import { BrainDumpEntry } from './BrainDumpEntry';
+import { ConversationalCapture } from './ConversationalCapture';
 import { ResourcePicker } from '@/components/library/ResourcePicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
 import { getResourcesByIds } from '@/services/LibraryService';
@@ -26,6 +26,7 @@ import { useCompetenciesForInterest } from '@/hooks/useCompetencies';
 import { CollaboratorPicker } from './CollaboratorPicker';
 import { LocationMapPicker as LocationMapPickerModal } from '@/components/races/LocationMapPicker';
 import { Linking } from 'react-native';
+import { getStepCategoryLabels } from '@/lib/step-category-config';
 
 interface PlanTabProps {
   stepId?: string;
@@ -42,14 +43,22 @@ interface PlanTabProps {
   isStructuring?: boolean;
   hasPlanContent?: boolean;
   interestSlug?: string;
+  interestName?: string;
+  /** When true, show conversational capture instead of brain dump for new steps */
+  useConversationalCapture?: boolean;
+  onConversationalCreate?: (planData: Partial<StepPlanData>, suggestedTitle?: string) => void;
+  /** Step category for subtype-aware labels (e.g. 'nutrition', 'strength') */
+  stepCategory?: string;
 }
 
 export function PlanTab({
   stepId, planData, interestId, onUpdate, onNextTab, readOnly, footer,
   brainDumpData, onBrainDumpChange, onStructureWithAI,
-  isStructuring, hasPlanContent, interestSlug,
+  isStructuring, hasPlanContent, interestSlug, interestName,
+  useConversationalCapture, onConversationalCreate, stepCategory,
 }: PlanTabProps) {
   const { user } = useAuth();
+  const catLabels = getStepCategoryLabels(stepCategory);
   const { userInterests } = useInterest();
   const [showResourcePicker, setShowResourcePicker] = useState(false);
   const [showCollaboratorPicker, setShowCollaboratorPicker] = useState(false);
@@ -124,8 +133,22 @@ export function PlanTab({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Brain dump section — collapsible at top */}
-      {showBrainDump && (
+      {/* Conversational Capture — chat-first step creation for new steps */}
+      {useConversationalCapture && interestId && interestName && !readOnly && !hasPlanContent && onConversationalCreate && (
+        <View style={styles.brainDumpSection}>
+          <ConversationalCapture
+            interestId={interestId}
+            interestName={interestName}
+            stepTitle={planData.what_will_you_do || 'New step'}
+            onCreateStep={onConversationalCreate}
+            embedded
+            stepCategory={stepCategory}
+          />
+        </View>
+      )}
+
+      {/* Brain dump section — collapsible at top (legacy / fallback) */}
+      {showBrainDump && !useConversationalCapture && (
         <View style={styles.brainDumpSection}>
           <Pressable
             style={styles.brainDumpHeader}
@@ -165,7 +188,7 @@ export function PlanTab({
       {/* Q1: What will you do? */}
       <PlanQuestionCard
         icon="bulb-outline"
-        title="What will you do?"
+        title={catLabels.questions.what}
         isComplete={q1Complete}
         defaultExpanded={!q1Complete}
       >
@@ -173,7 +196,7 @@ export function PlanTab({
           style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={planData.what_will_you_do ?? ''}
           onChangeText={readOnly ? undefined : (text) => onUpdate({ what_will_you_do: text })}
-          placeholder={readOnly ? '' : "Describe what you'll focus on..."}
+          placeholder={readOnly ? '' : catLabels.placeholders.what}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
@@ -220,7 +243,7 @@ export function PlanTab({
       {/* Q2: How will you do it? */}
       <PlanQuestionCard
         icon="list-outline"
-        title="How will you do it?"
+        title={catLabels.questions.how}
         isComplete={q2Complete}
         defaultExpanded={q1Complete && !q2Complete}
       >
@@ -234,14 +257,14 @@ export function PlanTab({
       {/* Q3: Why is this next? */}
       <PlanQuestionCard
         icon="help-circle-outline"
-        title="Why is this next?"
+        title={catLabels.questions.why}
         isComplete={q3Complete}
       >
         <TextInput
           style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={planData.why_reasoning ?? ''}
           onChangeText={readOnly ? undefined : (text) => onUpdate({ why_reasoning: text })}
-          placeholder={readOnly ? '' : "What makes this the right next step?"}
+          placeholder={readOnly ? '' : catLabels.placeholders.why}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
@@ -463,9 +486,9 @@ export function PlanTab({
             onUpdate({ how_sub_steps: [...existing, newSubStep] });
           }}
           onCreateStep={async (suggestion) => {
-            if (!user?.id) return;
+            if (!user?.id) return undefined;
             const targetInterest = userInterests.find((i) => i.slug === suggestion.sourceInterestSlug);
-            if (!targetInterest) return;
+            if (!targetInterest) return undefined;
             try {
               const created = await createStep({
                 user_id: user.id,
@@ -473,10 +496,13 @@ export function PlanTab({
                 title: suggestion.suggestion.slice(0, 80),
                 status: 'pending',
                 source_type: 'manual',
+                category: suggestion.suggestedCategory || 'general',
                 metadata: { plan: { what_will_you_do: suggestion.suggestion } },
               });
-              router.push(`/step/${created.id}` as any);
-            } catch {}
+              return created.id;
+            } catch {
+              return undefined;
+            }
           }}
         />
       )}

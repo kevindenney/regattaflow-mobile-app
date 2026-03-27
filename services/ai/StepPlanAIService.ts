@@ -19,6 +19,10 @@ import type { StepPlanData, StepReviewData, StepActData, CrossInterestSuggestion
 import { sailorBoatService, type SailorBoat } from '@/services/SailorBoatService';
 import { equipmentService, type BoatEquipment } from '@/services/EquipmentService';
 import { getUserLibrary, getResources } from '@/services/LibraryService';
+import { getManifesto } from '@/services/ManifestoService';
+import { getActiveInsights, formatInsightsForPrompt } from '@/services/AIMemoryService';
+import { getMeasurementHistory, formatMeasurementsForPrompt, type MeasurementHistorySummary } from '@/services/MeasurementExtractionService';
+import type { UserInterestManifesto, AIInterestInsight } from '@/types/manifesto';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +43,12 @@ export interface EnrichedPlanContext {
   userCapabilityProgress: CapabilityProgressEntry[];
   /** Full library resources for this interest (not just step-linked) */
   libraryResources: LibraryResourceRecord[];
+  /** User's manifesto (vision/philosophy) for this interest */
+  manifesto?: UserInterestManifesto | null;
+  /** AI-extracted insights about this user's patterns */
+  aiInsights?: AIInterestInsight[];
+  /** Measurement history from recent sessions */
+  measurementHistory?: MeasurementHistorySummary;
 }
 
 /** Legacy interface kept for backward compat */
@@ -111,8 +121,11 @@ export async function gatherEnrichedContext(
   orgPrograms: OrgProgramSummary[];
   userCapabilityProgress: CapabilityProgressEntry[];
   libraryResources: LibraryResourceRecord[];
+  manifesto: UserInterestManifesto | null;
+  aiInsights: AIInterestInsight[];
+  measurementHistory: MeasurementHistorySummary;
 }> {
-  const [stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress, libraryResources] =
+  const [stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress, libraryResources, manifesto, aiInsights, measurementHistory] =
     await Promise.all([
       getFullStepHistory(userId, interestId),
       getOrgCompetencies(userId, interestId),
@@ -120,9 +133,12 @@ export async function gatherEnrichedContext(
       getUserOrgPrograms(userId, interestId),
       getUserCapabilityProgress(userId, interestId),
       getFullLibraryResources(userId, interestId),
+      getManifesto(userId, interestId).catch(() => null),
+      getActiveInsights(userId, interestId).catch(() => []),
+      getMeasurementHistory(userId, interestId).catch(() => ({ hasData: false, recentSessions: [], exercisePRs: {} }) as MeasurementHistorySummary),
     ]);
 
-  return { stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress, libraryResources };
+  return { stepHistory, orgCompetencies, followedUsersActivity, orgPrograms, userCapabilityProgress, libraryResources, manifesto, aiInsights, measurementHistory };
 }
 
 /**
@@ -427,6 +443,38 @@ export function formatLibraryForPrompt(resources: LibraryResourceRecord[]): stri
 
 function buildEnrichedPrompt(ctx: EnrichedPlanContext): string {
   const sections: string[] = [];
+
+  // Manifesto (highest priority — user's vision and philosophy)
+  if (ctx.manifesto?.content?.trim()) {
+    let manifestoSection = `MANIFESTO (user's vision and philosophy):\n${ctx.manifesto.content}`;
+    if (ctx.manifesto.philosophies?.length) {
+      manifestoSection += `\nPhilosophies: ${ctx.manifesto.philosophies.join(', ')}`;
+    }
+    if (ctx.manifesto.role_models?.length) {
+      manifestoSection += `\nRole models: ${ctx.manifesto.role_models.join(', ')}`;
+    }
+    const cadenceEntries = Object.entries(ctx.manifesto.weekly_cadence ?? {}).filter(([, v]) => v != null);
+    if (cadenceEntries.length) {
+      manifestoSection += `\nWeekly cadence: ${cadenceEntries.map(([k, v]) => `${k}: ${v}x/wk`).join(', ')}`;
+    }
+    sections.push(manifestoSection);
+  }
+
+  // AI Insights (patterns the AI has learned about this user)
+  if (ctx.aiInsights?.length) {
+    const insightsBlock = formatInsightsForPrompt(ctx.aiInsights);
+    if (insightsBlock) {
+      sections.push(`AI INSIGHTS (learned patterns about this user):\n${insightsBlock}`);
+    }
+  }
+
+  // Measurement history (exercise PRs, recent training data)
+  if (ctx.measurementHistory?.hasData) {
+    const measurementBlock = formatMeasurementsForPrompt(ctx.measurementHistory);
+    if (measurementBlock) {
+      sections.push(measurementBlock);
+    }
+  }
 
   // Step history
   if (ctx.stepHistory.length) {
@@ -827,9 +875,10 @@ Each suggestion should:
 - Be a specific, actionable activity (under 60 words)
 - Genuinely connect two interests in a useful way
 - Include a brief relevance note (under 30 words) explaining why it helps
+- Include a suggested_category from: nutrition, strength, cardio, hiit, sport, or general
 
 Respond with ONLY a JSON array, no other text:
-[{ "source_interest_slug": "slug", "suggestion": "...", "relevance": "..." }]`;
+[{ "source_interest_slug": "slug", "suggestion": "...", "relevance": "...", "suggested_category": "general" }]`;
 
   const userMessage = `Current interest: ${ctx.currentInterestName}
 Step: "${ctx.stepTitle}"
@@ -871,6 +920,7 @@ ${otherInterestBlock}`;
       source_interest_slug: string;
       suggestion: string;
       relevance: string;
+      suggested_category?: string;
     }[];
 
     // Enrich with interest metadata
@@ -890,6 +940,7 @@ ${otherInterestBlock}`;
           sourceInterestIcon: interest?.iconName ?? null,
           suggestion: item.suggestion,
           relevance: item.relevance,
+          suggestedCategory: item.suggested_category || undefined,
         };
       });
   } catch {

@@ -6,8 +6,10 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, Pressable, TextInput, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
+import { useInterest } from '@/providers/InterestProvider';
 import { useCrossInterestSuggestions } from '@/hooks/useCrossInterestSuggestions';
 import type { CrossInterestSuggestion } from '@/types/step-detail';
 
@@ -15,7 +17,7 @@ interface CrossInterestSuggestionsProps {
   stepId: string;
   interestId: string | undefined;
   onApplyToStep: (text: string) => void;
-  onCreateStep: (suggestion: CrossInterestSuggestion) => void | Promise<void>;
+  onCreateStep: (suggestion: CrossInterestSuggestion) => Promise<string | undefined>;
 }
 
 export function CrossInterestSuggestions({
@@ -26,9 +28,14 @@ export function CrossInterestSuggestions({
 }: CrossInterestSuggestionsProps) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [applied, setApplied] = useState<Set<string>>(new Set());
+  const [creating, setCreating] = useState<Set<string>>(new Set());
+  const [createdSteps, setCreatedSteps] = useState<Map<string, { stepId: string; interestSlug: string }>>(new Map());
   const [focusText, setFocusText] = useState('');
   const [showFocusInput, setShowFocusInput] = useState(false);
   const { suggestions, isLoading, refetch } = useCrossInterestSuggestions(stepId, interestId, focusText);
+
+  const router = useRouter();
+  const { switchInterest } = useInterest();
 
   const handleDismiss = useCallback((id: string) => {
     setDismissed((prev) => new Set(prev).add(id));
@@ -38,6 +45,25 @@ export function CrossInterestSuggestions({
     onApplyToStep(suggestion.suggestion);
     setApplied((prev) => new Set(prev).add(suggestion.id));
   }, [onApplyToStep]);
+
+  const handleCreate = useCallback(async (suggestion: CrossInterestSuggestion) => {
+    setCreating((prev) => new Set(prev).add(suggestion.id));
+    try {
+      const newStepId = await onCreateStep(suggestion);
+      if (newStepId) {
+        setCreatedSteps((prev) => new Map(prev).set(suggestion.id, {
+          stepId: newStepId,
+          interestSlug: suggestion.sourceInterestSlug,
+        }));
+      }
+    } finally {
+      setCreating((prev) => {
+        const next = new Set(prev);
+        next.delete(suggestion.id);
+        return next;
+      });
+    }
+  }, [onCreateStep]);
 
   const handleRefresh = useCallback(() => {
     setDismissed(new Set());
@@ -139,16 +165,38 @@ export function CrossInterestSuggestions({
                   <Text style={styles.applyButtonText}>Add to this step</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity
-                style={styles.createButton}
-                onPress={() => onCreateStep(suggestion)}
-                activeOpacity={0.6}
-              >
-                <Ionicons name="add-outline" size={14} color={IOS_COLORS.systemGreen} />
-                <Text style={styles.createButtonText}>
-                  Create in {suggestion.sourceInterestName}
-                </Text>
-              </TouchableOpacity>
+              {createdSteps.has(suggestion.id) ? (
+                <TouchableOpacity
+                  style={[styles.createButton, { backgroundColor: 'rgba(52,199,89,0.15)' }]}
+                  onPress={async () => {
+                    const info = createdSteps.get(suggestion.id)!;
+                    await switchInterest(info.interestSlug);
+                    router.push(`/(tabs)/races?selected=${info.stepId}` as any);
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="checkmark-circle" size={14} color={IOS_COLORS.systemGreen} />
+                  <Text style={styles.createButtonText}>
+                    Created — View in {suggestion.sourceInterestName}
+                  </Text>
+                </TouchableOpacity>
+              ) : creating.has(suggestion.id) ? (
+                <View style={styles.createButton}>
+                  <ActivityIndicator size={12} color={IOS_COLORS.systemGreen} />
+                  <Text style={styles.createButtonText}>Creating...</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.createButton}
+                  onPress={() => handleCreate(suggestion)}
+                  activeOpacity={0.6}
+                >
+                  <Ionicons name="add-outline" size={14} color={IOS_COLORS.systemGreen} />
+                  <Text style={styles.createButtonText}>
+                    Create in {suggestion.sourceInterestName}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </View>

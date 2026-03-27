@@ -69,7 +69,7 @@ import { useRaceCourse } from '@/hooks/useRaceCourse';
 import { useRaceDebriefData } from '@/hooks/useRaceDebriefData';
 import { useRaceDocuments } from '@/hooks/useRaceDocuments';
 import { useRaceLayoutData } from '@/hooks/useRaceLayoutData';
-import { DEMO_RACE, getDemoEvent, useRaceListData } from '@/hooks/useRaceListData';
+import { DEMO_RACE, getDemoEvent, getDemoTimelineSteps, useRaceListData } from '@/hooks/useRaceListData';
 import { useRaceMarks } from '@/hooks/useRaceMarks';
 import { useRacePhaseDetection } from '@/hooks/useRacePhaseDetection';
 import { useRacePhaseInput } from '@/hooks/useRacePhaseInput';
@@ -416,6 +416,13 @@ export default function RacesScreen() {
     typeof searchParams?.selected === 'string' ? searchParams.selected : null
   );
 
+  // Keep the ref in sync when searchParams.selected changes (e.g. navigating back to this tab)
+  useEffect(() => {
+    if (typeof searchParams?.selected === 'string' && searchParams.selected) {
+      initialSelectedRaceParam.current = searchParams.selected;
+    }
+  }, [searchParams?.selected]);
+
   // Live race execution state
   const [gpsPosition, setGpsPosition] = useState<any>(null);
   const [gpsTrail, setGpsTrail] = useState<any[]>([]);
@@ -589,9 +596,19 @@ export default function RacesScreen() {
     const existingIds = new Set(regattas.map((r: any) => r.id));
     const newSteps = timelineStepCards.filter((s) => !existingIds.has(s.id));
     if (newSteps.length === 0) return regattas.length > 0 ? regattas : EMPTY_RACES;
-    const merged = [...regattas, ...newSteps].sort(
-      (a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-    );
+    // Sort with status-aware partitioning: completed/done steps first, then
+    // pending/planned steps. Within each group, sort by date ascending.
+    // This ensures completed steps are always to the left of the now bar
+    // and planned steps to the right.
+    const now = Date.now();
+    const merged = [...regattas, ...newSteps].sort((a: any, b: any) => {
+      const aCompleted = a.stepStatus === 'completed' || a.status === 'completed' ||
+        (!a.isTimelineStep && new Date(a.date).getTime() + 3 * 60 * 60 * 1000 < now);
+      const bCompleted = b.stepStatus === 'completed' || b.status === 'completed' ||
+        (!b.isTimelineStep && new Date(b.date).getTime() + 3 * 60 * 60 * 1000 < now);
+      if (aCompleted !== bCompleted) return aCompleted ? -1 : 1;
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
     // Final dedup pass — guard against same ID appearing from multiple sources
     const seen = new Set<string>();
     return merged.filter((r: any) => {
@@ -1015,8 +1032,12 @@ export default function RacesScreen() {
       ? currentTimeline.races
       : safeRecentRaces;
 
-    // If no races and sample race not dismissed (only for own timeline), show demo race
+    // If no races and sample race not dismissed (only for own timeline), show demo data
     if (racesToShow.length === 0 && !sampleRaceDismissed && !isViewingOtherTimeline) {
+      // For interests with demo timeline steps, show those instead of a race card
+      const demoSteps = getDemoTimelineSteps(eventConfig.interestSlug);
+      if (demoSteps) return demoSteps;
+
       const demoIso = getDemoRaceStartDateISO(7, 11, 0);
       const demoEvent = getDemoEvent(eventConfig.interestSlug, eventConfig.eventNoun);
       const isSailing = eventConfig.interestSlug === 'sail-racing';
@@ -1095,13 +1116,27 @@ export default function RacesScreen() {
       // Timeline step fields — pass through so detail view can distinguish steps from regattas
       ...(race.isTimelineStep ? {
         isTimelineStep: true,
-        stepStatus: race.stepStatus,
+        stepStatus: timelineStatusOverrides[race.id]?.status || race.stepStatus,
         sort_order: race.sort_order,
         description: race.description,
         due_at: race.due_at,
         completed_at: race.completed_at,
       } : null),
     }));
+
+    // Re-sort after applying status overrides so that marking done/not-done
+    // immediately moves the step to the correct side of the now bar.
+    const nowMs = Date.now();
+    mapped.sort((a: any, b: any) => {
+      const aCompleted = a.stepStatus === 'completed' || a.status === 'completed' ||
+        (!a.isTimelineStep && new Date(a.date).getTime() + 3 * 60 * 60 * 1000 < nowMs);
+      const bCompleted = b.stepStatus === 'completed' || b.status === 'completed' ||
+        (!b.isTimelineStep && new Date(b.date).getTime() + 3 * 60 * 60 * 1000 < nowMs);
+      if (aCompleted !== bCompleted) return aCompleted ? -1 : 1;
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+
+    return mapped;
   }, [safeRecentRaces, sampleRaceDismissed, isViewingOtherTimeline, currentTimeline, timelineStatusOverrides]);
 
   const orderedBaseCardGridRaces: CardRaceData[] = useMemo(() => {
@@ -1117,7 +1152,16 @@ export default function RacesScreen() {
         ordered.push(race);
       }
     }
-    return ordered;
+    // Enforce status partition even with custom ordering:
+    // done steps must stay left of planned steps (the now bar boundary).
+    // Within each group, preserve the user's custom order.
+    const nowMs = Date.now();
+    const isCompleted = (r: any) =>
+      r.stepStatus === 'completed' || r.status === 'completed' ||
+      (!r.isTimelineStep && new Date(r.date).getTime() + 3 * 60 * 60 * 1000 < nowMs);
+    const done = ordered.filter((r) => isCompleted(r));
+    const planned = ordered.filter((r) => !isCompleted(r));
+    return [...done, ...planned];
   }, [baseCardGridRaces, isViewingOtherTimeline, timelineCustomOrderIds]);
 
   useEffect(() => {
@@ -1151,6 +1195,22 @@ export default function RacesScreen() {
       logger.warn('Unable to persist timeline reorder', { error });
     }
   }, [baseCardGridRaces, isViewingOtherTimeline, logger, timelineOrderStorageKey]);
+
+  // Move a step one position earlier or later in the custom order
+  const handleMoveStep = useCallback((raceId: string, direction: 'earlier' | 'later') => {
+    if (isViewingOtherTimeline) return;
+    const currentOrder = orderedBaseCardGridRaces.map((r) => r.id);
+    const idx = currentOrder.indexOf(raceId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'earlier' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= currentOrder.length) return;
+    const next = [...currentOrder];
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    void handleTimelineGridReorder(next);
+  }, [orderedBaseCardGridRaces, isViewingOtherTimeline, handleTimelineGridReorder]);
+
+  const handleMoveStepEarlier = useCallback((raceId: string) => handleMoveStep(raceId, 'earlier'), [handleMoveStep]);
+  const handleMoveStepLater = useCallback((raceId: string) => handleMoveStep(raceId, 'later'), [handleMoveStep]);
 
   // Calculate current season week (ISO week number with 'W' prefix)
   const currentSeasonWeek = useMemo(() => {
@@ -1368,6 +1428,8 @@ export default function RacesScreen() {
           totalRaces={totalRaces}
           onCardPress={onCardPress}
           refetchTrigger={refetchTrigger}
+          onMoveStepEarlier={canManage ? () => handleMoveStepEarlier(race.id) : undefined}
+          onMoveStepLater={canManage ? () => handleMoveStepLater(race.id) : undefined}
           onMoveStepToPlannedNext={canManage ? () => handleMoveStepToPlannedNext(race.id) : undefined}
           onMoveStepToCompletedMostRecent={canManage ? () => handleMoveStepToCompletedMostRecent(race.id) : undefined}
           onSetDueDate={canManage ? (dateIso: string | null) => handleSetDueDate(race.id, dateIso) : undefined}
@@ -1375,7 +1437,7 @@ export default function RacesScreen() {
         />
       );
     },
-    [cardGridDimensions, currentSeasonWeek, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleSetDueDate]
+    [cardGridDimensions, currentSeasonWeek, handleMoveStepEarlier, handleMoveStepLater, handleMoveStepToCompletedMostRecent, handleMoveStepToPlannedNext, handleSetDueDate]
   );
 
   // Handle race change from CardGrid
@@ -1664,6 +1726,52 @@ export default function RacesScreen() {
     }
   }, [user?.id, currentInterest?.id, vocab, queryClient]);
 
+  // Quick-create a step with a specific event subtype (e.g. Nutrition, Strength)
+  const handleAddStepWithSubtype = useCallback(async (subtypeId: string, subtypeLabel: string) => {
+    if (!user?.id || !currentInterest?.id) return;
+
+    try {
+      const newStep = await createTimelineStep({
+        user_id: user.id,
+        interest_id: currentInterest.id,
+        title: `New ${subtypeLabel} Step`,
+        category: subtypeId,
+        status: 'pending',
+        starts_at: new Date().toISOString(),
+        metadata: {
+          plan: {},
+          act: {},
+          review: {},
+          brain_dump: {
+            raw_text: '',
+            extracted_urls: [],
+            extracted_people: [],
+            extracted_topics: [],
+            created_at: new Date().toISOString(),
+          },
+        },
+      });
+
+      skipFetchForStepRef.current = newStep.id;
+      setSelectedRaceId(newStep.id);
+      setSelectedRaceData({
+        id: newStep.id,
+        name: newStep.title,
+        date: newStep.starts_at,
+        isTimelineStep: true,
+        stepStatus: 'pending',
+        status: 'pending',
+        metadata: newStep.metadata,
+      });
+      setHasManuallySelected(true);
+      setIsGridView(false);
+      pendingNewStepIdRef.current = newStep.id;
+      queryClient.refetchQueries({ queryKey: ['timeline-steps'] });
+    } catch (err) {
+      console.error('Failed to create step:', err);
+      showAlert('Error', 'Failed to create step. Please try again.');
+    }
+  }, [user?.id, currentInterest?.id, queryClient]);
 
   // Navigate to the next upcoming item when "X upcoming" is tapped
   const handleUpcomingPress = useCallback(() => {
@@ -2194,8 +2302,9 @@ export default function RacesScreen() {
   }, [selectedRaceId]);
 
   // Handle deep links that request a specific race selection (e.g., after creation)
+  // Also handles subsequent navigations with ?selected= while tab is already mounted
   useEffect(() => {
-    const targetId = initialSelectedRaceParam.current;
+    const targetId = initialSelectedRaceParam.current || (typeof searchParams?.selected === 'string' ? searchParams.selected : null);
     if (!targetId || loading) {
       return;
     }
@@ -2215,7 +2324,7 @@ export default function RacesScreen() {
       url.searchParams.delete('selected');
       window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
     }
-  }, [loading, safeRecentRaces]);
+  }, [loading, safeRecentRaces, searchParams?.selected]);
 
   useEffect(() => {
     if (hasRealRaces) {
@@ -3410,6 +3519,25 @@ export default function RacesScreen() {
     return idx >= 0 ? idx : 0;
   }, [selectedRaceId, safeNextRace?.id, cardGridRaces]);
 
+  // Next race index — falls back to demo-aware calculation when safeNextRace is empty
+  const effectiveNextRaceIndex = useMemo((): number | null => {
+    if (!isViewingOtherTimeline && safeNextRace?.id) {
+      const idx = cardGridRaces.findIndex(r => r.id === safeNextRace.id);
+      return idx >= 0 ? idx : null;
+    }
+    // For demo steps, find the first future/non-completed step
+    if (isShowingDemoRace && cardGridRaces.length > 0) {
+      const now = new Date();
+      const idx = cardGridRaces.findIndex((r: any) => {
+        if (r.stepStatus === 'completed' || r.status === 'completed') return false;
+        const d = new Date(r.date || '');
+        return d > now || r.stepStatus === 'pending' || r.status === 'scheduled';
+      });
+      return idx >= 0 ? idx : null;
+    }
+    return null;
+  }, [isViewingOtherTimeline, safeNextRace?.id, cardGridRaces, isShowingDemoRace]);
+
   const profileOnboardingStep = (profile as { onboarding_step?: string } | null | undefined)?.onboarding_step;
 
   const isDemoProfile = (profileOnboardingStep ?? '').toString().startsWith('demo');
@@ -3764,10 +3892,11 @@ export default function RacesScreen() {
                   />
                 </View>
               )}
+              {/* Nutrition tracking is handled per-step via nutrition category steps */}
               <TimelineGridView
                 races={filteredCardGridRaces}
                 selectedRaceId={selectedRaceId || undefined}
-                nextRaceIndex={!isViewingOtherTimeline && safeNextRace?.id ? filteredCardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
+                nextRaceIndex={effectiveNextRaceIndex != null ? filteredCardGridRaces.findIndex(r => r.id === cardGridRaces[effectiveNextRaceIndex]?.id) : null}
                 onSelectRace={(index, race) => {
                   setSelectedRaceId(race.id);
                   setHasManuallySelected(true);
@@ -3803,7 +3932,7 @@ export default function RacesScreen() {
               onRaceChange={handleCardGridRaceChange}
               onCardChange={handleCardGridCardChange}
               initialRaceIndex={initialCardIndex}
-              nextRaceIndex={!isViewingOtherTimeline && safeNextRace?.id ? cardGridRaces.findIndex(r => r.id === safeNextRace.id) : null}
+              nextRaceIndex={effectiveNextRaceIndex}
               enableHaptics={FEATURE_FLAGS.ENABLE_CARD_HAPTICS}
               persistState={FEATURE_FLAGS.PERSIST_CARD_NAVIGATION && !isViewingOtherTimeline}
               style={{ flex: 1 }}
@@ -4331,6 +4460,7 @@ export default function RacesScreen() {
         recommendedTemplates={recommendedOrgTemplates}
         onSelectRecommendedTemplate={handleSelectRecommendedTemplate}
         onAddStep={isSailingInterest ? handleAddStep : handleAddStep}
+        onAddStepWithSubtype={handleAddStepWithSubtype}
         onAddRace={isSailingInterest ? handleShowAddRaceSheet : undefined}
         onAddPractice={isSailingInterest ? handleAddPractice : undefined}
         onNewSeason={isSailingInterest ? () => setShowSeasonSettings(true) : undefined}

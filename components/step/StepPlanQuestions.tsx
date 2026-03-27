@@ -9,7 +9,6 @@
 
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Platform, Linking, Share, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { IOS_COLORS, IOS_SPACING } from '@/lib/design-tokens-ios';
 import { STEP_COLORS } from '@/lib/step-theme';
@@ -24,16 +23,18 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
 import { getResourcesByIds } from '@/services/LibraryService';
 import { NotificationService } from '@/services/NotificationService';
-import { gatherEnrichedContext, generatePlanFromResource, generateEnrichedPlanSuggestion } from '@/services/ai/StepPlanAIService';
+import { gatherEnrichedContext, generatePlanFromResource, generateEnrichedPlanSuggestion, generateChatPlanSuggestion } from '@/services/ai/StepPlanAIService';
 import { getCompetencies } from '@/services/competencyService';
 import { getSkillGoalTitles } from '@/services/SkillGoalService';
-import type { StepPlanData, StepMetadata, SubStep, StepCollaborator, StepLocation, BrainDumpData } from '@/types/step-detail';
+import type { StepPlanData, StepMetadata, SubStep, StepCollaborator, StepLocation, BrainDumpData, ChatMessage } from '@/types/step-detail';
 import { BrainDumpEntry } from './BrainDumpEntry';
+import { ConversationalCapture } from './ConversationalCapture';
 import { CrossInterestSuggestions } from './CrossInterestSuggestions';
 import { DateEnrichmentCard } from './DateEnrichmentCard';
 import { createStep, enableStepSharing } from '@/services/TimelineStepService';
 import { LocationMapPicker as LocationMapPickerModal } from '@/components/races/LocationMapPicker';
 import { supabase } from '@/services/supabase';
+import { getStepCategoryLabels } from '@/lib/step-category-config';
 import type { LibraryResourceRecord } from '@/types/library';
 
 interface StepPlanQuestionsProps {
@@ -46,22 +47,29 @@ interface StepPlanQuestionsProps {
   onStructureWithAI?: (dump: BrainDumpData) => void;
   isStructuring?: boolean;
   interestSlug?: string;
+  /** When true, show conversational capture instead of brain dump */
+  useConversationalCapture?: boolean;
+  onConversationalCreate?: (planData: Partial<StepPlanData>, suggestedTitle?: string) => void;
 }
 
 export function StepPlanQuestions({
   stepId, interestId, readOnly,
   brainDumpData: brainDumpProp, onBrainDumpChange, onStructureWithAI,
   isStructuring, interestSlug,
+  useConversationalCapture, onConversationalCreate,
 }: StepPlanQuestionsProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
   const { user } = useAuth();
   const { currentInterest, userInterests } = useInterest();
+  const catLabels = getStepCategoryLabels(step?.category);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showResourcePicker, setShowResourcePicker] = useState(false);
   const [linkedResources, setLinkedResources] = useState<LibraryResourceRecord[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
+  const [refinementChat, setRefinementChat] = useState<ChatMessage[]>([]);
+  const [refinementInput, setRefinementInput] = useState('');
   const [localGoals, setLocalGoals] = useState<string[]>([]);
   const [newGoalText, setNewGoalText] = useState('');
   const [suggestedCompetencies, setSuggestedCompetencies] = useState<string[]>([]);
@@ -86,10 +94,18 @@ export function StepPlanQuestions({
   const metadata = (step?.metadata ?? {}) as StepMetadata;
   const planData: StepPlanData = metadata.plan ?? {};
 
-  // Seed local state from server data once on first load
+  // Seed local state from server data on first load AND when plan changes externally
+  // (e.g. ConversationalCapture populates fields, AI structuring fills plan)
+  const serverWhat = ((step?.metadata as StepMetadata)?.plan ?? {}).what_will_you_do ?? '';
   useEffect(() => {
-    if (step && !initializedRef.current) {
-      const plan = (step.metadata as StepMetadata)?.plan ?? {};
+    if (!step) return;
+    const plan = (step.metadata as StepMetadata)?.plan ?? {};
+
+    // Re-sync when plan content arrives externally (e.g., from ConversationalCapture or AI structuring)
+    // Detects: local "what" is empty but server now has content → external update happened
+    const externalUpdate = initializedRef.current && !localWhat.trim() && !!plan.what_will_you_do?.trim();
+
+    if (!initializedRef.current || externalUpdate) {
       setLocalWhat(plan.what_will_you_do ?? '');
       setLocalWhy(plan.why_reasoning ?? '');
       setLocalConnectionSpace(plan.connection_space ?? '');
@@ -109,13 +125,18 @@ export function StepPlanQuestions({
       }
       setLocalGoals(plan.capability_goals ?? []);
       setLocalWhereLocation(plan.where_location);
+      // Allow skill auto-matching to re-run after external updates
+      if (externalUpdate) autoMatchedRef.current = false;
       initializedRef.current = true;
     }
-  }, [step]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, serverWhat]);
 
-  // Load org-defined locations for quick pick
+  // Load org-defined locations for quick pick — only for interests with org-scoped locations (e.g. nursing clinical sites)
+  const normalizedSlug = String(interestSlug || currentInterest?.slug || '').toLowerCase();
+  const isOrgLocationInterest = normalizedSlug === 'nursing';
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !isOrgLocationInterest) return;
     const loadOrgLocations = async () => {
       try {
         const { data } = await supabase
@@ -126,7 +147,7 @@ export function StepPlanQuestions({
       } catch {}
     };
     loadOrgLocations();
-  }, [user?.id]);
+  }, [user?.id, isOrgLocationInterest]);
 
   // Load org competencies + user skill goals as suggestions for capability goals
   useEffect(() => {
@@ -413,33 +434,139 @@ export function StepPlanQuestions({
     });
   }, [debouncedSave]);
 
+  // Build enriched context for AI — reused by both initial suggest and refinement
+  const buildEnrichedCtx = useCallback(async () => {
+    if (!user?.id || !step) return null;
+    const resolvedInterestId = interestId || currentInterest?.id;
+    const enriched = resolvedInterestId
+      ? await gatherEnrichedContext(user.id, resolvedInterestId)
+      : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [], libraryResources: [] };
+    return {
+      interestName: currentInterest?.name || 'this interest',
+      interestId: resolvedInterestId,
+      stepTitle: step.title,
+      currentWhat: localWhat || undefined,
+      linkedResources,
+      capabilityGoals: localGoals,
+      ...enriched,
+    };
+  }, [user?.id, step, interestId, currentInterest, localWhat, linkedResources, localGoals]);
+
   const handleAISuggest = useCallback(async () => {
-    if (aiLoading || !user?.id || !step) return;
+    if (aiLoading) return;
     setAiLoading(true);
     setAiSuggestion('');
+    setRefinementChat([]);
     try {
-      const resolvedInterestId = interestId || currentInterest?.id;
-      const enriched = resolvedInterestId
-        ? await gatherEnrichedContext(user.id, resolvedInterestId)
-        : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [], libraryResources: [] };
-
-      const text = await generateEnrichedPlanSuggestion({
-        interestName: currentInterest?.name || 'this interest',
-        interestId: resolvedInterestId,
-        stepTitle: step.title,
-        currentWhat: localWhat || undefined,
-        linkedResources,
-        capabilityGoals: localGoals,
-        ...enriched,
-      });
+      const ctx = await buildEnrichedCtx();
+      if (!ctx) return;
+      const text = await generateEnrichedPlanSuggestion(ctx);
       setAiSuggestion(text);
+      // Seed the refinement chat with the initial exchange
+      setRefinementChat([
+        { role: 'assistant', content: text, timestamp: new Date().toISOString() },
+      ]);
     } catch (err) {
       console.error('AI suggestion failed:', err);
       setAiSuggestion('Unable to generate suggestion. Please try again.');
     } finally {
       setAiLoading(false);
     }
-  }, [aiLoading, user?.id, step, interestId, currentInterest, localWhat, linkedResources, localGoals]);
+  }, [aiLoading, buildEnrichedCtx]);
+
+  const handleRefinementSend = useCallback(async () => {
+    const trimmed = refinementInput.trim();
+    if (!trimmed || aiLoading) return;
+    setRefinementInput('');
+
+    const userMsg: ChatMessage = { role: 'user', content: trimmed, timestamp: new Date().toISOString() };
+    const updatedChat = [...refinementChat, userMsg];
+    setRefinementChat(updatedChat);
+    setAiLoading(true);
+
+    try {
+      const ctx = await buildEnrichedCtx();
+      if (!ctx) return;
+      const text = await generateChatPlanSuggestion(ctx, updatedChat);
+      const assistantMsg: ChatMessage = { role: 'assistant', content: text, timestamp: new Date().toISOString() };
+      setRefinementChat((prev) => [...prev, assistantMsg]);
+    } catch (err) {
+      console.error('AI refinement failed:', err);
+      const errorMsg: ChatMessage = { role: 'assistant', content: 'Unable to respond. Try again.', timestamp: new Date().toISOString() };
+      setRefinementChat((prev) => [...prev, errorMsg]);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [refinementInput, aiLoading, refinementChat, buildEnrichedCtx]);
+
+  const [exercisesLoading, setExercisesLoading] = useState(false);
+  const [whyLoading, setWhyLoading] = useState(false);
+  const handleGenerateWhy = useCallback(async () => {
+    if (whyLoading || !localWhat.trim()) return;
+    setWhyLoading(true);
+    try {
+      const ctx = await buildEnrichedCtx();
+      if (!ctx) return;
+      const text = await generateChatPlanSuggestion(ctx, [
+        { role: 'user', content: `Based on my plan "${localWhat.trim()}" and my goals/history, write a brief 1-2 sentence explanation of why this is the right focus for this session. Be specific — reference my goals, recent progress, or competency gaps. Keep it concise and personal.`, timestamp: new Date().toISOString() },
+      ]);
+      handleWhyChange(text);
+    } catch (err) {
+      console.error('AI why generation failed:', err);
+    } finally {
+      setWhyLoading(false);
+    }
+  }, [whyLoading, localWhat, buildEnrichedCtx, handleWhyChange]);
+
+  const handleGenerateExercises = useCallback(async () => {
+    if (exercisesLoading || !localWhat.trim()) return;
+    setExercisesLoading(true);
+    try {
+      const ctx = await buildEnrichedCtx();
+      if (!ctx) return;
+      const text = await generateChatPlanSuggestion(ctx, [
+        {
+          role: 'user',
+          content: `Based on my plan "${localWhat.trim()}", generate ONLY a list of exercises with sets, reps, and weights. Use my measurement history for progressive overload.
+
+RULES:
+- Output ONLY exercises, one per line
+- Format: "Exercise name: SetsxReps @ Weight" (e.g. "Bench press: 4x8 @ 155 lbs")
+- For bodyweight exercises: "Dips: 3x failure" or "Plank: 3x 45 sec"
+- Include warmup sets as separate lines (e.g. "Bench press (warmup): 2x5 @ 95 lbs")
+- NO advice, NO explanations, NO commentary, NO separators, NO numbering
+- Just the exercise lines, nothing else`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      // Parse response into sub-steps, filtering non-exercise lines
+      const lines = text.split('\n').map((l) => l.trim()).filter((l) => {
+        if (l.length === 0 || l.length > 120) return false;
+        if (/^[-–—=]+$/.test(l)) return false; // separators
+        // Must contain a colon (exercise: prescription) or common exercise pattern
+        return l.includes(':') || /\d+x\d+/.test(l) || /\d+\s*sets?/i.test(l);
+      });
+      const newSubSteps: SubStep[] = lines.map((line, i) => ({
+        id: `ai_${Date.now()}_${i}`,
+        text: line.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '').replace(/^[""]|[""]$/g, ''),
+        sort_order: i,
+        completed: false,
+      }));
+      if (newSubSteps.length > 0) {
+        // Merge with existing sub-steps (append AI-generated ones)
+        const existing = planData.how_sub_steps ?? [];
+        const nonEmpty = existing.filter((s) => s.text.trim());
+        const merged = nonEmpty.length > 0
+          ? [...nonEmpty, ...newSubSteps.map((s, i) => ({ ...s, sort_order: nonEmpty.length + i }))]
+          : newSubSteps;
+        handleSubStepsChange(merged);
+      }
+    } catch (err) {
+      console.error('AI exercise generation failed:', err);
+    } finally {
+      setExercisesLoading(false);
+    }
+  }, [exercisesLoading, localWhat, buildEnrichedCtx, planData.how_sub_steps, handleSubStepsChange]);
 
   const q1Complete = Boolean(localWhat.trim() || linkedIds.length > 0);
   const q2Complete = Boolean(planData.how_sub_steps?.length && planData.how_sub_steps.some((s) => s.text.trim()));
@@ -464,9 +591,10 @@ export function StepPlanQuestions({
 
   // Brain dump section — use prop data or fall back to step metadata
   const brainDumpData = brainDumpProp ?? (metadata?.brain_dump as BrainDumpData | undefined);
-  const showBrainDump = Boolean(brainDumpData !== undefined && onStructureWithAI && !readOnly);
+  const showBrainDump = Boolean(brainDumpData !== undefined && onStructureWithAI && !readOnly && !useConversationalCapture);
   const localHasPlanContent = q1Complete || q2Complete || q4Complete || qWhereComplete || q5Complete;
   const [brainDumpExpanded, setBrainDumpExpanded] = useState(!localHasPlanContent);
+  const showConversational = Boolean(useConversationalCapture && interestId && currentInterest?.name && !readOnly && !localHasPlanContent && onConversationalCreate);
 
   if (!step) return null;
 
@@ -479,8 +607,8 @@ export function StepPlanQuestions({
     <View style={styles.container}>
       {/* Section header */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>STEP PLANNING</Text>
-        <Text style={styles.sectionSubtitle}>Define what, how, and why</Text>
+        <Text style={styles.sectionTitle}>{catLabels.planHeader}</Text>
+        <Text style={styles.sectionSubtitle}>{catLabels.planSubheader}</Text>
       </View>
 
       {/* Course context banner — tap to see full course */}
@@ -508,7 +636,21 @@ export function StepPlanQuestions({
         />
       )}
 
-      {/* Brain dump section — collapsible at top */}
+      {/* Conversational Capture — chat-first step creation */}
+      {showConversational && (
+        <View style={styles.brainDumpSection}>
+          <ConversationalCapture
+            interestId={interestId!}
+            interestName={currentInterest?.name || 'this interest'}
+            stepTitle={localWhat || 'New step'}
+            onCreateStep={onConversationalCreate!}
+            embedded
+            stepCategory={step?.category}
+          />
+        </View>
+      )}
+
+      {/* Brain dump section — collapsible at top (legacy fallback) */}
       {showBrainDump && (
         <View style={styles.brainDumpSection}>
           <Pressable
@@ -545,7 +687,7 @@ export function StepPlanQuestions({
       {/* Q1: What will you do? */}
       <PlanQuestionCard
         icon="bulb-outline"
-        title="What will you do?"
+        title={catLabels.questions.what}
         isComplete={q1Complete}
         defaultExpanded={!q1Complete}
       >
@@ -553,15 +695,15 @@ export function StepPlanQuestions({
           style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={localWhat}
           onChangeText={readOnly ? undefined : handleWhatChange}
-          placeholder={readOnly ? '' : "Describe what you'll focus on..."}
+          placeholder={readOnly ? '' : catLabels.placeholders.what}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
           editable={!readOnly}
         />
 
-        {/* AI suggestion */}
-        {!readOnly && (
+        {/* AI refinement chat */}
+        {!readOnly && refinementChat.length === 0 && (
           <Pressable
             style={styles.aiSuggestButton}
             onPress={handleAISuggest}
@@ -572,23 +714,69 @@ export function StepPlanQuestions({
             ) : (
               <>
                 <Ionicons name="sparkles" size={16} color={IOS_COLORS.systemPurple} />
-                <Text style={styles.aiSuggestText}>
-                  {aiSuggestion ? 'Regenerate suggestion' : 'Suggest what to focus on'}
-                </Text>
+                <Text style={styles.aiSuggestText}>Suggest what to focus on</Text>
               </>
             )}
           </Pressable>
         )}
 
-        {aiSuggestion ? (
-          <View style={styles.aiSuggestionBox}>
+        {refinementChat.length > 0 && (
+          <View style={styles.refinementContainer}>
             <View style={styles.aiSuggestionHeader}>
               <Ionicons name="sparkles" size={14} color={IOS_COLORS.systemPurple} />
               <Text style={styles.aiSuggestionLabel}>AI Coach</Text>
             </View>
-            <Text style={styles.aiSuggestionText}>{aiSuggestion}</Text>
+
+            {/* Chat thread */}
+            {refinementChat.map((msg, i) => (
+              <View
+                key={`ref_${i}`}
+                style={[
+                  styles.refinementBubble,
+                  msg.role === 'user' ? styles.refinementBubbleUser : styles.refinementBubbleAssistant,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.refinementBubbleText,
+                    msg.role === 'user' ? styles.refinementBubbleTextUser : styles.refinementBubbleTextAssistant,
+                  ]}
+                >
+                  {msg.content}
+                </Text>
+              </View>
+            ))}
+
+            {aiLoading && (
+              <View style={[styles.refinementBubble, styles.refinementBubbleAssistant]}>
+                <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+              </View>
+            )}
+
+            {/* Refinement input */}
+            {!readOnly && (
+              <View style={styles.refinementInputRow}>
+                <TextInput
+                  style={styles.refinementInput}
+                  value={refinementInput}
+                  onChangeText={setRefinementInput}
+                  placeholder={catLabels.refinementPlaceholder}
+                  placeholderTextColor={IOS_COLORS.tertiaryLabel}
+                  onSubmitEditing={handleRefinementSend}
+                  returnKeyType="send"
+                  editable={!aiLoading}
+                />
+                <Pressable
+                  style={[styles.refinementSendButton, (!refinementInput.trim() || aiLoading) && styles.refinementSendDisabled]}
+                  onPress={handleRefinementSend}
+                  disabled={!refinementInput.trim() || aiLoading}
+                >
+                  <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            )}
           </View>
-        ) : null}
+        )}
 
         {linkedResources.length > 0 && (
           <View style={styles.chipContainer}>
@@ -624,7 +812,7 @@ export function StepPlanQuestions({
       {/* Q2: How will you do it? */}
       <PlanQuestionCard
         icon="list-outline"
-        title="How will you do it?"
+        title={catLabels.questions.how}
         isComplete={q2Complete}
         defaultExpanded={q1Complete && !q2Complete}
       >
@@ -633,24 +821,60 @@ export function StepPlanQuestions({
           onChange={readOnly ? () => {} : handleSubStepsChange}
           readOnly={readOnly}
         />
+        {!readOnly && localWhat.trim() && (
+          <Pressable
+            style={styles.aiSuggestButton}
+            onPress={handleGenerateExercises}
+            disabled={exercisesLoading}
+          >
+            {exercisesLoading ? (
+              <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+            ) : (
+              <>
+                <Ionicons name="sparkles" size={16} color={IOS_COLORS.systemPurple} />
+                <Text style={styles.aiSuggestText}>
+                  {q2Complete ? 'Regenerate exercises' : 'Generate exercises'}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        )}
       </PlanQuestionCard>
 
       {/* Q3: Why is this next? */}
       <PlanQuestionCard
         icon="help-circle-outline"
-        title="Why is this next?"
+        title={catLabels.questions.why}
         isComplete={q3Complete}
       >
         <TextInput
           style={[styles.textArea, readOnly && styles.readOnlyInput]}
           value={localWhy}
           onChangeText={readOnly ? undefined : handleWhyChange}
-          placeholder={readOnly ? '' : "What makes this the right next step?"}
+          placeholder={readOnly ? '' : catLabels.placeholders.why}
           placeholderTextColor={IOS_COLORS.tertiaryLabel}
           multiline
           textAlignVertical="top"
           editable={!readOnly}
         />
+        {!readOnly && localWhat.trim() && (
+          <Pressable
+            style={styles.aiSuggestButton}
+            onPress={handleGenerateWhy}
+            disabled={whyLoading}
+          >
+            {whyLoading ? (
+              <ActivityIndicator size="small" color={IOS_COLORS.systemPurple} />
+            ) : (
+              <>
+                <Ionicons name="sparkles" size={16} color={IOS_COLORS.systemPurple} />
+                <Text style={styles.aiSuggestText}>
+                  {localWhy.trim() ? 'Regenerate why' : 'Generate why'}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        )}
       </PlanQuestionCard>
 
       {/* Q4: Who will you do this with? */}
@@ -967,9 +1191,9 @@ export function StepPlanQuestions({
           debouncedSave({ how_sub_steps: updated });
         }}
         onCreateStep={async (suggestion) => {
-          if (!user?.id) return;
+          if (!user?.id) return undefined;
           const targetInterest = userInterests.find((i) => i.slug === suggestion.sourceInterestSlug);
-          if (!targetInterest) return;
+          if (!targetInterest) return undefined;
           try {
             const created = await createStep({
               user_id: user.id,
@@ -977,10 +1201,13 @@ export function StepPlanQuestions({
               title: suggestion.suggestion.slice(0, 80),
               status: 'pending',
               source_type: 'manual',
+              category: suggestion.suggestedCategory || 'general',
               metadata: { plan: { what_will_you_do: suggestion.suggestion } },
             });
-            router.push(`/step/${created.id}` as any);
-          } catch {}
+            return created.id;
+          } catch {
+            return undefined;
+          }
         }}
       />}
 
@@ -1135,6 +1362,72 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: IOS_COLORS.label,
     lineHeight: 20,
+  },
+  // Refinement chat
+  refinementContainer: {
+    backgroundColor: 'rgba(175,82,222,0.06)',
+    borderRadius: 10,
+    padding: IOS_SPACING.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(175,82,222,0.15)',
+    marginTop: IOS_SPACING.xs,
+    gap: 8,
+  },
+  refinementBubble: {
+    borderRadius: 10,
+    padding: 10,
+    maxWidth: '88%',
+  } as any,
+  refinementBubbleAssistant: {
+    backgroundColor: '#FFFFFF',
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(175,82,222,0.12)',
+  },
+  refinementBubbleUser: {
+    backgroundColor: IOS_COLORS.systemPurple,
+    alignSelf: 'flex-end',
+  },
+  refinementBubbleText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  refinementBubbleTextAssistant: {
+    color: IOS_COLORS.label,
+  },
+  refinementBubbleTextUser: {
+    color: '#FFFFFF',
+  },
+  refinementInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  refinementInput: {
+    flex: 1,
+    fontSize: 13,
+    color: IOS_COLORS.label,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(175,82,222,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    ...Platform.select({
+      web: { outlineStyle: 'none' } as any,
+    }),
+  },
+  refinementSendButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: IOS_COLORS.systemPurple,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refinementSendDisabled: {
+    opacity: 0.35,
   },
   addLibraryButton: {
     flexDirection: 'row',

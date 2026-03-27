@@ -39,6 +39,15 @@ import type { StepReviewData, StepActData, StepPlanData, StepMetadata, BrainDump
 import type { Competency } from '@/types/competency';
 import { ShareStepSheet } from '@/components/step/ShareStepSheet';
 import { InstructorAssessmentSection } from '@/components/step/InstructorAssessmentSection';
+import { MeasurementReview } from '@/components/step/MeasurementReview';
+import { NutritionReview } from '@/components/step/NutritionReview';
+import { extractMeasurements, getMeasurementHistory, type MeasurementHistorySummary } from '@/services/MeasurementExtractionService';
+import { extractNutritionToStep } from '@/services/ai/NutritionExtractionService';
+import { getActiveConversation, completeConversation } from '@/services/AIConversationService';
+import { extractInsights } from '@/services/AIMemoryService';
+import { getDailyTargets } from '@/services/NutritionService';
+import type { StepMeasurements } from '@/types/measurements';
+import type { NutritionTargets } from '@/types/nutrition';
 
 // ---------------------------------------------------------------------------
 // Design tokens from Pencil Critique Tab
@@ -216,6 +225,7 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
   const updateStep = useUpdateStep();
   const { user } = useAuth();
   const { currentInterest } = useInterest();
+  const queryClient = useQueryClient();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
 
@@ -231,6 +241,50 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
   const [localNextNotes, setLocalNextNotes] = useState('');
   const [localCapabilityRatings, setLocalCapabilityRatings] = useState<Record<string, number>>({});
   const [lastSavedLabel, setLastSavedLabel] = useState('');
+  const [measurementHistory, setMeasurementHistory] = useState<MeasurementHistorySummary | undefined>();
+  const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | undefined>();
+
+  // Load measurement history and nutrition targets
+  useEffect(() => {
+    if (!user?.id || !step?.interest_id) return;
+    getMeasurementHistory(user.id, step.interest_id)
+      .then(setMeasurementHistory)
+      .catch(() => {});
+    getDailyTargets(user.id, step.interest_id)
+      .then(setNutritionTargets)
+      .catch(() => {});
+  }, [user?.id, step?.interest_id]);
+
+  // Auto-complete any active train conversation and trigger extraction when Review tab mounts
+  const extractionTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (extractionTriggeredRef.current || !user?.id || !step?.interest_id || !stepId) return;
+    // Skip if we already have extracted data
+    if (actData.measurements?.extracted?.length || actData.nutrition?.entries?.length) return;
+    extractionTriggeredRef.current = true;
+
+    (async () => {
+      const conversation = await getActiveConversation(user.id, step.interest_id, 'train', stepId);
+      if (!conversation || conversation.messages.length < 2) return;
+
+      // Complete the conversation
+      await completeConversation(conversation.id).catch(() => {});
+      const completed = { ...conversation, messages: conversation.messages, status: 'completed' as const };
+
+      // Trigger extractions in parallel
+      const interestSlug = currentInterest?.slug;
+      await Promise.allSettled([
+        interestSlug
+          ? extractMeasurements(user.id, step.interest_id, stepId, completed, interestSlug)
+          : Promise.resolve(),
+        extractNutritionToStep(user.id, step.interest_id, stepId, completed),
+        extractInsights(user.id, step.interest_id, completed),
+      ]);
+
+      // Refetch step data so extracted results appear
+      queryClient.invalidateQueries({ queryKey: ['timeline-steps', 'detail', stepId] });
+    })();
+  }, [user?.id, step?.interest_id, stepId, actData.measurements, actData.nutrition, currentInterest?.slug]);
 
   // Seed from server
   useEffect(() => {
@@ -420,7 +474,6 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
 
   // --- Create Next Step ---
-  const queryClient = useQueryClient();
   const [createdNextId, setCreatedNextId] = useState<string | null>(null);
   const [creatingNext, setCreatingNext] = useState(false);
 
@@ -539,6 +592,63 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
           </View>
         </View>
       )}
+
+      {/* ── SESSION DATA (AI-extracted measurements) ── */}
+      {actData.measurements?.extracted?.length ? (
+        <View style={s.sectionWrap}>
+          <MeasurementReview
+            measurements={actData.measurements}
+            history={measurementHistory}
+            readOnly={readOnly}
+            onUpdate={(updated) => {
+              updateMetadata.mutate({
+                act: {
+                  measurements: {
+                    ...actData.measurements!,
+                    extracted: updated,
+                  },
+                },
+              });
+            }}
+          />
+        </View>
+      ) : null}
+
+      {/* ── SESSION NUTRITION (AI-extracted nutrition) ── */}
+      {actData.nutrition?.entries?.length ? (
+        <View style={s.sectionWrap}>
+          <NutritionReview
+            nutrition={actData.nutrition}
+            targets={nutritionTargets}
+            readOnly={readOnly}
+            onUpdate={(updated) => {
+              updateMetadata.mutate({
+                act: {
+                  nutrition: {
+                    ...actData.nutrition!,
+                    entries: updated,
+                  },
+                },
+              });
+            }}
+            onReExtract={readOnly ? undefined : async () => {
+              if (!user?.id || !step?.interest_id || !stepId) return;
+              // Fetch the conversation used for original extraction (or the latest completed one)
+              const convId = actData.nutrition?.extraction_conversation_id;
+              const conversation = convId
+                ? await getActiveConversation(user.id, step.interest_id, 'train', stepId)
+                : await getActiveConversation(user.id, step.interest_id, 'train', stepId);
+              if (!conversation || conversation.messages.length < 2) return;
+              const completed = { ...conversation, messages: conversation.messages, status: 'completed' as const };
+              // Clear existing entries so extraction runs fresh
+              await updateMetadata.mutateAsync({ act: { nutrition: { entries: [], last_extracted_at: undefined } } });
+              // Re-run extraction with the now-higher max_tokens
+              await extractNutritionToStep(user.id, step.interest_id, stepId, completed);
+              queryClient.invalidateQueries({ queryKey: ['timeline-steps', 'detail', stepId] });
+            }}
+          />
+        </View>
+      ) : null}
 
       {/* ── WHAT WENT WELL? ── */}
       <View style={s.sectionWrap}>

@@ -2,6 +2,9 @@
  * Step Detail types — Plan/Act/Review metadata stored in timeline_steps.metadata
  */
 
+import type { StepMeasurements } from './measurements';
+import type { StepNutrition } from './step-nutrition';
+
 export interface SubStep {
   id: string;
   text: string;
@@ -70,6 +73,7 @@ export interface StepPlanData {
   linked_resource_ids?: string[];
   equipment_context?: AnyExtractedEntity[];
   date_enrichment?: DateEnrichment;
+  conversation_id?: string;               // AI conversation that created this plan
 }
 
 export interface StepActData {
@@ -78,6 +82,9 @@ export interface StepActData {
   media_uploads?: MediaUpload[];
   media_links?: MediaLink[];
   sub_step_progress?: Record<string, boolean>;
+  conversation_id?: string;               // AI conversation during training
+  measurements?: StepMeasurements;         // AI-extracted structured measurements
+  nutrition?: StepNutrition;               // AI-extracted nutrition data
 }
 
 export interface InstructorCompetencyAssessment {
@@ -109,6 +116,8 @@ export interface CrossInterestSuggestion {
   sourceInterestIcon: string | null;
   suggestion: string;
   relevance: string;
+  /** Suggested step category for the created step (e.g. 'nutrition', 'strength') */
+  suggestedCategory?: string;
 }
 
 // ---------------------------------------------------------------------------
