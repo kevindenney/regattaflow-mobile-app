@@ -4248,6 +4248,13 @@ export const SAMPLE_INTERESTS: SampleInterest[] = [
       { name: 'Chicago Medical Mission Network', orgSlugs: ['mayan-health-initiative', 'uic-medical-center', 'chicago-global-health-partners'] },
     ],
   },
+  {
+    slug: 'self-mastery',
+    name: 'Self-Mastery',
+    color: '#8B5CF6',
+    icon: 'shield-checkmark',
+    organizations: [],
+  },
 ];
 
 export function getInterest(slug: string): SampleInterest | undefined {
