@@ -87,7 +87,7 @@ export const getTabsForUserType = (
   if (isGuest) {
     return [
       { name: 'races', title: eventTitle, icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'connect', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'discover', title: 'Discover', icon: 'compass-outline', iconFocused: 'compass' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
       { name: 'search', title: 'Search', icon: 'search-outline', iconFocused: 'search' },
@@ -128,7 +128,7 @@ export const getTabsForUserType = (
   if (userType === 'sailor' || userType === 'coach') {
     const tabs: TabConfig[] = [
       { name: 'races', title: eventTitle, icon: 'flag-outline', iconFocused: 'flag' },
-      { name: 'connect', title: 'Connect', icon: 'people-outline', iconFocused: 'people' },
+      { name: 'discover', title: 'Discover', icon: 'compass-outline', iconFocused: 'compass' },
       { name: 'learn', title: 'Learn', icon: 'book-outline', iconFocused: 'book' },
       { name: 'reflect', title: 'Reflect', icon: 'stats-chart-outline', iconFocused: 'stats-chart' },
       { name: 'search', title: 'Search', icon: 'search-outline', iconFocused: 'search' },
@@ -157,7 +157,7 @@ export const getTabsForUserType = (
 // Navigation items by persona (used by NavigationDrawer and WebSidebarNav)
 export const SAILOR_NAV_ITEMS: NavItem[] = [
   { key: 'races', label: 'Race', route: '/(tabs)/races', icon: 'flag-outline' },
-  { key: 'connect', label: 'Connect', route: '/(tabs)/connect', icon: 'people-outline' },
+  { key: 'discover', label: 'Discover', route: '/(tabs)/discover', icon: 'compass-outline' },
   { key: 'learn', label: 'Learn', route: '/(tabs)/learn', icon: 'school-outline' },
   { key: 'reflect', label: 'Reflect', route: '/(tabs)/reflect', icon: 'stats-chart-outline' },
   { key: 'search', label: 'Search', route: '/(tabs)/search', icon: 'search-outline' },

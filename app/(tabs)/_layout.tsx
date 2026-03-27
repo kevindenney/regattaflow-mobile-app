@@ -38,21 +38,21 @@ const WebSidebarNav = Platform.OS === 'web'
 const WEB_SIDEBAR_MIN_WIDTH = 1024;
 
 const logger = createLogger('_layout');
-const TAB_SWEEP_REQUIRED_TABS = ['connect', 'learn', 'reflect'] as const;
+const TAB_SWEEP_REQUIRED_TABS = ['discover', 'learn', 'reflect'] as const;
 const isTabSweepRequiredTab = (tabName: string) =>
   TAB_SWEEP_REQUIRED_TABS.some((requiredTab) => requiredTab === tabName);
 const TAB_SWEEP_ROUTE_MAP: Record<(typeof TAB_SWEEP_REQUIRED_TABS)[number], string> = {
-  connect: '/connect',
+  discover: '/discover',
   learn: '/learn',
   reflect: '/reflect',
 };
 const TAB_SWEEP_META: Record<(typeof TAB_SWEEP_REQUIRED_TABS)[number], { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  connect: { label: 'Connect', icon: 'people-outline' },
+  discover: { label: 'Discover', icon: 'compass-outline' },
   learn: { label: 'Learn', icon: 'school-outline' },
   reflect: { label: 'Reflect', icon: 'stats-chart-outline' },
 };
 const ROUTES_WITH_CUSTOM_TOOLBAR = [
-  '/connect',
+  '/discover',
   '/learn',
   '/race-browser',
   '/races',
@@ -63,9 +63,9 @@ const TAB_SWEEP_CONTEXT_COPY: Record<
   (typeof TAB_SWEEP_REQUIRED_TABS)[number],
   { description: string; emptyHint: string }
 > = {
-  connect: {
-    description: 'Follow sailors, browse posts, and join community discussions.',
-    emptyHint: 'Start by following a few sailors or joining a community.',
+  discover: {
+    description: 'Browse interests, organizations, people, and community forums.',
+    emptyHint: 'Start by exploring interests or finding people to follow.',
   },
   learn: {
     description: 'Browse tactical courses and continue training plans.',
@@ -354,6 +354,7 @@ function TabLayoutInner() {
   const reflectTab = findTab('reflect');
   const coursesTab = findTab('courses');
   const connectTab = findTab('connect');
+  const discoverTab = findTab('discover');
   const searchTab = findTab('search');
   const followTab = findTab('follow');
   const communityTab = findTab('community');
@@ -453,23 +454,30 @@ function TabLayoutInner() {
                 : undefined,
           }}
         />
-        {/* Tab 2: Connect (merged Follow + Discuss) */}
+        {/* Tab 2: Discover (replaces Connect) */}
         <Tabs.Screen
-          name="connect"
+          name="discover"
           options={{
-            title: connectTab?.title ?? 'Connect',
+            title: discoverTab?.title ?? 'Discover',
             tabBarIcon: isSailorUser ? () => null : ({ color, size, focused }) => (
               <Ionicons
-                name={getIconName(connectTab, focused, connectTab?.iconFocused ?? 'people', connectTab?.icon ?? 'people-outline') as any}
+                name={getIconName(discoverTab, focused, discoverTab?.iconFocused ?? 'compass', discoverTab?.icon ?? 'compass-outline') as any}
                 size={size}
                 color={color}
               />
             ),
-            tabBarButton: !isTabVisible('connect')
+            tabBarButton: !isTabVisible('discover')
               ? () => null
               : isSailorUser
-                ? renderSailorTabButton('connect', connectTab?.title ?? 'Connect', connectTab)
+                ? renderSailorTabButton('discover', discoverTab?.title ?? 'Discover', discoverTab)
                 : undefined,
+          }}
+        />
+        {/* Hidden: Legacy connect route (redirects to discover) */}
+        <Tabs.Screen
+          name="connect"
+          options={{
+            href: null,
           }}
         />
         {/* Hidden: Legacy follow route (redirects to connect) */}
@@ -482,13 +490,6 @@ function TabLayoutInner() {
         {/* Hidden: Legacy community route (redirects to connect) */}
         <Tabs.Screen
           name="community"
-          options={{
-            href: null,
-          }}
-        />
-        {/* Hidden: Legacy discover route (redirects to community) */}
-        <Tabs.Screen
-          name="discover"
           options={{
             href: null,
           }}
