@@ -67,6 +67,7 @@ export function ConversationalCapture({
       let insightsBlock = '';
       let measurementBlock = '';
       let libraryBlock = '';
+      let loadedInsights: Awaited<ReturnType<typeof getActiveInsights>> = [];
 
       try {
         const [manifesto, insights, measurementHistory, libraryResources] = await Promise.all([
@@ -78,6 +79,7 @@ export function ConversationalCapture({
             .catch(() => [] as any[]),
         ]);
 
+        loadedInsights = insights;
         if (manifesto?.content?.trim()) {
           manifestoBlock = `\n\nUSER'S MANIFESTO (their vision and philosophy for ${interestName}):\n${manifesto.content}`;
           if (manifesto.philosophies?.length) {
@@ -136,7 +138,7 @@ Guidelines:
 
       setSystemPrompt(prompt);
 
-      // Build contextual opening message
+      // Build contextual opening message with insight enrichment
       let opening = `What are you working on today?`;
       try {
         const manifesto = await getManifesto(user.id, interestId);
@@ -149,6 +151,18 @@ Guidelines:
           }
         }
       } catch {}
+
+      // Enrich with most relevant recent insight
+      if (loadedInsights.length) {
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        const recent = loadedInsights
+          .filter((i: { created_at: string }) => new Date(i.created_at) > twoWeeksAgo)
+          .sort((a: { confidence: number }, b: { confidence: number }) => b.confidence - a.confidence);
+        if (recent.length) {
+          opening += ` From our recent conversations, I noticed: ${recent[0].content}.`;
+        }
+      }
 
       setOpeningMessage(opening);
     })();
