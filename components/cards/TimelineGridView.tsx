@@ -94,6 +94,7 @@ function groupByMonthIndexed(
   indexedRaces: IndexedRace[],
   sortMode?: 'planned' | 'done',
   nextRaceIdx?: number | null,
+  preserveOrder = false,
 ): MonthGroup[] {
   const groups = new Map<string, MonthGroup>();
 
@@ -113,47 +114,49 @@ function groupByMonthIndexed(
 
   const result = Array.from(groups.values());
 
-  if (sortMode === 'planned') {
-    // Within each month: steps/actionable items first, then plan-phase items
-    for (const group of result) {
-      group.races.sort((a, b) => {
-        const aIsStep = !!(a.race as any).isTimelineStep;
-        const bIsStep = !!(b.race as any).isTimelineStep;
+  if (!preserveOrder) {
+    if (sortMode === 'planned') {
+      // Within each month: steps/actionable items first, then plan-phase items
+      for (const group of result) {
+        group.races.sort((a, b) => {
+          const aIsStep = !!(a.race as any).isTimelineStep;
+          const bIsStep = !!(b.race as any).isTimelineStep;
 
-        // Priority: NEXT item always first
-        const aIsNext = a.index === nextRaceIdx;
-        const bIsNext = b.index === nextRaceIdx;
-        if (aIsNext && !bIsNext) return -1;
-        if (!aIsNext && bIsNext) return 1;
+          // Priority: NEXT item always first
+          const aIsNext = a.index === nextRaceIdx;
+          const bIsNext = b.index === nextRaceIdx;
+          if (aIsNext && !bIsNext) return -1;
+          if (!aIsNext && bIsNext) return 1;
 
-        // Steps in "do" phase (in_progress) before plan phase
-        const aStatus = (a.race as any).status;
-        const bStatus = (b.race as any).status;
-        const aIsDoing = aIsStep && aStatus === 'in_progress';
-        const bIsDoing = bIsStep && bStatus === 'in_progress';
-        if (aIsDoing && !bIsDoing) return -1;
-        if (!aIsDoing && bIsDoing) return 1;
+          // Steps in "do" phase (in_progress) before plan phase
+          const aStatus = (a.race as any).status;
+          const bStatus = (b.race as any).status;
+          const aIsDoing = aIsStep && aStatus === 'in_progress';
+          const bIsDoing = bIsStep && bStatus === 'in_progress';
+          if (aIsDoing && !bIsDoing) return -1;
+          if (!aIsDoing && bIsDoing) return 1;
 
-        // Steps (non-plan-phase) before plan-phase items
-        const aIsPlanPhase = aIsStep && aStatus !== 'completed' && aStatus !== 'in_progress';
-        const bIsPlanPhase = bIsStep && bStatus !== 'completed' && bStatus !== 'in_progress';
-        if (!aIsPlanPhase && bIsPlanPhase) return -1;
-        if (aIsPlanPhase && !bIsPlanPhase) return 1;
+          // Steps (non-plan-phase) before plan-phase items
+          const aIsPlanPhase = aIsStep && aStatus !== 'completed' && aStatus !== 'in_progress';
+          const bIsPlanPhase = bIsStep && bStatus !== 'completed' && bStatus !== 'in_progress';
+          if (!aIsPlanPhase && bIsPlanPhase) return -1;
+          if (aIsPlanPhase && !bIsPlanPhase) return 1;
 
-        // Within same category, sort by date ascending (soonest left)
-        const aDate = (a.race as any).start_date || a.race.date;
-        const bDate = (b.race as any).start_date || b.race.date;
-        return new Date(aDate).getTime() - new Date(bDate).getTime();
-      });
-    }
-  } else if (sortMode === 'done') {
-    // Within each month: chronological order (oldest left → most recent right)
-    for (const group of result) {
-      group.races.sort((a, b) => {
-        const aDate = (a.race as any).start_date || a.race.date;
-        const bDate = (b.race as any).start_date || b.race.date;
-        return new Date(aDate).getTime() - new Date(bDate).getTime();
-      });
+          // Within same category, sort by date ascending (soonest left)
+          const aDate = (a.race as any).start_date || a.race.date;
+          const bDate = (b.race as any).start_date || b.race.date;
+          return new Date(aDate).getTime() - new Date(bDate).getTime();
+        });
+      }
+    } else if (sortMode === 'done') {
+      // Within each month: chronological order (oldest left → most recent right)
+      for (const group of result) {
+        group.races.sort((a, b) => {
+          const aDate = (a.race as any).start_date || a.race.date;
+          const bDate = (b.race as any).start_date || b.race.date;
+          return new Date(aDate).getTime() - new Date(bDate).getTime();
+        });
+      }
     }
   }
 
@@ -224,6 +227,8 @@ const MiniCard = React.memo(function MiniCard({
   onPress,
   isReorderMode = false,
   isDragging = false,
+  isDropTarget = false,
+  reorderIndex,
   onDragStartCard,
   onDragEnterCard,
   onDropCard,
@@ -245,6 +250,8 @@ const MiniCard = React.memo(function MiniCard({
   onPress: () => void;
   isReorderMode?: boolean;
   isDragging?: boolean;
+  isDropTarget?: boolean;
+  reorderIndex?: number;
   onDragStartCard?: () => void;
   onDragEnterCard?: () => void;
   onDropCard?: () => void;
@@ -295,33 +302,18 @@ const MiniCard = React.memo(function MiniCard({
   const dndRef = React.useRef<any>(null);
   const dndCallbacks = React.useRef({ onDragStartCard, onDragEnterCard, onDropCard });
   dndCallbacks.current = { onDragStartCard, onDragEnterCard, onDropCard };
+  // HTML5 drag-and-drop disabled — tap-to-reorder is used on all platforms
+  // because React Native Web's touch handling swallows click events when
+  // draggable="true" is set, preventing the second tap from firing.
   React.useEffect(() => {
-    if (Platform.OS !== 'web' || !isReorderMode) {
-      if (dndRef.current) dndRef.current.removeAttribute?.('draggable');
-      return;
-    }
-    const el = dndRef.current;
-    if (!el) return;
-    el.setAttribute('draggable', 'true');
-    const handleDragStart = () => dndCallbacks.current.onDragStartCard?.();
-    const handleDragEnter = (e: Event) => { e.preventDefault(); dndCallbacks.current.onDragEnterCard?.(); };
-    const handleDragOver = (e: Event) => { e.preventDefault(); };
-    const handleDrop = (e: Event) => { e.preventDefault(); dndCallbacks.current.onDropCard?.(); };
-    el.addEventListener('dragstart', handleDragStart);
-    el.addEventListener('dragenter', handleDragEnter);
-    el.addEventListener('dragover', handleDragOver);
-    el.addEventListener('drop', handleDrop);
-    return () => {
-      el.removeAttribute('draggable');
-      el.removeEventListener('dragstart', handleDragStart);
-      el.removeEventListener('dragenter', handleDragEnter);
-      el.removeEventListener('dragover', handleDragOver);
-      el.removeEventListener('drop', handleDrop);
-    };
+    if (dndRef.current) dndRef.current.removeAttribute?.('draggable');
   }, [isReorderMode]);
 
   return (
-    <View ref={dndRef}>
+    <View
+      ref={dndRef}
+      style={isReorderMode && Platform.OS === 'web' ? { userSelect: 'none', WebkitUserSelect: 'none' } as any : undefined}
+    >
     <AnimatedPressable
       style={[
         miniStyles.card,
@@ -329,9 +321,11 @@ const MiniCard = React.memo(function MiniCard({
         isNext && miniStyles.cardNext,
         isReorderMode && miniStyles.cardReorderMode,
         isDragging && miniStyles.cardDragging,
+        isDropTarget && miniStyles.cardDropTarget,
         animStyle,
       ]}
       onPress={() => {
+
         if (isMenuOpen) {
           onCloseMenu();
           return;
@@ -342,12 +336,44 @@ const MiniCard = React.memo(function MiniCard({
       onLongPress={isReorderMode && Platform.OS !== 'web' ? onLongPressCard : undefined}
       delayLongPress={140}
       onPressIn={() => {
-        scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
+        if (!isReorderMode) {
+          scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
+        }
       }}
       onPressOut={() => {
-        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+        if (!isReorderMode) {
+          scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+        }
       }}
     >
+      {/* Green "now" bar on the left edge for next step */}
+      {isNext && <View style={miniStyles.nowBar} />}
+
+      {/* Reorder mode: order badge */}
+      {isReorderMode && reorderIndex != null && (
+        <View pointerEvents="none" style={[miniStyles.reorderBadge, isDragging && miniStyles.reorderBadgeActive]}>
+          <Text style={[miniStyles.reorderBadgeText, isDragging && miniStyles.reorderBadgeTextActive]}>
+            {reorderIndex + 1}
+          </Text>
+        </View>
+      )}
+
+      {/* Reorder mode: "MOVING" label on selected card */}
+      {isDragging && (
+        <View pointerEvents="none" style={miniStyles.movingLabel}>
+          <Ionicons name="move-outline" size={10} color="#FFFFFF" />
+          <Text style={miniStyles.movingLabelText}>MOVING</Text>
+        </View>
+      )}
+
+      {/* Reorder mode: drop target hint */}
+      {isDropTarget && (
+        <View pointerEvents="none" style={miniStyles.dropTargetHint}>
+          <Ionicons name="arrow-down-circle-outline" size={14} color="#3B82F6" />
+          <Text style={miniStyles.dropTargetHintText}>Drop here</Text>
+        </View>
+      )}
+
       <View style={miniStyles.topRow}>
         {/* Status badge */}
         <View style={[miniStyles.statusBadge, { backgroundColor: statusColor }]}>
@@ -645,8 +671,8 @@ export function TimelineGridView({
       return !isRacePast(dateStr, race.startTime);
     });
   }, [indexedRaces, nextRaceIndex]);
-  const plannedGroups = useMemo(() => groupByMonthIndexed(plannedIndexedRaces, 'planned', nextRaceIndex), [plannedIndexedRaces, nextRaceIndex]);
-  const doneGroups = useMemo(() => groupByMonthIndexed(doneIndexedRaces, 'done'), [doneIndexedRaces]);
+  const plannedGroups = useMemo(() => groupByMonthIndexed(plannedIndexedRaces, 'planned', nextRaceIndex, reorderMode), [plannedIndexedRaces, nextRaceIndex, reorderMode]);
+  const doneGroups = useMemo(() => groupByMonthIndexed(doneIndexedRaces, 'done', null, reorderMode), [doneIndexedRaces, reorderMode]);
 
   const handleSelectRace = useCallback(
     (index: number, race: CardRaceData) => {
@@ -674,52 +700,69 @@ export function TimelineGridView({
 
   useEffect(() => {
     if (!canReorder && reorderMode) {
+      // Flush any pending reorder before exiting
+      if (pendingOrderRef.current) {
+        const order = pendingOrderRef.current;
+        pendingOrderRef.current = null;
+        void onReorderRaces?.(order);
+      }
       setReorderMode(false);
       setDragRaceId(null);
     }
-  }, [canReorder, reorderMode]);
+  }, [canReorder, reorderMode, onReorderRaces]);
 
   const clearBulk = useCallback(() => {
     setBulkMode(false);
     setSelectedRaceIds(new Set());
   }, []);
 
+  // Pending reorder: store locally, only persist to parent when exiting reorder mode
+  const pendingOrderRef = useRef<string[] | null>(null);
+
   const applyReorder = useCallback((fromId: string, toId: string) => {
+
     if (!fromId || !toId || fromId === toId) return;
-    let reorderedIds: string[] | null = null;
     setOrderedIds((prev) => {
       const current = prev.length ? [...prev] : races.map((race) => race.id);
       const fromIdx = current.indexOf(fromId);
       const toIdx = current.indexOf(toId);
+
       if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return current;
       const next = [...current];
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
-      reorderedIds = next;
+
+      pendingOrderRef.current = next;
       return next;
     });
-    // Defer parent callback to avoid setState-during-render error
-    queueMicrotask(() => {
-      if (reorderedIds) void onReorderRaces?.(reorderedIds);
-    });
-  }, [onReorderRaces, races]);
+  }, [races]);
+
+  // Use a ref so the press handler always reads the latest dragRaceId
+  // without needing it in the dependency array (which would recreate the
+  // callback on every selection and potentially cause stale-closure issues).
+  const dragRaceIdPressRef = useRef<string | null>(null);
+  dragRaceIdPressRef.current = dragRaceId;
 
   const handleCardPress = useCallback((index: number, race: CardRaceData) => {
-    if (reorderMode && Platform.OS !== 'web') {
-      if (!dragRaceId) {
+    if (reorderMode) {
+      const currentDrag = dragRaceIdPressRef.current;
+
+
+      if (!currentDrag) {
         setDragRaceId(race.id);
         return;
       }
-      if (dragRaceId === race.id) {
+      if (currentDrag === race.id) {
         setDragRaceId(null);
         return;
       }
-      applyReorder(dragRaceId, race.id);
-      setDragRaceId(null);
+      // Apply reorder locally (no parent callback — avoids remount)
+      applyReorder(currentDrag, race.id);
+      // Keep card selected for further moves
       return;
     }
     handleSelectRace(index, race);
-  }, [applyReorder, dragRaceId, handleSelectRace, reorderMode]);
+  }, [applyReorder, handleSelectRace, reorderMode]);
 
   return (
     <Animated.View
@@ -760,7 +803,18 @@ export function TimelineGridView({
               <Pressable
                 style={[gridStyles.bulkChip, reorderMode && gridStyles.bulkChipActive]}
                 onPress={() => {
-                  setReorderMode((prev) => !prev);
+                  setReorderMode((prev) => {
+                    if (prev) {
+                      // Exiting reorder mode — flush pending order to parent
+                      if (pendingOrderRef.current) {
+                        const order = pendingOrderRef.current;
+                        pendingOrderRef.current = null;
+                        queueMicrotask(() => void onReorderRaces?.(order));
+                      }
+                      setDragRaceId(null);
+                    }
+                    return !prev;
+                  });
                   setBulkMode(false);
                   setSelectedRaceIds(new Set());
                 }}
@@ -810,9 +864,19 @@ export function TimelineGridView({
           )}
         </View>
 
-        {reorderMode && Platform.OS !== 'web' ? (
-          <View style={gridStyles.reorderHelpBar}>
-            <Text style={gridStyles.reorderHelpText}>Long-press a step, then tap another step to move it.</Text>
+        {reorderMode ? (
+          <View style={[gridStyles.reorderHelpBar, dragRaceId && gridStyles.reorderHelpBarActive]}>
+            <Ionicons
+              name={dragRaceId ? 'swap-vertical' : 'hand-left-outline'}
+              size={14}
+              color={dragRaceId ? '#3B82F6' : IOS_COLORS.secondaryLabel}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[gridStyles.reorderHelpText, dragRaceId && gridStyles.reorderHelpTextActive]}>
+              {dragRaceId
+                ? `Tap where to place "${orderedRaces.find((r) => r.id === dragRaceId)?.name || 'step'}", or tap it again to deselect`
+                : 'Tap a step to select it for moving'}
+            </Text>
           </View>
         ) : null}
 
@@ -845,20 +909,22 @@ export function TimelineGridView({
                     return (
                   <MiniCard
                     race={race}
-                    isSelected={bulkMode ? selectedRaceIds.has(race.id) : race.id === selectedRaceId}
-                    isNext={index === nextRaceIndex}
+                    isSelected={reorderMode ? false : bulkMode ? selectedRaceIds.has(race.id) : race.id === selectedRaceId}
+                    isNext={reorderMode ? false : index === nextRaceIndex}
                     canManage={canManage}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onHide={handleHide}
                     onOpenDetail={handleOpenDetail}
                     onMarkDone={canManage && isStep && onMarkDone ? () => onMarkDone(race.id) : undefined}
-                    isMenuOpen={openMenuRaceId === race.id}
+                    isMenuOpen={reorderMode ? false : openMenuRaceId === race.id}
                     onOpenMenu={() => setOpenMenuRaceId(race.id)}
                     onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
                     onPress={() => handleCardPress(index, race)}
                     isReorderMode={reorderMode}
                     isDragging={dragRaceId === race.id}
+                    isDropTarget={reorderMode && !!dragRaceId && dragRaceId !== race.id}
+                    reorderIndex={reorderMode ? orderedIds.indexOf(race.id) : undefined}
                     onLongPressCard={() => {
                       if (!reorderMode || Platform.OS === 'web') return;
                       setDragRaceId(race.id);
@@ -916,19 +982,21 @@ export function TimelineGridView({
                     return (
                       <MiniCard
                         race={race}
-                        isSelected={bulkMode ? selectedRaceIds.has(race.id) : race.id === selectedRaceId}
-                        isNext={index === nextRaceIndex}
+                        isSelected={reorderMode ? false : bulkMode ? selectedRaceIds.has(race.id) : race.id === selectedRaceId}
+                        isNext={reorderMode ? false : index === nextRaceIndex}
                         canManage={canManage}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
                         onOpenDetail={handleOpenDetail}
                         onMarkNotDone={canManage && isStep && onMarkNotDone ? () => onMarkNotDone(race.id) : undefined}
-                        isMenuOpen={openMenuRaceId === race.id}
+                        isMenuOpen={reorderMode ? false : openMenuRaceId === race.id}
                         onOpenMenu={() => setOpenMenuRaceId(race.id)}
                         onCloseMenu={() => setOpenMenuRaceId((current) => (current === race.id ? null : current))}
                         onPress={() => handleCardPress(index, race)}
                         isReorderMode={reorderMode}
                         isDragging={dragRaceId === race.id}
+                        isDropTarget={reorderMode && !!dragRaceId && dragRaceId !== race.id}
+                        reorderIndex={reorderMode ? orderedIds.indexOf(race.id) : undefined}
                         onLongPressCard={() => {
                           if (!reorderMode || Platform.OS === 'web') return;
                           setDragRaceId(race.id);
@@ -1004,20 +1072,101 @@ const miniStyles = StyleSheet.create({
     borderWidth: 2,
     borderColor: IOS_COLORS.green,
   },
+  nowBar: {
+    position: 'absolute',
+    left: 0,
+    top: 6,
+    bottom: 6,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: IOS_COLORS.green,
+    zIndex: 5,
+  },
   cardReorderMode: {
     ...Platform.select({
       web: {
         cursor: 'grab',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       } as any,
     }),
   },
   cardDragging: {
-    opacity: 0.55,
+    opacity: 0.85,
+    borderColor: '#3B82F6',
+    borderWidth: 2,
+    backgroundColor: '#EFF6FF',
     ...Platform.select({
       web: {
         cursor: 'grabbing',
+        boxShadow: '0 0 0 3px rgba(59,130,246,0.3), 0 4px 12px rgba(59,130,246,0.15)',
       } as any,
     }),
+  },
+  cardDropTarget: {
+    borderWidth: 2,
+    borderColor: '#93C5FD',
+    borderStyle: 'dashed' as any,
+    backgroundColor: '#F0F9FF',
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      } as any,
+    }),
+  },
+  reorderBadge: {
+    position: 'absolute',
+    top: -6,
+    left: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  reorderBadgeActive: {
+    backgroundColor: '#3B82F6',
+  },
+  reorderBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  reorderBadgeTextActive: {
+    color: '#FFFFFF',
+  },
+  movingLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 3,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  movingLabelText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.8,
+  },
+  dropTargetHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 3,
+    marginBottom: 2,
+  },
+  dropTargetHintText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
   statusBadge: {
     alignSelf: 'flex-start',
@@ -1252,13 +1401,28 @@ const gridStyles = StyleSheet.create({
     color: '#B91C1C',
   },
   reorderHelpBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  reorderHelpBarActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
   },
   reorderHelpText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: IOS_COLORS.secondaryLabel,
+    flex: 1,
+  },
+  reorderHelpTextActive: {
+    color: '#2563EB',
   },
   monthSection: {
     marginBottom: 20,
@@ -1307,10 +1471,10 @@ const gridStyles = StyleSheet.create({
   nowDividerLine: {
     flex: 1,
     height: 2,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#34D399',
   },
   nowDividerBadge: {
-    backgroundColor: '#0EA5E9',
+    backgroundColor: '#34D399',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 3,
