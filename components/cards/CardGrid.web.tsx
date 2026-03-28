@@ -36,6 +36,8 @@ import {
 import { CardWidthContext } from './CardWidthContext';
 import { TimeAxisRace } from '@/components/races/TimelineTimeAxis';
 
+const NOW_DIVIDER_WIDTH = 32; // Width of the NOW separator between cards
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -126,7 +128,10 @@ function CardGridComponent({
     if (newIdx >= 0 && newIdx !== currentRaceIndex) {
       // Same race is now at a different index — re-center without calling onRaceChange
       setCurrentRaceIndex(newIdx);
-      const offset = (dimensions.cardWidth + HORIZONTAL_CARD_GAP) * newIdx;
+      const cardStep = dimensions.cardWidth + HORIZONTAL_CARD_GAP;
+      const dividerExtra = NOW_DIVIDER_WIDTH + HORIZONTAL_CARD_GAP;
+      let offset = newIdx * cardStep;
+      if (nextRaceIndex != null && newIdx >= nextRaceIndex) offset += dividerExtra;
       horizontalScrollRef.current?.scrollTo({ x: offset, animated: false });
     }
   }, [races, currentRaceIndex, dimensions.cardWidth]);
@@ -220,10 +225,19 @@ function CardGridComponent({
   // ==========================================================================
 
   // Pre-compute the scroll offset for each card index
+  // Account for the NOW divider that appears before the nextRaceIndex card
   const snapOffsets = useMemo(() => {
     const cardStep = dimensions.cardWidth + HORIZONTAL_CARD_GAP;
-    return races.map((_, i) => i * cardStep);
-  }, [races, dimensions.cardWidth]);
+    const dividerExtra = NOW_DIVIDER_WIDTH + HORIZONTAL_CARD_GAP; // divider width + its gap
+    return races.map((_, i) => {
+      let offset = i * cardStep;
+      // If there's a NOW divider and this card is at or after it, shift by divider width
+      if (nextRaceIndex != null && i >= nextRaceIndex) {
+        offset += dividerExtra;
+      }
+      return offset;
+    });
+  }, [races, dimensions.cardWidth, nextRaceIndex]);
 
   // ==========================================================================
   // NAVIGATION
@@ -364,17 +378,10 @@ function CardGridComponent({
               height: cardHeight,
               borderRadius: CARD_BORDER_RADIUS,
             },
-            isNextRace && styles.cardNext,
             isLastDone && styles.cardLastDone,
           ]}
         >
-          {isNextRace && <View style={styles.nowBar} />}
-          {isNextRace ? (
-            <View style={styles.badgeNext}>
-              <View style={styles.badgeDotNext} />
-              <Text style={styles.badgeTextNext}>NEXT</Text>
-            </View>
-          ) : null}
+          {/* NOW bar is rendered as a standalone separator between cards */}
           {isLastDone && !isActive ? (
             <View style={styles.badgeDone}>
               <View style={styles.badgeDotDone} />
@@ -474,8 +481,19 @@ function CardGridComponent({
           if (typeof window !== 'undefined' && (window as any).__PERIOD_DEBUG__?.enabled) {
             (window as any).__PERIOD_DEBUG__.log('CardGrid.web.renderCard', raceIndex, { raceId: race.id, raceName: race.name, raceIndex });
           }
+          const isNextRace = nextRaceIndex != null && raceIndex === nextRaceIndex;
           return (
             <React.Fragment key={race.id}>
+              {/* NOW divider — standalone separator before the next step */}
+              {isNextRace && (
+                <View style={styles.nowDivider}>
+                  <View style={styles.nowDividerLine} />
+                  <View style={styles.nowDividerLabel}>
+                    <Text style={styles.nowDividerText}>NOW</Text>
+                  </View>
+                  <View style={styles.nowDividerLine} />
+                </View>
+              )}
               {renderCard(race, raceIndex)}
             </React.Fragment>
           );
@@ -543,39 +561,36 @@ const styles = StyleSheet.create({
     // @ts-ignore - Web-only property
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08)',
   },
-  cardNext: {
-    borderWidth: 2,
-    borderColor: 'rgba(52, 199, 89, 0.65)',
+  nowDivider: {
+    width: NOW_DIVIDER_WIDTH,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'column',
+    gap: 6,
   },
-  nowBar: {
-    position: 'absolute',
-    left: 0,
-    top: 16,
-    bottom: 16,
-    width: 4,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
+  nowDividerLine: {
+    flex: 1,
+    width: 2,
     backgroundColor: IOS_COLORS.green,
-    zIndex: 10,
+    borderRadius: 1,
+    opacity: 0.4,
+  },
+  nowDividerLabel: {
+    backgroundColor: IOS_COLORS.green,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  nowDividerText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: '#FFFFFF',
   },
   cardLastDone: {
     borderWidth: 2,
     borderColor: 'rgba(107, 114, 128, 0.55)',
-  },
-  badgeNext: {
-    position: 'absolute',
-    top: 8,
-    right: 40,
-    zIndex: 12,
-    backgroundColor: 'rgba(52, 199, 89, 0.12)',
-    borderColor: 'rgba(52, 199, 89, 0.35)',
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
   },
   badgeDone: {
     position: 'absolute',
@@ -592,23 +607,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
-  badgeDotNext: {
-    width: 6,
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: '#34C759',
-  },
   badgeDotDone: {
     width: 6,
     height: 6,
     borderRadius: 999,
     backgroundColor: '#6B7280',
-  },
-  badgeTextNext: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    color: '#1F7A3B',
   },
   badgeTextDone: {
     fontSize: 10,

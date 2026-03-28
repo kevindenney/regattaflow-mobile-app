@@ -2221,12 +2221,7 @@ export function RaceSummaryCard({
           >
             {/* Simplified Header: Race type badge + Countdown */}
             <View style={styles.simpleHeaderWrapper}>
-            {showNextRibbon && (
-              <View style={styles.nextBookmarkRibbon}>
-                <Ionicons name="bookmark" size={11} color="#047857" />
-                <Text style={styles.nextBookmarkRibbonText}>Next</Text>
-              </View>
-            )}
+            {/* NOW bookmark is now rendered by CardGrid on the card edge */}
             <View style={styles.simpleHeaderRow}>
           {/* Status badge: past = green checkmark + result; future = race type */}
           {isTimelineDone ? (
@@ -2283,6 +2278,16 @@ export function RaceSummaryCard({
                 </>
               )}
             </View>
+            )}
+            {/* Mark Done button - visible for incomplete timeline steps */}
+            {!isTimelineDone && onMoveStepToCompletedMostRecent && (
+              <Pressable
+                onPress={onMoveStepToCompletedMostRecent}
+                style={styles.markDoneButton}
+                accessibilityLabel="Mark step as done"
+              >
+                <Ionicons name="checkmark-circle-outline" size={22} color={IOS_COLORS.green} />
+              </Pressable>
             )}
             {/* Three-dot menu (includes Share Race, Crew Chat) */}
             {menuItems.length > 0 && (
@@ -4158,6 +4163,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  markDoneButton: {
+    padding: 4,
+    borderRadius: 999,
   },
   countdownSimple: {
     alignItems: 'center',

@@ -132,9 +132,14 @@ export function CardShell({
     ]}
       testID={testID}
     >
-      {/* Green now bar on the left edge of the next step card */}
+      {/* NOW bar on the left edge of the next step card */}
       {isNextRace && (
-        <View style={styles.nowBar} />
+        <>
+          <View style={styles.nowBarStripe} />
+          <View style={styles.nowLabel}>
+            <Text style={styles.nowLabelText}>NOW</Text>
+          </View>
+        </>
       )}
       {isLastDone && relativeX !== gridState.currentRaceIndex.value ? (
         <View style={styles.lastDoneBadge}>
@@ -192,16 +197,32 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(52, 199, 89, 0.65)',
   },
-  nowBar: {
+  nowBarStripe: {
     position: 'absolute',
     left: 0,
-    top: 16,
-    bottom: 16,
+    top: 0,
+    bottom: 0,
     width: 4,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
     backgroundColor: IOS_COLORS.green,
-    zIndex: 10,
+    borderTopLeftRadius: 10,
+    borderBottomLeftRadius: 10,
+    zIndex: 12,
+  },
+  nowLabel: {
+    position: 'absolute',
+    top: -12,
+    left: -4,
+    zIndex: 13,
+    backgroundColor: IOS_COLORS.green,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  nowLabelText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: '#FFFFFF',
   },
   lastDoneCard: {
     borderWidth: 2,

@@ -803,8 +803,8 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
       {readOnly ? null : !isCompleted ? (
         <View style={s.buttonGroup}>
           <Pressable style={s.saveButton} onPress={handleSaveReview}>
-            <Ionicons name="save-outline" size={18} color="#FFFFFF" />
-            <Text style={s.saveButtonText}>Save Review</Text>
+            <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
+            <Text style={s.saveButtonText}>Complete & Save Review</Text>
           </Pressable>
           <Pressable style={s.shareButton} onPress={() => setShareSheetOpen(true)}>
             <Ionicons name="share-outline" size={18} color={C.labelMid} />

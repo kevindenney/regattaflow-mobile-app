@@ -346,8 +346,15 @@ const MiniCard = React.memo(function MiniCard({
         }
       }}
     >
-      {/* Green "now" bar on the left edge for next step */}
-      {isNext && <View style={miniStyles.nowBar} />}
+      {/* NOW bar on the left edge for next step */}
+      {isNext && (
+        <>
+          <View style={miniStyles.nowBarStripe} />
+          <View style={miniStyles.nowLabel}>
+            <Text style={miniStyles.nowLabelText}>NOW</Text>
+          </View>
+        </>
+      )}
 
       {/* Reorder mode: order badge */}
       {isReorderMode && reorderIndex != null && (
@@ -1072,15 +1079,32 @@ const miniStyles = StyleSheet.create({
     borderWidth: 2,
     borderColor: IOS_COLORS.green,
   },
-  nowBar: {
+  nowBarStripe: {
     position: 'absolute',
     left: 0,
-    top: 6,
-    bottom: 6,
+    top: 0,
+    bottom: 0,
     width: 3,
-    borderRadius: 2,
     backgroundColor: IOS_COLORS.green,
-    zIndex: 5,
+    borderTopLeftRadius: 6,
+    borderBottomLeftRadius: 6,
+    zIndex: 10,
+  },
+  nowLabel: {
+    position: 'absolute',
+    top: -8,
+    left: -3,
+    zIndex: 11,
+    backgroundColor: IOS_COLORS.green,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  nowLabelText: {
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: '#FFFFFF',
   },
   cardReorderMode: {
     ...Platform.select({
