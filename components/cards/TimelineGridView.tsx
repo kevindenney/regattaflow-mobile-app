@@ -182,7 +182,7 @@ function getRaceStatusLabel(race: CardRaceData, isNext: boolean): string {
   if (isNext) return 'NEXT';
   // Timeline steps carry an explicit status — use it instead of date logic
   if ((race as any).isTimelineStep) {
-    const s = (race as any).status;
+    const s = (race as any).stepStatus || (race as any).status;
     if (s === 'completed') return 'DONE';
     if (s === 'in_progress') return 'NOW';
     return 'PLANNED';

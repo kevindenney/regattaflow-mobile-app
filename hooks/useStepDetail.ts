@@ -24,6 +24,11 @@ export function useStepDetail(stepId: string | undefined) {
     queryKey: KEYS.stepDetail(stepId ?? ''),
     queryFn: () => getStepById(stepId!),
     enabled: Boolean(stepId),
+    retry: (failureCount, error) => {
+      // Don't retry "not found" errors — step was likely deleted
+      if (error?.message?.includes('not found')) return false;
+      return failureCount < 2;
+    },
   });
 }
 

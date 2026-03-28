@@ -19,6 +19,8 @@ import { CourseContextSheet } from './CourseContextSheet';
 import { ResourcePicker } from '@/components/library/ResourcePicker';
 import { ResourceTypeIcon } from '@/components/library/ResourceTypeIcon';
 import { useStepDetail, useUpdateStepMetadata } from '@/hooks/useStepDetail';
+import { useUpdateStep } from '@/hooks/useTimelineSteps';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { useInterest } from '@/providers/InterestProvider';
 import { getResourcesByIds } from '@/services/LibraryService';
@@ -60,6 +62,8 @@ export function StepPlanQuestions({
 }: StepPlanQuestionsProps) {
   const { data: step } = useStepDetail(stepId);
   const updateMetadata = useUpdateStepMetadata(stepId);
+  const updateStep = useUpdateStep();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { currentInterest, userInterests } = useInterest();
   const catLabels = getStepCategoryLabels(step?.category);
@@ -461,6 +465,31 @@ export function StepPlanQuestions({
       const ctx = await buildEnrichedCtx();
       if (!ctx) return;
       const text = await generateEnrichedPlanSuggestion(ctx);
+
+      // Parse title from first line (AI returns: title\n\nbody)
+      const lines = text.split('\n');
+      const firstLine = lines[0]?.trim() || '';
+      const bodyStart = lines.findIndex((l, i) => i > 0 && l.trim() !== '');
+      const body = bodyStart >= 0 ? lines.slice(bodyStart).join('\n').trim() : text;
+      const suggestedTitle = firstLine.length > 0 && firstLine.length <= 80 ? firstLine : '';
+
+      // Auto-fill the "what" field with the suggestion body
+      setLocalWhat(body);
+      debouncedSave({ what_will_you_do: body });
+
+      // Update the step title with the AI-suggested title
+      if (suggestedTitle) {
+        // Optimistically update timeline-steps caches so card title updates immediately
+        queryClient.setQueriesData<any[]>(
+          { queryKey: ['timeline-steps'] },
+          (old) => {
+            if (!Array.isArray(old)) return old;
+            return old.map((s) => (s.id === stepId ? { ...s, title: suggestedTitle } : s));
+          },
+        );
+        updateStep.mutate({ stepId, input: { title: suggestedTitle } });
+      }
+
       setAiSuggestion(text);
       // Seed the refinement chat with the initial exchange
       setRefinementChat([
@@ -472,7 +501,7 @@ export function StepPlanQuestions({
     } finally {
       setAiLoading(false);
     }
-  }, [aiLoading, buildEnrichedCtx]);
+  }, [aiLoading, buildEnrichedCtx, debouncedSave, step?.title, stepId, updateStep]);
 
   const handleRefinementSend = useCallback(async () => {
     const trimmed = refinementInput.trim();
@@ -524,10 +553,20 @@ export function StepPlanQuestions({
     try {
       const ctx = await buildEnrichedCtx();
       if (!ctx) return;
-      const text = await generateChatPlanSuggestion(ctx, [
-        {
-          role: 'user',
-          content: `Based on my plan "${localWhat.trim()}", generate ONLY a list of exercises with sets, reps, and weights. Use my measurement history for progressive overload.
+      const category = step?.category || 'general';
+      const isNutrition = category === 'nutrition';
+
+      const prompt = isNutrition
+        ? `Based on my nutrition plan "${localWhat.trim()}", generate a structured meal list for the day.
+
+RULES:
+- Output ONLY meals/snacks, one per line
+- Format: "Meal name: specific foods with portions" (e.g. "Breakfast: 1/2C oats + 1 banana + 1 scoop whey + 1C milk")
+- Include macro estimates if possible (e.g. "~35g protein, 50g carbs")
+- Cover all meals: breakfast, lunch, dinner, snacks
+- NO advice, NO explanations, NO commentary, NO numbering
+- Just the meal lines, nothing else`
+        : `Based on my plan "${localWhat.trim()}", generate ONLY a list of exercises with sets, reps, and weights. Use my measurement history for progressive overload.
 
 RULES:
 - Output ONLY exercises, one per line
@@ -535,16 +574,17 @@ RULES:
 - For bodyweight exercises: "Dips: 3x failure" or "Plank: 3x 45 sec"
 - Include warmup sets as separate lines (e.g. "Bench press (warmup): 2x5 @ 95 lbs")
 - NO advice, NO explanations, NO commentary, NO separators, NO numbering
-- Just the exercise lines, nothing else`,
-          timestamp: new Date().toISOString(),
-        },
+- Just the exercise lines, nothing else`;
+
+      const text = await generateChatPlanSuggestion(ctx, [
+        { role: 'user', content: prompt, timestamp: new Date().toISOString() },
       ]);
-      // Parse response into sub-steps, filtering non-exercise lines
+      // Parse response into sub-steps, filtering non-content lines
       const lines = text.split('\n').map((l) => l.trim()).filter((l) => {
-        if (l.length === 0 || l.length > 120) return false;
+        if (l.length === 0 || l.length > 150) return false;
         if (/^[-–—=]+$/.test(l)) return false; // separators
-        // Must contain a colon (exercise: prescription) or common exercise pattern
-        return l.includes(':') || /\d+x\d+/.test(l) || /\d+\s*sets?/i.test(l);
+        // Must contain a colon (item: detail) or common patterns
+        return l.includes(':') || /\d+x\d+/.test(l) || /\d+\s*sets?/i.test(l) || /\d+[gG]\b/.test(l);
       });
       const newSubSteps: SubStep[] = lines.map((line, i) => ({
         id: `ai_${Date.now()}_${i}`,
@@ -566,7 +606,7 @@ RULES:
     } finally {
       setExercisesLoading(false);
     }
-  }, [exercisesLoading, localWhat, buildEnrichedCtx, planData.how_sub_steps, handleSubStepsChange]);
+  }, [exercisesLoading, localWhat, buildEnrichedCtx, planData.how_sub_steps, handleSubStepsChange, step?.category]);
 
   const q1Complete = Boolean(localWhat.trim() || linkedIds.length > 0);
   const q2Complete = Boolean(planData.how_sub_steps?.length && planData.how_sub_steps.some((s) => s.text.trim()));

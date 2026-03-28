@@ -1085,6 +1085,7 @@ export default function RacesScreen() {
       id: race.id,
       name: race.name || race.race_name || `Unnamed ${eventConfig.eventNoun}`,
       venue: race.venue || race.venue_name,
+      status: timelineStatusOverrides[race.id]?.status || race.status,
       date: timelineStatusOverrides[race.id]?.startDateIso || race.start_date || race.date || new Date().toISOString(),
       startTime: timelineStatusOverrides[race.id]?.startTimeLabel || race.start_time || race.startTime,
       boatClass: race.boat_class || race.boatClass,
@@ -1945,6 +1946,7 @@ export default function RacesScreen() {
                 setSelectedRaceData(null);
                 setSelectedRaceMarks([]);
                 setHasManuallySelected(false);
+                saveLastViewState({ selectedStepId: null });
               }
               await queryClient.invalidateQueries({ queryKey: ['timeline-steps'] });
               await refetchRaces();

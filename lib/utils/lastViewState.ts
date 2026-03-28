@@ -20,9 +20,9 @@ export function saveLastViewState(state: Partial<LastViewState>): void {
   try {
     const existing = getLastViewState();
     const merged: LastViewState = {
-      selectedStepId: state.selectedStepId ?? existing?.selectedStepId ?? null,
-      interestSlug: state.interestSlug ?? existing?.interestSlug ?? null,
-      isGridView: state.isGridView ?? existing?.isGridView ?? null,
+      selectedStepId: 'selectedStepId' in state ? (state.selectedStepId ?? null) : (existing?.selectedStepId ?? null),
+      interestSlug: 'interestSlug' in state ? (state.interestSlug ?? null) : (existing?.interestSlug ?? null),
+      isGridView: 'isGridView' in state ? (state.isGridView ?? null) : (existing?.isGridView ?? null),
       savedAt: Date.now(),
     };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));

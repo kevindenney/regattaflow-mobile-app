@@ -599,7 +599,12 @@ Be specific and practical. Suggest 2-3 concrete activities or exercises. Priorit
 - Interesting approaches from people they follow
 - Specific resources from their library (by name) that would help with this session
 
-Keep it under 200 words. Write in second person ("You could..."). Do not use markdown formatting.`;
+Keep it under 200 words. Write in second person ("You could..."). Do not use markdown formatting.
+
+IMPORTANT: Start your response with a concise session title on its own line (5-10 words, no quotes, no prefix), then a blank line, then the suggestion body. Example:
+Lace Pattern Basics with Yarn Overs
+
+You could start by practicing...`;
 
   const userMessage = `The user is planning a step titled "${ctx.stepTitle}".
 ${ctx.currentWhat ? `They've started writing: "${ctx.currentWhat}"` : 'They haven\'t written anything yet.'}
