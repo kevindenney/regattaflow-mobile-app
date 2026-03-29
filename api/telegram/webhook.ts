@@ -139,27 +139,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // --- Diagnostic logging (remove after debugging) ---
-    const keyPrefix = serviceRoleKey.substring(0, 20);
-    const anonKeyPrefix = (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').substring(0, 20);
-    const keyRole = serviceRoleKey.includes('"role":"service_role"') || serviceRoleKey.includes('InNlcnZpY2Vfcm9sZSI') ? 'service_role' :
-                    serviceRoleKey.includes('"role":"anon"') || serviceRoleKey.includes('ImFub24i') ? 'ANON_KEY_WRONG!' : 'unknown';
-    console.log(`[TG DEBUG] supabaseUrl=${supabaseUrl}`);
-    console.log(`[TG DEBUG] serviceRoleKey starts with: ${keyPrefix}...`);
-    console.log(`[TG DEBUG] anonKey starts with: ${anonKeyPrefix}...`);
-    console.log(`[TG DEBUG] detected key role: ${keyRole}`);
-    console.log(`[TG DEBUG] keys match: ${serviceRoleKey === (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)}`);
+    // --- Diagnostic: send debug info via Telegram (remove after debugging) ---
+    const keyPrefix = serviceRoleKey.substring(0, 30);
+    const anonKeyPrefix = (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').substring(0, 30);
+    const keyRole = serviceRoleKey.includes('InNlcnZpY2Vfcm9sZSI') ? 'service_role' :
+                    serviceRoleKey.includes('ImFub24i') ? 'ANON_KEY_WRONG!' : 'unknown';
+    const keysMatch = serviceRoleKey === (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // --- DB connectivity test (remove after debugging) ---
+    // DB connectivity test
     const { data: testData, error: testError } = await supabase
       .from('telegram_links')
       .select('id')
       .limit(1);
-    console.log(`[TG DEBUG] DB test query: data=${JSON.stringify(testData)}, error=${JSON.stringify(testError)}`);
+
+    // Test insert
+    const { error: testInsertError } = await supabase
+      .from('telegram_links')
+      .insert({ telegram_user_id: 1, telegram_username: 'test', link_code: 'ZZTEST', is_active: true })
+      .select('id');
+
+    // Clean up test row
+    if (!testInsertError) {
+      await supabase.from('telegram_links').delete().eq('telegram_user_id', 1);
+    }
+
+    if (text === '/debug') {
+      await sendMessage(chatId,
+        `DEBUG INFO:\n` +
+        `keyRole: ${keyRole}\n` +
+        `keysMatch: ${keysMatch}\n` +
+        `keyPrefix: ${keyPrefix}...\n` +
+        `anonPrefix: ${anonKeyPrefix}...\n` +
+        `supabaseUrl: ${supabaseUrl}\n` +
+        `SELECT test: data=${JSON.stringify(testData)}, err=${JSON.stringify(testError)}\n` +
+        `INSERT test: err=${JSON.stringify(testInsertError)}`
+      );
+      ok();
+      return;
+    }
 
     // --- Handle /start command ---
     if (text.startsWith('/start')) {
@@ -211,11 +232,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
       if (insertError) {
-        console.error('[TG DEBUG] INSERT error code:', insertError.code);
-        console.error('[TG DEBUG] INSERT error message:', insertError.message);
-        console.error('[TG DEBUG] INSERT error details:', insertError.details);
-        console.error('[TG DEBUG] INSERT error hint:', insertError.hint);
-        console.error('[TG DEBUG] INSERT full error:', JSON.stringify(insertError, null, 2));
+        // Send full error to Telegram for debugging
+        await sendMessage(chatId,
+          `[DEBUG] INSERT failed:\ncode: ${insertError.code}\nmsg: ${insertError.message}\ndetails: ${insertError.details}\nhint: ${insertError.hint}\nkeyRole: ${keyRole}`
+        );
         // Likely a duplicate — try updating instead
         const { error: updateError } = await supabase
           .from('telegram_links')
