@@ -179,18 +179,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const code = generateLinkCode();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min
 
+      // Remove any existing unlinked rows for this Telegram user, then insert fresh
       await supabase
         .from('telegram_links')
-        .upsert(
-          {
-            telegram_user_id: telegramUserId,
-            telegram_username: username,
-            link_code: code,
-            link_code_expires_at: expiresAt,
-            is_active: true,
-          },
-          { onConflict: 'telegram_user_id' },
-        );
+        .delete()
+        .eq('telegram_user_id', telegramUserId)
+        .is('linked_at', null);
+
+      await supabase
+        .from('telegram_links')
+        .insert({
+          telegram_user_id: telegramUserId,
+          telegram_username: username,
+          link_code: code,
+          link_code_expires_at: expiresAt,
+          is_active: true,
+        });
 
       await sendMessage(
         chatId,
