@@ -139,9 +139,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    // --- Diagnostic logging (remove after debugging) ---
+    const keyPrefix = serviceRoleKey.substring(0, 20);
+    const anonKeyPrefix = (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').substring(0, 20);
+    const keyRole = serviceRoleKey.includes('"role":"service_role"') || serviceRoleKey.includes('InNlcnZpY2Vfcm9sZSI') ? 'service_role' :
+                    serviceRoleKey.includes('"role":"anon"') || serviceRoleKey.includes('ImFub24i') ? 'ANON_KEY_WRONG!' : 'unknown';
+    console.log(`[TG DEBUG] supabaseUrl=${supabaseUrl}`);
+    console.log(`[TG DEBUG] serviceRoleKey starts with: ${keyPrefix}...`);
+    console.log(`[TG DEBUG] anonKey starts with: ${anonKeyPrefix}...`);
+    console.log(`[TG DEBUG] detected key role: ${keyRole}`);
+    console.log(`[TG DEBUG] keys match: ${serviceRoleKey === (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY)}`);
+
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    // --- DB connectivity test (remove after debugging) ---
+    const { data: testData, error: testError } = await supabase
+      .from('telegram_links')
+      .select('id')
+      .limit(1);
+    console.log(`[TG DEBUG] DB test query: data=${JSON.stringify(testData)}, error=${JSON.stringify(testError)}`);
 
     // --- Handle /start command ---
     if (text.startsWith('/start')) {
@@ -167,12 +185,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // --- Resolve Telegram user → BetterAt user ---
-    const { data: link } = await supabase
+    const { data: link, error: linkError } = await supabase
       .from('telegram_links')
       .select('user_id, linked_at')
       .eq('telegram_user_id', telegramUserId)
       .eq('is_active', true)
       .maybeSingle();
+
+    console.log(`[TG DEBUG] SELECT link result: data=${JSON.stringify(link)}, error=${JSON.stringify(linkError)}`);
 
     if (!link?.user_id || !link.linked_at) {
       // Not linked — generate a code and prompt them
@@ -191,7 +211,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
       if (insertError) {
-        console.error('Telegram insert error:', JSON.stringify(insertError));
+        console.error('[TG DEBUG] INSERT error code:', insertError.code);
+        console.error('[TG DEBUG] INSERT error message:', insertError.message);
+        console.error('[TG DEBUG] INSERT error details:', insertError.details);
+        console.error('[TG DEBUG] INSERT error hint:', insertError.hint);
+        console.error('[TG DEBUG] INSERT full error:', JSON.stringify(insertError, null, 2));
         // Likely a duplicate — try updating instead
         const { error: updateError } = await supabase
           .from('telegram_links')
@@ -205,7 +229,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('telegram_user_id', telegramUserId);
 
         if (updateError) {
-          console.error('Telegram update error:', JSON.stringify(updateError));
+          console.error('[TG DEBUG] UPDATE error code:', updateError.code);
+          console.error('[TG DEBUG] UPDATE error message:', updateError.message);
+          console.error('[TG DEBUG] UPDATE full error:', JSON.stringify(updateError, null, 2));
           await sendMessage(chatId, 'Sorry, something went wrong setting up your link. Please try again.');
           ok();
           return;
