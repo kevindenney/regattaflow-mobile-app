@@ -72,7 +72,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .maybeSingle();
 
   if (findError) {
-    console.error('Telegram link lookup error:', findError);
+    console.error('Telegram link lookup error:', JSON.stringify(findError));
+    console.error('Query was: link_code =', code.toUpperCase(), 'linked_at IS NULL');
     res.status(500).json({ error: 'Internal error' });
     return;
   }
