@@ -393,11 +393,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Telegram webhook error:', error);
 
-    // Try to send error message to user
+    // Send actual error to Telegram for debugging (remove after debugging)
     try {
       const chatId = (req.body as TelegramUpdate)?.message?.chat?.id;
       if (chatId) {
-        await sendMessage(chatId, "Sorry, I'm having trouble right now. Please try again in a moment.");
+        const errMsg = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        await sendMessage(chatId, `[DEBUG ERROR] ${errMsg.substring(0, 500)}`);
       }
     } catch {
       // Ignore - best effort
