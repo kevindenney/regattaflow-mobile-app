@@ -322,7 +322,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const tools = getAnthropicTools();
 
     let response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20250414',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
       tools,
@@ -356,7 +356,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sendChatAction(chatId, 'typing');
 
       response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20250414',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
         tools,
