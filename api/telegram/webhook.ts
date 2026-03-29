@@ -12,7 +12,7 @@ import type { AuthContext } from '../../services/mcp/server';
 
 const MAX_TOOL_ITERATIONS = 5;
 const MAX_CONVERSATION_MESSAGES = 20;
-const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://app.betterat.com';
+const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
 
 const SYSTEM_PROMPT = `You are the BetterAt AI assistant, helping users manage their learning timeline via Telegram.
 You help them track progress, create steps, mark tasks done, and plan next activities.
