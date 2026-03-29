@@ -69,14 +69,26 @@ export default function TelegramSettingsScreen(): React.ReactElement {
   // ---------------------------------------------------------------------------
 
   const handleLink = useCallback(async () => {
-    if (!code || !session?.access_token) return;
+    if (!code) {
+      showAlert('Error', 'No link code found.');
+      return;
+    }
+
+    // Get fresh session token
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token || session?.access_token;
+    if (!token) {
+      showAlert('Not Logged In', 'Please log into BetterAt first, then try this link again.');
+      return;
+    }
+
     setLinking(true);
     try {
       const response = await fetch(`${API_BASE}/api/telegram/link`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ code }),
       });
