@@ -75,22 +75,35 @@ const TOOLS: TelegramToolDef[] = [
   {
     name: 'get_student_timeline',
     description:
-      'Get learning steps (timeline) for the user. Returns up to 50 steps, optionally filtered by status.',
+      'Get learning steps (timeline) for the user. Returns up to 50 steps with their interest, optionally filtered by status or interest.',
     schema: z.object({
       status: z
         .enum(['pending', 'in_progress', 'completed', 'skipped'])
         .optional()
         .describe('Filter by step status'),
+      interest: z
+        .string()
+        .optional()
+        .describe('Filter by interest slug, name, or UUID'),
     }),
     handler: async (input, supabase, auth) => {
       let query = supabase
         .from('timeline_steps')
-        .select('id, title, description, category, status, starts_at, ends_at, sort_order, created_at, updated_at')
+        .select('id, title, description, category, status, starts_at, ends_at, sort_order, interest_id, created_at, updated_at, interests(id, name, slug)')
         .eq('user_id', auth.userId)
         .order('sort_order', { ascending: true })
         .limit(50);
 
       if (input.status) query = query.eq('status', input.status as string);
+
+      if (input.interest) {
+        const interest = await resolveInterestId(supabase, input.interest as string);
+        if (interest) {
+          query = query.eq('interest_id', interest.id);
+        } else {
+          return { error: `Could not find interest "${input.interest}". Use list_interests to see available options.` };
+        }
+      }
 
       const { data, error } = await query;
       if (error) return { error: error.message };
@@ -255,22 +268,45 @@ const TOOLS: TelegramToolDef[] = [
 
   {
     name: 'list_interests',
-    description: 'List available interests/subjects. Use to find the right interest slug for creating steps.',
+    description:
+      "List the user's active interests/subjects (those they have timeline steps for). " +
+      'Also accepts a search to find any interest in the catalog.',
     schema: z.object({
-      search: z.string().optional().describe('Search by name (partial match)'),
+      search: z.string().optional().describe('Search catalog by name (partial match). Omit to see user\'s active interests.'),
     }),
-    handler: async (input, supabase) => {
-      let query = supabase
-        .from('interests')
-        .select('id, slug, name, description, type, parent_id')
-        .eq('status', 'active')
-        .order('name', { ascending: true });
+    handler: async (input, supabase, auth) => {
+      if (input.search) {
+        // Search the full catalog
+        const { data, error } = await supabase
+          .from('interests')
+          .select('id, slug, name, description, type, parent_id')
+          .eq('status', 'active')
+          .ilike('name', `%${input.search}%`)
+          .order('name', { ascending: true });
+        if (error) return { error: error.message };
+        return { source: 'catalog_search', count: data?.length ?? 0, interests: data ?? [] };
+      }
 
-      if (input.search) query = query.ilike('name', `%${input.search}%`);
+      // Default: show interests the user actually has steps in
+      const { data: steps, error } = await supabase
+        .from('timeline_steps')
+        .select('interest_id, interests(id, name, slug, description, type)')
+        .eq('user_id', auth.userId);
 
-      const { data, error } = await query;
       if (error) return { error: error.message };
-      return { count: data?.length ?? 0, interests: data ?? [] };
+
+      // Deduplicate by interest_id
+      const seen = new Set<string>();
+      const userInterests: unknown[] = [];
+      for (const step of steps ?? []) {
+        const interest = (step as Record<string, unknown>).interests as { id: string; name: string; slug: string; description: string; type: string } | null;
+        if (interest && !seen.has(interest.id)) {
+          seen.add(interest.id);
+          userInterests.push(interest);
+        }
+      }
+
+      return { source: 'user_timeline', count: userInterests.length, interests: userInterests };
     },
   },
 

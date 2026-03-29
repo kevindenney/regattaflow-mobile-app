@@ -139,48 +139,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // --- Diagnostic: send debug info via Telegram (remove after debugging) ---
-    const keyPrefix = serviceRoleKey.substring(0, 30);
-    const anonKeyPrefix = (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').substring(0, 30);
-    const keyRole = serviceRoleKey.includes('InNlcnZpY2Vfcm9sZSI') ? 'service_role' :
-                    serviceRoleKey.includes('ImFub24i') ? 'ANON_KEY_WRONG!' : 'unknown';
-    const keysMatch = serviceRoleKey === (process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
-
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-
-    // DB connectivity test
-    const { data: testData, error: testError } = await supabase
-      .from('telegram_links')
-      .select('id')
-      .limit(1);
-
-    // Test insert
-    const { error: testInsertError } = await supabase
-      .from('telegram_links')
-      .insert({ telegram_user_id: 1, telegram_username: 'test', link_code: 'ZZTEST', is_active: true })
-      .select('id');
-
-    // Clean up test row
-    if (!testInsertError) {
-      await supabase.from('telegram_links').delete().eq('telegram_user_id', 1);
-    }
-
-    if (text === '/debug') {
-      await sendMessage(chatId,
-        `DEBUG INFO:\n` +
-        `keyRole: ${keyRole}\n` +
-        `keysMatch: ${keysMatch}\n` +
-        `keyPrefix: ${keyPrefix}...\n` +
-        `anonPrefix: ${anonKeyPrefix}...\n` +
-        `supabaseUrl: ${supabaseUrl}\n` +
-        `SELECT test: data=${JSON.stringify(testData)}, err=${JSON.stringify(testError)}\n` +
-        `INSERT test: err=${JSON.stringify(testInsertError)}`
-      );
-      ok();
-      return;
-    }
 
     // --- Handle /start command ---
     if (text.startsWith('/start')) {
@@ -213,8 +174,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('is_active', true)
       .maybeSingle();
 
-    console.log(`[TG DEBUG] SELECT link result: data=${JSON.stringify(link)}, error=${JSON.stringify(linkError)}`);
-
     if (!link?.user_id || !link.linked_at) {
       // Not linked — generate a code and prompt them
       const code = generateLinkCode();
@@ -232,10 +191,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
 
       if (insertError) {
-        // Send full error to Telegram for debugging
-        await sendMessage(chatId,
-          `[DEBUG] INSERT failed:\ncode: ${insertError.code}\nmsg: ${insertError.message}\ndetails: ${insertError.details}\nhint: ${insertError.hint}\nkeyRole: ${keyRole}`
-        );
         // Likely a duplicate — try updating instead
         const { error: updateError } = await supabase
           .from('telegram_links')
@@ -249,9 +204,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('telegram_user_id', telegramUserId);
 
         if (updateError) {
-          console.error('[TG DEBUG] UPDATE error code:', updateError.code);
-          console.error('[TG DEBUG] UPDATE error message:', updateError.message);
-          console.error('[TG DEBUG] UPDATE full error:', JSON.stringify(updateError, null, 2));
+          console.error('Telegram link update error:', updateError.message);
           await sendMessage(chatId, 'Sorry, something went wrong setting up your link. Please try again.');
           ok();
           return;
@@ -393,12 +346,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     console.error('Telegram webhook error:', error);
 
-    // Send actual error to Telegram for debugging (remove after debugging)
     try {
       const chatId = (req.body as TelegramUpdate)?.message?.chat?.id;
       if (chatId) {
-        const errMsg = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-        await sendMessage(chatId, `[DEBUG ERROR] ${errMsg.substring(0, 500)}`);
+        await sendMessage(chatId, "Sorry, I'm having trouble right now. Please try again in a moment.");
       }
     } catch {
       // Ignore - best effort
