@@ -82,6 +82,8 @@ export interface StepActData {
   media_uploads?: MediaUpload[];
   media_links?: MediaLink[];
   sub_step_progress?: Record<string, boolean>;
+  sub_step_deviations?: Record<string, string>;  // what user actually did instead (keyed by sub-step id)
+  sub_step_overrides?: Record<string, string>;    // edited sub-step text during training (keyed by sub-step id)
   conversation_id?: string;               // AI conversation during training
   measurements?: StepMeasurements;         // AI-extracted structured measurements
   nutrition?: StepNutrition;               // AI-extracted nutrition data
@@ -93,6 +95,22 @@ export interface InstructorCompetencyAssessment {
 }
 
 export type InstructorReviewStatus = 'approved' | 'needs_revision';
+
+export interface CompetencyEvidenceItem {
+  competency_id?: string;
+  competency_title: string;
+  category?: string;
+  demonstrated_level: 'initial_exposure' | 'developing' | 'proficient' | 'not_demonstrated';
+  evidence_basis: string;
+  advancement_suggestion?: string;
+}
+
+export interface StepCompetencyAssessment {
+  assessed_at: string;
+  planned_competency_results: CompetencyEvidenceItem[];
+  additional_competencies_found: CompetencyEvidenceItem[];
+  gap_summary: string;
+}
 
 export interface StepReviewData {
   overall_rating?: number;
@@ -106,6 +124,7 @@ export interface StepReviewData {
   instructor_review_status?: InstructorReviewStatus;
   instructor_review_note?: string;     // reason for approval/revision request
   instructor_review_at?: string;       // ISO timestamp
+  competency_assessment?: StepCompetencyAssessment;
 }
 
 export interface CrossInterestSuggestion {

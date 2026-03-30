@@ -43,6 +43,7 @@ import { MeasurementReview } from '@/components/step/MeasurementReview';
 import { NutritionReview } from '@/components/step/NutritionReview';
 import { extractMeasurements, getMeasurementHistory, type MeasurementHistorySummary } from '@/services/MeasurementExtractionService';
 import { extractNutritionToStep } from '@/services/ai/NutritionExtractionService';
+import { extractCompetencyAssessment } from '@/services/ai/CompetencyExtractionService';
 import { getActiveConversation, completeConversation } from '@/services/AIConversationService';
 import { extractInsights } from '@/services/AIMemoryService';
 import { getDailyTargets } from '@/services/NutritionService';
@@ -279,6 +280,13 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
           : Promise.resolve(),
         extractNutritionToStep(user.id, step.interest_id, stepId, completed),
         extractInsights(user.id, step.interest_id, completed),
+        // Competency assessment extraction (doesn't need conversation — uses step evidence)
+        (planData.competency_ids?.length || planData.capability_goals?.length)
+          ? extractCompetencyAssessment(
+              user.id, step.interest_id, stepId, planData, actData,
+              currentInterest?.name ?? '', reviewData.competency_assessment?.assessed_at,
+            )
+          : Promise.resolve(),
       ]);
 
       // Refetch step data so extracted results appear
@@ -747,6 +755,62 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
               </Text>
             </Pressable>
           )}
+        </View>
+      )}
+
+      {/* ── COMPETENCY ASSESSMENT ── */}
+      {reviewData.competency_assessment && (
+        <View style={s.sectionWrap}>
+          <SectionLabel>COMPETENCY ASSESSMENT</SectionLabel>
+          <View style={s.aiCard}>
+            {/* Planned competency results */}
+            {reviewData.competency_assessment.planned_competency_results.map((item, idx) => {
+              const levelColor = item.demonstrated_level === 'proficient' ? C.accent
+                : item.demonstrated_level === 'developing' ? C.gold
+                : item.demonstrated_level === 'initial_exposure' ? '#7C8BA1'
+                : C.labelLight;
+              const levelLabel = item.demonstrated_level === 'not_demonstrated' ? 'Not demonstrated'
+                : item.demonstrated_level.replace('_', ' ');
+              return (
+                <View key={`planned-${idx}`} style={{ marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <View style={{ backgroundColor: levelColor, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600', textTransform: 'capitalize' }}>{levelLabel}</Text>
+                    </View>
+                    <Text style={{ color: C.labelDark, fontSize: 14, fontWeight: '600', flex: 1 }}>{item.competency_title}</Text>
+                  </View>
+                  {item.evidence_basis ? (
+                    <Text style={{ color: C.labelMid, fontSize: 12, marginLeft: 4 }}>{item.evidence_basis}</Text>
+                  ) : null}
+                  {item.advancement_suggestion ? (
+                    <Text style={{ color: C.accent, fontSize: 12, marginLeft: 4, marginTop: 2 }}>Next: {item.advancement_suggestion}</Text>
+                  ) : null}
+                </View>
+              );
+            })}
+
+            {/* Additional competencies found */}
+            {(reviewData.competency_assessment.additional_competencies_found?.length ?? 0) > 0 && (
+              <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: C.cardBorder }}>
+                <Text style={{ color: C.labelMid, fontSize: 11, fontWeight: '600', marginBottom: 6 }}>ALSO DEMONSTRATED</Text>
+                {reviewData.competency_assessment.additional_competencies_found.map((item, idx) => (
+                  <View key={`extra-${idx}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <Ionicons name="add-circle-outline" size={14} color={C.accent} />
+                    <Text style={{ color: C.labelDark, fontSize: 13 }}>{item.competency_title}</Text>
+                    <Text style={{ color: C.labelMid, fontSize: 11 }}>({item.demonstrated_level.replace('_', ' ')})</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Gap summary */}
+            {reviewData.competency_assessment.gap_summary ? (
+              <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: C.cardBorder }}>
+                <Text style={{ color: C.labelMid, fontSize: 11, fontWeight: '600', marginBottom: 4 }}>GAPS</Text>
+                <Text style={{ color: C.labelDark, fontSize: 13 }}>{reviewData.competency_assessment.gap_summary}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       )}
 
