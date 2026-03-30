@@ -92,6 +92,7 @@ const TOOLS: TelegramToolDef[] = [
         .select('id, title, description, category, status, starts_at, ends_at, sort_order, interest_id, created_at, updated_at')
         .eq('user_id', auth.userId)
         .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
         .limit(50);
 
       if (input.status) query = query.eq('status', input.status as string);
