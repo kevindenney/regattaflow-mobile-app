@@ -303,8 +303,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           tool_use_id: block.id,
           content: result,
         });
-        // Track tool calls for conversation history
-        toolCallSummaries.push(`[Used tool: ${block.name}(${JSON.stringify(block.input)}) → ${result.substring(0, 200)}]`);
+        // Track tool calls for conversation history (brief summary only —
+        // do NOT include results, as Claude will treat them as a data source
+        // and skip calling the tool on future turns)
+        toolCallSummaries.push(`[Called ${block.name}]`);
       }
 
       messages.push({ role: 'assistant', content: response.content as Anthropic.ContentBlockParam[] });
