@@ -559,6 +559,7 @@ async function handleMessage(
     );
 
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    const debugEntries: string[] = []; // DEBUG: write tool results to DB
     for (const block of toolUseBlocks) {
       // Inject photo_url for attach_step_evidence — Claude often omits this optional param
       let toolInput = block.input;
@@ -572,6 +573,9 @@ async function handleMessage(
         content: result,
       });
       toolCallSummaries.push(`[Called ${block.name}]`);
+      // DEBUG: capture tool name, input keys, and result snippet
+      const inputKeys = Object.keys(block.input || {}).join(',');
+      debugEntries.push(`${block.name}(${inputKeys})=>${result.substring(0, 300)}`);
 
       // Check if this tool result warrants inline buttons
       // When a photo is pending, show "Attach to" buttons instead of Start/Done
@@ -581,6 +585,15 @@ async function handleMessage(
 
     messages.push({ role: 'assistant', content: response.content as Anthropic.ContentBlockParam[] });
     messages.push({ role: 'user', content: toolResults });
+
+    // DEBUG: write tool results to DB so we can query them
+    if (debugEntries.length > 0 && conversation?.id) {
+      const debugText = `[DEBUG iter=${iterations}] ${debugEntries.join(' | ')}`;
+      await supabase
+        .from('telegram_conversations')
+        .update({ pending_photo_url: debugText.substring(0, 2000) })
+        .eq('id', conversation.id);
+    }
 
     await sendChatAction(chatId, 'typing');
 
