@@ -726,13 +726,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Acknowledge Telegram immediately to prevent retry/backoff
-    ok();
-
-    // Handle messages (text, photo, voice) — runs after 200 is sent
+    // Handle messages (text, photo, voice)
     if (update.message?.from) {
       await handleMessage(update.message);
     }
+
+    ok();
   } catch (error) {
     console.error('Telegram webhook error:', error);
 
