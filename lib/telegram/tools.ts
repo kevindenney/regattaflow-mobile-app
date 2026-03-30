@@ -641,7 +641,10 @@ const TOOLS: TelegramToolDef[] = [
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
       // Resolve photo URL: prefer explicit input, fallback to pending_photo_url from conversation
-      let photoUrl = (input.photo_url as string) || '';
+      const inputPhotoUrl = (input.photo_url as string) || '';
+      let photoUrl = inputPhotoUrl;
+      let photoSource = inputPhotoUrl ? 'input' : 'none';
+
       if (!photoUrl) {
         const { data: convo } = await supabase
           .from('telegram_conversations')
@@ -650,7 +653,19 @@ const TOOLS: TelegramToolDef[] = [
           .not('pending_photo_url', 'is', null)
           .maybeSingle();
         photoUrl = (convo?.pending_photo_url as string) || '';
+        if (photoUrl) photoSource = 'fallback';
       }
+
+      // Write diagnostic to a temp row so we can check what happened
+      await supabase.from('telegram_conversations')
+        .update({
+          // Abuse messages to store diagnostic (we'll remove this)
+          last_active_at: new Date().toISOString(),
+        })
+        .eq('user_id', auth.userId);
+
+      // Log to stderr (shows as error in Vercel)
+      console.error(`[attach_step_evidence] photo_source=${photoSource} photo_url_len=${photoUrl.length} input_keys=${Object.keys(input).join(',')}`);
 
       // Fetch current step metadata
       const { data: step, error: fetchError } = await supabase
@@ -725,15 +740,18 @@ const TOOLS: TelegramToolDef[] = [
         .single();
 
       if (updateError) {
+        console.error(`[attach_step_evidence] UPDATE FAILED: ${updateError.message}`);
         return { error: updateError.message };
       }
 
       if (!updated) {
+        console.error('[attach_step_evidence] UPDATE matched 0 rows');
         return { error: 'Update matched no rows — step may not belong to this user' };
       }
 
       const updatedAct = (updated.metadata as Record<string, unknown>)?.act as Record<string, unknown> | undefined;
       const finalUploads = (updatedAct?.media_uploads as unknown[]) ?? [];
+      console.error(`[attach_step_evidence] DONE: uploads_after_save=${finalUploads.length} photo_source=${photoSource}`);
 
       // Clear pending photo now that it's been attached
       if (photoUrl) {
