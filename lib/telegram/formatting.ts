@@ -155,3 +155,21 @@ export function buildPhotoAttachButtons(
     return [{ text: `📎 Attach to: ${label}`, callback_data: `attach:${step.id}` }];
   });
 }
+
+/**
+ * Build sub-step toggle buttons for uncompleted sub-steps.
+ * Callback data: `substep_done:<step_id>:<sub_step_id>`
+ * Max 5 buttons.
+ */
+export function buildSubStepButtons(
+  stepId: string,
+  subSteps: { id: string; text: string; completed: boolean }[],
+): InlineKeyboardButton[][] {
+  const uncompleted = subSteps.filter(ss => !ss.completed);
+  const limited = uncompleted.slice(0, 5);
+
+  return limited.map(ss => {
+    const label = ss.text.length > 22 ? ss.text.slice(0, 19) + '...' : ss.text;
+    return [{ text: `☑️ Done: ${label}`, callback_data: `substep_done:${stepId}:${ss.id}` }];
+  });
+}

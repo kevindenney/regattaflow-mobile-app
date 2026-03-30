@@ -30,10 +30,15 @@ CRITICAL RULES — READ CAREFULLY:
 2. NEVER say "Done" or "I've added" without having ACTUALLY called a tool first.
 3. If the user wants to see their timeline, you MUST call get_student_timeline.
 4. If the user wants to add evidence/photos to a step, you MUST call attach_step_evidence.
-5. If the user wants nutrition logged, you MUST call log_nutrition.
+5. If the user wants nutrition logged, you MUST call log_nutrition with a step_id so it appears in the Review tab.
 6. If the user wants a new step, you MUST call create_step.
 7. Do NOT describe what you would do — actually DO it by calling the tool.
-8. Every request that involves data REQUIRES at least one tool call.`;
+8. Every request that involves data REQUIRES at least one tool call.
+
+SUB-STEP TRACKING:
+- When the user mentions completing a task or sub-step, call get_step_detail to see their sub-steps, then use toggle_sub_step to mark it done. Report progress (e.g. "3/5 sub-steps done!").
+- When the user says they did something differently than planned, use log_sub_step_deviation to record what they actually did.
+- When showing step details, highlight incomplete sub-steps so the user knows what's left.`;
 
 const PHOTO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
@@ -193,18 +198,20 @@ async function handleCallbackQuery(
     return;
   }
 
-  // Parse callback data: "done:<step_id>" | "wip:<step_id>" | "skip:<step_id>" | "attach:<step_id>"
+  // Parse callback data: "done:<step_id>" | "wip:<step_id>" | "skip:<step_id>" | "attach:<step_id>" | "substep_done:<step_id>:<sub_step_id>"
   const colonIdx = data.indexOf(':');
   if (colonIdx < 0) {
     await answerCallbackQuery(queryId, 'Invalid action');
     return;
   }
   const action = data.slice(0, colonIdx);
-  const stepId = data.slice(colonIdx + 1);
-  if (!action || !stepId) {
+  const rest = data.slice(colonIdx + 1);
+  if (!action || !rest) {
     await answerCallbackQuery(queryId, 'Invalid action');
     return;
   }
+  // For substep_done, rest = "<step_id>:<sub_step_id>"; for others, rest = "<step_id>"
+  const stepId = action === 'substep_done' ? rest.slice(0, rest.indexOf(':')) : rest;
 
   // Resolve auth
   const { data: link } = await supabase
@@ -260,6 +267,34 @@ async function handleCallbackQuery(
     await answerCallbackQuery(queryId, `📎 Photo attached to: ${parsed.step_title ?? 'step'}`);
     if (chatId) {
       await sendMessage(chatId, `📎 Photo attached as evidence to *${parsed.step_title ?? 'step'}*`);
+    }
+    return;
+  }
+
+  // Handle sub-step toggle callback
+  if (action === 'substep_done') {
+    const subStepId = rest.slice(rest.indexOf(':') + 1);
+    if (!stepId || !subStepId) {
+      await answerCallbackQuery(queryId, 'Invalid sub-step action');
+      return;
+    }
+
+    const toggleResult = await executeTool(
+      'toggle_sub_step',
+      { step_id: stepId, sub_step_id: subStepId, completed: true },
+      supabase,
+      auth,
+    );
+
+    const toggleParsed = JSON.parse(toggleResult);
+    if (toggleParsed.error) {
+      await answerCallbackQuery(queryId, `Error: ${toggleParsed.error}`);
+      return;
+    }
+
+    await answerCallbackQuery(queryId, `☑️ ${toggleParsed.sub_step_title ?? 'Sub-step'} done!`);
+    if (chatId) {
+      await sendMessage(chatId, `☑️ *${toggleParsed.sub_step_title ?? 'Sub-step'}* marked done\\! ${toggleParsed.progress ?? ''}`);
     }
     return;
   }

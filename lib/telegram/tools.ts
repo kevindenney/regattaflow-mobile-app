@@ -11,7 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { isFeatureAvailable } from '../subscriptions/sailorTiers';
 import type { AuthContext } from '../../services/mcp/server';
-import { buildStepButtons, buildCreatedStepButtons, buildPhotoAttachButtons } from './formatting';
+import { buildStepButtons, buildCreatedStepButtons, buildPhotoAttachButtons, buildSubStepButtons } from './formatting';
 import type { InlineKeyboardButton } from './formatting';
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,10 @@ const TOOLS: TelegramToolDef[] = [
 
   {
     name: 'get_step_detail',
-    description: 'Get full detail for a single learning step including Plan/Act/Review metadata.',
+    description:
+      'Get full detail for a single learning step including sub-steps with progress, ' +
+      'evidence count, nutrition status, and Plan/Act/Review metadata. ' +
+      'Use this to see sub-step checklists before toggling them.',
     schema: z.object({
       step_id: z.string().describe('The timeline step ID'),
     }),
@@ -148,7 +151,44 @@ const TOOLS: TelegramToolDef[] = [
 
       if (error) return { error: error.message };
       if (!data) return { error: 'Step not found' };
-      return data;
+
+      // Parse metadata for structured sub-step info
+      const metadata = (data.metadata as Record<string, unknown>) ?? {};
+      const plan = (metadata.plan as Record<string, unknown>) ?? {};
+      const act = (metadata.act as Record<string, unknown>) ?? {};
+      const subSteps = (plan.how_sub_steps as { id: string; text: string; sort_order: number }[]) ?? [];
+      const progress = (act.sub_step_progress as Record<string, boolean>) ?? {};
+      const deviations = (act.sub_step_deviations as Record<string, string>) ?? {};
+      const overrides = (act.sub_step_overrides as Record<string, string>) ?? {};
+      const mediaUploads = (act.media_uploads as unknown[]) ?? [];
+      const nutrition = act.nutrition as { entries?: unknown[] } | undefined;
+      const measurements = act.measurements as { extracted?: unknown[] } | undefined;
+
+      const completedCount = subSteps.filter(ss => progress[ss.id]).length;
+
+      return {
+        id: data.id,
+        title: data.title,
+        description: data.description,
+        status: data.status,
+        category: data.category,
+        starts_at: data.starts_at,
+        ends_at: data.ends_at,
+        interest_id: data.interest_id,
+        sub_steps: subSteps.map(ss => ({
+          id: ss.id,
+          text: overrides[ss.id] || ss.text,
+          completed: progress[ss.id] ?? false,
+          deviation: deviations[ss.id] ?? null,
+        })),
+        sub_step_summary: subSteps.length > 0 ? `${completedCount}/${subSteps.length} done` : 'No sub-steps',
+        evidence_count: mediaUploads.length,
+        has_nutrition: !!(nutrition?.entries?.length),
+        has_measurements: !!(measurements?.extracted?.length),
+        plan_what: plan.what_will_you_do ?? null,
+        plan_why: plan.why_reasoning ?? null,
+        notes: act.notes ?? null,
+      };
     },
   },
 
@@ -286,6 +326,118 @@ const TOOLS: TelegramToolDef[] = [
 
       if (error) return { error: error.message };
       return { updated: true, step: data };
+    },
+  },
+
+  // -- Sub-step Management --------------------------------------------------
+  {
+    name: 'toggle_sub_step',
+    description:
+      'Mark a sub-step as done or undone. Use get_step_detail first to see the ' +
+      'sub-step IDs and their current progress. Reports updated progress (e.g. "3/5 done").',
+    schema: z.object({
+      step_id: z.string().describe('The timeline step ID'),
+      sub_step_id: z.string().describe('The sub-step ID to toggle'),
+      completed: z.boolean().describe('Mark as done (true) or undone (false)'),
+    }),
+    requiresWrite: true,
+    handler: async (input, supabase, auth) => {
+      const { data: step, error: fetchErr } = await supabase
+        .from('timeline_steps')
+        .select('metadata, status')
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId)
+        .single();
+
+      if (fetchErr || !step) return { error: fetchErr?.message ?? 'Step not found' };
+
+      const metadata = (step.metadata as Record<string, unknown>) ?? {};
+      const plan = (metadata.plan as Record<string, unknown>) ?? {};
+      const act = (metadata.act as Record<string, unknown>) ?? {};
+      const subSteps = (plan.how_sub_steps as { id: string; text: string }[]) ?? [];
+      const progress = (act.sub_step_progress as Record<string, boolean>) ?? {};
+
+      // Verify the sub-step exists
+      const subStep = subSteps.find(ss => ss.id === input.sub_step_id);
+      if (!subStep) return { error: `Sub-step "${input.sub_step_id}" not found in this step` };
+
+      const updatedProgress = { ...progress, [input.sub_step_id as string]: input.completed as boolean };
+      const completedCount = subSteps.filter(ss => updatedProgress[ss.id]).length;
+
+      const stepUpdate: Record<string, unknown> = {
+        metadata: { ...metadata, act: { ...act, sub_step_progress: updatedProgress } },
+        updated_at: new Date().toISOString(),
+      };
+      // Auto-advance pending steps to in_progress when sub-steps are toggled
+      if (step.status === 'pending') {
+        stepUpdate.status = 'in_progress';
+      }
+
+      const { error: updateErr } = await supabase
+        .from('timeline_steps')
+        .update(stepUpdate)
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId);
+
+      if (updateErr) return { error: updateErr.message };
+
+      return {
+        toggled: true,
+        sub_step_title: subStep.text,
+        completed: input.completed,
+        progress: `${completedCount}/${subSteps.length} done`,
+      };
+    },
+  },
+
+  {
+    name: 'log_sub_step_deviation',
+    description:
+      'Record what the user actually did instead of a planned sub-step. ' +
+      'Use this when the user says they did something different from the plan.',
+    schema: z.object({
+      step_id: z.string().describe('The timeline step ID'),
+      sub_step_id: z.string().describe('The sub-step ID'),
+      deviation: z.string().describe('What the user actually did instead of the planned sub-step'),
+    }),
+    requiresWrite: true,
+    handler: async (input, supabase, auth) => {
+      const { data: step, error: fetchErr } = await supabase
+        .from('timeline_steps')
+        .select('metadata')
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId)
+        .single();
+
+      if (fetchErr || !step) return { error: fetchErr?.message ?? 'Step not found' };
+
+      const metadata = (step.metadata as Record<string, unknown>) ?? {};
+      const plan = (metadata.plan as Record<string, unknown>) ?? {};
+      const act = (metadata.act as Record<string, unknown>) ?? {};
+      const subSteps = (plan.how_sub_steps as { id: string; text: string }[]) ?? [];
+      const deviations = (act.sub_step_deviations as Record<string, string>) ?? {};
+
+      const subStep = subSteps.find(ss => ss.id === input.sub_step_id);
+      if (!subStep) return { error: `Sub-step "${input.sub_step_id}" not found` };
+
+      const updatedDeviations = { ...deviations, [input.sub_step_id as string]: input.deviation as string };
+
+      const { error: updateErr } = await supabase
+        .from('timeline_steps')
+        .update({
+          metadata: { ...metadata, act: { ...act, sub_step_deviations: updatedDeviations } },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId);
+
+      if (updateErr) return { error: updateErr.message };
+
+      return {
+        recorded: true,
+        sub_step_title: subStep.text,
+        deviation: input.deviation,
+      };
     },
   },
 
@@ -565,8 +717,11 @@ const TOOLS: TelegramToolDef[] = [
     name: 'log_nutrition',
     description:
       'Log nutrition entries extracted from a meal description or photo analysis. ' +
-      'Use this after analyzing what the user ate (from text or a food photo).',
+      'Use this after analyzing what the user ate (from text or a food photo). ' +
+      'If step_id is provided, nutrition data will also be attached to the step so it ' +
+      'appears in the Review tab. Always provide step_id when you know which step this relates to.',
     schema: z.object({
+      step_id: z.string().optional().describe('Step ID to attach nutrition data to (makes it visible in Review tab)'),
       entries: z.array(z.object({
         description: z.string().describe('Food/drink description'),
         meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'pre_workout', 'post_workout', 'other']).optional(),
@@ -586,7 +741,9 @@ const TOOLS: TelegramToolDef[] = [
 
       const inserted: unknown[] = [];
       const errors: string[] = [];
+      const now = new Date().toISOString();
 
+      // Insert into nutrition_entries table (for analytics/history)
       for (const entry of entries) {
         const row = {
           user_id: auth.userId,
@@ -599,7 +756,7 @@ const TOOLS: TelegramToolDef[] = [
           fiber_g: entry.fiber_g ?? null,
           water_oz: entry.water_oz ?? null,
           confidence: entry.confidence ?? 'estimated',
-          logged_at: new Date().toISOString(),
+          logged_at: now,
           source: 'telegram',
         };
 
@@ -616,9 +773,65 @@ const TOOLS: TelegramToolDef[] = [
         }
       }
 
+      // Also write to step metadata so nutrition shows in Review tab
+      let stepAttached = false;
+      if (input.step_id && inserted.length > 0) {
+        const { data: step } = await supabase
+          .from('timeline_steps')
+          .select('metadata')
+          .eq('id', input.step_id as string)
+          .eq('user_id', auth.userId)
+          .single();
+
+        if (step) {
+          const metadata = (step.metadata as Record<string, unknown>) ?? {};
+          const act = (metadata.act as Record<string, unknown>) ?? {};
+          const existingNutrition = (act.nutrition as { entries?: unknown[] }) ?? {};
+          const existingEntries = (existingNutrition.entries as Record<string, unknown>[]) ?? [];
+
+          // Build StepNutritionEntry objects for step metadata
+          const newStepEntries = entries.map((entry, i) => ({
+            id: `tg_nutr_${Date.now()}_${i}`,
+            description: entry.description,
+            meal_type: entry.meal_type ?? 'other',
+            calories: entry.calories ?? undefined,
+            protein_g: entry.protein_g ?? undefined,
+            carbs_g: entry.carbs_g ?? undefined,
+            fat_g: entry.fat_g ?? undefined,
+            fiber_g: entry.fiber_g ?? undefined,
+            water_oz: entry.water_oz ?? undefined,
+            confidence: entry.confidence ?? 'estimated',
+            source: 'telegram',
+            verified: false,
+            timestamp: now,
+          }));
+
+          const updatedMetadata = {
+            ...metadata,
+            act: {
+              ...act,
+              nutrition: {
+                ...existingNutrition,
+                entries: [...existingEntries, ...newStepEntries],
+                last_extracted_at: now,
+              },
+            },
+          };
+
+          const { error: updateErr } = await supabase
+            .from('timeline_steps')
+            .update({ metadata: updatedMetadata, updated_at: now })
+            .eq('id', input.step_id as string)
+            .eq('user_id', auth.userId);
+
+          stepAttached = !updateErr;
+        }
+      }
+
       return {
         logged: inserted.length,
         entries: inserted,
+        step_attached: stepAttached,
         ...(errors.length > 0 ? { errors } : {}),
       };
     },
@@ -839,6 +1052,15 @@ export function getToolResponseKeyboard(
         const stepId = result.step?.id as string | undefined;
         if (!stepId) return null;
         return buildCreatedStepButtons(stepId);
+      }
+
+      case 'get_step_detail': {
+        const subSteps = result.sub_steps as { id: string; text: string; completed: boolean }[] | undefined;
+        if (!subSteps?.length) return null;
+        const stepId = result.id as string | undefined;
+        if (!stepId) return null;
+        const buttons = buildSubStepButtons(stepId, subSteps);
+        return buttons.length > 0 ? buttons : null;
       }
 
       case 'attach_step_evidence': {
