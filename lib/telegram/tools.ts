@@ -646,26 +646,25 @@ const TOOLS: TelegramToolDef[] = [
       let photoSource = inputPhotoUrl ? 'input' : 'none';
 
       if (!photoUrl) {
-        const { data: convo } = await supabase
+        // Simplified fallback — no .not() filter, just check in JS
+        const { data: convo, error: convoErr } = await supabase
           .from('telegram_conversations')
           .select('pending_photo_url')
           .eq('user_id', auth.userId)
-          .not('pending_photo_url', 'is', null)
           .maybeSingle();
+        if (convoErr) {
+          console.error(`[attach_step_evidence] fallback query error: ${convoErr.message}`);
+        }
         photoUrl = (convo?.pending_photo_url as string) || '';
         if (photoUrl) photoSource = 'fallback';
       }
 
-      // Write diagnostic to a temp row so we can check what happened
-      await supabase.from('telegram_conversations')
-        .update({
-          // Abuse messages to store diagnostic (we'll remove this)
-          last_active_at: new Date().toISOString(),
-        })
-        .eq('user_id', auth.userId);
-
-      // Log to stderr (shows as error in Vercel)
       console.error(`[attach_step_evidence] photo_source=${photoSource} photo_url_len=${photoUrl.length} input_keys=${Object.keys(input).join(',')}`);
+
+      // Fail early if no photo URL available from any source
+      if (!photoUrl && !input.notes) {
+        return { error: 'No photo_url provided and no pending photo found. Send a photo first.' };
+      }
 
       // Fetch current step metadata
       const { data: step, error: fetchError } = await supabase

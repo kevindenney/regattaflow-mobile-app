@@ -455,6 +455,7 @@ async function handleMessage(
   let userContent: Anthropic.ContentBlockParam[] | string;
   let systemPrompt = SYSTEM_PROMPT;
   let historyEntry = `${historyPrefix}${userText}`;
+  let uploadedPhotoUrl = ''; // Hoisted so we can inject it into tool calls
 
   if (hasPhoto && message.photo) {
     // Use the largest photo (last in array)
@@ -479,6 +480,7 @@ async function handleMessage(
           .from('step-media')
           .getPublicUrl(storagePath);
         photoUrl = urlData.publicUrl;
+        uploadedPhotoUrl = photoUrl; // Make available to tool loop
       } else {
         console.error('Photo upload error:', uploadError.message);
       }
@@ -558,7 +560,12 @@ async function handleMessage(
 
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const block of toolUseBlocks) {
-      const result = await executeTool(block.name, block.input, supabase, auth);
+      // Inject photo_url for attach_step_evidence — Claude often omits this optional param
+      let toolInput = block.input;
+      if (block.name === 'attach_step_evidence' && uploadedPhotoUrl) {
+        toolInput = { ...block.input, photo_url: uploadedPhotoUrl };
+      }
+      const result = await executeTool(block.name, toolInput, supabase, auth);
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
