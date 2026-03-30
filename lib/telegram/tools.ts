@@ -569,11 +569,11 @@ export async function executeTool(
   const tool = TOOLS.find(t => t.name === name);
   if (!tool) return JSON.stringify({ error: `Unknown tool: ${name}` });
 
-  // Check write tier gating
-  if (tool.requiresWrite && !isFeatureAvailable('mcp_write', auth.tier)) {
+  // Check write tier gating — Telegram write ops require Plus or higher
+  if (tool.requiresWrite && auth.tier === 'free') {
     return JSON.stringify({
-      error: `${name} requires a Pro subscription.`,
-      required_tier: 'pro',
+      error: `You need a Plus subscription to create new steps. Your account is currently on the free plan.`,
+      required_tier: 'plus',
       current_tier: auth.tier,
     });
   }

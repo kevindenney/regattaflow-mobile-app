@@ -45,34 +45,32 @@ const PLANS: PlanTier[] = [
     name: 'Free',
     monthlyPrice: 0,
     yearlyPrice: 0,
-    description: 'Get started with race preparation',
+    description: 'Get started',
     features: [
-      'Up to 3 races',
-      'Basic race checklists',
-      'Manual weather lookup',
+      'Up to 3 learning interests',
+      'Basic timeline management',
       '5 AI queries per month',
       'Document upload',
     ],
     cta: 'Start Free',
     accentColor: '#6B7280',
-    iconName: 'boat-outline',
+    iconName: 'rocket-outline',
   },
   {
-    id: 'individual',
-    name: 'Individual',
-    monthlyPrice: 10,
-    yearlyPrice: 100,
-    description: 'AI-powered race preparation',
+    id: 'plus',
+    name: 'Plus',
+    monthlyPrice: 9,
+    yearlyPrice: 89,
+    description: 'AI-powered learning',
     features: [
-      'Unlimited races',
+      'Unlimited interests & steps',
       '50,000 AI tokens per month',
-      'AI strategy analysis',
-      'Venue intelligence',
-      'Historical race data',
+      'AI coaching & suggestions',
+      'Telegram assistant',
+      'Progress analytics',
       'Offline mode',
-      'Advanced analytics',
     ],
-    cta: 'Go Individual',
+    cta: 'Go Plus',
     highlighted: true,
     badge: 'MOST POPULAR',
     accentColor: '#2563EB',
@@ -81,17 +79,15 @@ const PLANS: PlanTier[] = [
   {
     id: 'pro',
     name: 'Pro',
-    monthlyPrice: 30,
-    yearlyPrice: 250,
-    description: 'Maximum AI power for serious racers',
+    monthlyPrice: 29,
+    yearlyPrice: 249,
+    description: 'Power user AI',
     features: [
-      'Everything in Individual',
+      'Everything in Plus',
       '500,000 AI tokens per month',
       'Priority AI processing',
-      'Team sharing & collaboration',
-      'Team analytics dashboard',
+      'MCP integrations',
       'Priority support',
-      'MCP / AI assistant integration',
     ],
     cta: 'Go Pro',
     accentColor: '#7C3AED',
@@ -163,7 +159,7 @@ export default function PricingScreen() {
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Choose Your Plan</Text>
           <Text style={styles.headerSubtitle}>
-            Race preparation tools for every sailor. AI-powered insights to help you win.
+            AI-powered tools to accelerate your learning. Choose the plan that fits your goals.
           </Text>
 
           {/* Billing toggle */}

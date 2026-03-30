@@ -375,24 +375,26 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   };
 
   // Get the price/product to determine tier
-  // Price IDs: Individual $120/yr, Team $480/yr (updated 2026-01-30)
+  // Price IDs: Plus $89/yr, Pro $249/yr (updated 2026-03-30)
   const priceId = subscription.items.data[0]?.price.id;
   const tierMap: Record<string, string> = {
-    // Current price IDs
-    'price_1SvDDBBbfEeOhHXbyxF7XSKY': 'individual',  // $120/year Individual
-    'price_1SvDDCBbfEeOhHXbRi18kcG1': 'team',        // $480/year Team (up to 5 users)
+    // Current price IDs (2026-03-30)
+    'price_1TGTJ7BbfEeOhHXbebVzyXwm': 'plus',   // $89/year Plus
+    'price_1TGTJ8BbfEeOhHXbSNhpoRC4': 'pro',    // $249/year Pro
     // Use env vars if set
-    [Deno.env.get('STRIPE_INDIVIDUAL_PRICE_ID') || 'price_individual_yearly']: 'individual',
-    [Deno.env.get('STRIPE_TEAM_PRICE_ID') || 'price_team_yearly']: 'team',
-    // Legacy price IDs (map old prices to new tiers)
-    'price_1Splo2BbfEeOhHXbHi1ENal0': 'individual',  // old basic $120/year -> individual
-    'price_1SplplBbfEeOhHXbRunl0IIa': 'team',        // old pro $360/year -> team
-    'price_1Sl0i8BbfEeOhHXbmUQ5OBkV': 'individual',  // old $300/year Pro -> individual
-    'price_1Sl0ljBbfEeOhHXbKmEU06Ha': 'team',        // old $480/year Championship -> team
+    [Deno.env.get('STRIPE_PLUS_YEARLY_PRICE_ID') || 'price_plus_yearly']: 'plus',
+    [Deno.env.get('STRIPE_PRO_YEARLY_PRICE_ID') || 'price_pro_yearly']: 'pro',
+    // Legacy price IDs (map old prices to plus)
+    'price_1SvDDBBbfEeOhHXbyxF7XSKY': 'plus',   // old $120/year Individual -> plus
+    'price_1SvDDCBbfEeOhHXbRi18kcG1': 'pro',    // old $480/year Team -> pro
+    'price_1Splo2BbfEeOhHXbHi1ENal0': 'plus',   // old basic $120/year -> plus
+    'price_1SplplBbfEeOhHXbRunl0IIa': 'pro',    // old pro $360/year -> pro
+    'price_1Sl0i8BbfEeOhHXbmUQ5OBkV': 'plus',   // old $300/year Pro -> plus
+    'price_1Sl0ljBbfEeOhHXbKmEU06Ha': 'pro',    // old $480/year Championship -> pro
   };
 
-  const tier = tierMap[priceId] || 'individual';
-  const isTeamPlan = tier === 'team';
+  const tier = tierMap[priceId] || 'plus';
+  const isTeamPlan = tier === 'pro';
   const isNewOrReactivated = subscription.status === 'active';
 
   const { error } = await supabase

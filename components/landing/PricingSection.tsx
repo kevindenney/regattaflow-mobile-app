@@ -121,9 +121,9 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
     <View id="pricing-section" style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Simple Sailor Pricing</Text>
+          <Text style={styles.headerTitle}>Simple Pricing</Text>
           <Text style={styles.headerSubtitle}>
-            Based on current in-app subscription tiers and Stripe web plans.
+            Choose the plan that fits your learning goals.
           </Text>
         </View>
 
@@ -132,23 +132,18 @@ export function PricingSection({ variant = 'sailor' }: PricingSectionProps) {
             title={SAILOR_TIERS.free.name}
             price="$0"
             sublabel="Get started"
-            features={[
-              'Up to 3 races',
-              '5 AI queries per month',
-              'Basic race checklists',
-              'Document upload',
-            ]}
+            features={SAILOR_TIERS.free.features.slice(0, 4)}
             cta="Get Started Free"
             outlined
             persona={variant}
           />
 
           <PricingCard
-            title={SAILOR_TIERS.individual.name}
-            price={`${SAILOR_TIERS.individual.priceMonthly || '$10'}/mo`}
-            sublabel={`or ${SAILOR_TIERS.individual.priceYearly || '$100'}/year`}
-            features={SAILOR_TIERS.individual.features.slice(0, 6)}
-            cta="Choose Individual"
+            title={SAILOR_TIERS.plus.name}
+            price={`${SAILOR_TIERS.plus.priceMonthly || '$9'}/mo`}
+            sublabel={`or ${SAILOR_TIERS.plus.priceYearly || '$89'}/year`}
+            features={SAILOR_TIERS.plus.features.slice(0, 6)}
+            cta="Choose Plus"
             outlined
             persona={variant}
           />

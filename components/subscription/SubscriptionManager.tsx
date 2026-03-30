@@ -2,8 +2,8 @@
  * Subscription Manager Component
  * Handles subscription display, upgrade, and management
  *
- * Updated: 2026-03-15
- * Pricing: Free / Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
+ * Updated: 2026-03-30
+ * Pricing: Free / Plus $9/mo ($89/yr) / Pro $29/mo ($249/yr)
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -38,35 +38,33 @@ const webStripeService = {
       name: 'Free',
       price: 0,
       priceId: '',
-      features: ['Up to 3 races', 'Basic race checklists', 'Manual weather lookup', '5 AI queries per month']
+      features: ['Up to 3 learning interests', 'Basic timeline management', '5 AI queries per month']
     },
     {
-      id: 'individual',
-      name: 'Individual',
-      price: 10,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_MONTHLY_PRICE_ID || 'price_individual_monthly_10',
+      id: 'plus',
+      name: 'Plus',
+      price: 9,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PLUS_MONTHLY_PRICE_ID || 'price_plus_monthly',
       features: [
-        'Unlimited races',
+        'Unlimited interests & steps',
         '50,000 AI tokens per month',
-        'AI strategy analysis',
-        'Venue intelligence',
-        'Historical race data',
+        'AI coaching & suggestions',
+        'Telegram assistant',
+        'Progress analytics',
         'Offline mode',
-        'Advanced analytics',
       ],
       popular: true
     },
     {
       id: 'pro',
       name: 'Pro',
-      price: 100,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly_100',
+      price: 29,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly',
       features: [
-        'Everything in Individual',
+        'Everything in Plus',
         '500,000 AI tokens per month',
         'Priority AI processing',
-        'Team sharing & collaboration',
-        'Team analytics dashboard',
+        'MCP integrations',
         'Priority support',
       ]
     }

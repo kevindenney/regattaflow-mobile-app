@@ -20,28 +20,28 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { SAILOR_TIERS, type SailorTier } from '@/lib/subscriptions/sailorTiers';
 
-const TIER_ORDER: SailorTier[] = ['free', 'individual', 'pro'];
+const TIER_ORDER: SailorTier[] = ['free', 'plus', 'pro'];
 
-const TIER_COLORS: Record<SailorTier, string> = {
+const TIER_COLORS: Partial<Record<SailorTier, string>> = {
   free: '#64748B',
-  individual: '#2563EB',
+  plus: '#2563EB',
   pro: '#7C3AED',
 };
 
-const TIER_DISPLAY_FEATURES: Record<SailorTier, string[]> = {
+const TIER_DISPLAY_FEATURES: Partial<Record<SailorTier, string[]>> = {
   free: [
-    'Up to 3 races',
-    'Basic checklists',
+    'Up to 3 learning interests',
+    'Basic timeline management',
     '5 AI queries/month',
   ],
-  individual: [
-    'Unlimited races',
+  plus: [
+    'Unlimited interests & steps',
     '50,000 AI tokens/month',
-    'AI strategy analysis',
-    'Offline mode',
+    'AI coaching & suggestions',
+    'Telegram assistant',
   ],
   pro: [
-    'Everything in Individual',
+    'Everything in Plus',
     '500,000 AI tokens/month',
     'Priority AI processing',
   ],
@@ -83,8 +83,8 @@ export function TourPricingCard({
       >
         {TIER_ORDER.map((tierId) => {
           const tier = SAILOR_TIERS[tierId];
-          const color = TIER_COLORS[tierId];
-          const features = TIER_DISPLAY_FEATURES[tierId];
+          const color = TIER_COLORS[tierId] ?? '#64748B';
+          const features = TIER_DISPLAY_FEATURES[tierId] ?? [];
           const isPopular = tier.isPopular;
 
           return (

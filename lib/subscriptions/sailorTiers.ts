@@ -1,14 +1,14 @@
 /**
- * Sailor Tier Definitions
+ * Tier Definitions
  *
- * Updated: 2026-03-15
+ * Updated: 2026-03-30
  * Pricing:
- * - Free: Limited races, basic features, 5 AI queries/month
- * - Individual: $10/mo or $100/yr — 50,000 AI tokens/month
- * - Pro: $30/mo or $250/yr — 500,000 AI tokens/month
+ * - Free: Up to 3 interests, 5 AI queries/month
+ * - Plus (aka individual): $9/mo or $89/yr — 50,000 AI tokens/month
+ * - Pro: $29/mo or $249/yr — 500,000 AI tokens/month
  */
 
-export type SailorTier = 'free' | 'individual' | 'pro';
+export type SailorTier = 'free' | 'individual' | 'plus' | 'pro';
 
 export interface TierLimits {
   maxRaces: number;
@@ -35,14 +35,44 @@ export interface TierDefinition {
 }
 
 /**
- * Sailor tier configuration
- * Updated: 2026-03-15
+ * Tier configuration
+ * Updated: 2026-03-30
  */
+const PLUS_TIER: TierDefinition = {
+  id: 'plus',
+  name: 'Plus',
+  description: 'AI-powered learning',
+  price: '$9/month',
+  priceMonthly: '$9',
+  priceYearly: '$89',
+  limits: {
+    maxRaces: Infinity,
+    aiQueriesPerMonth: Infinity,
+    aiTokensPerMonth: 50000,
+    teamSharing: false,
+    weatherAutomation: true,
+    historicalData: true,
+    offlineMode: true,
+    advancedAnalytics: true,
+    maxSeats: 1,
+  },
+  features: [
+    'Unlimited interests & steps',
+    '50,000 AI tokens per month',
+    'AI coaching & suggestions',
+    'Telegram assistant',
+    'Progress analytics',
+    'Offline mode',
+    'MCP / AI assistant integration (read-only)',
+  ],
+  isPopular: true,
+};
+
 export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
   free: {
     id: 'free',
     name: 'Free',
-    description: 'Get started with race preparation',
+    description: 'Get started',
     price: null,
     priceMonthly: null,
     priceYearly: null,
@@ -58,52 +88,22 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       maxSeats: 1,
     },
     features: [
-      'Up to 3 races',
-      'Basic race checklists',
-      'Manual weather lookup',
+      'Up to 3 learning interests',
+      'Basic timeline management',
       '5 AI queries per month',
       'Document upload',
       'MCP / AI assistant integration (read-only)',
     ],
   },
-  individual: {
-    id: 'individual',
-    name: 'Individual',
-    description: 'AI-powered race preparation',
-    price: '$10/month',
-    priceMonthly: '$10',
-    priceYearly: '$100',
-    limits: {
-      maxRaces: Infinity,
-      aiQueriesPerMonth: Infinity,
-      aiTokensPerMonth: 50000,
-      teamSharing: false,
-      weatherAutomation: true,
-      historicalData: true,
-      offlineMode: true,
-      advancedAnalytics: true,
-      maxSeats: 1,
-    },
-    features: [
-      'Unlimited races',
-      '50,000 AI tokens per month',
-      'AI strategy analysis',
-      'Automatic weather updates',
-      'Historical race data',
-      'Offline mode',
-      'Advanced analytics',
-      'Cloud backup & sync',
-      'MCP / AI assistant integration (read-only)',
-    ],
-    isPopular: true,
-  },
+  individual: PLUS_TIER,  // Legacy alias
+  plus: PLUS_TIER,
   pro: {
     id: 'pro',
     name: 'Pro',
-    description: 'Maximum AI power for serious racers',
-    price: '$30/month',
-    priceMonthly: '$30',
-    priceYearly: '$250',
+    description: 'Power user AI',
+    price: '$29/month',
+    priceMonthly: '$29',
+    priceYearly: '$249',
     limits: {
       maxRaces: Infinity,
       aiQueriesPerMonth: Infinity,
@@ -116,13 +116,11 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
       maxSeats: 5,
     },
     features: [
-      'Everything in Individual',
+      'Everything in Plus',
       '500,000 AI tokens per month',
       'Priority AI processing',
-      'Team sharing & collaboration',
-      'Team analytics dashboard',
+      'MCP integrations',
       'Priority support',
-      'MCP / AI assistant integration (read & write)',
     ],
   },
 };
@@ -131,7 +129,7 @@ export const SAILOR_TIERS: Record<SailorTier, TierDefinition> = {
  * Legacy tier mapping for backward compatibility
  */
 export const LEGACY_TIER_MAP: Record<string, SailorTier> = {
-  basic: 'individual',
+  basic: 'plus',
   team: 'pro',
   championship: 'pro',
 };

@@ -2,8 +2,8 @@
  * Stripe Payment Service for RegattaFlow (Web)
  * Handles subscriptions, payment methods, and billing for web platform
  *
- * Updated: 2026-03-15
- * Pricing: Individual $10/mo ($100/yr), Pro $100/mo ($800/yr)
+ * Updated: 2026-03-30
+ * Pricing: Plus $9/mo ($89/yr), Pro $29/mo ($249/yr)
  */
 
 import { supabase } from '@/services/supabase';
@@ -31,7 +31,7 @@ const logger = createLogger('StripeService.web');
 export class StripeService {
   private readonly apiUrl = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:3000';
 
-  // Subscription Plans - Updated 2026-03-15
+  // Subscription Plans - Updated 2026-03-30
   readonly plans: SubscriptionPlan[] = [
     {
       id: 'free',
@@ -40,73 +40,68 @@ export class StripeService {
       priceId: '',
       billingPeriod: 'monthly',
       features: [
-        'Up to 3 races',
-        'Basic race checklists',
-        'Manual weather lookup',
+        'Up to 3 learning interests',
+        'Basic timeline management',
         '5 AI queries per month',
       ],
     },
     {
-      id: 'individual_monthly',
-      name: 'Individual',
-      price: 10,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_MONTHLY_PRICE_ID || 'price_individual_monthly_10',
+      id: 'plus_monthly',
+      name: 'Plus',
+      price: 9,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PLUS_MONTHLY_PRICE_ID || 'price_plus_monthly',
       billingPeriod: 'monthly',
       features: [
-        'Unlimited races',
+        'Unlimited interests & steps',
         '50,000 AI tokens per month',
-        'AI strategy analysis',
-        'Venue intelligence',
-        'Historical race data',
+        'AI coaching & suggestions',
+        'Telegram assistant',
+        'Progress analytics',
         'Offline mode',
-        'Advanced analytics',
       ],
       popular: true,
     },
     {
-      id: 'individual_yearly',
-      name: 'Individual',
-      price: 100,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_INDIVIDUAL_YEARLY_PRICE_ID || 'price_individual_yearly_100',
+      id: 'plus_yearly',
+      name: 'Plus',
+      price: 89,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PLUS_YEARLY_PRICE_ID || 'price_plus_yearly',
       billingPeriod: 'yearly',
       features: [
-        'Unlimited races',
+        'Unlimited interests & steps',
         '50,000 AI tokens per month',
-        'AI strategy analysis',
-        'Venue intelligence',
-        'Historical race data',
+        'AI coaching & suggestions',
+        'Telegram assistant',
+        'Progress analytics',
         'Offline mode',
-        'Advanced analytics',
       ],
       popular: true,
     },
     {
       id: 'pro_monthly',
       name: 'Pro',
-      price: 100,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly_100',
+      price: 29,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_MONTHLY_PRICE_ID || 'price_pro_monthly',
       billingPeriod: 'monthly',
       features: [
-        'Everything in Individual',
+        'Everything in Plus',
         '500,000 AI tokens per month',
         'Priority AI processing',
-        'Team sharing & collaboration',
-        'Team analytics dashboard',
+        'MCP integrations',
         'Priority support',
       ],
     },
     {
       id: 'pro_yearly',
       name: 'Pro',
-      price: 800,
-      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID || 'price_pro_yearly_800',
+      price: 249,
+      priceId: process.env.EXPO_PUBLIC_STRIPE_PRO_YEARLY_PRICE_ID || 'price_pro_yearly',
       billingPeriod: 'yearly',
       features: [
-        'Everything in Individual',
+        'Everything in Plus',
         '500,000 AI tokens per month',
         'Priority AI processing',
-        'Team sharing & collaboration',
-        'Team analytics dashboard',
+        'MCP integrations',
         'Priority support',
       ],
     },
@@ -303,14 +298,14 @@ export class StripeService {
     }
 
     const featureMap: Record<string, string[]> = {
-      individual_monthly: [
+      plus_monthly: [
         'unlimited_documents',
         'ai_analysis',
         'advanced_analytics',
         'multi_venue',
         'performance_insights'
       ],
-      individual_yearly: [
+      plus_yearly: [
         'unlimited_documents',
         'ai_analysis',
         'advanced_analytics',

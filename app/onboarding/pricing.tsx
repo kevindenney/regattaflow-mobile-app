@@ -1,19 +1,19 @@
 /**
  * Onboarding Pricing Screen
  *
- * Updated: 2026-03-15
- * Pricing: Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
+ * Updated: 2026-03-30
+ * Pricing: Plus $9/mo ($89/yr) / Pro $29/mo ($249/yr)
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Users, Zap } from 'lucide-react-native';
+import { Zap } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function PricingScreen() {
     const router = useRouter();
-    const [selectedPlan, setSelectedPlan] = useState<'individual' | 'pro' | null>('individual');
+    const [selectedPlan, setSelectedPlan] = useState<'plus' | 'pro' | null>('plus');
     const [loading, setLoading] = useState(false);
 
     const handleContinue = async () => {
@@ -59,24 +59,24 @@ export default function PricingScreen() {
 
                     <View style={styles.header}>
                         <Text style={styles.title}>Choose Your Plan</Text>
-                        <Text style={styles.subtitle}>Unlock the full potential of RegattaFlow.</Text>
+                        <Text style={styles.subtitle}>Unlock the full potential of BetterAt.</Text>
                     </View>
 
                     <View style={styles.cardsContainer}>
-                        {/* Individual Plan */}
+                        {/* Plus Plan */}
                         <TouchableOpacity
                             style={[
                                 styles.planCard,
-                                selectedPlan === 'individual' && styles.selectedCard
+                                selectedPlan === 'plus' && styles.selectedCard
                             ]}
-                            onPress={() => setSelectedPlan('individual')}
+                            onPress={() => setSelectedPlan('plus')}
                             activeOpacity={0.9}
                         >
                             <View style={styles.cardHeader}>
                                 <View style={[styles.iconContainer, { backgroundColor: '#DBEAFE' }]}>
                                     <Zap size={24} color="#3B82F6" />
                                 </View>
-                                {selectedPlan === 'individual' && (
+                                {selectedPlan === 'plus' && (
                                     <View style={styles.checkCircle}>
                                         <Ionicons name="checkmark" size={16} color="#FFF" />
                                     </View>
@@ -85,10 +85,10 @@ export default function PricingScreen() {
                             <View style={styles.popularBadge}>
                                 <Text style={styles.popularBadgeText}>MOST POPULAR</Text>
                             </View>
-                            <Text style={styles.planName}>Individual</Text>
-                            <Text style={styles.planPrice}>$10<Text style={styles.period}>/month</Text></Text>
-                            <Text style={styles.annualPrice}>$100/year when billed annually</Text>
-                            <Text style={styles.planDesc}>AI-powered race preparation with 50,000 AI tokens per month.</Text>
+                            <Text style={styles.planName}>Plus</Text>
+                            <Text style={styles.planPrice}>$9<Text style={styles.period}>/month</Text></Text>
+                            <Text style={styles.annualPrice}>$89/year when billed annually</Text>
+                            <Text style={styles.planDesc}>AI-powered learning with 50,000 AI tokens per month.</Text>
                         </TouchableOpacity>
 
                         {/* Pro Plan */}
@@ -102,7 +102,7 @@ export default function PricingScreen() {
                         >
                             <View style={styles.cardHeader}>
                                 <View style={[styles.iconContainer, { backgroundColor: '#F3E8FF' }]}>
-                                    <Users size={24} color="#9333EA" />
+                                    <Zap size={24} color="#9333EA" />
                                 </View>
                                 {selectedPlan === 'pro' && (
                                     <View style={styles.checkCircle}>
@@ -111,9 +111,9 @@ export default function PricingScreen() {
                                 )}
                             </View>
                             <Text style={styles.planName}>Pro</Text>
-                            <Text style={styles.planPrice}>$100<Text style={styles.period}>/month</Text></Text>
-                            <Text style={styles.annualPrice}>$800/year when billed annually</Text>
-                            <Text style={styles.planDesc}>Maximum AI power with 500,000 tokens per month. Priority support.</Text>
+                            <Text style={styles.planPrice}>$29<Text style={styles.period}>/month</Text></Text>
+                            <Text style={styles.annualPrice}>$249/year when billed annually</Text>
+                            <Text style={styles.planDesc}>Power user AI with 500,000 tokens per month. Priority support.</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -121,23 +121,23 @@ export default function PricingScreen() {
                         <Text style={styles.featuresTitle}>Both plans include:</Text>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                            <Text style={styles.featureText}>Unlimited Race Logging</Text>
+                            <Text style={styles.featureText}>Unlimited Interests & Steps</Text>
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                            <Text style={styles.featureText}>AI-Powered Analysis</Text>
+                            <Text style={styles.featureText}>AI Coaching & Suggestions</Text>
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                            <Text style={styles.featureText}>AI Strategy Analysis</Text>
+                            <Text style={styles.featureText}>Telegram Assistant</Text>
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                            <Text style={styles.featureText}>Weather & Tide Integration</Text>
+                            <Text style={styles.featureText}>Progress Analytics</Text>
                         </View>
                         <View style={styles.featureItem}>
                             <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                            <Text style={styles.featureText}>Advanced Analytics</Text>
+                            <Text style={styles.featureText}>Offline Mode</Text>
                         </View>
                     </View>
 
@@ -150,7 +150,7 @@ export default function PricingScreen() {
                         disabled={loading}
                     >
                         <Text style={styles.continueButtonText}>
-                            {loading ? 'Processing...' : `Start ${selectedPlan === 'individual' ? 'Individual' : 'Pro'} Plan`}
+                            {loading ? 'Processing...' : `Start ${selectedPlan === 'plus' ? 'Plus' : 'Pro'} Plan`}
                         </Text>
                     </TouchableOpacity>
 
