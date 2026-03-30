@@ -640,12 +640,17 @@ const TOOLS: TelegramToolDef[] = [
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
-      console.log('[attach_step_evidence] input:', JSON.stringify({
-        step_id: input.step_id,
-        photo_url: input.photo_url ? `${(input.photo_url as string).slice(0, 80)}...` : null,
-        caption: input.caption,
-        notes: input.notes,
-      }));
+      // Resolve photo URL: prefer explicit input, fallback to pending_photo_url from conversation
+      let photoUrl = (input.photo_url as string) || '';
+      if (!photoUrl) {
+        const { data: convo } = await supabase
+          .from('telegram_conversations')
+          .select('pending_photo_url')
+          .eq('user_id', auth.userId)
+          .not('pending_photo_url', 'is', null)
+          .maybeSingle();
+        photoUrl = (convo?.pending_photo_url as string) || '';
+      }
 
       // Fetch current step metadata
       const { data: step, error: fetchError } = await supabase
@@ -656,7 +661,6 @@ const TOOLS: TelegramToolDef[] = [
         .single();
 
       if (fetchError || !step) {
-        console.error('[attach_step_evidence] step fetch failed:', fetchError?.message);
         return { error: fetchError?.message ?? 'Step not found' };
       }
 
@@ -667,17 +671,14 @@ const TOOLS: TelegramToolDef[] = [
       const updates: Record<string, unknown> = {};
 
       // Add photo as media upload
-      if (input.photo_url) {
+      if (photoUrl) {
         const newUpload = {
           id: `tg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-          uri: input.photo_url as string,
+          uri: photoUrl,
           type: 'photo',
           caption: (input.caption as string) || undefined,
         };
         updates.media_uploads = [...existingUploads, newUpload];
-        console.log('[attach_step_evidence] adding upload:', newUpload.id, 'total:', (updates.media_uploads as unknown[]).length);
-      } else {
-        console.warn('[attach_step_evidence] no photo_url provided!');
       }
 
       // Add/append notes
@@ -724,18 +725,29 @@ const TOOLS: TelegramToolDef[] = [
         .single();
 
       if (updateError) {
-        console.error('[attach_step_evidence] update failed:', updateError.message);
         return { error: updateError.message };
       }
 
-      const updatedAct = (updated?.metadata as Record<string, unknown>)?.act as Record<string, unknown> | undefined;
+      if (!updated) {
+        return { error: 'Update matched no rows — step may not belong to this user' };
+      }
+
+      const updatedAct = (updated.metadata as Record<string, unknown>)?.act as Record<string, unknown> | undefined;
       const finalUploads = (updatedAct?.media_uploads as unknown[]) ?? [];
-      console.log('[attach_step_evidence] success! uploads after save:', finalUploads.length);
+
+      // Clear pending photo now that it's been attached
+      if (photoUrl) {
+        await supabase
+          .from('telegram_conversations')
+          .update({ pending_photo_url: null })
+          .eq('user_id', auth.userId);
+      }
 
       return {
         attached: true,
         step_id: step.id,
         step_title: step.title,
+        photo_url_used: photoUrl || 'none',
         evidence_count: finalUploads.length,
         has_notes: !!updates.notes,
       };
