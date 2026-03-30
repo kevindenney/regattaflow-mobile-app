@@ -178,7 +178,11 @@ const TOOLS: TelegramToolDef[] = [
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
+      console.log('[create_step] input:', JSON.stringify(input));
+      console.log('[create_step] auth:', JSON.stringify(auth));
+
       const interest = await resolveInterestId(supabase, input.interest as string);
+      console.log('[create_step] resolved interest:', JSON.stringify(interest));
       if (!interest) {
         return { error: `Could not find interest "${input.interest}". Use list_interests to see available options.` };
       }
@@ -189,24 +193,28 @@ const TOOLS: TelegramToolDef[] = [
         review: {},
       };
 
+      const insertPayload = {
+        user_id: auth.userId,
+        interest_id: interest.id,
+        title: input.title,
+        description: input.description ?? null,
+        category: input.category ?? 'general',
+        status: input.status ?? 'pending',
+        visibility: 'followers',
+        starts_at: input.starts_at ?? new Date().toISOString(),
+        ends_at: input.ends_at ?? null,
+        source_type: 'manual',
+        metadata,
+      };
+      console.log('[create_step] inserting:', JSON.stringify(insertPayload));
+
       const { data, error } = await supabase
         .from('timeline_steps')
-        .insert({
-          user_id: auth.userId,
-          interest_id: interest.id,
-          title: input.title,
-          description: input.description ?? null,
-          category: input.category ?? 'general',
-          status: input.status ?? 'pending',
-          visibility: 'followers',
-          starts_at: input.starts_at ?? new Date().toISOString(),
-          ends_at: input.ends_at ?? null,
-          source_type: 'manual',
-          metadata,
-        })
+        .insert(insertPayload)
         .select('id, title, description, category, status, starts_at, ends_at, created_at')
         .single();
 
+      console.log('[create_step] result:', JSON.stringify({ data, error }));
       if (error) return { error: error.message };
       return { created: true, step: data, interest: { id: interest.id, name: interest.name, slug: interest.slug } };
     },
