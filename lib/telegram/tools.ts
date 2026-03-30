@@ -564,10 +564,12 @@ ${evidenceParts ? `\nEVIDENCE:\n${evidenceParts}` : ''}
 
       // Call the step-plan-suggest edge function
       const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const anonKey = process.env.SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+      const authKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        || process.env.SUPABASE_ANON_KEY
+        || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-      if (!supabaseUrl || !anonKey) {
-        return { error: 'AI service not configured' };
+      if (!supabaseUrl || !authKey) {
+        return { error: `AI service not configured (url=${!!supabaseUrl}, key=${!!authKey})` };
       }
 
       try {
@@ -575,7 +577,7 @@ ${evidenceParts ? `\nEVIDENCE:\n${evidenceParts}` : ''}
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
+            'Authorization': `Bearer ${authKey}`,
           },
           body: JSON.stringify({ system: systemPrompt, prompt: userMessage, max_tokens: 512 }),
         });
