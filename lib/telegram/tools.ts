@@ -640,59 +640,41 @@ const TOOLS: TelegramToolDef[] = [
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
-      const debug: Record<string, unknown> = {
-        input_keys: Object.keys(input),
-        has_photo_url_input: !!(input.photo_url),
-        step_id: input.step_id,
-      };
-
       // Resolve photo URL: prefer explicit input, fallback to pending_photo_url from conversation
       const inputPhotoUrl = (input.photo_url as string) || '';
       let photoUrl = inputPhotoUrl;
-      let photoSource = inputPhotoUrl ? 'input' : 'none';
 
       if (!photoUrl) {
-        const { data: convo, error: convoErr } = await supabase
+        const { data: convo } = await supabase
           .from('telegram_conversations')
           .select('pending_photo_url')
           .eq('user_id', auth.userId)
           .maybeSingle();
-        if (convoErr) {
-          debug.fallback_error = convoErr.message;
-        }
         photoUrl = (convo?.pending_photo_url as string) || '';
-        if (photoUrl) photoSource = 'fallback';
-        debug.fallback_pending_url = !!convo?.pending_photo_url;
       }
-
-      debug.photo_source = photoSource;
-      debug.photo_url_length = photoUrl.length;
 
       // Fail early if no photo URL available from any source
       if (!photoUrl && !input.notes) {
-        return { error: 'No photo_url provided and no pending photo found. Send a photo first.', debug };
+        return { error: 'No photo_url provided and no pending photo found. Send a photo first.' };
       }
 
       // Fetch current step metadata
       const { data: step, error: fetchError } = await supabase
         .from('timeline_steps')
-        .select('id, title, metadata')
+        .select('id, title, metadata, status')
         .eq('id', input.step_id as string)
         .eq('user_id', auth.userId)
         .single();
 
       if (fetchError || !step) {
-        return { error: fetchError?.message ?? 'Step not found', debug };
+        return { error: fetchError?.message ?? 'Step not found' };
       }
 
       const metadata = (step.metadata as Record<string, unknown>) ?? {};
       const act = (metadata.act as Record<string, unknown>) ?? {};
       const existingUploads = (act.media_uploads as { id: string; uri: string; type: string; caption?: string }[]) ?? [];
 
-      debug.existing_upload_count = existingUploads.length;
-      debug.act_keys = Object.keys(act);
-
-      // Add photo as media upload
+      // Build new uploads array — always include existing uploads
       const newUploads = [...existingUploads];
       if (photoUrl) {
         newUploads.push({
@@ -726,21 +708,12 @@ const TOOLS: TelegramToolDef[] = [
         act: { ...act, ...actUpdates },
       };
 
-      debug.new_upload_count = newUploads.length;
-
-      // Check current step status — if pending, auto-advance to in_progress
+      // Build update payload — auto-advance pending steps to in_progress
       const stepUpdate: Record<string, unknown> = {
         metadata: updatedMetadata,
         updated_at: new Date().toISOString(),
       };
-
-      const { data: currentStep } = await supabase
-        .from('timeline_steps')
-        .select('status')
-        .eq('id', input.step_id as string)
-        .single();
-
-      if (currentStep?.status === 'pending') {
+      if (step.status === 'pending') {
         stepUpdate.status = 'in_progress';
       }
 
@@ -753,16 +726,15 @@ const TOOLS: TelegramToolDef[] = [
         .single();
 
       if (updateError) {
-        return { error: updateError.message, debug };
+        return { error: updateError.message };
       }
 
       if (!updated) {
-        return { error: 'Update matched no rows — step may not belong to this user', debug };
+        return { error: 'Update matched no rows — step may not belong to this user' };
       }
 
       const updatedAct = (updated.metadata as Record<string, unknown>)?.act as Record<string, unknown> | undefined;
       const finalUploads = (updatedAct?.media_uploads as unknown[]) ?? [];
-      debug.final_upload_count = finalUploads.length;
 
       // Clear pending photo now that it's been attached
       if (photoUrl) {
@@ -776,10 +748,8 @@ const TOOLS: TelegramToolDef[] = [
         attached: true,
         step_id: step.id,
         step_title: step.title,
-        photo_url_used: photoUrl ? photoUrl.substring(0, 60) + '...' : 'none',
         evidence_count: finalUploads.length,
         has_notes: !!actUpdates.notes,
-        debug,
       };
     },
   },

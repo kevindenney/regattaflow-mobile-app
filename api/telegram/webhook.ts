@@ -15,7 +15,6 @@ import type { AuthContext } from '../../services/mcp/server';
 const MAX_TOOL_ITERATIONS = 5;
 const MAX_CONVERSATION_MESSAGES = 20;
 const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
-const DEPLOY_VERSION = 'v9-clean-history'; // Change this to verify new code is running
 
 const SYSTEM_PROMPT = `You are the BetterAt AI assistant, helping users manage their learning timeline via Telegram.
 You help them track progress, create steps, mark tasks done, and plan next activities.
@@ -457,16 +456,7 @@ async function handleMessage(
     conversation = created;
   }
 
-  const rawHistory = (conversation?.messages as { role: string; content: string }[]) ?? [];
-
-  // Detect poisoned history: if any assistant message contains "Done!" pattern
-  // without tool use evidence, the history teaches Claude to skip tool calls.
-  // Wipe it and start fresh.
-  const isPoisoned = rawHistory.some(m =>
-    m.role === 'assistant' && /Done!.*✅|I've added/.test(m.content ?? ''),
-  );
-
-  const history = isPoisoned ? [] : rawHistory;
+  const history = (conversation?.messages as { role: string; content: string }[]) ?? [];
   const recentHistory = history.slice(-MAX_CONVERSATION_MESSAGES);
 
   // Build user content — text or photo+caption
@@ -565,7 +555,6 @@ async function handleMessage(
 
   // --- Tool use loop ---
   let iterations = 0;
-  let toolsExecuted = 0;
   let lastKeyboard: InlineKeyboardButton[][] | null = null;
 
   while (response.stop_reason === 'tool_use' && iterations < MAX_TOOL_ITERATIONS) {
@@ -589,16 +578,6 @@ async function handleMessage(
         tool_use_id: block.id,
         content: result,
       });
-      toolsExecuted++;
-
-      // Write tool result to DB for debugging (temporary — will be overwritten each iteration)
-      if (conversation?.id) {
-        const snippet = typeof result === 'string' ? result.substring(0, 300) : '';
-        await supabase.from('telegram_conversations')
-          .update({ pending_photo_url: `${DEPLOY_VERSION}|${block.name}|${snippet}` })
-          .eq('id', conversation.id);
-      }
-
       // Check if this tool result warrants inline buttons
       // When a photo is pending, show "Attach to" buttons instead of Start/Done
       const keyboard = getToolResponseKeyboard(block.name, result, hasPhoto);
