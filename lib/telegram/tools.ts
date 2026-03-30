@@ -11,6 +11,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { isFeatureAvailable } from '../subscriptions/sailorTiers';
 import type { AuthContext } from '../../services/mcp/server';
+import { buildStepButtons, buildCreatedStepButtons } from './formatting';
+import type { InlineKeyboardButton } from './formatting';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -557,6 +559,165 @@ const TOOLS: TelegramToolDef[] = [
       };
     },
   },
+
+  // -- Nutrition Logging ----------------------------------------------------
+  {
+    name: 'log_nutrition',
+    description:
+      'Log nutrition entries extracted from a meal description or photo analysis. ' +
+      'Use this after analyzing what the user ate (from text or a food photo).',
+    schema: z.object({
+      entries: z.array(z.object({
+        description: z.string().describe('Food/drink description'),
+        meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'pre_workout', 'post_workout', 'other']).optional(),
+        calories: z.number().optional(),
+        protein_g: z.number().optional(),
+        carbs_g: z.number().optional(),
+        fat_g: z.number().optional(),
+        fiber_g: z.number().optional(),
+        water_oz: z.number().optional(),
+        confidence: z.enum(['exact', 'estimated', 'rough']).optional(),
+      })).describe('Array of nutrition entries to log'),
+    }),
+    requiresWrite: true,
+    handler: async (input, supabase, auth) => {
+      const entries = input.entries as Record<string, unknown>[];
+      if (!entries?.length) return { error: 'No entries provided' };
+
+      const inserted: unknown[] = [];
+      const errors: string[] = [];
+
+      for (const entry of entries) {
+        const row = {
+          user_id: auth.userId,
+          description: entry.description,
+          meal_type: entry.meal_type ?? 'other',
+          calories: entry.calories ?? null,
+          protein_g: entry.protein_g ?? null,
+          carbs_g: entry.carbs_g ?? null,
+          fat_g: entry.fat_g ?? null,
+          fiber_g: entry.fiber_g ?? null,
+          water_oz: entry.water_oz ?? null,
+          confidence: entry.confidence ?? 'estimated',
+          logged_at: new Date().toISOString(),
+          source: 'telegram',
+        };
+
+        const { data, error } = await supabase
+          .from('nutrition_entries')
+          .insert(row)
+          .select('id, description, meal_type, calories, protein_g, carbs_g, fat_g')
+          .single();
+
+        if (error) {
+          errors.push(`${entry.description}: ${error.message}`);
+        } else {
+          inserted.push(data);
+        }
+      }
+
+      return {
+        logged: inserted.length,
+        entries: inserted,
+        ...(errors.length > 0 ? { errors } : {}),
+      };
+    },
+  },
+
+  // -- Evidence Attachment ---------------------------------------------------
+  {
+    name: 'attach_step_evidence',
+    description:
+      'Attach a photo or note as evidence to a step\'s Act tab. ' +
+      'Use this when the user sends a photo or voice note documenting what they did for a step. ' +
+      'The photo must have already been uploaded — pass the photo_url provided by the system. ' +
+      'You can also add a text caption/note describing the evidence.',
+    schema: z.object({
+      step_id: z.string().describe('The timeline step ID to attach evidence to'),
+      photo_url: z.string().optional().describe('URL of the uploaded photo (provided by system)'),
+      caption: z.string().optional().describe('Description of the evidence'),
+      notes: z.string().optional().describe('Additional notes to add to the act tab'),
+    }),
+    requiresWrite: true,
+    handler: async (input, supabase, auth) => {
+      // Fetch current step metadata
+      const { data: step, error: fetchError } = await supabase
+        .from('timeline_steps')
+        .select('id, title, metadata')
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId)
+        .single();
+
+      if (fetchError || !step) return { error: fetchError?.message ?? 'Step not found' };
+
+      const metadata = (step.metadata as Record<string, unknown>) ?? {};
+      const act = (metadata.act as Record<string, unknown>) ?? {};
+      const existingUploads = (act.media_uploads as { id: string; uri: string; type: string; caption?: string }[]) ?? [];
+
+      const updates: Record<string, unknown> = {};
+
+      // Add photo as media upload
+      if (input.photo_url) {
+        const newUpload = {
+          id: `tg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          uri: input.photo_url as string,
+          type: 'photo',
+          caption: (input.caption as string) || undefined,
+        };
+        updates.media_uploads = [...existingUploads, newUpload];
+      }
+
+      // Add/append notes
+      if (input.notes) {
+        const existingNotes = (act.notes as string) ?? '';
+        const timestamp = new Date().toISOString().split('T')[0];
+        const newNote = `[${timestamp} via Telegram] ${input.notes}`;
+        updates.notes = existingNotes ? `${existingNotes}\n\n${newNote}` : newNote;
+      }
+
+      // Set started_at if not already set
+      if (!act.started_at) {
+        updates.started_at = new Date().toISOString();
+      }
+
+      // Deep merge into metadata
+      const updatedMetadata = {
+        ...metadata,
+        act: { ...act, ...updates },
+      };
+
+      // Check current step status — if pending, auto-advance to in_progress
+      const { data: currentStep } = await supabase
+        .from('timeline_steps')
+        .select('status')
+        .eq('id', input.step_id as string)
+        .single();
+
+      const stepUpdate: Record<string, unknown> = {
+        metadata: updatedMetadata,
+        updated_at: new Date().toISOString(),
+      };
+      if (currentStep?.status === 'pending') {
+        stepUpdate.status = 'in_progress';
+      }
+
+      const { error: updateError } = await supabase
+        .from('timeline_steps')
+        .update(stepUpdate)
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId);
+
+      if (updateError) return { error: updateError.message };
+
+      return {
+        attached: true,
+        step_id: step.id,
+        step_title: step.title,
+        evidence_count: (updates.media_uploads as unknown[])?.length ?? existingUploads.length,
+        has_notes: !!updates.notes,
+      };
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -606,5 +767,39 @@ export async function executeTool(
   } catch (error) {
     console.error(`Tool execution error (${name}):`, error);
     return JSON.stringify({ error: `Tool execution failed: ${String(error)}` });
+  }
+}
+
+/**
+ * Generate inline keyboard buttons based on tool results.
+ * Returns null if no buttons are appropriate for this tool/result.
+ */
+export function getToolResponseKeyboard(
+  toolName: string,
+  resultJson: string,
+): InlineKeyboardButton[][] | null {
+  try {
+    const result = JSON.parse(resultJson);
+    if (result.error) return null;
+
+    switch (toolName) {
+      case 'get_student_timeline': {
+        const steps = result.steps as { id: string; title: string; status: string }[] | undefined;
+        if (!steps?.length) return null;
+        const buttons = buildStepButtons(steps);
+        return buttons.length > 0 ? buttons : null;
+      }
+
+      case 'create_step': {
+        const stepId = result.step?.id as string | undefined;
+        if (!stepId) return null;
+        return buildCreatedStepButtons(stepId);
+      }
+
+      default:
+        return null;
+    }
+  } catch {
+    return null;
   }
 }

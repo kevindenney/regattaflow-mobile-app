@@ -3,6 +3,9 @@
  * No external Telegram SDK needed.
  */
 
+import { formatForTelegram } from './formatting';
+import type { InlineKeyboardButton } from './formatting';
+
 const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_MESSAGE_LENGTH = 4096;
 
@@ -10,6 +13,12 @@ interface TelegramResponse {
   ok: boolean;
   result?: unknown;
   description?: string;
+}
+
+interface SendMessageOptions {
+  parseMode?: 'MarkdownV2' | 'Markdown' | 'HTML';
+  replyToMessageId?: number;
+  replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] };
 }
 
 function getBotToken(): string {
@@ -22,31 +31,71 @@ function apiUrl(method: string): string {
   return `${TELEGRAM_API}/bot${getBotToken()}/${method}`;
 }
 
+function fileUrl(filePath: string): string {
+  return `${TELEGRAM_API}/file/bot${getBotToken()}/${filePath}`;
+}
+
+/**
+ * Send a text message, auto-splitting at paragraph boundaries if too long.
+ * Defaults to MarkdownV2 formatting with plaintext fallback on error.
+ */
 export async function sendMessage(
   chatId: number,
   text: string,
-  options?: { parseMode?: 'Markdown' | 'HTML'; replyToMessageId?: number },
+  options?: SendMessageOptions,
 ): Promise<TelegramResponse> {
-  // Split long messages at paragraph boundaries
-  const chunks = splitMessage(text);
+  const useMarkdown = options?.parseMode !== undefined ? options.parseMode === 'MarkdownV2' : true;
+  const formattedText = useMarkdown ? formatForTelegram(text) : text;
+  const chunks = splitMessage(formattedText);
 
   let lastResponse: TelegramResponse = { ok: true };
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
     const body: Record<string, unknown> = {
       chat_id: chatId,
-      text: chunk,
+      text: chunks[i],
     };
-    if (options?.parseMode) body.parse_mode = options.parseMode;
-    if (options?.replyToMessageId) {
+
+    if (useMarkdown) body.parse_mode = 'MarkdownV2';
+    else if (options?.parseMode) body.parse_mode = options.parseMode;
+
+    // Only attach reply_markup to the last chunk
+    if (i === chunks.length - 1 && options?.replyMarkup) {
+      body.reply_markup = JSON.stringify(options.replyMarkup);
+    }
+
+    if (options?.replyToMessageId && i === 0) {
       body.reply_to_message_id = options.replyToMessageId;
-      // Only reply to the first chunk
-      delete options.replyToMessageId;
     }
 
     lastResponse = await callTelegram('sendMessage', body);
+
+    // Fallback: if MarkdownV2 failed, retry this chunk as plaintext
+    if (!lastResponse.ok && useMarkdown && lastResponse.description?.includes('parse')) {
+      const plainChunks = splitMessage(text);
+      const plainBody: Record<string, unknown> = {
+        chat_id: chatId,
+        text: plainChunks[i] ?? chunks[i],
+      };
+      if (i === plainChunks.length - 1 && options?.replyMarkup) {
+        plainBody.reply_markup = JSON.stringify(options.replyMarkup);
+      }
+      lastResponse = await callTelegram('sendMessage', plainBody);
+    }
   }
 
   return lastResponse;
+}
+
+/**
+ * Acknowledge an inline keyboard button press.
+ */
+export async function answerCallbackQuery(
+  callbackQueryId: string,
+  text?: string,
+): Promise<TelegramResponse> {
+  const body: Record<string, unknown> = { callback_query_id: callbackQueryId };
+  if (text) body.text = text;
+  return callTelegram('answerCallbackQuery', body);
 }
 
 export async function sendChatAction(
@@ -63,9 +112,49 @@ export async function setWebhook(
   return callTelegram('setWebhook', {
     url,
     secret_token: secretToken,
-    allowed_updates: ['message'],
+    allowed_updates: ['message', 'callback_query'],
   });
 }
+
+// ---------------------------------------------------------------------------
+// File download (for photos and voice notes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the download URL for a Telegram file by file_id.
+ */
+export async function getFileUrl(fileId: string): Promise<string | null> {
+  const response = await callTelegram('getFile', { file_id: fileId });
+  if (!response.ok || !response.result) return null;
+  const filePath = (response.result as { file_path?: string }).file_path;
+  if (!filePath) return null;
+  return fileUrl(filePath);
+}
+
+/**
+ * Download a file from Telegram by file_id. Returns the raw Buffer.
+ */
+export async function downloadFile(fileId: string): Promise<Buffer | null> {
+  const url = await getFileUrl(fileId);
+  if (!url) return null;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Telegram file download failed: ${response.status}`);
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (error) {
+    console.error('Telegram file download error:', error);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 async function callTelegram(
   method: string,

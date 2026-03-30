@@ -1,9 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
-import { sendMessage, sendChatAction } from '../../lib/telegram/client';
-import { getAnthropicTools, executeTool } from '../../lib/telegram/tools';
+import { sendMessage, sendChatAction, answerCallbackQuery, downloadFile } from '../../lib/telegram/client';
+import { getAnthropicTools, executeTool, getToolResponseKeyboard } from '../../lib/telegram/tools';
 import { normalizeTier } from '../../lib/subscriptions/sailorTiers';
+import { transcribeVoiceNote } from '../../lib/telegram/transcription';
+import type { InlineKeyboardButton } from '../../lib/telegram/formatting';
 import type { AuthContext } from '../../services/mcp/server';
 
 // ---------------------------------------------------------------------------
@@ -17,11 +19,29 @@ const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
 const SYSTEM_PROMPT = `You are the BetterAt AI assistant, helping users manage their learning timeline via Telegram.
 You help them track progress, create steps, mark tasks done, and plan next activities.
 Keep responses concise — this is a chat interface, not a document.
-Use short paragraphs. Avoid markdown headers (Telegram doesn't render them well).
+Use short paragraphs. Use *bold* for emphasis and _italic_ for secondary info.
+Use bullet points with - for lists. Use \`code\` for IDs or technical values.
+Avoid markdown headers — Telegram doesn't render them.
 When tool results contain lists, summarize the key points rather than dumping raw data.
 If the user asks something you can't do with available tools, say so directly.
 
 IMPORTANT: You MUST use tools for ALL data operations. NEVER assume a step was created, updated, or retrieved without actually calling the appropriate tool. Even if the conversation history shows similar past requests, you must call the tool every time — the history may not reflect the actual database state.`;
+
+const PHOTO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
+
+The user has sent a photo. A photo_url has been uploaded and is available for you to attach to a step.
+
+Your priority order:
+1. If the user's caption mentions a specific step or activity (e.g. "my IV insertion practice", "finished the drawing"):
+   - Use get_student_timeline to find the matching step
+   - Use attach_step_evidence with the photo_url to attach it as evidence on the Act tab
+   - If the step is still pending, also call update_step_status to mark it in_progress
+2. If the photo appears to be food/a meal (and no step is mentioned):
+   - Analyze the food and estimate nutrition
+   - Use log_nutrition to save the entries
+3. If neither applies, respond helpfully about what you see.
+
+The uploaded photo URL is provided in the message as [Photo uploaded: URL]. Use this exact URL when calling attach_step_evidence.`;
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrored from api/mcp.ts)
@@ -80,23 +100,469 @@ function generateLinkCode(): string {
 // Telegram types (subset we need)
 // ---------------------------------------------------------------------------
 
+interface TelegramUser {
+  id: number;
+  is_bot: boolean;
+  first_name: string;
+  username?: string;
+}
+
 interface TelegramUpdate {
   update_id: number;
   message?: {
     message_id: number;
-    from?: { id: number; is_bot: boolean; first_name: string; username?: string };
+    from?: TelegramUser;
     chat: { id: number; type: string };
     date: number;
     text?: string;
+    photo?: { file_id: string; file_unique_id: string; width: number; height: number; file_size?: number }[];
+    voice?: { file_id: string; duration: number; mime_type?: string; file_size?: number };
+    caption?: string;
+  };
+  callback_query?: {
+    id: string;
+    from: TelegramUser;
+    message?: { chat: { id: number }; message_id: number };
+    data?: string;
   };
 }
 
 // ---------------------------------------------------------------------------
-// Handler
+// Supabase + Auth context helpers
+// ---------------------------------------------------------------------------
+
+function createSupabaseClient() {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) return null;
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+async function resolveAuthContext(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<AuthContext> {
+  const clubId = await resolveClubId(supabase, userId);
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('subscription_tier, email')
+    .eq('id', userId)
+    .maybeSingle();
+
+  return {
+    userId,
+    email: userRow?.email ?? null,
+    clubId,
+    tier: normalizeTier(userRow?.subscription_tier),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Callback query handler (inline keyboard button presses)
+// ---------------------------------------------------------------------------
+
+async function handleCallbackQuery(
+  callbackQuery: NonNullable<TelegramUpdate['callback_query']>,
+): Promise<void> {
+  const { id: queryId, from, data, message: cbMessage } = callbackQuery;
+  if (!data || !cbMessage) {
+    await answerCallbackQuery(queryId, 'Invalid action');
+    return;
+  }
+
+  const supabase = createSupabaseClient();
+  if (!supabase) {
+    await answerCallbackQuery(queryId, 'Service not configured');
+    return;
+  }
+
+  // Parse callback data: "done:<step_id>" | "wip:<step_id>" | "skip:<step_id>"
+  const [action, stepId] = data.split(':');
+  if (!action || !stepId) {
+    await answerCallbackQuery(queryId, 'Invalid action');
+    return;
+  }
+
+  const statusMap: Record<string, string> = {
+    done: 'completed',
+    wip: 'in_progress',
+    skip: 'skipped',
+  };
+  const newStatus = statusMap[action];
+  if (!newStatus) {
+    await answerCallbackQuery(queryId, 'Unknown action');
+    return;
+  }
+
+  // Resolve auth
+  const { data: link } = await supabase
+    .from('telegram_links')
+    .select('user_id, linked_at')
+    .eq('telegram_user_id', from.id)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!link?.user_id || !link.linked_at) {
+    await answerCallbackQuery(queryId, 'Account not linked');
+    return;
+  }
+
+  const auth = await resolveAuthContext(supabase, link.user_id);
+
+  // Execute the status update
+  const result = await executeTool(
+    'update_step_status',
+    { step_id: stepId, status: newStatus },
+    supabase,
+    auth,
+  );
+
+  const parsed = JSON.parse(result);
+  if (parsed.error) {
+    await answerCallbackQuery(queryId, `Error: ${parsed.error}`);
+    return;
+  }
+
+  const label = newStatus === 'completed' ? '✅ Done' : newStatus === 'in_progress' ? '▶️ Started' : '⏭️ Skipped';
+  await answerCallbackQuery(queryId, `${label}: ${parsed.step?.title ?? 'step'}`);
+
+  // Send a follow-up message so the user sees confirmation
+  if (cbMessage.chat?.id) {
+    await sendMessage(cbMessage.chat.id, `${label}: *${parsed.step?.title ?? 'step'}*`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Message handler (text, photo, voice)
+// ---------------------------------------------------------------------------
+
+async function handleMessage(
+  message: NonNullable<TelegramUpdate['message']>,
+): Promise<void> {
+  const telegramUserId = message.from?.id;
+  const chatId = message.chat.id;
+  const username = message.from?.username ?? null;
+
+  if (!telegramUserId || !message.from) return;
+
+  // Determine message type and content
+  const hasText = !!message.text;
+  const hasPhoto = !!(message.photo && message.photo.length > 0);
+  const hasVoice = !!message.voice;
+
+  // Skip if no usable content
+  if (!hasText && !hasPhoto && !hasVoice) return;
+
+  const text = message.text?.trim() ?? '';
+
+  // --- Supabase ---
+  const supabase = createSupabaseClient();
+  if (!supabase) {
+    await sendMessage(chatId, 'Sorry, the service is not configured yet. Please try again later.');
+    return;
+  }
+
+  // --- Handle /start command ---
+  if (hasText && text.startsWith('/start')) {
+    const payload = text.split(' ')[1];
+    if (payload?.startsWith('link_')) {
+      await sendMessage(
+        chatId,
+        `To link your account, open this URL while logged into BetterAt:\n\n${APP_URL}/settings/telegram?code=${payload.replace('link_', '')}`,
+      );
+    } else {
+      await sendMessage(
+        chatId,
+        "Welcome to BetterAt! 👋\n\nI'm your AI learning assistant. I can help you:\n\n" +
+          '- Check your timeline and progress\n' +
+          '- Create new learning steps\n' +
+          '- Mark tasks as done\n' +
+          '- Get suggestions for what to do next\n' +
+          '- Analyze meal photos for nutrition tracking\n' +
+          '- Process voice notes\n\n' +
+          "Send me any message to get started. If this is your first time, I'll help you link your account.",
+      );
+    }
+    return;
+  }
+
+  // --- Resolve Telegram user → BetterAt user ---
+  const { data: link } = await supabase
+    .from('telegram_links')
+    .select('user_id, linked_at')
+    .eq('telegram_user_id', telegramUserId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!link?.user_id || !link.linked_at) {
+    const code = generateLinkCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+    const { error: insertError } = await supabase
+      .from('telegram_links')
+      .insert({
+        telegram_user_id: telegramUserId,
+        telegram_username: username,
+        link_code: code,
+        link_code_expires_at: expiresAt,
+        is_active: true,
+      });
+
+    if (insertError) {
+      const { error: updateError } = await supabase
+        .from('telegram_links')
+        .update({
+          link_code: code,
+          link_code_expires_at: expiresAt,
+          telegram_username: username,
+          linked_at: null,
+          is_active: true,
+        })
+        .eq('telegram_user_id', telegramUserId);
+
+      if (updateError) {
+        console.error('Telegram link update error:', updateError.message);
+        await sendMessage(chatId, 'Sorry, something went wrong setting up your link. Please try again.');
+        return;
+      }
+    }
+
+    // Also store chat_id for digest cron
+    await supabase
+      .from('telegram_links')
+      .update({ telegram_chat_id: chatId })
+      .eq('telegram_user_id', telegramUserId);
+
+    await sendMessage(
+      chatId,
+      `I don't recognize your account yet. Let's link it!\n\nOpen this URL while logged into BetterAt:\n${APP_URL}/settings/telegram?code=${code}\n\nThis link expires in 15 minutes. Send me another message after linking.`,
+    );
+    return;
+  }
+
+  const userId = link.user_id;
+
+  // Ensure chat_id is stored for digest cron
+  await supabase
+    .from('telegram_links')
+    .update({ telegram_chat_id: chatId })
+    .eq('telegram_user_id', telegramUserId);
+
+  // --- Build auth context ---
+  const auth = await resolveAuthContext(supabase, userId);
+
+  // --- Send typing indicator ---
+  await sendChatAction(chatId, 'typing');
+
+  // --- Handle voice notes: transcribe → treat as text ---
+  let userText = text;
+  let historyPrefix = '';
+
+  if (hasVoice && message.voice) {
+    const audioBuffer = await downloadFile(message.voice.file_id);
+    if (!audioBuffer) {
+      await sendMessage(chatId, "Sorry, I couldn't download your voice note. Please try again.");
+      return;
+    }
+
+    const transcription = await transcribeVoiceNote(
+      audioBuffer,
+      message.voice.mime_type || 'audio/ogg',
+    );
+
+    if (!transcription) {
+      await sendMessage(chatId, "Sorry, I couldn't transcribe your voice note. Please try typing your message instead.");
+      return;
+    }
+
+    userText = transcription;
+    historyPrefix = '[Voice note]: ';
+  }
+
+  // --- Build Claude messages ---
+  let { data: conversation } = await supabase
+    .from('telegram_conversations')
+    .select('id, messages')
+    .eq('telegram_chat_id', chatId)
+    .maybeSingle();
+
+  if (!conversation) {
+    const { data: created } = await supabase
+      .from('telegram_conversations')
+      .insert({ telegram_chat_id: chatId, user_id: userId, messages: [] })
+      .select('id, messages')
+      .single();
+    conversation = created;
+  }
+
+  const history = (conversation?.messages as { role: string; content: string }[]) ?? [];
+  const recentHistory = history.slice(-MAX_CONVERSATION_MESSAGES);
+
+  // Build user content — text or photo+caption
+  let userContent: Anthropic.ContentBlockParam[] | string;
+  let systemPrompt = SYSTEM_PROMPT;
+  let historyEntry = `${historyPrefix}${userText}`;
+
+  if (hasPhoto && message.photo) {
+    // Use the largest photo (last in array)
+    const largestPhoto = message.photo[message.photo.length - 1];
+    const photoBuffer = await downloadFile(largestPhoto.file_id);
+
+    if (photoBuffer) {
+      // Upload to Supabase Storage so it's permanently available
+      const fileId = `tg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const storagePath = `${userId}/telegram/${fileId}.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('step-media')
+        .upload(storagePath, photoBuffer, {
+          contentType: 'image/jpeg',
+          upsert: false,
+        });
+
+      let photoUrl = '';
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage
+          .from('step-media')
+          .getPublicUrl(storagePath);
+        photoUrl = urlData.publicUrl;
+      } else {
+        console.error('Photo upload error:', uploadError.message);
+      }
+
+      const base64 = photoBuffer.toString('base64');
+      const captionText = message.caption || 'What is this? If it\'s food, analyze and log the nutrition.';
+      const photoUrlNote = photoUrl ? `\n\n[Photo uploaded: ${photoUrl}]` : '';
+
+      userContent = [
+        {
+          type: 'image' as const,
+          source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: base64 },
+        },
+        {
+          type: 'text' as const,
+          text: `${captionText}${photoUrlNote}`,
+        },
+      ];
+      systemPrompt = PHOTO_SYSTEM_PROMPT;
+      historyEntry = `[Sent a photo${message.caption ? `: ${message.caption}` : ''}]${photoUrl ? ` [url: ${photoUrl}]` : ''}`;
+    } else {
+      await sendMessage(chatId, "Sorry, I couldn't download your photo. Please try again.");
+      return;
+    }
+  } else {
+    userContent = userText;
+  }
+
+  const messages: Anthropic.MessageParam[] = [
+    ...recentHistory.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    })),
+    { role: 'user' as const, content: userContent },
+  ];
+
+  // --- Call Claude ---
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const tools = getAnthropicTools();
+
+  let response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    system: systemPrompt,
+    tools,
+    messages,
+  });
+
+  // --- Tool use loop ---
+  let iterations = 0;
+  const toolCallSummaries: string[] = [];
+  let lastKeyboard: InlineKeyboardButton[][] | null = null;
+
+  while (response.stop_reason === 'tool_use' && iterations < MAX_TOOL_ITERATIONS) {
+    iterations++;
+
+    const toolUseBlocks = response.content.filter(
+      (b): b is Anthropic.ContentBlockParam & { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> } =>
+        b.type === 'tool_use',
+    );
+
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of toolUseBlocks) {
+      const result = await executeTool(block.name, block.input, supabase, auth);
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: result,
+      });
+      toolCallSummaries.push(`[Called ${block.name}]`);
+
+      // Check if this tool result warrants inline buttons
+      const keyboard = getToolResponseKeyboard(block.name, result);
+      if (keyboard) lastKeyboard = keyboard;
+    }
+
+    messages.push({ role: 'assistant', content: response.content as Anthropic.ContentBlockParam[] });
+    messages.push({ role: 'user', content: toolResults });
+
+    await sendChatAction(chatId, 'typing');
+
+    response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      system: systemPrompt,
+      tools,
+      messages,
+    });
+  }
+
+  // --- Extract final text response ---
+  const textBlocks = response.content.filter(
+    (b): b is Anthropic.TextBlock => b.type === 'text',
+  );
+  const responseText = textBlocks.map(b => b.text).join('\n\n') || "I processed your request but don't have anything to say.";
+
+  // --- Send to Telegram (with optional inline keyboard) ---
+  const sendOptions: {
+    replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] };
+  } = {};
+
+  if (lastKeyboard) {
+    sendOptions.replyMarkup = { inline_keyboard: lastKeyboard };
+  }
+
+  await sendMessage(chatId, responseText, sendOptions);
+
+  // --- Save conversation ---
+  const savedAssistantContent = toolCallSummaries.length > 0
+    ? `${toolCallSummaries.join('\n')}\n\n${responseText}`
+    : responseText;
+
+  const updatedHistory = [
+    ...recentHistory,
+    { role: 'user', content: historyEntry },
+    { role: 'assistant', content: savedAssistantContent },
+  ];
+
+  await supabase
+    .from('telegram_conversations')
+    .update({
+      messages: updatedHistory,
+      last_active_at: new Date().toISOString(),
+      user_id: userId,
+    })
+    .eq('id', conversation?.id);
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
 // ---------------------------------------------------------------------------
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Only POST
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -117,243 +583,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const update = req.body as TelegramUpdate;
-    const message = update?.message;
 
-    // Ignore non-text messages for now
-    if (!message?.text || !message.from) {
+    // Handle inline keyboard button presses
+    if (update.callback_query) {
+      await handleCallbackQuery(update.callback_query);
       ok();
       return;
     }
 
-    const telegramUserId = message.from.id;
-    const chatId = message.chat.id;
-    const text = message.text.trim();
-    const username = message.from.username ?? null;
-
-    // --- Supabase service-role client (bypasses RLS) ---
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      console.error('Telegram webhook: Supabase not configured');
-      await sendMessage(chatId, 'Sorry, the service is not configured yet. Please try again later.');
-      ok();
-      return;
+    // Handle messages (text, photo, voice)
+    if (update.message?.from) {
+      await handleMessage(update.message);
     }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
-    // --- Handle /start command ---
-    if (text.startsWith('/start')) {
-      const payload = text.split(' ')[1]; // deep link payload after /start
-      if (payload?.startsWith('link_')) {
-        await sendMessage(
-          chatId,
-          `To link your account, open this URL while logged into BetterAt:\n\n${APP_URL}/settings/telegram?code=${payload.replace('link_', '')}`,
-        );
-      } else {
-        await sendMessage(
-          chatId,
-          "Welcome to BetterAt! 👋\n\nI'm your AI learning assistant. I can help you:\n\n" +
-            '• Check your timeline and progress\n' +
-            '• Create new learning steps\n' +
-            '• Mark tasks as done\n' +
-            '• Get suggestions for what to do next\n\n' +
-            "Send me any message to get started. If this is your first time, I'll help you link your account.",
-        );
-      }
-      ok();
-      return;
-    }
-
-    // --- Resolve Telegram user → BetterAt user ---
-    const { data: link, error: linkError } = await supabase
-      .from('telegram_links')
-      .select('user_id, linked_at')
-      .eq('telegram_user_id', telegramUserId)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (!link?.user_id || !link.linked_at) {
-      // Not linked — generate a code and prompt them
-      const code = generateLinkCode();
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min
-
-      // Try insert first; if duplicate, update the existing row
-      const { error: insertError } = await supabase
-        .from('telegram_links')
-        .insert({
-          telegram_user_id: telegramUserId,
-          telegram_username: username,
-          link_code: code,
-          link_code_expires_at: expiresAt,
-          is_active: true,
-        });
-
-      if (insertError) {
-        // Likely a duplicate — try updating instead
-        const { error: updateError } = await supabase
-          .from('telegram_links')
-          .update({
-            link_code: code,
-            link_code_expires_at: expiresAt,
-            telegram_username: username,
-            linked_at: null,
-            is_active: true,
-          })
-          .eq('telegram_user_id', telegramUserId);
-
-        if (updateError) {
-          console.error('Telegram link update error:', updateError.message);
-          await sendMessage(chatId, 'Sorry, something went wrong setting up your link. Please try again.');
-          ok();
-          return;
-        }
-      }
-
-      await sendMessage(
-        chatId,
-        `I don't recognize your account yet. Let's link it!\n\nOpen this URL while logged into BetterAt:\n${APP_URL}/settings/telegram?code=${code}\n\nThis link expires in 15 minutes. Send me another message after linking.`,
-      );
-      ok();
-      return;
-    }
-
-    const userId = link.user_id;
-
-    // --- Build auth context ---
-    const clubId = await resolveClubId(supabase, userId);
-
-    const { data: userRow } = await supabase
-      .from('users')
-      .select('subscription_tier, email')
-      .eq('id', userId)
-      .maybeSingle();
-
-    const tier = normalizeTier(userRow?.subscription_tier);
-    const auth: AuthContext = {
-      userId,
-      email: userRow?.email ?? null,
-      clubId,
-      tier,
-    };
-
-    // --- Send typing indicator ---
-    await sendChatAction(chatId, 'typing');
-
-    // --- Load conversation history ---
-    let { data: conversation } = await supabase
-      .from('telegram_conversations')
-      .select('id, messages')
-      .eq('telegram_chat_id', chatId)
-      .maybeSingle();
-
-    if (!conversation) {
-      const { data: created } = await supabase
-        .from('telegram_conversations')
-        .insert({ telegram_chat_id: chatId, user_id: userId, messages: [] })
-        .select('id, messages')
-        .single();
-      conversation = created;
-    }
-
-    const history = (conversation?.messages as { role: string; content: string }[]) ?? [];
-    // Keep only recent messages to stay within token limits
-    const recentHistory = history.slice(-MAX_CONVERSATION_MESSAGES);
-
-    // Append user message
-    const messages: Anthropic.MessageParam[] = [
-      ...recentHistory.map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      })),
-      { role: 'user' as const, content: text },
-    ];
-
-    // --- Call Claude ---
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const tools = getAnthropicTools();
-
-    let response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      tools,
-      messages,
-    });
-
-    // --- Tool use loop ---
-    let iterations = 0;
-    const toolCallSummaries: string[] = [];
-    while (response.stop_reason === 'tool_use' && iterations < MAX_TOOL_ITERATIONS) {
-      iterations++;
-
-      const toolUseBlocks = response.content.filter(
-        (b): b is Anthropic.ContentBlockParam & { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> } =>
-          b.type === 'tool_use',
-      );
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const block of toolUseBlocks) {
-        const result = await executeTool(block.name, block.input, supabase, auth);
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          content: result,
-        });
-        // Track tool calls for conversation history (brief summary only —
-        // do NOT include results, as Claude will treat them as a data source
-        // and skip calling the tool on future turns)
-        toolCallSummaries.push(`[Called ${block.name}]`);
-      }
-
-      messages.push({ role: 'assistant', content: response.content as Anthropic.ContentBlockParam[] });
-      messages.push({ role: 'user', content: toolResults });
-
-      // Re-send typing indicator for long tool chains
-      await sendChatAction(chatId, 'typing');
-
-      response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        system: SYSTEM_PROMPT,
-        tools,
-        messages,
-      });
-    }
-
-    // --- Extract final text response ---
-    const textBlocks = response.content.filter(
-      (b): b is Anthropic.TextBlock => b.type === 'text',
-    );
-    const responseText = textBlocks.map(b => b.text).join('\n\n') || "I processed your request but don't have anything to say.";
-
-    // --- Send to Telegram ---
-    await sendMessage(chatId, responseText);
-
-    // --- Save conversation ---
-    // Include tool call summaries so Claude knows it used tools (prevents hallucinating
-    // tool results from conversation pattern matching on future turns)
-    const savedAssistantContent = toolCallSummaries.length > 0
-      ? `${toolCallSummaries.join('\n')}\n\n${responseText}`
-      : responseText;
-
-    const updatedHistory = [
-      ...recentHistory,
-      { role: 'user', content: text },
-      { role: 'assistant', content: savedAssistantContent },
-    ];
-
-    await supabase
-      .from('telegram_conversations')
-      .update({
-        messages: updatedHistory,
-        last_active_at: new Date().toISOString(),
-        user_id: userId,
-      })
-      .eq('id', conversation?.id);
 
     ok();
   } catch (error) {
