@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   LayoutChangeEvent,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -85,6 +86,8 @@ export default function AccountModalContent() {
   // Settings-related state
   const [pricingVisible, setPricingVisible] = useState(false);
   const [teamManagerVisible, setTeamManagerVisible] = useState(false);
+  const [telegramLinked, setTelegramLinked] = useState<boolean | null>(null);
+  const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
 const [interestSectionY, setInterestSectionY] = useState<number>(0);
   const [didAutoScrollInterest, setDidAutoScrollInterest] = useState(false);
 
@@ -156,6 +159,25 @@ const [interestSectionY, setInterestSectionY] = useState<number>(0);
       .single()
       .then(({ data }) => {
         if (data?.username) setUsername(data.username);
+      });
+  }, [user?.id]);
+
+  // Load Telegram link status
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from('telegram_links')
+      .select('telegram_username, linked_at')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.linked_at) {
+          setTelegramLinked(true);
+          setTelegramUsername(data.telegram_username);
+        } else {
+          setTelegramLinked(false);
+        }
       });
   }, [user?.id]);
 
@@ -538,6 +560,27 @@ const [interestSectionY, setInterestSectionY] = useState<number>(0);
             leadingIconBackgroundColor={ICON_BACKGROUNDS.red}
             trailingAccessory="chevron"
             onPress={() => router.push('/settings/notifications')}
+          />
+          <IOSListItem
+            title="Telegram Assistant"
+            leadingIcon="paper-plane-outline"
+            leadingIconBackgroundColor="#2AABEE"
+            trailingAccessory={telegramLinked ? 'none' : 'chevron'}
+            trailingComponent={
+              telegramLinked
+                ? trailingValue(telegramUsername ? `@${telegramUsername}` : 'Connected')
+                : telegramLinked === false
+                  ? trailingValue('Connect')
+                  : undefined
+            }
+            onPress={() => {
+              if (telegramLinked) {
+                router.push('/settings/telegram');
+              } else {
+                const botUsername = process.env.EXPO_PUBLIC_TELEGRAM_BOT_USERNAME || 'BetterAtBot';
+                Linking.openURL(`https://t.me/${botUsername}`);
+              }
+            }}
           />
         </IOSListSection>
 
