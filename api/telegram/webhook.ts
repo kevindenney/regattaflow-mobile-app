@@ -622,8 +622,9 @@ async function handleMessage(
       if (block.name === 'attach_step_evidence' && uploadedPhotoUrl) {
         toolInput = { ...block.input, photo_url: uploadedPhotoUrl };
       }
+      const toolStart = Date.now();
       const result = await executeTool(block.name, toolInput, supabase, auth);
-      console.log(`[telegram] Tool result: ${block.name}`, result.slice(0, 300));
+      console.log(`[telegram] Tool result (${Date.now() - toolStart}ms): ${block.name}`, result.slice(0, 300));
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
@@ -643,6 +644,8 @@ async function handleMessage(
 
     await sendChatAction(chatId, 'typing');
 
+    console.log(`[telegram] Calling Claude iteration ${iterations + 1}...`);
+    const claudeStart = Date.now();
     response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
@@ -650,6 +653,7 @@ async function handleMessage(
       tools,
       messages,
     });
+    console.log(`[telegram] Claude response (${Date.now() - claudeStart}ms): stop_reason=${response.stop_reason}`);
   }
 
   console.log(`[telegram] Tool loop done: ${iterations} iterations, stop_reason=${response.stop_reason}`);
@@ -669,7 +673,9 @@ async function handleMessage(
     sendOptions.replyMarkup = { inline_keyboard: lastKeyboard };
   }
 
+  console.log(`[telegram] Sending response (${responseText.length} chars)...`);
   await sendMessage(chatId, responseText, sendOptions);
+  console.log(`[telegram] Response sent OK`);
 
   // --- Save conversation ---
   // IMPORTANT: Only save Claude's final text response — do NOT save tool call
