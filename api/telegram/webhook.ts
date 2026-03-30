@@ -15,7 +15,7 @@ import type { AuthContext } from '../../services/mcp/server';
 const MAX_TOOL_ITERATIONS = 5;
 const MAX_CONVERSATION_MESSAGES = 20;
 const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
-const DEPLOY_VERSION = 'v7-debug'; // Change this to verify new code is running
+const DEPLOY_VERSION = 'v8-results'; // Change this to verify new code is running
 
 const SYSTEM_PROMPT = `You are the BetterAt AI assistant, helping users manage their learning timeline via Telegram.
 You help them track progress, create steps, mark tasks done, and plan next activities.
@@ -572,8 +572,14 @@ async function handleMessage(
         tool_use_id: block.id,
         content: result,
       });
-      // DEBUG: include result snippet in summaries (saved to conversation for inspection)
-      toolCallSummaries.push(`[Called ${block.name}: ${result.substring(0, 150)}]`);
+      // DEBUG v8: write EACH tool result to DB immediately so we can query it
+      const resultSnippet = typeof result === 'string' ? result.substring(0, 200) : String(result).substring(0, 200);
+      toolCallSummaries.push(`[${block.name}=>${resultSnippet}]`);
+      if (conversation?.id) {
+        await supabase.from('telegram_conversations')
+          .update({ pending_photo_url: `${DEPLOY_VERSION}|${block.name}|${resultSnippet}` })
+          .eq('id', conversation.id);
+      }
 
       // Check if this tool result warrants inline buttons
       // When a photo is pending, show "Attach to" buttons instead of Start/Done
