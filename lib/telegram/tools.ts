@@ -445,9 +445,9 @@ const TOOLS: TelegramToolDef[] = [
   {
     name: 'analyze_step',
     description:
-      'Analyze a training step: assess whether evidence demonstrates the planned competencies, ' +
-      'surface gaps, and identify unplanned skills shown. Use when the user asks how they did, ' +
-      'whether they demonstrated a skill, or to review their progress on a step.',
+      'Get full step data for competency analysis: planned competencies, evidence, progress, and history. ' +
+      'Use when the user asks how they did, whether they demonstrated a skill, or to review progress on a step. ' +
+      'YOU (the assistant) should analyze the returned data and provide the competency assessment directly.',
     schema: z.object({
       step_id: z.string().describe('The timeline step ID to analyze'),
     }),
@@ -469,134 +469,69 @@ const TOOLS: TelegramToolDef[] = [
 
       // 2. Fetch planned competency definitions
       const competencyIds = (plan.competency_ids as string[]) ?? [];
-      let plannedCompetencies: { id: string; title: string; category: string; description: string | null }[] = [];
+      let plannedCompetencies: { id: string; title: string; category: string; description: string | null; status?: string; attempts?: number }[] = [];
       if (competencyIds.length) {
         const { data: comps } = await supabase
           .from('betterat_competencies')
           .select('id, title, category, description')
           .in('id', competencyIds);
-        plannedCompetencies = (comps ?? []) as typeof plannedCompetencies;
+
+        const { data: progressRows } = await supabase
+          .from('betterat_competency_progress')
+          .select('competency_id, status, attempts_count')
+          .eq('user_id', auth.userId)
+          .in('competency_id', competencyIds);
+        const progressMap = new Map((progressRows ?? []).map(r => [r.competency_id, r]));
+
+        plannedCompetencies = (comps ?? []).map(c => {
+          const prog = progressMap.get(c.id);
+          return { ...c, status: prog?.status ?? 'not_started', attempts: prog?.attempts_count ?? 0 };
+        });
       }
 
-      // 3. Fetch user's competency progress for this interest
-      const { data: progressRows } = await supabase
-        .from('betterat_competency_progress')
-        .select('competency_id, status, attempts_count')
-        .eq('user_id', auth.userId);
-      const progressMap = new Map((progressRows ?? []).map(r => [r.competency_id, r]));
-
-      // 4. Fetch recent step history for context
-      const { data: historySteps } = await supabase
-        .from('timeline_steps')
-        .select('title, status, metadata')
-        .eq('user_id', auth.userId)
-        .eq('interest_id', step.interest_id)
-        .in('status', ['completed', 'in_progress'])
-        .order('starts_at', { ascending: false })
-        .limit(5);
-
-      const historyBlock = (historySteps ?? []).map(s => {
-        const m = (s.metadata as Record<string, unknown>) ?? {};
-        const r = (m.review as Record<string, unknown>) ?? {};
-        const p = (m.plan as Record<string, unknown>) ?? {};
-        const ratings = Object.entries((r.capability_progress as Record<string, number>) ?? {});
-        let line = `- "${s.title}" (${s.status})`;
-        if (p.what_will_you_do) line += ` — Focus: ${p.what_will_you_do}`;
-        if (ratings.length) line += ` — Ratings: ${ratings.map(([k, v]) => `${k}: ${v}/5`).join(', ')}`;
-        return line;
-      }).join('\n') || '(no prior steps)';
-
-      // 5. Build evidence summary
+      // 3. Build evidence summary
       const subSteps = (plan.how_sub_steps as { id: string; text: string }[]) ?? [];
       const subProgress = (act.sub_step_progress as Record<string, boolean>) ?? {};
-      const completedCount = subSteps.filter(ss => subProgress[ss.id]).length;
+      const subDeviations = (act.sub_step_deviations as Record<string, string>) ?? {};
       const mediaUploads = (act.media_uploads as { caption?: string; type: string }[]) ?? [];
       const nutrition = act.nutrition as { entries?: { calories?: number }[] } | undefined;
       const measurements = act.measurements as { extracted?: { extracted_from_text?: string }[] } | undefined;
-      const capabilityRatings = Object.entries((review.capability_progress as Record<string, number>) ?? {});
+      const capabilityRatings = (review.capability_progress as Record<string, number>) ?? {};
 
-      const competencyBlock = plannedCompetencies.map(c => {
-        const prog = progressMap.get(c.id);
-        return `- ${c.title} [${c.category}]: ${c.description || '(no description)'} — Status: ${prog?.status ?? 'not started'}, Attempts: ${prog?.attempts_count ?? 0}`;
-      }).join('\n');
+      // 4. Fetch recent step history for context (lightweight)
+      const { data: historySteps } = await supabase
+        .from('timeline_steps')
+        .select('title, status, starts_at')
+        .eq('user_id', auth.userId)
+        .eq('interest_id', step.interest_id)
+        .in('status', ['completed', 'in_progress'])
+        .neq('id', step.id)
+        .order('starts_at', { ascending: false })
+        .limit(5);
 
-      const evidenceParts = [
-        act.notes ? `Notes: ${act.notes}` : '',
-        mediaUploads.length > 0
-          ? `Photos/videos: ${mediaUploads.length} uploads${mediaUploads.filter(m => m.caption).map(m => ` ("${m.caption}")`).join(',')}`
-          : '',
-        (measurements?.extracted?.length ?? 0) > 0
-          ? `Measurements: ${measurements!.extracted!.slice(0, 5).map(m => m.extracted_from_text || '').filter(Boolean).join('; ')}`
-          : '',
-        (nutrition?.entries?.length ?? 0) > 0
-          ? `Nutrition: ${nutrition!.entries!.length} entries, ~${nutrition!.entries!.reduce((s, e) => s + (e.calories ?? 0), 0)} cal`
-          : '',
-      ].filter(Boolean).join('\n');
-
-      // 6. Build AI prompt and call edge function
-      const hasCompetencies = plannedCompetencies.length > 0;
-      const hasEvidence = evidenceParts.length > 0;
-
-      const systemPrompt = `You are an expert learning coach reviewing a ${step.title} session.
-
-${hasCompetencies && hasEvidence ? `Assess whether the evidence demonstrates the planned competencies:
-1. For each planned competency, does the evidence indicate it was practiced? At what level (initial exposure / developing / proficient)?
-2. Were any additional skills shown beyond what was planned?
-3. What specific gaps remain?
-4. One concrete suggestion for the next session.` : `Analyze this session and provide coaching insight:
-1. What does the evidence show was accomplished?
-2. What patterns do you notice across their history?
-3. One concrete suggestion for next time.`}
-
-Keep it under 200 words. Be specific. Reference competency names and evidence. Write in second person.`;
-
-      const ratingsBlock = capabilityRatings.length
-        ? capabilityRatings.map(([k, v]) => `${k}: ${v}/5`).join(', ')
-        : '(no ratings)';
-
-      const userMessage = `Session: "${step.title}" (${step.status})
-Plan: ${plan.what_will_you_do || '(not specified)'}
-Sub-steps: ${completedCount}/${subSteps.length} completed
-Self-ratings: ${ratingsBlock}
-${competencyBlock ? `\nPLANNED COMPETENCIES:\n${competencyBlock}` : ''}
-${evidenceParts ? `\nEVIDENCE:\n${evidenceParts}` : ''}
-\nRECENT HISTORY:\n${historyBlock}`;
-
-      // Call the step-plan-suggest edge function
-      const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
-      const authKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-        || process.env.SUPABASE_ANON_KEY
-        || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-      if (!supabaseUrl || !authKey) {
-        return { error: `AI service not configured (url=${!!supabaseUrl}, key=${!!authKey})` };
-      }
-
-      try {
-        const resp = await fetch(`${supabaseUrl}/functions/v1/step-plan-suggest`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authKey}`,
-          },
-          body: JSON.stringify({ system: systemPrompt, prompt: userMessage, max_tokens: 512 }),
-        });
-
-        if (!resp.ok) {
-          return { error: `AI analysis failed (${resp.status})` };
-        }
-
-        const result = await resp.json();
-        return {
-          step_title: step.title,
-          analysis: result.text || 'Unable to generate analysis.',
-          competencies_assessed: plannedCompetencies.map(c => c.title),
-          evidence_count: mediaUploads.length,
-          sub_step_progress: `${completedCount}/${subSteps.length}`,
-        };
-      } catch (err) {
-        return { error: `AI analysis failed: ${err instanceof Error ? err.message : 'unknown'}` };
-      }
+      // Return all data for Claude to analyze directly — no nested AI call
+      return {
+        instruction: 'Analyze this step data. For each planned competency, assess whether the evidence demonstrates it (initial_exposure / developing / proficient / not_demonstrated). Identify gaps and suggest next steps. Be specific and concise.',
+        step: {
+          title: step.title,
+          status: step.status,
+          plan: plan.what_will_you_do || null,
+          capability_goals: plan.capability_goals ?? [],
+        },
+        planned_competencies: plannedCompetencies,
+        evidence: {
+          notes: act.notes || null,
+          photos_videos: mediaUploads.length,
+          photo_captions: mediaUploads.filter((m: { caption?: string }) => m.caption).map((m: { caption?: string }) => m.caption),
+          sub_steps_completed: `${subSteps.filter(ss => subProgress[ss.id]).length}/${subSteps.length}`,
+          sub_step_deviations: Object.keys(subDeviations).length > 0 ? subDeviations : null,
+          measurements: (measurements?.extracted ?? []).slice(0, 5).map(m => m.extracted_from_text).filter(Boolean),
+          nutrition_entries: nutrition?.entries?.length ?? 0,
+          nutrition_calories: nutrition?.entries?.reduce((s, e) => s + (e.calories ?? 0), 0) ?? 0,
+        },
+        self_ratings: Object.keys(capabilityRatings).length > 0 ? capabilityRatings : null,
+        recent_history: (historySteps ?? []).map(s => ({ title: s.title, status: s.status })),
+      };
     },
   },
 
