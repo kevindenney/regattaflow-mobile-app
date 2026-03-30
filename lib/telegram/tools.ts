@@ -841,6 +841,12 @@ export function getToolResponseKeyboard(
         return buildCreatedStepButtons(stepId);
       }
 
+      case 'attach_step_evidence': {
+        // Photo was already attached — clear any pending "Attach to:" buttons
+        if (result.attached) return [];
+        return null;
+      }
+
       default:
         return null;
     }

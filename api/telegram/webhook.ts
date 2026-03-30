@@ -581,7 +581,10 @@ async function handleMessage(
       // Check if this tool result warrants inline buttons
       // When a photo is pending, show "Attach to" buttons instead of Start/Done
       const keyboard = getToolResponseKeyboard(block.name, result, hasPhoto);
-      if (keyboard) lastKeyboard = keyboard;
+      if (keyboard !== null) {
+        // Empty array = explicitly clear keyboard (e.g. after successful attachment)
+        lastKeyboard = keyboard.length > 0 ? keyboard : null;
+      }
     }
 
     messages.push({ role: 'assistant', content: response.content as Anthropic.ContentBlockParam[] });
