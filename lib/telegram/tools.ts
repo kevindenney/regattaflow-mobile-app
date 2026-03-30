@@ -89,7 +89,7 @@ const TOOLS: TelegramToolDef[] = [
     handler: async (input, supabase, auth) => {
       let query = supabase
         .from('timeline_steps')
-        .select('id, title, description, category, status, starts_at, ends_at, sort_order, interest_id, created_at, updated_at, interests(id, name, slug)')
+        .select('id, title, description, category, status, starts_at, ends_at, sort_order, interest_id, created_at, updated_at')
         .eq('user_id', auth.userId)
         .order('sort_order', { ascending: true })
         .limit(50);
@@ -107,7 +107,26 @@ const TOOLS: TelegramToolDef[] = [
 
       const { data, error } = await query;
       if (error) return { error: error.message };
-      return { user_id: auth.userId, count: data?.length ?? 0, steps: data ?? [] };
+
+      // Resolve interest names (no FK exists for PostgREST join)
+      const interestIds = [...new Set((data ?? []).map((s: Record<string, unknown>) => s.interest_id as string))];
+      const interestMap: Record<string, { name: string; slug: string }> = {};
+      if (interestIds.length > 0) {
+        const { data: interests } = await supabase
+          .from('interests')
+          .select('id, name, slug')
+          .in('id', interestIds);
+        for (const i of interests ?? []) {
+          interestMap[i.id] = { name: i.name, slug: i.slug };
+        }
+      }
+
+      const steps = (data ?? []).map((s: Record<string, unknown>) => ({
+        ...s,
+        interest: interestMap[s.interest_id as string] ?? null,
+      }));
+
+      return { user_id: auth.userId, count: steps.length, steps };
     },
   },
 
