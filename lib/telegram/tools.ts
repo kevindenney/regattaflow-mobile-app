@@ -640,6 +640,13 @@ const TOOLS: TelegramToolDef[] = [
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
+      console.log('[attach_step_evidence] input:', JSON.stringify({
+        step_id: input.step_id,
+        photo_url: input.photo_url ? `${(input.photo_url as string).slice(0, 80)}...` : null,
+        caption: input.caption,
+        notes: input.notes,
+      }));
+
       // Fetch current step metadata
       const { data: step, error: fetchError } = await supabase
         .from('timeline_steps')
@@ -648,7 +655,10 @@ const TOOLS: TelegramToolDef[] = [
         .eq('user_id', auth.userId)
         .single();
 
-      if (fetchError || !step) return { error: fetchError?.message ?? 'Step not found' };
+      if (fetchError || !step) {
+        console.error('[attach_step_evidence] step fetch failed:', fetchError?.message);
+        return { error: fetchError?.message ?? 'Step not found' };
+      }
 
       const metadata = (step.metadata as Record<string, unknown>) ?? {};
       const act = (metadata.act as Record<string, unknown>) ?? {};
@@ -665,6 +675,9 @@ const TOOLS: TelegramToolDef[] = [
           caption: (input.caption as string) || undefined,
         };
         updates.media_uploads = [...existingUploads, newUpload];
+        console.log('[attach_step_evidence] adding upload:', newUpload.id, 'total:', (updates.media_uploads as unknown[]).length);
+      } else {
+        console.warn('[attach_step_evidence] no photo_url provided!');
       }
 
       // Add/append notes
@@ -701,19 +714,29 @@ const TOOLS: TelegramToolDef[] = [
         stepUpdate.status = 'in_progress';
       }
 
-      const { error: updateError } = await supabase
+      // Use .select() to verify the update actually modified a row
+      const { data: updated, error: updateError } = await supabase
         .from('timeline_steps')
         .update(stepUpdate)
         .eq('id', input.step_id as string)
-        .eq('user_id', auth.userId);
+        .eq('user_id', auth.userId)
+        .select('id, metadata')
+        .single();
 
-      if (updateError) return { error: updateError.message };
+      if (updateError) {
+        console.error('[attach_step_evidence] update failed:', updateError.message);
+        return { error: updateError.message };
+      }
+
+      const updatedAct = (updated?.metadata as Record<string, unknown>)?.act as Record<string, unknown> | undefined;
+      const finalUploads = (updatedAct?.media_uploads as unknown[]) ?? [];
+      console.log('[attach_step_evidence] success! uploads after save:', finalUploads.length);
 
       return {
         attached: true,
         step_id: step.id,
         step_title: step.title,
-        evidence_count: (updates.media_uploads as unknown[])?.length ?? existingUploads.length,
+        evidence_count: finalUploads.length,
         has_notes: !!updates.notes,
       };
     },
