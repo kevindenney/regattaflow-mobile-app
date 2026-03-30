@@ -51,11 +51,13 @@ Your priority order:
    - You ALREADY called get_student_timeline — look through the results for a step whose title matches
    - Use attach_step_evidence with the photo_url to attach it as evidence on the Act tab
    - Do NOT create a new step if one already exists with a matching title
-   - Do NOT use log_nutrition when the user explicitly mentions a step — attach the photo to that step instead
+   - If the photo is food/a meal, ALSO call log_nutrition with the step_id to record nutritional data on the step's Review tab
 2. If no step is mentioned and the photo appears to be food/a meal:
    - Analyze the food and estimate nutrition
-   - Use log_nutrition to save the entries
+   - Use log_nutrition to save the entries (try to find a matching nutrition step via get_student_timeline and pass its step_id)
 3. If neither applies, respond helpfully about what you see.
+
+IMPORTANT: For food photos, ALWAYS call log_nutrition (with step_id when possible) so nutrition data appears in the Review tab. Attaching the photo as evidence is not enough — you must also extract and log the nutritional information.
 
 IMPORTANT: Do NOT pass an interest filter to get_student_timeline. The user has steps across many interests (fitness, sailing, nursing, art, etc.) and you must search all of them. Do NOT create a new step unless you searched and confirmed no matching step exists.
 
