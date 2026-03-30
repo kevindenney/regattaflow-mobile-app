@@ -609,12 +609,14 @@ async function handleMessage(
 
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
     for (const block of toolUseBlocks) {
+      console.log(`[telegram] Tool call #${iterations}: ${block.name}`, JSON.stringify(block.input).slice(0, 200));
       // Inject photo_url for attach_step_evidence — Claude often omits this optional param
       let toolInput = block.input;
       if (block.name === 'attach_step_evidence' && uploadedPhotoUrl) {
         toolInput = { ...block.input, photo_url: uploadedPhotoUrl };
       }
       const result = await executeTool(block.name, toolInput, supabase, auth);
+      console.log(`[telegram] Tool result: ${block.name}`, result.slice(0, 300));
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
@@ -642,6 +644,8 @@ async function handleMessage(
       messages,
     });
   }
+
+  console.log(`[telegram] Tool loop done: ${iterations} iterations, stop_reason=${response.stop_reason}`);
 
   // --- Extract final text response ---
   const textBlocks = response.content.filter(
