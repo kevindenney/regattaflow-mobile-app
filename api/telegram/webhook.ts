@@ -38,7 +38,11 @@ CRITICAL RULES — READ CAREFULLY:
 SUB-STEP TRACKING:
 - When the user mentions completing a task or sub-step, call get_step_detail to see their sub-steps, then use toggle_sub_step to mark it done. Report progress (e.g. "3/5 sub-steps done!").
 - When the user says they did something differently than planned, use log_sub_step_deviation to record what they actually did.
-- When showing step details, highlight incomplete sub-steps so the user knows what's left.`;
+- When showing step details, highlight incomplete sub-steps so the user knows what's left.
+
+COMPETENCY ASSESSMENT:
+- When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.
+- When the user asks what competencies they're missing or what to work on next, call get_competency_gaps.`;
 
 const PHOTO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
