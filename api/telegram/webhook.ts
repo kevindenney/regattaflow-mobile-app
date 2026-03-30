@@ -19,7 +19,9 @@ You help them track progress, create steps, mark tasks done, and plan next activ
 Keep responses concise — this is a chat interface, not a document.
 Use short paragraphs. Avoid markdown headers (Telegram doesn't render them well).
 When tool results contain lists, summarize the key points rather than dumping raw data.
-If the user asks something you can't do with available tools, say so directly.`;
+If the user asks something you can't do with available tools, say so directly.
+
+IMPORTANT: You MUST use tools for ALL data operations. NEVER assume a step was created, updated, or retrieved without actually calling the appropriate tool. Even if the conversation history shows similar past requests, you must call the tool every time — the history may not reflect the actual database state.`;
 
 // ---------------------------------------------------------------------------
 // Auth helpers (mirrored from api/mcp.ts)
@@ -284,6 +286,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // --- Tool use loop ---
     let iterations = 0;
+    const toolCallSummaries: string[] = [];
     while (response.stop_reason === 'tool_use' && iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
 
@@ -300,6 +303,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           tool_use_id: block.id,
           content: result,
         });
+        // Track tool calls for conversation history
+        toolCallSummaries.push(`[Used tool: ${block.name}(${JSON.stringify(block.input)}) → ${result.substring(0, 200)}]`);
       }
 
       messages.push({ role: 'assistant', content: response.content as Anthropic.ContentBlockParam[] });
@@ -327,10 +332,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await sendMessage(chatId, responseText);
 
     // --- Save conversation ---
+    // Include tool call summaries so Claude knows it used tools (prevents hallucinating
+    // tool results from conversation pattern matching on future turns)
+    const savedAssistantContent = toolCallSummaries.length > 0
+      ? `${toolCallSummaries.join('\n')}\n\n${responseText}`
+      : responseText;
+
     const updatedHistory = [
       ...recentHistory,
       { role: 'user', content: text },
-      { role: 'assistant', content: responseText },
+      { role: 'assistant', content: savedAssistantContent },
     ];
 
     await supabase
