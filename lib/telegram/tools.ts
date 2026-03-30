@@ -75,7 +75,7 @@ const TOOLS: TelegramToolDef[] = [
   {
     name: 'get_student_timeline',
     description:
-      'Get learning steps (timeline) for the user. Returns up to 50 steps with their interest, optionally filtered by status or interest.',
+      "Get the user's actual learning steps from their timeline. This is the PRIMARY tool for answering questions about what the user is working on, what's next, what's planned, or what's done. Returns up to 50 steps with their interest, optionally filtered by status or interest.",
     schema: z.object({
       status: z
         .enum(['pending', 'in_progress', 'completed', 'skipped'])
@@ -321,8 +321,9 @@ const TOOLS: TelegramToolDef[] = [
   {
     name: 'get_suggested_next_steps',
     description:
-      "Get suggested next steps based on subscribed blueprints. " +
-      "Returns steps the user hasn't adopted yet, ordered by curriculum sequence.",
+      "Get NEW step suggestions from subscribed blueprints/curricula that the user hasn't added yet. " +
+      "Only use this when the user explicitly asks for suggestions or recommendations for NEW things to add. " +
+      "Do NOT use this to check what the user is currently working on — use get_student_timeline instead.",
     schema: z.object({
       interest: z.string().optional().describe('Filter by interest slug, name, or UUID'),
       limit: z.number().optional().describe('Max suggestions to return (default 5)'),
