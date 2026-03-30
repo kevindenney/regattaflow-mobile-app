@@ -26,7 +26,15 @@ Avoid markdown headers — Telegram doesn't render them.
 When tool results contain lists, summarize the key points rather than dumping raw data.
 If the user asks something you can't do with available tools, say so directly.
 
-IMPORTANT: You MUST use tools for ALL data operations. NEVER assume a step was created, updated, or retrieved without actually calling the appropriate tool. Even if the conversation history shows similar past requests, you must call the tool every time — the history may not reflect the actual database state.`;
+CRITICAL RULES — READ CAREFULLY:
+1. You MUST call tools to perform ANY action. NEVER pretend you did something without calling a tool.
+2. NEVER say "Done" or "I've added" without having ACTUALLY called a tool first.
+3. If the user wants to see their timeline, you MUST call get_student_timeline.
+4. If the user wants to add evidence/photos to a step, you MUST call attach_step_evidence.
+5. If the user wants nutrition logged, you MUST call log_nutrition.
+6. If the user wants a new step, you MUST call create_step.
+7. Do NOT describe what you would do — actually DO it by calling the tool.
+8. Every request that involves data REQUIRES at least one tool call.`;
 
 const PHOTO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
@@ -449,24 +457,17 @@ async function handleMessage(
     conversation = created;
   }
 
-  const history = (conversation?.messages as { role: string; content: string }[]) ?? [];
+  const rawHistory = (conversation?.messages as { role: string; content: string }[]) ?? [];
 
-  // Clean poisoned history: previous versions saved "[Called tool_name]" summaries
-  // in assistant messages, which caused Claude to mimic those patterns as text
-  // instead of actually calling tools. Strip those lines out.
-  const cleanedHistory = history.map(m => {
-    if (m.role === 'assistant' && m.content) {
-      const cleaned = m.content
-        .replace(/\[v\d+-[^\]]*\]\s*/g, '')           // Remove [v7-debug], [v8-results] markers
-        .replace(/\[Called [^\]]+\]\n?/g, '')           // Remove [Called tool_name] lines
-        .replace(/\[[^\]]+=>[\s\S]*?\]\n?/g, '')       // Remove [tool=>result] lines
-        .trim();
-      return { ...m, content: cleaned || m.content };
-    }
-    return m;
-  });
+  // Detect poisoned history: if any assistant message contains "Done!" pattern
+  // without tool use evidence, the history teaches Claude to skip tool calls.
+  // Wipe it and start fresh.
+  const isPoisoned = rawHistory.some(m =>
+    m.role === 'assistant' && /Done!.*✅|I've added/.test(m.content ?? ''),
+  );
 
-  const recentHistory = cleanedHistory.slice(-MAX_CONVERSATION_MESSAGES);
+  const history = isPoisoned ? [] : rawHistory;
+  const recentHistory = history.slice(-MAX_CONVERSATION_MESSAGES);
 
   // Build user content — text or photo+caption
   let userContent: Anthropic.ContentBlockParam[] | string;
