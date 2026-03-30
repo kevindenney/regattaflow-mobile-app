@@ -1,8 +1,8 @@
 /**
  * Subscription Page
  *
- * Updated: 2026-03-15
- * Pricing: Free / Individual $10/mo ($100/yr) / Pro $100/mo ($800/yr)
+ * Updated: 2026-03-30
+ * Pricing: Free / Plus $9/mo ($89/yr) / Pro $29/mo ($249/yr)
  */
 
 import React, { useState } from 'react';
@@ -18,7 +18,7 @@ import { showAlert } from '@/lib/utils/crossPlatformAlert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Zap, Users, Anchor } from 'lucide-react-native';
+import { Zap, Crown, Anchor } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 
 import { useAuth } from '@/providers/AuthProvider';
@@ -57,54 +57,51 @@ const PLANS: Plan[] = [
     name: 'Free',
     annualPrice: 0,
     monthlyEquivalent: '$0',
-    description: 'Get started with sailing',
+    description: 'Get started',
     icon: Anchor,
     color: IOS_COLORS.systemGray,
     features: [
-      'Up to 3 races',
-      'Basic race checklists',
-      'Manual weather lookup',
+      'Up to 3 learning interests',
+      'Basic timeline management',
       '5 AI queries per month',
     ],
     limitations: [
-      'AI race strategy',
-      'Venue intelligence',
-      'Performance analytics',
+      'Unlimited AI coaching',
+      'Telegram assistant',
+      'Advanced analytics',
     ],
   },
   {
-    id: 'individual',
-    name: 'Individual',
-    annualPrice: 100,
-    monthlyEquivalent: '$10/mo',
-    description: 'AI-powered race preparation',
+    id: 'plus',
+    name: 'Plus',
+    annualPrice: 89,
+    monthlyEquivalent: '$9/mo',
+    description: 'AI-powered learning',
     icon: Zap,
     color: IOS_COLORS.systemBlue,
     popular: true,
     features: [
-      'Unlimited races',
+      'Unlimited interests & steps',
       '50,000 AI tokens per month',
-      'AI strategy analysis',
-      'Venue intelligence',
-      'Historical race data',
+      'AI coaching & suggestions',
+      'Telegram assistant',
+      'Progress analytics',
       'Offline mode',
-      'Advanced analytics',
     ],
   },
   {
     id: 'pro',
     name: 'Pro',
-    annualPrice: 800,
-    monthlyEquivalent: '$100/mo',
-    description: 'Maximum AI power for serious racers',
-    icon: Users,
+    annualPrice: 249,
+    monthlyEquivalent: '$29/mo',
+    description: 'Power user AI',
+    icon: Crown,
     color: IOS_COLORS.systemPurple,
     features: [
-      'Everything in Individual',
+      'Everything in Plus',
       '500,000 AI tokens per month',
       'Priority AI processing',
-      'Team sharing & collaboration',
-      'Team analytics dashboard',
+      'MCP integrations',
       'Priority support',
     ],
   },
@@ -180,8 +177,8 @@ export default function SubscriptionPage() {
   // Normalize tier name for comparison
   const rawTier = userProfile?.subscription_tier?.toLowerCase() || 'free';
   let currentPlan = 'free';
-  if (rawTier === 'individual' || rawTier === 'basic') {
-    currentPlan = 'individual';
+  if (rawTier === 'plus' || rawTier === 'individual' || rawTier === 'basic') {
+    currentPlan = 'plus';
   } else if (rawTier === 'pro' || rawTier === 'team' || rawTier === 'championship') {
     currentPlan = 'pro';
   }

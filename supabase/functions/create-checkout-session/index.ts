@@ -14,11 +14,10 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Plan to Stripe Price ID mapping
+// Plan to Stripe Price ID mapping (individual user subscriptions)
 const PLAN_PRICES: Record<string, string> = {
-  starter: Deno.env.get('STRIPE_STARTER_PRICE_ID') || 'price_starter',
-  professional: Deno.env.get('STRIPE_PRO_PRICE_ID') || 'price_professional',
-  enterprise: Deno.env.get('STRIPE_ENTERPRISE_PRICE_ID') || 'price_enterprise',
+  plus: Deno.env.get('STRIPE_PLUS_YEARLY_PRICE_ID') || '',
+  pro: Deno.env.get('STRIPE_PRO_YEARLY_PRICE_ID') || '',
 };
 
 const corsHeaders = {
@@ -27,8 +26,7 @@ const corsHeaders = {
 };
 
 interface CheckoutRequest {
-  planId: 'starter' | 'professional' | 'enterprise';
-  clubId: string;
+  planId: 'plus' | 'pro';
   userId: string;
   successUrl: string;
   cancelUrl: string;
@@ -40,9 +38,9 @@ serve(async (req) => {
   }
 
   try {
-    const { planId, clubId, userId, successUrl, cancelUrl }: CheckoutRequest = await req.json();
+    const { planId, userId, successUrl, cancelUrl }: CheckoutRequest = await req.json();
 
-    if (!planId || !clubId || !userId) {
+    if (!planId || !userId) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -52,7 +50,7 @@ serve(async (req) => {
     const priceId = PLAN_PRICES[planId];
     if (!priceId) {
       return new Response(
-        JSON.stringify({ error: 'Invalid plan' }),
+        JSON.stringify({ error: `Invalid plan: ${planId}. No Stripe price ID configured.` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -60,77 +58,50 @@ serve(async (req) => {
     // Create Supabase client with service role
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get user and club info
+    // Get user info
     const { data: user } = await supabase
       .from('users')
-      .select('email')
+      .select('email, stripe_customer_id')
       .eq('id', userId)
       .single();
 
-    const { data: club } = await supabase
-      .from('yacht_clubs')
-      .select('name, stripe_customer_id')
-      .eq('id', clubId)
-      .single();
-
-    if (!user || !club) {
+    if (!user) {
       return new Response(
-        JSON.stringify({ error: 'User or club not found' }),
+        JSON.stringify({ error: 'User not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // Get or create Stripe customer
-    let customerId = club.stripe_customer_id;
+    let customerId = user.stripe_customer_id;
 
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
-        name: club.name,
-        metadata: {
-          club_id: clubId,
-          user_id: userId,
-        },
+        metadata: { user_id: userId },
       });
       customerId = customer.id;
 
-      // Save customer ID to club
+      // Save customer ID to user
       await supabase
-        .from('yacht_clubs')
+        .from('users')
         .update({ stripe_customer_id: customerId })
-        .eq('id', clubId);
+        .eq('id', userId);
     }
 
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
       subscription_data: {
-        metadata: {
-          club_id: clubId,
-          user_id: userId,
-          plan_id: planId,
-        },
+        metadata: { user_id: userId, plan_id: planId },
       },
-      metadata: {
-        club_id: clubId,
-        user_id: userId,
-        plan_id: planId,
-      },
+      metadata: { user_id: userId, plan_id: planId },
       allow_promotion_codes: true,
       billing_address_collection: 'required',
-      customer_update: {
-        address: 'auto',
-        name: 'auto',
-      },
     });
 
     return new Response(
