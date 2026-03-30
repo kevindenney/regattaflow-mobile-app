@@ -11,7 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { isFeatureAvailable } from '../subscriptions/sailorTiers';
 import type { AuthContext } from '../../services/mcp/server';
-import { buildStepButtons, buildCreatedStepButtons } from './formatting';
+import { buildStepButtons, buildCreatedStepButtons, buildPhotoAttachButtons } from './formatting';
 import type { InlineKeyboardButton } from './formatting';
 
 // ---------------------------------------------------------------------------
@@ -772,11 +772,14 @@ export async function executeTool(
 
 /**
  * Generate inline keyboard buttons based on tool results.
+ * When `hasPendingPhoto` is true, adds "Attach photo to: Step" buttons
+ * so the user can attach their photo to an existing step via button tap.
  * Returns null if no buttons are appropriate for this tool/result.
  */
 export function getToolResponseKeyboard(
   toolName: string,
   resultJson: string,
+  hasPendingPhoto = false,
 ): InlineKeyboardButton[][] | null {
   try {
     const result = JSON.parse(resultJson);
@@ -786,6 +789,13 @@ export function getToolResponseKeyboard(
       case 'get_student_timeline': {
         const steps = result.steps as { id: string; title: string; status: string }[] | undefined;
         if (!steps?.length) return null;
+
+        if (hasPendingPhoto) {
+          // Show "Attach photo" buttons instead of Start/Done
+          const attachButtons = buildPhotoAttachButtons(steps);
+          return attachButtons.length > 0 ? attachButtons : null;
+        }
+
         const buttons = buildStepButtons(steps);
         return buttons.length > 0 ? buttons : null;
       }

@@ -139,3 +139,19 @@ export function buildCreatedStepButtons(
 ): InlineKeyboardButton[][] {
   return [[{ text: '▶️ Start now', callback_data: `wip:${stepId}` }]];
 }
+
+/**
+ * Build "Attach photo to: Step" buttons when a photo is pending.
+ * Max 5 in-progress/pending steps. Callback data uses `attach:<step_id>`.
+ */
+export function buildPhotoAttachButtons(
+  steps: { id: string; title: string; status: string }[],
+): InlineKeyboardButton[][] {
+  const actionable = steps.filter(s => s.status === 'pending' || s.status === 'in_progress');
+  const limited = actionable.slice(0, 5);
+
+  return limited.map(step => {
+    const label = step.title.length > 22 ? step.title.slice(0, 19) + '...' : step.title;
+    return [{ text: `📎 Attach to: ${label}`, callback_data: `attach:${step.id}` }];
+  });
+}

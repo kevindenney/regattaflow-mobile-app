@@ -31,15 +31,20 @@ const PHOTO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 
 The user has sent a photo. A photo_url has been uploaded and is available for you to attach to a step.
 
+CRITICAL RULE: ALWAYS call get_student_timeline FIRST (with NO interest filter) to see ALL the user's steps across ALL interests. Then decide what to do based on the results.
+
 Your priority order:
-1. If the user's caption mentions a specific step or activity (e.g. "my IV insertion practice", "finished the drawing"):
-   - Use get_student_timeline to find the matching step
+1. If the user's caption mentions a step name or activity (e.g. "my IV insertion practice", "Monday nutrition", "add this to my drawing step"):
+   - You ALREADY called get_student_timeline — look through the results for a step whose title matches
    - Use attach_step_evidence with the photo_url to attach it as evidence on the Act tab
-   - If the step is still pending, also call update_step_status to mark it in_progress
-2. If the photo appears to be food/a meal (and no step is mentioned):
+   - Do NOT create a new step if one already exists with a matching title
+   - Do NOT use log_nutrition when the user explicitly mentions a step — attach the photo to that step instead
+2. If no step is mentioned and the photo appears to be food/a meal:
    - Analyze the food and estimate nutrition
    - Use log_nutrition to save the entries
 3. If neither applies, respond helpfully about what you see.
+
+IMPORTANT: Do NOT pass an interest filter to get_student_timeline. The user has steps across many interests (fitness, sailing, nursing, art, etc.) and you must search all of them. Do NOT create a new step unless you searched and confirmed no matching step exists.
 
 The uploaded photo URL is provided in the message as [Photo uploaded: URL]. Use this exact URL when calling attach_step_evidence.`;
 
@@ -180,21 +185,16 @@ async function handleCallbackQuery(
     return;
   }
 
-  // Parse callback data: "done:<step_id>" | "wip:<step_id>" | "skip:<step_id>"
-  const [action, stepId] = data.split(':');
-  if (!action || !stepId) {
+  // Parse callback data: "done:<step_id>" | "wip:<step_id>" | "skip:<step_id>" | "attach:<step_id>"
+  const colonIdx = data.indexOf(':');
+  if (colonIdx < 0) {
     await answerCallbackQuery(queryId, 'Invalid action');
     return;
   }
-
-  const statusMap: Record<string, string> = {
-    done: 'completed',
-    wip: 'in_progress',
-    skip: 'skipped',
-  };
-  const newStatus = statusMap[action];
-  if (!newStatus) {
-    await answerCallbackQuery(queryId, 'Unknown action');
+  const action = data.slice(0, colonIdx);
+  const stepId = data.slice(colonIdx + 1);
+  if (!action || !stepId) {
+    await answerCallbackQuery(queryId, 'Invalid action');
     return;
   }
 
@@ -212,8 +212,62 @@ async function handleCallbackQuery(
   }
 
   const auth = await resolveAuthContext(supabase, link.user_id);
+  const chatId = cbMessage.chat?.id;
 
-  // Execute the status update
+  // Handle photo attachment callback
+  if (action === 'attach') {
+    // Look up pending photo from conversation
+    const { data: convo } = await supabase
+      .from('telegram_conversations')
+      .select('pending_photo_url')
+      .eq('telegram_chat_id', chatId)
+      .maybeSingle();
+
+    const photoUrl = convo?.pending_photo_url as string | null;
+    if (!photoUrl) {
+      await answerCallbackQuery(queryId, 'No photo to attach — send a photo first');
+      return;
+    }
+
+    // Attach the photo to the step
+    const result = await executeTool(
+      'attach_step_evidence',
+      { step_id: stepId, photo_url: photoUrl, caption: 'Added via Telegram' },
+      supabase,
+      auth,
+    );
+
+    const parsed = JSON.parse(result);
+    if (parsed.error) {
+      await answerCallbackQuery(queryId, `Error: ${parsed.error}`);
+      return;
+    }
+
+    // Clear pending photo
+    await supabase
+      .from('telegram_conversations')
+      .update({ pending_photo_url: null })
+      .eq('telegram_chat_id', chatId);
+
+    await answerCallbackQuery(queryId, `📎 Photo attached to: ${parsed.step_title ?? 'step'}`);
+    if (chatId) {
+      await sendMessage(chatId, `📎 Photo attached as evidence to *${parsed.step_title ?? 'step'}*`);
+    }
+    return;
+  }
+
+  // Handle status update callbacks (done/wip/skip)
+  const statusMap: Record<string, string> = {
+    done: 'completed',
+    wip: 'in_progress',
+    skip: 'skipped',
+  };
+  const newStatus = statusMap[action];
+  if (!newStatus) {
+    await answerCallbackQuery(queryId, 'Unknown action');
+    return;
+  }
+
   const result = await executeTool(
     'update_step_status',
     { step_id: stepId, status: newStatus },
@@ -229,11 +283,6 @@ async function handleCallbackQuery(
 
   const label = newStatus === 'completed' ? '✅ Done' : newStatus === 'in_progress' ? '▶️ Started' : '⏭️ Skipped';
   await answerCallbackQuery(queryId, `${label}: ${parsed.step?.title ?? 'step'}`);
-
-  // Send a follow-up message so the user sees confirmation
-  if (cbMessage.chat?.id) {
-    await sendMessage(cbMessage.chat.id, `${label}: *${parsed.step?.title ?? 'step'}*`);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -450,12 +499,28 @@ async function handleMessage(
       ];
       systemPrompt = PHOTO_SYSTEM_PROMPT;
       historyEntry = `[Sent a photo${message.caption ? `: ${message.caption}` : ''}]${photoUrl ? ` [url: ${photoUrl}]` : ''}`;
+
+      // Store pending photo URL so callback buttons can attach it
+      if (photoUrl && conversation?.id) {
+        await supabase
+          .from('telegram_conversations')
+          .update({ pending_photo_url: photoUrl })
+          .eq('id', conversation.id);
+      }
     } else {
       await sendMessage(chatId, "Sorry, I couldn't download your photo. Please try again.");
       return;
     }
   } else {
     userContent = userText;
+
+    // Clear any pending photo when the user sends a text message (no longer relevant)
+    if (conversation?.id) {
+      await supabase
+        .from('telegram_conversations')
+        .update({ pending_photo_url: null })
+        .eq('id', conversation.id);
+    }
   }
 
   const messages: Anthropic.MessageParam[] = [
@@ -502,7 +567,8 @@ async function handleMessage(
       toolCallSummaries.push(`[Called ${block.name}]`);
 
       // Check if this tool result warrants inline buttons
-      const keyboard = getToolResponseKeyboard(block.name, result);
+      // When a photo is pending, show "Attach to" buttons instead of Start/Done
+      const keyboard = getToolResponseKeyboard(block.name, result, hasPhoto);
       if (keyboard) lastKeyboard = keyboard;
     }
 
