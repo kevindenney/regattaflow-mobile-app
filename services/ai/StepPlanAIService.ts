@@ -708,11 +708,19 @@ export interface CritiqueInsightContext {
   whatLearned: string;
   capabilityRatings: Record<string, number>;
   stepHistory: StepHistoryEntry[];
+  // Competency + evidence context (Phase 1 enrichment)
+  plannedCompetencies?: { id: string; title: string; category: string; description: string | null }[];
+  userCompetencyProgress?: CapabilityProgressEntry[];
+  orgCompetencies?: OrgCompetencySummary[];
+  mediaUploads?: { caption?: string; type: string }[];
+  actNutritionSummary?: string;
+  actMeasurementSummary?: string;
+  planCapabilityGoals?: string[];
 }
 
 /**
  * Generate an AI insight for the critique/review phase.
- * Analyzes patterns across the user's learning history.
+ * Analyzes evidence against planned competencies and patterns across history.
  */
 export async function generateCritiqueInsight(ctx: CritiqueInsightContext): Promise<string> {
   const historyBlock = ctx.stepHistory.length
@@ -733,33 +741,65 @@ export async function generateCritiqueInsight(ctx: CritiqueInsightContext): Prom
     ? currentRatings.map(([k, v]) => `- ${k}: ${v}/5`).join('\n')
     : '(no ratings yet)';
 
-  const systemPrompt = `You are an expert learning coach on the BetterAt platform, helping someone reflect on their ${ctx.interestName} practice.
+  // Build competency context blocks
+  const hasCompetencies = (ctx.plannedCompetencies?.length ?? 0) > 0;
+  const hasEvidence = (ctx.mediaUploads?.length ?? 0) > 0 || ctx.actNotes || ctx.actNutritionSummary || ctx.actMeasurementSummary;
 
-Your role is to analyze their learning patterns and provide insight they might not see themselves. Consider:
-1. How their self-ratings have changed over time — are they improving? Plateauing?
-2. Whether they consistently deviate from plans — and what that means
-3. Recurring themes in what they learn — are they circling the same challenges?
-4. Skills that remain low-rated across multiple sessions
-5. What their strongest growth areas are
+  const competencyBlock = hasCompetencies
+    ? ctx.plannedCompetencies!.map((c) => {
+        const progress = ctx.userCompetencyProgress?.find(p => p.competencyTitle === c.title);
+        return `- ${c.title} [${c.category}]: ${c.description || '(no description)'} — Status: ${progress?.status ?? 'not started'}, Attempts: ${progress?.attemptCount ?? 0}`;
+      }).join('\n')
+    : '';
 
-Be encouraging but honest. Point out 2-3 specific patterns you notice. If they're improving, celebrate it. If they're stuck, gently suggest why and what to try differently.
+  const evidenceBlock = [
+    ctx.actNotes ? `Notes: ${ctx.actNotes}` : '',
+    (ctx.mediaUploads?.length ?? 0) > 0
+      ? `Photos/videos: ${ctx.mediaUploads!.length} uploads${ctx.mediaUploads!.filter(m => m.caption).map(m => ` ("${m.caption}")`).join(',')}`
+      : '',
+    ctx.actMeasurementSummary ? `Measurements: ${ctx.actMeasurementSummary}` : '',
+    ctx.actNutritionSummary ? `Nutrition: ${ctx.actNutritionSummary}` : '',
+  ].filter(Boolean).join('\n');
 
-Keep it under 180 words. Write in second person ("You've been..."). Do not use markdown formatting.`;
+  const frameworkBlock = ctx.orgCompetencies?.length
+    ? ctx.orgCompetencies.flatMap(org =>
+        org.competencies
+          .filter(c => c.status !== 'competent')
+          .slice(0, 8)
+          .map(c => `- ${c.title} [${c.category}]: ${c.status}`)
+      ).join('\n')
+    : '';
+
+  const systemPrompt = `You are an expert learning coach on the BetterAt platform, reviewing a ${ctx.interestName} session.
+
+Your role is to assess whether the evidence from this session demonstrates the planned skills, and to surface patterns across their learning history.
+
+Analyze in this order:
+${hasCompetencies && hasEvidence ? `1. EVIDENCE vs PLAN: For each planned competency, does the evidence (notes, photos, measurements, nutrition) indicate it was practiced? At what level — initial exposure, developing, or proficient?
+2. UNPLANNED SKILLS: Did the evidence show any additional skills not explicitly planned?
+3. GAPS: What's still needed to advance these competencies? Be specific.
+4. PATTERNS: How does this session fit into their broader history — improving, plateauing, or stuck?` : `1. PATTERNS: How their self-ratings have changed over time — improving, plateauing, or stuck?
+2. PLAN ADHERENCE: Whether they consistently deviate from plans — and what that means.
+3. RECURRING THEMES: Are they circling the same challenges?
+4. GROWTH: What are their strongest growth areas?`}
+
+Be encouraging but honest. Point out 2-3 specific observations. Reference specific competency names and evidence when possible.
+
+Keep it under 250 words. Write in second person ("You've been..."). Do not use markdown formatting.`;
 
   const userMessage = `Current session: "${ctx.stepTitle}"
 Plan: ${ctx.planWhat || '(not specified)'}
-Session notes: ${ctx.actNotes || '(none)'}
+${ctx.planCapabilityGoals?.length ? `Skill goals: ${ctx.planCapabilityGoals.join(', ')}` : ''}
 Sub-steps: ${ctx.subStepsCompleted}/${ctx.subStepsTotal} completed
 Worked to plan: ${ctx.workedToPlan === null ? 'not answered' : ctx.workedToPlan ? 'yes' : 'no'}${ctx.deviationReason ? `\nDeviation: ${ctx.deviationReason}` : ''}
 What they learned: ${ctx.whatLearned || '(not yet filled in)'}
-
+${competencyBlock ? `\nPLANNED COMPETENCIES FOR THIS SESSION:\n${competencyBlock}` : ''}
+${evidenceBlock ? `\nEVIDENCE FROM THIS SESSION:\n${evidenceBlock}` : ''}
 Current session ratings:
 ${ratingsBlock}
-
+${frameworkBlock ? `\nFRAMEWORK COMPETENCIES STILL IN PROGRESS:\n${frameworkBlock}` : ''}
 Previous step history (most recent first):
-${historyBlock}
-
-Based on their full history and this session, what patterns do you notice in their learning?`;
+${historyBlock}`;
 
   try {
     const { data, error } = await supabase.functions.invoke('step-plan-suggest', {

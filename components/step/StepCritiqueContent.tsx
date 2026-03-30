@@ -429,6 +429,26 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
         ? await gatherEnrichedContext(user.id, resolvedInterestId)
         : { stepHistory: [], orgCompetencies: [], followedUsersActivity: [], orgPrograms: [], userCapabilityProgress: [], libraryResources: [] };
 
+      // Fetch planned competency definitions for this step
+      const plannedCompetencies = planData.competency_ids?.length && resolvedInterestId
+        ? await competencyService.getCompetencies(resolvedInterestId)
+            .then(all => all
+              .filter(c => planData.competency_ids!.includes(c.id))
+              .map(c => ({ id: c.id, title: c.title, category: c.category, description: c.description })))
+            .catch(() => [])
+        : [];
+
+      // Summarize evidence for AI context
+      const nutritionEntries = actData.nutrition?.entries ?? [];
+      const actNutritionSummary = nutritionEntries.length
+        ? `${nutritionEntries.length} entries, ~${nutritionEntries.reduce((sum, e) => sum + (e.calories ?? 0), 0)} cal`
+        : undefined;
+
+      const measurements = actData.measurements?.extracted ?? [];
+      const actMeasurementSummary = measurements.length
+        ? measurements.slice(0, 5).map(m => m.extracted_from_text || '').filter(Boolean).join('; ')
+        : undefined;
+
       const text = await generateCritiqueInsight({
         interestName: currentInterest?.name || 'this interest',
         stepTitle: step.title,
@@ -441,6 +461,13 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
         whatLearned: localWentWell,
         capabilityRatings: localCapabilityRatings,
         stepHistory: enriched.stepHistory,
+        plannedCompetencies,
+        userCompetencyProgress: enriched.userCapabilityProgress,
+        orgCompetencies: enriched.orgCompetencies,
+        mediaUploads: actData.media_uploads?.map(m => ({ caption: m.caption, type: m.type })),
+        actNutritionSummary,
+        actMeasurementSummary,
+        planCapabilityGoals: planData.capability_goals,
       });
 
       // Try to split out a suggestion line (last sentence starting with "Suggested" or "Try")
