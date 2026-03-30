@@ -590,6 +590,14 @@ async function handleMessage(
       });
       toolsExecuted++;
 
+      // Write tool result to DB for debugging (temporary — will be overwritten each iteration)
+      if (conversation?.id) {
+        const snippet = typeof result === 'string' ? result.substring(0, 300) : '';
+        await supabase.from('telegram_conversations')
+          .update({ pending_photo_url: `${DEPLOY_VERSION}|${block.name}|${snippet}` })
+          .eq('id', conversation.id);
+      }
+
       // Check if this tool result warrants inline buttons
       // When a photo is pending, show "Attach to" buttons instead of Start/Done
       const keyboard = getToolResponseKeyboard(block.name, result, hasPhoto);

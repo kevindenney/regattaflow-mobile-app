@@ -640,30 +640,37 @@ const TOOLS: TelegramToolDef[] = [
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
+      const debug: Record<string, unknown> = {
+        input_keys: Object.keys(input),
+        has_photo_url_input: !!(input.photo_url),
+        step_id: input.step_id,
+      };
+
       // Resolve photo URL: prefer explicit input, fallback to pending_photo_url from conversation
       const inputPhotoUrl = (input.photo_url as string) || '';
       let photoUrl = inputPhotoUrl;
       let photoSource = inputPhotoUrl ? 'input' : 'none';
 
       if (!photoUrl) {
-        // Simplified fallback — no .not() filter, just check in JS
         const { data: convo, error: convoErr } = await supabase
           .from('telegram_conversations')
           .select('pending_photo_url')
           .eq('user_id', auth.userId)
           .maybeSingle();
         if (convoErr) {
-          console.error(`[attach_step_evidence] fallback query error: ${convoErr.message}`);
+          debug.fallback_error = convoErr.message;
         }
         photoUrl = (convo?.pending_photo_url as string) || '';
         if (photoUrl) photoSource = 'fallback';
+        debug.fallback_pending_url = !!convo?.pending_photo_url;
       }
 
-      console.error(`[attach_step_evidence] photo_source=${photoSource} photo_url_len=${photoUrl.length} input_keys=${Object.keys(input).join(',')}`);
+      debug.photo_source = photoSource;
+      debug.photo_url_length = photoUrl.length;
 
       // Fail early if no photo URL available from any source
       if (!photoUrl && !input.notes) {
-        return { error: 'No photo_url provided and no pending photo found. Send a photo first.' };
+        return { error: 'No photo_url provided and no pending photo found. Send a photo first.', debug };
       }
 
       // Fetch current step metadata
@@ -675,61 +682,68 @@ const TOOLS: TelegramToolDef[] = [
         .single();
 
       if (fetchError || !step) {
-        return { error: fetchError?.message ?? 'Step not found' };
+        return { error: fetchError?.message ?? 'Step not found', debug };
       }
 
       const metadata = (step.metadata as Record<string, unknown>) ?? {};
       const act = (metadata.act as Record<string, unknown>) ?? {};
       const existingUploads = (act.media_uploads as { id: string; uri: string; type: string; caption?: string }[]) ?? [];
 
-      const updates: Record<string, unknown> = {};
+      debug.existing_upload_count = existingUploads.length;
+      debug.act_keys = Object.keys(act);
 
       // Add photo as media upload
+      const newUploads = [...existingUploads];
       if (photoUrl) {
-        const newUpload = {
+        newUploads.push({
           id: `tg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
           uri: photoUrl,
           type: 'photo',
           caption: (input.caption as string) || undefined,
-        };
-        updates.media_uploads = [...existingUploads, newUpload];
+        });
       }
+
+      const actUpdates: Record<string, unknown> = {
+        media_uploads: newUploads,
+      };
 
       // Add/append notes
       if (input.notes) {
         const existingNotes = (act.notes as string) ?? '';
         const timestamp = new Date().toISOString().split('T')[0];
         const newNote = `[${timestamp} via Telegram] ${input.notes}`;
-        updates.notes = existingNotes ? `${existingNotes}\n\n${newNote}` : newNote;
+        actUpdates.notes = existingNotes ? `${existingNotes}\n\n${newNote}` : newNote;
       }
 
       // Set started_at if not already set
       if (!act.started_at) {
-        updates.started_at = new Date().toISOString();
+        actUpdates.started_at = new Date().toISOString();
       }
 
-      // Deep merge into metadata
+      // Deep merge into metadata — preserve all existing act fields
       const updatedMetadata = {
         ...metadata,
-        act: { ...act, ...updates },
+        act: { ...act, ...actUpdates },
       };
 
+      debug.new_upload_count = newUploads.length;
+
       // Check current step status — if pending, auto-advance to in_progress
+      const stepUpdate: Record<string, unknown> = {
+        metadata: updatedMetadata,
+        updated_at: new Date().toISOString(),
+      };
+
       const { data: currentStep } = await supabase
         .from('timeline_steps')
         .select('status')
         .eq('id', input.step_id as string)
         .single();
 
-      const stepUpdate: Record<string, unknown> = {
-        metadata: updatedMetadata,
-        updated_at: new Date().toISOString(),
-      };
       if (currentStep?.status === 'pending') {
         stepUpdate.status = 'in_progress';
       }
 
-      // Use .select() to verify the update actually modified a row
       const { data: updated, error: updateError } = await supabase
         .from('timeline_steps')
         .update(stepUpdate)
@@ -739,18 +753,16 @@ const TOOLS: TelegramToolDef[] = [
         .single();
 
       if (updateError) {
-        console.error(`[attach_step_evidence] UPDATE FAILED: ${updateError.message}`);
-        return { error: updateError.message };
+        return { error: updateError.message, debug };
       }
 
       if (!updated) {
-        console.error('[attach_step_evidence] UPDATE matched 0 rows');
-        return { error: 'Update matched no rows — step may not belong to this user' };
+        return { error: 'Update matched no rows — step may not belong to this user', debug };
       }
 
       const updatedAct = (updated.metadata as Record<string, unknown>)?.act as Record<string, unknown> | undefined;
       const finalUploads = (updatedAct?.media_uploads as unknown[]) ?? [];
-      console.error(`[attach_step_evidence] DONE: uploads_after_save=${finalUploads.length} photo_source=${photoSource}`);
+      debug.final_upload_count = finalUploads.length;
 
       // Clear pending photo now that it's been attached
       if (photoUrl) {
@@ -764,9 +776,10 @@ const TOOLS: TelegramToolDef[] = [
         attached: true,
         step_id: step.id,
         step_title: step.title,
-        photo_url_used: photoUrl || 'none',
+        photo_url_used: photoUrl ? photoUrl.substring(0, 60) + '...' : 'none',
         evidence_count: finalUploads.length,
-        has_notes: !!updates.notes,
+        has_notes: !!actUpdates.notes,
+        debug,
       };
     },
   },
