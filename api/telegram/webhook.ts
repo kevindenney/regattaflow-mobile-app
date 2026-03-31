@@ -16,7 +16,7 @@ export const maxDuration = 60;
 // ---------------------------------------------------------------------------
 
 const MAX_TOOL_ITERATIONS = 5;
-const MAX_CONVERSATION_MESSAGES = 20;
+const MAX_CONVERSATION_MESSAGES = 10;
 const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
 
 const buildSystemPrompt = () => {
@@ -412,6 +412,16 @@ async function handleMessage(
     return;
   }
 
+  // --- Handle /reset command — clear conversation history ---
+  if (hasText && text === '/reset') {
+    await supabase
+      .from('telegram_conversations')
+      .update({ messages: [] })
+      .eq('telegram_chat_id', chatId);
+    await sendMessage(chatId, '🔄 Conversation history cleared. Start fresh!');
+    return;
+  }
+
   // --- Handle /start command ---
   if (hasText && text.startsWith('/start')) {
     const payload = text.split(' ')[1];
@@ -718,10 +728,12 @@ async function handleMessage(
   console.log(`[telegram] Response sent OK`);
 
   // --- Save conversation ---
-  // IMPORTANT: Only save Claude's final text response — do NOT save tool call
-  // summaries like "[Called tool_name]" because Claude Haiku will mimic those
-  // patterns in future turns instead of actually calling tools.
-  const savedAssistantContent = responseText;
+  // Save only a short summary when tools were used. This prevents Haiku from
+  // learning to mimic verbose "Created!" responses without calling tools.
+  // When no tools were used, save the full response (it's just conversation).
+  const savedAssistantContent = iterations > 0
+    ? `[Used ${iterations} tool(s)] ${responseText.slice(0, 120)}`
+    : responseText;
 
   const updatedHistory = [
     ...recentHistory,
