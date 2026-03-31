@@ -637,13 +637,20 @@ const TOOLS: TelegramToolDef[] = [
       step_id: z.string().describe('The step ID that was analyzed'),
       assessments: z.array(z.object({
         competency_id: z.string().describe('Competency UUID from the planned_competencies'),
+        competency_title: z.string().describe('Title of the competency'),
         demonstrated_level: z.enum(['initial_exposure', 'developing', 'proficient', 'not_demonstrated'])
           .describe('The level demonstrated based on evidence'),
+        evidence_basis: z.string().describe('Specific evidence that led to this assessment'),
+        advancement_suggestion: z.string().optional().describe('What to do next for this competency'),
       })).describe('One entry per planned competency'),
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
-      const results = input.assessments as { competency_id: string; demonstrated_level: string }[];
+      const results = input.assessments as {
+        competency_id: string; competency_title: string;
+        demonstrated_level: string; evidence_basis: string;
+        advancement_suggestion?: string;
+      }[];
       const stepId = input.step_id as string;
 
       // Map demonstrated_level to competency status
@@ -656,6 +663,7 @@ const TOOLS: TelegramToolDef[] = [
         not_started: 0, learning: 1, practicing: 2, checkoff_ready: 3, validated: 4, competent: 5,
       };
 
+      // 1. Write to betterat_competency_progress
       let updated = 0;
       for (const r of results) {
         const targetStatus = levelToStatus[r.demonstrated_level];
@@ -698,6 +706,36 @@ const TOOLS: TelegramToolDef[] = [
             .eq('id', existing.id);
           if (!error) updated++;
         }
+      }
+
+      // 2. Write to step metadata so browser Review tab shows pills
+      const { data: step } = await supabase
+        .from('timeline_steps')
+        .select('metadata')
+        .eq('id', stepId)
+        .eq('user_id', auth.userId)
+        .single();
+
+      if (step) {
+        const meta = (step.metadata as Record<string, unknown>) ?? {};
+        const review = (meta.review as Record<string, unknown>) ?? {};
+        const assessment = {
+          assessed_at: new Date().toISOString(),
+          planned_competency_results: results.map(r => ({
+            competency_id: r.competency_id,
+            competency_title: r.competency_title,
+            demonstrated_level: r.demonstrated_level,
+            evidence_basis: r.evidence_basis,
+            advancement_suggestion: r.advancement_suggestion ?? '',
+          })),
+          additional_competencies_found: [],
+          gap_summary: '',
+        };
+        await supabase
+          .from('timeline_steps')
+          .update({ metadata: { ...meta, review: { ...review, competency_assessment: assessment } } })
+          .eq('id', stepId)
+          .eq('user_id', auth.userId);
       }
 
       return { saved: true, updated, total: results.length };
