@@ -645,7 +645,7 @@ async function handleMessage(
   const tools = getAnthropicTools();
 
   let response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-3-5-haiku-20241022',
     max_tokens: 1024,
     system: systemPrompt,
     tools,
@@ -697,7 +697,7 @@ async function handleMessage(
     console.log(`[telegram] Calling Claude iteration ${iterations + 1}...`);
     const claudeStart = Date.now();
     response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 1024,
       system: systemPrompt,
       tools,

@@ -121,15 +121,13 @@ export function getTaskComplexity(taskType: string): TaskComplexity {
 export function getModelForTask(taskType: string): AIModelId {
   const complexity = getTaskComplexity(taskType);
   
+  // Cost optimization: use cheapest model for all tasks
   switch (complexity) {
     case 'simple':
-      return 'claude-3-haiku-20240307';
     case 'standard':
-      return 'claude-3-5-haiku-latest';
     case 'complex':
-      return 'claude-3-5-sonnet-latest';
     default:
-      return 'claude-3-5-haiku-latest';
+      return 'claude-3-haiku-20240307';
   }
 }
 
@@ -160,7 +158,7 @@ export function estimateCost(
 /**
  * Default model for most tasks - balances cost and quality
  */
-export const DEFAULT_MODEL: AIModelId = 'claude-3-5-haiku-latest';
+export const DEFAULT_MODEL: AIModelId = 'claude-3-haiku-20240307';
 
 /**
  * Budget model for high-volume, simple tasks

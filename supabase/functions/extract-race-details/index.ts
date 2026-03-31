@@ -184,8 +184,8 @@ Deno.serve(async (req) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 8192,  // Max for Haiku - use efficient extraction for multi-race documents
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 8192,
         temperature: 0,
         messages: [
           {

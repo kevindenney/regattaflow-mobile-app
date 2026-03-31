@@ -187,7 +187,7 @@ If there's only one course, return the standard single-course format.`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         temperature: 0.2,
         messages: [

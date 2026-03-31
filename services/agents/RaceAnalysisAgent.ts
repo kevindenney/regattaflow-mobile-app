@@ -306,7 +306,7 @@ Include a confidence score (0-100) based on GPS data quality and completeness.`,
               boat_handling: input.boat_handling,
               recommendations: input.recommendations,
               confidence_score: input.confidence_score,
-              model_used: 'claude-sonnet-4-5-20250929',
+              model_used: 'claude-3-haiku-20240307',
               analysis_version: '1.0',
             })
             .select()

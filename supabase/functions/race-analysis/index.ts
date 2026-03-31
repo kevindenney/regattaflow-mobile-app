@@ -215,7 +215,7 @@ Deno.serve(async (req: Request) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 4096,
         messages: [{
           role: 'user',
@@ -262,7 +262,7 @@ Deno.serve(async (req: Request) => {
         recommendations: analysis.recommendations,
         plan_vs_execution: analysis.plan_vs_execution || null,
         confidence_score: analysis.confidence_score,
-        model_used: 'claude-sonnet-4-20250514',
+        model_used: 'claude-3-haiku-20240307',
         analysis_version: '2.0',
       })
       .select()
