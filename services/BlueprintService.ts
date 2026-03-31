@@ -964,7 +964,53 @@ export async function getPeerSubscriberTimelines(
 }
 
 // ---------------------------------------------------------------------------
-// 12. Slug generation helper
+// 12. Discover published blueprints for an interest
+// ---------------------------------------------------------------------------
+
+export interface DiscoveredBlueprint extends BlueprintRecord {
+  author_name: string | null;
+  author_avatar_url: string | null;
+  organization_name: string | null;
+}
+
+/**
+ * Fetch all published blueprints for an interest, with author and org info.
+ * Returns blueprints grouped by: org-associated first, then self-published.
+ */
+export async function discoverBlueprints(
+  interestId: string,
+): Promise<DiscoveredBlueprint[]> {
+  try {
+    const { data, error } = await supabase
+      .from('timeline_blueprints')
+      .select(`
+        *,
+        profiles:user_id ( full_name, avatar_url ),
+        organizations:organization_id ( name )
+      `)
+      .eq('interest_id', interestId)
+      .eq('is_published', true)
+      .order('subscriber_count', { ascending: false });
+
+    if (error) throw error;
+
+    return ((data ?? []) as any[]).map(row => ({
+      ...row,
+      author_name: row.profiles?.full_name ?? null,
+      author_avatar_url: row.profiles?.avatar_url ?? null,
+      organization_name: row.organizations?.name ?? null,
+      // Remove nested join objects
+      profiles: undefined,
+      organizations: undefined,
+    }));
+  } catch (err) {
+    logger.error('Failed to discover blueprints', err);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 13. Slug generation helper
 // ---------------------------------------------------------------------------
 
 export function generateBlueprintSlug(
