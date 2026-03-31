@@ -39,7 +39,8 @@ Rules:
 - "initial_exposure" = first attempt or minimal evidence; "developing" = repeated practice with some success; "proficient" = consistent competent execution.
 - If no evidence relates to a planned competency, mark it "not_demonstrated".
 - Keep additional_competencies_found to 3 max — only genuinely demonstrated skills.
-- gap_summary should be actionable and specific.`;
+- gap_summary should be actionable and specific.
+- If photos are provided, analyze them as visual evidence. Look for technique, body positioning, equipment handling, procedural correctness, and safety practices. Reference specific visual observations in evidence_basis (e.g., "photo shows correct tourniquet placement above the antecubital fossa").`;
 
 /**
  * Extract competency assessment from step evidence and write to step metadata.
@@ -122,6 +123,11 @@ export async function extractCompetencyAssessment(
         : '',
     ].filter(Boolean).join('\n');
 
+    // Collect photo URLs for vision analysis (up to 4 photos, photos only)
+    const photoUploads = (act.media_uploads ?? [])
+      .filter(m => m.type === 'photo' && m.uri)
+      .slice(0, 4);
+
     // Build competency context
     const competencyBlock = plannedCompetencies.map(c => {
       const prog = progressList.find(p => p.id === c.id);
@@ -132,15 +138,43 @@ export async function extractCompetencyAssessment(
       ? `\nCapability goals (free-text): ${capabilityGoals.join(', ')}`
       : '';
 
-    const userMessage = `Interest: ${interestName}
+    const textContent = `Interest: ${interestName}
 ${competencyBlock ? `\nPLANNED COMPETENCIES:\n${competencyBlock}` : ''}${goalsBlock}
 
 EVIDENCE FROM THIS SESSION:
 ${evidenceParts}`;
 
+    // Build message content — include photos as image blocks for vision analysis
+    let messageContent: string | { type: string; [key: string]: unknown }[];
+    if (photoUploads.length > 0) {
+      const imageBlocks = photoUploads.map(photo => ({
+        type: 'image' as const,
+        source: { type: 'url' as const, url: photo.uri },
+        ...(photo.caption ? {} : {}), // caption is in text content
+      }));
+      const captionNote = photoUploads
+        .filter(p => p.caption)
+        .map(p => `Photo: "${p.caption}"`)
+        .join('; ');
+      messageContent = [
+        ...imageBlocks,
+        {
+          type: 'text' as const,
+          text: `${textContent}${captionNote ? `\n\nPhoto captions: ${captionNote}` : ''}\n\nAnalyze the photos above as visual evidence for the competency assessment. Look for technique, form, equipment setup, procedure execution, and any observable clinical skills.`,
+        },
+      ];
+      logger.info(`Including ${photoUploads.length} photos for vision analysis`);
+    } else {
+      messageContent = textContent;
+    }
+
     // Call AI — use 2048 tokens to avoid truncated JSON on large competency sets
     const { data, error } = await supabase.functions.invoke('step-plan-suggest', {
-      body: { system: ASSESSMENT_SYSTEM_PROMPT, prompt: userMessage, max_tokens: 2048 },
+      body: {
+        system: ASSESSMENT_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: messageContent }],
+        max_tokens: 2048,
+      },
     });
 
     if (error || !data?.text) {

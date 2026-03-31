@@ -601,9 +601,16 @@ const TOOLS: TelegramToolDef[] = [
         .order('starts_at', { ascending: false })
         .limit(5);
 
+      // Collect photo URLs for evidence (up to 4)
+      const photoUrls = mediaUploads
+        .filter((m: { type: string; uri?: string }) => m.type === 'photo' && (m as any).uri)
+        .slice(0, 4)
+        .map((m: any) => ({ url: m.uri, caption: m.caption || null }));
+
       // Return all data for Claude to analyze directly — no nested AI call
       return {
-        instruction: 'Analyze this step data. For each planned competency, assess whether the evidence demonstrates it (initial_exposure / developing / proficient / not_demonstrated). Identify gaps and suggest next steps. Be specific and concise.',
+        instruction: 'Analyze this step data. For each planned competency, assess whether the evidence demonstrates it (initial_exposure / developing / proficient / not_demonstrated). Identify gaps and suggest next steps. Be specific and concise.' +
+          (photoUrls.length > 0 ? ' Photo URLs are provided — describe what you can infer from the captions and context about technique, procedure, and clinical skill demonstration.' : ''),
         step: {
           title: step.title,
           status: step.status,
@@ -615,6 +622,7 @@ const TOOLS: TelegramToolDef[] = [
           notes: act.notes || null,
           photos_videos: mediaUploads.length,
           photo_captions: mediaUploads.filter((m: { caption?: string }) => m.caption).map((m: { caption?: string }) => m.caption),
+          photo_urls: photoUrls.length > 0 ? photoUrls : undefined,
           sub_steps_completed: `${subSteps.filter(ss => subProgress[ss.id]).length}/${subSteps.length}`,
           sub_step_deviations: Object.keys(subDeviations).length > 0 ? subDeviations : null,
           measurements: (measurements?.extracted ?? []).slice(0, 5).map(m => m.extracted_from_text).filter(Boolean),

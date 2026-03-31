@@ -57,12 +57,14 @@ serve(async (req: Request) => {
 
     const { system, prompt, messages: rawMessages, max_tokens = 768 } = await req.json();
 
-    // Support either a `messages` array (multi-turn chat) or a single `prompt` string
-    const messages: { role: string; content: string }[] = Array.isArray(rawMessages) && rawMessages.length > 0
-      ? rawMessages
-      : prompt && typeof prompt === 'string'
-        ? [{ role: 'user', content: prompt }]
-        : [];
+    // Support either a `messages` array (multi-turn chat) or a single `prompt` string.
+    // Messages can contain string content or multi-block content (text + images).
+    const messages: { role: string; content: string | { type: string; [key: string]: unknown }[] }[] =
+      Array.isArray(rawMessages) && rawMessages.length > 0
+        ? rawMessages
+        : prompt && typeof prompt === 'string'
+          ? [{ role: 'user', content: prompt }]
+          : [];
 
     if (messages.length === 0) {
       return new Response(
