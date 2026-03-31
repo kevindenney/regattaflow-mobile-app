@@ -246,6 +246,12 @@ const TOOLS: TelegramToolDef[] = [
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
+      // DEBUG: Log what date Claude passed vs what the server thinks today is
+      const serverNow = new Date();
+      console.log(`[create_step DEBUG] Server date: ${serverNow.toISOString()}`);
+      console.log(`[create_step DEBUG] Claude passed starts_at: ${JSON.stringify(input.starts_at)}`);
+      console.log(`[create_step DEBUG] Claude passed ends_at: ${JSON.stringify(input.ends_at)}`);
+      console.log(`[create_step DEBUG] Full input: ${JSON.stringify(input)}`);
       const interest = await resolveInterestId(supabase, input.interest as string);
       if (!interest) {
         return { error: `Could not find interest "${input.interest}". Use list_interests to see available options.` };
@@ -273,6 +279,9 @@ const TOOLS: TelegramToolDef[] = [
         review: {},
       };
 
+      const resolvedStartsAt = input.starts_at ?? new Date().toISOString();
+      console.log(`[create_step DEBUG] Resolved starts_at: ${resolvedStartsAt} (from input: ${!!input.starts_at})`);
+
       const insertPayload = {
         user_id: auth.userId,
         interest_id: interest.id,
@@ -281,11 +290,12 @@ const TOOLS: TelegramToolDef[] = [
         category: input.category ?? 'general',
         status: input.status ?? 'pending',
         visibility: 'followers',
-        starts_at: input.starts_at ?? new Date().toISOString(),
+        starts_at: resolvedStartsAt,
         ends_at: input.ends_at ?? null,
         source_type: 'manual',
         metadata,
       };
+      console.log(`[create_step DEBUG] Insert payload starts_at: ${insertPayload.starts_at}, title: ${insertPayload.title}`);
       const { data, error } = await supabase
         .from('timeline_steps')
         .insert(insertPayload)
@@ -1371,6 +1381,13 @@ export function getToolResponseKeyboard(
         if (!stepId) return null;
         const buttons = buildSubStepButtons(stepId, subSteps);
         return buttons.length > 0 ? buttons : null;
+      }
+
+      case 'update_step': {
+        const stepId = result.step?.id as string | undefined;
+        if (!stepId) return null;
+        // Show "View step" button after update
+        return [[{ text: '📋 View Step', callback_data: `detail:${stepId}` }]];
       }
 
       case 'attach_step_evidence': {

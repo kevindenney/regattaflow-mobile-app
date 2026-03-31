@@ -16,4 +16,4 @@
 
 # Development
 /.git/
-node_modules/.cache/
+node_modules/

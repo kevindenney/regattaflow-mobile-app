@@ -19,8 +19,12 @@ const MAX_TOOL_ITERATIONS = 5;
 const MAX_CONVERSATION_MESSAGES = 20;
 const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
 
-const SYSTEM_PROMPT = `You are the BetterAt AI assistant, helping users manage their learning timeline via Telegram.
+const buildSystemPrompt = () => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  console.log(`[telegram DEBUG] buildSystemPrompt: server date = ${new Date().toISOString()}, todayStr = ${todayStr}`);
+  return `You are the BetterAt AI assistant, helping users manage their learning timeline via Telegram.
 You help them track progress, create steps, mark tasks done, and plan next activities.
+Today's date is ${todayStr}. Use this as the reference for all date-related decisions.
 Keep responses concise — this is a chat interface, not a document.
 Use short paragraphs. Use *bold* for emphasis and _italic_ for secondary info.
 Use bullet points with - for lists. Use \`code\` for IDs or technical values.
@@ -42,18 +46,26 @@ STEP CREATION:
 - When creating a step, ALWAYS populate the structured fields: what_will_you_do, sub_steps, capability_goals, and location_name.
 - If the user mentions specific skills or competencies, look up competency IDs with get_competency_gaps first, then pass them as competency_ids.
 - Convert conversation details into structured fields — don't just put everything in plan_notes or description.
+- For starts_at: ONLY provide a date if the user explicitly mentions one. If they don't mention a date, OMIT starts_at entirely — the system will default to today.
 
 SUB-STEP TRACKING:
 - When the user mentions completing a task or sub-step, call get_step_detail to see their sub-steps, then use toggle_sub_step to mark it done. Report progress (e.g. "3/5 sub-steps done!").
 - When the user says they did something differently than planned, use log_sub_step_deviation to record what they actually did.
 - When showing step details, highlight incomplete sub-steps so the user knows what's left.
 
+UPDATING STEPS:
+- When the user wants to add sub-steps, change the plan, update location, or modify an existing step, call update_step.
+- You MUST first call get_step_detail to get the step's current sub-steps, then call update_step with the FULL list (existing + new) since sub_steps replaces the entire list.
+- Example: if a step has ["Gather supplies", "Practice technique"] and user says "add Clean up", call update_step with sub_steps: ["Gather supplies", "Practice technique", "Clean up"].
+- Supported fields: what_will_you_do, sub_steps, capability_goals, location_name, competency_ids, plan_notes.
+
 COMPETENCY ASSESSMENT:
 - When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.
 - When the user asks what competencies they're missing or what to work on next, call get_competency_gaps.
 - When the user asks HOW to practice a specific skill, call suggest_next_step_for_competency.`;
+};
 
-const PHOTO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
+const buildPhotoSystemPrompt = () => `${buildSystemPrompt()}
 
 The user has sent a photo. A photo_url has been uploaded and is available for you to attach to a step.
 
@@ -291,6 +303,26 @@ async function handleCallbackQuery(
     return;
   }
 
+  // Handle "View Step" detail callback
+  if (action === 'detail') {
+    const detailResult = await executeTool('get_step_detail', { step_id: stepId }, supabase, auth);
+    const detailParsed = JSON.parse(detailResult);
+    if (detailParsed.error) {
+      await answerCallbackQuery(queryId, `Error: ${detailParsed.error}`);
+      return;
+    }
+    await answerCallbackQuery(queryId);
+    if (chatId) {
+      const title = detailParsed.title ?? 'Step';
+      const subs = (detailParsed.sub_steps ?? []) as { completed: boolean; text: string }[];
+      const subList = subs.length
+        ? '\n' + subs.map((ss: { completed: boolean; text: string }) => `${ss.completed ? '☑️' : '⬜'} ${ss.text}`).join('\n')
+        : '';
+      await sendMessage(chatId, `📋 *${title}*${subList}`);
+    }
+    return;
+  }
+
   // Handle sub-step toggle callback
   if (action === 'substep_done') {
     const subStepId = rest.slice(rest.indexOf(':') + 1);
@@ -516,7 +548,7 @@ async function handleMessage(
 
   // Build user content — text or photo+caption
   let userContent: Anthropic.ContentBlockParam[] | string;
-  let systemPrompt = SYSTEM_PROMPT;
+  let systemPrompt = buildSystemPrompt();
   let historyEntry = `${historyPrefix}${userText}`;
   let uploadedPhotoUrl = ''; // Hoisted so we can inject it into tool calls
 
@@ -562,7 +594,7 @@ async function handleMessage(
           text: `${captionText}${photoUrlNote}`,
         },
       ];
-      systemPrompt = PHOTO_SYSTEM_PROMPT;
+      systemPrompt = buildPhotoSystemPrompt();
       historyEntry = `[Sent a photo${message.caption ? `: ${message.caption}` : ''}]${photoUrl ? ` [url: ${photoUrl}]` : ''}`;
 
       // Store pending photo URL so callback buttons can attach it

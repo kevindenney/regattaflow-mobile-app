@@ -280,19 +280,35 @@ export function StepCritiqueContent({ stepId, onNextStepCreated, readOnly }: Ste
           : Promise.resolve(),
         extractNutritionToStep(user.id, step.interest_id, stepId, completed),
         extractInsights(user.id, step.interest_id, completed),
-        // Competency assessment extraction (doesn't need conversation — uses step evidence)
-        (planData.competency_ids?.length || planData.capability_goals?.length)
-          ? extractCompetencyAssessment(
-              user.id, step.interest_id, stepId, planData, actData,
-              currentInterest?.name ?? '', reviewData.competency_assessment?.assessed_at,
-            )
-          : Promise.resolve(),
       ]);
 
       // Refetch step data so extracted results appear
       queryClient.invalidateQueries({ queryKey: ['timeline-steps', 'detail', stepId] });
     })();
   }, [user?.id, step?.interest_id, stepId, actData.measurements, actData.nutrition, currentInterest?.slug]);
+
+  // Competency assessment extraction — runs independently of conversation extraction
+  const competencyExtractionRef = useRef(false);
+  useEffect(() => {
+    if (competencyExtractionRef.current || !user?.id || !step?.interest_id || !stepId) return;
+    if (!planData.competency_ids?.length && !planData.capability_goals?.length) return;
+    // Skip if already assessed
+    if (reviewData.competency_assessment?.assessed_at) {
+      const age = Date.now() - new Date(reviewData.competency_assessment.assessed_at).getTime();
+      if (age < 24 * 60 * 60 * 1000) return;
+    }
+    competencyExtractionRef.current = true;
+
+    (async () => {
+      const result = await extractCompetencyAssessment(
+        user.id, step.interest_id, stepId, planData, actData,
+        currentInterest?.name ?? '', reviewData.competency_assessment?.assessed_at,
+      );
+      if (result) {
+        queryClient.invalidateQueries({ queryKey: ['timeline-steps', 'detail', stepId] });
+      }
+    })();
+  }, [user?.id, step?.interest_id, stepId, planData.competency_ids, planData.capability_goals]);
 
   // Seed from server
   useEffect(() => {
