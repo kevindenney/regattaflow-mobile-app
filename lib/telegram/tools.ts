@@ -560,8 +560,46 @@ const TOOLS: TelegramToolDef[] = [
       const review = (metadata.review as Record<string, unknown>) ?? {};
 
       // 2. Fetch planned competency definitions
-      const competencyIds = (plan.competency_ids as string[]) ?? [];
+      let competencyIds = (plan.competency_ids as string[]) ?? [];
+      let autoLinked = false;
       let plannedCompetencies: { id: string; title: string; category: string; description: string | null; status?: string; attempts?: number }[] = [];
+
+      // If no competency_ids linked, auto-discover from interest by matching step title/description
+      if (!competencyIds.length && step.interest_id) {
+        const { data: allComps } = await supabase
+          .from('betterat_competencies')
+          .select('id, title, category, description')
+          .eq('interest_id', step.interest_id)
+          .limit(100);
+
+        if (allComps?.length) {
+          const titleLower = (step.title ?? '').toLowerCase();
+          const descLower = (step.description ?? '').toLowerCase();
+          const goalsLower = ((plan.capability_goals as string[]) ?? []).join(' ').toLowerCase();
+          const searchText = `${titleLower} ${descLower} ${goalsLower}`;
+
+          // Match competencies whose title or category words appear in the step text
+          const matched = allComps.filter(c => {
+            const words = c.title.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+            return words.some((w: string) => searchText.includes(w));
+          }).slice(0, 5);
+
+          if (matched.length) {
+            competencyIds = matched.map(c => c.id);
+            autoLinked = true;
+            // Persist the auto-linked competency_ids back to the step so future analyses are instant
+            await supabase
+              .from('timeline_steps')
+              .update({
+                metadata: { ...metadata, plan: { ...plan, competency_ids: competencyIds } },
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', step.id)
+              .eq('user_id', auth.userId);
+          }
+        }
+      }
+
       if (competencyIds.length) {
         const { data: comps } = await supabase
           .from('betterat_competencies')
@@ -610,6 +648,7 @@ const TOOLS: TelegramToolDef[] = [
       // Return all data for Claude to analyze directly — no nested AI call
       return {
         instruction: 'Analyze this step data. For each planned competency, assess whether the evidence demonstrates it (initial_exposure / developing / proficient / not_demonstrated). Identify gaps and suggest next steps. Be specific and concise.' +
+          (autoLinked ? ' NOTE: Competencies were auto-linked from the interest based on step content. Assess them normally.' : '') +
           (photoUrls.length > 0 ? ' Photo URLs are provided — describe what you can infer from the captions and context about technique, procedure, and clinical skill demonstration.' : ''),
         step: {
           title: step.title,
@@ -617,6 +656,7 @@ const TOOLS: TelegramToolDef[] = [
           plan: plan.what_will_you_do || null,
           capability_goals: plan.capability_goals ?? [],
         },
+        competencies_auto_linked: autoLinked,
         planned_competencies: plannedCompetencies,
         evidence: {
           notes: act.notes || null,

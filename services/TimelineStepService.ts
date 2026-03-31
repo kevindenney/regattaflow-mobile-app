@@ -11,6 +11,7 @@
 
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isAbortError } from '@/lib/utils/fetchWithTimeout';
 import type {
   TimelineStepRecord,
   CreateTimelineStepInput,
@@ -106,7 +107,7 @@ export async function getUserTimeline(
     });
     return [...ownSteps, ...uniqueCollabSteps];
   } catch (err) {
-    logger.error('Failed to fetch user timeline', err);
+    if (!isAbortError(err)) logger.error('Failed to fetch user timeline', err);
     throw err;
   }
 }
@@ -127,7 +128,14 @@ export async function getStepById(stepId: string): Promise<TimelineStepRecord> {
     if (!data) throw new Error(`Step ${stepId} not found`);
     return data as TimelineStepRecord;
   } catch (err) {
-    logger.error('Failed to fetch step by ID', err);
+    if (!isAbortError(err)) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('not found')) {
+        logger.warn('Step not found (may be deleted or from another account)', stepId);
+      } else {
+        logger.error('Failed to fetch step by ID', err);
+      }
+    }
     throw err;
   }
 }
