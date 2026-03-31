@@ -767,24 +767,20 @@ const TOOLS: TelegramToolDef[] = [
           .eq('user_id', auth.userId)
           .limit(5);
 
-        console.log('[get_competency_gaps] user_interests query:', { userId: auth.userId, count: interests?.length ?? 0, error: uiErr?.message });
-
         const interestIds = (interests ?? []).map((ui: any) => ui.interest_id);
 
         // Fall back to distinct interest_ids from timeline_steps
         if (!interestIds.length) {
-          const { data: stepInterests, error: siErr } = await supabase
+          const { data: stepInterests } = await supabase
             .from('timeline_steps')
             .select('interest_id')
             .eq('user_id', auth.userId)
             .limit(50);
-          console.log('[get_competency_gaps] timeline_steps fallback:', { count: stepInterests?.length ?? 0, error: siErr?.message });
           const unique = [...new Set((stepInterests ?? []).map((s: any) => s.interest_id).filter(Boolean))];
           interestIds.push(...unique);
         }
 
-        console.log('[get_competency_gaps] resolved interestIds:', interestIds);
-        if (!interestIds.length) return { error: 'No interests found', debug: { userId: auth.userId } };
+        if (!interestIds.length) return { error: 'No interests found' };
 
         // Find the first interest that has competencies
         for (const iid of interestIds) {
@@ -792,7 +788,6 @@ const TOOLS: TelegramToolDef[] = [
             .from('betterat_competencies')
             .select('id', { count: 'exact', head: true })
             .eq('interest_id', iid);
-          console.log('[get_competency_gaps] competency count for', iid, ':', count);
           if ((count ?? 0) > 0) { interestId = iid; break; }
         }
         if (!interestId) return { error: 'No competency frameworks found for your interests' };
