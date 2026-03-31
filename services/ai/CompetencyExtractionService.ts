@@ -138,9 +138,9 @@ ${competencyBlock ? `\nPLANNED COMPETENCIES:\n${competencyBlock}` : ''}${goalsBl
 EVIDENCE FROM THIS SESSION:
 ${evidenceParts}`;
 
-    // Call AI
+    // Call AI — use 2048 tokens to avoid truncated JSON on large competency sets
     const { data, error } = await supabase.functions.invoke('step-plan-suggest', {
-      body: { system: ASSESSMENT_SYSTEM_PROMPT, prompt: userMessage, max_tokens: 1024 },
+      body: { system: ASSESSMENT_SYSTEM_PROMPT, prompt: userMessage, max_tokens: 2048 },
     });
 
     if (error || !data?.text) {
@@ -156,11 +156,32 @@ ${evidenceParts}`;
       return null;
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
+    let parsed: {
       planned_competency_results?: CompetencyEvidenceItem[];
       additional_competencies_found?: CompetencyEvidenceItem[];
       gap_summary?: string;
     };
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      // AI response may be truncated — try to salvage by closing open arrays/objects
+      let fixable = jsonMatch[0];
+      // Close any unclosed strings, arrays, objects
+      const openBraces = (fixable.match(/\{/g) || []).length - (fixable.match(/\}/g) || []).length;
+      const openBrackets = (fixable.match(/\[/g) || []).length - (fixable.match(/\]/g) || []).length;
+      // Trim trailing partial entry (after last comma or opening bracket)
+      fixable = fixable.replace(/,\s*\{[^}]*$/, '');
+      fixable = fixable.replace(/,\s*"[^"]*$/, '');
+      for (let i = 0; i < openBrackets; i++) fixable += ']';
+      for (let i = 0; i < openBraces; i++) fixable += '}';
+      try {
+        parsed = JSON.parse(fixable);
+        logger.warn('Recovered truncated JSON from AI response');
+      } catch {
+        logger.error('Could not parse or recover AI JSON', parseErr);
+        return null;
+      }
+    }
 
     const assessment: StepCompetencyAssessment = {
       assessed_at: new Date().toISOString(),
