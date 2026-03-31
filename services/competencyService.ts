@@ -15,6 +15,7 @@
 
 import { supabase } from '@/services/supabase';
 import { createLogger } from '@/lib/utils/logger';
+import { isAbortError } from '@/lib/utils/fetchWithTimeout';
 import { isMissingSupabaseColumn } from '@/lib/utils/supabaseSchemaFallback';
 import { NURSING_CORE_V1_CAPABILITIES } from '@/configs/competencies/nursing-core-v1';
 import type {
@@ -65,7 +66,7 @@ export async function getCompetencies(interestId: string): Promise<Competency[]>
       (c) => c.organization_id || !orgTitles.has(c.title.toLowerCase())
     );
   } catch (err) {
-    logger.error('Failed to fetch competencies', err);
+    if (!isAbortError(err)) logger.error('Failed to fetch competencies', err);
     throw err;
   }
 }
@@ -482,6 +483,96 @@ export async function submitFacultyReview(
     logger.error('Failed to submit faculty review', err);
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// 7b. Record AI-assessed competency progress from step review
+// ---------------------------------------------------------------------------
+
+/**
+ * Map AI demonstrated_level to competency status.
+ * AI assessment can advance status but never regress it or bypass faculty approval.
+ */
+const AI_LEVEL_TO_STATUS: Record<string, CompetencyStatus> = {
+  initial_exposure: 'learning',
+  developing: 'practicing',
+  proficient: 'checkoff_ready',
+};
+
+/**
+ * Status rank for comparing progress — higher = more advanced.
+ */
+const STATUS_RANK: Record<CompetencyStatus, number> = {
+  not_started: 0,
+  learning: 1,
+  practicing: 2,
+  checkoff_ready: 3,
+  validated: 4,
+  competent: 5,
+};
+
+/**
+ * Write AI competency assessment results back to betterat_competency_progress.
+ * Only advances status forward (never regresses). Skips competencies without IDs.
+ */
+export async function recordAIAssessedProgress(
+  userId: string,
+  results: { competency_id?: string; demonstrated_level: string }[],
+  stepId: string,
+): Promise<number> {
+  let updated = 0;
+  for (const result of results) {
+    if (!result.competency_id) continue;
+    const targetStatus = AI_LEVEL_TO_STATUS[result.demonstrated_level];
+    if (!targetStatus) continue; // not_demonstrated → skip
+
+    try {
+      // Fetch existing progress
+      const { data: existing } = await supabase
+        .from('betterat_competency_progress')
+        .select('id, status, attempts_count')
+        .eq('user_id', userId)
+        .eq('competency_id', result.competency_id)
+        .maybeSingle();
+
+      const now = new Date().toISOString();
+
+      if (!existing) {
+        // Create new progress row
+        const { error } = await supabase
+          .from('betterat_competency_progress')
+          .insert({
+            user_id: userId,
+            competency_id: result.competency_id,
+            status: targetStatus,
+            attempts_count: 1,
+            last_attempt_at: now,
+            notes: `AI-assessed from step ${stepId}`,
+          });
+        if (!error) updated++;
+      } else {
+        // Only advance status, never regress
+        const currentRank = STATUS_RANK[existing.status as CompetencyStatus] ?? 0;
+        const targetRank = STATUS_RANK[targetStatus] ?? 0;
+        const newStatus = targetRank > currentRank ? targetStatus : existing.status;
+
+        const { error } = await supabase
+          .from('betterat_competency_progress')
+          .update({
+            status: newStatus,
+            attempts_count: (existing.attempts_count ?? 0) + 1,
+            last_attempt_at: now,
+            updated_at: now,
+          })
+          .eq('id', existing.id);
+        if (!error) updated++;
+      }
+    } catch (err) {
+      logger.warn('Failed to record AI progress for competency', { competencyId: result.competency_id, err });
+    }
+  }
+  logger.info(`Recorded AI-assessed progress for ${updated}/${results.length} competencies (step ${stepId})`);
+  return updated;
 }
 
 // ---------------------------------------------------------------------------

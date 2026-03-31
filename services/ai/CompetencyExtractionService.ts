@@ -195,6 +195,15 @@ ${evidenceParts}`;
       review: { competency_assessment: assessment },
     });
 
+    // Write progress back to betterat_competency_progress so faculty dashboard reflects it
+    const allResults = [
+      ...assessment.planned_competency_results,
+      ...assessment.additional_competencies_found,
+    ];
+    await competencyService.recordAIAssessedProgress(userId, allResults, stepId).catch(err => {
+      logger.warn('Failed to write AI progress back', err);
+    });
+
     logger.info(`Extracted ${assessment.planned_competency_results.length} competency assessments for step ${stepId}`);
     return assessment;
   } catch (err) {
