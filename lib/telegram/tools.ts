@@ -628,6 +628,83 @@ const TOOLS: TelegramToolDef[] = [
   },
 
   {
+    name: 'save_competency_assessment',
+    description:
+      'Save structured competency assessment results after analyzing a step. ' +
+      'Call this IMMEDIATELY after analyze_step to record progress. ' +
+      'Pass each planned competency with its demonstrated level so progress is tracked.',
+    schema: z.object({
+      step_id: z.string().describe('The step ID that was analyzed'),
+      assessments: z.array(z.object({
+        competency_id: z.string().describe('Competency UUID from the planned_competencies'),
+        demonstrated_level: z.enum(['initial_exposure', 'developing', 'proficient', 'not_demonstrated'])
+          .describe('The level demonstrated based on evidence'),
+      })).describe('One entry per planned competency'),
+    }),
+    requiresWrite: true,
+    handler: async (input, supabase, auth) => {
+      const results = input.assessments as { competency_id: string; demonstrated_level: string }[];
+      const stepId = input.step_id as string;
+
+      // Map demonstrated_level to competency status
+      const levelToStatus: Record<string, string> = {
+        initial_exposure: 'learning',
+        developing: 'practicing',
+        proficient: 'checkoff_ready',
+      };
+      const statusRank: Record<string, number> = {
+        not_started: 0, learning: 1, practicing: 2, checkoff_ready: 3, validated: 4, competent: 5,
+      };
+
+      let updated = 0;
+      for (const r of results) {
+        const targetStatus = levelToStatus[r.demonstrated_level];
+        if (!targetStatus) continue; // not_demonstrated → skip
+
+        const { data: existing } = await supabase
+          .from('betterat_competency_progress')
+          .select('id, status, attempts_count')
+          .eq('user_id', auth.userId)
+          .eq('competency_id', r.competency_id)
+          .maybeSingle();
+
+        const now = new Date().toISOString();
+
+        if (!existing) {
+          const { error } = await supabase
+            .from('betterat_competency_progress')
+            .insert({
+              user_id: auth.userId,
+              competency_id: r.competency_id,
+              status: targetStatus,
+              attempts_count: 1,
+              last_attempt_at: now,
+              notes: `AI-assessed via Telegram (step ${stepId})`,
+            });
+          if (!error) updated++;
+        } else {
+          const currentRank = statusRank[existing.status] ?? 0;
+          const targetRank = statusRank[targetStatus] ?? 0;
+          const newStatus = targetRank > currentRank ? targetStatus : existing.status;
+
+          const { error } = await supabase
+            .from('betterat_competency_progress')
+            .update({
+              status: newStatus,
+              attempts_count: (existing.attempts_count ?? 0) + 1,
+              last_attempt_at: now,
+              updated_at: now,
+            })
+            .eq('id', existing.id);
+          if (!error) updated++;
+        }
+      }
+
+      return { saved: true, updated, total: results.length };
+    },
+  },
+
+  {
     name: 'list_interests',
     description:
       "List the user's active interests/subjects (those they have timeline steps for). " +

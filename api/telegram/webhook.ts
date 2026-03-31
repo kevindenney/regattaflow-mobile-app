@@ -61,8 +61,10 @@ UPDATING STEPS:
 
 COMPETENCY ASSESSMENT:
 - When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.
+- IMPORTANT: After calling analyze_step and providing your assessment, you MUST also call save_competency_assessment with the structured results for each planned competency. This records their progress.
 - When the user asks what competencies they're missing or what to work on next, call get_competency_gaps.
-- When the user asks HOW to practice a specific skill, call suggest_next_step_for_competency.`;
+- When the user asks HOW to practice a specific skill, call suggest_next_step_for_competency.
+- After suggesting a practice session, ask if the user wants you to create it as a step. If they say yes, call create_step with the structured details from your suggestion (title, sub_steps, capability_goals, competency_ids, location_name).`;
 };
 
 const buildPhotoSystemPrompt = () => `${buildSystemPrompt()}
