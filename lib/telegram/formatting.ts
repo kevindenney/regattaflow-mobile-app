@@ -137,7 +137,10 @@ export function buildStepButtons(
 export function buildCreatedStepButtons(
   stepId: string,
 ): InlineKeyboardButton[][] {
-  return [[{ text: '▶️ Start now', callback_data: `wip:${stepId}` }]];
+  return [
+    [{ text: '▶️ Start now', callback_data: `wip:${stepId}` }],
+    [{ text: '📋 View Step', callback_data: `detail:${stepId}` }],
+  ];
 }
 
 /**
