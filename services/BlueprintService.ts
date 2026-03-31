@@ -981,28 +981,45 @@ export async function discoverBlueprints(
   interestId: string,
 ): Promise<DiscoveredBlueprint[]> {
   try {
-    const { data, error } = await supabase
+    // Fetch published blueprints (no joins — FKs may not exist to profiles/organizations)
+    const { data: blueprints, error } = await supabase
       .from('timeline_blueprints')
-      .select(`
-        *,
-        profiles:user_id ( full_name, avatar_url ),
-        organizations:organization_id ( name )
-      `)
+      .select('*')
       .eq('interest_id', interestId)
       .eq('is_published', true)
       .order('subscriber_count', { ascending: false });
 
     if (error) throw error;
+    if (!blueprints?.length) return [];
 
-    return ((data ?? []) as any[]).map(row => ({
-      ...row,
-      author_name: row.profiles?.full_name ?? null,
-      author_avatar_url: row.profiles?.avatar_url ?? null,
-      organization_name: row.organizations?.name ?? null,
-      // Remove nested join objects
-      profiles: undefined,
-      organizations: undefined,
-    }));
+    // Batch-fetch author profiles
+    const userIds = [...new Set(blueprints.map(b => b.user_id))];
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, avatar_url')
+      .in('id', userIds);
+    const profileMap = new Map((profiles ?? []).map(p => [p.id, p]));
+
+    // Batch-fetch org names
+    const orgIds = [...new Set(blueprints.map(b => b.organization_id).filter(Boolean))] as string[];
+    let orgMap = new Map<string, string>();
+    if (orgIds.length) {
+      const { data: orgs } = await supabase
+        .from('organizations')
+        .select('id, name')
+        .in('id', orgIds);
+      orgMap = new Map((orgs ?? []).map(o => [o.id, o.name]));
+    }
+
+    return blueprints.map(row => {
+      const profile = profileMap.get(row.user_id);
+      return {
+        ...row,
+        author_name: profile?.full_name ?? null,
+        author_avatar_url: profile?.avatar_url ?? null,
+        organization_name: row.organization_id ? (orgMap.get(row.organization_id) ?? null) : null,
+      } as DiscoveredBlueprint;
+    });
   } catch (err) {
     logger.error('Failed to discover blueprints', err);
     return [];
