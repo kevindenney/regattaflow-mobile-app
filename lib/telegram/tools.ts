@@ -234,7 +234,9 @@ const TOOLS: TelegramToolDef[] = [
         .enum(['pending', 'in_progress', 'completed', 'skipped'])
         .optional()
         .describe('Initial status (defaults to "pending")'),
-      starts_at: z.string().optional().describe('Start date/time in ISO 8601'),
+      starts_at: z.string().optional().describe('DEPRECATED — use date_offset_days instead. Only use for absolute ISO 8601 dates the user explicitly provides (e.g. "2026-04-15").'),
+      date_offset_days: z.number().optional().describe('Days from today: 0 = today, 1 = tomorrow, 7 = next week, -1 = yesterday. Use this for relative dates like "tomorrow", "next week", etc.'),
+      time_of_day: z.string().optional().describe('Time in HH:MM 24h format (e.g. "14:00" for 2pm). Only if user specifies a time.'),
       ends_at: z.string().optional().describe('End date/time in ISO 8601'),
       plan_notes: z.string().optional().describe('Initial planning notes'),
       what_will_you_do: z.string().optional().describe('What the user plans to do — the main focus/goal of the session'),
@@ -246,12 +248,47 @@ const TOOLS: TelegramToolDef[] = [
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
-      // DEBUG: Log what date Claude passed vs what the server thinks today is
       const serverNow = new Date();
-      console.log(`[create_step DEBUG] Server date: ${serverNow.toISOString()}`);
-      console.log(`[create_step DEBUG] Claude passed starts_at: ${JSON.stringify(input.starts_at)}`);
-      console.log(`[create_step DEBUG] Claude passed ends_at: ${JSON.stringify(input.ends_at)}`);
-      console.log(`[create_step DEBUG] Full input: ${JSON.stringify(input)}`);
+
+      // Resolve date server-side to avoid LLM date hallucination
+      let resolvedDate: Date;
+      const offsetDays = input.date_offset_days as number | undefined;
+      const timeOfDay = input.time_of_day as string | undefined;
+
+      if (offsetDays !== undefined && offsetDays !== null) {
+        // Preferred path: offset from server's "today"
+        resolvedDate = new Date(serverNow);
+        resolvedDate.setUTCDate(resolvedDate.getUTCDate() + offsetDays);
+        console.log(`[create_step] Date from offset: ${offsetDays} days → ${resolvedDate.toISOString().split('T')[0]}`);
+      } else if (input.starts_at) {
+        // Fallback: validate LLM-provided ISO date isn't hallucinated
+        const parsed = new Date(input.starts_at as string);
+        const diffMs = Math.abs(parsed.getTime() - serverNow.getTime());
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        if (isNaN(parsed.getTime()) || diffDays > 365) {
+          // Date is invalid or more than a year off — likely hallucinated
+          console.warn(`[create_step] Rejected hallucinated starts_at: ${input.starts_at} (server: ${serverNow.toISOString()})`);
+          resolvedDate = serverNow;
+        } else {
+          resolvedDate = parsed;
+          console.log(`[create_step] Using validated starts_at: ${input.starts_at}`);
+        }
+      } else {
+        resolvedDate = serverNow;
+        console.log(`[create_step] No date provided, using today: ${serverNow.toISOString().split('T')[0]}`);
+      }
+
+      // Apply time of day if provided
+      if (timeOfDay) {
+        const [hours, minutes] = timeOfDay.split(':').map(Number);
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          resolvedDate.setUTCHours(hours, minutes, 0, 0);
+        }
+      }
+
+      const startsAtISO = resolvedDate.toISOString();
+      console.log(`[create_step] Final starts_at: ${startsAtISO} (title: ${input.title})`);
+
       const interest = await resolveInterestId(supabase, input.interest as string);
       if (!interest) {
         return { error: `Could not find interest "${input.interest}". Use list_interests to see available options.` };
@@ -279,9 +316,6 @@ const TOOLS: TelegramToolDef[] = [
         review: {},
       };
 
-      const resolvedStartsAt = input.starts_at ?? new Date().toISOString();
-      console.log(`[create_step DEBUG] Resolved starts_at: ${resolvedStartsAt} (from input: ${!!input.starts_at})`);
-
       const insertPayload = {
         user_id: auth.userId,
         interest_id: interest.id,
@@ -290,12 +324,11 @@ const TOOLS: TelegramToolDef[] = [
         category: input.category ?? 'general',
         status: input.status ?? 'pending',
         visibility: 'followers',
-        starts_at: resolvedStartsAt,
+        starts_at: startsAtISO,
         ends_at: input.ends_at ?? null,
         source_type: 'manual',
         metadata,
       };
-      console.log(`[create_step DEBUG] Insert payload starts_at: ${insertPayload.starts_at}, title: ${insertPayload.title}`);
       const { data, error } = await supabase
         .from('timeline_steps')
         .insert(insertPayload)

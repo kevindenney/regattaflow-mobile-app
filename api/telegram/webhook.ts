@@ -46,7 +46,7 @@ STEP CREATION:
 - When creating a step, ALWAYS populate the structured fields: what_will_you_do, sub_steps, capability_goals, and location_name.
 - If the user mentions specific skills or competencies, look up competency IDs with get_competency_gaps first, then pass them as competency_ids.
 - Convert conversation details into structured fields — don't just put everything in plan_notes or description.
-- For starts_at: ONLY provide a date if the user explicitly mentions one. If they don't mention a date, OMIT starts_at entirely — the system will default to today.
+- For dates: use date_offset_days (integer) instead of starts_at. 0 = today, 1 = tomorrow, 7 = next week, -1 = yesterday. If the user says a time, also pass time_of_day in "HH:MM" 24h format. If no date is mentioned, OMIT date_offset_days entirely — the system defaults to today. NEVER pass starts_at with an ISO date string — always use date_offset_days for relative dates.
 
 SUB-STEP TRACKING:
 - When the user mentions completing a task or sub-step, call get_step_detail to see their sub-steps, then use toggle_sub_step to mark it done. Report progress (e.g. "3/5 sub-steps done!").
