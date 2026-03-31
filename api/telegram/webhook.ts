@@ -38,6 +38,11 @@ CRITICAL RULES — READ CAREFULLY:
 7. Do NOT describe what you would do — actually DO it by calling the tool.
 8. Every request that involves data REQUIRES at least one tool call.
 
+STEP CREATION:
+- When creating a step, ALWAYS populate the structured fields: what_will_you_do, sub_steps, capability_goals, and location_name.
+- If the user mentions specific skills or competencies, look up competency IDs with get_competency_gaps first, then pass them as competency_ids.
+- Convert conversation details into structured fields — don't just put everything in plan_notes or description.
+
 SUB-STEP TRACKING:
 - When the user mentions completing a task or sub-step, call get_step_detail to see their sub-steps, then use toggle_sub_step to mark it done. Report progress (e.g. "3/5 sub-steps done!").
 - When the user says they did something differently than planned, use log_sub_step_deviation to record what they actually did.
@@ -45,7 +50,8 @@ SUB-STEP TRACKING:
 
 COMPETENCY ASSESSMENT:
 - When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.
-- When the user asks what competencies they're missing or what to work on next, call get_competency_gaps.`;
+- When the user asks what competencies they're missing or what to work on next, call get_competency_gaps.
+- When the user asks HOW to practice a specific skill, call suggest_next_step_for_competency.`;
 
 const PHOTO_SYSTEM_PROMPT = `${SYSTEM_PROMPT}
 

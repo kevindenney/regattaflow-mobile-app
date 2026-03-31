@@ -237,6 +237,12 @@ const TOOLS: TelegramToolDef[] = [
       starts_at: z.string().optional().describe('Start date/time in ISO 8601'),
       ends_at: z.string().optional().describe('End date/time in ISO 8601'),
       plan_notes: z.string().optional().describe('Initial planning notes'),
+      what_will_you_do: z.string().optional().describe('What the user plans to do — the main focus/goal of the session'),
+      why_reasoning: z.string().optional().describe('Why this step is the right next thing to work on'),
+      sub_steps: z.array(z.string()).optional().describe('Ordered list of sub-step texts (e.g. ["Warm up", "Practice drills", "Cool down"])'),
+      competency_ids: z.array(z.string()).optional().describe('Competency UUIDs to link to this step'),
+      capability_goals: z.array(z.string()).optional().describe('Free-text skill goals (e.g. ["vein selection", "sterile technique"])'),
+      location_name: z.string().optional().describe('Where the session will take place'),
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
@@ -245,8 +251,24 @@ const TOOLS: TelegramToolDef[] = [
         return { error: `Could not find interest "${input.interest}". Use list_interests to see available options.` };
       }
 
+      // Build sub-steps with IDs
+      const subSteps = (input.sub_steps as string[] | undefined)?.map((text, i) => ({
+        id: `ss-${Date.now()}-${i}`,
+        text,
+        sort_order: i,
+        completed: false,
+      })) ?? [];
+
       const metadata = {
-        plan: { notes: (input.plan_notes as string) ?? '', collaborators: [] },
+        plan: {
+          what_will_you_do: (input.what_will_you_do as string) ?? (input.plan_notes as string) ?? '',
+          why_reasoning: (input.why_reasoning as string) ?? '',
+          how_sub_steps: subSteps,
+          competency_ids: (input.competency_ids as string[]) ?? [],
+          capability_goals: (input.capability_goals as string[]) ?? [],
+          where_location: (input.location_name as string) ? { name: input.location_name as string } : undefined,
+          collaborators: [],
+        },
         act: {},
         review: {},
       };
@@ -277,7 +299,7 @@ const TOOLS: TelegramToolDef[] = [
 
   {
     name: 'update_step',
-    description: 'Update an existing learning step. Can change title, description, status, plan notes, and more.',
+    description: 'Update an existing learning step. Can change title, description, status, and structured plan fields.',
     schema: z.object({
       step_id: z.string().describe('The timeline step ID to update'),
       title: z.string().optional().describe('New title'),
@@ -293,6 +315,12 @@ const TOOLS: TelegramToolDef[] = [
       starts_at: z.string().optional().describe('New start date/time (ISO 8601)'),
       ends_at: z.string().optional().describe('New end date/time (ISO 8601)'),
       plan_notes: z.string().optional().describe('Update the planning notes'),
+      what_will_you_do: z.string().optional().describe('What the user plans to do'),
+      why_reasoning: z.string().optional().describe('Why this step matters'),
+      sub_steps: z.array(z.string()).optional().describe('Replace sub-steps with this list of texts'),
+      competency_ids: z.array(z.string()).optional().describe('Competency UUIDs to link'),
+      capability_goals: z.array(z.string()).optional().describe('Free-text skill goals'),
+      location_name: z.string().optional().describe('Where the session takes place'),
     }),
     requiresWrite: true,
     handler: async (input, supabase, auth) => {
@@ -304,7 +332,11 @@ const TOOLS: TelegramToolDef[] = [
       if (input.starts_at !== undefined) updates.starts_at = input.starts_at;
       if (input.ends_at !== undefined) updates.ends_at = input.ends_at;
 
-      if (input.plan_notes !== undefined) {
+      // Check if any plan metadata fields need updating
+      const planFields = ['plan_notes', 'what_will_you_do', 'why_reasoning', 'sub_steps', 'competency_ids', 'capability_goals', 'location_name'] as const;
+      const hasPlanUpdates = planFields.some(f => input[f] !== undefined);
+
+      if (hasPlanUpdates) {
         const { data: existing } = await supabase
           .from('timeline_steps')
           .select('metadata')
@@ -313,7 +345,24 @@ const TOOLS: TelegramToolDef[] = [
 
         const existingMeta = (existing?.metadata as Record<string, unknown>) ?? {};
         const existingPlan = (existingMeta.plan as Record<string, unknown>) ?? {};
-        updates.metadata = { ...existingMeta, plan: { ...existingPlan, notes: input.plan_notes } };
+        const planUpdates: Record<string, unknown> = {};
+
+        if (input.plan_notes !== undefined) planUpdates.notes = input.plan_notes;
+        if (input.what_will_you_do !== undefined) planUpdates.what_will_you_do = input.what_will_you_do;
+        if (input.why_reasoning !== undefined) planUpdates.why_reasoning = input.why_reasoning;
+        if (input.competency_ids !== undefined) planUpdates.competency_ids = input.competency_ids;
+        if (input.capability_goals !== undefined) planUpdates.capability_goals = input.capability_goals;
+        if (input.location_name !== undefined) planUpdates.where_location = { name: input.location_name };
+        if (input.sub_steps !== undefined) {
+          planUpdates.how_sub_steps = (input.sub_steps as string[]).map((text, i) => ({
+            id: `ss-${Date.now()}-${i}`,
+            text,
+            sort_order: i,
+            completed: false,
+          }));
+        }
+
+        updates.metadata = { ...existingMeta, plan: { ...existingPlan, ...planUpdates } };
       }
 
       const { data, error } = await supabase
@@ -708,22 +757,38 @@ const TOOLS: TelegramToolDef[] = [
       interest_id: z.string().optional().describe('Interest ID (defaults to first interest with competencies)'),
     }),
     handler: async (input, supabase, auth) => {
-      // Resolve interest
+      // Resolve interest — check user_interests first, fall back to timeline_steps
       let interestId = input.interest_id as string | undefined;
       if (!interestId) {
+        // Try user_interests table first
         const { data: interests } = await supabase
           .from('user_interests')
           .select('interest_id')
           .eq('user_id', auth.userId)
           .limit(5);
-        if (!interests?.length) return { error: 'No interests found' };
+
+        const interestIds = (interests ?? []).map((ui: any) => ui.interest_id);
+
+        // Fall back to distinct interest_ids from timeline_steps
+        if (!interestIds.length) {
+          const { data: stepInterests } = await supabase
+            .from('timeline_steps')
+            .select('interest_id')
+            .eq('user_id', auth.userId)
+            .limit(50);
+          const unique = [...new Set((stepInterests ?? []).map((s: any) => s.interest_id).filter(Boolean))];
+          interestIds.push(...unique);
+        }
+
+        if (!interestIds.length) return { error: 'No interests found' };
+
         // Find the first interest that has competencies
-        for (const ui of interests) {
+        for (const iid of interestIds) {
           const { count } = await supabase
             .from('betterat_competencies')
             .select('id', { count: 'exact', head: true })
-            .eq('interest_id', ui.interest_id);
-          if ((count ?? 0) > 0) { interestId = ui.interest_id; break; }
+            .eq('interest_id', iid);
+          if ((count ?? 0) > 0) { interestId = iid; break; }
         }
         if (!interestId) return { error: 'No competency frameworks found for your interests' };
       }
@@ -770,6 +835,81 @@ const TOOLS: TelegramToolDef[] = [
         completion_pct: total > 0 ? Math.round((demonstrated / total) * 100) : 0,
         gaps: gaps.slice(0, 10),
         gap_count: gaps.length,
+      };
+    },
+  },
+
+  {
+    name: 'suggest_next_step_for_competency',
+    description:
+      'Get context for suggesting a practice session for a specific competency. ' +
+      'Returns the competency definition, user attempt history, and recent related steps. ' +
+      'Use when the user asks HOW to practice a specific skill or wants a session plan for a competency.',
+    schema: z.object({
+      competency_id: z.string().describe('The competency ID to suggest a practice session for'),
+    }),
+    handler: async (input, supabase, auth) => {
+      // 1. Fetch the competency definition
+      const { data: comp, error: compErr } = await supabase
+        .from('betterat_competencies')
+        .select('id, title, category, description, requires_supervision, interest_id')
+        .eq('id', input.competency_id as string)
+        .single();
+
+      if (compErr || !comp) return { error: compErr?.message ?? 'Competency not found' };
+
+      // 2. Fetch the interest name
+      const { data: interest } = await supabase
+        .from('interests')
+        .select('name')
+        .eq('id', comp.interest_id)
+        .single();
+
+      // 3. Fetch user's progress on this competency
+      const { data: progress } = await supabase
+        .from('betterat_competency_progress')
+        .select('status, attempts_count, last_assessed_at')
+        .eq('user_id', auth.userId)
+        .eq('competency_id', comp.id)
+        .maybeSingle();
+
+      // 4. Fetch recent steps that had this competency planned
+      const { data: recentSteps } = await supabase
+        .from('timeline_steps')
+        .select('title, status, starts_at, metadata')
+        .eq('user_id', auth.userId)
+        .eq('interest_id', comp.interest_id)
+        .in('status', ['completed', 'in_progress'])
+        .order('starts_at', { ascending: false })
+        .limit(5);
+
+      const relatedSteps = (recentSteps ?? [])
+        .filter((s: any) => {
+          const compIds = (s.metadata?.plan?.competency_ids as string[]) ?? [];
+          return compIds.includes(comp.id);
+        })
+        .map((s: any) => ({
+          title: s.title,
+          status: s.status,
+          plan: s.metadata?.plan?.what_will_you_do || null,
+          learned: s.metadata?.review?.what_learned || null,
+        }));
+
+      return {
+        instruction: `Suggest a focused practice session for the competency "${comp.title}". Include a session title, 3-5 sub-steps, and a rationale. Consider the user's current level and past attempts. Be specific and actionable.`,
+        competency: {
+          title: comp.title,
+          category: comp.category,
+          description: comp.description,
+          requires_supervision: comp.requires_supervision,
+        },
+        interest: interest?.name ?? 'unknown',
+        user_progress: {
+          status: progress?.status ?? 'not_started',
+          attempts: progress?.attempts_count ?? 0,
+          last_assessed: progress?.last_assessed_at ?? null,
+        },
+        related_past_steps: relatedSteps,
       };
     },
   },
