@@ -15,7 +15,7 @@ export const maxDuration = 60;
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_TOOL_ITERATIONS = 5;
+const MAX_TOOL_ITERATIONS = 8;
 const MAX_CONVERSATION_MESSAGES = 10;
 const APP_URL = process.env.EXPO_PUBLIC_APP_URL || 'https://better.at';
 
@@ -49,9 +49,10 @@ STEP CREATION:
 - For dates: use date_offset_days (integer) instead of starts_at. 0 = today, 1 = tomorrow, 7 = next week, -1 = yesterday. If the user says a time, also pass time_of_day in "HH:MM" 24h format. If no date is mentioned, OMIT date_offset_days entirely — the system defaults to today. NEVER pass starts_at with an ISO date string — always use date_offset_days for relative dates.
 
 SUB-STEP TRACKING:
-- When the user mentions completing a task or sub-step, call get_step_detail to see their sub-steps, then use toggle_sub_step to mark it done. Report progress (e.g. "3/5 sub-steps done!").
+- When the user mentions completing tasks or sub-steps, call get_step_detail to see their sub-steps, then use bulk_toggle_sub_steps to mark ALL completed ones at once (much more efficient than calling toggle_sub_step one at a time). Report progress (e.g. "3/5 sub-steps done!").
 - When the user says they did something differently than planned, use log_sub_step_deviation to record what they actually did.
 - When showing step details, highlight incomplete sub-steps so the user knows what's left.
+- IMPORTANT: After a debrief, infer which sub-steps the user completed from their narrative and toggle them all with a single bulk_toggle_sub_steps call.
 
 UPDATING STEPS:
 - When the user wants to add sub-steps, change the plan, update location, or modify an existing step, call update_step.
@@ -65,6 +66,13 @@ LOGGING OBSERVATIONS:
 - Summarize what the user reported: what they did, how it went, skills demonstrated, challenges encountered, and self-reflections.
 - Always log the observation BEFORE calling analyze_step, so the evidence is recorded first.
 - Even if the user doesn't explicitly ask to "log" anything, if they describe their experience on a step, log it as an observation.
+
+DEBRIEF FLOW (when user describes what happened on a step):
+1. Call log_observation — save the narrative first
+2. Call get_step_detail — see the sub-steps and their IDs
+3. Call bulk_toggle_sub_steps — mark all completed sub-steps at once (infer from the narrative)
+4. If user asks "how did I do?" or for assessment: call analyze_step, then save_competency_assessment
+This order ensures all evidence is recorded efficiently within the tool iteration limit.
 
 COMPETENCY ASSESSMENT:
 - When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.

@@ -483,6 +483,73 @@ const TOOLS: TelegramToolDef[] = [
   },
 
   {
+    name: 'bulk_toggle_sub_steps',
+    description:
+      'Mark multiple sub-steps as done or undone in a single call. Much more efficient than calling toggle_sub_step multiple times. ' +
+      'Use get_step_detail first to see the sub-step IDs. Pass an array of sub-step IDs to toggle.',
+    schema: z.object({
+      step_id: z.string().describe('The timeline step ID'),
+      sub_step_ids: z.array(z.string()).describe('Array of sub-step IDs to toggle'),
+      completed: z.boolean().describe('Mark all as done (true) or undone (false)'),
+    }),
+    requiresWrite: true,
+    handler: async (input, supabase, auth) => {
+      const { data: step, error: fetchErr } = await supabase
+        .from('timeline_steps')
+        .select('metadata, status')
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId)
+        .single();
+
+      if (fetchErr || !step) return { error: fetchErr?.message ?? 'Step not found' };
+
+      const metadata = (step.metadata as Record<string, unknown>) ?? {};
+      const plan = (metadata.plan as Record<string, unknown>) ?? {};
+      const act = (metadata.act as Record<string, unknown>) ?? {};
+      const subSteps = (plan.how_sub_steps as { id: string; text: string }[]) ?? [];
+      const progress = (act.sub_step_progress as Record<string, boolean>) ?? {};
+      const ids = input.sub_step_ids as string[];
+
+      // Validate all sub-step IDs exist
+      const missing = ids.filter(id => !subSteps.find(ss => ss.id === id));
+      if (missing.length > 0) {
+        return { error: `Sub-step IDs not found: ${missing.join(', ')}` };
+      }
+
+      const updatedProgress = { ...progress };
+      for (const id of ids) {
+        updatedProgress[id] = input.completed as boolean;
+      }
+      const completedCount = subSteps.filter(ss => updatedProgress[ss.id]).length;
+
+      const stepUpdate: Record<string, unknown> = {
+        metadata: { ...metadata, act: { ...act, sub_step_progress: updatedProgress } },
+        updated_at: new Date().toISOString(),
+      };
+      if (step.status === 'pending') {
+        stepUpdate.status = 'in_progress';
+      }
+
+      const { error: updateErr } = await supabase
+        .from('timeline_steps')
+        .update(stepUpdate)
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId);
+
+      if (updateErr) return { error: updateErr.message };
+
+      const toggledNames = ids.map(id => subSteps.find(ss => ss.id === id)?.text).filter(Boolean);
+      return {
+        toggled: true,
+        count: ids.length,
+        toggled_sub_steps: toggledNames,
+        completed: input.completed,
+        progress: `${completedCount}/${subSteps.length} done`,
+      };
+    },
+  },
+
+  {
     name: 'log_sub_step_deviation',
     description:
       'Record what the user actually did instead of a planned sub-step. ' +
@@ -1495,7 +1562,7 @@ const TOOLS: TelegramToolDef[] = [
       observation: z.string().describe('The observation text to save — summarize the user\'s account of what happened, preserving key details about skills demonstrated, challenges encountered, and self-reflections'),
     }),
     requiresWrite: true,
-    execute: async (
+    handler: async (
       input: Record<string, unknown>,
       supabase: SupabaseClient,
       auth: AuthContext,
