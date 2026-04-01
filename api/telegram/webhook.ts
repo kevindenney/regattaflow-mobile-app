@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { waitUntil } from '@vercel/functions';
 import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import { sendMessage, sendChatAction, answerCallbackQuery, downloadFile } from '../../lib/telegram/client';
@@ -820,34 +821,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Respond 200 to Telegram IMMEDIATELY to prevent retries and timeouts.
-  // Processing continues in the background after the response is sent.
+  // Respond 200 to Telegram IMMEDIATELY to prevent retries.
+  // Use waitUntil to keep the function alive for background processing.
   res.status(200).json({ ok: true });
 
-  try {
-    const update = req.body as TelegramUpdate;
+  const update = req.body as TelegramUpdate;
 
-    // Handle inline keyboard button presses
-    if (update.callback_query) {
-      await handleCallbackQuery(update.callback_query);
-      return;
-    }
-
-    // Handle messages (text, photo, voice)
-    if (update.message?.from) {
-      await handleMessage(update.message);
-    }
-  } catch (error: any) {
-    console.error('Telegram webhook error:', error?.message || error, error?.stack);
-
+  const processUpdate = async () => {
     try {
-      const chatId = (req.body as TelegramUpdate)?.message?.chat?.id;
-      if (chatId) {
-        const errMsg = error?.message?.slice(0, 200) || 'Unknown error';
-        await sendMessage(chatId, `Sorry, I'm having trouble right now. Please try again in a moment.\n\n_Debug: ${errMsg}_`, { parseMode: 'MarkdownV2' });
+      // Handle inline keyboard button presses
+      if (update.callback_query) {
+        await handleCallbackQuery(update.callback_query);
+        return;
       }
-    } catch {
-      // Ignore - best effort
+
+      // Handle messages (text, photo, voice)
+      if (update.message?.from) {
+        await handleMessage(update.message);
+      }
+    } catch (error: any) {
+      console.error('Telegram webhook error:', error?.message || error, error?.stack);
+
+      try {
+        const chatId = update?.message?.chat?.id;
+        if (chatId) {
+          const errMsg = error?.message?.slice(0, 200) || 'Unknown error';
+          await sendMessage(chatId, `Sorry, something went wrong. Please try again.\n\nDebug: ${errMsg}`);
+        }
+      } catch {
+        // Ignore - best effort
+      }
     }
-  }
+  };
+
+  waitUntil(processUpdate());
 }
