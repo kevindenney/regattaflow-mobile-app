@@ -59,6 +59,13 @@ UPDATING STEPS:
 - Example: if a step has ["Gather supplies", "Practice technique"] and user says "add Clean up", call update_step with sub_steps: ["Gather supplies", "Practice technique", "Clean up"].
 - Supported fields: what_will_you_do, sub_steps, capability_goals, location_name, competency_ids, plan_notes.
 
+LOGGING OBSERVATIONS:
+- When the user describes what happened during a step (debrief, recap, reflection), you MUST call log_observation to save their narrative.
+- This is CRITICAL — the observation text is visible to faculty on the Act tab and provides qualitative evidence of learning.
+- Summarize what the user reported: what they did, how it went, skills demonstrated, challenges encountered, and self-reflections.
+- Always log the observation BEFORE calling analyze_step, so the evidence is recorded first.
+- Even if the user doesn't explicitly ask to "log" anything, if they describe their experience on a step, log it as an observation.
+
 COMPETENCY ASSESSMENT:
 - When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.
 - IMPORTANT: After calling analyze_step and providing your assessment, you MUST also call save_competency_assessment with the structured results for each planned competency. This records their progress.

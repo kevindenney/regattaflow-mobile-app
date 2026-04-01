@@ -1482,6 +1482,78 @@ const TOOLS: TelegramToolDef[] = [
       };
     },
   },
+
+  // -----------------------------------------------------------------------
+  // log_observation — save the user's narrative/debrief as an observation
+  // -----------------------------------------------------------------------
+  {
+    name: 'log_observation',
+    description:
+      'Log an observation or debrief note on a step. Use this to capture what the user reports about their experience — what they did, how it went, what they learned, what they struggled with. The observation appears on the Act/Train tab and is visible to faculty.',
+    schema: z.object({
+      step_id: z.string().describe('The step UUID to log the observation on'),
+      observation: z.string().describe('The observation text to save — summarize the user\'s account of what happened, preserving key details about skills demonstrated, challenges encountered, and self-reflections'),
+    }),
+    requiresWrite: true,
+    execute: async (
+      input: Record<string, unknown>,
+      supabase: SupabaseClient,
+      auth: AuthContext,
+    ) => {
+      const { data: step, error } = await supabase
+        .from('timeline_steps')
+        .select('id, title, metadata, status')
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId)
+        .single();
+
+      if (error || !step) {
+        return { error: error?.message ?? 'Step not found' };
+      }
+
+      const metadata = (step.metadata ?? {}) as Record<string, unknown>;
+      const act = (metadata.act ?? {}) as Record<string, unknown>;
+
+      const existingNotes = (act.notes as string) ?? '';
+      const timestamp = new Date().toISOString().split('T')[0];
+      const newNote = `[${timestamp} via Telegram] ${input.observation}`;
+      const updatedNotes = existingNotes ? `${existingNotes}\n\n${newNote}` : newNote;
+
+      const actUpdates: Record<string, unknown> = {
+        ...act,
+        notes: updatedNotes,
+      };
+
+      if (!act.started_at) {
+        actUpdates.started_at = new Date().toISOString();
+      }
+
+      const stepUpdate: Record<string, unknown> = {
+        metadata: { ...metadata, act: actUpdates },
+        updated_at: new Date().toISOString(),
+      };
+
+      if (step.status === 'pending') {
+        stepUpdate.status = 'in_progress';
+      }
+
+      const { error: updateError } = await supabase
+        .from('timeline_steps')
+        .update(stepUpdate)
+        .eq('id', input.step_id as string)
+        .eq('user_id', auth.userId);
+
+      if (updateError) {
+        return { error: updateError.message };
+      }
+
+      return {
+        logged: true,
+        step_id: step.id,
+        step_title: step.title,
+      };
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
