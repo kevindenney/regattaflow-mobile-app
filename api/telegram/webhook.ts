@@ -42,6 +42,8 @@ CRITICAL RULES — READ CAREFULLY:
 6. If the user wants a new step, you MUST call create_step.
 7. Do NOT describe what you would do — actually DO it by calling the tool.
 8. Every request that involves data REQUIRES at least one tool call.
+9. NEVER fabricate step_ids or sub_step_ids. All IDs are UUIDs that come from tool results. If you need a step_id, call get_student_timeline first.
+10. When reporting tool results to the user, ONLY report what the tool ACTUALLY returned. If a tool returned an error, tell the user about the error — do NOT pretend it succeeded.
 
 STEP CREATION:
 - When creating a step, ALWAYS populate the structured fields: what_will_you_do, sub_steps, capability_goals, and location_name.
@@ -69,11 +71,13 @@ LOGGING OBSERVATIONS:
 - Even if the user doesn't explicitly ask to "log" anything, if they describe their experience on a step, log it as an observation.
 
 DEBRIEF FLOW (when user describes what happened on a step):
+0. If you do NOT have the step_id from conversation history, call get_student_timeline FIRST to find the matching step. NEVER guess or fabricate a step_id — you must have a real UUID from a tool result or conversation context.
 1. Call log_observation — save the narrative first
 2. Call get_step_detail — see the sub-steps and their IDs
 3. Call bulk_toggle_sub_steps — mark all completed sub-steps at once (infer from the narrative)
 4. If user asks "how did I do?" or for assessment: call analyze_step, then save_competency_assessment
 This order ensures all evidence is recorded efficiently within the tool iteration limit.
+CRITICAL: The step_id is a UUID like "ee4d729f-7ec6-4277-a2e5-e558ed31174c". If previous assistant messages contain [Steps: ...] with IDs, use those. Otherwise call get_student_timeline to look it up.
 
 COMPETENCY ASSESSMENT:
 - When the user asks how they did, whether they demonstrated a skill, or to review their progress on a step, call analyze_step.
@@ -701,6 +705,7 @@ async function handleMessage(
   // --- Tool use loop ---
   let iterations = 0;
   let lastKeyboard: InlineKeyboardButton[][] | null = null;
+  const mentionedStepIds: { id: string; title: string }[] = []; // Track step IDs for conversation context
 
   while (response.stop_reason === 'tool_use' && iterations < MAX_TOOL_ITERATIONS) {
     iterations++;
@@ -726,6 +731,15 @@ async function handleMessage(
         tool_use_id: block.id,
         content: result,
       });
+      // Extract step IDs from tool results for conversation context
+      try {
+        const parsed = JSON.parse(result);
+        if (parsed.step?.id && parsed.step?.title) {
+          mentionedStepIds.push({ id: parsed.step.id, title: parsed.step.title });
+        } else if (parsed.step_id && parsed.step_title) {
+          mentionedStepIds.push({ id: parsed.step_id, title: parsed.step_title });
+        }
+      } catch { /* ignore parse errors */ }
       // Check if this tool result warrants inline buttons
       // When a photo is pending, show "Attach to" buttons instead of Start/Done
       const keyboard = getToolResponseKeyboard(block.name, result, hasPhoto);
@@ -775,9 +789,22 @@ async function handleMessage(
   }
 
   console.log(`[telegram] Sending response (${responseText.length} chars), stop_reason=${response.stop_reason}...`);
-  const sendResult = await sendMessage(chatId, responseText, sendOptions);
+  let sendResult = await sendMessage(chatId, responseText, sendOptions);
   if (!sendResult.ok) {
-    console.error(`[telegram] sendMessage FAILED: ${sendResult.description}`);
+    console.error(`[telegram] sendMessage FAILED (MarkdownV2+fallback): ${sendResult.description}`);
+    // Last resort: strip ALL formatting and send raw text
+    try {
+      const stripped = responseText.replace(/[*_`~\[\]()>#+=|{}.!\\-]/g, '');
+      sendResult = await sendMessage(chatId, stripped || 'Done! Check your timeline in the app.', {
+        ...sendOptions,
+        parseMode: undefined as any,
+      });
+      if (!sendResult.ok) {
+        console.error(`[telegram] sendMessage FAILED (stripped): ${sendResult.description}`);
+      }
+    } catch (e) {
+      console.error(`[telegram] sendMessage stripped fallback error:`, e);
+    }
   } else {
     console.log(`[telegram] Response sent OK`);
   }
@@ -786,8 +813,12 @@ async function handleMessage(
   // Save only a short summary when tools were used. This prevents Haiku from
   // learning to mimic verbose "Created!" responses without calling tools.
   // When no tools were used, save the full response (it's just conversation).
+  // IMPORTANT: Include step IDs so follow-up messages (debrief, assessment) can reference them.
+  const stepContext = mentionedStepIds.length > 0
+    ? ` [Steps: ${mentionedStepIds.map(s => `${s.title} (${s.id})`).join(', ')}]`
+    : '';
   const savedAssistantContent = iterations > 0
-    ? `[Used ${iterations} tool(s)] ${responseText.slice(0, 120)}`
+    ? `[Used ${iterations} tool(s)]${stepContext} ${responseText.slice(0, 120)}`
     : responseText;
 
   const updatedHistory = [

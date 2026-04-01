@@ -69,8 +69,8 @@ export async function sendMessage(
 
     lastResponse = await callTelegram('sendMessage', body);
 
-    // Fallback: if MarkdownV2 failed, retry this chunk as plaintext
-    if (!lastResponse.ok && useMarkdown && lastResponse.description?.includes('parse')) {
+    // Fallback: if MarkdownV2 failed for any reason, retry this chunk as plaintext
+    if (!lastResponse.ok && useMarkdown) {
       const plainChunks = splitMessage(text);
       const plainBody: Record<string, unknown> = {
         chat_id: chatId,
